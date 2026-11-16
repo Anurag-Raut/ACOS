@@ -5386,7 +5386,45 @@ fn interactive_serve(
                     ),
                 );
                 let injected = match (cmd, key_code) {
-                    ("tap", _) => live.input.tap(x, y, ack_wait),
+                    ("tap", _) => {
+                        // LAYER1: the ART/`verify` path routes a tap through the
+                        // WMS layer stack, not `WindowManagerGlobal` insertion
+                        // order. The request carries **display** coordinates
+                        // (the same space the UI tree reports); the target is
+                        // the topmost touchable window at that point, and the
+                        // published point is that window's own local space
+                        // (the `InputChannel` transform).
+                        let point = acos_wm::geom::PointI::new(x as i32, y as i32);
+                        let (target, origin) = {
+                            let wm = live
+                                .wms
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            match wm.wm.hit_test(point) {
+                                Some(window) => (
+                                    Some(window),
+                                    wm.wm.windows
+                                        .get(&window)
+                                        .map(|record| (record.frame.left, record.frame.top))
+                                        .unwrap_or((0, 0)),
+                                ),
+                                None => (None, (0, 0)),
+                            }
+                        };
+                        match target {
+                            Some(window) => live.input.tap_window(
+                                acos_parcel::binder::BinderId(window),
+                                x - origin.0 as f32,
+                                y - origin.1 as f32,
+                                ack_wait,
+                            ),
+                            None => Err(
+                                acos_services::input_channel::ChannelError::Malformed(
+                                    "no touchable window at the tap point (the layer-stack hit test found none)",
+                                ),
+                            ),
+                        }
+                    }
                     ("type_text", _) => live
                         .input
                         .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),

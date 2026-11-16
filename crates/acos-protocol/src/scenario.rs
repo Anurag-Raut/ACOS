@@ -106,6 +106,9 @@ pub struct Step {
     /// Assert node state flags.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_state: Option<StateAssertion>,
+    /// Assert the window stack order (bottom to top) and focus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assert_windows: Option<WindowOrderAssertion>,
     /// Assert a log sequence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_log: Option<LogAssertion>,
@@ -177,6 +180,8 @@ pub enum StepRef<'a> {
     AssertNotVisible(&'a VisibilityAssertion),
     /// See [`Step::assert_state`].
     AssertState(&'a StateAssertion),
+    /// See [`Step::assert_windows`].
+    AssertWindows(&'a WindowOrderAssertion),
     /// See [`Step::assert_log`].
     AssertLog(&'a LogAssertion),
     /// See [`Step::assert_no_crash`].
@@ -220,6 +225,7 @@ impl StepRef<'_> {
             StepRef::AssertVisible(_) => "assert_visible",
             StepRef::AssertNotVisible(_) => "assert_not_visible",
             StepRef::AssertState(_) => "assert_state",
+            StepRef::AssertWindows(_) => "assert_windows",
             StepRef::AssertLog(_) => "assert_log",
             StepRef::AssertNoCrash(_) => "assert_no_crash",
             StepRef::AssertScreenshot(_) => "assert_screenshot",
@@ -252,6 +258,7 @@ impl Step {
             self.assert_visible.is_some(),
             self.assert_not_visible.is_some(),
             self.assert_state.is_some(),
+            self.assert_windows.is_some(),
             self.assert_log.is_some(),
             self.assert_no_crash.is_some(),
             self.assert_screenshot.is_some(),
@@ -308,6 +315,9 @@ impl Step {
         }
         if self.assert_state.is_some() {
             return self.assert_state.as_ref().map(StepRef::AssertState);
+        }
+        if self.assert_windows.is_some() {
+            return self.assert_windows.as_ref().map(StepRef::AssertWindows);
         }
         if self.assert_log.is_some() {
             return self.assert_log.as_ref().map(StepRef::AssertLog);
@@ -599,6 +609,32 @@ pub enum PermissionState {
     Revoke,
     /// Reset to the manifest/default state.
     Reset,
+}
+
+/// `assert_windows`: the window stack in policy z order, bottom first.
+///
+/// This is the LAYER1 assertion: it reads the tree's `windows[]` block (the
+/// host's AOSP layer policy, not insertion order), so an application overlay
+/// that is drawn and tapped above an activity can only pass when the reported
+/// stack actually says so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WindowOrderAssertion {
+    /// Expected window kinds, bottom to top (`application`,
+    /// `application_overlay`, `sub_window`, …). The count must match exactly:
+    /// a missing or extra window is a failure, never silently ignored.
+    pub order: Vec<String>,
+    /// Optional expected kind of the focused window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<String>,
+    /// Optional expected `LayoutParams.TYPE_*` name of the focused window.
+    /// This is the precise form: the activity is `TYPE_BASE_APPLICATION`, a
+    /// dialog is `TYPE_APPLICATION`, and both have kind `application`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus_type: Option<String>,
+    /// Optional expected `LayoutParams.TYPE_*` names, bottom to top. When
+    /// present this must have the same length as `order`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub types: Option<Vec<String>>,
 }
 
 /// `set_permission`.
@@ -1243,6 +1279,19 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                         &format!("{path}.region_masks[{i}].bounds"),
                         mask.bounds,
                     );
+                }
+            }
+            StepRef::AssertWindows(assertion) => {
+                if assertion.order.is_empty() {
+                    v.push(&path, "assert_windows.order must list at least one window");
+                }
+                if let Some(types) = &assertion.types {
+                    if types.len() != assertion.order.len() {
+                        v.push(
+                            &path,
+                            "assert_windows.types must have the same length as order",
+                        );
+                    }
                 }
             }
             StepRef::AssertRegion(assertion) => {

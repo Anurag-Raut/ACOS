@@ -19,6 +19,8 @@ acos-sandbox = { path = "../acos-sandbox" }
 acos-binder-peer = { path = "../acos-binder-peer" }
 acos-render = { path = "../acos-render" }
 acos-services = { path = "../acos-services" }
+acos-wm = { path = "../acos-wm" }
+acos-parcel = { path = "../acos-parcel" }
 # VIEW1a: the live-view frame encoder (jpeg/png only, no default formats).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 libc = "0.2"

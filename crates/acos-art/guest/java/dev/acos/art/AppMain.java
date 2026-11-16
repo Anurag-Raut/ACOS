@@ -1092,6 +1092,15 @@ public final class AppMain {
             roots = new java.util.ArrayList<View>();
             roots.add(v);
         }
+        // LAYER1: the window block carries the facts the host needs to apply the
+        // AOSP layer policy (type/flags), the window identity and the parent
+        // link for sub-windows. The guest does **not** sort by policy: the host
+        // is the one implementation of the layer table (D3).
+        String[] labels = new String[roots.size()];
+        for (int i = 0; i < roots.size(); i++) {
+            View r = roots.get(i);
+            labels[i] = r == v ? "main" : windowLabelOf(r, i);
+        }
         boolean sawMain = false;
         int z = 0;
         for (View root : roots) {
@@ -1101,11 +1110,13 @@ public final class AppMain {
                 label = "main";
                 sawMain = true;
             } else {
-                label = windowLabelOf(root, z);
+                label = labels[z];
             }
             if (windows.length() > 0) windows.append(',');
             windows.append("{\"z\":").append(z)
-                    .append(",\"window\":\"").append(esc(label)).append("\"}");
+                    .append(",\"window\":\"").append(esc(label)).append("\"")
+                    .append(windowMeta(root, roots, labels));
+            windows.append('}');
             StringBuilder one = new StringBuilder(4096);
             try {
                 dumpNode(root, one, budget, truncated, label);
@@ -1192,6 +1203,73 @@ public final class AppMain {
             title = "window-" + (type == null ? "?" : type);
         }
         return title + "#" + z;
+    }
+
+    /** LAYER1 window facts: identity, real type/flags, focus and parent link. */
+    static String windowMeta(View root, java.util.List<View> roots, String[] labels) {
+        StringBuilder sb = new StringBuilder(128);
+        Object vr = null;
+        Object attrs = null;
+        try {
+            java.lang.reflect.Method m = Class.forName("android.view.View")
+                    .getMethod("getViewRootImpl");
+            vr = m.invoke(root);
+        } catch (Throwable ignored) {
+        }
+        Object own = fieldOf(vr, "mWindow");
+        if (own != null) {
+            sb.append(",\"id\":\"").append(Integer.toHexString(System.identityHashCode(own)))
+              .append('"');
+        }
+        if (vr != null) attrs = fieldOf(vr, "mWindowAttributes");
+        int type = -1;
+        int flags = 0;
+        Object token = null;
+        if (attrs != null) {
+            Object t = fieldOf(attrs, "type");
+            Object f = fieldOf(attrs, "flags");
+            if (t instanceof Integer) type = (Integer) t;
+            if (f instanceof Integer) flags = (Integer) f;
+            token = fieldOf(attrs, "token");
+        }
+        if (type >= 0) sb.append(",\"type\":").append(type);
+        // FLAG_NOT_TOUCHABLE (0x10): the same bit the WMS reads.
+        sb.append(",\"touch\":").append((flags & 0x10) == 0);
+        boolean focus = false;
+        try {
+            focus = root.hasWindowFocus();
+        } catch (Throwable ignored) {
+        }
+        sb.append(",\"focus\":").append(focus);
+        sb.append(",\"bounds\":\"").append(screenBounds(root)).append('"');
+        if (token != null) {
+            for (int i = 0; i < roots.size(); i++) {
+                View other = roots.get(i);
+                if (other == null || other == root) continue;
+                Object otherVr = null;
+                try {
+                    otherVr = Class.forName("android.view.View").getMethod("getViewRootImpl")
+                            .invoke(other);
+                } catch (Throwable ignored) {
+                }
+                if (fieldOf(otherVr, "mWindow") == token) {
+                    sb.append(",\"parent\":\"").append(esc(labels[i])).append('"');
+                    break;
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    static Object fieldOf(Object target, String name) {
+        if (target == null) return null;
+        try {
+            java.lang.reflect.Field f = target.getClass().getDeclaredField(name);
+            f.setAccessible(true);
+            return f.get(target);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     static void dumpNode(View v, StringBuilder sb, int[] budget, boolean[] truncated,

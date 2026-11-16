@@ -28,13 +28,26 @@
 //! * `TYPE_NOTIFICATION_SHADE` is the shade and keyguard layer, i.e. a system
 //!   window above the app's own overlays.
 //!
-//! The numeric band of the *system* windows relative to each other (shade vs
-//! status bar vs IME) is decided by
-//! `PhoneWindowManager.getWindowLayerFromTypeLw`, which lives in
-//! `services.jar` and is **not** in the AOSP source cache. [`LayerBand`] keeps
-//! those relations as separate variants so the one table that has to be
-//! transcribed later is a single `match` arm, and the open question is recorded
-//! in `results/handoff/LAYER0/DESIGN.md` §5 instead of being invented here.
+//! The numeric order of **every** window type (including the system band:
+//! system dialog, alert, application overlay, IME, status bar, notification
+//! shade, navigation bar, accessibility overlay, …) is transcribed, not
+//! derived, from the AOSP source at `android-14.0.0_r75`:
+//!
+//! * `frameworks/base/services/core/java/com/android/server/policy/`
+//!   `WindowManagerPolicy.java:525-630` — `getWindowLayerFromTypeLw()` (the
+//!   whole table; the two permission-dependent types are
+//!   `TYPE_SYSTEM_ALERT`/`TYPE_SYSTEM_ERROR`/`TYPE_SYSTEM_OVERLAY`, which use
+//!   layer 12/27/23 for an internal system window and 9/9/10 otherwise) and
+//!   `:656-674` — `getSubWindowLayerFromTypeLw()`;
+//! * `frameworks/base/core/java/android/view/WindowManagerPolicyConstants.java:193-198`
+//!   — `APPLICATION_LAYER = 2` and the sub-window sub-layers (media −2,
+//!   media-overlay −1, panel/attached-dialog +1, sub-panel +2, above-sub-panel
+//!   +3, relative to the attached window);
+//! * `frameworks/base/core/java/android/view/WindowManager.java:2053-2457` —
+//!   the numeric `TYPE_*` values.
+//!
+//! Every limb of [`policy_layer`] cites the source line it comes from, so the
+//! table can be re-checked against the image instead of being guessed.
 //!
 //! ## Flags
 //!
@@ -123,6 +136,251 @@ pub const TYPE_NOTIFICATION_SHADE: i32 = FIRST_SYSTEM_WINDOW + 40;
 /// `TYPE_STATUS_BAR_ADDITIONAL`.
 pub const TYPE_STATUS_BAR_ADDITIONAL: i32 = FIRST_SYSTEM_WINDOW + 41;
 
+// The remaining documented types in the policy table. Values are
+// `WindowManager.java:2151-2457`; each is referenced by `policy_layer` below.
+/// `TYPE_SEARCH_BAR`.
+pub const TYPE_SEARCH_BAR: i32 = FIRST_SYSTEM_WINDOW + 1;
+/// `TYPE_PHONE`.
+pub const TYPE_PHONE: i32 = FIRST_SYSTEM_WINDOW + 2;
+/// `TYPE_KEYGUARD`.
+pub const TYPE_KEYGUARD: i32 = FIRST_SYSTEM_WINDOW + 4;
+/// `TYPE_TOAST`.
+pub const TYPE_TOAST: i32 = FIRST_SYSTEM_WINDOW + 5;
+/// `TYPE_PRIORITY_PHONE`.
+pub const TYPE_PRIORITY_PHONE: i32 = FIRST_SYSTEM_WINDOW + 7;
+/// `TYPE_KEYGUARD_DIALOG`.
+pub const TYPE_KEYGUARD_DIALOG: i32 = FIRST_SYSTEM_WINDOW + 9;
+/// `TYPE_STATUS_BAR_PANEL`.
+pub const TYPE_STATUS_BAR_PANEL: i32 = FIRST_SYSTEM_WINDOW + 14;
+/// `TYPE_SECURE_SYSTEM_OVERLAY`.
+pub const TYPE_SECURE_SYSTEM_OVERLAY: i32 = FIRST_SYSTEM_WINDOW + 15;
+/// `TYPE_DRAG`.
+pub const TYPE_DRAG: i32 = FIRST_SYSTEM_WINDOW + 16;
+/// `TYPE_STATUS_BAR_SUB_PANEL`.
+pub const TYPE_STATUS_BAR_SUB_PANEL: i32 = FIRST_SYSTEM_WINDOW + 17;
+/// `TYPE_POINTER`.
+pub const TYPE_POINTER: i32 = FIRST_SYSTEM_WINDOW + 18;
+/// `TYPE_BOOT_PROGRESS`.
+pub const TYPE_BOOT_PROGRESS: i32 = FIRST_SYSTEM_WINDOW + 21;
+/// `TYPE_INPUT_CONSUMER`.
+pub const TYPE_INPUT_CONSUMER: i32 = FIRST_SYSTEM_WINDOW + 22;
+/// `TYPE_NAVIGATION_BAR_PANEL`.
+pub const TYPE_NAVIGATION_BAR_PANEL: i32 = FIRST_SYSTEM_WINDOW + 24;
+/// `TYPE_DISPLAY_OVERLAY`.
+pub const TYPE_DISPLAY_OVERLAY: i32 = FIRST_SYSTEM_WINDOW + 26;
+/// `TYPE_MAGNIFICATION_OVERLAY`.
+pub const TYPE_MAGNIFICATION_OVERLAY: i32 = FIRST_SYSTEM_WINDOW + 27;
+/// `TYPE_PRIVATE_PRESENTATION`.
+pub const TYPE_PRIVATE_PRESENTATION: i32 = FIRST_SYSTEM_WINDOW + 30;
+/// `TYPE_VOICE_INTERACTION`.
+pub const TYPE_VOICE_INTERACTION: i32 = FIRST_SYSTEM_WINDOW + 31;
+/// `TYPE_VOICE_INTERACTION_STARTING`.
+pub const TYPE_VOICE_INTERACTION_STARTING: i32 = FIRST_SYSTEM_WINDOW + 33;
+/// `TYPE_DOCK_DIVIDER`.
+pub const TYPE_DOCK_DIVIDER: i32 = FIRST_SYSTEM_WINDOW + 34;
+/// `TYPE_QS_DIALOG`.
+pub const TYPE_QS_DIALOG: i32 = FIRST_SYSTEM_WINDOW + 35;
+/// `TYPE_PRESENTATION`.
+pub const TYPE_PRESENTATION: i32 = FIRST_SYSTEM_WINDOW + 37;
+
+/// `WindowManagerPolicyConstants.APPLICATION_LAYER`.
+pub const APPLICATION_LAYER: i32 = 2;
+/// `WindowManagerPolicyConstants.APPLICATION_MEDIA_SUBLAYER`.
+pub const APPLICATION_MEDIA_SUBLAYER: i32 = -2;
+/// `WindowManagerPolicyConstants.APPLICATION_MEDIA_OVERLAY_SUBLAYER`.
+pub const APPLICATION_MEDIA_OVERLAY_SUBLAYER: i32 = -1;
+/// `WindowManagerPolicyConstants.APPLICATION_PANEL_SUBLAYER`.
+pub const APPLICATION_PANEL_SUBLAYER: i32 = 1;
+/// `WindowManagerPolicyConstants.APPLICATION_SUB_PANEL_SUBLAYER`.
+pub const APPLICATION_SUB_PANEL_SUBLAYER: i32 = 2;
+/// `WindowManagerPolicyConstants.APPLICATION_ABOVE_SUB_PANEL_SUBLAYER`.
+pub const APPLICATION_ABOVE_SUB_PANEL_SUBLAYER: i32 = 3;
+/// `WindowManagerPolicy.getMaxWindowLayer()` (`WindowManagerPolicy.java:643`).
+pub const MAX_WINDOW_LAYER: i32 = 36;
+
+/// The AOSP policy layer of a window type, transcribed from
+/// `WindowManagerPolicy.getWindowLayerFromTypeLw(type, canAddInternalSystemWindow)`
+/// (`frameworks/base/services/core/java/com/android/server/policy/WindowManagerPolicy.java:525-630`).
+///
+/// Lower paints below higher. `can_add_internal_system_window` is the caller's
+/// `INTERNAL_SYSTEM_WINDOW` permission; it changes only `TYPE_SYSTEM_ALERT`
+/// (9 → 12), `TYPE_SYSTEM_OVERLAY` (10 → 23) and `TYPE_SYSTEM_ERROR` (9 → 27).
+/// An undocumented type returns `3` (the AOSP default arm), never a made-up
+/// band; [`WindowKind::of`] still reports it as [`WindowKind::Unknown`].
+#[must_use]
+pub const fn policy_layer(type_: i32, can_add_internal_system_window: bool) -> i32 {
+    // :531 application range.
+    if type_ >= FIRST_APPLICATION_WINDOW && type_ <= LAST_APPLICATION_WINDOW {
+        return APPLICATION_LAYER;
+    }
+    match type_ {
+        // :534 wallpaper is at the bottom.
+        TYPE_WALLPAPER => 1,
+        // :537-542 presentation/private-presentation/dock-divider/qs-dialog/phone.
+        TYPE_PRESENTATION | TYPE_PRIVATE_PRESENTATION | TYPE_DOCK_DIVIDER | TYPE_QS_DIALOG
+        | TYPE_PHONE => 3,
+        // :543 search bar.
+        TYPE_SEARCH_BAR => 4,
+        // :545 input consumer.
+        TYPE_INPUT_CONSUMER => 5,
+        // :547 system dialog.
+        TYPE_SYSTEM_DIALOG => 6,
+        // :549 toast.
+        TYPE_TOAST => 7,
+        // :551 priority phone.
+        TYPE_PRIORITY_PHONE => 8,
+        // :553-557 alert: above the app overlay only for an internal system window.
+        TYPE_SYSTEM_ALERT => {
+            if can_add_internal_system_window {
+                12
+            } else {
+                9
+            }
+        }
+        // :558 application overlay (`SYSTEM_ALERT_WINDOW`).
+        TYPE_APPLICATION_OVERLAY => 11,
+        // :559 input method.
+        TYPE_INPUT_METHOD => 13,
+        // :562 input-method dialog.
+        TYPE_INPUT_METHOD_DIALOG => 14,
+        // :564 status bar.
+        TYPE_STATUS_BAR => 15,
+        // :566 additional status bar.
+        TYPE_STATUS_BAR_ADDITIONAL => 16,
+        // :568 notification shade (and keyguard).
+        TYPE_NOTIFICATION_SHADE => 17,
+        // :570 status-bar sub-panel.
+        TYPE_STATUS_BAR_SUB_PANEL => 18,
+        // :572 keyguard dialog.
+        TYPE_KEYGUARD_DIALOG => 19,
+        // :574 voice-interaction starting.
+        TYPE_VOICE_INTERACTION_STARTING => 20,
+        // :576 voice interaction (above the lock screen).
+        TYPE_VOICE_INTERACTION => 21,
+        // :580 volume overlay.
+        TYPE_VOLUME_OVERLAY => 22,
+        // :583-587 system overlay: internal system window only above the overlay.
+        TYPE_SYSTEM_OVERLAY => {
+            if can_add_internal_system_window {
+                23
+            } else {
+                10
+            }
+        }
+        // :589 navigation bar.
+        TYPE_NAVIGATION_BAR => 24,
+        // :591 navigation-bar panel.
+        TYPE_NAVIGATION_BAR_PANEL => 25,
+        // :593 screenshot selection.
+        TYPE_SCREENSHOT => 26,
+        // :596-600 system error: internal system window only above the overlay.
+        TYPE_SYSTEM_ERROR => {
+            if can_add_internal_system_window {
+                27
+            } else {
+                9
+            }
+        }
+        // :601 magnification overlay.
+        TYPE_MAGNIFICATION_OVERLAY => 28,
+        // :603 display overlay.
+        TYPE_DISPLAY_OVERLAY => 29,
+        // :605 drag layer.
+        TYPE_DRAG => 30,
+        // :608 accessibility interception overlay.
+        TYPE_ACCESSIBILITY_OVERLAY => 31,
+        // :610 accessibility magnification overlay.
+        TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY => 32,
+        // :612 secure system overlay.
+        TYPE_SECURE_SYSTEM_OVERLAY => 33,
+        // :614 boot progress.
+        TYPE_BOOT_PROGRESS => 34,
+        // :616 pointer.
+        TYPE_POINTER => 35,
+        // :619-621 the AOSP default arm logs "Unknown window type" and uses 3.
+        _ => 3,
+    }
+}
+
+/// The sub-window's layer relative to the window it is attached to, from
+/// `WindowManagerPolicy.getSubWindowLayerFromTypeLw()`
+/// (`WindowManagerPolicy.java:656-674`): positive paints above the attached
+/// window, negative behind it.
+#[must_use]
+pub const fn sub_window_layer(type_: i32) -> i32 {
+    match type_ {
+        // :660 panel and attached dialog.
+        TYPE_APPLICATION_PANEL | TYPE_APPLICATION_ATTACHED_DIALOG => APPLICATION_PANEL_SUBLAYER,
+        // :662 media.
+        TYPE_APPLICATION_MEDIA => APPLICATION_MEDIA_SUBLAYER,
+        // :664 media overlay.
+        TYPE_APPLICATION_MEDIA_OVERLAY => APPLICATION_MEDIA_OVERLAY_SUBLAYER,
+        // :666 sub-panel.
+        TYPE_APPLICATION_SUB_PANEL => APPLICATION_SUB_PANEL_SUBLAYER,
+        // :668 above-sub-panel.
+        TYPE_APPLICATION_ABOVE_SUB_PANEL => APPLICATION_ABOVE_SUB_PANEL_SUBLAYER,
+        // :670 an unknown sub-window type is 0 (next to its parent).
+        _ => 0,
+    }
+}
+
+/// The symbolic `TYPE_*` name of a documented window type (`WindowManager.java`).
+/// `None` for an undocumented value, so a caller never prints a made-up name.
+#[must_use]
+pub const fn type_name(type_: i32) -> Option<&'static str> {
+    Some(match type_ {
+        TYPE_BASE_APPLICATION => "TYPE_BASE_APPLICATION",
+        TYPE_APPLICATION => "TYPE_APPLICATION",
+        TYPE_APPLICATION_STARTING => "TYPE_APPLICATION_STARTING",
+        TYPE_DRAWN_APPLICATION => "TYPE_DRAWN_APPLICATION",
+        TYPE_APPLICATION_PANEL => "TYPE_APPLICATION_PANEL",
+        TYPE_APPLICATION_MEDIA => "TYPE_APPLICATION_MEDIA",
+        TYPE_APPLICATION_SUB_PANEL => "TYPE_APPLICATION_SUB_PANEL",
+        TYPE_APPLICATION_ATTACHED_DIALOG => "TYPE_APPLICATION_ATTACHED_DIALOG",
+        TYPE_APPLICATION_MEDIA_OVERLAY => "TYPE_APPLICATION_MEDIA_OVERLAY",
+        TYPE_APPLICATION_ABOVE_SUB_PANEL => "TYPE_APPLICATION_ABOVE_SUB_PANEL",
+        TYPE_STATUS_BAR => "TYPE_STATUS_BAR",
+        TYPE_SEARCH_BAR => "TYPE_SEARCH_BAR",
+        TYPE_PHONE => "TYPE_PHONE",
+        TYPE_SYSTEM_ALERT => "TYPE_SYSTEM_ALERT",
+        TYPE_KEYGUARD => "TYPE_KEYGUARD",
+        TYPE_TOAST => "TYPE_TOAST",
+        TYPE_SYSTEM_OVERLAY => "TYPE_SYSTEM_OVERLAY",
+        TYPE_PRIORITY_PHONE => "TYPE_PRIORITY_PHONE",
+        TYPE_SYSTEM_DIALOG => "TYPE_SYSTEM_DIALOG",
+        TYPE_KEYGUARD_DIALOG => "TYPE_KEYGUARD_DIALOG",
+        TYPE_SYSTEM_ERROR => "TYPE_SYSTEM_ERROR",
+        TYPE_INPUT_METHOD => "TYPE_INPUT_METHOD",
+        TYPE_INPUT_METHOD_DIALOG => "TYPE_INPUT_METHOD_DIALOG",
+        TYPE_WALLPAPER => "TYPE_WALLPAPER",
+        TYPE_STATUS_BAR_PANEL => "TYPE_STATUS_BAR_PANEL",
+        TYPE_SECURE_SYSTEM_OVERLAY => "TYPE_SECURE_SYSTEM_OVERLAY",
+        TYPE_DRAG => "TYPE_DRAG",
+        TYPE_STATUS_BAR_SUB_PANEL => "TYPE_STATUS_BAR_SUB_PANEL",
+        TYPE_POINTER => "TYPE_POINTER",
+        TYPE_NAVIGATION_BAR => "TYPE_NAVIGATION_BAR",
+        TYPE_VOLUME_OVERLAY => "TYPE_VOLUME_OVERLAY",
+        TYPE_BOOT_PROGRESS => "TYPE_BOOT_PROGRESS",
+        TYPE_INPUT_CONSUMER => "TYPE_INPUT_CONSUMER",
+        TYPE_NAVIGATION_BAR_PANEL => "TYPE_NAVIGATION_BAR_PANEL",
+        TYPE_DISPLAY_OVERLAY => "TYPE_DISPLAY_OVERLAY",
+        TYPE_MAGNIFICATION_OVERLAY => "TYPE_MAGNIFICATION_OVERLAY",
+        TYPE_PRIVATE_PRESENTATION => "TYPE_PRIVATE_PRESENTATION",
+        TYPE_VOICE_INTERACTION => "TYPE_VOICE_INTERACTION",
+        TYPE_ACCESSIBILITY_OVERLAY => "TYPE_ACCESSIBILITY_OVERLAY",
+        TYPE_VOICE_INTERACTION_STARTING => "TYPE_VOICE_INTERACTION_STARTING",
+        TYPE_DOCK_DIVIDER => "TYPE_DOCK_DIVIDER",
+        TYPE_QS_DIALOG => "TYPE_QS_DIALOG",
+        TYPE_SCREENSHOT => "TYPE_SCREENSHOT",
+        TYPE_PRESENTATION => "TYPE_PRESENTATION",
+        TYPE_APPLICATION_OVERLAY => "TYPE_APPLICATION_OVERLAY",
+        TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY => "TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY",
+        TYPE_NOTIFICATION_SHADE => "TYPE_NOTIFICATION_SHADE",
+        TYPE_STATUS_BAR_ADDITIONAL => "TYPE_STATUS_BAR_ADDITIONAL",
+        _ => return None,
+    })
+}
+
 /// What a window *is*, in the terms an agent and the compositor care about.
 ///
 /// This is a classification of the real `LayoutParams.type`, not a new type
@@ -161,40 +419,17 @@ pub enum WindowKind {
     Unknown,
 }
 
-/// Z-order band. Larger paints later. The *relations* are the AOSP-documented
-/// ones (see the module docs); the relative order of two system bands is the one
-/// piece still owed to `getWindowLayerFromTypeLw` and is flagged as open.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum LayerBand {
-    /// Below every application window.
-    Wallpaper = 0,
-    /// `FIRST_APPLICATION_WINDOW..=LAST_APPLICATION_WINDOW`.
-    Application = 10,
-    /// Sub-windows: kept next to their attached window (inserted directly above
-    /// it by [`WindowLayerStack::ordered`]), never above an overlay.
-    SubWindow = 20,
-    /// Above all activity windows.
-    ApplicationOverlay = 30,
-    /// The accessibility interception overlay.
-    AccessibilityOverlay = 40,
-    /// Above the app's overlays, below the bar/IME band.
-    SystemAlert = 50,
-    /// Above the app's overlays, below the bar/IME band.
-    SystemDialog = 51,
-    /// Above the app's overlays, below the bar/IME band.
-    SystemOverlay = 52,
-    /// The shade: a system window above the app's overlays.
-    NotificationShade = 60,
-    /// Above the shade.
-    SystemBar = 70,
-    /// The IME is above the bars (it covers them in `adjustResize`).
-    InputMethod = 80,
-    /// Anything else in the system range.
-    System = 90,
-    /// An undocumented `type`: drawn on top and named, never silently merged
-    /// with the application band.
-    Unknown = 100,
-}
+/// Z-order is the AOSP policy layer ([`policy_layer`]): larger paints later.
+/// There is no hand-derived band enum any more — the table above is the one
+/// source of truth, so a system-window type cannot get an order that differs
+/// from the image's.
+///
+/// ## Flags
+///
+/// `FLAG_NOT_TOUCHABLE` (0x10) and `FLAG_NOT_FOCUSABLE` (0x8) are the two flags
+/// that decide routing; `FLAG_NOT_TOUCH_MODAL` (0x20) decides whether a touch
+/// outside the frame is passed through (AOSP `InputWindowHandle`). `FLAG_DIM_BEHIND`
+/// (0x2) is the window manager's own dim layer, not the client's.
 
 impl WindowKind {
     /// Classify a real `LayoutParams.type`.
@@ -209,37 +444,19 @@ impl WindowKind {
                 WindowKind::AccessibilityOverlay
             }
             TYPE_SYSTEM_ALERT => WindowKind::SystemAlert,
-            TYPE_SYSTEM_DIALOG => WindowKind::SystemDialog,
-            TYPE_SYSTEM_OVERLAY | TYPE_SYSTEM_ERROR | TYPE_VOLUME_OVERLAY | TYPE_SCREENSHOT => {
-                WindowKind::SystemOverlay
-            }
+            TYPE_SYSTEM_DIALOG | TYPE_KEYGUARD_DIALOG | TYPE_QS_DIALOG => WindowKind::SystemDialog,
+            TYPE_SYSTEM_OVERLAY | TYPE_SYSTEM_ERROR | TYPE_VOLUME_OVERLAY | TYPE_SCREENSHOT
+            | TYPE_TOAST | TYPE_PRESENTATION | TYPE_PRIVATE_PRESENTATION | TYPE_DISPLAY_OVERLAY
+            | TYPE_MAGNIFICATION_OVERLAY | TYPE_SECURE_SYSTEM_OVERLAY | TYPE_BOOT_PROGRESS
+            | TYPE_POINTER | TYPE_DRAG => WindowKind::SystemOverlay,
             TYPE_NOTIFICATION_SHADE => WindowKind::NotificationShade,
             TYPE_INPUT_METHOD | TYPE_INPUT_METHOD_DIALOG => WindowKind::InputMethod,
-            TYPE_STATUS_BAR | TYPE_STATUS_BAR_ADDITIONAL | TYPE_NAVIGATION_BAR => {
+            TYPE_STATUS_BAR | TYPE_STATUS_BAR_ADDITIONAL | TYPE_NAVIGATION_BAR
+            | TYPE_STATUS_BAR_PANEL | TYPE_STATUS_BAR_SUB_PANEL | TYPE_NAVIGATION_BAR_PANEL => {
                 WindowKind::SystemBar
             }
             FIRST_SYSTEM_WINDOW..=LAST_SYSTEM_WINDOW => WindowKind::System,
             _ => WindowKind::Unknown,
-        }
-    }
-
-    /// The band this kind is drawn in.
-    #[must_use]
-    pub const fn band(self) -> LayerBand {
-        match self {
-            WindowKind::Wallpaper => LayerBand::Wallpaper,
-            WindowKind::Application => LayerBand::Application,
-            WindowKind::SubWindow => LayerBand::SubWindow,
-            WindowKind::ApplicationOverlay => LayerBand::ApplicationOverlay,
-            WindowKind::AccessibilityOverlay => LayerBand::AccessibilityOverlay,
-            WindowKind::SystemAlert => LayerBand::SystemAlert,
-            WindowKind::SystemDialog => LayerBand::SystemDialog,
-            WindowKind::SystemOverlay => LayerBand::SystemOverlay,
-            WindowKind::NotificationShade => LayerBand::NotificationShade,
-            WindowKind::SystemBar => LayerBand::SystemBar,
-            WindowKind::InputMethod => LayerBand::InputMethod,
-            WindowKind::System => LayerBand::System,
-            WindowKind::Unknown => LayerBand::Unknown,
         }
     }
 
@@ -314,8 +531,13 @@ pub struct LayerEntry {
     /// The window this one is attached to (`LayoutParams.token` resolved to a
     /// window id), for sub-windows and attached dialogs.
     pub parent: Option<WindowId>,
-    /// Creation order: the tie-breaker *inside* a band (AOSP "added later wins").
+    /// Creation order: the tie-breaker *inside* one policy layer (AOSP "added
+    /// later wins").
     pub seq: u64,
+    /// The owner's `INTERNAL_SYSTEM_WINDOW` permission; it picks the layer of
+    /// `TYPE_SYSTEM_ALERT`/`TYPE_SYSTEM_OVERLAY`/`TYPE_SYSTEM_ERROR`
+    /// ([`policy_layer`]).
+    pub can_add_internal_system_window: bool,
 }
 
 impl LayerEntry {
@@ -352,11 +574,10 @@ impl LayerEntry {
 
 /// The ordered window stack of one display.
 ///
-/// Bottom to top: band-major (`LayerBand`), then creation order inside a band.
-/// A sub-window is moved out of its band and inserted **directly above** the
-/// window it is attached to, which is what "kept next to their attached window
-/// in Z-order" means: two panels on the same activity stay above the activity
-/// and below anything that was above it.
+/// Bottom to top: `(policy_layer, creation order)` from the AOSP table in
+/// [`policy_layer`]. A sub-window is moved out of the top-level order and put
+/// next to the window it is attached to at its own
+/// [`sub_window_layer`] offset (panel/attached-dialog above, media behind).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WindowLayerStack {
     entries: Vec<LayerEntry>,
@@ -419,10 +640,12 @@ impl WindowLayerStack {
 
     /// The stack in AOSP z-order, **bottom first**.
     ///
-    /// Top-level windows sort by `(band, seq)`. A sub-window is drawn directly
-    /// above its parent, and a sub-window whose parent is not in the stack (a
-    /// tombstoned token) sorts by its band like any other window, so it can
-    /// never disappear silently.
+    /// Top-level windows sort by `(policy_layer, seq)` (the transcribed
+    /// `getWindowLayerFromTypeLw`). A sub-window sits next to its parent at its
+    /// own `getSubWindowLayerFromTypeLw` offset (`media` −2 and `media-overlay`
+    /// −1 behind, `panel` +1 … `above-sub-panel` +3 above). A sub-window whose
+    /// parent is not in the stack (a tombstoned token) sorts by its policy layer
+    /// like any other window, so it can never disappear silently.
     #[must_use]
     pub fn ordered(&self) -> Vec<&LayerEntry> {
         // Top-level order first.
@@ -431,20 +654,35 @@ impl WindowLayerStack {
             .iter()
             .filter(|e| !e.kind().is_sub_window())
             .collect();
-        top.sort_by_key(|e| (e.kind().band(), e.seq));
-        // Sub-windows keyed by their parent, in creation order.
+        top.sort_by_key(|e| {
+            (
+                policy_layer(e.type_, e.can_add_internal_system_window),
+                e.seq,
+            )
+        });
+        // Sub-windows keyed by their parent, in (sublayer, creation order).
         let mut subs: Vec<&LayerEntry> = self
             .entries
             .iter()
             .filter(|e| e.kind().is_sub_window())
             .collect();
-        subs.sort_by_key(|e| e.seq);
+        subs.sort_by_key(|e| (sub_window_layer(e.type_), e.seq));
 
         let mut out: Vec<&LayerEntry> = Vec::with_capacity(self.entries.len());
         for entry in top {
+            // `media`/`media-overlay` sub-windows are drawn behind their parent.
+            out.extend(
+                subs.iter()
+                    .copied()
+                    .filter(|s| s.parent == Some(entry.window) && sub_window_layer(s.type_) < 0),
+            );
             out.push(entry);
             // Panels/dialogs of this window, directly above it.
-            out.extend(subs.iter().copied().filter(|s| s.parent == Some(entry.window)));
+            out.extend(
+                subs.iter()
+                    .copied()
+                    .filter(|s| s.parent == Some(entry.window) && sub_window_layer(s.type_) >= 0),
+            );
         }
         // Orphans (their token is not in the stack) keep a defined place: above
         // the application band, below the overlays.
@@ -516,11 +754,123 @@ mod tests {
             frame,
             parent: None,
             seq,
+            can_add_internal_system_window: false,
         }
     }
 
     fn full() -> RectI {
         RectI::new(0, 0, 1080, 2400)
+    }
+
+    /// The table is transcribed from
+    /// `WindowManagerPolicy.getWindowLayerFromTypeLw` (`android-14.0.0_r75`),
+    /// not derived: every row below is a `case` of that source method.
+    #[test]
+    fn policy_layers_match_the_aosp_table() {
+        // WindowManager.java numeric values the table is keyed by.
+        assert_eq!(FIRST_SYSTEM_WINDOW, 2000);
+        assert_eq!(TYPE_STATUS_BAR, 2000);
+        assert_eq!(TYPE_SEARCH_BAR, 2001);
+        assert_eq!(TYPE_PHONE, 2002);
+        assert_eq!(TYPE_SYSTEM_ALERT, 2003);
+        assert_eq!(TYPE_TOAST, 2005);
+        assert_eq!(TYPE_SYSTEM_OVERLAY, 2006);
+        assert_eq!(TYPE_PRIORITY_PHONE, 2007);
+        assert_eq!(TYPE_SYSTEM_DIALOG, 2008);
+        assert_eq!(TYPE_KEYGUARD_DIALOG, 2009);
+        assert_eq!(TYPE_SYSTEM_ERROR, 2010);
+        assert_eq!(TYPE_INPUT_METHOD, 2011);
+        assert_eq!(TYPE_INPUT_METHOD_DIALOG, 2012);
+        assert_eq!(TYPE_WALLPAPER, 2013);
+        assert_eq!(TYPE_STATUS_BAR_PANEL, 2014);
+        assert_eq!(TYPE_SECURE_SYSTEM_OVERLAY, 2015);
+        assert_eq!(TYPE_DRAG, 2016);
+        assert_eq!(TYPE_STATUS_BAR_SUB_PANEL, 2017);
+        assert_eq!(TYPE_POINTER, 2018);
+        assert_eq!(TYPE_NAVIGATION_BAR, 2019);
+        assert_eq!(TYPE_VOLUME_OVERLAY, 2020);
+        assert_eq!(TYPE_BOOT_PROGRESS, 2021);
+        assert_eq!(TYPE_INPUT_CONSUMER, 2022);
+        assert_eq!(TYPE_NAVIGATION_BAR_PANEL, 2024);
+        assert_eq!(TYPE_DISPLAY_OVERLAY, 2026);
+        assert_eq!(TYPE_MAGNIFICATION_OVERLAY, 2027);
+        assert_eq!(TYPE_PRIVATE_PRESENTATION, 2030);
+        assert_eq!(TYPE_VOICE_INTERACTION, 2031);
+        assert_eq!(TYPE_ACCESSIBILITY_OVERLAY, 2032);
+        assert_eq!(TYPE_VOICE_INTERACTION_STARTING, 2033);
+        assert_eq!(TYPE_DOCK_DIVIDER, 2034);
+        assert_eq!(TYPE_QS_DIALOG, 2035);
+        assert_eq!(TYPE_SCREENSHOT, 2036);
+        assert_eq!(TYPE_PRESENTATION, 2037);
+        assert_eq!(TYPE_APPLICATION_OVERLAY, 2038);
+        assert_eq!(TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY, 2039);
+        assert_eq!(TYPE_NOTIFICATION_SHADE, 2040);
+        assert_eq!(TYPE_STATUS_BAR_ADDITIONAL, 2041);
+
+        // WindowManagerPolicy.java:534-616, one row per case arm.
+        let rows = [
+            (TYPE_WALLPAPER, 1),
+            (TYPE_APPLICATION, APPLICATION_LAYER),
+            (TYPE_PRESENTATION, 3),
+            (TYPE_PRIVATE_PRESENTATION, 3),
+            (TYPE_DOCK_DIVIDER, 3),
+            (TYPE_QS_DIALOG, 3),
+            (TYPE_PHONE, 3),
+            (TYPE_SEARCH_BAR, 4),
+            (TYPE_INPUT_CONSUMER, 5),
+            (TYPE_SYSTEM_DIALOG, 6),
+            (TYPE_TOAST, 7),
+            (TYPE_PRIORITY_PHONE, 8),
+            (TYPE_SYSTEM_ALERT, 9),
+            (TYPE_APPLICATION_OVERLAY, 11),
+            (TYPE_INPUT_METHOD, 13),
+            (TYPE_INPUT_METHOD_DIALOG, 14),
+            (TYPE_STATUS_BAR, 15),
+            (TYPE_STATUS_BAR_ADDITIONAL, 16),
+            (TYPE_NOTIFICATION_SHADE, 17),
+            (TYPE_STATUS_BAR_SUB_PANEL, 18),
+            (TYPE_KEYGUARD_DIALOG, 19),
+            (TYPE_VOICE_INTERACTION_STARTING, 20),
+            (TYPE_VOICE_INTERACTION, 21),
+            (TYPE_VOLUME_OVERLAY, 22),
+            (TYPE_SYSTEM_OVERLAY, 10),
+            (TYPE_NAVIGATION_BAR, 24),
+            (TYPE_NAVIGATION_BAR_PANEL, 25),
+            (TYPE_SCREENSHOT, 26),
+            (TYPE_SYSTEM_ERROR, 9),
+            (TYPE_MAGNIFICATION_OVERLAY, 28),
+            (TYPE_DISPLAY_OVERLAY, 29),
+            (TYPE_DRAG, 30),
+            (TYPE_ACCESSIBILITY_OVERLAY, 31),
+            (TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY, 32),
+            (TYPE_SECURE_SYSTEM_OVERLAY, 33),
+            (TYPE_BOOT_PROGRESS, 34),
+            (TYPE_POINTER, 35),
+        ];
+        for (type_, expected) in rows {
+            assert_eq!(
+                policy_layer(type_, false),
+                expected,
+                "{}",
+                type_name(type_).unwrap_or("undocumented")
+            );
+        }
+        // The three permission-dependent arms (`:553`, `:583`, `:596`).
+        assert_eq!(policy_layer(TYPE_SYSTEM_ALERT, true), 12);
+        assert_eq!(policy_layer(TYPE_SYSTEM_OVERLAY, true), 23);
+        assert_eq!(policy_layer(TYPE_SYSTEM_ERROR, true), 27);
+        assert_eq!(MAX_WINDOW_LAYER, 36);
+        // Undocumented types take the AOSP default arm (3), not a new band.
+        assert_eq!(policy_layer(0, false), 3);
+        assert_eq!(policy_layer(3000, false), 3);
+        assert_eq!(type_name(0), None);
+        // Sub-window offsets (`:656-674`).
+        assert_eq!(sub_window_layer(TYPE_APPLICATION_MEDIA), -2);
+        assert_eq!(sub_window_layer(TYPE_APPLICATION_MEDIA_OVERLAY), -1);
+        assert_eq!(sub_window_layer(TYPE_APPLICATION_PANEL), 1);
+        assert_eq!(sub_window_layer(TYPE_APPLICATION_ATTACHED_DIALOG), 1);
+        assert_eq!(sub_window_layer(TYPE_APPLICATION_SUB_PANEL), 2);
+        assert_eq!(sub_window_layer(TYPE_APPLICATION_ABOVE_SUB_PANEL), 3);
     }
 
     #[test]
@@ -534,7 +884,7 @@ mod tests {
         ] {
             let k = WindowKind::of(t);
             assert_eq!(k, WindowKind::Application, "type {t}");
-            assert_eq!(k.band(), LayerBand::Application, "type {t}");
+            assert_eq!(policy_layer(t, false), APPLICATION_LAYER, "type {t}");
             assert!(k.is_application());
             assert!(!k.is_sub_window());
         }
@@ -579,23 +929,26 @@ mod tests {
         assert_eq!(WindowKind::of(0), WindowKind::Unknown);
         assert_eq!(WindowKind::of(3000), WindowKind::Unknown);
         assert_eq!(WindowKind::of(-1), WindowKind::Unknown);
-        assert_eq!(WindowKind::Unknown.band(), LayerBand::Unknown);
     }
 
     #[test]
-    fn application_overlay_is_above_every_activity_window_below_bars_and_ime() {
-        let overlay = WindowKind::of(TYPE_APPLICATION_OVERLAY).band();
-        assert!(overlay > LayerBand::Application);
-        assert!(overlay > LayerBand::SubWindow);
-        // "below critical system windows like the status bar or IME"
-        assert!(overlay < WindowKind::of(TYPE_STATUS_BAR).band());
-        assert!(overlay < WindowKind::of(TYPE_INPUT_METHOD).band());
-        // The accessibility interception overlay is not overlaid by the app's
-        // own overlay.
-        assert!(
-            WindowKind::of(TYPE_ACCESSIBILITY_OVERLAY).band()
-                > WindowKind::of(TYPE_APPLICATION_OVERLAY).band()
-        );
+    fn application_overlay_is_above_every_activity_window_below_critical_system_windows() {
+        let overlay = policy_layer(TYPE_APPLICATION_OVERLAY, false);
+        assert!(overlay > APPLICATION_LAYER);
+        // The source table's own order: the app overlay is below the IME (13),
+        // the status bar (15), the shade (17), the navigation bar (24) and the
+        // accessibility interception overlay (31).
+        assert!(overlay < policy_layer(TYPE_INPUT_METHOD, false));
+        assert!(overlay < policy_layer(TYPE_STATUS_BAR, false));
+        assert!(overlay < policy_layer(TYPE_NOTIFICATION_SHADE, false));
+        assert!(overlay < policy_layer(TYPE_NAVIGATION_BAR, false));
+        assert!(overlay < policy_layer(TYPE_ACCESSIBILITY_OVERLAY, false));
+        // A normal app's SYSTEM_ALERT is *below* the application overlay (9 < 11);
+        // only an internal system window gets the higher 12.
+        assert!(policy_layer(TYPE_SYSTEM_ALERT, false) < overlay);
+        assert!(policy_layer(TYPE_SYSTEM_ALERT, true) > overlay);
+        // The status bar is *below* the notification shade in this image.
+        assert!(policy_layer(TYPE_STATUS_BAR, false) < policy_layer(TYPE_NOTIFICATION_SHADE, false));
     }
 
     #[test]
@@ -619,7 +972,7 @@ mod tests {
     }
 
     #[test]
-    fn stack_order_is_band_major_then_creation_order() {
+    fn stack_order_is_policy_layer_then_creation_order() {
         let mut s = WindowLayerStack::new();
         // Added in the "wrong" order on purpose: the overlay first, the app last.
         s.upsert(entry(30, TYPE_APPLICATION_OVERLAY, 0, full(), 1));
@@ -630,12 +983,30 @@ mod tests {
         assert_eq!(s.z_of(10), Some(0));
         assert_eq!(s.z_of(30), Some(2));
         assert_eq!(s.z_of(99), None);
-        // Wallpaper below everything, shade and bar above the overlay.
+        // Wallpaper below everything; the status bar (15) below the shade (17)
+        // in this image's table, both above the app overlay (11).
         s.upsert(entry(5, TYPE_WALLPAPER, 0, full(), 4));
         s.upsert(entry(40, TYPE_NOTIFICATION_SHADE, 0, full(), 5));
         s.upsert(entry(50, TYPE_STATUS_BAR, 0, full(), 6));
         let ids: Vec<_> = s.ordered().iter().map(|e| e.window).collect();
-        assert_eq!(ids, vec![5, 10, 20, 30, 40, 50]);
+        assert_eq!(ids, vec![5, 10, 20, 30, 50, 40]);
+    }
+
+    #[test]
+    fn a_media_sub_window_is_behind_its_parent_and_a_panel_above_it() {
+        let mut s = WindowLayerStack::new();
+        s.upsert(entry(10, TYPE_APPLICATION, 0, full(), 1));
+        s.upsert(entry(20, TYPE_APPLICATION, 0, full(), 2));
+        let mut media = entry(12, TYPE_APPLICATION_MEDIA, 0, full(), 3);
+        media.parent = Some(20);
+        let mut panel = entry(21, TYPE_APPLICATION_PANEL, 0, full(), 4);
+        panel.parent = Some(20);
+        s.upsert(media);
+        s.upsert(panel);
+        let ids: Vec<_> = s.ordered().iter().map(|e| e.window).collect();
+        // `getSubWindowLayerFromTypeLw`: media −2 (behind the activity),
+        // panel +1 (in front of it).
+        assert_eq!(ids, vec![10, 12, 20, 21]);
     }
 
     #[test]

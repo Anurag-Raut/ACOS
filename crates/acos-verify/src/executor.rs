@@ -27,7 +27,8 @@ use acos_protocol::{ErrorCode, Fidelity, ProtocolError, Status};
 
 use crate::artifacts;
 use crate::assertions::{
-    self, eval_log, eval_no_crash, eval_not_visible, eval_state, eval_text, eval_visible, Evaluated,
+    self, eval_log, eval_no_crash, eval_not_visible, eval_state, eval_text, eval_visible,
+    eval_windows, Evaluated,
 };
 use crate::backend::{
     Backend, BackendError, Capabilities, Capability, CrashRecord, EnvironmentChange, InputAction,
@@ -1194,6 +1195,21 @@ fn execute_step(
                 backend,
                 |observation| eval_state(assertion, observation),
                 "assert_state",
+                bound_frame_seq,
+            )
+        }
+        StepRef::AssertWindows(assertion) => {
+            capabilities_used.insert(Capability::UiTree.as_str().to_string());
+            if !caps.ui_tree {
+                return StepExec::unsupported(
+                    Capability::UiTree,
+                    "the backend cannot observe a UI tree, so it cannot report the window stack",
+                );
+            }
+            observation_assertion(
+                backend,
+                |observation| eval_windows(assertion, observation),
+                "assert_windows",
                 bound_frame_seq,
             )
         }

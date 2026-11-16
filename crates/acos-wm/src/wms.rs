@@ -109,10 +109,13 @@ pub struct WindowRecord {
     pub requested_visible_types: i32,
     /// Whether the window may hold focus.
     pub focusable: bool,
-    /// Z-order: the window's index in the layer stack (band-major: wallpaper,
-    /// application, sub-window, application overlay, system windows, shade,
-    /// bars, IME). See [`crate::layers`].
+    /// Z-order: the window's index in the layer stack (AOSP policy layer, then
+    /// creation order; sub-windows next to their parent). See [`crate::layers`].
     pub z: i64,
+    /// Creation order inside the display, the same-band tie-breaker
+    /// (`WindowManagerPolicy` "added later wins"). Unlike the `IWindow` binder
+    /// id this is monotonic, so a dialog added after the activity is above it.
+    pub seq: u64,
     /// The window's kind, classified from `LayoutParams.type`.
     pub kind: crate::layers::WindowKind,
     /// Monotonic relayout sequence (the `syncSeqId`).
@@ -243,6 +246,8 @@ pub struct WindowManager {
     next_layer: u64,
     /// Session id allocator.
     next_session: u64,
+    /// Window creation-order allocator (a same-policy-layer tie-breaker).
+    next_window_seq: u64,
 }
 
 impl WindowManager {
@@ -259,6 +264,7 @@ impl WindowManager {
             touch_mode: true,
             next_layer: 0x1000,
             next_session: 0,
+            next_window_seq: 0,
         }
     }
 
@@ -316,6 +322,8 @@ impl WindowManager {
         }
 
         let frame = self.compute_frame(&params);
+        let seq = self.next_window_seq;
+        self.next_window_seq += 1;
         let layer = self.alloc_layer();
         let name = format!(
             "Surface(name={}/{})/@0x{:x}",
@@ -343,11 +351,11 @@ impl WindowManager {
                 leash.handle = Some(self.alloc_layer());
             }
         }
-        // A window may hold focus when the framework would let it: an app-type
-        // window (`!is_system_window`) that does not set `FLAG_NOT_FOCUSABLE`.
-        // An overlay is a system window *and* is normally NOT_FOCUSABLE, so this
-        // is two independent guards, exactly as `InputWindowHandle` has them.
-        let focusable = !params.is_system_window() && crate::layers::focusable(params.flags);
+        // A window may hold focus when the framework would let it: it does not
+        // set `FLAG_NOT_FOCUSABLE`. LAYER1: the old `!is_system_window` guard
+        // was wrong for a focusable `TYPE_APPLICATION_OVERLAY` (AOSP lets it
+        // receive keys) and disagreed with the layer stack's `focus_target`.
+        let focusable = crate::layers::focusable(params.flags);
         let kind = crate::layers::WindowKind::of(params.type_);
         // Provisional z; `renumber_z` sets the real layer-stack index once the
         // record is in `self.windows`.
@@ -370,6 +378,7 @@ impl WindowManager {
             requested_visible_types,
             focusable,
             z,
+            seq,
             kind,
             relayout_seq: 0,
             insets_state: insets_state.clone(),
@@ -388,11 +397,13 @@ impl WindowManager {
             id,
             WmCallback::DispatchAppVisibility { visible: true },
         );
-        if focusable && self.focus.is_none() {
-            self.focus = Some(id);
-            self.callbacks
-                .push(id, WmCallback::WindowFocusChanged { focused: true });
-        }
+        // LAYER1: focus follows the layer stack, not "first focusable add":
+        // a dialog above the activity takes focus; a FLAG_NOT_FOCUSABLE
+        // overlay above it does not. The transition is published as
+        // WindowFocusChanged(false) for the old window and (true) for the new
+        // one, on add *and* remove (`WmsState::remove`), so a listener sees the
+        // same focus the hit test and the tree report.
+        self.publish_focus_transition();
         self.callbacks.push(
             id,
             WmCallback::InsetsControlChanged {
@@ -542,6 +553,11 @@ impl WindowManager {
                 controls: Box::new(insets_controls.clone()),
             },
         );
+        // LAYER1: `relayout` carries the current `LayoutParams.flags`, so a
+        // window that just became/stopped being `FLAG_NOT_FOCUSABLE` changes
+        // who the stack's `focus_target()` is. Publish that transition here so
+        // focus never disagrees with `hit_test`/the tree.
+        self.publish_focus_transition();
 
         Ok(RelayoutResult {
             result,
@@ -566,11 +582,34 @@ impl WindowManager {
         }
         self.renumber_z();
         if self.focus == Some(window) {
-            // Focus the topmost remaining focusable window (layer order, not
-            // insertion order).
-            self.focus = self.focus_target();
+            // The focused window just went away: focus the topmost remaining
+            // focusable window (layer order, not insertion order), and publish
+            // the transition to it. The removed window's channel is closed.
+            self.focus = None;
+            self.publish_focus_transition();
         }
         Ok(())
+    }
+
+    /// Move focus to the topmost focusable window and queue the two
+    /// `WindowFocusChanged` callbacks. No-op when focus did not change.
+    fn publish_focus_transition(&mut self) {
+        let target = self.focus_target();
+        let old = self.focus;
+        if old == target {
+            return;
+        }
+        if let Some(old) = old {
+            if self.windows.contains_key(&old) {
+                self.callbacks
+                    .push(old, WmCallback::WindowFocusChanged { focused: false });
+            }
+        }
+        if let Some(new) = target {
+            self.callbacks
+                .push(new, WmCallback::WindowFocusChanged { focused: true });
+        }
+        self.focus = target;
     }
 
     /// `IWindowSession.finishDrawing`: record that the buffer arrived for
@@ -725,7 +764,11 @@ impl WindowManager {
                 flags: record.params.flags,
                 frame: record.frame,
                 parent,
-                seq: record.id,
+                seq: record.seq,
+                // ACOS runs a normal (non-system) app: no `INTERNAL_SYSTEM_WINDOW`,
+                // so the alert/system-overlay/system-error arms use their low
+                // layers (WindowManagerPolicy.java:553,583,596).
+                can_add_internal_system_window: false,
             });
         }
         stack
@@ -1694,5 +1737,107 @@ mod tests {
         assert_eq!(wm.focus_target(), Some(activity));
         // It is still drawn: composition order does not depend on touchability.
         assert_eq!(wm.layer_stack().z_of(0x10), Some(1));
+    }
+
+    /// LAYER1: two windows in the same policy layer are ordered by creation,
+    /// not by the numeric `IWindow` binder id. A dialog added after its
+    /// activity is above it even when its binder id is smaller.
+    #[test]
+    fn a_same_layer_window_added_later_is_above_one_with_a_smaller_binder_id() {
+        use crate::layers::TYPE_APPLICATION;
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let activity = wm
+            .add_to_display_as_user(sess, BinderId(0x99), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        let dialog = wm
+            .add_to_display_as_user(sess, BinderId(0x11), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        assert_eq!(wm.windows[&activity].z, 0);
+        assert_eq!(wm.windows[&dialog].z, 1);
+        assert_eq!(wm.layer_stack().ordered()[1].window, dialog);
+    }
+
+    /// LAYER1: focus follows the layer stack on add and on remove, and the
+    /// transition is published as `WindowFocusChanged(false)` for the window
+    /// that lost focus and `(true)` for the one that gained it.
+    #[test]
+    fn focus_moves_with_the_layer_stack_on_add_and_remove() {
+        use crate::layers::{
+            TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY, FLAG_NOT_FOCUSABLE,
+        };
+        use crate::callbacks::WmCallback;
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let activity = wm
+            .add_to_display_as_user(sess, BinderId(0x01), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        assert_eq!(wm.focus, Some(activity));
+        let dialog = wm
+            .add_to_display_as_user(sess, BinderId(0x02), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        assert_eq!(wm.focus, Some(dialog), "a dialog above the activity takes focus");
+
+        // A focusable overlay above the dialog takes focus too...
+        let overlay = wm
+            .add_to_display_as_user(
+                sess,
+                BinderId(0x03),
+                overlay_params(TYPE_APPLICATION_OVERLAY, 0),
+                0,
+            )
+            .unwrap()
+            .window;
+        assert_eq!(wm.focus, Some(overlay));
+
+        // ...but a FLAG_NOT_FOCUSABLE overlay does not, even though it is on top.
+        let passive = wm
+            .add_to_display_as_user(
+                sess,
+                BinderId(0x04),
+                overlay_params(TYPE_APPLICATION_OVERLAY, FLAG_NOT_FOCUSABLE),
+                0,
+            )
+            .unwrap()
+            .window;
+        assert_eq!(wm.focus, Some(overlay));
+        assert!(wm.windows[&passive].z > wm.windows[&overlay].z);
+
+        let mut transitions = Vec::new();
+        while let Some(pc) = wm.callbacks.pop() {
+            if let WmCallback::WindowFocusChanged { focused } = pc.callback {
+                transitions.push((pc.window, focused));
+            }
+        }
+        // add(activity): activity true; add(dialog): activity false, dialog
+        // true; add(overlay): dialog false, overlay true; add(passive): no
+        // transition.
+        assert_eq!(
+            transitions,
+            vec![
+                (activity, true),
+                (activity, false),
+                (dialog, true),
+                (dialog, false),
+                (overlay, true)
+            ]
+        );
+
+        // Removing the focused overlay publishes (true) for the topmost
+        // focusable window that remains (the dialog). The removed window's own
+        // channel is closed, so it gets no callback.
+        wm.remove(overlay).unwrap();
+        assert_eq!(wm.focus, Some(dialog));
+        let mut after = Vec::new();
+        while let Some(pc) = wm.callbacks.pop() {
+            if let WmCallback::WindowFocusChanged { focused } = pc.callback {
+                after.push((pc.window, focused));
+            }
+        }
+        assert_eq!(after, vec![(dialog, true)]);
     }
 }

@@ -59,7 +59,7 @@ pub fn content_window_ms(requested: Option<u64>) -> u64 {
 /// `assert_visible`, `assert_state`, `assert_offscreen`, ...) can read, plus the
 /// structural facts that decide whether a read is even meaningful. A field an
 /// assertion reads may never change without changing the signature.
-pub const SIGNATURE_FIELDS: [&str; 14] = [
+pub const SIGNATURE_FIELDS: [&str; 16] = [
     "class",
     "resource_id",
     "text",
@@ -73,6 +73,8 @@ pub const SIGNATURE_FIELDS: [&str; 14] = [
     "checked",
     "selected",
     "window",
+    "window_kind",
+    "window_z",
     "package",
 ];
 
@@ -126,6 +128,10 @@ fn hash_node<H: std::hash::Hasher>(node: &UiNode, hasher: &mut H) {
     node.visible.hash(hasher);
     // GR4: the window label decides which frame a bounds value refers to.
     node.window.hash(hasher);
+    // LAYER1: a window's kind/z is content too. A dialog appearing or an
+    // overlay changing the stack must restart the content window.
+    node.window_kind.hash(hasher);
+    node.window_z.hash(hasher);
     node.package.hash(hasher);
     // The child count is hashed so a subtree cannot collide with its sibling
     // sequence by concatenation alone.

@@ -4678,3 +4678,52 @@ nothing in this change is on the tap path).
   peak vs the 256 MiB limit). INT-KG-AB recorded the same `launch_hang` flake on
   `main` and queued it as LHFLAKE.
 
+
+## E13.17 — LAYER1: the window layer table from AOSP source, policy-routed taps, window-tagged trees — PASS (overlay stack, dialog gates; A/B prepared, not run)
+
+- **Date / commit:** 2026-11-16 `layer1` (from `layer0` `6b00f943`)
+- **Question / goal:** finish the v0.4.0 window layer stack: replace LAYER0's
+  derived system-band order with the image's own numeric table, make the
+  ART/`verify` path use that stack (tree order, focus, tap routing), and tag the
+  tree/screenshot with the window (id, type, kind, z).
+- **Method:** added `frameworks/base/services/core/java/com/android/server/policy`
+  (+ `/wm`) to the AOSP sparse cache and transcribed
+  `WindowManagerPolicy.getWindowLayerFromTypeLw()` (android-14.0.0_r75,
+  `WindowManagerPolicy.java:525-630`); generated `docs/WINDOW_LAYERS.md` from
+  the cache; wired `WindowRecord.seq` + `WmsState::publish_focus_transition()`
+  and `InputDispatch::set_focus()`; moved ART tap routing to the WMS hit test
+  with the CLI sending display coordinates; added `windows[]` + per-node window
+  tags to the probe/protocol/replies; new fixture `overlay-stack` and gate
+  `scenarios/layer0-overlay-stack.yaml` (with a new `assert_windows` step).
+- **Inputs:** `fixtures/build/apps/overlay-stack.apk`
+  sha256 `b7be8c13487850fc370706c496fbb0d4eb3e6daf84dbe39647caf9516febe582`;
+  `dialog-menu.apk` / `form-validation.apk` unchanged from the fixture cache;
+  offscreen 1080x2400@420, API 34, `--engine art`.
+- **Result:** `layer0-overlay-stack` 18/18 steps pass
+  (`results/handoff/LAYER1/overlay-run4.json`). The tree reports
+  `TYPE_BASE_APPLICATION(z0, focus) < TYPE_APPLICATION(dialog, z1, focus after
+  show) < TYPE_APPLICATION_OVERLAY(z2) < TYPE_APPLICATION_OVERLAY(z3,
+  touchable:false)`; PNG region hashes match the overlay red `85ad4aaa…`, the
+  activity background `f8e6fa0f…` and overlay B blue `e8556fd7…`; tap on A logs
+  `overlay_tapped`, beside it and through B log `activity_tapped`.
+  `w27-dialog-window` pass, `w54-dialog-pixels` pass (all three region hashes
+  unchanged). `policy_layers_match_the_aosp_table` pins 35 policy rows + 5
+  sub-window offsets. `cargo test --release -p acos-wm -p acos-protocol
+  -p acos-verify` and `-p acos-cli --bins` green except two pre-existing
+  `view` tests that panic binding a Unix socket under the long worktree path
+  (`SUN_LEN`), unrelated to this change.
+- **Finding:** C1 already took z as an input, so the whole feature is the policy
+  above it; the source table corrected four LAYER0 relations (accessibility
+  overlay 31 is above the shade, status bar 15 is below the shade 17, a normal
+  app's system alert 9 is below the app overlay 11, IME 13 is below the bar).
+  Sub-window order now also models the negative media sub-layers.
+- **Fidelity / evidence:** real ART / AOSP policy, host-observed frames +
+  guest-asserted tree/logs. `results/handoff/LAYER1/HANDOFF.md` and the three
+  verdict directories under `results/handoff/LAYER1/artifacts/`.
+- **Regression / false pass:** no. The new `assert_windows` fails closed on a
+  tree without `windows[]`; the overlay gate's three tap steps each require a
+  fresh log line since the previous step.
+- **Conclusion / next:** the single-window latency A/B is prepared in
+  `tools/bench/layer0-single-window-ab.sh` (RUNBOOK in `results/handoff/LAYER1/`)
+  and must be run by the bench owner; the Gaten disclosure-dialog gate named in
+  the design does not exist in this worktree.

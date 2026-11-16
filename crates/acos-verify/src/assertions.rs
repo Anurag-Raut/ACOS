@@ -8,6 +8,7 @@ use acos_protocol::assertion::{
     AssertionDiff, AssertionResult, LogAssertion, StateAssertion, TextAssertion,
     VisibilityAssertion,
 };
+use acos_protocol::scenario::WindowOrderAssertion;
 use acos_protocol::ui::UiNode;
 use acos_protocol::ErrorCode;
 use regex::Regex;
@@ -423,6 +424,111 @@ pub fn eval_not_visible(
     )
 }
 
+/// Evaluate an `assert_windows` assertion: the tree's window stack in policy z
+/// order (bottom first), plus the focused window's kind.
+///
+/// A probe that reports no window block is a failed assertion, not a pass: the
+/// claim is about the stack, and an empty stack cannot support it.
+pub fn eval_windows(assertion: &WindowOrderAssertion, observation: &SessionObservation) -> Evaluated {
+    let windows = &observation.tree.windows;
+    if windows.is_empty() {
+        return Evaluated::fail(
+            "windows",
+            Vec::new(),
+            AssertionDiff {
+                expected: json!({"order": assertion.order}),
+                actual: Value::Null,
+                path: None,
+                detail: Some(
+                    "the UI tree reports no windows[] block (the engine predates the window layer stack)"
+                        .to_string(),
+                ),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail: "assert_windows needs a tree with a windows[] block; this engine reports none"
+                    .to_string(),
+            },
+        );
+    }
+    let kinds: Vec<String> = windows.iter().map(|w| w.kind.clone()).collect();
+    let types: Vec<String> = windows.iter().map(|w| w.type_name.clone()).collect();
+    let focused_window = windows.iter().find(|w| w.focus);
+    let focused = focused_window.map(|w| w.kind.clone());
+    let focused_type = focused_window.map(|w| w.type_name.clone());
+    let order_ok = kinds == assertion.order;
+    let types_ok = assertion
+        .types
+        .as_ref()
+        .map(|expected| expected == &types)
+        .unwrap_or(true);
+    let focus_ok = assertion
+        .focus
+        .as_ref()
+        .map(|expected| focused.as_deref() == Some(expected.as_str()))
+        .unwrap_or(true)
+        && assertion
+            .focus_type
+            .as_ref()
+            .map(|expected| focused_type.as_deref() == Some(expected.as_str()))
+            .unwrap_or(true);
+    if !order_ok || !types_ok || !focus_ok {
+        let detail = if !order_ok {
+            format!("window kinds are {kinds:?}, expected {:?}", assertion.order)
+        } else if !types_ok {
+            format!("window types are {types:?}, expected {:?}", assertion.types)
+        } else {
+            format!(
+                "focused window is kind {:?} / type {:?}, expected {:?} / {:?}",
+                focused, focused_type, assertion.focus, assertion.focus_type
+            )
+        };
+        return Evaluated::fail(
+            "windows",
+            Vec::new(),
+            AssertionDiff {
+                expected: json!({
+                    "order": assertion.order,
+                    "types": assertion.types,
+                    "focus": assertion.focus,
+                    "focus_type": assertion.focus_type,
+                }),
+                actual: json!({
+                    "order": kinds,
+                    "types": types,
+                    "focus": focused,
+                    "focus_type": focused_type,
+                    "z": windows.iter().map(|w| w.z).collect::<Vec<_>>(),
+                }),
+                path: None,
+                detail: Some(detail.clone()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail,
+            },
+        );
+    }
+    Evaluated::pass(
+        "windows",
+        Vec::new(),
+        Some(format!("{} windows in policy z order", windows.len())),
+        json!({
+            "order": assertion.order,
+            "types": assertion.types,
+            "focus": assertion.focus,
+            "focus_type": assertion.focus_type,
+        }),
+        json!({
+            "order": kinds,
+            "types": types,
+            "focus": focused,
+            "focus_type": focused_type,
+            "windows": windows,
+        }),
+    )
+}
+
 /// Evaluate a `state` assertion (all specified flags must match).
 pub fn eval_state(assertion: &StateAssertion, observation: &SessionObservation) -> Evaluated {
     // A state check about an explicitly invisible node (`visible: false`) must
@@ -675,6 +781,83 @@ mod tests {
             input: None,
         settle: None,
         }
+    }
+
+    fn windows_observation() -> SessionObservation {
+        let mut obs = observation();
+        obs.tree.windows = vec![
+            acos_protocol::ui::WindowInfo {
+                id: "aa".into(),
+                label: "main".into(),
+                type_name: "TYPE_BASE_APPLICATION".into(),
+                kind: "application".into(),
+                z: 0,
+                bounds: Some(Bounds::new(0, 0, 1080, 2400)),
+                focus: true,
+                touchable: true,
+            },
+            acos_protocol::ui::WindowInfo {
+                id: "bb".into(),
+                label: "dialog".into(),
+                type_name: "TYPE_APPLICATION".into(),
+                kind: "application".into(),
+                z: 1,
+                bounds: Some(Bounds::new(28, 976, 1052, 1489)),
+                focus: false,
+                touchable: true,
+            },
+            acos_protocol::ui::WindowInfo {
+                id: "cc".into(),
+                label: "overlay".into(),
+                type_name: "TYPE_APPLICATION_OVERLAY".into(),
+                kind: "application_overlay".into(),
+                z: 2,
+                bounds: Some(Bounds::new(40, 648, 520, 908)),
+                focus: false,
+                touchable: false,
+            },
+        ];
+        obs
+    }
+
+    /// LAYER1: the window stack assertion reads the tree's policy order, not
+    /// the node order, and the precise `TYPE_*`/focus form distinguishes an
+    /// activity from a dialog (both kind `application`).
+    #[test]
+    fn window_order_assertion_passes_on_the_policy_stack_and_fails_on_a_reorder() {
+        let good = WindowOrderAssertion {
+            order: vec!["application".into(), "application".into(), "application_overlay".into()],
+            focus: Some("application".into()),
+            focus_type: Some("TYPE_BASE_APPLICATION".into()),
+            types: Some(vec![
+                "TYPE_BASE_APPLICATION".into(),
+                "TYPE_APPLICATION".into(),
+                "TYPE_APPLICATION_OVERLAY".into(),
+            ]),
+        };
+        let evaluated = eval_windows(&good, &windows_observation());
+        assert!(evaluated.result.passed, "{:?}", evaluated.error);
+        assert_eq!(evaluated.result.kind, "windows");
+
+        // Insertion order (overlay first) must fail: the assertion is about z.
+        let mut swapped = windows_observation();
+        swapped.tree.windows.swap(0, 2);
+        let evaluated = eval_windows(&good, &swapped);
+        assert!(!evaluated.result.passed);
+        assert_eq!(evaluated.error.unwrap().code(), ErrorCode::AssertionFailed);
+
+        // A dialog has kind `application` too; focus_type is what pins it.
+        let dialog_focus = WindowOrderAssertion {
+            focus: Some("application".into()),
+            focus_type: Some("TYPE_APPLICATION".into()),
+            ..good.clone()
+        };
+        assert!(!eval_windows(&dialog_focus, &windows_observation()).result.passed);
+
+        // No window block: fail closed, never a pass.
+        let mut empty = windows_observation();
+        empty.tree.windows.clear();
+        assert!(!eval_windows(&good, &empty).result.passed);
     }
 
     #[test]

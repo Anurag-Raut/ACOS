@@ -651,6 +651,17 @@ impl ServiceObject for WindowSessionService {
                                 "{DESCRIPTOR}: register window input: {e}"
                             ))
                         })?;
+                    // LAYER1: focus is the WMS layer stack's answer (topmost
+                    // focusable window), not "the window that just registered".
+                    // A FLAG_NOT_FOCUSABLE overlay must not take focus from the
+                    // activity; a dialog above it must.
+                    dispatch
+                        .set_focus(state.wm.focus.map(BinderId))
+                        .map_err(|e| {
+                            ServiceError::Internal(format!(
+                                "{DESCRIPTOR}: publish focus: {e}"
+                            ))
+                        })?;
                 }
                 crate::exception::write_no_exception(reply);
                 write_add_result(&mut state, self.input.as_ref(), &add, size_compat_scale_len, reply)?;
@@ -710,6 +721,11 @@ impl ServiceObject for WindowSessionService {
                             .lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner);
                         dispatch.remove(binder);
+                        // The focused window is gone: publish FOCUS(true) to the
+                        // topmost focusable window that remains.
+                        dispatch.set_focus(state.wm.focus.map(BinderId)).map_err(|e| {
+                            ServiceError::Internal(format!("{DESCRIPTOR}: publish focus: {e}"))
+                        })?;
                     }
                 }
                 crate::exception::write_no_exception(reply);
@@ -806,6 +822,16 @@ impl ServiceObject for WindowSessionService {
                 // tree has bounds. Wake the env-driven injector (no-op when no
                 // plan is configured).
                 if let Some(input) = &self.input {
+                    // A relayout can change `FLAG_NOT_FOCUSABLE`; focus moves
+                    // with the stack's target, in the same order the tree sees.
+                    let mut dispatch = input
+                        .state()
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    dispatch.set_focus(state.wm.focus.map(BinderId)).map_err(|e| {
+                        ServiceError::Internal(format!("{DESCRIPTOR}: publish focus: {e}"))
+                    })?;
+                    drop(dispatch);
                     input.note_relayout(window);
                 }
                 // W5 finding: `resized(reportDraw=true)` is the other callback
