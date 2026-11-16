@@ -71,6 +71,7 @@ pub mod parcelable;
 pub mod pms;
 pub mod provider;
 pub mod registry;
+pub mod sensors; // MODSENS: native sensorservice (SensorManager/SensorEventConnection)
 pub mod surface_client;
 pub mod trace;
 pub mod value;

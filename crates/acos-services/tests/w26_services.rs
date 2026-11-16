@@ -83,11 +83,16 @@ fn sensorservice_resolves_the_first_time_and_serves_an_empty_sensor_list() {
 
     // getSensorList: `writeUint32(count)` + per sensor
     // `writeInt32(flattenedSize)` + flattened `Sensor`. Zero sensors is one
-    // count word, which is byte-exact and needs no `Sensor` layout.
+    // count word.
+    //
+    // MODSENS: `ISensorServer` is a **hand-written** binder interface
+    // (`libsensor/ISensorServer.cpp`), so its proxy reads the reply with no
+    // `binder::Status`/exception header. W26 wrote one (`no_exception` first),
+    // which the client read as the count: harmless while the list was always
+    // empty, and fatal for a populated one. The reply now starts at the count.
     for code in [SENSOR_GET_SENSOR_LIST, SENSOR_GET_DYNAMIC_SENSOR_LIST] {
         let mut data = sensor_list_request(SENSOR_SERVER_DESCRIPTOR, "com.gaten");
         let mut reply = transact(&mut host, server, code, 0, &mut data).expect("transact");
-        no_exception(&mut reply);
         assert_eq!(reply.read_int32().expect("sensor count"), 0);
         assert_eq!(reply.data_avail(), 0, "an empty Vector<Sensor> is 4 bytes");
     }
@@ -160,9 +165,10 @@ fn sensor_server_rejects_truncated_and_garbage_requests_without_hanging() {
 fn sensor_event_connection_is_a_named_gap_not_a_fabricated_queue() {
     // `createSensorEventConnection(String8 opPackage, int mode, String16
     // package, String16 attributionTag) -> ISensorEventConnection` (image
-    // `0xECDB`). With an empty sensor list no guest can ask for a queue, so the
-    // honest answer is a named structured gap: a real device's reply carries a
-    // `BitTube` of event fds, which ACOS cannot serve without inventing fds.
+    // `0xECDB`). With **no feed** (the modules `sensors:off` state) the honest
+    // answer is a named structured gap: a real device's reply carries a `BitTube`
+    // of event fds, and ACOS only serves one from a scripted feed
+    // (`crates/acos-services/tests/sensors_module.rs`).
     let mut host = ServiceHost::standard();
     let server = host
         .check_service("sensorservice")

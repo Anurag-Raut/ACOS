@@ -2741,14 +2741,14 @@ fn status_value(session: &ArtSession) -> Value {
 /// set it actually has.
 fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let op = args.get("op").and_then(Value::as_str).unwrap_or("");
-    if !matches!(op, "list" | "status" | "attach" | "detach") {
+    if !matches!(op, "list" | "status" | "attach" | "detach" | "ctl") {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
-            detail: format!("unknown op {op:?}; use list, status, attach or detach"),
+            detail: format!("unknown op {op:?}; use list, status, attach, detach or ctl"),
         });
     }
     let mut request = json!({"op": op});
-    if matches!(op, "attach" | "detach") {
+    if matches!(op, "attach" | "detach" | "ctl") {
         let Some(id) = args.get("id").and_then(Value::as_str) else {
             return Err(BackendError::Failed {
                 code: ErrorCode::InvalidArgument,
@@ -2764,6 +2764,18 @@ fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, Back
         if let Some(config) = args.get("config") {
             request["config"] = config.clone();
         }
+    }
+    if op == "ctl" {
+        // `acos_services {op: "ctl", id, ctl_op, args}` is the MCP spelling of
+        // `acos_service_ctl`: it drives a module's scripted state mid-session.
+        let Some(ctl_op) = args.get("ctl_op").and_then(Value::as_str) else {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "ctl needs a string `ctl_op` (the module's control op)".to_string(),
+            });
+        };
+        request["ctl_op"] = json!(ctl_op);
+        request["args"] = args.get("args").cloned().unwrap_or(json!({}));
     }
     let mut reply = session.service_op(request)?;
     reply["session_id"] = json!(args

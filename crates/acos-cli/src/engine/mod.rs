@@ -125,6 +125,8 @@ pub struct SessionCapabilities {
     pub logs: bool,
     /// Environment changes (`set_*`).
     pub environment: bool,
+    /// Service-module operations (`service_ctl`).
+    pub services: bool,
     /// Crash/ANR reports distinct from logs.
     pub crash_reports: bool,
 }
@@ -165,6 +167,7 @@ impl SessionCapabilities {
             ("close", self.close),
             ("logs", self.logs),
             ("environment", self.environment),
+            ("service_ctl", self.services),
             ("crash_reports", self.crash_reports),
         ]
     }
@@ -181,6 +184,7 @@ impl SessionCapabilities {
             reset: self.reset,
             environment: self.environment,
             crash_reports: self.crash_reports,
+            services: self.services,
         }
     }
 }
@@ -332,6 +336,25 @@ pub trait SessionBackend {
     /// rows). Engines with no module registry report none, never a guess.
     fn modules(&self) -> Vec<serde_json::Value> {
         Vec::new()
+    }
+
+    /// ADR-0029 item 4: one `acos_services`/`acos_service_ctl` operation on the
+    /// live session (`op: list|status|attach|detach|ctl`). An engine with no
+    /// service table refuses; none of them answers a no-op.
+    fn service_op(
+        &mut self,
+        _request: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        Err(BackendError::unsupported(
+            "services",
+            format!(
+                "the {} engine has no service-module command",
+                match self.engine() {
+                    Engine::Art => "ART",
+                    Engine::RustVm => "Rust VM",
+                }
+            ),
+        ))
     }
 
     /// Start the app and return the first completed frame.
@@ -1151,6 +1174,35 @@ impl Backend for EngineBackend {
         }
     }
 
+    fn service_ctl(
+        &mut self,
+        request: &acos_verify::backend::ServiceCtlRequest,
+    ) -> Result<serde_json::Value, BackendError> {
+        match self {
+            // The Rust VM has no service table at all: a structured refusal, not
+            // a silent no-op (ADR-0029 item 4).
+            EngineBackend::Native(_) => Err(BackendError::unsupported(
+                "services",
+                format!(
+                    "the Rust VM backend has no service modules (asked for `{}`)",
+                    request.kind()
+                ),
+            )),
+            EngineBackend::Session { session, .. } => {
+                if !session.capabilities().services {
+                    return Err(BackendError::unsupported(
+                        "services",
+                        format!(
+                            "this engine has no `services` command (asked for `{}`)",
+                            request.kind()
+                        ),
+                    ));
+                }
+                session.service_op(request.to_json())
+            }
+        }
+    }
+
     fn capture(&mut self) -> Result<SessionObservation, BackendError> {
         match self {
             EngineBackend::Native(backend) => backend.capture(),
@@ -1679,10 +1731,14 @@ mod tests {
                 "rotate",
                 "logs",
                 "environment",
+                // ADR-0029 item 4: a session without the `services` command
+                // cannot run a `service_ctl` step.
+                "service_ctl",
                 "crash_reports"
             ]
         );
         assert!(!caps.to_protocol().environment);
+        assert!(!caps.to_protocol().services);
         assert!(caps.to_protocol().input);
     }
 
@@ -2221,6 +2277,7 @@ mod engine_tests {
             None,
             None,
             None,
+            &[],
         );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["engine"], "art");
@@ -2578,6 +2635,7 @@ mod engine_tests {
             None,
             None,
             None,
+            &[],
         );
         assert!(!envelope.status().is_pass());
         assert_eq!(envelope.status(), Status::Unsupported);

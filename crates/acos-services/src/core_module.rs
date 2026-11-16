@@ -62,8 +62,9 @@ impl CoreModule {
                     // ADR-0029: `accessibility` is owned by the `accessibility`
                     // module, which configures the same shared state. `core`
                     // still installs the disabled fallback service so a session
-                    // that does not attach the module keeps the boot behaviour.
-                    .filter(|(name, _)| *name != "accessibility")
+                    // that does not attach the module keeps the boot behaviour
+                    // (see `FILLED_BY_MODULE`).
+                    .filter(|(name, _)| !FILLED_BY_MODULE.contains(name))
                     .map(|(name, descriptor)| ServiceProvide {
                         name,
                         descriptor,
@@ -101,6 +102,21 @@ impl CoreModule {
 /// `core` accepts no control ops: it is the implementation, and a control that
 /// changed AMS/PMS behaviour behind the agent's back would be a fake session.
 const CONTROLS: [ControlOp; 0] = [];
+
+/// Service names `core` **publishes** but does not claim in its manifest, because
+/// the behaviour behind them belongs to a module.
+///
+/// * `sensorservice` — `core` registers the node with no feed (the stock answer
+///   of a device without sensors) for two reasons: a `null` name costs
+///   `SystemSensorManager.nativeCreate` two 5 s libbinder retry loops (W26 §1),
+///   and an app resolves the `ISensorServer` proxy once and keeps it, so a hot
+///   attach must reuse the same binder. The `sensors` module installs a feed into
+///   that node and owns the name in the registry/capabilities, which is why it is
+///   filtered out of this manifest (the registry refuses two owners).
+/// * `accessibility` — `core` installs the disabled fallback service (a session
+///   that does not attach the module keeps the boot behaviour); the
+///   `accessibility` module configures the same shared state and owns the name.
+pub const FILLED_BY_MODULE: &[&str] = &["sensorservice", "accessibility"];
 
 impl Default for CoreModule {
     fn default() -> Self {

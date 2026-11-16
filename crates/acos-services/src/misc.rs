@@ -1826,167 +1826,27 @@ impl ServiceObject for FutureService {
 pub type ContentServiceState = ();
 
 // ---------------------------------------------------------------------------
-// sensors (W26): a stock-shaped `ISensorServer` with an empty sensor list
+// sensors (W26 -> MODSENS): the native `sensorservice`, now in `crate::sensors`
 // ---------------------------------------------------------------------------
 //
 // `SystemSensorManager.nativeCreate` (libandroid_runtime) constructs
 // `android::SensorManager`, which calls
-// `defaultServiceManager()->getService(String16("sensorservice"))` and then
-// `ISensorServer::getSensorList(package, &mSensorList)`. On stock Android the
-// service always exists; in ACOS it did not, and `ServiceManagerShim::getService`
-// (`.cache/aosp/native/libs/binder/IServiceManager.cpp:309`) retries
-// `checkService` for **5000 ms per lookup** before returning null. Two lookups
-// therefore burned ~10 s of the launcher's 12 s resume budget (W25 §3c).
+// `defaultServiceManager()->getService(String16("sensorservice"))`; a **null**
+// answer costs libbinder's `ServiceManagerShim::getService` retry loop
+// (`native/libs/binder/IServiceManager.cpp:309`) 5000 ms per lookup and the
+// framework makes two, which spent ~12 s of the launcher's resume budget (W25
+// §3c). The node therefore always exists.
 //
-// The wire below is read from the **image**, not the tag:
-// `nm -D .cache/art/sysroot/system/lib64/libsensor.so` locates
-// `android::BnSensorServer::onTransact` at `0xe8e0`; its jump table at
-// `0x953c` maps codes 1..5, and each case's `Parcel` calls give the argument
-// order. The interface descriptors are UTF-16 literals in `.rodata`:
-// `android.gui.SensorServer` (0x16754) and
-// `android.gui.SensorEventConnection`.
+// The reply shapes, the sensor table and the event channel live in
+// [`crate::sensors`] since the `sensors` service module fills the node with a
+// scripted feed (ADR-0029). This module re-exports the names W26 pinned so the
+// existing evidence tests keep compiling against one source of truth.
+pub use crate::sensors::{
+    SENSOR_CREATE_DIRECT_CONNECTION, SENSOR_CREATE_EVENT_CONNECTION,
+    SENSOR_GET_DYNAMIC_SENSOR_LIST, SENSOR_GET_SENSOR_LIST, SENSOR_NOARG_INT,
+    SENSOR_SERVER_DESCRIPTOR,
+};
 
-/// Descriptor `ISensorServer::descriptor` (image `.rodata`, UTF-16).
-pub const SENSOR_SERVER_DESCRIPTOR: &str = "android.gui.SensorServer";
-/// Descriptor `ISensorEventConnection::descriptor` (image `.rodata`, UTF-16).
-pub const SENSOR_EVENT_CONNECTION_DESCRIPTOR: &str = "android.gui.SensorEventConnection";
-/// `getSensorList(String16 package) -> Vector<Sensor>` (case `0xE927`).
-pub const SENSOR_GET_SENSOR_LIST: u32 = 1;
-/// `createSensorEventConnection(String8 opPackage, int mode, String16 package,
-/// String16 attributionTag) -> ISensorEventConnection` (case `0xECDB`).
-pub const SENSOR_CREATE_EVENT_CONNECTION: u32 = 2;
-/// A no-argument call returning `int32` (case `0xECA8`). The image's name for
-/// it is not recoverable from the stripped table, so it is answered
-/// structurally only when its reply shape is proven; today it is a named gap.
-pub const SENSOR_NOARG_INT: u32 = 3;
-/// `getDynamicSensorList(String16 package) -> Vector<Sensor>` (case `0xEE0B`).
-pub const SENSOR_GET_DYNAMIC_SENSOR_LIST: u32 = 4;
-/// `createSensorDirectConnection(...)` — takes a `NativeHandle` (case `0xEB68`).
-pub const SENSOR_CREATE_DIRECT_CONNECTION: u32 = 5;
-
-/// What the sensor server was asked for during a session (evidence).
-#[derive(Debug, Default)]
-pub struct SensorState {
-    /// `getSensorList` calls, in request order, with the package argument.
-    pub sensor_list_calls: Vec<String>,
-    /// `getDynamicSensorList` calls.
-    pub dynamic_list_calls: Vec<String>,
-    /// `createSensorEventConnection` calls (packages).
-    pub event_connection_calls: Vec<String>,
-}
-
-/// `android.gui.SensorServer`: an `ISensorServer` with zero sensors, which is
-/// exactly what an emulator image without sensor hardware serves.
-pub struct SensorServer {
-    state: Arc<Mutex<SensorState>>,
-}
-
-impl SensorServer {
-    /// A server with an empty sensor list.
-    #[must_use]
-    pub fn new(state: Arc<Mutex<SensorState>>) -> Self {
-        Self { state }
-    }
-}
-
-fn sensor_bad(method: &str, detail: impl std::fmt::Display) -> ServiceError {
-    ServiceError::BadRequest {
-        interface: SENSOR_SERVER_DESCRIPTOR.to_string(),
-        method: method.to_string(),
-        detail: detail.to_string(),
-    }
-}
-
-impl ServiceObject for SensorServer {
-    fn call(
-        &mut self,
-        interface: &str,
-        method: &MethodInfo,
-        _args: &[Value],
-    ) -> Result<CallResult> {
-        // `android.gui.*` has no decoded `acos-aidl` table: `raw_transact` is
-        // the only path (the same rule as the compositor and `IDisplayEventConnection`).
-        Err(ServiceError::UnsupportedAndroidApi {
-            interface: interface.to_string(),
-            code: method.code,
-            method: method.name.clone(),
-        })
-    }
-
-    fn raw_transact(
-        &mut self,
-        interface: &str,
-        code: u32,
-        data: &mut acos_parcel::Parcel,
-        reply: &mut acos_parcel::Parcel,
-    ) -> Result<bool> {
-        if interface != SENSOR_SERVER_DESCRIPTOR {
-            return Ok(false);
-        }
-        match code {
-            SENSOR_GET_SENSOR_LIST | SENSOR_GET_DYNAMIC_SENSOR_LIST => {
-                // `BnSensorServer::onTransact` reads the package name first
-                // (`checkInterface`, `readString16`), then the reply is
-                // `writeUint32(count)` followed by, per sensor,
-                // `writeInt32(flattenedSize)` + the flattened `Sensor`. Zero
-                // sensors is one count word and nothing else, so this is
-                // byte-exact for the empty case and needs no `Sensor` layout.
-                let package = data
-                    .read_string16()
-                    .map_err(|e| sensor_bad("getSensorList", e))?
-                    .unwrap_or_default();
-                {
-                    let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-                    if code == SENSOR_GET_SENSOR_LIST {
-                        state.sensor_list_calls.push(package);
-                    } else {
-                        state.dynamic_list_calls.push(package);
-                    }
-                }
-                crate::exception::write_no_exception(reply);
-                reply.write_int32(0);
-                Ok(true)
-            }
-            SENSOR_CREATE_EVENT_CONNECTION => {
-                // Decode the whole request so a malformed parcel is a
-                // structured error instead of a half-consumed transaction,
-                // then refuse explicitly: a real device answers with an
-                // `ISensorEventConnection` carrying a `BitTube` of event fds,
-                // and with an empty sensor list no guest can ever need one.
-                let op_package = data
-                    .read_string8()
-                    .map_err(|e| sensor_bad("createSensorEventConnection", e))?;
-                let _mode = data
-                    .read_int32()
-                    .map_err(|e| sensor_bad("createSensorEventConnection", e))?;
-                let package = data
-                    .read_string16()
-                    .map_err(|e| sensor_bad("createSensorEventConnection", e))?
-                    .unwrap_or_default();
-                let _attribution_tag = data
-                    .read_string16()
-                    .map_err(|e| sensor_bad("createSensorEventConnection", e))?;
-                let _ = op_package;
-                self.state
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .event_connection_calls
-                    .push(package);
-                Err(ServiceError::UnsupportedAndroidApi {
-                    interface: SENSOR_SERVER_DESCRIPTOR.to_string(),
-                    code,
-                    method: "createSensorEventConnection".to_string(),
-                })
-            }
-            _ => {
-                // Codes 3 (`() -> int`) and 5 (a `NativeHandle` argument) never
-                // occur on the empty-list path. Answering them would mean
-                // guessing a layout, so they stay a named, structured gap.
-                Ok(false)
-            }
-        }
-    }
-}
 
 /// A convenience `Bundle` for evidence.
 #[must_use]

@@ -27,7 +27,7 @@ use acos_protocol::commands::ResetScope;
 use acos_protocol::{Backend as ProtocolBackend, Envelope, ErrorCode};
 use acos_verify::backend::{
     Backend, BackendError, Capabilities, EnvironmentChange, InputAction, LaunchOutcome,
-    LaunchRequest, LogRecord, ManifestInfo, SessionObservation,
+    LaunchRequest, LogRecord, ManifestInfo, ServiceCtlRequest, SessionObservation,
 };
 use acos_verify::Fidelity;
 
@@ -353,6 +353,17 @@ impl Backend for TrustGuard {
 
     fn configure(&mut self, change: &EnvironmentChange) -> Result<(), BackendError> {
         self.inner.configure(change)
+    }
+
+    /// ADR-0029 item 4: forward the service-module seam. A wrapper that forwards
+    /// every other operation but not this one would turn every `service_ctl` step
+    /// into `unsupported` (that is what the first ART run of the sensors proof
+    /// hit), which reads as "the engine cannot" instead of the module refusing.
+    fn service_ctl(
+        &mut self,
+        request: &ServiceCtlRequest,
+    ) -> Result<serde_json::Value, BackendError> {
+        self.inner.service_ctl(request)
     }
 
     fn capture(&mut self) -> Result<SessionObservation, BackendError> {

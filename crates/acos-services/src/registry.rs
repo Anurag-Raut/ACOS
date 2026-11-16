@@ -442,12 +442,15 @@ pub fn install_with_handles_and_insets(
     // It is a raw node (`android.gui.*` has no decoded table) published under
     // the `ServiceManager` name the framework asks for, so `checkService`
     // answers on the first try and `SensorManager` never enters its retry loop.
-    let sensors = Arc::new(Mutex::new(crate::misc::SensorState::default()));
-    host.register_dynamic_named(
-        "sensorservice",
-        crate::misc::SENSOR_SERVER_DESCRIPTOR,
-        Box::new(crate::misc::SensorServer::new(Arc::clone(&sensors))),
-    );
+    //
+    // MODSENS: the node is `core`'s, with **no feed** — the stock answer of a
+    // device without sensors (empty list). The `sensors` module installs a feed
+    // into this same node while attached, so a hot attach does not invalidate a
+    // binder the app already holds (an app keeps the `ISensorServer` proxy for
+    // its whole life). `core`'s manifest therefore does not claim the name; see
+    // `core_module::FILLED_BY_MODULE`.
+    let sensors = Arc::new(Mutex::new(crate::sensors::SensorHub::default()));
+    crate::sensors::install(host, Arc::clone(&sensors));
     // K5: the two raw nodes above. Neither interface has a decoded
     // `acos-aidl` table (their own `raw_transact` answers the exact wire
     // shape), so they are dynamic nodes registered under their real

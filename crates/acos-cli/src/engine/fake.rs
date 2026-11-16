@@ -298,6 +298,8 @@ impl SessionBackend for FakeSession {
             close: true,
             logs: false,
             environment: false,
+            // A fake session has no service table.
+            services: false,
             crash_reports: false,
         }
     }
