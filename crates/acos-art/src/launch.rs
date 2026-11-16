@@ -29,11 +29,10 @@ use crate::launcher::Outcome;
 use crate::logd::Logd;
 use crate::watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 use crate::{ArtRoot, Error, Result};
-use acos_binder_peer::{accept, close_frame_fds, listen, read_frame, write_frame, Frame, Peer};
+use acos_binder_peer::{listen, Peer};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
-use std::os::fd::RawFd;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -954,53 +953,32 @@ pub(crate) fn launch_session(
     crate::stage("peer-setup");
     let peer_thread = std::thread::spawn(move || {
         let summary = (|| -> std::io::Result<PeerSummary> {
-            let client = loop {
-                if peer_stop.load(Ordering::Acquire) {
-                    unsafe {
-                        libc::close(listener);
-                    }
-                    return Ok(PeerSummary::default());
-                }
-                match accept(listener) {
-                    Ok(fd) => break fd,
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(Duration::from_millis(2));
-                    }
-                    Err(e) => {
-                        unsafe {
-                            libc::close(listener);
-                        }
-                        return Err(e);
-                    }
-                }
-            };
-            unsafe {
-                libc::close(listener);
-                // H4: the receive timeout only exists to notice `stop` after a
-                // guest death. Process exit closes this socket, which is the
-                // real wake; a 1 s bound keeps a wedged peer from parking the
-                // launcher forever without a 10/s idle timer.
-                let tv = libc::timeval {
-                    tv_sec: 1,
-                    tv_usec: 0,
-                };
-                libc::setsockopt(
-                    client,
-                    libc::SOL_SOCKET,
-                    libc::SO_RCVTIMEO,
-                    &tv as *const _ as *const libc::c_void,
-                    std::mem::size_of::<libc::timeval>() as libc::socklen_t,
-                );
-            }
             // The real ServiceHost, with its package manager pointed at the APK
             // being launched: `handleBindApplication` asks for its
             // `getApplicationInfo` and must get the real package, not the
             // hello-views fixture (and never a fabricated null).
             let mut peer = Peer::with_host(peer_host, Some(peer_log));
-            let rc = serve(&mut peer, client, &peer_stop);
+            // MPROC2 step 3a: the session serves **N** tagged driver
+            // connections (one per app process) from this one peer/ServiceHost.
+            // The listener now stays open for the whole session, because the
+            // launcher spawns secondary processes lazily through it.
+            let served = acos_binder_peer::serve::serve(&mut peer, listener, &peer_stop);
             unsafe {
-                libc::close(client);
+                libc::close(listener);
             }
+            let outcome = served?;
+            eprintln!(
+                "acos-art: peer: processes={:?} peak_connections={} accepted={} refused={} \
+                 closed={} frames={}/{} unroutable={}",
+                peer.tags(),
+                outcome.peak_connections,
+                outcome.accepted,
+                outcome.refused,
+                outcome.closed,
+                outcome.frames_in,
+                outcome.frames_out,
+                outcome.unroutable
+            );
             let summary = PeerSummary {
                 calls: peer
                     .service_calls()
@@ -1030,10 +1008,9 @@ pub(crate) fn launch_session(
                 reverse_failed: peer.reverse_failed,
                 resource_limits: peer.resource_limits(),
             };
-            let _ = rc;
             Ok(summary)
         })();
-        let _ = tx.send(summary.unwrap_or(PeerSummary::default()));
+        let _ = tx.send(summary.unwrap_or_default());
     });
 
     // --- guest -------------------------------------------------------------
@@ -1330,6 +1307,12 @@ pub(crate) fn launch_session(
     );
     sb.env("ACOSART_LOAD", "libandroid_runtime.so");
     sb.env("E3G_SOCK", "/data/acos-launch.sock");
+    // MPROC2 step 3a: the primary app process names itself in the driver's
+    // connection handshake, so the peer can put its tag on every binder handle
+    // it imports. Secondary processes get their own tag from the spawn path
+    // (`spawn <tag>`), never from this env.
+    sb.env("ACOS_PROCESS_TAG", "0");
+    sb.env("ACOS_PROCESS_NAME", &package);
     sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
     // Display geometry the guest boots at. Forwarded only when the caller set
     // it (`acos-art launch --width …`, or the engine's `ACOS_ART_*`), so the
@@ -6671,81 +6654,6 @@ struct PeerSummary {
     reverse_replies: u64,
     reverse_failed: u64,
     resource_limits: u64,
-}
-
-fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
-    loop {
-        let frame: Frame = match read_frame(fd) {
-            Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            Err(e)
-                if (e.kind() == std::io::ErrorKind::WouldBlock
-                    || e.kind() == std::io::ErrorKind::TimedOut)
-                    && stop.load(Ordering::Acquire) =>
-            {
-                return Ok(())
-            }
-            // A live guest may be idle; the timeout only exists to observe
-            // `stop`, not to end the session.
-            Err(e)
-                if e.kind() == std::io::ErrorKind::WouldBlock
-                    || e.kind() == std::io::ErrorKind::TimedOut =>
-            {
-                continue
-            }
-            Err(e) => return Err(e),
-        };
-        // `ACOS_PEER_DEBUG=1` prints every frame the peer reads and writes. The
-        // reply/`write_frame` failure line is *not* gated: a reply the peer
-        // cannot send is the difference between a structured guest error and a
-        // main thread blocked in `transact`, so it must always be visible.
-        let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
-        if dbg {
-            eprintln!(
-                "peer-trace: in ty={} seq={} code={} flags={:#x} target={:#x} data={} offs={} fds={}",
-                frame.ty,
-                frame.seq,
-                frame.code,
-                frame.flags,
-                frame.target,
-                frame.data.len(),
-                frame.offs.len(),
-                frame.fds.len()
-            );
-        }
-        let outs = peer.handle(frame);
-        if dbg {
-            eprintln!("peer-trace: handle -> {} frames", outs.len());
-        }
-        for out in outs {
-            if let Err(e) = write_frame(fd, &out) {
-                eprintln!(
-                    "peer-trace: write_frame FAILED: {e} (ty={} seq={} code={} data={} offs={} fds={})",
-                    out.ty,
-                    out.seq,
-                    out.code,
-                    out.data.len(),
-                    out.offs.len(),
-                    out.fds.len()
-                );
-                close_frame_fds(&out);
-                return Err(e);
-            }
-            if dbg {
-                eprintln!(
-                    "peer-trace: out ty={} seq={} code={} data={} offs={} fds={:?}",
-                    out.ty,
-                    out.seq,
-                    out.code,
-                    out.data.len(),
-                    out.offs.len(),
-                    out.fds
-                );
-            }
-            close_frame_fds(&out);
-        }
-        let _ = std::io::stderr().flush();
-    }
 }
 
 /// Compile the userspace binder driver (`crates/acos-binder-peer/native`) with

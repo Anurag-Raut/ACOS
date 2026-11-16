@@ -205,7 +205,7 @@ __attribute__((constructor)) static void e3g_load_runtime(void) {
 }
 
 // ------------------------------------------------------------- (3) transport
-enum { F_REQ = 1, F_RSP = 2, F_TXN = 3, F_REP = 4 };
+enum { F_REQ = 1, F_RSP = 2, F_TXN = 3, F_REP = 4, F_HELLO = 5 };
 
 struct fhdr {
     uint32_t type;
@@ -774,6 +774,34 @@ static int connect_peer(void) {
         return -1;
     }
     g.sock = s;
+    // MPROC2 step 3a: name this connection's app process before any
+    // transaction. A driver wire handle is only unique inside its own process,
+    // so the peer needs the tag to address a delivery to the right one. With
+    // ACOS_PROCESS_TAG unset the process is the session's primary one (tag 0),
+    // which is what every launch was before MPROC2 — an older peer that never
+    // reads the handshake sees it as one extra frame type it ignores, and a
+    // newer peer treats a connection without a handshake as tag 0 as well.
+    {
+        const char* tag_env = getenv("ACOS_PROCESS_TAG");
+        unsigned long tag = 0;
+        if (tag_env != NULL && tag_env[0] != '\0') {
+            char* end = NULL;
+            unsigned long parsed = strtoul(tag_env, &end, 10);
+            if (end != tag_env && *end == '\0' && parsed <= 63) {
+                tag = parsed;
+            } else {
+                WARN("ACOS_PROCESS_TAG=%s is not a tag (0..63); using 0", tag_env);
+            }
+        }
+        const char* name = getenv("ACOS_PROCESS_NAME");
+        if (name == NULL) name = "primary";
+        size_t nlen = strlen(name);
+        if (nlen > 64) nlen = 64;
+        if (send_frame(F_HELLO, 0, (uint32_t)tag, 0, 0, name, nlen, NULL, 0, NULL, 0) != 0) {
+            WARN("hello failed; the peer sees this connection as the primary process");
+        }
+        DBG("hello tag=%lu name=%s", tag, name);
+    }
     pthread_create(&g.reader, NULL, reader_main, NULL);
     g.reader_started = 1;
     DBG("connected to peer at %s", path);

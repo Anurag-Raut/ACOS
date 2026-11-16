@@ -1,14 +1,17 @@
-//! Serve one binder-driver connection on a `SOCK_SEQPACKET` unix socket.
+//! Serve tagged binder-driver connections on a `SOCK_SEQPACKET` unix socket.
 //!
 //! ```text
 //! acos-binder-peer /data/acos-binder.sock [unsupported.jsonl]
 //! ```
+//!
+//! MPROC2 step 3a: the loop accepts N connections, each naming its app process
+//! in a `F_HELLO` handshake (a connection with no handshake is the primary
+//! process, tag 0). This binary has no launcher, so it runs until the last
+//! connection closes.
 
-use std::io::Write;
-use std::os::fd::RawFd;
 use std::process::ExitCode;
 
-use acos_binder_peer::{accept, close_frame_fds, listen, read_frame, write_frame, Peer};
+use acos_binder_peer::{listen, Peer};
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -27,24 +30,24 @@ fn main() -> ExitCode {
         }
     };
     eprintln!("acos-binder-peer: listening on {path}");
-    let client = match accept(listener) {
-        Ok(fd) => fd,
-        Err(e) => {
-            eprintln!("acos-binder-peer: accept: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    unsafe {
-        libc::close(listener);
-    }
-    eprintln!("acos-binder-peer: driver connected");
     let mut peer = match log {
         Some(p) => Peer::with_log(p),
         None => Peer::new(),
     };
-    let rc = serve(&mut peer, client);
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let rc = acos_binder_peer::serve::serve(&mut peer, listener, &stop)
+        .map(|outcome| {
+            eprintln!(
+                "acos-binder-peer: served processes={:?} peak={} accepted={} refused={} closed={}",
+                peer.tags(),
+                outcome.peak_connections,
+                outcome.accepted,
+                outcome.refused,
+                outcome.closed
+            );
+        });
     unsafe {
-        libc::close(client);
+        libc::close(listener);
     }
     let _ = std::fs::remove_file(&path);
     match rc {
@@ -64,21 +67,5 @@ fn main() -> ExitCode {
             eprintln!("acos-binder-peer: {e}");
             ExitCode::FAILURE
         }
-    }
-}
-
-fn serve(peer: &mut Peer, fd: RawFd) -> std::io::Result<()> {
-    loop {
-        let frame = match read_frame(fd) {
-            Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            Err(e) => return Err(e),
-        };
-        let outs = peer.handle(frame);
-        for out in outs {
-            write_frame(fd, &out)?;
-            close_frame_fds(&out);
-        }
-        let _ = std::io::stderr().flush();
     }
 }

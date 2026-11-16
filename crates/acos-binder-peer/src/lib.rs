@@ -25,12 +25,15 @@
 
 pub mod peer;
 pub mod protocol;
+pub mod serve;
 
 pub use peer::{
-    frame_from_parcel, host_binder_kind, import_parcel, java_wire, peer_node, Peer,
-    UnsupportedRecord, JAVA_TAG, NODE_TAG,
+    frame_from_parcel, host_binder_kind, import_parcel, import_parcel_for, java_binder_id, java_wire,
+    owner_process, peer_node, Peer, ProcessConn, TagRefusal, UnsupportedRecord, JAVA_TAG, NODE_TAG,
+    PROC_MASK, PROC_SHIFT,
 };
+pub use serve::{serve, refuse_frame, ServeOutcome};
 pub use protocol::{
-    accept, close_frame_fds, listen, read_frame, write_frame, Frame, F_REP, F_REQ, F_RSP, F_TXN,
-    PING_TRANSACTION, TF_ONE_WAY, TF_STATUS_CODE,
+    accept, close_frame_fds, listen, read_frame, write_frame, Frame, F_HELLO, F_REP, F_REQ, F_RSP,
+    F_TXN, MAX_PROCESSES, MAX_PROCESS_TAG, PING_TRANSACTION, TAG_PRIMARY, TF_ONE_WAY, TF_STATUS_CODE,
 };

@@ -26,6 +26,13 @@ use crate::error::{codes, ServiceError, Result};
 use crate::exception::{write_exception, write_no_exception, EX_SERVICE_SPECIFIC};
 use crate::trace::{self, CallTrace, TraceSink};
 
+/// Ceiling on binder owner records (one per app binder the service layer saw).
+///
+/// A real session exports a handful per process (`IApplicationThread`, a few
+/// `IInterface` callbacks); 8192 is generous, and exceeding it is counted, not
+/// hidden.
+pub const MAX_BINDER_OWNERS: usize = 8192;
+
 /// A binder-to-binder delivery the native layer must enqueue on the target
 /// looper (the `system -> app` direction).
 #[derive(Debug)]
@@ -176,6 +183,13 @@ pub struct ServiceHost {
     /// Binders created while answering a transaction (the `IBulkCursor` a
     /// `query` hands back), keyed by binder id.
     dynamic: HashMap<u64, Box<dyn ServiceObject>>,
+    /// Owner process tag for every binder that lives in an app process
+    /// (MPROC2 step 3a). A host service node has no entry; an app binder is
+    /// recorded the first time its process hands it to the service layer
+    /// (`addService`, `attachApplication`, any request parcel).
+    binder_owners: HashMap<u64, u32>,
+    /// Binder records refused because the table was full (never a silent drop).
+    binder_owner_drops: u64,
     deliveries: Vec<PendingDelivery>,
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
@@ -218,6 +232,8 @@ impl ServiceHost {
             names: HashMap::new(),
             aux: HashMap::new(),
             dynamic: HashMap::new(),
+            binder_owners: HashMap::new(),
+            binder_owner_drops: 0,
             deliveries: Vec::new(),
             trace: None,
             seq: AtomicU64::new(1),
@@ -300,10 +316,81 @@ impl ServiceHost {
     }
 
     /// Register an auxiliary binder (a binder returned by another service).
-    pub fn register_aux(&mut self, descriptor: &'static str) -> BinderId {        let binder = self.registry.register_local(descriptor);
+    pub fn register_aux(&mut self, descriptor: &'static str) -> BinderId {
+        let binder = self.registry.register_local(descriptor);
         self.binder_descriptors.insert(binder.0, descriptor);
         self.aux.insert(descriptor, binder);
         binder
+    }
+
+    /// Record which app process owns a binder (MPROC2 step 3a).
+    ///
+    /// Called whenever a process hands the service layer a binder of its own:
+    /// `IServiceManager.addService`, `attachApplication` (its
+    /// `IApplicationThread`) and every binder object in a request parcel. The
+    /// record is what lets a delivery be addressed to the process that can
+    /// receive it, and what a process teardown drops.
+    ///
+    /// The table is bounded: a guest that keeps exporting binders must not own
+    /// an unbounded host allocation. A refusal is counted
+    /// ([`ServiceHost::binder_owner_drops`]), never silently discarded, and the
+    /// binder is still usable — only its owner record is missing.
+    ///
+    /// Returns `true` when the owner was recorded (or already was that owner).
+    pub fn set_binder_owner(&mut self, binder: BinderId, tag: u32) -> bool {
+        if binder.is_null() {
+            return false;
+        }
+        if let Some(existing) = self.binder_owners.get(&binder.0) {
+            if *existing == tag {
+                return true;
+            }
+        } else if self.binder_owners.len() >= MAX_BINDER_OWNERS {
+            self.binder_owner_drops = self.binder_owner_drops.saturating_add(1);
+            eprintln!(
+                "acos-services: ART_RESOURCE_LIMIT: binder owner table is full 
+                 ({MAX_BINDER_OWNERS} records); binder {:#x} of process {tag} is not recorded",
+                binder.0
+            );
+            return false;
+        }
+        self.binder_owners.insert(binder.0, tag);
+        true
+    }
+
+    /// The app process that owns `binder`, when it is an app binder.
+    #[must_use]
+    pub fn binder_owner(&self, binder: BinderId) -> Option<u32> {
+        self.binder_owners.get(&binder.0).copied()
+    }
+
+    /// Every binder recorded as owned by process `tag`, ascending.
+    #[must_use]
+    pub fn binders_of_process(&self, tag: u32) -> Vec<BinderId> {
+        let mut v: Vec<BinderId> = self
+            .binder_owners
+            .iter()
+            .filter(|(_, owner)| **owner == tag)
+            .map(|(id, _)| BinderId(*id))
+            .collect();
+        v.sort_unstable_by_key(|b| b.0);
+        v
+    }
+
+    /// Drop every binder record owned by process `tag` (the process exited).
+    ///
+    /// Returns how many records were dropped. A later delivery to one of those
+    /// ids fails structurally instead of reaching a stale handle.
+    pub fn drop_process_binders(&mut self, tag: u32) -> usize {
+        let before = self.binder_owners.len();
+        self.binder_owners.retain(|_, owner| *owner != tag);
+        before - self.binder_owners.len()
+    }
+
+    /// Binder owner records refused because the table was full.
+    #[must_use]
+    pub fn binder_owner_drops(&self) -> u64 {
+        self.binder_owner_drops
     }
 
     /// Look up an auxiliary binder.
@@ -929,6 +1016,18 @@ impl ServiceHost {
             reply: trace::summary_args(&reply_values),
         };
         Ok((info, reply_values))
+    }
+
+    /// Queue a `system -> app` delivery outside a service handler call.
+    ///
+    /// Handlers queue theirs through `CallResult::deliveries`; the session
+    /// control surface (lifecycle ops such as the idle-kill save-state, a
+    /// scripted intent result, a process's own bookkeeping) needs the same queue
+    /// without being inside `call()`. The peer drains it with
+    /// [`ServiceHost::take_deliveries`] and routes each delivery to the process
+    /// that owns its target binder.
+    pub fn queue_delivery(&mut self, delivery: PendingDelivery) {
+        self.deliveries.push(delivery);
     }
 
     /// Drain `system -> app` deliveries queued by service handlers.

@@ -28,6 +28,17 @@ pub const F_RSP: u32 = 2;
 pub const F_TXN: u32 = 3;
 /// Driver -> peer: the reply to the peer-initiated transaction with that `seq`.
 pub const F_REP: u32 = 4;
+/// Driver -> peer: the connection handshake, sent once right after `connect`.
+///
+/// MPROC2 step 3a: each app process has its own driver connection, and every
+/// binder handle on that connection is private to that process. The handshake
+/// names the process (`code` = tag, `data` = the process name) *before* any
+/// transaction, so the peer can put the owning tag into every Java binder id it
+/// imports from this connection and route deliveries back to the right one.
+///
+/// A peer that never sees a hello treats the connection as the primary process
+/// (tag 0), which is exactly the one-guest fast path that existed before.
+pub const F_HELLO: u32 = 5;
 
 /// Size of the fixed frame header (`struct fhdr`).
 pub const HEADER_SIZE: usize = 48;
@@ -43,6 +54,17 @@ pub const PING_TRANSACTION: u32 = 0x5F50_4E47;
 /// `asInterface` for the native AIDL backends (`android.gui.*`, which have no
 /// `acos-aidl` table) asks for it before dispatching any interface call.
 pub const INTERFACE_TRANSACTION: u32 = 0x5F49_4E54;
+/// The tag of the primary (launched) app process. Every session has it; a
+/// second process gets 1..=[`MAX_PROCESS_TAG`].
+pub const TAG_PRIMARY: u32 = 0;
+/// Highest process tag a connection may claim (`PROC_MASK` is 6 bits).
+pub const MAX_PROCESS_TAG: u32 = 63;
+/// One connection per app process (tag 0 plus 63 secondary ones).
+pub const MAX_PROCESSES: usize = MAX_PROCESS_TAG as usize + 1;
+/// Longest process name a hello may carry; a longer one is truncated (the name
+/// is evidence, not addressing).
+pub const MAX_PROCESS_NAME: usize = 64;
+
 /// `TF_ONE_WAY` in `binder_transaction_data.flags`.
 pub const TF_ONE_WAY: u32 = 0x01;
 /// `TF_STATUS_CODE` in `binder_transaction_data.flags`: the reply carries a
@@ -86,6 +108,33 @@ impl Frame {
             offs: Vec::new(),
             fds: Vec::new(),
         }
+    }
+
+    /// A connection handshake naming `tag` (see [`F_HELLO`]).
+    #[must_use]
+    pub fn hello(tag: u32, name: &str) -> Self {
+        let mut bytes = name.as_bytes().to_vec();
+        bytes.truncate(MAX_PROCESS_NAME);
+        Self {
+            ty: F_HELLO,
+            seq: 0,
+            code: tag,
+            flags: 0,
+            target: 0,
+            data: bytes,
+            offs: Vec::new(),
+            fds: Vec::new(),
+        }
+    }
+
+    /// `(tag, name)` when this frame is a handshake.
+    #[must_use]
+    pub fn hello_of(&self) -> Option<(u32, String)> {
+        if self.ty != F_HELLO {
+            return None;
+        }
+        let name = String::from_utf8_lossy(&self.data).to_string();
+        Some((self.code, name))
     }
 
     /// The object offsets decoded from the little-endian table.
@@ -367,5 +416,29 @@ mod tests {
         write_frame(a.as_raw_fd(), &f).unwrap();
         let g = read_frame(b.as_raw_fd()).unwrap();
         assert_eq!((g.ty, g.seq, g.code, g.target, g.data), (F_REQ, 1, 5, 0x2_0000_0002, vec![9, 8, 7, 6]));
+    }
+
+    #[test]
+    fn hello_names_the_process_and_round_trips_over_a_socket() {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::net::UnixStream;
+        let (a, b) = UnixStream::pair().unwrap();
+        let f = Frame::hello(3, "dev.acos.fixtures.counter");
+        write_frame(a.as_raw_fd(), &f).unwrap();
+        let g = read_frame(b.as_raw_fd()).unwrap();
+        assert_eq!(g.ty, F_HELLO);
+        assert_eq!(
+            g.hello_of(),
+            Some((3, "dev.acos.fixtures.counter".to_string()))
+        );
+        // A normal transaction is never mistaken for a handshake.
+        let req = Frame::plain(F_REQ, 1, 5, 0, 0, vec![1]);
+        assert_eq!(req.hello_of(), None);
+    }
+
+    #[test]
+    fn a_hello_name_is_bounded() {
+        let f = Frame::hello(1, &"n".repeat(MAX_PROCESS_NAME * 4));
+        assert_eq!(f.data.len(), MAX_PROCESS_NAME);
     }
 }

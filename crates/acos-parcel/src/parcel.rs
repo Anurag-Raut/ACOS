@@ -1076,6 +1076,31 @@ impl Parcel {
         self.objects.len()
     }
 
+    /// The binder ids this parcel carries, in object-table order (MPROC2 3a).
+    ///
+    /// A `system_server`-side caller that receives a request has to know *which
+    /// binders the caller handed over* — those belong to the caller's process,
+    /// and a delivery to one of them must be routed back there. File-descriptor
+    /// objects are skipped (their `id` is a descriptor, not a binder id), and an
+    /// object whose offset is out of range is ignored rather than read past the
+    /// buffer.
+    #[must_use]
+    pub fn binder_ids(&self) -> Vec<BinderId> {
+        let mut out = Vec::new();
+        for &o in &self.objects {
+            if o + FLAT_OBJECT_SIZE > self.data.len() {
+                continue;
+            }
+            let mut bytes = [0u8; FLAT_OBJECT_SIZE];
+            bytes.copy_from_slice(&self.data[o..o + FLAT_OBJECT_SIZE]);
+            let obj = FlatObject::from_bytes(&bytes);
+            if obj.is_binder() && obj.id != 0 {
+                out.push(BinderId(obj.id));
+            }
+        }
+        out
+    }
+
     // ------------------------------------------------------------------
     // append / marshal / recycle
     // ------------------------------------------------------------------
@@ -1160,6 +1185,24 @@ impl Parcel {
     pub fn unmarshall(&mut self, bytes: &[u8]) {
         self.reset();
         self.data.extend_from_slice(bytes);
+    }
+
+    /// Replace the parcel contents with `bytes` and the object table that goes
+    /// with them (`nativeUnmarshall` plus the offsets the wire carried).
+    ///
+    /// [`Parcel::marshall`] deliberately serialises data bytes only; the binder
+    /// peer receives the object offsets in the same frame, so it installs them
+    /// here. Without this an imported parcel has no object table, and a caller
+    /// that asks *which binders did the guest hand over* (MPROC2 step 3a) gets
+    /// an empty answer.
+    pub fn unmarshall_with_objects(&mut self, bytes: &[u8], offsets: &[usize]) {
+        self.unmarshall(bytes);
+        self.objects.extend(
+            offsets
+                .iter()
+                .copied()
+                .filter(|o| o.saturating_add(FLAT_OBJECT_SIZE) <= self.data.len()),
+        );
     }
 
     /// `nativeFreeBuffer` / `Parcel.recycle`: drop data, objects and fds.
