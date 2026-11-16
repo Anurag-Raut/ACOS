@@ -81,8 +81,8 @@ an app *receives* the callback.
 | path | what |
 |---|---|
 | `run/proof/proof.log` | the four app-level arms: `off 8/8`, `real 9/9`, `offline 14/14`, host-port PASS |
-| `run/proof/offline/art/verdict.json` | the 14 steps of the offline/online proof, including the callback and exception assertions |
-| `run/proof/offline/art/logs/logcat.txt` | `netcb onAvailable` → `netcb onLost` → `fetch failed: java.net.ConnectException` → `netcb onAvailable` → `fetch result=HTTP 200` |
+| `run/proof/offline/verdict.json` | the 14 steps of the offline/online proof, including the callback and exception assertions |
+| `run/proof/offline/logs/logcat.txt` | `netcb onAvailable` → `netcb onLost` → `fetch failed: java.net.ConnectException` → `netcb onAvailable` → `fetch result=HTTP 200` |
 | `run/stacks6-threads.txt` | the live threaded probe: the stuck fetch thread in `ppoll` with a 15 s timeout, no TCP socket, no resolver request |
 | `run/offline1-logcat.txt` | the pre-fix run: status stays `pending` for the 60 s budget |
 | `run/exp-order.yaml` | the experiment that separated "the callback fired" from "the TextView refreshed" |

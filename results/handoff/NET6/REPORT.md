@@ -44,7 +44,7 @@ hostport_runs exit=0 check=no_leak "relay_veths": [] "session_rules": 0 forwarde
 ```
 
 The offline arm, from the app's own log
-(`run/proof/offline/art/logs/logcat.txt`):
+(`run/proof/offline/logs/logcat.txt`):
 
 ```
 NetCheck: netcb onAvailable 100
