@@ -47,8 +47,16 @@ pub enum FieldOp {
     CharSequence,
     /// `writeString8`.
     Str8,
-    /// `writeStringArray`.
+    /// `writeStringArray` (`Parcel.writeString16Array`): an `int` count (`-1`
+    /// for null) followed by each string as a **String16**.
     StringArray,
+    /// `writeString8Array`: an `int` count (`-1` for null) followed by each
+    /// string as a **String8**. Every `android.content.pm` parcelable uses this
+    /// form for its `String[]` fields (`PackageInfo.splitNames`,
+    /// `requestedPermissions`; `ApplicationInfo.split*`; `ComponentInfo.
+    /// attributionTags`); the bytes differ from [`FieldOp::StringArray`] for
+    /// every non-empty array, so the two are distinct ops, not aliases.
+    String8Array,
     /// `writeStringList`: an `int` count (`-1` for null) followed by each
     /// string. Wire-identical to [`FieldOp::StringArray`]; separate so the
     /// decoded value is a [`Value::StringList`], which is what the Java reader
@@ -230,9 +238,9 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Str8, // scanPublicSourceDir
             FieldOp::Str8, // sourceDir
             FieldOp::Str8, // publicSourceDir
-            FieldOp::StringArray, // splitNames
-            FieldOp::StringArray, // splitSourceDirs
-            FieldOp::StringArray, // splitPublicSourceDirs
+            FieldOp::String8Array, // splitNames
+            FieldOp::String8Array, // splitSourceDirs
+            FieldOp::String8Array, // splitPublicSourceDirs
             FieldOp::SparseArray, // splitDependencies
             FieldOp::Str8, // nativeLibraryDir
             FieldOp::Str8, // secondaryNativeLibraryDir
@@ -240,11 +248,11 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int,  // nativeLibraryRootRequiresIsa
             FieldOp::Str8, // primaryCpuAbi
             FieldOp::Str8, // secondaryCpuAbi
-            FieldOp::StringArray, // resourceDirs
-            FieldOp::StringArray, // overlayPaths
+            FieldOp::String8Array, // resourceDirs
+            FieldOp::String8Array, // overlayPaths
             FieldOp::Str8, // seInfo
             FieldOp::Str8, // seInfoUser
-            FieldOp::StringArray, // sharedLibraryFiles
+            FieldOp::String8Array, // sharedLibraryFiles
             FieldOp::TypedList("android.content.pm.SharedLibraryInfo"), // sharedLibraryInfos
             FieldOp::Str8, // dataDir
             FieldOp::Str8, // deviceProtectedDataDir
@@ -267,7 +275,7 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int,  // category
             FieldOp::Int,  // targetSandboxVersion
             FieldOp::Str8, // classLoaderName
-            FieldOp::StringArray, // splitClassLoaderNames
+            FieldOp::String8Array, // splitClassLoaderNames
             FieldOp::Int,  // compileSdkVersion
             FieldOp::Str8, // compileSdkVersionCodename
             FieldOp::Str8, // appComponentFactory
@@ -302,7 +310,7 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Nested("android.content.pm.ApplicationInfo"),
             FieldOp::Str8,        // processName
             FieldOp::Str8,        // splitName
-            FieldOp::StringArray, // attributionTags
+            FieldOp::String8Array, // attributionTags
             FieldOp::Int,         // descriptionRes
             FieldOp::Int,         // enabled
             FieldOp::Int,         // exported
@@ -330,7 +338,7 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Nested("android.content.pm.ApplicationInfo"),
             FieldOp::Str8,
             FieldOp::Str8,
-            FieldOp::StringArray,
+            FieldOp::String8Array,
             FieldOp::Int,
             FieldOp::Int,
             FieldOp::Int,
@@ -369,11 +377,21 @@ pub static SPECS: &[ParcelableSpec] = &[
     // `PackageInfo.writeToParcel` (API 34): 43 `Parcel.write*` calls. The two
     // conditional members (`applicationInfo`, `signingInfo`) are `writeInt`
     // presence markers followed by a direct `writeToParcel`.
+    //
+    // `splitNames` and `requestedPermissions` are **`writeString8Array`**:
+    // `PackageInfo.java:585,608` in the android-14 tag and
+    // `Landroid/content/pm/PackageInfo;->writeToParcel` at `0x000b`/`0x0072` in
+    // the image's `classes.dex`. Encoding them as String16 arrays (the old
+    // `FieldOp::StringArray`) desynchronised every field after
+    // `requestedPermissions`; the framework then read a `Signature[]` length
+    // out of string payload bytes and threw
+    // `OutOfMemoryError: Failed to allocate a 7676737936 byte allocation at
+    // Parcel.createString8Array` for `getPackageInfo(pkg, 0x100024c0)`.
     ParcelableSpec {
         class: "android.content.pm.PackageInfo",
         fields: &[
             FieldOp::Str8,        // packageName
-            FieldOp::StringArray, // splitNames
+            FieldOp::String8Array, // splitNames
             FieldOp::Int,         // versionCode
             FieldOp::Int,         // versionCodeMajor
             FieldOp::Str8,        // versionName
@@ -391,7 +409,7 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::TypedArray("android.content.pm.ProviderInfo"),
             FieldOp::TypedArray("android.content.pm.InstrumentationInfo"),
             FieldOp::TypedArray("android.content.pm.PermissionInfo"),
-            FieldOp::StringArray, // requestedPermissions
+            FieldOp::String8Array, // requestedPermissions
             FieldOp::IntArray,    // requestedPermissionsFlags
             FieldOp::TypedArray("android.content.pm.Signature"),
             FieldOp::TypedArray("android.content.pm.ConfigurationInfo"),
@@ -441,7 +459,7 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Nested("android.content.pm.ApplicationInfo"),
             FieldOp::Str8,        // processName
             FieldOp::Str8,        // splitName
-            FieldOp::StringArray, // attributionTags
+            FieldOp::String8Array, // attributionTags
             FieldOp::Int,         // descriptionRes
             FieldOp::Int,         // enabled
             FieldOp::Int,         // exported
@@ -479,7 +497,7 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Nested("android.content.pm.ApplicationInfo"),
             FieldOp::Str8,        // processName
             FieldOp::Str8,        // splitName
-            FieldOp::StringArray, // attributionTags
+            FieldOp::String8Array, // attributionTags
             FieldOp::Int,         // descriptionRes
             FieldOp::Int,         // enabled
             FieldOp::Int,         // exported (ComponentInfo)
@@ -513,9 +531,9 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Str8,        // targetProcesses
             FieldOp::Str8,        // sourceDir
             FieldOp::Str8,        // publicSourceDir
-            FieldOp::StringArray, // splitNames
-            FieldOp::StringArray, // splitSourceDirs
-            FieldOp::StringArray, // splitPublicSourceDirs
+            FieldOp::String8Array, // splitNames
+            FieldOp::String8Array, // splitSourceDirs
+            FieldOp::String8Array, // splitPublicSourceDirs
             FieldOp::SparseArray, // splitDependencies
             FieldOp::Str8,        // dataDir
             FieldOp::Str8,        // deviceProtectedDataDir
@@ -1054,10 +1072,16 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int],
         verification: Verification::Curated,
     },
+    // `android.content.pm.ProviderInfoList.writeToParcel` (image
+    // `classes.dex`): `allowSquashing()` (writes nothing), then
+    // `writeTypedList(providers, flags)`, then `restoreAllowSquashing`. The old
+    // `[StringArray]` spec described a class that has no string array at all;
+    // no ACOS reply uses this codec yet (`atms` sends a null typed object), so
+    // the wrong table was inert but wrong.
     ParcelableSpec {
         class: "android.content.pm.ProviderInfoList",
-        fields: &[FieldOp::StringArray],
-        verification: Verification::Curated,
+        fields: &[FieldOp::TypedList("android.content.pm.ProviderInfo")],
+        verification: Verification::Full,
     },
     // `android.app.ProfilerInfo.writeToParcel`:
     //   writeString(profileFile)
@@ -1733,8 +1757,14 @@ pub fn read_payload(class: &str, parcel: &mut Parcel) -> Result<Parcelable> {
     }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     let mut values = Vec::with_capacity(spec.fields.len());
-    for field in spec.fields {
-        values.push(read_field(*field, parcel)?);
+    let trace = std::env::var_os("ACOS_PARCEL_TRACE").is_some();
+    for (i, field) in spec.fields.iter().enumerate() {
+        let before = parcel.data_position();
+        let v = read_field(*field, parcel)?;
+        if trace {
+            eprintln!("  [{class} {i}] {field:?} {before}..{} = {v:?}", parcel.data_position());
+        }
+        values.push(v);
     }
     Ok(Parcelable::Ordered {
         class: class.to_string(),
@@ -1798,6 +1828,7 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
         }
         FieldOp::Str8 => Value::Str8(parcel.read_string8()?),
         FieldOp::StringArray => Value::StringArray(parcel.read_string16_array()?),
+        FieldOp::String8Array => Value::StringArray(parcel.read_string8_array()?),
         FieldOp::StringList => Value::StringList(parcel.read_string16_array()?),
         FieldOp::IntArray => Value::IntArray(parcel.read_int32_array()?),
         FieldOp::LongArray => Value::LongArray(parcel.read_int64_array()?),
@@ -1852,7 +1883,18 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
                 }
                 let mut out = Vec::with_capacity(n);
                 for _ in 0..n {
-                    out.push(Value::Parcelable(read_payload(class, parcel)?));
+                    // `Parcel.writeTypedArray` writes each element with
+                    // `writeTypedObject`: a 4-byte presence marker (`0` null,
+                    // `1` present) before the payload. The writer below emits
+                    // that marker, so the reader must consume it; reading the
+                    // payload directly desynchronised every element after the
+                    // first and only stayed invisible while all typed arrays in
+                    // the replies were empty (count `-1`).
+                    if parcel.read_int32()? == 0 {
+                        out.push(Value::Parcelable(Parcelable::Null));
+                    } else {
+                        out.push(Value::Parcelable(read_payload(class, parcel)?));
+                    }
                 }
                 Value::List(Some(out))
             }
@@ -2082,8 +2124,15 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
         FieldOp::Str8 => parcel.write_string8_opt(expect_str(value)?)?,
         FieldOp::StringArray => {
             let arr = expect_string_array(value)?;
-            let refs: Option<Vec<&str>> = arr.map(|v| v.iter().map(|s| s.as_deref().unwrap_or("")).collect());
-            parcel.write_string16_array(refs.as_deref())?;
+            let refs: Option<Vec<Option<&str>>> =
+                arr.map(|v| v.iter().map(|s| s.as_deref()).collect());
+            parcel.write_string16_array_nullable(refs.as_deref())?;
+        }
+        FieldOp::String8Array => {
+            let arr = expect_string_array(value)?;
+            let refs: Option<Vec<Option<&str>>> =
+                arr.map(|v| v.iter().map(|s| s.as_deref()).collect());
+            parcel.write_string8_array(refs.as_deref())?;
         }
         FieldOp::StringList => {
             let items = expect_string_list(value)?;
@@ -3509,10 +3558,14 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         // even though the wire form is `int + writeString8`.
         FieldOp::CharSequence => call == "writeString",
         FieldOp::Str8 => call == "writeString8",
-        FieldOp::StringArray => call == "writeString8Array" || call == "writeStringArray",
+        FieldOp::StringArray => call == "writeStringArray",
+        // `writeString8Array` and `writeStringArray` are different wire
+        // encodings; accepting either for both is how the pm codecs stayed
+        // wrong while the DEX oracle passed.
+        FieldOp::String8Array => call == "writeString8Array",
         // `Parcel.writeStringList` is a distinct call in a DEX scan, but the
         // bytes it writes are the `writeStringArray` shape (count + String16s).
-        FieldOp::StringList => call == "writeStringList" || call == "writeStringArray",
+        FieldOp::StringList => call == "writeStringList",
         FieldOp::IntArray => call == "writeIntArray",
         FieldOp::LongArray => call == "writeLongArray",
         FieldOp::FloatArray => call == "writeFloatArray",
