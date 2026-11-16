@@ -43,3 +43,11 @@ steps:
       tag: AcosA11yProbe
       patterns:
         - "event_sent"
+  # MODA11Y2: the module binds the enabled service (scheduleCreateService +
+  # scheduleBindService -> publishService -> IAccessibilityServiceClient.init),
+  # so the app's own AccessibilityService.onServiceConnected runs with the
+  # AccessibilityServiceInfo the system connected it with.
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        - "service_connected"

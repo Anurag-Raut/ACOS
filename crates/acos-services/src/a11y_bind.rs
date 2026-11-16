@@ -358,6 +358,12 @@ impl ServiceObject for A11yConnectionNode {
                 }
                 crate::exception::write_no_exception(reply);
             }
+            "setAttributionTag" => {
+                // `AccessibilityService` sets its attribution tag on the
+                // connection right after `init`; AOSP records it and returns.
+                let _tag = data.read_string16()?;
+                crate::exception::write_no_exception(reply);
+            }
             "getServiceInfo" => {
                 let info = state
                     .bound_info()
@@ -412,8 +418,9 @@ impl ServiceObject for A11yConnectionNode {
 
 /// `IAccessibilityServiceConnection` transaction codes (AIDL declaration
 /// order), for the methods this node answers.
-const CONNECTION_METHODS: [(u32, &str); 5] = [
+const CONNECTION_METHODS: [(u32, &str); 6] = [
     (1, "setServiceInfo"),
+    (2, "setAttributionTag"),
     (11, "getServiceInfo"),
     (12, "performGlobalAction"),
     (13, "getSystemActions"),
