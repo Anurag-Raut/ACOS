@@ -439,10 +439,38 @@ fn bundle_extras(vm: &mut Vm, bundle: Handle) -> JResult<std::collections::BTree
                             )))
                         }
                     },
+                    "java.lang.String[]" => {
+                        let len = match vm.call_method(h, "length", "()I", &[]).map_err(err)? {
+                            JavaValue::Int(v) => v,
+                            other => {
+                                return Err(err(format!(
+                                    "String[].length returned {}",
+                                    other.kind()
+                                )))
+                            }
+                        };
+                        let mut items = Vec::new();
+                        for index in 0..len.max(0) {
+                            let item = vm
+                                .call_method(h, "get", "(I)Ljava/lang/Object;", &[
+                                    JavaValue::Int(index),
+                                ])
+                                .map_err(err)?;
+                            match item {
+                                JavaValue::Object(item) if item != NULL => {
+                                    items.push(vm.java_string_to_rust(item).map_err(err)?)
+                                }
+                                _ => return Err(err("String[] element is null".to_string())),
+                            }
+                        }
+                        // MODNOTIF2: `EXTRA_REQUEST_PERMISSIONS_NAMES` is the
+                        // only String[] the ATMS request path reads.
+                        Extra::Strings(items)
+                    }
                     other => {
                         return Err(err(format!(
                             "extra `{key}` has unsupported type {other}; AMS the bridge \
-                             only carries String/int/boolean extras"
+                             only carries String/int/boolean/String[] extras"
                         )))
                     }
                 }
@@ -872,9 +900,14 @@ pub fn materialize_intent(vm: &mut Vm, facts: &IntentFacts) -> JResult<Handle> {
                     "cannot re-materialise extra `{key}`: this value is a parcelable and the VM path has no class-loader construction for it"
                 )))
             }
-            Extra::Present => {
+            // MODNOTIF2/MODNOTIF5: the request direction carries a `String[]`
+            // (`EXTRA_REQUEST_PERMISSIONS_NAMES`), which this path does not
+            // materialise back into Java; the `Present` refusal covers both.
+            Extra::Strings(_) | Extra::Present => {
                 return Err(err(format!(
-                    "cannot re-materialise extra `{key}`: its type was not captured"
+                    "cannot re-materialise extra `{key}`: its type is not carried back into Java \
+                     (only the framework->system direction needs it, e.g. the permission \
+                     request's EXTRA_REQUEST_PERMISSIONS_NAMES)"
                 )))
             }
         }

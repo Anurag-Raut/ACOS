@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- `NotificationManager.areNotificationsEnabled()` as the app sees it. -->
+    <TextView
+        android:id="@+id/enabled"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/enabled_unknown" />
+
+    <!-- What the app asked for (the system's record is the module's `list`). -->
+    <TextView
+        android:id="@+id/posted"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/posted_none" />
+
+    <TextView
+        android:id="@+id/channel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="channel: -" />
+</LinearLayout>

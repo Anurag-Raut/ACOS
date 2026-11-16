@@ -1469,24 +1469,103 @@ fn service_ctl_step(backend: &mut dyn Backend, ctl: &ServiceCtlStep) -> StepExec
         Ok(reply) => {
             let mut exec = StepExec::pass();
             let summary = summarize_reply(&reply);
+            // `expect` is the step's assertion over the module's own reply
+            // (subset match, see [`json_subset`]): a control op is only a check
+            // when the scenario says what the reply must contain.
+            let mismatch = ctl
+                .expect
+                .as_ref()
+                .and_then(|expected| json_subset(expected, &reply));
+            if let Some(path) = &mismatch {
+                exec.status = Status::Fail;
+                exec.error = Some(
+                    ProtocolError::new(
+                        acos_protocol::ErrorCode::AssertionFailed,
+                        format!(
+                            "service_ctl {} {}: the reply does not match `expect` at {path}",
+                            request.module,
+                            request.kind()
+                        ),
+                    )
+                    .with_hint(
+                        "The reply is the module's evidence; compare it with `expect` (a JSON subset).",
+                    ),
+                );
+            }
             // The reply is the step's evidence: a reviewer reads what the module
             // actually applied (`scheduled=12`, `delivered_to=1`, the attached
             // set after a detach), not only that the step did not fail.
             exec.assertions.push(acos_protocol::assertion::AssertionResult {
                 kind: "service_ctl".to_string(),
-                passed: true,
-                expected: Some(serde_json::json!({
-                    "module": request.module,
-                    "op": request.kind(),
-                })),
+                passed: mismatch.is_none(),
+                expected: Some(match &ctl.expect {
+                    Some(expect) => serde_json::json!({
+                        "module": request.module,
+                        "op": request.kind(),
+                        "expect": expect,
+                    }),
+                    None => serde_json::json!({
+                        "module": request.module,
+                        "op": request.kind(),
+                    }),
+                }),
                 actual: Some(reply),
-                diff: None,
+                diff: mismatch.as_ref().map(|path| acos_protocol::assertion::AssertionDiff {
+                    expected: ctl.expect.clone().unwrap_or(serde_json::Value::Null),
+                    actual: serde_json::Value::Null,
+                    path: Some(path.clone()),
+                    detail: Some("the reply does not contain the expected JSON subset".to_string()),
+                }),
                 matched_node_ids: Vec::new(),
                 message: Some(summary),
             });
             exec
         }
         Err(error) => StepExec::backend_error(&error, backend.id(), request.kind()),
+    }
+}
+
+/// Match `expected` as a **subset** of `actual`; `Some(path)` names the first
+/// place they differ.
+///
+/// * objects: every expected key must exist and match (extra actual keys are
+///   allowed, so a scenario names only the fields it cares about);
+/// * arrays: same length, element-wise subset (a shorter expectation is a
+///   failure, so `actions: []` really means "no actions");
+/// * everything else: equality.
+fn json_subset(expected: &serde_json::Value, actual: &serde_json::Value) -> Option<String> {
+    match (expected, actual) {
+        (serde_json::Value::Object(expected), serde_json::Value::Object(actual)) => {
+            for (key, value) in expected {
+                let Some(actual) = actual.get(key) else {
+                    return Some(format!("/{key} (missing)"));
+                };
+                if let Some(path) = json_subset(value, actual) {
+                    return Some(format!("/{key}{path}"));
+                }
+            }
+            None
+        }
+        (serde_json::Value::Array(expected), serde_json::Value::Array(actual)) => {
+            if expected.len() != actual.len() {
+                return Some(format!(
+                    " (array length: expected {}, got {})",
+                    expected.len(),
+                    actual.len()
+                ));
+            }
+            for (index, (expected, actual)) in expected.iter().zip(actual).enumerate() {
+                if let Some(path) = json_subset(expected, actual) {
+                    return Some(format!("/{index}{path}"));
+                }
+            }
+            None
+        }
+        (serde_json::Value::Object(_), _) | (serde_json::Value::Array(_), _) => {
+            Some(format!(" (expected {expected}, got {actual})"))
+        }
+        _ if expected == actual => None,
+        _ => Some(format!(" (expected {expected}, got {actual})")),
     }
 }
 
@@ -3754,5 +3833,35 @@ mod content_settle_tests {
             parsed.steps[1].tap.as_ref().unwrap().settle,
             Some(StepSettle::Content)
         ));
+    }
+}
+
+#[cfg(test)]
+mod service_ctl_expect {
+    use super::json_subset;
+    use serde_json::json;
+
+    #[test]
+    fn a_subset_names_only_the_fields_the_scenario_cares_about() {
+        let reply = json!({
+            "posted": [{"id": 7, "title": "Probe title", "channel": "probe", "actions": [{"index": 0}]}],
+            "dropped": [],
+        });
+        // A subset matches although the reply has more keys.
+        assert_eq!(
+            json_subset(
+                &json!({"posted": [{"id": 7, "title": "Probe title", "channel": "probe"}]}),
+                &reply
+            ),
+            None
+        );
+        // An empty array means "none", not "anything".
+        assert_eq!(json_subset(&json!({"dropped": []}), &reply), None);
+        // A missing key, a different scalar and a wrong array length all fail,
+        // with the path the reviewer needs.
+        assert!(json_subset(&json!({"posted": [{"id": 8}]}), &reply).is_some());
+        assert!(json_subset(&json!({"missing": true}), &reply).is_some());
+        assert!(json_subset(&json!({"posted": []}), &reply).is_some());
+        assert!(json_subset(&json!({"dropped": [{"id": 1}]}), &reply).is_some());
     }
 }

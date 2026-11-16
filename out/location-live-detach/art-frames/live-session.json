@@ -44,11 +44,11 @@
         "input_hash": "099117b2e874fe99",
         "mode": "shared-fixed"
       },
-      "buffer_generation": 1,
+      "buffer_generation": 2,
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 2533852,
+      "guest_process_group": 2573083,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -68,6 +68,24 @@
           "id": "accessibility",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -218,7 +236,7 @@
       "ok": true,
       "package": "dev.acos.fixtures.locationprobe",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-2533843-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-2573076-1/view.sock",
       "width": 1080
     },
     {
@@ -297,6 +315,24 @@
           "id": "accessibility",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -469,12 +505,12 @@
       "frame_seq": 3,
       "ok": true,
       "pixels": false,
-      "probe_seq": 8
+      "probe_seq": 9
     },
     {
-      "buffer_generation": 43,
+      "buffer_generation": 45,
       "cmd": "tap",
-      "frame_number": 43,
+      "frame_number": 45,
       "frame_seq": 4,
       "handled": [
         true,
@@ -489,32 +525,32 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 131,
+      "kept": 132,
       "ok": true,
-      "total": 131
+      "total": 132
     },
     {
-      "buffer_generation": 43,
+      "buffer_generation": 45,
       "cmd": "tree",
-      "frame_number": 43,
+      "frame_number": 45,
       "frame_seq": 5,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 43
+      "probe_seq": 44
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 131,
+      "kept": 132,
       "ok": true,
-      "total": 131
+      "total": 132
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 131,
+      "kept": 132,
       "ok": true,
-      "total": 131
+      "total": 132
     },
     {
       "attached": [
@@ -541,6 +577,24 @@
           "id": "accessibility",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -694,21 +748,21 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 131,
+      "kept": 132,
       "ok": true,
-      "total": 131
+      "total": 132
     },
     {
       "cmd": "tree",
       "frame_seq": 6,
       "ok": true,
       "pixels": false,
-      "probe_seq": 44
+      "probe_seq": 45
     },
     {
-      "buffer_generation": 82,
+      "buffer_generation": 84,
       "cmd": "tap",
-      "frame_number": 82,
+      "frame_number": 84,
       "frame_seq": 7,
       "handled": [
         true,
@@ -716,39 +770,39 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 75,
+      "probe_seq": 78,
       "x": 540.0,
       "y": 600.0
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 170,
+      "kept": 171,
       "ok": true,
-      "total": 170
+      "total": 171
     },
     {
-      "buffer_generation": 82,
+      "buffer_generation": 84,
       "cmd": "tree",
-      "frame_number": 82,
+      "frame_number": 84,
       "frame_seq": 8,
       "ok": true,
-      "png": "out/location-live-detach/art-frames/live-frames/acos-c1-layer3-frame-82-g82-c8.png",
-      "probe_seq": 76
+      "png": "out/location-live-detach/art-frames/live-frames/acos-c1-layer3-frame-84-g84-c8.png",
+      "probe_seq": 79
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 170,
+      "kept": 171,
       "ok": true,
-      "total": 170
+      "total": 171
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 170,
+      "kept": 171,
       "ok": true,
-      "total": 170
+      "total": 171
     },
     {
       "attached": [
@@ -775,6 +829,24 @@
           "id": "accessibility",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {

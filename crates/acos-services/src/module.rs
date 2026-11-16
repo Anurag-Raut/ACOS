@@ -233,6 +233,15 @@ pub struct ModuleManifest {
     pub summary: &'static str,
     /// `ServiceManager` names (with their AIDL descriptors) the module provides.
     pub services: &'static [ServiceProvide],
+    /// `ServiceManager` names this module **replaces** from `core`.
+    ///
+    /// A name listed here must also appear in [`Self::services`], must be a
+    /// name `core` registers (ADR-0029 amendment: `notification`, `statusbar`,
+    /// `permission` move out of `core` into their modules), and is served by
+    /// `core` **only while the module is off**: attaching the module overwrites
+    /// core's registration, detaching it restores it. A module may not replace
+    /// a name another non-core module owns.
+    pub replaces: &'static [&'static str],
     /// `PackageManager` system features the module makes available
     /// (`android.hardware.telephony`). Attach turns them on, detach off, so
     /// `hasSystemFeature` agrees with the attached set.
@@ -390,6 +399,20 @@ impl ModuleManifest {
                 ));
             }
             seen_ops.push(op.name);
+        }
+        for replaced in self.replaces {
+            if !seen_names.contains(replaced) {
+                return Err(format!(
+                    "module {:?}: replaces {:?} but does not provide it; a replaced name must be one of its own services",
+                    self.id, replaced
+                ));
+            }
+            if self.id == "core" {
+                return Err(
+                    "module \"core\": core cannot replace a name (it is the implementation being replaced)"
+                        .into(),
+                );
+            }
         }
         if self.controls.is_empty() && self.profiles.contains(&Profile::Scripted) {
             return Err(format!(
@@ -1204,6 +1227,8 @@ impl ModuleRegistry {
         for module in [
             Box::new(crate::core_module::CoreModule::new()) as Box<dyn Module>,
             Box::new(crate::modules::accessibility::AccessibilityModule::new()),
+            Box::new(crate::modules::permissions::PermissionsModule::new()),
+            Box::new(crate::modules::notifications::NotificationsModule::new()),
             Box::new(crate::modules::sensors::SensorsModule::new()),
             Box::new(crate::modules::vibrator::VibratorModule::new()),
             Box::new(crate::modules::location::LocationModule::new()),
@@ -1227,21 +1252,31 @@ impl ModuleRegistry {
         let manifest = module.manifest();
         manifest.validate()?;
         for service in manifest.services {
-            // `core` is the always-attached baseline, and some of its names are
-            // *taken over* by a module: `geo.country`, `location` and
-            // `feedback.vibrator` all have a core node today (a device with no
-            // such module still publishes the name) and a module that owns the
-            // whole behaviour replaces it when it attaches. Two non-core modules
-            // claiming one name is still an error.
-            if let Some(owner) = self.providers.insert(service.name, manifest.id) {
-                if owner == "core" {
-                    continue;
+            if let Some(owner) = self.providers.get(service.name).copied() {
+                // ADR-0029 amendment: a module may take a name over from `core`
+                // when its manifest says so (`replaces`); `core` answers that
+                // name only while the module is `off`, so the two never serve
+                // it at the same time and detach restores core's answer.
+                let takes_over_core = owner == "core" && manifest.replaces.contains(&service.name);
+                if !takes_over_core {
+                    return Err(format!(
+                        "module {:?} provides {:?}, which module {owner:?} already provides{}",
+                        manifest.id,
+                        service.name,
+                        if owner == "core" {
+                            " (declare it in `replaces` to take it over)"
+                        } else {
+                            ""
+                        }
+                    ));
                 }
-                return Err(format!(
-                    "module {:?} provides {:?}, which module {owner:?} already provides",
-                    manifest.id, service.name
-                ));
+                // The module is the owner from now on; `core` still answers the
+                // name while the module is off, which is a runtime property of
+                // the host, not of the ownership table.
+                self.providers.insert(service.name, manifest.id);
+                continue;
             }
+            self.providers.insert(service.name, manifest.id);
         }
         self.entries.push(Entry {
             module,

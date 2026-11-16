@@ -911,9 +911,12 @@ impl Peer {
     }
 
     /// The `system -> app` frames queued by anything that ran on the host (a
-    /// binder transaction, or a module's live `control` op). Public so the
-    /// launcher can flush them after a control request, which is not followed
-    /// by a binder transaction of its own.
+    /// binder transaction, or a module's live `control` op).
+    ///
+    /// [`Self::tick`] is what the launcher calls after a control request and on
+    /// the idle turn: a control op can park a delivery in the module's **own**
+    /// object (that is where a scripted feed lives), and only the timed drain
+    /// reaches it. This plain drain stays for the transaction path.
     pub fn take_delivery_frames(&mut self) -> Vec<Frame> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());
@@ -1057,6 +1060,10 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     let mut object_offsets: Vec<usize> = Vec::new();
     let mut cursor = 0usize;
     let mut fds = frame.fds.iter().copied();
+    // Offsets of the rewritten flat objects in `out`: the imported parcel has no
+    // object table (`unmarshall` does not rebuild one), and both the reply
+    // marshaller and the `writeValue` length accounting need it.
+    let mut objects: Vec<usize> = Vec::new();
     for off in frame.object_offsets() {
         if off < cursor || off + 24 > frame.data.len() {
             continue;
@@ -1094,7 +1101,9 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
         // parcel must be told where each rewritten object landed: a handler that
         // looks for a client binder in the request (`result_receiver` in the
         // bluetooth module) walks `Parcel::objects()`. Before this the imported
-        // parcel answered zero objects for every guest request.
+        // parcel answered zero objects for every guest request. MODNOTIF5 also
+        // needs them for `writeValue` length accounting (a framework length
+        // prefix still counts the 4-byte stability records import strips).
         object_offsets.push(out.len());
         out.extend_from_slice(&obj);
         let mut next = off + 24;

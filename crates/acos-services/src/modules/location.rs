@@ -868,6 +868,10 @@ fn manifest_ref() -> &'static ModuleManifest {
         security: SecurityClass::InProcess,
         process_initializers: &[],
         features: &[],
+        // `location` is a name a phone always publishes: `core` serves the
+        // disabled-device node while this module is off, and the module takes the
+        // name over when it attaches (ADR-0029 amendment, `replaces`).
+        replaces: &[SERVICE_NAME],
     };
     &MANIFEST
 }

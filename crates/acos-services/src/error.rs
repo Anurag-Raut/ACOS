@@ -43,6 +43,9 @@ pub mod codes {
     /// A service-module operation was refused (bad profile, unknown control op,
     /// live attach of an `at-launch` module).
     pub const SERVICE_MODULE_REJECTED: &str = "SERVICE_MODULE_REJECTED";
+    /// A permission dialog would be shown here, but ACOS has no permission
+    /// controller system app yet (MODNOTIF2, ADR-0029 amendment).
+    pub const PERMISSION_UI_UNAVAILABLE: &str = "PERMISSION_UI_UNAVAILABLE";
 }
 
 /// Errors returned by [`crate::ServiceHost`] and the service state machines.
@@ -164,6 +167,26 @@ pub enum ServiceError {
         /// Message for `EX_SERVICE_SPECIFIC`.
         message: String,
     },
+    /// `Activity.requestPermissions` needs the permission dialog, which is an
+    /// Activity in the permission controller package
+    /// (`PackageManager.buildRequestPermissionsIntent` +
+    /// `Activity.requestPermissions`, `Activity.java:5673`). ACOS installs no
+    /// system app for it yet (ADR-0029 amendment: system apps in the guest,
+    /// multi-process work), so the request is refused with this structured
+    /// error. It is never a silent grant and never a fake dialog.
+    #[error(
+        "permission UI unavailable: {detail} (system app needed: {needs}; configure the answer with the `system.permissions` control ops)"
+    )]
+    PermissionUiUnavailable {
+        /// The permissions the app asked for.
+        permissions: Vec<String>,
+        /// The configured state's answer for them (`granted`/`denied`).
+        state: String,
+        /// The work that would make the dialog real.
+        needs: String,
+        /// One line an agent can act on.
+        detail: String,
+    },
     /// Internal failure.
     #[error("internal service error: {0}")]
     Internal(String),
@@ -189,6 +212,7 @@ impl ServiceError {
                 let _ = e.code();
                 codes::SERVICE_PARCEL
             }
+            Self::PermissionUiUnavailable { .. } => codes::PERMISSION_UI_UNAVAILABLE,
             Self::Internal(_) => codes::SERVICE_INTERNAL,
             Self::ResourceLimit { .. } => codes::ART_RESOURCE_LIMIT,
         }
@@ -206,7 +230,8 @@ impl ServiceError {
             Self::UnsupportedAndroidApi { .. }
             | Self::NotOwned { .. }
             | Self::ModuleUnavailable { .. }
-            | Self::UnsupportedParcelable { .. } => EX_UNSUPPORTED_OPERATION,
+            | Self::UnsupportedParcelable { .. }
+            | Self::PermissionUiUnavailable { .. } => EX_UNSUPPORTED_OPERATION,
             Self::ModuleRejected { .. } => EX_ILLEGAL_ARGUMENT,
             Self::UnknownBinder { .. } | Self::UnknownService { .. } => EX_ILLEGAL_ARGUMENT,
             Self::BadRequest { .. } | Self::BadReply { .. } => EX_ILLEGAL_ARGUMENT,

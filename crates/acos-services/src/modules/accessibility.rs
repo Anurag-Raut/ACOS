@@ -78,6 +78,9 @@ fn manifest_ref() -> &'static ModuleManifest {
             name: "accessibility",
             descriptor: "android.view.accessibility.IAccessibilityManager",
         }],
+        // `core` publishes the `accessibility` node and this module fills it
+        // (`core_module::FILLED_BY_MODULE`), so the name is not replaced.
+        replaces: &[],
         features: &[],
         process_initializers: &[],
         providers: &[],

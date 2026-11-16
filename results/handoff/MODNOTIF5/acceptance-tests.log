@@ -1,0 +1,618 @@
+warning: acos-binder-peer@0.2.2: built /home/Qui/.t3/worktrees/acos/t3-b957100d-21d9ab10dafe2a6f/.cache/modnotif5-target/debug/build/acos-binder-peer-1bf80c28dddde2d5/out/libacos_binder_driver.so
+warning: variable does not need to be mutable
+   --> crates/acos-services/src/modules/notifications.rs:309:13
+    |
+309 |         let mut store = store
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: constant `SERVICE_MANAGER_DESCRIPTOR` is never used
+  --> crates/acos-services/src/host.rs:56:7
+   |
+56 | const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `acos-services` (lib) generated 3 warnings (run `cargo fix --lib -p acos-services` to apply 1 suggestion)
+warning: `acos-services` (lib test) generated 3 warnings (3 duplicates)
+warning: unused variable: `objects`
+    --> crates/acos-binder-peer/src/peer.rs:1025:13
+     |
+1025 |     let mut objects: Vec<usize> = Vec::new();
+     |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_objects`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+    --> crates/acos-binder-peer/src/peer.rs:1025:9
+     |
+1025 |     let mut objects: Vec<usize> = Vec::new();
+     |         ----^^^^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` on by default
+
+warning: `acos-binder-peer` (lib) generated 2 warnings (run `cargo fix --lib -p acos-binder-peer` to apply 1 suggestion)
+warning: unused variable: `started`
+   --> crates/acos-art/src/boot_image.rs:801:13
+    |
+801 |         let started = Instant::now();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_started`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: method `cache_str` is never used
+   --> crates/acos-art/src/boot_image.rs:540:8
+    |
+539 | impl CacheOutcome {
+    | ----------------- method in this implementation
+540 |     fn cache_str(&self) -> &'static str {
+    |        ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `animations_on` is never read
+    --> crates/acos-art/src/launch.rs:2123:5
+     |
+2104 | struct ProbeSample {
+     |        ----------- field in this struct
+...
+2123 |     animations_on: Option<bool>,
+     |     ^^^^^^^^^^^^^
+     |
+     = note: `ProbeSample` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `adler32` is never used
+    --> crates/acos-art/src/launch.rs:6333:4
+     |
+6333 | fn adler32(data: &[u8]) -> u32 {
+     |    ^^^^^^^
+
+warning: function `tail` is never used
+    --> crates/acos-art/src/launch.rs:7018:4
+     |
+7018 | fn tail(s: &str, max: usize) -> String {
+     |    ^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/acos-art/src/lib.rs:836:20
+    |
+836 |     pub fn sandbox(&self) -> Sandbox {
+    |                    ^^^^^     ------- the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+836 |     pub fn sandbox(&self) -> Sandbox<'_> {
+    |                                     ++++
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:1008:21
+     |
+1008 |             let mut unsettled: Option<BackendError> = None;
+     |                     ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/probe_channel_tests.rs:109:9
+    |
+109 |     let mut writer = match channel.as_mut() {
+    |         ----^^^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: function `solid` is never used
+    --> crates/acos-art/src/live_view.rs:1854:8
+     |
+1854 |     fn solid(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
+     |        ^^^^^
+
+warning: method `nudge` is never used
+    --> crates/acos-art/src/live_view.rs:1890:12
+     |
+1882 |     impl TestWake {
+     |     ------------- method in this implementation
+...
+1890 |         fn nudge(&self) {
+     |            ^^^^^
+
+warning: unused import: `AmsState`
+  --> crates/acos-services/tests/w38_activity_token.rs:20:26
+   |
+20 | use acos_services::ams::{AmsState, IntentFacts};
+   |                          ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused `Result` that must be used
+   --> crates/acos-services/tests/parcelable.rs:778:5
+    |
+778 |     parcel.write_string16_array(Some(&[])); // tags
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+778 |     let _ = parcel.write_string16_array(Some(&[])); // tags
+    |     +++++++
+
+warning: unused `Result` that must be used
+   --> crates/acos-services/tests/parcelable.rs:816:5
+    |
+816 |     original.write_string16_array(Some(&[]));
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+816 |     let _ = original.write_string16_array(Some(&[]));
+    |     +++++++
+
+warning: unused `Result` that must be used
+   --> crates/acos-services/tests/parcelable.rs:834:5
+    |
+834 |     parcel.write_string16("a;b");
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+834 |     let _ = parcel.write_string16("a;b");
+    |     +++++++
+
+warning: unused `Result` that must be used
+   --> crates/acos-services/tests/parcelable.rs:865:5
+    |
+865 |     body.write_string16(class);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+865 |     let _ = body.write_string16(class);
+    |     +++++++
+
+warning: variable does not need to be mutable
+   --> crates/acos-services/tests/module_kit.rs:321:9
+    |
+321 |     let mut registry = module::install_standard(&mut host);
+    |         ----^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: `acos-art` (lib) generated 6 warnings
+warning: `acos-verify` (lib) generated 1 warning
+warning: `acos-art` (lib test) generated 8 warnings (5 duplicates) (run `cargo fix --lib -p acos-art --tests` to apply 1 suggestion)
+warning: `acos-services` (test "w38_activity_token") generated 1 warning (run `cargo fix --test "w38_activity_token"` to apply 1 suggestion)
+warning: `acos-services` (test "parcelable") generated 4 warnings
+warning: `acos-services` (test "module_kit") generated 1 warning (run `cargo fix --test "module_kit"` to apply 1 suggestion)
+warning: field `sockets` is never read
+  --> crates/acos-cli/tests/w50_serve_art.rs:79:5
+   |
+73 | struct Daemon {
+   |        ------ field in this struct
+...
+79 |     sockets: ShortSocketDir,
+   |     ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: unused variable: `rest`
+   --> crates/acos-art/src/main.rs:100:13
+    |
+100 |     let mut rest: Vec<String> = Vec::new();
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_rest`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:100:9
+    |
+100 |     let mut rest: Vec<String> = Vec::new();
+    |         ----^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:141:13
+    |
+141 |         let mut next = |i: &mut usize| -> Result<String> {
+    |             ----^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: field `sockets` is never read
+   --> crates/acos-cli/tests/w55_dead_guest.rs:120:5
+    |
+114 | struct Daemon {
+    |        ------ field in this struct
+...
+120 |     sockets: ShortSocketDir,
+    |     ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: unused import: `AtomicBool`
+  --> crates/acos-cli/src/serve.rs:33:25
+   |
+33 | use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+   |                         ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: method `label` is never used
+   --> crates/acos-cli/src/engine/mod.rs:256:12
+    |
+249 | impl FrameEvidence {
+    | ------------------ method in this implementation
+...
+256 |     pub fn label(&self) -> String {
+    |            ^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: multiple associated items are never used
+    --> crates/acos-cli/src/engine/art.rs:1466:12
+     |
+1448 | impl ArtSession {
+     | --------------- associated items in this implementation
+...
+1466 |     pub fn start(apk: &Path, artifacts: &Path) -> Result<ArtSession, BackendError> {
+     |            ^^^^^
+...
+1474 |     pub fn start_with_animations(
+     |            ^^^^^^^^^^^^^^^^^^^^^
+...
+1489 |     pub fn start_with_options(
+     |            ^^^^^^^^^^^^^^^^^^
+...
+1510 |     pub fn start_with_zygote(
+     |            ^^^^^^^^^^^^^^^^^
+...
+2089 |     pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+     |            ^^^^^^^^^^^^
+...
+2094 |     pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2123 |     pub fn services(&self) -> &[serde_json::Value] {
+     |            ^^^^^^^^
+
+warning: method `first_frame_bound` is never used
+    --> crates/acos-cli/src/engine/art.rs:4203:19
+     |
+3874 | impl ArtSession {
+     | --------------- method in this implementation
+...
+4203 |     pub(crate) fn first_frame_bound(&self) -> Option<(bool, Option<String>)> {
+     |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `read_png` is never used
+    --> crates/acos-cli/src/engine/art.rs:5557:4
+     |
+5557 | fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {
+     |    ^^^^^^^^
+
+warning: function `kill_group_signals` is never used
+    --> crates/acos-cli/src/engine/art.rs:5676:15
+     |
+5676 | pub(crate) fn kill_group_signals() -> usize {
+     |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated items `disabled`, `keeper_count`, and `keeper_pids` are never used
+   --> crates/acos-cli/src/engine/zygote_host.rs:164:12
+    |
+ 93 | impl ZygoteHost {
+    | --------------- associated items in this implementation
+...
+164 |     pub fn disabled() -> Self {
+    |            ^^^^^^^^
+...
+179 |     pub fn keeper_count(&self) -> usize {
+    |            ^^^^^^^^^^^^
+...
+184 |     pub fn keeper_pids(&self) -> Vec<u32> {
+    |            ^^^^^^^^^^^
+
+warning: associated function `at` is never used
+   --> crates/acos-cli/src/live_registry.rs:123:12
+    |
+ 95 | impl LiveRegistry {
+    | ----------------- associated function in this implementation
+...
+123 |     pub fn at(dir: PathBuf) -> Self {
+    |            ^^
+
+warning: unused import: `std::io::Write`
+   --> crates/acos-cli/src/view/mod.rs:997:17
+    |
+997 |             use std::io::Write;
+    |                 ^^^^^^^^^^^^^^
+
+warning: function `make_run` is never used
+   --> crates/acos-cli/src/artifacts_gc.rs:393:8
+    |
+393 |     fn make_run(root: &Path, relative: &str, status: &str, age_secs: u64, bytes: usize) -> PathBuf {
+    |        ^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `start_with_zygote`, `zygote_facts`, `zygote_previous_child_pid`, and `services` are never used
+    --> crates/acos-cli/src/engine/art.rs:1510:12
+     |
+1448 | impl ArtSession {
+     | --------------- associated items in this implementation
+...
+1510 |     pub fn start_with_zygote(
+     |            ^^^^^^^^^^^^^^^^^
+...
+2089 |     pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+     |            ^^^^^^^^^^^^
+...
+2094 |     pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2123 |     pub fn services(&self) -> &[serde_json::Value] {
+     |            ^^^^^^^^
+
+warning: method `stats` is never used
+   --> crates/acos-cli/src/view/hub.rs:363:12
+    |
+335 | impl Watcher {
+    | ------------ method in this implementation
+...
+363 |     pub fn stats(&self) -> SlotStats {
+    |            ^^^^^
+
+warning: method `url` is never used
+   --> crates/acos-cli/src/view/mod.rs:687:12
+    |
+669 |     impl Server {
+    |     ----------- method in this implementation
+...
+687 |         fn url(&self, path: &str) -> String {
+    |            ^^^
+
+warning: `acos-cli` (test "w50_serve_art") generated 1 warning
+warning: `acos-art` (bin "acos-art" test) generated 3 warnings (run `cargo fix --bin "acos-art" --tests` to apply 2 suggestions)
+warning: `acos-cli` (test "w55_dead_guest") generated 1 warning
+warning: `acos-cli` (bin "acos") generated 8 warnings (run `cargo fix --bin "acos"` to apply 1 suggestion)
+warning: `acos-art` (bin "acos-art") generated 3 warnings (3 duplicates)
+warning: `acos-cli` (bin "acos" test) generated 7 warnings (2 duplicates) (run `cargo fix --bin "acos" --tests` to apply 1 suggestion)
+warning: unused variable: `dir`
+  --> crates/acos-art/tests/w37_build_cache.rs:80:16
+   |
+80 |     let (_env, dir, _root) = isolate("corrupt");
+   |                ^^^ help: if this is intentional, prefix it with an underscore: `_dir`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: `acos-art` (test "w37_build_cache") generated 1 warning
+    Finished `test` profile [unoptimized] target(s) in 0.07s
+     Running unittests src/lib.rs (.cache/modnotif5-target/debug/deps/acos_art-12e0b0a68ac5c0c9)
+
+running 155 tests
+test boot_image::tests::modes_parse_exactly ... ok
+test boot_image::tests::a_missing_explicit_image_is_refused ... ok
+test app::tests::font_customization_merges_new_named_families_only ... ok
+test boot_image::tests::the_window_is_the_same_range_art_uses ... ok
+test boot_image::tests::a_build_failure_is_a_structured_error_and_leaves_no_entry ... ok
+test build_cache::tests::tmp_is_never_the_staging_root ... ok
+test boot_image::tests::random_bases_are_aligned_and_in_arts_window ... ok
+test capture::tests::a_single_write_bigger_than_the_cap_keeps_only_its_tail ... ok
+test capture::tests::small_stream_is_kept_whole_without_a_marker ... ok
+test build_cache::tests::digest_is_length_prefixed ... ok
+test app::tests::no_layout_is_a_tool_error ... ok
+test cgroup::tests::cgroup_line_is_parsed ... ok
+test cgroup::tests::capability_stamp_is_boot_scoped_and_never_guesses ... ok
+test cgroup::tests::sizes_parse ... ok
+test app::tests::guest_line_parses ... ok
+test crash::tests::art_dump_yields_signal_code_addr_thread_and_library_frames ... ok
+test landlock::tests::fallback_is_only_accepted_as_an_explicit_skip ... ok
+test crash::tests::truncated_dump_keeps_what_exists ... ok
+test jvm::tests::d8_args_survive_the_build_tools_wrapper_dash ... ok
+test jvm::tests::dump_args_are_absolute_and_pid_scoped ... ok
+test launch::crash_evidence_tests::the_guest_crash_line_is_kept_and_parsed ... ok
+test launch::abi_gate_tests::a_guest_launch_record_has_no_abi_block ... ok
+test launch::crash_evidence_tests::the_guest_stream_tail_is_bounded_and_ordered ... ok
+test launch::png_checksum_tests::adler32_matches_the_standard_check_vector ... ok
+test launch::png_checksum_tests::crc32_matches_the_standard_check_vector ... ok
+test landlock::tests::landlock_failure_has_its_own_code ... ok
+test cgroup::tests::zero_limits_are_refused_not_silently_unbounded ... ok
+test crash::tests::nothing_is_not_a_crash_record ... ok
+test crash::tests::shim_line_alone_is_enough_for_the_primary_fields ... ok
+test capture::tests::parse_bytes_accepts_suffixes ... ok
+test launch::png_checksum_tests::stride_padding_and_short_rows_still_decode_to_the_padded_rows ... ok
+test capture::tests::flood_keeps_the_tail_and_counts_the_drops ... ok
+test landlock::tests::plan_grants_writes_only_on_the_per_run_roots ... ok
+test cgroup::tests::wrap_puts_the_command_behind_systemd_run_with_the_limits ... ok
+test launch::abi_gate_tests::the_refusal_names_unsupported_abi_and_the_apk_inventory ... ok
+test launch::png_checksum_tests::empty_and_single_byte_inputs_match_the_oracle ... ok
+test cgroup::tests::warm_stamp_answers_without_probing_and_a_cold_root_probes ... ok
+test launch::probe_line_tests::an_oversized_line_is_drained_and_counted ... ok
+test launch::probe_line_tests::a_thrown_probe_surfaces_acosprobe_error ... ok
+test launch::probe_line_tests::fast_tree_rejects_a_probe_from_before_the_entry_generation ... ok
+test launch::shared_boot_image_tests::a_directory_without_the_main_image_is_an_error ... ok
+test launch::probe_line_tests::an_invalid_probe_line_is_counted ... ok
+test launch::probe_channel_tests::the_forked_child_installs_the_probe_fifo_as_stdin_before_its_sandbox ... ok
+test launch::shared_boot_image_tests::a_directory_with_the_main_image_is_accepted ... ok
+test launch::probe_channel_tests::a_vanished_reader_cannot_break_the_next_wake ... ok
+test launch::probe_line_tests::a_probe_line_above_the_old_128k_cap_is_parsed ... ok
+test launch::shotz_png_tests::png_encoder_candidates_on_real_frames ... ignored, measurement: prints the size/time table for the handoff, needs $SHOTZ_FRAMES
+test launch::shared_boot_image_tests::unset_means_the_default_lz4_path ... ok
+test launch::skipped_traversal_tests::a_skipped_traversal_with_no_frame_fails_within_the_bounded_budget ... ok
+test launch::skipped_traversal_tests::the_budget_is_two_frames_and_at_most_the_guest_resume_deadline ... ok
+test app::tests::apk_chrome_reads_the_manifest ... ok
+test launch::skipped_traversal_tests::the_failure_reply_names_post_resume_not_ready_and_draw_skip ... ok
+test launch::view_socket_dir_tests::private_dir_tightens_ours_and_refuses_a_file_or_a_symlink ... ok
+test launch::skipped_traversal_tests::the_marker_evidence_fields_are_parsed ... ok
+test launcher::tests::aborter_log_entry_is_fatal ... ok
+test launch::skipped_traversal_tests::a_live_frame_leaves_the_normal_skipped_traversal_untouched ... ok
+test launcher::tests::check_failure_is_art_fatal_check ... ok
+test launcher::tests::segv_is_art_crash ... ok
+test capture::tests::tail_text_keeps_the_truncation_marker ... ok
+test launcher::tests::sigsys_is_unsupported ... ok
+test launcher::tests::sigabrt_from_fatal_check_is_art_fatal_check ... ok
+test launcher::tests::uncaught_main_exception_is_ok ... ok
+test launcher::tests::timeout_wins ... ok
+test live_view::tests::a_fallback_shaped_tree_masks_a_password_or_undecidable_focus ... ok
+test live_view::tests::focused_password_nodes_are_detected_in_the_probe_tree ... ok
+test live_view::tests::event_queue_drops_the_oldest_when_full ... ok
+test live_view::tests::downscale_box_averages_2x2_blocks ... ok
+test live_view::tests::event_text_is_truncated_and_password_text_masked ... ok
+test live_view::tests::framing_round_trips_a_hello_a_frame_and_an_event ... ok
+test live_view::tests::peer_credentials_report_our_own_uid ... ok
+test live_view::tests::no_subscriber_means_no_source_call_and_no_encode ... ok
+test boot_image::tests::cold_miss_builds_and_the_second_run_hits ... ok
+test logd::tests::frame_roundtrip ... ok
+test launch::view_socket_dir_tests::the_view_directory_is_not_the_guest_mounted_socket_directory ... ok
+test live_view::tests::the_view_socket_is_private_in_a_private_directory_never_chmodded_by_path ... ok
+test props::tests::defaults_are_servable ... ok
+test launch::skipped_traversal_tests::the_process_initializer_install_is_driven_by_the_manifest ... ok
+test props::tests::heap_defaults_unchanged ... ok
+test launch::skipped_traversal_tests::the_guest_ready_path_has_no_forced_traversal_and_publishes_the_evidence ... ok
+test props::tests::heap_each_override_applied ... ok
+test props::tests::heap_inconsistent_ordering_rejected ... ok
+test props::tests::heap_start_and_growth_override_together ... ok
+test props::tests::heap_metadata_reports_effective_values ... ok
+test props::tests::heap_invalid_format_rejected ... ok
+test seccomp::tests::audit_action_kills_and_never_returns_eacces ... ok
+test props::tests::long_values_are_truncated ... ok
+test seccomp::tests::art_needs_are_not_denied ... ok
+test seccomp::tests::deny_terminal_returns_eacces_and_default_allows ... ok
+test seccomp::tests::every_escape_syscall_is_denied ... ok
+test seccomp::tests::program_is_small_enough_for_u8_jumps_and_ends_in_return ... ok
+test session::tests::argv_order_is_the_guest_contract ... ok
+test seccomp::tests::blob_has_the_sock_filter_layout ... ok
+test launch::png_checksum_tests::unaligned_random_slices_match_the_oracle ... ok
+test session::tests::protocol_line_parses_only_with_the_prefix ... ok
+test session::tests::guest_paths_map_onto_the_data_dir ... ok
+test session::tests::peak_rss_comes_from_the_verdict ... ok
+test tests::apex_manifest_name_wins_over_dir_name ... ok
+test tests::classpath_env_parses_device_environ ... ok
+test tests::classpath_env_rejects_incomplete_files ... ok
+test tests::compiled_root_is_the_checkout ... ok
+test tests::gwp_asan_is_off_for_guests_unless_asked ... ok
+test tests::acos_home_overrides_every_root_lookup ... ok
+test session::tests::reply_maps_png_and_keeps_the_tree ... ok
+test tests::guest_asset_resolves_home_then_checkout_then_compiled_path ... ok
+test logd::tests::stopping_an_idle_sink_does_not_wait_out_the_read_timeout ... ok
+test launch::probe_channel_tests::every_probe_wake_reaches_the_zygote_child_side_of_the_fifo ... ok
+test tests::kept_crash_trees_are_pruned_oldest_first_and_unmarked_trees_survive ... ok
+test boot_image::tests::a_changed_input_set_invalidates_the_entry ... ok
+test tests::only_a_guest_crash_with_evidence_keeps_the_run_tree ... ok
+test tests::unset_home_resolves_to_the_checkout_unchanged ... ok
+test tests::sandbox_argv_hardens_before_first_mount ... ok
+test tests::run_root_makes_shared_inputs_read_only ... ok
+test watchdog::tests::data_limit_defaults_above_the_rss_ceiling ... ok
+test tests::varint_roundtrip ... ok
+test watchdog::tests::relax_child_limits_is_safe_to_call ... ok
+test boot_image::tests::a_truncated_file_is_detected_and_rebuilt ... ok
+test live_view::tests::a_non_password_state_does_not_survive_a_detach ... ok
+test watchdog::tests::rss_reading_works_on_linux ... ok
+test tests::publish_atomic_never_truncates_a_live_reader ... ok
+test watchdog::tests::zero_ceiling_disables_the_watchdog ... ok
+test zygote_prod::tests::key_dir_names_are_stable_distinct_and_path_safe ... ok
+test tests::stage_apk_leaves_the_previous_copy_intact ... ok
+test zygote_prod::tests::a_dead_keeper_is_a_structured_error_never_a_write ... ok
+test watchdog::tests::the_stock_init_rc_nice_limit_is_mirrored_and_safe_to_apply ... ok
+test zygote_prod::tests::kv_and_pid_contracts_parse_z4_shapes ... ok
+test zygote_prod::tests::publish_binds_writes_the_childs_run_root_and_socket_contract ... ok
+test zygote_prod::tests::prepare_session_wipes_the_previous_run_root_and_contract ... ok
+test build_cache::tests::sha256_matches_known_vectors ... ok
+test boot_image::tests::a_same_size_corruption_is_detected_by_the_sampled_checksum ... ok
+test watchdog::tests::arming_a_process_group_records_it_as_killed ... ok
+test watchdog::tests::a_one_byte_ceiling_trips_immediately ... ok
+test boot_image::tests::pruning_keeps_the_newest_entries ... ok
+test launch::png_checksum_tests::the_stored_baseline_is_the_encoder_v0_2_0_shipped ... ok
+test zygote_prod::tests::the_keeper_protocol_spawn_kill_reset_and_shutdown ... ok
+test tests::publish_atomic_is_atomic_for_a_concurrent_reader ... ok
+test capture::tests::memory_stays_bounded_under_a_sustained_flood ... ok
+test zygote_prod::tests::one_session_bad_tag_is_a_structured_error_not_a_hang ... ok
+test launch::png_checksum_tests::the_streamed_encoder_writes_the_same_file_as_the_buffered_encoder ... ok
+test live_view::tests::typed_input_is_masked_unless_a_fresh_tree_proves_a_non_password_focus ... ok
+test boot_image::tests::two_concurrent_builders_produce_one_build ... ok
+test logd::tests::listen_roundtrip ... ok
+test live_view::tests::a_secure_frame_is_published_blank_and_flagged ... ok
+test capture::tests::drain_to_tail_enforces_the_cap_on_a_reader ... ok
+test live_view::tests::a_subscriber_receives_hello_frames_and_events ... ok
+test launch::md5_frame_tests::streaming_hash_of_a_written_file_matches_the_whole_buffer ... ok
+test launch::md5_frame_tests::content_hash_matches_md5sum_on_a_real_frame ... ok
+test launch::shotz_png_tests::real_frames_round_trip_pixel_exact ... ok
+test logd::tests::spammer_is_capped_and_drop_oldest ... ok
+test launch::md5_frame_tests::streamed_encoder_is_byte_identical_to_the_buffered_encoder ... ok
+test live_view::tests::a_frame_larger_than_the_socket_buffer_is_delivered_to_a_slow_reader ... ok
+test launch::png_checksum_tests::random_buffers_match_the_oracle_at_every_boundary ... ok
+test launch::png_checksum_tests::a_high_entropy_canvas_is_never_materially_worse_than_stored ... ok
+test launch::shotz_png_tests::compressed_frames_are_much_smaller_than_the_stored_baseline ... ok
+test live_view::tests::a_slow_subscriber_is_dropped_without_blocking_the_encoder ... ok
+test live_view::tests::subscribe_threads_are_capped_and_a_trickling_peer_is_cut_off_by_one_deadline ... ok
+
+test result: ok. 154 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 10.85s
+
+     Running unittests src/main.rs (.cache/modnotif5-target/debug/deps/acos_art-497418bca10b3aa3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cleanup.rs (.cache/modnotif5-target/debug/deps/cleanup-17f019d8248f2744)
+
+running 8 tests
+test guest_cannot_overwrite_boot_art_or_the_classpath ... ok
+test log_spam_keeps_the_launcher_peak_rss_under_256_mib ... ok
+test janitor_reaps_stale_runs_and_keeps_live_ones ... ok
+test r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans ... ok
+test guest_crash_still_removes_the_run_root ... ok
+test render_app_leaves_no_processes_or_scratch_behind ... ok
+test sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it ... ok
+test leak_scan_is_scoped_to_this_tests_own_processes ... FAILED
+
+failures:
+
+---- leak_scan_is_scoped_to_this_tests_own_processes stdout ----
+
+thread 'leak_scan_is_scoped_to_this_tests_own_processes' panicked at crates/acos-art/tests/cleanup.rs:1331:5:
+the marker-only leaked guest (pid 2339679) is not owned by the scan — the teeth are gone. owned={2339680}; ignored:
+  pid=2339679 ppid=2339669 state=S comm=dalvikvm64 cmd=/home/Qui/.t3/worktrees/acos/t3-b957100d-21d9ab10dafe2a6f/.cache/h1-tests/scope-bin-2339669/dalvikvm64 120
+  pid=2339681 ppid=2339669 state=S comm=dalvikvm64 cmd=/home/Qui/.t3/worktrees/acos/t3-b957100d-21d9ab10dafe2a6f/.cache/h1-tests/scope-bin-2339669/dalvikvm64 120
+  pid=2339707 ppid=2192198 state=S comm=bash cmd=/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-92c2445d-c9c25ca9bd97d4f9 && rm -rf results/handoff/MODTAIL3/v-bluetooth && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_RUNTIME_DIR=$PWD/.cache/rt-modtail3 ACOS_SESSION_SOCKET=$PWD/.cache/rt-modtail3/session.sock ACOS_ART_BIN=$PWD/.cache/modtail3-target/release/acos-art && ACOST=$PWD/.cache/modtail3-target/release/acos && tools/art-runtime/run-exclusive.sh --task MODTAIL3 -- tools/guarded.sh --mem 8G --time 900 -- $ACOST verify --engine art --apk fixtures/build/apps/tail-probe.apk --scenario results/handoff/MODTAIL/tail-bluetooth.yaml --artifacts results/handoff/MODTAIL3/v-bluetooth --required-fidelity art-reference 2>&1 | tail -8
+  pid=2339754 ppid=2339752 state=S comm=acos-art cmd=/home/Qui/.t3/worktrees/acos/t3-92c2445d-c9c25ca9bd97d4f9/.cache/modtail3-target/release/acos-art launch --apk fixtures/build/apps/tail-probe.apk --until activity-resumed --out results/handoff/MODTAIL3/v-bluetooth/art-frames --animations on --insets report
+  pid=2340159 ppid=1 state=S comm=bash cmd=/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-dce712d6-e1203953d80bf791 && export CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=$PWD/.cache/moda11y5-target && nohup tools/guarded.sh --mem 14G --time 1800 -- cargo build --release --offline -p acos-cli -p acos-art > .cache/build-release.log 2>&1 &
+sleep 3; grep -n 'build_apk a11y-probe' -B5 -A2 tools/build-apps.sh | head; grep -n 'a11y-probe' tools/build-apps.sh | head
+  pid=2340161 ppid=2340159 state=S comm=bash cmd=bash tools/guarded.sh --mem 14G --time 1800 -- cargo build --release --offline -p acos-cli -p acos-art
+  pid=2340170 ppid=2340161 state=S comm=timeout cmd=/usr/bin/timeout -k 5 1800 cargo build --release --offline -p acos-cli -p acos-art
+  pid=2340171 ppid=2340170 state=S comm=cargo cmd=/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-cli -p acos-art
+  pid=2343679 ppid=2343677 state=S comm=tures.tailprobe cmd=/system/apex/com.android.art/bin/dalvikvm64 -Ximage:/data/img/boot.art -Xnorelocate -cp /data/app/launch-guest/classes.dex dev.acos.art.LaunchMain /data/app/tail-probe.apk dev.acos.fixtures.tailprobe /data/out/launch activity-resumed dev.acos.fixtures.tailprobe.MainActivity  0 /data/overlay/PixelConfigOverlayCommon.idmap 2130837504  0   277364294 manifest
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    leak_scan_is_scoped_to_this_tests_own_processes
+
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.11s
+
+error: test failed, to rerun pass `-p acos-art --test cleanup`

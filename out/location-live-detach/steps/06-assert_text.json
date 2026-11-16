@@ -58,7 +58,7 @@
     "bound": "strict-event",
     "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
     "mode": "strict",
-    "probe_seq": 43,
+    "probe_seq": 44,
     "settled": true,
     "strict_rule": "event",
     "tree_age_ms": 40

@@ -96,6 +96,9 @@ pub enum Extra {
     Short(i16),
     /// `putExtra(boolean)`.
     Bool(bool),
+    /// `putExtra(String[])` — the permission names of a
+    /// `REQUEST_PERMISSIONS` intent (`EXTRA_REQUEST_PERMISSIONS_NAMES`).
+    Strings(Vec<String>),
     /// `putExtra(String, byte[])` (a `VAL_BYTEARRAY` bundle value).
     Bytes(Vec<u8>),
     /// `putExtra(String, Serializable)` of an `Object[]` of `byte[]`: the shape
@@ -233,6 +236,9 @@ fn reduce_extras(bundle: &Bundle) -> BTreeMap<String, Extra> {
     for (key, value) in &bundle.entries {
         let extra = match value {
             Value::Str(Some(s)) | Value::Str8(Some(s)) => Extra::String(s.clone()),
+            Value::StringArray(Some(items)) => Extra::Strings(
+                items.iter().filter_map(|item| item.clone()).collect(),
+            ),
             Value::Int(i) => Extra::Int(*i),
             Value::Short(s) => Extra::Short(*s),
             Value::Bool(b) => Extra::Bool(*b),
@@ -266,6 +272,10 @@ fn encode_extras(extras: &BTreeMap<String, Extra>) -> Bundle {
             Extra::Int(i) => bundle.put(key, Value::Int(*i)),
             Extra::Short(s) => bundle.put(key, Value::Short(*s)),
             Extra::Bool(b) => bundle.put(key, Value::Bool(*b)),
+            Extra::Strings(items) => bundle.put(
+                key,
+                Value::StringArray(Some(items.iter().cloned().map(Some).collect())),
+            ),
             Extra::Bytes(bytes) => bundle.put(key, Value::ByteArray(Some(bytes.clone()))),
             Extra::Parcelable(parcelable) => {
                 bundle.put(key, Value::Parcelable(parcelable.clone()))
@@ -897,12 +907,21 @@ pub struct AmsState {
     pub pending_binds: Vec<PendingBind>,
     /// Pending `IIntentReceiver.performReceive` deliveries.
     pub pending_receivers: Vec<PendingReceiver>,
+    /// The session's one runtime-permission table (MODNOTIF2). Only the
+    /// permission-controller request path in [`dispatch`] reads it; `None` in a
+    /// bare unit-test state, where a request resolves as unsupported.
+    pub runtime_permissions:
+        Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
     /// Next task id.
     next_task_id: i32,
     /// Next activity token.
     next_token: u64,
     /// Last `onNewIntent` records (evidence).
     pub new_intents: Vec<(u64, IntentFacts)>,
+    /// `PendingIntent` senders: the `mIntentSenderRecords` map, addressed by the
+    /// pool of `IIntentSender` binders `registry::install` registers
+    /// (MODNOTIF4).
+    pub intent_senders: crate::pending_intent::SenderTable,
 }
 
 impl AmsState {
@@ -912,6 +931,7 @@ impl AmsState {
         Self {
             next_task_id: 1,
             next_token: 0x1000_0000,
+            runtime_permissions: None,
             ..Self::default()
         }
     }
@@ -1010,6 +1030,72 @@ impl AmsState {
         Ok(START_SUCCESS)
     }
 
+    /// The structured answer to a `REQUEST_PERMISSIONS` intent (MODNOTIF2).
+    ///
+    /// Real Android shows `GrantPermissionsActivity` from
+    /// `com.android.permissioncontroller`. ACOS does not install that system app
+    /// yet, so this answers with the configured state's honest result:
+    ///
+    /// * all requested permissions already granted -> `state: "granted"`. On a
+    ///   phone the controller grants immediately and returns
+    ///   `onRequestPermissionsResult` without drawing anything; ACOS cannot
+    ///   deliver that result (no `IApplicationThread` activity-result path), so
+    ///   it says exactly that instead of answering success and leaving
+    ///   `mHasCurrentPermissionsRequest` set forever.
+    /// * otherwise -> `state: "denied"`: the dialog is the permission
+    ///   controller app's, and it is not built.
+    ///
+    /// The request is recorded (a refusal is evidence), and nothing is granted.
+    pub fn permission_ui_unavailable(
+        &mut self,
+        request: &crate::permissions::PermissionsRequest,
+    ) -> ServiceError {
+        let (state, detail) = match self.runtime_permissions.as_ref() {
+            Some(store) => {
+                let mut store = store
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                store.refuse_request(&request.permissions, &request.package);
+                if store.all_granted(&request.permissions) {
+                    (
+                        "granted".to_string(),
+                        format!(
+                            "every requested permission is already granted ({}); the controller would auto-grant and return, but ACOS cannot deliver onRequestPermissionsResult without the controller system app",
+                            request.permissions.join(", ")
+                        ),
+                    )
+                } else {
+                    (
+                        "denied".to_string(),
+                        format!(
+                            "{} is not granted and the dialog is the permission controller app's",
+                            request
+                                .permissions
+                                .iter()
+                                .filter(|p| store.check(p) != crate::permissions::PERMISSION_GRANTED)
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    )
+                }
+            }
+            None => (
+                "unknown".to_string(),
+                "no runtime-permission table is published in this host".to_string(),
+            ),
+        };
+        ServiceError::PermissionUiUnavailable {
+            permissions: request.permissions.clone(),
+            state,
+            needs: format!(
+                "a guest system app {} answering ACTION_REQUEST_PERMISSIONS (GrantPermissionsActivity), built on the multi-process work",
+                request.package
+            ),
+            detail,
+        }
+    }
+
     /// Bind a real (guest-minted) activity token to the pending launch the host
     /// recorded for it (W38).
     ///
@@ -1064,6 +1150,85 @@ impl AmsState {
     }
 
     /// `startService`: resolve and start the service. Returns the component.
+    /// `IIntentSender.send`: replay the sender's stored intent(s).
+    ///
+    /// The record is looked up by the binder the caller used, so a cancelled
+    /// record refuses (AOSP logs and returns; the refusal is recorded as
+    /// evidence rather than thrown, exactly like `PendingIntentRecord.
+    /// sendInner`). Delivery is the same path the app's own start would take:
+    /// `start_activity` for a `getActivity` sender, [`AmsState::broadcast`] for
+    /// `getBroadcast`, [`AmsState::start_service`] for `getService`.
+    pub fn send_pending_intent(
+        &mut self,
+        binder: u64,
+        code: i32,
+    ) -> Result<crate::pending_intent::SendEvidence> {
+        self.send_pending_intent_with_fill_in(binder, code, false)
+    }
+
+    /// [`Self::send_pending_intent`] for a caller that read the request's
+    /// fill-in marker: `fill_in_ignored` is the evidence bit (the intent is
+    /// never merged — `Intent.fillIn` is not modelled).
+    pub fn send_pending_intent_with_fill_in(
+        &mut self,
+        binder: u64,
+        code: i32,
+        fill_in_ignored: bool,
+    ) -> Result<crate::pending_intent::SendEvidence> {
+        let Some(record) = self.intent_senders.record_cloned(binder) else {
+            return Err(ServiceError::BadRequest {
+                interface: "android.content.IIntentSender".into(),
+                method: "send".into(),
+                detail: format!("binder {binder} is not a live pending-intent sender"),
+            });
+        };
+        let cancelled = record.cancelled;
+        // `FLAG_UPDATE_CURRENT` stored extras are applied to every intent the
+        // record replays (`PendingIntentRecord.sendInner` sets them on the
+        // intent before the start).
+        let intents: Vec<IntentFacts> = record
+            .intents
+            .iter()
+            .map(|intent| {
+                let mut intent = intent.clone();
+                if let Some(extras) = &record.extras {
+                    for (key, value) in crate::pending_intent::bundle_extras(extras) {
+                        intent.extras.insert(key, value);
+                    }
+                }
+                intent
+            })
+            .collect();
+        let intent = intents.first().cloned().unwrap_or_default();
+        let outcome = if cancelled {
+            Err("the pending intent was cancelled".to_string())
+        } else {
+            match record.kind {
+                crate::pending_intent::TYPE_ACTIVITY => self
+                    .start_activity(&intent, 0, 0, record.request_code)
+                    .map_err(|e| e.to_string()),
+                crate::pending_intent::TYPE_BROADCAST => self
+                    .broadcast(&intent, 0, code, None)
+                    .map_err(|e| e.to_string()),
+                crate::pending_intent::TYPE_SERVICE
+                | crate::pending_intent::TYPE_FOREGROUND_SERVICE => self
+                    .start_service(&intent)
+                    .map(|_| 0)
+                    .map_err(|e| e.to_string()),
+                other => Err(format!("unmodelled sender type {other}")),
+            }
+        };
+        let evidence = crate::pending_intent::SendEvidence {
+            code,
+            outcome: outcome.clone(),
+            intent,
+            refused_cancelled: cancelled,
+            fill_in_ignored,
+        };
+        self.intent_senders.record_send(binder, evidence.clone());
+        Ok(evidence)
+    }
+
     pub fn start_service(&mut self, intent: &IntentFacts) -> Result<(String, String)> {
         let component = self.manifests.resolve_service(intent)?;
         let key = format!("{}/{}", component.package, component.class);
@@ -1412,6 +1577,15 @@ pub fn dispatch(
                 }
             })?;
             let intent = intent(positions.intent)?;
+            // MODNOTIF2: `Activity.requestPermissions` starts an Intent at the
+            // permission controller package. ACOS has no such system app yet
+            // (ADR-0029 amendment: system UI comes from guest system apps), so
+            // the request resolves here, honestly, instead of falling through to
+            // "activity not found" (which looks like an app bug) or, worse, a
+            // silent grant.
+            if let Some(request) = crate::permissions::permission_request(&intent) {
+                return Err(state.permission_ui_unavailable(&request));
+            }
             let flags = value(positions.flags).and_then(Value::as_int).unwrap_or(0);
             let result_to = value(positions.result_to)
                 .and_then(Value::as_binder)
@@ -1545,6 +1719,80 @@ pub fn dispatch(
             }]
         }
         "getRunningAppProcesses" => vec![Value::List(Some(Vec::new()))],
+        // MODNOTIF4: `PendingIntent` senders. The argument layout is the
+        // decoded table's (`tables.rs:2068` for code 62, `:2091` for 63):
+        // `(type, [featureId,] packageName, activity, who, requestCode,
+        // Intent[] intents, String[] resolvedTypes, flags, Bundle options,
+        // userId)`.
+        "getIntentSender" | "getIntentSenderWithFeature" => {
+            let base = usize::from(method.name == "getIntentSenderWithFeature");
+            let kind = value(0).and_then(Value::as_int).unwrap_or(0);
+            let package = value(1 + base).and_then(Value::as_str).unwrap_or_default();
+            let request_code = value(4 + base).and_then(Value::as_int).unwrap_or(0);
+            let intents: Vec<IntentFacts> = match args.get(5 + base) {
+                Some(Value::List(Some(items))) => items
+                    .iter()
+                    .filter_map(Value::as_parcelable)
+                    .map(IntentFacts::from_parcelable)
+                    .collect(),
+                _ => Vec::new(),
+            };
+            let resolved_types: Vec<Option<String>> = match args.get(6 + base) {
+                Some(Value::StringArray(Some(items))) => items.clone(),
+                _ => vec![None; intents.len()],
+            };
+            let flags = value(7 + base).and_then(Value::as_int).unwrap_or(0);
+            // `options` is a `Bundle` (the AIDL's last-but-one argument); its
+            // one documented key for `PendingIntent` is the "pending intent
+            // created for a shortcut/notification" marker, which the system
+            // side stores and nothing in ACOS dereferences.
+            let extras = match args.get(8 + base) {
+                Some(Value::Bundle(Some(bundle))) if !bundle.is_empty() => Some(bundle.clone()),
+                _ => None,
+            };
+            let binder = state.intent_senders.get_intent_sender(
+                kind,
+                package,
+                request_code,
+                flags,
+                intents,
+                resolved_types,
+                extras,
+            )?;
+            vec![Value::Binder(binder.map(acos_parcel::BinderId))]
+        }
+        "cancelIntentSender" => {
+            let binder = value(0)
+                .and_then(Value::as_binder)
+                .map(|b| b.0)
+                .unwrap_or(0);
+            let cancelled = state.intent_senders.cancel(binder);
+            vec![Value::Bool(cancelled)]
+        }
+        "getInfoForIntentSender" => {
+            let binder = value(0)
+                .and_then(Value::as_binder)
+                .map(|b| b.0)
+                .unwrap_or(0);
+            // `ActivityManager.PendingIntentInfo`: the creator package, whether
+            // the sender exists and whether it is an activity sender
+            // (`ActivityManager.java:4540`).
+            let record = state.intent_senders.record(binder);
+            vec![Value::TypedObject(Parcelable::ordered(
+                "android.app.ActivityManager$PendingIntentInfo",
+                vec![
+                    Value::Str(Some(
+                        record.map(|r| r.package.clone()).unwrap_or_default(),
+                    )),
+                    Value::Int(i32::from(record.is_some())),
+                    Value::Int(i32::from(
+                        record
+                            .map(|r| r.kind == crate::pending_intent::TYPE_ACTIVITY)
+                            .unwrap_or(false),
+                    )),
+                ],
+            ))]
+        }
         _ => return Ok(None),
     };
 

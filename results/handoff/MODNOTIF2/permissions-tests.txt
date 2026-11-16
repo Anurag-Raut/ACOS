@@ -1,0 +1,10 @@
+$ cargo test -p acos-services --test modnotif2_permissions
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    Finished `test` profile [unoptimized] target(s) in 0.03s
+     Running tests/modnotif2_permissions.rs (.cache/modnotif2-target/debug/deps/modnotif2_permissions-90638c037aac32c7)
+running 4 tests
+test the_launch_config_pre_grants_and_pre_denies ... ok
+test a_module_that_takes_over_a_core_name_restores_core_on_detach ... ok
+test request_permissions_resolves_to_a_structured_permission_ui_unavailable ... ok
+test both_check_permission_paths_read_the_one_store ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

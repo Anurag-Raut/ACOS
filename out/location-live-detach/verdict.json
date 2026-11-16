@@ -5,6 +5,7 @@
     "path": "fixtures/build/apps/location-probe.apk",
     "sha256": "33b0f66440e2e6acdd02526ef933aba21ea0b6f2af41d48bb4f918627062fa6c"
   },
+  "artifacts_overwrote_run": "req_273174_18e876326d5a3542",
   "backend": "acos-native",
   "certification": "certified-with-limits",
   "certification_limits": {
@@ -37,7 +38,7 @@
     "tree": "guest-asserted"
   },
   "fidelity": "art-reference",
-  "finished_at": "2026-11-16T07:30:28.928Z",
+  "finished_at": "2026-11-16T07:34:49.573Z",
   "insets": "report",
   "isolation": "process",
   "mode": "live",
@@ -58,6 +59,24 @@
       "id": "accessibility",
       "profile": "off",
       "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.permissions",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.notifications",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
       "state": "off"
     },
     {
@@ -208,7 +227,10 @@
   "notes": [
     "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
     "artifacts: referenced (prune-unreferenced): 31 file(s) / 1.2 MiB kept, 4 file(s) / 0.6 MiB pruned; see retention.json",
+    "artifacts: --overwrite replaced the evidence of run req_273174_18e876326d5a3542",
     "fidelity: module `accessibility` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `sensors` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `feedback.vibrator` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `location` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
@@ -244,15 +266,15 @@
     "scenario_path": "results/handoff/MODLOC2/location-live-detach.yaml",
     "scenario_sha256": "de8c92098cb97af181bb547909514b9c611101e22311007e547b97032dc4e9af"
   },
-  "request_id": "req_26a9d1_18e87607184067e5",
+  "request_id": "req_274312_18e87643e24d43bb",
   "resources": {
-    "events": 180,
+    "events": 181,
     "frames_captured": 10,
     "memory_mib": 33,
-    "peak_rss_bytes": 34689024,
+    "peak_rss_bytes": 34742272,
     "sessions": 1,
     "steps": 12,
-    "wall_ms": 4375
+    "wall_ms": 3938
   },
   "scenario": {
     "name": "location-live-detach",
@@ -262,9 +284,9 @@
   "schema_version": 1,
   "session_exit": {
     "abi": null,
-    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=81MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2533852-i2565656.scope)",
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=90MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2573083-i2567357.scope)",
     "code": null,
-    "disk_free_bytes": 235988361216,
+    "disk_free_bytes": 243138166784,
     "guest_crash": null,
     "guest_exit": 0,
     "guest_signal": null,
@@ -277,12 +299,12 @@
     "stage": "teardown-evidence"
   },
   "session_id": "s_art_location-probe",
-  "started_at": "2026-11-16T07:30:24.553Z",
+  "started_at": "2026-11-16T07:34:45.635Z",
   "status": "pass",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 378,
+      "duration_ms": 388,
       "evidence": [
         {
           "kind": "step",
@@ -301,7 +323,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 286,
+      "duration_ms": 282,
       "evidence": [
         {
           "kind": "tree",
@@ -430,6 +452,24 @@
                 "id": "accessibility",
                 "profile": "off",
                 "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
                 "state": "off"
               },
               {
@@ -629,7 +669,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1308,
+      "duration_ms": 1276,
       "evidence": [
         {
           "kind": "tree",
@@ -655,8 +695,8 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 121,
-        "frame_ms": 1020,
+        "first_change_ms": 110,
+        "frame_ms": 991,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
@@ -669,7 +709,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 286,
+      "duration_ms": 346,
       "evidence": [
         {
           "kind": "tree",
@@ -693,7 +733,7 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 43,
+        "probe_seq": 44,
         "settled": true,
         "strict_rule": "event",
         "tree_age_ms": 40
@@ -756,7 +796,7 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 43,
+        "probe_seq": 44,
         "settled": true,
         "strict_rule": "event",
         "tree_age_ms": 40
@@ -793,6 +833,24 @@
                 "id": "accessibility",
                 "profile": "off",
                 "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
                 "state": "off"
               },
               {
@@ -982,7 +1040,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1733,
+      "duration_ms": 1338,
       "evidence": [
         {
           "kind": "tree",
@@ -1008,8 +1066,8 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 111,
-        "frame_ms": 1246,
+        "first_change_ms": 121,
+        "frame_ms": 1050,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
@@ -1022,7 +1080,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 358,
+      "duration_ms": 288,
       "evidence": [
         {
           "kind": "tree",
@@ -1046,7 +1104,7 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 76,
+        "probe_seq": 79,
         "settled": true,
         "strict_rule": "event",
         "tree_age_ms": 40
@@ -1085,7 +1143,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 2,
+      "duration_ms": 3,
       "evidence": [
         {
           "kind": "tree",
@@ -1109,7 +1167,7 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 76,
+        "probe_seq": 79,
         "settled": true,
         "strict_rule": "event",
         "tree_age_ms": 40
@@ -1148,7 +1206,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 3,
+      "duration_ms": 2,
       "evidence": [
         {
           "kind": "tree",
@@ -1172,7 +1230,7 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 76,
+        "probe_seq": 79,
         "settled": true,
         "strict_rule": "event",
         "tree_age_ms": 40

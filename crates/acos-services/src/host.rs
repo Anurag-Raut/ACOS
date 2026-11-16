@@ -234,6 +234,16 @@ impl Default for Wiring {
 
 type Factory = Arc<dyn Fn(Wiring) -> Box<dyn ServiceObject> + Send + Sync>;
 
+/// `(sender binder, code) -> evidence` for one `IIntentSender.send`.
+///
+/// The delivery is `AmsState::send_pending_intent`, which owns the sender table
+/// and the activity/broadcast/service start paths; publishing a closure keeps
+/// that state out of the module API while still letting `notifications` `tap`
+/// really fire the intent.
+pub type FireSender = Arc<
+    dyn Fn(u64, i32) -> crate::error::Result<crate::pending_intent::SendEvidence> + Send + Sync,
+>;
+
 /// The registration tables as they were at [`ServiceHost::begin_scope`].
 ///
 /// ADR-0029 requires that detaching a module leaves **no** registration behind,
@@ -241,14 +251,40 @@ type Factory = Arc<dyn Fn(Wiring) -> Box<dyn ServiceObject> + Send + Sync>;
 /// node, an alias). Keeping the pre-attach snapshot is the only way to prove
 /// that by construction instead of trusting each module's `detach` to enumerate
 /// what its `attach` did.
-#[derive(Debug)]
 pub struct RegistrationScope {
     entries: Vec<&'static str>,
     names: HashMap<&'static str, &'static str>,
     aux: HashMap<&'static str, BinderId>,
     dynamic: Vec<u64>,
     binder_descriptors: HashMap<u64, &'static str>,
-    notification: bool,
+    notification: Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>>,
+    permission_store: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    pending_intent_fire: Option<FireSender>,
+    /// Index of this scope's overwrite log in [`ServiceHost::overwrites`].
+    ///
+    /// A module that replaces a `core` name registers the same descriptor, so
+    /// deleting what was added cannot describe the rollback: `end_scope` must
+    /// restore the **factory and binder** that descriptor had before. Without
+    /// this a detached module's factory kept answering (MODNOTIF2).
+    depth: usize,
+}
+
+impl core::fmt::Debug for RegistrationScope {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // `FireSender` is a closure, which has no `Debug`; every other field is
+        // sized data a caller may want in a log.
+        f.debug_struct("RegistrationScope")
+            .field("entries", &self.entries.len())
+            .field("names", &self.names.len())
+            .field("aux", &self.aux.len())
+            .field("dynamic", &self.dynamic.len())
+            .field("binder_descriptors", &self.binder_descriptors.len())
+            .field("notification", &self.notification.is_some())
+            .field("permission_store", &self.permission_store.is_some())
+            .field("pending_intent_fire", &self.pending_intent_fire.is_some())
+            .field("depth", &self.depth)
+            .finish()
+    }
 }
 
 struct ServiceEntry {
@@ -309,6 +345,18 @@ pub struct ServiceHost {
     /// The display's accessibility-overlay window token (`init`'s third
     /// argument; `getOverlayWindowToken` answers it).
     a11y_window_token: Option<BinderId>,
+    /// The one runtime-permission table `ActivityManager.checkPermission`,
+    /// `PackageManager.checkPermission` and `IPermissionManager` all read
+    /// (`crate::permissions`). Modules that own the name share it through this
+    /// slot, exactly like the notification state.
+    permission_store: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    /// The one way to *fire* a `PendingIntent` sender (MODNOTIF4). A module
+    /// owns the notification records but the sender table and the activity
+    /// start live in the AMS, so the registry publishes the delivery here
+    /// instead of a module reaching into the ATMS state.
+    pending_intent_fire: Option<FireSender>,
+    /// Overwrite logs, one per open [`RegistrationScope`].
+    overwrites: Vec<Vec<(&'static str, BinderId, Factory)>>,
 }
 
 impl core::fmt::Debug for ServiceHost {
@@ -353,6 +401,9 @@ impl ServiceHost {
             a11y: None,
             a11y_connection: None,
             a11y_window_token: None,
+            permission_store: None,
+            pending_intent_fire: None,
+            overwrites: Vec::new(),
         }
     }
 
@@ -366,12 +417,23 @@ impl ServiceHost {
         let binder = self.registry.register_local(descriptor);
         self.binder_descriptors.insert(binder.0, descriptor);
         self.names.insert(name, descriptor);
+        let factory: Factory = Arc::new(factory);
+        // A registration over a name that exists is recorded so the open scope
+        // (if any) can put the old factory back on rollback. Modules replacing a
+        // `core` name do exactly this.
+        if let Some(previous) = self.entries.get(descriptor) {
+            if let Some(log) = self.overwrites.last_mut() {
+                log.push((descriptor, previous.binder, Arc::clone(&previous.factory)));
+            }
+        }
+        // MODTAIL2: a module may depend on a registration appearing later in
+        // the same attach (the bluetooth/wifi nodes). Both hooks run.
         self.notify_registered(name);
         self.entries.insert(
             descriptor,
             ServiceEntry {
                 binder,
-                factory: Arc::new(factory),
+                factory,
                 object: None,
             },
         );
@@ -558,14 +620,18 @@ impl ServiceHost {
     /// Snapshot the registration tables so a module's registrations can be
     /// rolled back as a unit (ADR-0029 detach).
     #[must_use]
-    pub fn begin_scope(&self) -> RegistrationScope {
+    pub fn begin_scope(&mut self) -> RegistrationScope {
+        self.overwrites.push(Vec::new());
         RegistrationScope {
             entries: self.entries.keys().copied().collect(),
             names: self.names.clone(),
             aux: self.aux.clone(),
             dynamic: self.dynamic.keys().copied().collect(),
             binder_descriptors: self.binder_descriptors.clone(),
-            notification: self.notification.is_some(),
+            notification: self.notification.as_ref().map(std::sync::Arc::clone),
+            permission_store: self.permission_store.as_ref().map(std::sync::Arc::clone),
+            pending_intent_fire: self.pending_intent_fire.as_ref().map(std::sync::Arc::clone),
+            depth: self.overwrites.len() - 1,
         }
     }
 
@@ -592,6 +658,33 @@ impl ServiceHost {
             if let Some(entry) = self.entries.remove(key) {
                 freed.push(entry.binder);
             }
+        }
+        // Restore every descriptor this scope overwrote: the module's factory
+        // and binder go away (the binder is in `freed` below), core's factory
+        // and binder come back. The object is dropped, not kept, so the
+        // restored factory constructs core's service again with its own shared
+        // state (the state is behind an `Arc`, so this is not a reset).
+        let overwritten: Vec<(&'static str, BinderId, Factory)> = if self.overwrites.len() > scope.depth
+        {
+            self.overwrites.split_off(scope.depth).concat()
+        } else {
+            Vec::new()
+        };
+        for (descriptor, binder, factory) in overwritten {
+            if let Some(entry) = self.entries.get_mut(descriptor) {
+                freed.push(entry.binder);
+                self.registry.remove(entry.binder);
+                self.binder_descriptors.remove(&entry.binder.0);
+            }
+            self.entries.insert(
+                descriptor,
+                ServiceEntry {
+                    binder,
+                    factory,
+                    object: None,
+                },
+            );
+            self.binder_descriptors.insert(binder.0, descriptor);
         }
         let added_names: Vec<&'static str> = self
             .names
@@ -647,8 +740,27 @@ impl ServiceHost {
                 freed.push(BinderId(id));
             }
         }
-        if !scope.notification {
-            self.notification = None;
+        self.overwrites.truncate(scope.depth);
+        if !scope.notification.as_ref().is_some_and(|before| {
+            self.notification
+                .as_ref()
+                .is_some_and(|now| std::sync::Arc::ptr_eq(before, now))
+        }) {
+            self.notification = scope.notification.clone();
+        }
+        if !scope.permission_store.as_ref().is_some_and(|before| {
+            self.permission_store
+                .as_ref()
+                .is_some_and(|now| std::sync::Arc::ptr_eq(before, now))
+        }) {
+            self.permission_store = scope.permission_store.clone();
+        }
+        if !scope.pending_intent_fire.as_ref().is_some_and(|before| {
+            self.pending_intent_fire
+                .as_ref()
+                .is_some_and(|now| std::sync::Arc::ptr_eq(before, now))
+        }) {
+            self.pending_intent_fire = scope.pending_intent_fire.clone();
         }
         for binder in &freed {
             self.registry.remove(*binder);
@@ -726,6 +838,36 @@ impl ServiceHost {
         &self,
     ) -> Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>> {
         self.notification.as_ref().map(std::sync::Arc::clone)
+    }
+
+    /// Publish the session's `PendingIntent` delivery path (called by
+    /// [`crate::registry::install`]).
+    pub fn set_pending_intent_fire(&mut self, fire: FireSender) {
+        self.pending_intent_fire = Some(fire);
+    }
+
+    /// The delivery path a `notifications` `tap` uses.
+    #[must_use]
+    pub fn pending_intent_fire(&self) -> Option<FireSender> {
+        self.pending_intent_fire.as_ref().map(std::sync::Arc::clone)
+    }
+
+    /// Publish the session's one runtime-permission table (called by
+    /// [`crate::registry::install`]).
+    pub fn set_permission_store(
+        &mut self,
+        store: std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>,
+    ) {
+        self.permission_store = Some(store);
+    }
+
+    /// The runtime-permission table, when a standard set (or the `permissions`
+    /// module) published one.
+    #[must_use]
+    pub fn permission_store(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>> {
+        self.permission_store.as_ref().map(std::sync::Arc::clone)
     }
 
     /// Enable the per-call trace.

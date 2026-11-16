@@ -86,6 +86,7 @@ macro_rules! stub_module {
             system_apps: &[],
             requires: &[],
             requires_host_tools: &[],
+            replaces: &[],
             profiles: &[Profile::Stub],
             budget: Budget {
                 ram_mib: 1,
@@ -118,6 +119,7 @@ macro_rules! off_module {
             requires: &[],
             requires_host_tools: &[],
             // No profile but `off`: this module cannot answer honestly yet.
+            replaces: &[],
             profiles: &[],
             // An `off`-only module never attaches, so its session cost is zero;
             // the manifest floor is 1 (a module that cannot state a cost is not

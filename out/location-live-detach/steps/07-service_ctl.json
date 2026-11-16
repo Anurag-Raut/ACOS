@@ -33,6 +33,24 @@
             "attach": "hot",
             "details": null,
             "fidelity": "off",
+            "id": "system.permissions",
+            "profile": "off",
+            "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+            "state": "off"
+          },
+          {
+            "attach": "hot",
+            "details": null,
+            "fidelity": "off",
+            "id": "system.notifications",
+            "profile": "off",
+            "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+            "state": "off"
+          },
+          {
+            "attach": "hot",
+            "details": null,
+            "fidelity": "off",
             "id": "sensors",
             "profile": "off",
             "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",

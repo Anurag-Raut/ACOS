@@ -374,8 +374,13 @@ pub struct AtmsState {
     pub transactions: Vec<ClientTransaction>,
     /// Pending `system -> app` calls as `(method, args)`.
     pub pending_app_thread_calls: Vec<(String, Vec<Value>)>,
-    /// Granted permissions.
+    /// Granted permissions (install-time manifest grants; the runtime table in
+    /// [`crate::permissions`] wins for a permission it has an answer for).
     pub granted_permissions: Vec<String>,
+    /// The one runtime-permission table, shared with the PMS and the
+    /// `permissions` module (MODNOTIF2). `None` in a bare unit-test state, in
+    /// which case a granted permission answers from `granted_permissions`.
+    pub runtime_permissions: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
     /// Logical clock (ms) advanced per event; the VM supplies the real clock.
     clock_ms: u64,
     /// Next event seq.
@@ -406,6 +411,7 @@ impl AtmsState {
             transactions: Vec::new(),
             pending_app_thread_calls: Vec::new(),
             granted_permissions: vec!["android.permission.INTERNET".into()],
+            runtime_permissions: None,
             clock_ms: 1,
             next_seq: 1,
             controller_binder: 0,
@@ -826,9 +832,17 @@ impl AtmsState {
         Ok(())
     }
 
-    /// `checkPermission` from the manifest/grant policy.
+    /// `checkPermission`: the shared runtime table first, then install-time.
     #[must_use]
     pub fn check_permission(&self, permission: &str) -> i32 {
+        if let Some(store) = self.runtime_permissions.as_ref() {
+            let store = store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if store.entry(permission).is_some() {
+                return store.check(permission);
+            }
+        }
         if self.granted_permissions.iter().any(|p| p == permission) {
             0
         } else {

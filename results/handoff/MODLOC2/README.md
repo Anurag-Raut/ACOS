@@ -1,8 +1,9 @@
 # MODLOC2 — `modloc` into `modules`: one module-control path, a deadline-driven peer
 
 Branch `modloc2`, created from `modules` @ `cfed3eea` (MODTAIL2's single module
-control path), `modloc` @ `b29fe364` merged in, then `modules` @ `575c19d7`
-(MODTAIL3 + MODA11Y5) merged back so the branch fast-forwards. Implementation
+control path), `modloc` @ `b29fe364` merged in, then `modules` merged back twice
+(`575c19d7` = MODTAIL3 + MODA11Y5, and `9eb1b8ee` = MODNOTIF5 notifications/
+permissions/PendingIntent senders) so the branch fast-forwards. Implementation
 only; the orchestrator reviews and merges.
 
 Worktree `t3-9e894753`, private `ACOS_RUNTIME_DIR`/`ACOS_SESSION_SOCKET`, every
@@ -33,7 +34,23 @@ fixture, the how-to) is kept and ported.
 | 12 | `crates/acos-art/src/launch.rs` | `"ctl"` branch: MODTAIL2 `{id, ctl_op, args}` → `modules.control(host, id, ctl_op, args)` replying `{id, op, value, attached, modules}`; modloc `modules.control(id, ctl_op, args)` replying `{module, ctl_op, result}` | MODTAIL2's, because that is the shape `Module::control(&mut ServiceHost, …)` needs (the module gets the session host so a control can deliver) and the shape `summarize_reply`/`acos_service_ctl` read. |
 | 13 | `docs/AGENT_GUIDE.md` | MODTAIL2's “Driving a scripted module mid-run (`service_ctl`)” + sensors how-to; modloc's location how-to | both: MODTAIL2's section stays verbatim, followed by a new `### Location (\`location\`)` section adapted from modloc's (the live spelling is now `acos_service_ctl {module, op, args}` for a control op and `acos_services {op: attach\|detach}` for the lifecycle, not `acos_services {op:"ctl"}`). |
 | 14 | `tools/build-apps.sh` | `tail-probe` (MODTAIL2) vs `location-probe` (modloc) | both fixtures are built. |
-| 15 | `crates/acos-services/src/modules/mod.rs` | module list | `biometric, bluetooth, location, sensors, tail_stubs, telephony, vibrator`. |
+| 15 | `crates/acos-services/src/modules/mod.rs` | module list | `accessibility, biometric, bluetooth, location, notifications, permissions, sensors, tail_stubs, telephony, vibrator`. |
+
+**Second merge (`modules` @ `9eb1b8ee`, MODNOTIF5):** two conflicts, both from
+MODNOTIF5's `ModuleManifest.replaces` (a module may only take a `core` name over
+when its manifest declares it):
+
+| file | resolution |
+|---|---|
+| `crates/acos-services/src/module.rs` (`ModuleRegistry::add`) | MODNOTIF5's rule (an explicit `replaces` declaration, with the “declare it in `replaces` to take it over” message). modloc's blanket “core may always be taken over” is deleted. |
+| `crates/acos-services/src/modules/mod.rs` | both lists (accessibility/notifications/permissions + location). |
+
+`location`'s manifest now declares `replaces: &[SERVICE_NAME]`, which is the same
+intent modloc had (the name is always published on a device, the module takes it
+over while attached) expressed in the newer, stricter mechanism; `location`
+still installs `off_node` so the name keeps answering the disabled-device node
+while the module is off. `cargo check --workspace --all-targets` and the full
+`acos-services` suite are green after both merges.
 
 **Porting location onto the one path** (no conflict, but required): `location.rs`
 now implements `Module::control(&mut self, host: &mut ServiceHost, op, args)` and
@@ -80,6 +97,23 @@ Net effect: an idle session with no timed module has **zero** wakeups (the old
 loop had 50/s), and a scheduled fix lands within 5 ms of its deadline (the old
 loop bounded it at 20 ms).
 
+**Two things the first ART runs caught** (both fixed, both in this branch):
+
+1. **A live module request had no wake.** With the idle turn asleep until a
+   deadline, `acos_services {op: attach|detach}` / `acos_service_ctl` waited for a
+   guest frame that never came: the first run answered
+   `SERVICE_CONTROL_TIMEOUT … did not answer the module request within 10 s`.
+   `ServiceControl::submit` now writes to the same wake pipe `stop` uses, and
+   `IdleWake::Stop` is `IdleWake::Wake` (the `stop` flag is the decision; a queued
+   request is served at the top of the next turn).
+2. **A control op's own deliveries were left in the module's queue.** The
+   post-control flush used the plain transaction drain (`take_delivery_frames` →
+   `host.take_deliveries`), which cannot see a delivery a module parked in its own
+   object (`ServiceObject::drain_raw_deliveries`). `location-probe` regressed to
+   `wait_for last=37.4220 … timed out`; MODLOC's 20 ms tick used to hide it. The
+   launcher now flushes a control op with `Peer::tick()` (the timed drain) — the
+   control op has returned, so no module lock is held.
+
 Tests (`crates/acos-binder-peer/tests/peer.rs`, 18 pass):
 
 ```
@@ -99,22 +133,31 @@ which do not exist on the tree they replace (MODLOC's loop ticked every 20 ms vi
 
 MODTAIL2's `ServiceCtlStep` is already the superset (`attach` with
 `profile`/`config`, `detach`, every control op with `args`), so **no new step was
-needed**; the proof moves from MODLOC's MCP driver (`live_location.py`) into a
-scenario: `results/handoff/MODLOC2/location-live-attach.yaml`.
+needed**; the detach proof moves from MODLOC's MCP driver (`live_location.py`)
+into a scenario: `results/handoff/MODLOC2/location-live-detach.yaml` (12/12 on
+ART).
 
 ```
-services: [{id: location, profile: off}]
-launch -> state=unavailable (the off node), last=none
-service_ctl {module: location, op: attach, profile: scripted, config: {permissions: fine}}
-tap {id: check} -> state=ready providers=fused,gps,network,passive
+services: [{id: location, profile: scripted, config: {permissions: fine}}]
+launch -> state=ready providers=fused,gps,network,passive
 service_ctl {module: location, op: set_location, args: {...37.4220/-122.0841...}}
-tap {id: check} -> last=37.4220,-122.0841 / fix=... provider=gps
-service_ctl {module: location, op: detach}
-tap {id: check} -> state=unavailable again, last=none     # the stale handle answers
+tap check -> last=37.4220,-122.0841
+service_ctl {module: location, op: detach}         # the lifecycle word, in-band
+tap check -> state=unavailable, last=none, fix=none
 ```
 
-The fixture's “Check again” button re-runs the whole probe through the framework's
-own client, which is what makes the detach observable on screen.
+The fixture's “Check again” button re-runs the whole probe through the framework
+client it already holds, which is what makes the detach observable on screen.
+
+**A live *attach* is not observable by this app, and that is an honest limit, not
+a bug.** `SystemServiceRegistry` keeps one `LocationManager` per process and that
+object caches the `ILocationManager` binder it resolved at construction, so after
+a replace-on-attach the guest still talks to the old handle and gets the
+structured “module is not attached” answer (measured: the first version of this
+scenario, `location-live-attach.yaml`, timed out at `state=ready`). Detach is
+observable precisely because the cached handle must stop working. An attach is
+seen by resolving the service again — the launch path, which is what
+`location-probe.yaml` covers.
 
 ## 4. Verification
 
@@ -124,7 +167,7 @@ own client, which is what makes the detach observable on screen.
 | `cargo test -p acos-services` (52 suites) | **PASS**, 0 failed | `results/handoff/MODLOC2/services-tests.log` (`location_module` 8/8, `module_kit` 13/13) |
 | `cargo test -p acos-binder-peer` | **PASS** 18 (+ the two new) | same log tree / `peer` suite |
 | `cargo test -p acos-verify -p acos-protocol` | **PASS** (92 + 28 + lib units) | — |
-| `cargo test -p acos-mcp` | **PASS** *with `ACOS_RUNTIME_DIR` unset* (83 lib + 4 + 3 + 1 + e2e) | see the environment note below |
+| `cargo test -p acos-mcp` | **PASS** *with `ACOS_RUNTIME_DIR` unset* (141 tests) | see the environment note below |
 
 Environment note (not from this work): `acos-mcp`'s
 `private_dir_is_per_process_and_under_the_runtime_dir` and
@@ -135,27 +178,41 @@ socket path to `sun_path`'s 100-byte budget **and** to the default runtime dir
 `ACOS_RUNTIME_DIR` unset (then 100 % green). `cargo test -p acos-services` was
 run with the private runtime dir, as the brief requires.
 
-## 5. What is NOT done (smallest next action)
+### ART on the merged tree (`--engine art`, correctness runs under the shared lock)
 
-**ART re-runs are not in this handoff.** The trees are green and the peer deadline
-behaviour is unit-proven, but the four ART runs the brief asks for were not made
-on this merged tree, because the run needs a release `acos` build and the shared
-ART slots:
+| scenario | verdict | evidence |
+|---|---|---|
+| `results/handoff/MODLOC2/location-probe.yaml` | **pass 12/12** | `v-location-probe/` |
+| `results/handoff/MODLOC2/location-geocoder.yaml` | **pass 3/3** | `v-location-geocoder/` |
+| `results/handoff/MODLOC2/location-live-detach.yaml` | **pass 12/12** | `v-location-live-detach/` |
+| `scenarios/sensors-scripted.yaml` | **pass 16/16** | `v-sensors-scripted/` |
+| `results/handoff/MODTAIL/tail-telephony.yaml` | **pass 14/14** | `v-tail-telephony/` |
 
-1. `cargo build --release -p acos-cli` (or accept the debug binary for
-   correctness runs),
-2. `acos verify results/handoff/MODLOC2/location-live-attach.yaml --engine art --json`
-   (the new attach/detach proof; needs `fixtures/build/apps/location-probe.apk`,
-   `tools/build-apps.sh location-probe`),
-3. `acos verify results/handoff/MODLOC/location-probe.yaml --engine art --json`
-   and `.../location-geocoder.yaml` (they must pass on the merged tree; the codec
-   merge with MODTAIL3 touched `Bundle`/`writeString`, which the geocoder’s
-   `List<Address>` reply goes through — this is the run most likely to find a
-   regression),
-4. `acos verify scenarios/sensors-scripted.yaml --engine art --json` and
-   `acos verify results/handoff/MODTAIL/tail-telephony.yaml --engine art --json`
-   (they share the tick/control path).
+The detach, from the app's own logcat (`v-location-live-detach/logs/logcat.txt`):
 
-`results/handoff/MODLOC2/location-live-attach.yaml` has not been through an ART
-run either, so its selectors are unproven (the `tap: {id: check}` steps and the
-`state=unavailable` text on the off node are the two places to look first).
+```
+AcosLocationProbe: current location Location[gps 37.422000,-122.084100 hAcc=4.0 ...]
+AcosLocationProbe: unavailable: java.lang.UnsupportedOperationException: "binder 0x64" is
+  provided by service module "location", which is not attached — attach it:
+  acos_launch {"services": [{"id": "location", "profile": "scripted"}]}
+```
+
+and the verdict's `modules[]` row for `location` is the **final** state
+(`profile: off`, `reason: module is off; attach it: …`) even though the run
+attached it at launch — the verdict-cites-the-final-rows path MODLOC added.
+
+## 5. What is NOT done / what the orchestrator may want next
+
+* **`requestLocationUpdates(PendingIntent)` still answers `UNSUPPORTED_ANDROID_API`**
+  (MODLOC's honest limit). MODNOTIF5 now provides `getIntentSender` +
+  `IIntentSender.send` + `ServiceHost::pending_intent_fire`, so the module could
+  deliver the pending-intent form instead of refusing it. Not done here (it needs
+  the sender round-trip in the location node plus a fixture and a scenario);
+  smallest next action: in `location.rs`'s `REGISTER_LOCATION_PENDING_INTENT` arm,
+  keep the `IIntentSender` from the request and `pending_intent_fire` a
+  `LocationManagerService` intent on each fix, then extend the scenario.
+* `/proc/self/...`-based limits, the forward geocoder path and the 2 MiB/10 ms
+  budget checks are the same open MODLOC items (unchanged).
+* Artifact dirs under `v-*/` hold `verdict.json`, `run.json`, `engine.json`,
+  `steps/*.json` and `logs/logcat.txt`; the PNGs/trees are left out to keep the
+  handoff small (they are reproduced by re-running the scenario).

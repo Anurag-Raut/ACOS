@@ -20,7 +20,7 @@
     "doc": "docs/SANDBOX_CERTIFICATION.md",
     "section": "§8.7"
   },
-  "duration_ms": 1733,
+  "duration_ms": 1338,
   "evidence": [
     {
       "kind": "tree",
@@ -46,8 +46,8 @@
   "settle": {
     "ack_ms": 5,
     "bound": "strict-event",
-    "first_change_ms": 111,
-    "frame_ms": 1246,
+    "first_change_ms": 121,
+    "frame_ms": 1050,
     "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
     "mode": "strict",
     "pixels_changed": true,

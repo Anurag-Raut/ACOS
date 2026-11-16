@@ -182,6 +182,8 @@ fn manifest_ref() -> &'static ModuleManifest {
         system_apps: &[],
         requires: &[],
         requires_host_tools: &[],
+        // Nothing is taken over from `core` (MODNOTIF5 unified the field).
+        replaces: &[],
         profiles: &[Profile::Stub, Profile::Scripted],
         budget: Budget {
             ram_mib: 1,

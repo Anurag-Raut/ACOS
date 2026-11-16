@@ -67,6 +67,24 @@
         "attach": "hot",
         "details": null,
         "fidelity": "off",
+        "id": "system.permissions",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.notifications",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
         "id": "sensors",
         "profile": "off",
         "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
@@ -210,9 +228,9 @@
     ],
     "session_exit": {
       "abi": null,
-      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=81MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2533852-i2565656.scope)",
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=90MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2573083-i2567357.scope)",
       "code": null,
-      "disk_free_bytes": 235988361216,
+      "disk_free_bytes": 243138166784,
       "guest_crash": null,
       "guest_exit": 0,
       "guest_signal": null,
@@ -225,7 +243,7 @@
       "stage": "teardown-evidence"
     },
     "timing": {
-      "attributed_ms": 4359,
+      "attributed_ms": 3928,
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
@@ -234,19 +252,19 @@
         "mode": "shared-fixed"
       },
       "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
-      "session_start_ms": 199,
+      "session_start_ms": 193,
       "steps": [
         {
           "index": 0,
           "status": "pass",
           "step": "launch",
-          "wall_ms": 378
+          "wall_ms": 388
         },
         {
           "index": 1,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 286
+          "wall_ms": 282
         },
         {
           "index": 2,
@@ -264,13 +282,13 @@
           "index": 4,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 1308
+          "wall_ms": 1276
         },
         {
           "index": 5,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 286
+          "wall_ms": 346
         },
         {
           "index": 6,
@@ -288,35 +306,35 @@
           "index": 8,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 1733
+          "wall_ms": 1338
         },
         {
           "index": 9,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 358
+          "wall_ms": 288
         },
         {
           "index": 10,
           "status": "pass",
           "step": "assert_text",
-          "wall_ms": 2
+          "wall_ms": 3
         },
         {
           "index": 11,
           "status": "pass",
           "step": "assert_text",
-          "wall_ms": 3
+          "wall_ms": 2
         }
       ],
-      "unattributed_ms": 16,
+      "unattributed_ms": 10,
       "unit": "ms",
-      "verdict_wall_ms": 4375
+      "verdict_wall_ms": 3938
     },
     "trust": "trusted",
     "unsupported_steps": []
   },
   "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
-  "request_id": "req_26a9d1_18e87607184067e5",
+  "request_id": "req_274312_18e87643e24d43bb",
   "verdict_status": "pass"
 }

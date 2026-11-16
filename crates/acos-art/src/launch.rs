@@ -6719,9 +6719,13 @@ fn serve(
             let debug_reply = reply.to_string();
             control.reply(id, reply);
             // A live `ctl` op can queue `system -> app` deliveries (an SMS, a
-            // call-state event, an authentication result). No binder
-            // transaction follows to flush them, so do it here.
-            let flushed = peer.take_delivery_frames();
+            // call-state event, a location fix, an authentication result). No
+            // binder transaction follows to flush them, so do it here — with the
+            // **timed** drain, because a module parks its own deliveries in its
+            // own object (`ServiceObject::drain_raw_deliveries`), which the plain
+            // transaction drain does not see. The control op has returned, so no
+            // module lock is held here.
+            let flushed = peer.tick();
             if let Ok(path) = std::env::var("ACOS_SERVICE_CTL_LOG") {
                 use std::io::Write as _;
                 if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
