@@ -58,6 +58,7 @@ sys.path.insert(0, str(HERE))
 
 import benchlib  # noqa: E402
 import bench_lattice  # noqa: E402
+import bench_reply  # noqa: E402  (BENCHFIX: the reply/tree contract)
 import d2_warm  # noqa: E402
 import agent_loop  # noqa: E402
 
@@ -753,6 +754,18 @@ def tree_of(value):
     return (value or {}).get("tree") if isinstance(value, dict) else None
 
 
+def bench_tree(value, tool="reply"):
+    """The *full* screen behind a tree-bearing reply.
+
+    BENCHFIX: since REL3C (rel-030) `result.tree` is a compact page of visible
+    text nodes and the full tree is the file named by `result.tree_path`; up to
+    v0.2.2 the full tree was inline. `bench_reply.full_tree` reads whichever the
+    reply actually carries and raises `ReplyShapeError` when neither is there, so
+    a shape change fails the phase instead of scoring `None`/0 nodes.
+    """
+    return bench_reply.full_tree(value, tool)
+
+
 def nodes_of(tree):
     return list(agent_loop.walk((tree or {}).get("nodes")))
 
@@ -887,10 +900,14 @@ def launch(d, base, settle, apk=COUNTER, **extra):
 
 
 def launch_ok(reply, require_count=True):
+    """Is this launch reply the counter screen? (shape errors raise loudly.)"""
     env = reply.get("envelope") or {}
-    value = env.get("result") or {}
-    tree = tree_of(value)
-    good = bool(env.get("ok") and nodes_of(tree))
+    if not env.get("ok"):
+        return False, env.get("result") or {}
+    value = bench_reply.result_of(env, "acos_launch")
+    tree = bench_tree(value, "acos_launch")
+    bench_reply.settle(value, "acos_launch")
+    good = bool(nodes_of(tree))
     if require_count:
         good = good and count_text(tree) == "0"
     return good, value
@@ -949,26 +966,31 @@ def phase_latency(args):
                 base = new_base(tag, i)
                 r = launch(d, base, mode)
                 ok, value = launch_ok(r)
+                tree = bench_tree(value, "m4-%s-%d launch" % (mode, i)) if ok else None
                 settle = (value.get("settle") or {})
                 # P6 rule: a later strict read proves the reply's tree.
                 vr = d.call("acos_observe_tree", {"base": base, "settle": "strict",
                                                   "max_nodes": 2000})
-                vtree = tree_of((vr.get("envelope") or {}).get("result") or {})
-                ok = ok and bool((vr.get("envelope") or {}).get("ok"))
-                ok = ok and count_text(vtree) == "0"
+                venv = vr.get("envelope") or {}
+                vtree = None
+                if venv.get("ok"):
+                    _vres, vtree = bench_reply.require_tree_read(
+                        venv, "m4-%s-%d verify tree" % (mode, i))
+                verify_ok = bool(vtree is not None and count_text(vtree) == "0")
+                ok = ok and verify_ok
                 # P12: a timed-out settle is not a pass, even when the tree looks
                 # right; the reply says settled:false / bound:timeout.
                 ok = ok and settle.get("settled") is not False
                 if not ok:
                     failures.add("%s-%d" % (tag, i), "launch", r,
-                                 detail={"verify_ok": count_text(vtree) == "0",
+                                 detail={"verify_ok": verify_ok,
                                          "settled": settle.get("settled")})
                 add(samples, "m4_launch_%s_ms" % mode, r["wall_ms"], ok,
                     {"bound": settle.get("bound"), "settled": settle.get("settled"),
                      "pixels_changed": settle.get("pixels_changed"),
                      "animations": value.get("animations"),
-                     "nodes": len(nodes_of(tree_of(value))),
-                     "verify_ok": count_text(vtree) == "0"})
+                     "nodes": len(nodes_of(tree)),
+                     "verify_ok": verify_ok})
                 destroy(d, base, teardowns, "m4-%s" % mode)
             mode_wall["m4-%s" % mode] = round(time.time() - t_mode, 3)
             checks["m4_%s" % mode] = sum(
@@ -998,18 +1020,26 @@ def phase_latency(args):
                     failures.add(task, "tap", tr)
                 br = d.call("acos_observe_tree",
                             {"base": base, "settle": "strict"})
-                before = ((br.get("envelope") or {}).get("result") or {}).get("tree")
-                before_ok = bool((br.get("envelope") or {}).get("ok"))
-                if not before_ok:
+                benv = br.get("envelope") or {}
+                before = None
+                before_ok = bool(benv.get("ok"))
+                if before_ok:
+                    _bres, before = bench_reply.require_tree_read(
+                        benv, "%s before tree" % task)
+                else:
                     failures.add(task, "before_tree", br)
                 r = d.call("acos_reset", {"base": base, "settle": mode})
                 env = r.get("envelope") or {}
                 value = env.get("result") or {}
-                tree = tree_of(value)
+                tree = bench_tree(value, "%s acos_reset" % task) if env.get("ok") else None
                 vr = d.call("acos_observe_tree", {"base": base, "settle": "strict"})
-                vtree = tree_of((vr.get("envelope") or {}).get("result") or {})
-                verify_ok = bool((vr.get("envelope") or {}).get("ok"))
-                if not verify_ok:
+                vrev = vr.get("envelope") or {}
+                vtree = None
+                verify_ok = bool(vrev.get("ok"))
+                if verify_ok:
+                    _vres, vtree = bench_reply.require_tree_read(
+                        vrev, "%s verify tree" % task)
+                else:
                     failures.add(task, "verify_tree", vr)
                 settle = value.get("settle") or {}
                 ok = bool(env.get("ok") and value.get("state_reset")
@@ -1042,7 +1072,7 @@ def phase_latency(args):
         if not launch_ok(r)[0]:
             raise RuntimeError("counter session did not launch: %s" % (r["envelope"],))
 
-        shots = d2_warm.measure_screenshot(d, base, scratch / "screens", reps, warmup=1)
+        shots = d2_warm.measure_screenshot(d, base, reps, warmup=1)
         for row in shots:
             if row.get("warmup"):
                 continue
@@ -1064,8 +1094,12 @@ def phase_latency(args):
                 r = d.call("acos_observe_tree", {"base": base, "settle": mode,
                                                  "max_nodes": 2000})
                 env = r.get("envelope") or {}
-                value = env.get("result") or {}
-                tree = tree_of(value)
+                tree = None
+                if env.get("ok"):
+                    value, tree = bench_reply.require_tree_read(
+                        env, "m7-%s-%d tree" % (mode, i))
+                else:
+                    value = env.get("result") or {}
                 settle = value.get("settle") or {}
                 nodes = len(nodes_of(tree))
                 own_count = count_text(tree)
@@ -1076,8 +1110,12 @@ def phase_latency(args):
                     vr = d.call("acos_observe_tree", {"base": base,
                                                       "settle": "strict",
                                                       "max_nodes": 2000})
-                    vtree = tree_of((vr.get("envelope") or {}).get("result") or {})
-                    ok = ok and count_text(vtree) == own_count
+                    vrev = vr.get("envelope") or {}
+                    vtree = None
+                    if vrev.get("ok"):
+                        _vres, vtree = bench_reply.require_tree_read(
+                            vrev, "m7-fast-%d verify tree" % i)
+                    ok = ok and vtree is not None and count_text(vtree) == own_count
                 if not ok:
                     failures.add("m7-%s-%d" % (mode, i), "tree", r,
                                  detail={"nodes": nodes, "count": own_count,
@@ -1105,10 +1143,15 @@ def phase_latency(args):
             for i in range(n_mode + 1):
                 r = d.call("acos_tap", {"base": base, "id": "inc", "settle": mode})
                 env = r.get("envelope") or {}
-                settle = (env.get("result") or {}).get("settle") or {}
+                tres = {}
+                if env.get("ok"):
+                    tres, settle = bench_reply.require_tap(
+                        env, "m8-counter-%s-%d" % (mode, i))
+                else:
+                    settle = {}
                 # strict replies name the settled frame, fast replies name the
                 # state commit; state_changed is only present on the fast path.
-                ok = bool(env.get("ok") and settle.get("state_changed") is not False
+                ok = bool(env.get("ok") and tres.get("state_changed") is not False
                           and settle.get("settled") is not False
                           and (settle.get("frame_ms") is not None
                                or settle.get("first_change_ms") is not None))
@@ -1116,7 +1159,7 @@ def phase_latency(args):
                 if not ok:
                     failures.add("m8-counter-%s-%d" % (mode, i), "tap", r,
                                  detail={"settled": settle.get("settled"),
-                                         "state_changed": settle.get("state_changed"),
+                                         "state_changed": tres.get("state_changed"),
                                          "ack_ms": settle.get("ack_ms")})
                 if i == 0:
                     continue
@@ -1137,9 +1180,11 @@ def phase_latency(args):
                 add(samples, "cpu_active_tap_strict_pct", delta["cpu_pct"],
                     True, delta)
 
-        final = ((d.call("acos_observe_tree",
-                         {"base": base, "settle": "strict"})[
-            "envelope"].get("result") or {}).get("tree"))
+        final = None
+        final_reply = d.call("acos_observe_tree", {"base": base, "settle": "strict"})
+        fenv = final_reply.get("envelope") or {}
+        if fenv.get("ok"):
+            _fres, final = bench_reply.require_tree_read(fenv, "m8 final tree")
         checks["m8_counter_final_count"] = count_text(final)
         checks["m8_counter_expected_count"] = str(taps_expected)
         destroy(d, base, teardowns, "m8-counter")
@@ -1148,7 +1193,8 @@ def phase_latency(args):
         base = new_base("form", 0)
         r = launch(d, base, "strict", apk=FORM)
         fok, fvalue = launch_ok(r, require_count=False)
-        if not (fok and node_text(tree_of(fvalue), "submit") == "Submit"):
+        if not (fok and node_text(bench_tree(fvalue, "form acos_launch"),
+                                  "submit") == "Submit"):
             raise RuntimeError("form session did not launch: %s" % (r["envelope"],))
         for mode in ("strict", "fast"):
             n_mode = fast_reps if mode == "fast" else reps
@@ -1161,11 +1207,20 @@ def phase_latency(args):
                 r = d.call("acos_tap", {"base": base, "id": "submit",
                                         "settle": mode})
                 env = r.get("envelope") or {}
-                settle = (env.get("result") or {}).get("settle") or {}
+                tres = {}
+                if env.get("ok"):
+                    tres, settle = bench_reply.require_tap(
+                        env, "m8-form-%s-%d" % (mode, i))
+                else:
+                    settle = {}
                 vr = d.call("acos_observe_tree", {"base": base, "settle": "strict"})
-                vtree = tree_of((vr.get("envelope") or {}).get("result") or {})
+                vrev = vr.get("envelope") or {}
+                vtree = None
+                if vrev.get("ok"):
+                    _vres, vtree = bench_reply.require_tree_read(
+                        vrev, "m8-form-%s-%d verify tree" % (mode, i))
                 ok = bool(reset_ok and env.get("ok")
-                          and bool((vr.get("envelope") or {}).get("ok"))
+                          and vtree is not None
                           and node_text(vtree, "error") == FORM_ERROR
                           and settle.get("settled") is not False)
                 if not ok:
@@ -1243,29 +1298,37 @@ def phase_latency(args):
 
 
 def make_reference(d, scratch):
-    """P9/P7 rule: count 0, two identical settled captures, launch frame same."""
+    """P9/P7 rule: count 0, two identical settled captures, launch frame same.
+
+    BENCHFIX: the capture pair used to ask for `screenshot: <scratch>/ref-N.png`,
+    which FB2c (v0.2.2) refuses because a destination must live inside the
+    session's artifacts directory -- the reply then had no `frame` at all and the
+    rule reported `two consecutive settled captures differ: [None, None]`. A
+    frame-only `acos_observe` is a real host capture that carries `frame.md5`; no
+    PNG path is needed to compare two captures.
+
+    The screen check reads the full tree the reply points at (inline on v0.2.2-,
+    `tree_path` on rel-030+), never the compact page.
+    """
     base = new_base("ref", 0)
     r = launch(d, base, "strict", pixels=True)
-    ok, value = launch_ok(r)
-    if not ok:
-        raise RuntimeError("reference launch tree is not count=0: %r" % (r["envelope"],))
-    shots = []
+    value, tree = bench_reply.require_launch(r.get("envelope"),
+                                             "reference acos_launch")
+    bench_reply.require_counter_screen(tree, "reference acos_launch")
+    md5s = []
     for i in (1, 2):
-        path = Path(scratch) / ("ref-%d.png" % i)
-        rr = d.call("acos_observe", {"base": base, "tree": False, "png": True,
-                                     "screenshot": str(path)})
-        shots.append(((rr.get("envelope") or {}).get("result") or {}).get("frame") or {})
-        if path.exists():
-            path.unlink()
-    md5s = [s.get("md5") for s in shots]
-    if not md5s[0] or md5s[0] != md5s[1]:
-        raise RuntimeError("two consecutive settled captures differ: %s" % md5s)
-    launch_md5 = (value.get("frame") or {}).get("md5")
-    if launch_md5 != md5s[0]:
+        rr = d.call("acos_observe", {"base": base, "tree": False})
+        _value, md5 = bench_reply.require_capture(rr.get("envelope"),
+                                                  "reference capture %d" % i)
+        md5s.append(md5)
+    md5 = bench_reply.identical_captures(md5s, "reference")
+    launch_md5 = bench_reply.frame_md5(value, "reference acos_launch")
+    if launch_md5 != md5:
         raise RuntimeError("launch frame %s != settled capture %s"
-                           % (launch_md5, md5s[0]))
+                           % (launch_md5, md5))
     destroy(d, base, None, "reference")
-    return {"md5": md5s[0], "nodes": len(nodes_of(tree_of(value)))}
+    return {"md5": md5, "nodes": len(nodes_of(tree)),
+            "count_text": count_text(tree)}
 
 
 # --------------------------------------------------------------------------- #
@@ -1355,8 +1418,11 @@ def phase_memory(args):
             add(samples, "wakeups_idle_n%d_per_s" % n, delta["wakeups_per_s"], True)
         for base in sessions:
             destroy(d, base, teardowns, "memory-n10")
-        checks["mode_wall_s"] = mode_wall
-        checks["reps"] = {"other": reps, "fast": fast_reps}
+        # BENCHFIX: this phase used to end on `checks["mode_wall_s"] = mode_wall`
+        # (and `reps`/`fast_reps`), copy-pasted from phase_latency where those
+        # exist. The NameError came *after* every sample was taken, so the whole
+        # memory phase reported ok=false and its group rc=1 on every run.
+        checks["window_s"] = 60.0
         checks["teardown_verified"] = sum(1 for row in teardowns if row.get("verified"))
     except Exception as exc:  # noqa: BLE001
         errors.append("%s: %s" % (type(exc).__name__, exc))
@@ -1405,6 +1471,10 @@ def phase_loop(args):
     samples = {}
     errors = []
     doc = {}
+    # Defined before the `try`: the handler below and the returned document both
+    # read it, so a failure inside the bundle must report *that* error instead of
+    # dying with `UnboundLocalError: cohort` (found running the SPIKE-NET A/B).
+    cohort = {}
     try:
         p5 = load_module("h6_p5_loop", P5_LOOP)
         p5.APK = COUNTER

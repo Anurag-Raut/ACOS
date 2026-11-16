@@ -1,0 +1,59 @@
+{
+  "host_after": {
+    "loadavg1": 3.98,
+    "loadavg15": 8.67,
+    "loadavg5": 6.3,
+    "mem_available_gib": 48.25,
+    "mem_available_mib": 49404.7,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b && nohup env ACOS_VIEW_TEST_DIR=/dev/shm/rel3k-view CARGO_TARGET_DIR=$PWD/.cache/rel3k",
+        "comm": "bash",
+        "pid": 1023173
+      },
+      {
+        "cmd": "timeout 2400 /home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task REL3K -- tools/guarded.sh --mem 10G --time 2300 -- cargo test --release --offline",
+        "comm": "timeout",
+        "pid": 1023174
+      },
+      {
+        "cmd": "bash /home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task REL3K -- tools/guarded.sh --mem 10G --time 2300 -- cargo test --release --offline --no-fa",
+        "comm": "bash",
+        "pid": 1023175
+      }
+    ],
+    "runnable": "2/2069",
+    "used_mib": 12504.0,
+    "used_pct": 20.2,
+    "utc": "2026-11-16T04:47:58+00:00"
+  },
+  "host_before": {
+    "loadavg1": 10.64,
+    "loadavg15": 10.19,
+    "loadavg5": 9.7,
+    "mem_available_gib": 48.53,
+    "mem_available_mib": 49695.1,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [],
+    "runnable": "2/2078",
+    "used_mib": 12213.6,
+    "used_pct": 19.73,
+    "utc": "2026-11-16T04:44:15+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "memory": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 222.527
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-16T04:44:15+00:00",
+  "wall_s": 222.527
+}

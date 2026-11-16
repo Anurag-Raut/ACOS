@@ -55,6 +55,8 @@ sys.path.insert(0, str(HERE))
 
 import benchlib  # noqa: E402
 import agent_loop  # noqa: E402  (W55-owned; imported, not forked)
+sys.path.insert(0, str(REPO / "tools/bench"))
+import bench_reply  # noqa: E402  (BENCHFIX: the reply/tree contract)
 
 MiB = 1024.0 * 1024.0
 APK = REPO / "fixtures/build/apps/counter.apk"
@@ -129,6 +131,48 @@ def comm_of(pid):
         return Path("/proc/%d/comm" % int(pid)).read_text().strip()
     except OSError:
         return "?"
+
+
+def _record_daemon(pid):
+    """SERVELEAK2/F2: append `<pid> <starttime>` to `ACOS_BENCH_PIDFILE`.
+
+    `acos-bench.sh` exports the pidfile per run and its reaper signals only the
+    pids recorded here, after re-verifying `ACOS_BENCH_RUN_ID` in
+    `/proc/<pid>/environ` and the start time (a recycled pid fails). Without the
+    file (a bare `d2_warm` run) recording is a no-op, not an error.
+    """
+    path = os.environ.get("ACOS_BENCH_PIDFILE")
+    if not path:
+        return
+    try:
+        stat = Path("/proc/%d/stat" % int(pid)).read_text()
+        # Field 22 (starttime); the comm field can hold spaces, so split after
+        # the last ')'.
+        starttime = stat.rsplit(") ", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return
+    try:
+        with open(path, "a") as f:
+            f.write("%d %s\n" % (int(pid), starttime))
+    except OSError:
+        pass
+
+
+def _environ_has(pid, needle):
+    """Does process `pid` carry exactly the `KEY=VALUE` entry `needle`?
+
+    The Python twin of `bench_environ_has` in `tools/bench/reap-daemons.sh`:
+    process ownership is a run id in the process's own environment, never a
+    command-line or scratch-path match (two runs share both). A caller that
+    cannot read the environment (another user's process, a race on exit) is not
+    ours.
+    """
+    try:
+        env = Path("/proc/%d/environ" % int(pid)).read_bytes()
+    except OSError:
+        return False
+    wanted = needle.encode() if isinstance(needle, str) else needle
+    return wanted in env.split(b"\0")
 
 
 def ppid_map():
@@ -370,39 +414,60 @@ def survivors(scratch):
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
-def measure_screenshot(daemon, base, screens, count, warmup=0):
-    """M5: a fresh screenshot request on the already-held session."""
+def measure_screenshot(daemon, base, count, warmup=0):
+    """M5: a fresh screenshot request on the already-held session.
+
+    BENCHFIX: FB2c confines a screenshot destination to the session's artifacts
+    directory, so the old `screenshot: <scratch>/m5-000.png` is an argument error
+    and the reply carried no `screenshot` block at all (M5 scored zero good
+    rows). `screenshot: true` is the documented agent form: the daemon writes the
+    PNG under the session's own artifacts and reports `screenshot.path`; that
+    reported file is what this measures, never a caller-invented path.
+    """
     rows = []
     for i in range(warmup + count):
-        path = Path(screens) / ("m5-%03d.png" % i)
+        where = "m5-%03d" % i
         r = daemon.call("acos_observe", {"base": base, "tree": False, "text": False,
-                                         "png": True, "screenshot": str(path)})
+                                         "screenshot": True})
         env = r["envelope"]
         value = env.get("result") or {}
         frame = value.get("frame") or {}
-        size = path.stat().st_size if path.exists() else 0
+        path = None
+        size = 0
         magic = False
-        if size:
+        error_detail = None
+        error = (env.get("error") or {}).get("code") if env.get("error") else None
+        if env.get("ok"):
             try:
-                with open(path, "rb") as fh:
-                    magic = fh.read(8) == PNG_MAGIC
-            except OSError:
-                magic = False
+                path, _meta = bench_reply.screenshot_path(value, where)
+            except bench_reply.ReplyShapeError as exc:
+                error = "SCREENSHOT_SHAPE"
+                error_detail = str(exc)
+            else:
+                size = path.stat().st_size if path.exists() else 0
+                if size:
+                    try:
+                        with open(path, "rb") as fh:
+                            magic = fh.read(8) == PNG_MAGIC
+                    except OSError:
+                        magic = False
         seq, prev = frame.get("frame_seq"), frame.get("previous_seq")
         fresh = (isinstance(seq, int) and isinstance(prev, int) and seq > prev)
         row = {
-            "tag": "m5-%03d" % i, "warmup": i < warmup,
+            "tag": where, "warmup": i < warmup,
             "ms": round(r["wall_ms"], 3), "ok": bool(env.get("ok")),
             "frame_seq": seq, "previous_seq": prev, "fresh": fresh,
             "meaningful": bool(frame.get("meaningful")), "png_bytes": size,
             "png_magic": magic, "response_bytes": r["response_bytes"],
-            "error": (env.get("error") or {}).get("code") if env.get("error") else None,
+            "screenshot_path": str(path) if path else None,
+            "error": error, "error_detail": error_detail,
         }
         row["good"] = bool(row["ok"] and row["meaningful"] and size > 0
                            and magic and fresh)
         rows.append(row)
         try:
-            path.unlink()
+            if path is not None:
+                path.unlink()
         except OSError:
             pass
     return rows
@@ -614,8 +679,8 @@ def run_mem_phase(args, outdir):
             lat = {"utc": utc(), "n": args.samples, "resets": args.resets,
                    "settle_s": args.settle, "tag": tag,
                    "host_before": host_now()}
-            lat["m5"] = measure_screenshot(daemon, base, scratch / "screens",
-                                           args.samples, warmup=args.warmup)
+            lat["m5"] = measure_screenshot(daemon, base, args.samples,
+                                           warmup=args.warmup)
             lat["m7"] = measure_tree(daemon, base, args.samples, warmup=args.warmup)
             lat["m6"] = measure_reset(daemon, base, args.resets, warmup=args.warmup)
             lat["host_after"] = host_now()
@@ -689,8 +754,8 @@ def run_latency_phase(args, outdir):
         if not launch["envelope"].get("ok"):
             raise RuntimeError("launch failed: %s" % (launch["envelope"].get("error"),))
         time.sleep(args.settle_short)
-        doc["m5"] = measure_screenshot(daemon, base, scratch / "screens",
-                                       args.samples, warmup=args.warmup)
+        doc["m5"] = measure_screenshot(daemon, base, args.samples,
+                                       warmup=args.warmup)
         doc["m7"] = measure_tree(daemon, base, args.samples, warmup=args.warmup)
         doc["m6"] = measure_reset(daemon, base, args.resets, warmup=args.warmup)
         doc["ok"] = True
