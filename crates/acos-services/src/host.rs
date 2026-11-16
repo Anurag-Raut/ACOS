@@ -595,14 +595,34 @@ impl ServiceHost {
         apk_path: &std::path::Path,
         guest_source_dir: Option<&str>,
     ) -> Result<()> {
+        let service = self.pms_mut()?;
+        service.set_package_from_apk_as(apk_path, guest_source_dir)
+    }
+
+    /// MPROC1: install an **additional** package into this session's package
+    /// manager (the launched APK stays installed) and return its uid.
+    pub fn install_extra_package_from_apk_as(
+        &mut self,
+        apk_path: &std::path::Path,
+        guest_source_dir: Option<&str>,
+        guest_native_lib_dir: Option<&str>,
+    ) -> Result<i32> {
+        let service = self.pms_mut()?;
+        service.install_extra_package_from_apk_as(
+            apk_path,
+            guest_source_dir,
+            guest_native_lib_dir,
+        )
+    }
+
+    fn pms_mut(&mut self) -> Result<&mut crate::pms::PmsService> {
         let object = self.ensure("android.content.pm.IPackageManager")?;
-        let service = object
+        object
             .as_any_mut()
             .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())
             .ok_or_else(|| {
                 ServiceError::Internal("package service is not a PmsService".into())
-            })?;
-        service.set_package_from_apk_as(apk_path, guest_source_dir)
+            })
     }
 
     /// Dispatch one transaction.

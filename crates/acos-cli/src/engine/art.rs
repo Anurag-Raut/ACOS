@@ -255,6 +255,11 @@ pub struct ArtSession {
     /// reply states it so a functional result is never mistaken for animation
     /// evidence.
     animations: &'static str,
+    /// MPROC1: the extra APKs this session installed beside the launched one,
+    /// as the caller named them. Launch-time: a live session cannot gain a
+    /// package (the same rule `animations`/`insets` follow), and a `reset`
+    /// relaunch installs exactly this list again.
+    extra_apks: Vec<PathBuf>,
     /// P12b: per-request strict/fast settle deadline (`settle_timeout_ms`).
     /// `None` keeps the engine's documented default; on timeout the guest still
     /// returns the latest tree and frame identity with `settled:false`.
@@ -1483,7 +1488,23 @@ impl ArtSession {
         animations: &str,
         insets: &str,
     ) -> Result<ArtSession, BackendError> {
-        Self::start_inner(apk, artifacts, animations, insets, None)
+        Self::start_with_apks(apk, &[], artifacts, animations, insets)
+    }
+
+    /// MPROC1: start a session that installs `extra_apks` beside the launched
+    /// APK. Each extra APK is staged into this session's own tree, bound at its
+    /// guest path, installed at its own uid and seeded into the activity
+    /// manager, so `PackageManager`/`createPackageContext` (and, later, a second
+    /// process) see every package. An empty list is exactly
+    /// [`ArtSession::start_with_options`]: no staging, no bind, no install.
+    pub fn start_with_apks(
+        apk: &Path,
+        extra_apks: &[PathBuf],
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+    ) -> Result<ArtSession, BackendError> {
+        Self::start_inner(apk, extra_apks, artifacts, animations, insets, None)
     }
 
     /// ZPROD3: start a session that must run on a persistent zygote child
@@ -1505,16 +1526,32 @@ impl ArtSession {
         insets: &str,
         zygote: Option<Arc<ZygoteHost>>,
     ) -> Result<ArtSession, BackendError> {
+        Self::start_with_zygote_and_apks(apk, &[], artifacts, animations, insets, zygote)
+    }
+
+    /// MPROC1: [`ArtSession::start_with_zygote`] plus a list of extra APKs.
+    /// The extras are part of the zygote key: a keeper child's pre-fork heap is
+    /// only valid for the package set it was started for, so a session with
+    /// different extras never reuses another session's child.
+    pub fn start_with_zygote_and_apks(
+        apk: &Path,
+        extra_apks: &[PathBuf],
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        zygote: Option<Arc<ZygoteHost>>,
+    ) -> Result<ArtSession, BackendError> {
         let start = zygote.map(|host| ZygoteStart {
-            key: zygote_key_of(apk, insets, animations),
+            key: zygote_key_of(apk, insets, animations, extra_apks),
             host,
             reuse_tag: None,
         });
-        Self::start_inner(apk, artifacts, animations, insets, start)
+        Self::start_inner(apk, extra_apks, artifacts, animations, insets, start)
     }
 
     fn start_inner(
         apk: &Path,
+        extra_apks: &[PathBuf],
         artifacts: &Path,
         animations: &str,
         insets: &str,
@@ -1620,7 +1657,25 @@ impl ArtSession {
             // live session instead of a one-shot launch. The guest publishes
             // the read-only view-tree probe the `tree`/`tap` replies carry.
             .env("ACOSLAUNCH_INTERACTIVE", "1")
-            .env("ACOSLAUNCH_LIVE_PROBE", "1")
+            .env("ACOSLAUNCH_LIVE_PROBE", "1");
+        // MPROC1: the extra packages this session installs. Both spellings name
+        // the same list: the repeatable flags the launcher parses, and the
+        // `ACOSLAUNCH_EXTRA_APKS` env a frozen host-template child reads.
+        for extra in extra_apks {
+            command.arg("--extra-apk").arg(extra);
+        }
+        if !extra_apks.is_empty() {
+            command.env(
+                "ACOSLAUNCH_EXTRA_APKS",
+                std::env::join_paths(extra_apks.iter()).map_err(|error| BackendError::Failed {
+                    code: acos_protocol::ErrorCode::InvalidArgument,
+                    detail: format!(
+                        "extra APK paths cannot be forwarded in one environment value: {error}"
+                    ),
+                })?,
+            );
+        }
+        command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -1912,6 +1967,7 @@ impl ArtSession {
             last_reply_probe_seq: None,
             insets,
             animations,
+            extra_apks: extra_apks.to_vec(),
             settle_timeout_ms: None,
             bound_settle: None,
             reset_settle_timeout_ms: None,
@@ -2248,6 +2304,14 @@ impl ArtSession {
     /// P12: the animation choice this session was launched with (`"on"`/`"off"`).
     pub fn animations(&self) -> &'static str {
         self.animations
+    }
+
+    /// MPROC1: the extra APKs this session installed beside the launched one,
+    /// as the caller named them (launch-time; a `reset` relaunch reinstalls
+    /// exactly this list).
+    #[must_use]
+    pub fn extra_apks(&self) -> &[PathBuf] {
+        &self.extra_apks
     }
 
     /// W7: the app-window inset model this guest was launched with.
@@ -5087,6 +5151,7 @@ impl SessionBackend for ArtSession {
         for attempt in 1..=2 {
             match ArtSession::start_inner(
                 &apk,
+                &self.extra_apks.clone(),
                 &artifacts,
                 self.animations,
                 self.insets(),
@@ -5448,7 +5513,12 @@ fn resolve_binary() -> Result<PathBuf, BackendError> {
 /// is only valid for one APK + boot-image mode + geometry + insets + animations
 /// tuple). Values are the launch-time ones the engine already decided, never a
 /// new source of truth.
-fn zygote_key_of(apk: &Path, insets: &str, animations: &str) -> acos_art::zygote_prod::ZygoteKey {
+fn zygote_key_of(
+    apk: &Path,
+    insets: &str,
+    animations: &str,
+    extra_apks: &[PathBuf],
+) -> acos_art::zygote_prod::ZygoteKey {
     let num = |name: &str, default: u32| {
         std::env::var(name)
             .ok()
@@ -5464,6 +5534,13 @@ fn zygote_key_of(apk: &Path, insets: &str, animations: &str) -> acos_art::zygote
         density: num("ACOS_ART_DENSITY", 420),
         insets: insets.trim().to_ascii_lowercase(),
         animations: animations.trim().to_ascii_lowercase(),
+        // MPROC1: the installed package set is part of the key. A keeper
+        // child forked for one set must never serve a session that asks for a
+        // different one.
+        extra_apks: extra_apks
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect(),
     }
 }
 

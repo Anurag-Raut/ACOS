@@ -116,6 +116,13 @@ pub struct LaunchOpts {
     pub insets: String,
     /// P12: per-session framework animation scales.
     pub animations: Animations,
+    /// MPROC1: extra APKs installed into this session beside the launched one
+    /// (repeatable `--extra-apk`). Each is staged into this run's private tree,
+    /// bound read-only at `/data/app/<name>`, installed into the session's
+    /// package manager at its own uid and seeded into the activity manager's
+    /// manifest table, exactly as the launched APK is. Empty (and then free)
+    /// for every single-package launch: nothing is staged, bound or installed.
+    pub extra_apks: Vec<PathBuf>,
 }
 
 impl Default for LaunchOpts {
@@ -132,6 +139,7 @@ impl Default for LaunchOpts {
             nav_inset: 63,
             insets: acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string(),
             animations: Animations::On,
+            extra_apks: Vec::new(),
         }
     }
 }
@@ -206,6 +214,12 @@ pub struct LaunchResult {
     /// the heap configuration that produced it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heap: Option<serde_json::Value>,
+    /// MPROC1: every extra package this session installed beside the launched
+    /// one — `{package, uid, apk, native_library_dir}` with the **guest** paths
+    /// the package manager published. Empty for a single-package launch, so a
+    /// launch reply only carries the field when extras were asked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_packages: Option<Vec<serde_json::Value>>,
     /// H13b: `{mode, cache: hit|built|fallback|external|none, reason}` — which
     /// boot image this launch used and whether the shared-image cache hit, so a
     /// caller (and a benchmark row) can tell a warm serve from a cold one.
@@ -287,6 +301,11 @@ pub const ENV_ART_HEAP_TARGET_UTILIZATION: &str = "ACOS_ART_HEAP_TARGET_UTILIZAT
 /// frame). Both are forwarded to the cleared guest environment.
 pub const ENV_ART_EARLY_GC: &str = "ACOS_ART_EARLY_GC";
 pub const ENV_ART_GC_DELAY_MS: &str = "ACOS_ART_GC_DELAY_MS";
+
+/// MPROC1: the env spelling of [`LaunchOpts::extra_apks`] a frozen host-template
+/// child reads (see `host_zygote.rs`). The direct path uses the repeatable
+/// `--extra-apk` flags instead; both name the same list.
+pub const ENV_EXTRA_APKS: &str = "ACOSLAUNCH_EXTRA_APKS";
 
 fn valid_heap_size(text: &str) -> bool {
     let t = text.trim();
@@ -468,6 +487,30 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     launch_session(root, opts, None, &shims)
 }
 
+/// MPROC1: one extra APK staged and installed into a launch session beside the
+/// launched one.
+///
+/// Built by [`launch_session`] before any guest exists: the staged copy is this
+/// run's own (H17), the guest paths are the ones the sandbox binds, and the uid
+/// is filled in when the host's package manager installs the package.
+#[derive(Debug, Clone)]
+struct ExtraApk {
+    /// This run's private copy of the APK.
+    staged: PathBuf,
+    /// Guest path the sandbox binds the copy at (`/data/app/<name>`).
+    guest_path: String,
+    /// Package name from the APK's manifest.
+    package: String,
+    /// Host root of this package's extracted native libraries.
+    lib_root: PathBuf,
+    /// Guest directory `lib_root` is bound at (`/data/app-lib-extra/<pkg>`).
+    guest_lib_root: String,
+    /// Guest `ApplicationInfo.nativeLibraryDir` for the package.
+    guest_lib_dir: String,
+    /// The uid the package manager assigned at install time.
+    uid: Option<i32>,
+}
+
 /// The per-session half of [`launch`].
 ///
 /// `prebuilt` is `Some` only in a child of the ZM2 host template: the child
@@ -522,6 +565,73 @@ pub(crate) fn launch_session(
     let guest_apk = format!("/data/app/{apk_name}");
     let package = crate::app::apk_package(&opts.apk)?;
     crate::stage("apk-stage");
+
+    // MPROC1: extra APKs (`--extra-apk`, repeatable) are installed into this
+    // session beside the launched one. Each gets the same treatment the primary
+    // gets: a private staged copy in this run's tree (H17: never the shared
+    // `/data/app` entry), a bind over its guest path, the native-library
+    // install and a structured ABI gate. The package manager and the activity
+    // manager learn about them below, before any guest exists.
+    let mut extras: Vec<ExtraApk> = Vec::new();
+    for extra in &opts.extra_apks {
+        let name = extra
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .filter(|n| !n.is_empty())
+            .ok_or_else(|| {
+                Error::Layout(format!(
+                    "--extra-apk {}: the path has no file name",
+                    extra.display()
+                ))
+            })?;
+        if name == apk_name {
+            return Err(Error::Layout(format!(
+                "--extra-apk {}: the launched APK is already staged as {name}",
+                extra.display()
+            )));
+        }
+        if extras.iter().any(|e| e.guest_path == format!("/data/app/{name}")) {
+            return Err(Error::Layout(format!(
+                "--extra-apk {}: another extra APK is already staged as {name}",
+                extra.display()
+            )));
+        }
+        let extra_package = crate::app::apk_package(extra)?;
+        if extra_package == package {
+            return Err(Error::Layout(format!(
+                "--extra-apk {}: package {extra_package} is the launched package",
+                extra.display()
+            )));
+        }
+        if extras.iter().any(|e| e.package == extra_package) {
+            return Err(Error::Layout(format!(
+                "--extra-apk {}: package {extra_package} is already installed by another --extra-apk",
+                extra.display()
+            )));
+        }
+        let staged = run.dir("app").join(&name);
+        crate::app::stage_apk(extra, &staged)?;
+        crate::app::ensure_apk_mountpoint(&root.data, &name, extra)?;
+        let guest_lib_root = format!("/data/app-lib-extra/{extra_package}");
+        // An APK without native code still needs its `nativeLibraryDir` to
+        // exist (the primary's tree is created by the native-lib install for
+        // the same reason); bwrap refuses a bind whose source is missing.
+        let lib_root = run.dir("app-lib-extra").join(&extra_package);
+        fs::create_dir_all(&lib_root)?;
+        extras.push(ExtraApk {
+            staged,
+            guest_path: format!("/data/app/{name}"),
+            guest_lib_dir: format!(
+                "{guest_lib_root}/{}",
+                acos_services::native_libs::HOST_ABI
+            ),
+            guest_lib_root,
+            lib_root,
+            package: extra_package,
+            uid: None,
+        });
+    }
+    crate::stage("extra-apk-stage");
 
     // W17: installd's native-library step. Stock Android extracts the APK's
     // `lib/<abi>/*.so` into `ApplicationInfo.nativeLibraryDir` at install time
@@ -592,6 +702,56 @@ pub(crate) fn launch_session(
         acos_services::native_libs::NativeLibInstall::None => {}
     }
     crate::stage("native-libs");
+    // MPROC1: the same installd step and ABI gate for every extra APK. The
+    // libraries land in a per-package tree (`/data/app-lib-extra/<package>`)
+    // so two packages that ship a library of the same name can never shadow
+    // each other, and the package's own `nativeLibraryDir` names it below.
+    for extra in &mut extras {
+        let install = acos_services::native_libs::install(&extra.staged, &extra.lib_root)
+            .map_err(|e| Error::Layout(format!("native libs for {}: {e}", extra.package)))?;
+        match install {
+            acos_services::native_libs::NativeLibInstall::Installed { libs, .. } => {
+                eprintln!(
+                    "acos-art: launch: extra {} native libs installed={} guest={}",
+                    extra.package,
+                    libs.len(),
+                    extra.guest_lib_dir
+                );
+            }
+            acos_services::native_libs::NativeLibInstall::UnsupportedAbi {
+                available,
+                sample,
+                message,
+            } => {
+                // AOSP refuses the *package* (`INSTALL_FAILED_NO_MATCHING_ABIS`);
+                // a session cannot install this one, so the launch is refused
+                // before any guest exists, naming the extra APK's inventory.
+                eprintln!(
+                    "acos-art: launch: UNSUPPORTED_ABI ({}): {message}",
+                    extra.package
+                );
+                let result = abi_gate_result(opts, &extra.package, &available, &sample);
+                let out = opts.out.clone().unwrap_or_else(|| run.dir("out").join("launch"));
+                write_session_exit(&out, &result, None, None, None, None);
+                if std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some() {
+                    protocol_write(&serde_json::json!({
+                        "ok": false,
+                        "cmd": "ready",
+                        "code": "UNSUPPORTED_ABI",
+                        "retryable": false,
+                        "error": message,
+                        "extra_apk": extra.package,
+                        "apk_abis": available,
+                        "host_abi": acos_services::native_libs::HOST_ABI,
+                        "libs_sample": sample,
+                    }));
+                }
+                return Ok(result);
+            }
+            acos_services::native_libs::NativeLibInstall::None => {}
+        }
+    }
+    crate::stage("extra-native-libs");
     // The declared `<application android:name>` class and `android:theme`.
     // Without the class the real `LoadedApk.makeApplication` instantiates
     // `android.app.Application` instead of the APK's own (W15: RN's
@@ -603,9 +763,9 @@ pub(crate) fn launch_session(
     // `installed` was read from the launch's one open (above).
     let application_class = installed
         .as_ref()
-        .map(|state| state.app.class_name.clone())
+        .map(|state| state.app().class_name.clone())
         .filter(|name| !name.is_empty());
-    let application_theme = installed.as_ref().map_or(0, |state| state.app.theme);
+    let application_theme = installed.as_ref().map_or(0, |state| state.app().theme);
 
     // W24: the image's **static RROs** for `framework-res`, applied through the
     // same stock path `render-app`/the session already use (P2c/W18 #2). The
@@ -636,6 +796,11 @@ pub(crate) fn launch_session(
         let _ = fs::remove_file(staging.join(stale));
     }
     fs::create_dir_all(run.dir("app-data").join(&package))?;
+    // MPROC1: every extra package gets the same private data root the launched
+    // package gets, so its own `dataDir` exists before it runs.
+    for extra in &extras {
+        fs::create_dir_all(run.dir("app-data").join(&extra.package))?;
+    }
     let out = opts.out.clone().unwrap_or_else(|| staging.clone());
     fs::create_dir_all(&out)?;
     // W43: a full scratch disk is a host condition and a structured, retryable
@@ -730,6 +895,43 @@ pub(crate) fn launch_session(
         // which is how FileProvider's `FILE_PROVIDER_PATHS` XML lookup died.
         if let Err(e) = host.install_package_from_apk_as(&apk_for_peer, Some(&guest_apk)) {
             eprintln!("acos-art: launch: install_package_from_apk failed: {e}");
+        }
+        // MPROC1: each extra APK is installed into the same package manager
+        // (its own uid, its own `sourceDir`/`nativeLibraryDir`) and into the
+        // activity manager's manifest table under that same uid. A failure here
+        // fails the launch: a session that silently lacks a package the caller
+        // asked for is exactly the fake success the rules forbid.
+        for extra in &mut extras {
+            let uid = host
+                .install_extra_package_from_apk_as(
+                    &extra.staged,
+                    Some(&extra.guest_path),
+                    Some(&extra.guest_lib_dir),
+                )
+                .map_err(|e| {
+                    Error::Layout(format!(
+                        "extra APK {}: package manager install failed: {e}",
+                        extra.package
+                    ))
+                })?;
+            extra.uid = Some(uid);
+            if let Ok(object) = host.ensure("android.app.IActivityTaskManager") {
+                if let Some(atms) = object
+                    .as_any_mut()
+                    .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+                {
+                    if let Err(e) = atms.seed_manifest_from_apk_with_uid(&extra.staged, uid) {
+                        return Err(Error::Layout(format!(
+                            "extra APK {}: seed_manifest_from_apk: {e}",
+                            extra.package
+                        )));
+                    }
+                }
+            }
+            eprintln!(
+                "acos-art: launch: extra package installed {} uid={uid} apk={} native={}",
+                extra.package, extra.guest_path, extra.guest_lib_dir
+            );
         }
         // W38 (flagged, minimal): the guest's `startActivity` is resolved by the
         // host ATMS before it records a `PendingLaunch`; seed the same APK's
@@ -896,7 +1098,7 @@ pub(crate) fn launch_session(
     const FLAG_HARDWARE_ACCELERATED: i32 = 1 << 29;
     let mut app_flags = installed
         .as_ref()
-        .map(|state| ((state.app.flags & !FLAG_HARDWARE_ACCELERATED) | FLAG_INSTALLED) as i64)
+        .map(|state| ((state.app().flags & !FLAG_HARDWARE_ACCELERATED) | FLAG_INSTALLED) as i64)
         .unwrap_or(-1);
     // Diagnostic seam (W31): `ACOSLAUNCH_APP_FLAGS=0x…` (or decimal) lets a run
     // prove a *future* manifest derivation end to end before the host PMS owns
@@ -1058,6 +1260,12 @@ pub(crate) fn launch_session(
     sb.ro_bind(&shims.substrate, "/data/app/libacosart.so");
     // H17: this session's own APK shadows the shared `/data/app` entry.
     sb.ro_bind(&apk, &format!("/data/app/{apk_name}"));
+    // MPROC1: each extra package's APK and native-library tree, at the guest
+    // paths the package manager publishes for it.
+    for extra in &extras {
+        sb.ro_bind(&extra.staged, &extra.guest_path);
+        sb.ro_bind(&extra.lib_root, &extra.guest_lib_root);
+    }
     sb.ro_bind(
         &root.sysroot.join("shim/libacoshw.so"),
         "/data/libacoshw.so",
@@ -1208,8 +1416,8 @@ pub(crate) fn launch_session(
     // provider that reads it from `attachInfo`.
     let provider_spec = installed.as_ref().map_or_else(String::new, |state| {
         let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
-        for p in &state.providers {
-            if p.process_name != state.app.process_name {
+        for p in state.providers() {
+            if p.process_name != state.app().process_name {
                 continue;
             }
             match seen.iter_mut().find(|(class, _)| *class == p.name) {
@@ -1221,7 +1429,7 @@ pub(crate) fn launch_session(
         }
         seen.iter()
             .map(|(class, authorities)| {
-                let declared = state.providers.iter().find(|p| p.name == *class);
+                let declared = state.providers().iter().find(|p| p.name == *class);
                 let read = declared.map_or("", |p| p.read_permission.as_str());
                 let exported = declared.is_some_and(|p| p.exported);
                 let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
@@ -1273,12 +1481,12 @@ pub(crate) fn launch_session(
     // request's `ApplicationInfo` (`LoadedApk.makeApplication` hands that object
     // to the app, and `context.getApplicationInfo().metaData` reads it).
     if let Some(state) = &installed {
-        if !state.app.meta_data.is_empty() {
+        if !state.app().meta_data.is_empty() {
             eprintln!(
                 "acos-art: launch: application meta-data {} (bind ApplicationInfo.metaData)",
-                state.app.meta_data.len()
+                state.app().meta_data.len()
             );
-            sb.env("ACOSLAUNCH_APP_META", &meta_spec(&state.app.meta_data));
+            sb.env("ACOSLAUNCH_APP_META", &meta_spec(&state.app().meta_data));
         }
     }
     if std::env::var_os("ACOSLAUNCH_PROBE").is_some() {
@@ -1898,6 +2106,19 @@ pub(crate) fn launch_session(
         notes: unsupported_notes,
         marker,
         heap: Some(crate::props::effective_heap_json()),
+        extra_packages: Some(
+            extras
+                .iter()
+                .map(|extra| {
+                    serde_json::json!({
+                        "package": extra.package,
+                        "uid": extra.uid,
+                        "apk": extra.guest_path,
+                        "native_library_dir": extra.guest_lib_dir,
+                    })
+                })
+                .collect(),
+        ),
     };
     eprintln!(
         "acos-art: launch wall={wall_ms}ms until={} application_created={} activity_resumed={} \
@@ -2620,6 +2841,7 @@ fn abi_gate_result(
         stderr: String::new(),
         logs: Vec::new(),
         heap: Some(crate::props::effective_heap_json()),
+        extra_packages: None,
         notes: vec![format!(
             "UNSUPPORTED_ABI: the APK ships native code only for [{}], and this engine is \
              {host_abi}-only; no guest was started (AOSP PackageManager refuses the same \
@@ -2667,6 +2889,7 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
         stderr: String::new(),
         logs: Vec::new(),
         heap: Some(crate::props::effective_heap_json()),
+        extra_packages: None,
         notes: vec![format!(
             "HOST_DISK_FULL: {free} bytes free on the scratch filesystem, below \
              ACOS_ART_MIN_DISK_MB={} MiB; refusing to start a guest whose frames cannot be \

@@ -536,6 +536,55 @@ impl ServeEngine {
                 }
             },
         };
+        // MPROC1: `extra_apks` installs more packages in this session beside the
+        // launched APK (each at its own uid, with its own guest paths). Launch
+        // time only, like `animations`/`insets`: a live session cannot gain a
+        // package, so a differing list is refused by name.
+        let extra_apks: Vec<std::path::PathBuf> = match args.get("extra_apks") {
+            None => Vec::new(),
+            Some(Value::Array(items)) => {
+                let mut out = Vec::with_capacity(items.len());
+                for (index, item) in items.iter().enumerate() {
+                    let Some(raw) = item.as_str() else {
+                        return art_failure(
+                            request_id,
+                            Some(id),
+                            trust,
+                            ErrorCode::InvalidArgument,
+                            format!("extra_apks[{index}] must be a string APK path"),
+                            json!({"field": format!("extra_apks[{index}]")}),
+                        );
+                    };
+                    match acos_mcp::safety::validate_path(raw, &ctx.allowed_roots) {
+                        Ok(path) => out.push(path),
+                        Err(reason) => {
+                            return art_failure(
+                                request_id,
+                                Some(id),
+                                trust,
+                                ErrorCode::InvalidArgument,
+                                format!("refusing extra APK path `{raw}`: {reason}"),
+                                json!({"field": format!("extra_apks[{index}]"), "apk": raw}),
+                            )
+                        }
+                    }
+                }
+                out
+            }
+            Some(other) => {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::InvalidArgument,
+                    format!(
+                        "extra_apks must be an array of APK paths (got {})",
+                        json_kind(other)
+                    ),
+                    json!({"field": "extra_apks"}),
+                )
+            }
+        };
         let apk = match acos_mcp::safety::validate_path(apk_arg, &ctx.allowed_roots) {
             Ok(path) => path,
             Err(reason) => {
@@ -597,6 +646,27 @@ impl ServeEngine {
                         ),
                         "animations is launch-time: call acos_destroy for this session id, then \
                          acos_launch with the new choice.",
+                    );
+                }
+                if args.get("extra_apks").is_some() && session.extra_apks() != extra_apks {
+                    return with_hint(
+                        art_failure(
+                            request_id,
+                            Some(id),
+                            held.trust,
+                            ErrorCode::InvalidArgument,
+                            format!(
+                                "session `{id}` already runs with {} extra package(s) and a live \
+                                 session cannot change its installed packages",
+                                session.extra_apks().len()
+                            ),
+                            json!({
+                                "held_extra_apks": extra_apks_json(session.extra_apks()),
+                                "requested_extra_apks": extra_apks_json(&extra_apks),
+                            }),
+                        ),
+                        "extra_apks is launch-time: call acos_destroy for this session id, \
+                         then acos_launch with the package set you want.",
                     );
                 }
                 if args.get("insets").is_some() && session.insets() != insets {
@@ -691,8 +761,9 @@ impl ServeEngine {
             );
         }
         let artifacts = self.artifacts_root.join(sanitize_session_id(id));
-        match ArtSession::start_with_zygote(
+        match ArtSession::start_with_zygote_and_apks(
             &apk,
+            &extra_apks,
             &artifacts,
             animations,
             insets,
@@ -971,6 +1042,7 @@ impl ServeEngine {
                 if let Some(object) = result.as_object_mut() {
                     object.insert("animations".into(), json!(session.animations()));
                     object.insert("insets".into(), json!(session.insets()));
+                    object.insert("extra_apks".into(), extra_apks_json(session.extra_apks()));
                 }
                 label_frame(&mut result, &session);
                 label_timing(&mut result, &session, tool, started);
@@ -1364,6 +1436,7 @@ fn launch_reply(
     merge_zygote_fields(&mut result, session);
     result["animations"] = json!(session.animations());
     result["insets"] = json!(session.insets());
+    result["extra_apks"] = extra_apks_json(session.extra_apks());
     // H13b: which boot image this session booted and whether its cache hit.
     result["boot_image"] = session
         .boot_image()
@@ -2619,6 +2692,31 @@ fn logs(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     }))
 }
 
+/// MPROC1: the session's extra APKs as reply data — the caller's spelling of
+/// each path, in launch order. An empty list is still `[]` (not absent), so a
+/// reply never leaves "which packages are installed?" to a default.
+fn extra_apks_json(extra_apks: &[std::path::PathBuf]) -> Value {
+    Value::Array(
+        extra_apks
+            .iter()
+            .map(|path| json!(path.display().to_string()))
+            .collect(),
+    )
+}
+
+/// The JSON type of an argument, for an error that names what arrived instead of
+/// guessing (FB-series: a mistyped argument is never silently accepted).
+fn json_kind(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "a boolean",
+        Value::Number(_) => "a number",
+        Value::String(_) => "a string",
+        Value::Array(_) => "an array",
+        Value::Object(_) => "an object",
+    }
+}
+
 /// ZPROD3: copy the zygote fields into a reply (flag-on sessions only). With the
 /// flag off the map is `None` and the reply object is untouched; with it on the
 /// fields replace the generic `isolation` string, because a reset/status reply
@@ -2685,6 +2783,7 @@ fn status_value(session: &ArtSession) -> Value {
         "mode": "live",
         "animations": session.animations(),
         "insets": session.insets(),
+        "extra_apks": extra_apks_json(session.extra_apks()),
         "capabilities": {
             "tree": true, "screenshot": true, "tap": true, "tap_text": true,
             "type_text": true, "key": true, "reset": true, "logs": true,

@@ -349,6 +349,18 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     carries the latest tree and frame identity with `settled:false` and \
                                     `bound:timeout`; a timeout is never assertion evidence."
                 },
+                "extra_apks": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "MPROC1: APK paths to install into this session beside `apk` \
+                                    (each at its own uid, with its own guest paths), so the app \
+                                    can query them through PackageManager/getPackageInfo/\
+                                    createPackageContext exactly as it would see a second \
+                                    installed app. Resolved under ACOS_ALLOWED_ROOTS like `apk`. \
+                                    ART only, and launch-time: a live session cannot change its \
+                                    installed packages (acos_destroy, then relaunch). The launch \
+                                    reply echoes the list and `result.extra_packages` names each \
+                                    package, uid and guest sourceDir/nativeLibraryDir."
+                },
                 "animations": {
                     "type": "string", "enum": ["on", "off"],
                     "description": "P12: per-session framework animation scales. `on` (default) is real \

@@ -17,6 +17,7 @@
 #   fixtures/build/apps/svg-viewbox.apk
 #   fixtures/build/apps/offscreen-pager.apk
 #   fixtures/build/apps/insets-probe.apk
+#   fixtures/build/apps/multi-package-probe.apk
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -216,6 +217,12 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager; do
     build_apk "$app"
 done
+
+# multi-package-probe (MPROC1) is the multi-package session fixture: it asks
+# `PackageManager` about a second installed package (`dev.acos.fixtures.counter`)
+# and builds that package's Context/resources. It needs no second APK at build
+# time; the session installs `counter.apk` with `--extra-apk`.
+build_apk multi-package-probe
 
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from

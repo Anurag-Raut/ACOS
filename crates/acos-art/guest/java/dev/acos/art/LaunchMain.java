@@ -369,9 +369,16 @@ public final class LaunchMain {
         byte[] display = buildDisplayInfoReply();
         pushReplyTemplate("android.hardware.display.IDisplayManager", 1, display);
         System.out.println("ACOSLAUNCH MARK displayinfo-reply-pushed bytes=" + display.length);
-        byte[] appInfo = buildApplicationInfoReply();
-        pushReplyTemplate("android.content.pm.IPackageManager", 9, appInfo);
-        System.out.println("ACOSLAUNCH MARK applicationinfo-reply-pushed bytes=" + appInfo.length);
+        // MPROC1: `IPackageManager.getApplicationInfo` (code 9) is **not**
+        // answered from a guest-built template any more. The template ignored
+        // the request's package argument, so with a second package installed
+        // `getApplicationInfo("other.package")` (and therefore
+        // `createPackageContext`, `LoadedApk` for that package, and every
+        // per-package resolver) returned the launched app's own
+        // `ApplicationInfo`. The host package manager answers code 9 for the
+        // package the caller asked for, and its codec is the API-34
+        // `ApplicationInfo.writeToParcel` layout (proved by the multi-package
+        // probe + `scenarios/mproc1-*.yaml`).
         byte[] instr = buildInstrumentationInfoReply();
         // `getInstrumentationInfoAsUser(ComponentName, int, int)` = 44 on API 34.
         pushReplyTemplate("android.content.pm.IPackageManager", 44, instr);
@@ -3576,22 +3583,6 @@ public final class LaunchMain {
         set(ai, "enabled", Boolean.TRUE);
         set(ai, "enabledSetting", 0);
         return ai;
-    }
-
-    /**
-     * The `getApplicationInfo` reply the framework would get from the package
-     * manager for the APK being launched (no split: the launch needs no class
-     * outside the APK, because `instrumentationName` is null).
-     */
-    static byte[] buildApplicationInfoReply() throws Throwable {
-        Parcel p = Parcel.obtain();
-        try {
-            p.writeInt(0); // AIDL reply: no exception
-            p.writeTypedObject(buildAppInfo(), 0);
-            return p.marshall();
-        } finally {
-            p.recycle();
-        }
     }
 
     /**

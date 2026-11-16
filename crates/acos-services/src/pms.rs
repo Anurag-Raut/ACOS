@@ -1205,6 +1205,19 @@ impl InstalledPackage {
             app.public_source_dir = guest.to_string();
         }
     }
+
+    /// Publish `guest` as the installed package's `nativeLibraryDir`.
+    ///
+    /// MPROC1: an extra APK's libraries are installed into a **per-package**
+    /// guest tree (`/data/app-lib-extra/<package>/<abi>`), so two packages that
+    /// ship a library with the same name can never shadow each other. The path
+    /// is the one `LoadedApk` puts on the class loader's native search path,
+    /// exactly as for the launched package.
+    pub fn set_guest_native_lib_dir(&mut self, guest: &str) {
+        for app in [&mut self.app, &mut self.package.application] {
+            app.native_library_dir = guest.to_string();
+        }
+    }
 }
 
 /// The installed-package table of one session.
@@ -1329,12 +1342,32 @@ impl PmsState {
         path: impl AsRef<Path>,
         guest_source_dir: Option<&str>,
     ) -> Result<()> {
+        self.install_extra_with(path, guest_source_dir, None).map(|_| ())
+    }
+
+    /// [`Self::install_extra`] with the package's own `nativeLibraryDir`, and
+    /// the uid the install assigned.
+    ///
+    /// MPROC1: the launcher extracts an extra APK's `lib/<abi>` into a
+    /// per-package tree and must publish that guest path on the package, so an
+    /// `ApplicationInfo`/`PackageInfo` reply for it names a directory the guest
+    /// can open (`LoadedApk`'s native search path). The uid is the one the
+    /// activity manager's manifest table is seeded with for the same package.
+    pub fn install_extra_with(
+        &mut self,
+        path: impl AsRef<Path>,
+        guest_source_dir: Option<&str>,
+        guest_native_lib_dir: Option<&str>,
+    ) -> Result<i32> {
         let path = path.as_ref();
         let apk = crate::apk_facts::open_shared(path)
             .map_err(|e| ServiceError::Internal(format!("open {}: {e}", path.display())))?;
         let mut record = InstalledPackage::from_opened(path, &apk, self.next_uid())?;
         if let Some(guest) = guest_source_dir {
             record.set_guest_apk_path(guest);
+        }
+        if let Some(guest) = guest_native_lib_dir {
+            record.set_guest_native_lib_dir(guest);
         }
         if self
             .packages
@@ -1350,10 +1383,11 @@ impl PmsState {
                 ),
             });
         }
+        let uid = record.app.uid;
         self.uid_packages
-            .push((record.app.uid, record.app.package_name.clone()));
+            .push((uid, record.app.package_name.clone()));
         self.packages.push(record);
-        Ok(())
+        Ok(uid)
     }
 
     /// The next free uid for a new package.
@@ -1602,6 +1636,24 @@ impl PmsService {
         }
         *self.state.lock().unwrap() = state;
         Ok(())
+    }
+
+    /// MPROC1: install **one more** package into this session without touching
+    /// the packages already installed. Returns the uid the install assigned.
+    ///
+    /// The launched APK is installed first ([`Self::set_package_from_apk_as`],
+    /// which replaces the session state); every extra APK then goes through
+    /// here, so installing the second package cannot drop the first.
+    pub fn install_extra_package_from_apk_as(
+        &mut self,
+        apk_path: &Path,
+        guest_source_dir: Option<&str>,
+        guest_native_lib_dir: Option<&str>,
+    ) -> Result<i32> {
+        self.state
+            .lock()
+            .unwrap()
+            .install_extra_with(apk_path, guest_source_dir, guest_native_lib_dir)
     }
 
     /// The installed record for `package`. `None`/`""` is the package under

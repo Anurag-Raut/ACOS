@@ -250,6 +250,12 @@ pub fn run_template(root: &ArtRoot, plan_dir: &Path, shims: SessionShims) -> Res
                     .ok()
                     .and_then(|value| crate::launch::Animations::parse(&value).ok())
                     .unwrap_or_default(),
+                // MPROC1: a planned session's extra APKs, as the engine passes
+                // them to a direct launcher (`std::env::join_paths` spelling).
+                // The plan's per-slot `env` is the documented way to set it.
+                extra_apks: std::env::var_os(crate::launch::ENV_EXTRA_APKS)
+                    .map(|value| std::env::split_paths(&value).collect())
+                    .unwrap_or_default(),
             };
             let host = prebuilt.take();
             let code = match crate::launch::launch_session(root, &child_opts, host, &shims) {

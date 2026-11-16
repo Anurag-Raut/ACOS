@@ -35,6 +35,8 @@ USAGE:
                      [--panel-height PX] [--status-inset PX] [--nav-inset PX]
                      [--density DPI] [--insets carve|report]
                      [--animations on|off]
+                     [--extra-apk FILE]...  # install more packages in this
+                                            # session (repeatable)
   acos-art session --apk FILE [--out DIR] [--package PKG] [--activity CLASS]
                      [--width PX] [--panel-height PX] [--status-inset PX]
                      [--nav-inset PX] [--density DPI] [--session-id ID]
@@ -120,6 +122,7 @@ fn real_main() -> Result<ExitCode> {
     let mut apk: Option<PathBuf> = None;
     let mut until = "application-created".to_string();
     let mut animations = acos_art::launch::Animations::On;
+    let mut extra_apks: Vec<PathBuf> = Vec::new();
     let mut package: Option<String> = None;
     let mut layout: Option<String> = None;
     let mut size: (u32, u32, u32) = (1080, 2062, 420);
@@ -185,6 +188,9 @@ fn real_main() -> Result<ExitCode> {
                 let value = next(&mut i)?;
                 animations = acos_art::launch::Animations::parse(&value).map_err(Error::Layout)?;
             }
+            // MPROC1: repeatable; each APK is installed into the session beside
+            // the launched one, at its own uid, with its own guest paths.
+            "--extra-apk" => extra_apks.push(PathBuf::from(next(&mut i)?)),
             "--package" => package = Some(next(&mut i)?),
             "--activity" => activity = Some(next(&mut i)?),
             "--session-id" => session_id = Some(next(&mut i)?),
@@ -385,6 +391,7 @@ fn real_main() -> Result<ExitCode> {
                 nav_inset,
                 insets,
                 animations,
+                extra_apks,
             };
             let res = acos_art::launch::launch(&root, &opts)?;
             println!("{}", serde_json::to_string_pretty(&res).unwrap());

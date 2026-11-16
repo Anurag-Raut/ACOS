@@ -475,6 +475,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     let mut session_boot_ms: Option<u64> = None;
     let mut session_animations: Option<&'static str> = None;
     let mut session_insets: Option<&'static str> = None;
+    // MPROC1: the extra packages this run installed (empty for a single-app
+    // scenario), echoed in the verdict so the evidence names the package set.
+    let mut session_extra_apks: Vec<PathBuf> = Vec::new();
     // H13b: the boot image the guest booted and whether its cache hit.
     let mut session_boot_image: Option<serde_json::Value> = None;
     let backend: EngineBackend = match engine {
@@ -502,6 +505,22 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     return finish_run(&envelope, &args, &artifacts, Some(trust));
                 }
             };
+            // MPROC1: the scenario's `extra_apks` (or none). A path that does
+            // not resolve is a structured `APK_IO`/`INVALID_SCENARIO` failure
+            // before any guest starts, never a silently smaller package set.
+            let extra_apks = match resolve_extra_apks(&scenario) {
+                Ok(paths) => paths,
+                Err(error) => {
+                    let envelope = Envelope::failure(
+                        request_id,
+                        ProtocolBackend::AcosNative,
+                        Fidelity::StaticAnalysis,
+                        error,
+                        Metrics::wall_ms(0),
+                    );
+                    return finish_run(&envelope, &args, &artifacts, Some(trust));
+                }
+            };
             // ZPROD3: a `verify` run uses the same engine path as `acos serve`.
             // With `ACOS_ART_ZYGOTE=on` that means a persistent-zygote child
             // (`start_with_zygote`); with the flag off the host is disabled and
@@ -510,8 +529,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             let zygote = Arc::new(crate::engine::zygote_host::ZygoteHost::for_artifacts(
                 &artifacts,
             ));
-            match crate::engine::art::ArtSession::start_with_zygote(
+            match crate::engine::art::ArtSession::start_with_zygote_and_apks(
                 &apk,
+                &extra_apks,
                 &artifacts,
                 animations,
                 &insets_owned,
@@ -521,6 +541,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     session_boot_ms = Some(session.session_start_ms());
                     session_animations = Some(session.animations());
                     session_insets = Some(session.insets());
+                    session_extra_apks = session.extra_apks().to_vec();
                     session_boot_image = session.boot_image().cloned();
                     EngineBackend::session(Box::new(session))
                 }
@@ -563,6 +584,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         session_boot_ms,
         session_animations,
         session_insets,
+        &session_extra_apks,
         session_boot_image,
     );
     finish_run(&envelope, &args, &artifacts, Some(trust))
@@ -581,6 +603,7 @@ pub(crate) fn annotate(
     session_boot_ms: Option<u64>,
     session_animations: Option<&'static str>,
     session_insets: Option<&'static str>,
+    session_extra_apks: &[PathBuf],
     session_boot_image: Option<serde_json::Value>,
 ) {
     let engine = engine.unwrap_or(Engine::RustVm);
@@ -658,6 +681,10 @@ pub(crate) fn annotate(
         "animations": session_animations.unwrap_or("on"),
         "insets": session_insets
             .unwrap_or(acos_services::wms::DEFAULT_INSETS_MODE.as_str()),
+        "extra_apks": session_extra_apks
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>(),
     });
     // FB4: a run owns its artifacts directory. When `--overwrite` replaced a
     // previous run's evidence, say so in the verdict itself (the marker records
@@ -690,6 +717,10 @@ pub(crate) fn annotate(
             engine_block["animations"].clone(),
         );
         object.insert("insets".to_string(), engine_block["insets"].clone());
+        object.insert(
+            "extra_apks".to_string(),
+            engine_block["extra_apks"].clone(),
+        );
         if let Some(summary) = &session_exit_summary {
             object.insert("session_exit".to_string(), summary.clone());
         }
@@ -965,4 +996,60 @@ pub fn resolve_apk(path: &Path, scenario: &Path) -> Result<PathBuf, ProtocolErro
         .map(|parent| parent.join(&app))
         .unwrap_or_else(|| app.clone());
     Ok(if candidate.exists() { candidate } else { app })
+}
+
+/// MPROC1: a scenario's `extra_apks`, resolved the way `app:` is (absolute, else
+/// relative to the scenario file, else as written).
+///
+/// A listed path that does not exist is a structured failure before any guest
+/// starts: a run must never silently install fewer packages than the scenario
+/// declares, because every later assertion would then measure a different
+/// device than the one the scenario describes.
+pub fn resolve_extra_apks(scenario: &Path) -> Result<Vec<PathBuf>, ProtocolError> {
+    let declared = acos_protocol::scenario::Scenario::load(scenario)
+        .map_err(|validation| {
+            let detail = validation
+                .errors
+                .first()
+                .map(|error| format!("{}: {}", error.path, error.message))
+                .unwrap_or_else(|| "invalid scenario".to_string());
+            ProtocolError::new(
+                ErrorCode::InvalidScenario,
+                format!("cannot read scenario {}: {detail}", scenario.display()),
+            )
+        })?
+        .extra_apks
+        .unwrap_or_default();
+    let base = scenario
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map(Path::to_path_buf);
+    let mut out = Vec::with_capacity(declared.len());
+    for raw in declared {
+        let path = PathBuf::from(raw.trim());
+        let resolved = if path.is_absolute() {
+            path
+        } else if let Some(base) = &base {
+            let candidate = base.join(&path);
+            if candidate.exists() {
+                candidate
+            } else {
+                path
+            }
+        } else {
+            path
+        };
+        if !resolved.is_file() {
+            return Err(ProtocolError::new(
+                ErrorCode::ApkIo,
+                format!(
+                    "scenario {} lists extra_apks: {} which is not a file",
+                    scenario.display(),
+                    resolved.display()
+                ),
+            ));
+        }
+        out.push(resolved);
+    }
+    Ok(out)
 }

@@ -785,6 +785,14 @@ pub struct Scenario {
     /// the Rust VM has no window insets and ignores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub insets: Option<String>,
+    /// MPROC1: extra APKs installed into the session beside `app`, each at its
+    /// own uid and reachable through `PackageManager`/`createPackageContext`.
+    ///
+    /// Paths are workspace-relative or absolute, resolved like `app`. A
+    /// scenario that names packages here is self-contained: the run installs
+    /// exactly this set, or fails with a structured error naming the APK.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_apks: Option<Vec<String>>,
 }
 
 impl Scenario {
@@ -1048,6 +1056,31 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
     if let Some(insets) = &scenario.insets {
         if !insets.eq_ignore_ascii_case("carve") && !insets.eq_ignore_ascii_case("report") {
             v.push("$.insets", "insets must be `carve` or `report`");
+        }
+    }
+    // MPROC1: an extra APK list is explicit — no empty entry, no duplicate
+    // path, and never the launched APK itself (the install would collide).
+    if let Some(extra_apks) = &scenario.extra_apks {
+        for (index, path) in extra_apks.iter().enumerate() {
+            if path.trim().is_empty() {
+                v.push(
+                    &format!("$.extra_apks[{index}]"),
+                    "an extra APK path cannot be empty",
+                );
+            } else if path.trim() == scenario.app.trim() {
+                v.push(
+                    &format!("$.extra_apks[{index}]"),
+                    "an extra APK cannot be the scenario's own `app`",
+                );
+            } else if extra_apks[..index]
+                .iter()
+                .any(|earlier| earlier.trim() == path.trim())
+            {
+                v.push(
+                    &format!("$.extra_apks[{index}]"),
+                    "the same extra APK is listed twice",
+                );
+            }
         }
     }
     match scenario.display {

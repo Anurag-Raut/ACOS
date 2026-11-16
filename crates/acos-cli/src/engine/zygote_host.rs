@@ -598,6 +598,7 @@ mod tests {
             density: 420,
             insets: "report".into(),
             animations: "on".into(),
+            extra_apks: Vec::new(),
         }
     }
 

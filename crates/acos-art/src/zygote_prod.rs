@@ -78,18 +78,24 @@ pub struct ZygoteKey {
     pub density: u32,
     pub insets: String,
     pub animations: String,
+    /// MPROC1: the extra APKs the session installs, in the caller's order. A
+    /// child forked for one package set must never serve a session that asks
+    /// for another, so the list is part of the identity (and of the hash).
+    pub extra_apks: Vec<String>,
 }
 
 impl ZygoteKey {
     /// A filesystem-safe directory name for this key (stable, sorted, short).
     pub fn dir_name(&self) -> String {
         let mut hash: u64 = 0xcbf29ce484222325;
-        for part in [
+        let mut parts: Vec<&str> = vec![
             self.apk.as_str(),
             self.boot_image.as_str(),
             self.insets.as_str(),
             self.animations.as_str(),
-        ] {
+        ];
+        parts.extend(self.extra_apks.iter().map(String::as_str));
+        for part in parts {
             for byte in part.as_bytes() {
                 hash ^= u64::from(*byte);
                 hash = hash.wrapping_mul(0x100000001b3);
@@ -118,6 +124,7 @@ impl ZygoteKey {
             "density": self.density,
             "insets": self.insets,
             "animations": self.animations,
+            "extra_apks": self.extra_apks,
         })
     }
 }
@@ -835,6 +842,7 @@ mod tests {
             density: 400,
             insets: "carve".into(),
             animations: "on".into(),
+            extra_apks: Vec::new(),
         }
     }
 

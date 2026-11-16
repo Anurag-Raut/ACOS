@@ -997,8 +997,20 @@ impl AtmsService {
     /// when the APK declared the target. The launcher calls this once, before
     /// the guest boots, with the same APK it installs in the PMS.
     pub fn seed_manifest_from_apk(&mut self, apk: &std::path::Path) -> Result<()> {
+        self.seed_manifest_from_apk_with_uid(apk, crate::pms::FIXTURE_UID)
+    }
+
+    /// [`Self::seed_manifest_from_apk`] with the uid the package manager
+    /// assigned. MPROC1: every installed package's manifest record must carry
+    /// its **own** uid, because that uid decides which guest process an
+    /// `android:process` declaration / component belongs to.
+    pub fn seed_manifest_from_apk_with_uid(
+        &mut self,
+        apk: &std::path::Path,
+        uid: i32,
+    ) -> Result<()> {
         let mut state = self.state.lock().unwrap();
-        state.ams.manifests.add_apk(apk, crate::pms::FIXTURE_UID)
+        state.ams.manifests.add_apk(apk, uid)
     }
 
     /// The dynamic receiver registrations recorded so far, oldest first, with
