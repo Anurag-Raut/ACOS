@@ -91,9 +91,9 @@ packing round-trips.
 
 | scenario | result | evidence |
 |---|---|---|
-| `tail-telephony.yaml` | **pass** | `v-telephony.json` (16/16 steps) |
+| `tail-telephony.yaml` | **pass** | `v-telephony.json` (14/14 steps) |
 | `tail-biometric.yaml` | **pass** | `v-biometric.json` (14/14) |
-| `tail-vibrator.yaml` | **pass** | `v-vibrator.json` |
+| `tail-vibrator.yaml` | **pass** | `v-vibrator.json` (10/10) |
 | `tail-detached.yaml` | **pass** | `v-detached.json` (8/8) |
 | `tail-bluetooth.yaml` | **BLOCKED** (step 2 tap) | `v-bluetooth.json` |
 
@@ -110,6 +110,13 @@ verdict):
   `SmsMessage.createFromPdu` (a real GSM 03.40 PDU).
 * `SMS-SENT queued to=+15557654321` — `SmsManager.sendTextMessage` through
   `ISms.sendTextForSubscriber`, recorded by the module.
+* a re-query after the event prints `call=RINGING`, i.e. the binder answers what
+  the listener reported (the last tree of `v-telephony/tree/`).
+
+Verdict rows (from the JSON): `net.telephony: attached (scripted)`,
+`hw.biometric: attached (scripted)`, `feedback.vibrator: attached (scripted)`;
+the detached run lists every module `off` with its reason and attaches only
+`core`.
 
 The biometric run proves `BiometricManager.canAuthenticate` and two real
 `BiometricPrompt.authenticate` round trips (scripted success `type=2`, scripted
