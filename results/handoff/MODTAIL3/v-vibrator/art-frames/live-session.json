@@ -1,0 +1,694 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "retention": {
+    "note": "passing run: intermediate C1 captures were pruned; the frames a step declared are in frames/<seq>.png",
+    "policy": "referenced",
+    "pruned_captures": 6
+  },
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.tailprobe.MainActivity",
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "hit",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-275dea0d36cf0ff5",
+        "input_hash": "275dea0d36cf0ff5",
+        "mode": "shared-fixed"
+      },
+      "buffer_generation": 2,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "guest_process_group": 2401686,
+      "height": 2400,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "scripted",
+          "id": "feedback.vibrator",
+          "profile": "scripted",
+          "reason": "scripted profile: fixed answers, no vibration hardware; 0 vibrate call(s), 0 pattern(s) recorded as token/length/hash of the CombinedVibration parcel (the nested VibrationEffect parcelables are not decoded)",
+          "state": "attached"
+        },
+        {
+          "attach": "at-launch",
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "package": "dev.acos.fixtures.tailprobe",
+      "probe_seq": 1,
+      "stream_socket": "/run/user/1000/acos-view-2401677-1/view.sock",
+      "width": 1080
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 82,
+      "ok": true,
+      "total": 82
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "results/handoff/MODTAIL3/v-vibrator/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c1.png",
+      "probe_seq": 6
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 82,
+      "ok": true,
+      "total": 82
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 2,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 7
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 82,
+      "ok": true,
+      "total": 82
+    },
+    {
+      "buffer_generation": 59,
+      "cmd": "tap",
+      "frame_number": 59,
+      "frame_seq": 3,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 42,
+      "x": 540.0,
+      "y": 811.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 133,
+      "ok": true,
+      "total": 133
+    },
+    {
+      "buffer_generation": 59,
+      "cmd": "tree",
+      "frame_number": 59,
+      "frame_seq": 4,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 43
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 133,
+      "ok": true,
+      "total": 133
+    },
+    {
+      "buffer_generation": 111,
+      "cmd": "tap",
+      "frame_number": 111,
+      "frame_seq": 5,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 79,
+      "x": 540.0,
+      "y": 937.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 184,
+      "ok": true,
+      "total": 184
+    },
+    {
+      "buffer_generation": 111,
+      "cmd": "tree",
+      "frame_number": 111,
+      "frame_seq": 6,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 80
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 184,
+      "ok": true,
+      "total": 184
+    },
+    {
+      "buffer_generation": 163,
+      "cmd": "tap",
+      "frame_number": 163,
+      "frame_seq": 7,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 116,
+      "x": 540.0,
+      "y": 1063.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 235,
+      "ok": true,
+      "total": 235
+    },
+    {
+      "buffer_generation": 163,
+      "cmd": "tree",
+      "frame_number": 163,
+      "frame_seq": 8,
+      "ok": true,
+      "png": "results/handoff/MODTAIL3/v-vibrator/art-frames/live-frames/acos-c1-layer3-frame-163-g163-c8.png",
+      "probe_seq": 117
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 235,
+      "ok": true,
+      "total": 235
+    },
+    {
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        },
+        {
+          "id": "feedback.vibrator",
+          "profile": "scripted"
+        }
+      ],
+      "cmd": "services",
+      "id": "feedback.vibrator",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "scripted",
+          "id": "feedback.vibrator",
+          "profile": "scripted",
+          "reason": "scripted profile: fixed answers, no vibration hardware; 2 vibrate call(s), 2 pattern(s) recorded as token/length/hash of the CombinedVibration parcel (the nested VibrationEffect parcelables are not decoded)",
+          "state": "attached"
+        },
+        {
+          "attach": "at-launch",
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "op": "calls",
+      "value": {
+        "cancel_calls": 0,
+        "haptic_calls": 0,
+        "patterns": [
+          {
+            "device_id": 0,
+            "hash": "d78187148c66b64d",
+            "op_pkg": "dev.acos.fixtures.tailprobe",
+            "payload_len": 152,
+            "token": 1,
+            "uid": 10192
+          },
+          {
+            "device_id": 0,
+            "hash": "c49a9084f6e66f24",
+            "op_pkg": "dev.acos.fixtures.tailprobe",
+            "payload_len": 152,
+            "token": 1,
+            "uid": 10192
+          }
+        ],
+        "query_calls": 1,
+        "unsupported": [],
+        "vibrate_calls": 2
+      }
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 235,
+      "ok": true,
+      "total": 235
+    },
+    {
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        },
+        {
+          "id": "feedback.vibrator",
+          "profile": "scripted"
+        }
+      ],
+      "cmd": "services",
+      "id": "feedback.vibrator",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "scripted",
+          "id": "feedback.vibrator",
+          "profile": "scripted",
+          "reason": "scripted profile: fixed answers, no vibration hardware; 2 vibrate call(s), 2 pattern(s) recorded as token/length/hash of the CombinedVibration parcel (the nested VibrationEffect parcelables are not decoded)",
+          "state": "attached"
+        },
+        {
+          "attach": "at-launch",
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "op": "patterns",
+      "value": {
+        "patterns": [
+          {
+            "device_id": 0,
+            "hash": "d78187148c66b64d",
+            "op_pkg": "dev.acos.fixtures.tailprobe",
+            "payload_len": 152,
+            "token": 1,
+            "uid": 10192
+          },
+          {
+            "device_id": 0,
+            "hash": "c49a9084f6e66f24",
+            "op_pkg": "dev.acos.fixtures.tailprobe",
+            "payload_len": 152,
+            "token": 1,
+            "uid": 10192
+          }
+        ]
+      }
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 8,
+      "ok": true
+    }
+  ]
+}

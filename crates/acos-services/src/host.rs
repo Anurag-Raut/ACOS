@@ -12,6 +12,24 @@
 //! constructed service state machine, and writes the exception header plus the
 //! decoded reply layout. Unknown pairs are a structured
 //! `UNSUPPORTED_ANDROID_API`, never a default success.
+//!
+//! ## Intentional deviations from AOSP (keep both; `docs/FINDINGS.md` F-0015)
+//!
+//! The `android.os.IServiceManager` surface follows AOSP's
+//! `frameworks/native/cmds/servicemanager/ServiceManager.cpp` (registered names
+//! answer `Status::ok` with a possibly-null binder; `unregisterForNotifications`
+//! answers `EX_ILLEGAL_STATE` when nothing is pending) with two deliberate
+//! differences:
+//!
+//! * `registerForNotifications` for a name that is **neither registered nor
+//!   declared by a shipped module** is refused with `EX_ILLEGAL_ARGUMENT`
+//!   naming it. AOSP accepts it and never fires the callback; ACOS has no VINTF
+//!   manifest and no lazy service start, so such a name can never appear and
+//!   waiting for it would hang the caller forever.
+//! * `isDeclared` answers from the **loaded module manifests**
+//!   (`ModuleManifest::provided_names`), not a VINTF device manifest, which ACOS
+//!   does not have. This is what gives `waitForDeclaredService`/`waitForService`
+//!   something real to wait on.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -617,7 +635,8 @@ impl ServiceHost {
     /// running. ACOS's equivalent declaration is a module manifest's
     /// `services` list, registered here by [`Self::declare_service_name`], so
     /// `ServiceManager.isDeclared`/`waitForDeclaredService` agree with the
-    /// modules the build can attach.
+    /// modules the build can attach. **Intentional ACOS deviation** (no VINTF
+    /// manifest exists); see the module docs and `docs/FINDINGS.md` F-0015.
     #[must_use]
     pub fn is_declared(&self, name: &str) -> bool {
         self.names.contains_key(name) || self.declared.iter().any(|declared| *declared == name)
@@ -1214,8 +1233,9 @@ impl ServiceHost {
             // the callback and calls it at once when the service already exists
             // (`servicemanager/ServiceManager.cpp:527-570`, including the
             // `mNameToService.find(name) != end` immediate `onRegistration`).
-            // ACOS adds one deliberate difference: a name that is neither
-            // registered nor declared by a shipped module can never appear here
+            // **Intentional ACOS deviation** (keep it; `docs/FINDINGS.md`
+            // F-0015): a name that is neither registered nor declared by a
+            // shipped module can never appear here
             // (there is no VINTF manifest and no lazy service start), so the
             // registration is refused with `EX_ILLEGAL_ARGUMENT` and the reason.
             // AOSP would accept it and never fire, which is exactly the endless

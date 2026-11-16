@@ -33,10 +33,52 @@ fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// Root for the daemon scratch (its `serve.sock` lives below it).
+///
+/// It must stay **short**: `sun_path` is 108 bytes including the NUL, and
+/// `<worktree>/.cache/fb1-test-<tag>-<pid>/serve.sock` is over that in an agent
+/// worktree (the checkout path alone is ~70 bytes), so `bind(2)` answered
+/// "AF_UNIX path too long" and the test failed with "serve socket never
+/// appeared" before touching an assertion. Same class as the `acos-art`
+/// `live_view` tests (INTEG030 `b8dba361`): the root is chosen short —
+/// `ACOS_FB1_TEST_DIR` when it fits the budget, else a fixed RAM-backed
+/// directory (these tests write a few KB), else the checkout when it is short
+/// enough.
+fn scratch_root() -> PathBuf {
+    /// Leaves room for `/fb1-test-<tag>-<pid>` and `/serve.sock` below that.
+    const BUDGET: usize = 64;
+    let fits = |dir: &Path| dir.as_os_str().as_encoded_bytes().len() <= BUDGET;
+
+    if let Some(dir) = std::env::var_os("ACOS_FB1_TEST_DIR") {
+        let dir = PathBuf::from(dir);
+        let len = dir.as_os_str().as_encoded_bytes().len();
+        assert!(
+            fits(&dir),
+            "ACOS_FB1_TEST_DIR is {len} bytes, which leaves no room for the serve \
+             socket path (sun_path is 108 bytes with the NUL); use at most {BUDGET} \
+             bytes: {}",
+            dir.display()
+        );
+        return dir;
+    }
+    let shm = Path::new("/dev/shm");
+    if shm.is_dir() {
+        return shm.join("acos-fb1-tests");
+    }
+    let dir = repo_root().join(".cache");
+    assert!(
+        fits(&dir),
+        "the checkout path {} is too long for a Unix socket scratch root; set \
+         ACOS_FB1_TEST_DIR to a directory of at most {BUDGET} bytes",
+        dir.display()
+    );
+    dir
+}
+
 fn scratch(tag: &str) -> PathBuf {
-    let dir = repo_root()
-        .join(".cache")
-        .join(format!("fb1-test-{tag}-{}", std::process::id()));
+    let root = scratch_root();
+    std::fs::create_dir_all(&root).unwrap();
+    let dir = root.join(format!("fb1-test-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("runtime")).unwrap();
     std::fs::create_dir_all(dir.join("cache")).unwrap();
