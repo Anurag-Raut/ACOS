@@ -1,0 +1,71 @@
+# REL3A: content-stable settle backs a wait/assertion on a forever-animating
+# screen (root cause A, "settle is defined by pixels").
+#
+# `settle-lab`'s indeterminate ProgressBar keeps drawing for as long as it is
+# visible, so the strict (event/pixel) rule can never settle on this screen - the
+# app runs perfectly, the *pixels* never stop. Before REL3A a `wait_for` here
+# could only time out (the v0.3.0 P1 report: 31 s TIMEOUT with `reason: queue`
+# on the RN onboarding screen, and `animations: off` did not help).
+#
+# This scenario asserts the fixed behaviour:
+#   * the tap that starts the spinner uses `settle: content` (an action whose
+#     pixels never settle may still bind a content-stable tree);
+#   * the following `wait_for` has NO settle option and still passes - the
+#     default for a wait is auto: strict first, then content-stable;
+#   * `assert_text` with `timeout_ms` waits for a settled observation and passes;
+#   * every step JSON states `settle: {mode, settled, waited_ms, reason}` with
+#     `mode: content`, `fallback_from: strict` and `pixel_evidence: false`.
+#
+# The negative twin is rel3a-content-pixel.yaml: the same screen, and a pixel
+# assertion correctly does NOT pass.
+version: 1
+name: rel3a-content-settle
+description: >-
+  An indeterminate ProgressBar animates forever: wait_for and assert_text pass on
+  the content-stable tree (auto fallback), and say so in their settle records.
+app: fixtures/build/apps/settle-lab.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+animations: on
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.settletab/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: progress_start}
+      timeout_ms: 20000
+  # Start the endless animation. The action itself may not be pixel-settled any
+  # more, so it binds the content-stable tree (REL3A: content settle on actions).
+  - tap:
+      selector: {id: progress_start}
+      settle: content
+      settle_timeout_ms: 15000
+  # No `settle` key: auto (strict, then content-stable). Strict cannot settle
+  # this screen, the tree is stable, so this must pass.
+  - wait_for:
+      selector: {id: progress_stop}
+      timeout_ms: 15000
+  # The same rule for an assertion, with a real wait (`timeout_ms`).
+  - assert_text:
+      selector: {id: progress_stop}
+      text: {exact: Stop}
+      timeout_ms: 15000
+  - assert_visible:
+      selector: {id: progress_indeterminate}
+      timeout_ms: 15000

@@ -542,13 +542,27 @@ and the usual `frame` reference (`frame_seq`, `md5`, `captured_at`). No extra
 traversal is issued. `observe.png:true` is rejected on an input verb: use
 `acos_observe` for the PNG.
 
-**Assertions are always strict.** `acos_assert` rejects `settle:"fast"` with
-`INVALID_ARGUMENT`; `acos verify` assertions, `assert_screenshot` and
-`assert_region` never pass a settle option and always use the strict rule. A
-scenario cannot request fast for an assertion step. Acknowledgement is not
-success: a fast reply with `ack_ms` is still only a delivered input; the
-state change is whatever `settle.state_changed` (fast) or the host pixel+tree
-comparison (strict) actually measured.
+**Assertions are never fast.** `acos_assert` rejects `settle:"fast"` with
+`INVALID_ARGUMENT`; a scenario's `wait_for` and `assert_*` steps reject it with
+`INVALID_SCENARIO`. REL3A gives them the same two evidence rules an action has:
+
+* `strict` (event settle) — the default for `assert_log`, `assert_no_crash`,
+  `assert_screenshot`, `assert_region` and `capture`, and available explicitly
+  everywhere else;
+* `content` (content-stable, ADR-0026 decision 3) — accepted by `wait_for` and
+  by the tree/text/state assertions, which default to *auto*: strict first, then
+  content-stable when strict never settles. A content-settled frame backs
+  text/tree/state claims only; a pixel claim fails with
+  `details.reason: "content_settle_pixel"` and a bounds claim with
+  `"content_settle_geometry"`.
+
+Every step and reply states the rule it used: `settle: {mode, settled,
+waited_ms, reason}`. Acknowledgement is not success: a fast reply with `ack_ms`
+is still only a delivered input; the state change is whatever
+`settle.state_changed` (fast) or the host pixel+tree comparison (strict)
+actually measured. A settle that timed out is never a pass: the scenario step is
+`status: timeout` (error class `infra_timeout`) and a live-channel input reply is
+`status: timeout` with `details.reason: "settle_timeout"`.
 
 ### 8.6.2 Tree-only observations and `settle` on the tree verb (P3b)
 

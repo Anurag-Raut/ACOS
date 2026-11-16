@@ -1180,3 +1180,47 @@ app. Decision: keep the host-Chromium design; the in-session gate is re-run in v
 multi-package PMS foundation lands; the parcel defect is fixed in v0.3.0 as its own root-cause item
 (audit every ACOS parcelable writer against AOSP `writeToParcel`). The Android WebView APK fallback
 stays rejected.
+
+## ADR-0032 — Settle is not a pixel rule: content stability for every wait and assertion (REL3A, 2026-11-17)
+
+**Context.** v0.3.0 agent feedback (two independent agents) showed the settle model still leaked into
+the product in three ways: `wait_for` had no settle option and always ran the strict (pixel/event) rule,
+so a screen whose pixels never stop animating could only time out (31 s `TIMEOUT`, `reason: queue` /
+`newer-store`, `animations: off` did not help); `assert_text` advertised `timeout_ms` and ignored it
+(it read the bound frame ~1 ms after the action and failed while the result list was still loading);
+and `acos_tap` answered `status: pass` with `settle.settled:false` — a false green for an agent that
+reads only `status`. MCP `acos_verify` also lacked the `animations` and `native` arguments the CLI has,
+while the engine's own hint told agents to use `animations:off`.
+
+**Decision.**
+
+1. **Content stability is a first-class settle rule for every wait, assertion and action.** `wait_for`
+   and `assert_text`/`assert_visible`/`assert_not_visible`/`assert_state` take `settle`
+   (`strict`|`content`), like `tap`/`type`/`key`/`launch`/`reset` already did. `fast` is rejected there
+   at validation time.
+2. **Default per step kind.** `wait_for` and the tree/text/state assertions default to *auto*: strict
+   first, then content-stable once strict has proven it cannot settle. Actions (`tap`/`type`/`key`/
+   `back`/`launch`/`reset`) stay strict by default (an action's frame is evidence; an endless animation
+   there is an honest `TIMEOUT`); pixel steps (`capture`, `assert_screenshot`, `assert_region`) always
+   need pixel settle. This never weakens a claim: an assertion still requires its condition on a
+   *settled* observation of the mode it reports, content stability still refuses pixel and geometry
+   claims, and an explicit `settle: content` step fails closed when the backend cannot prove it.
+3. **Every step and reply states the rule and its outcome**: `settle: {mode, settled, waited_ms,
+   reason}` plus the mode-specific evidence (`bound`, `window_ms`, `traversals`, `pixels_changed`,
+   `fallback_from`, ...).
+4. **A settle that timed out is never a pass.** A scenario step is `status: timeout` with
+   `error.code: TIMEOUT` (error class `infra_timeout`); a live-channel input reply is
+   `status: timeout` with `details.reason: "settle_timeout"`, the settle record and the delivered facts
+   in `details.delivery`. `settle_timeout_ms` moves the deadline only.
+5. **`timeout_ms` is a real wait on assertions too.** With it, a tree/text/state assertion polls fresh
+   settled observations until the condition holds or the deadline passes, and the frame it judged
+   becomes the bound frame; without it the old single-observation, no-extra-traversal path is unchanged
+   (benchmark metrics unaffected).
+6. **MCP parity:** `acos_verify` gains `animations` (`on`/`off`) and `native`, matching `acos verify`
+   (`REL3F`'s one-front-door rule). Every hint that names an option names a real one.
+
+**Consequences.** `wait_for`/assertion settle records now name `content` where they previously could
+not, so a verdict may show `mode: content, fallback_from: strict, pixel_evidence: false`. A scenario
+that asserted a text on an animating screen used to fail (and was being worked around with a
+`settle: content` tap); it now passes with a content record. Pixel assertions on the same screens still
+fail (`content_settle_pixel`), as they must.

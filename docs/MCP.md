@@ -383,6 +383,27 @@ Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
 Without it `acos verify` uses its default engine, which cannot honour an
 ART-only scenario (`animations: off`); pass `engine: "art"` for real ART.
 
+`acos_verify` accepts `animations: "on"|"off"` and `native: true` (REL3A), the
+same options `acos verify --animations/--native` have. Before that the tool
+schema lacked both while the engine's own hints told agents to use
+`animations: off`, so a run that hit a settle timeout had to leave MCP for a
+shell. `animations: off` zeroes Android's three framework animation scales for
+functional checks; it cannot stop an app that animates in its own code (RN
+`Animated`, a spinner) — a `settle: content` step is the rule for those.
+
+**Settle semantics (REL3A).** Every step JSON states the rule it used and how it
+ended: `settle: {mode, settled, waited_ms, reason}`. `wait_for` and the tree/text
+assertions (`assert_text`, `assert_visible`, `assert_not_visible`,
+`assert_state`) default to *auto* — strict, then the content-stable rule when
+strict never settles — and honour `timeout_ms`. A step whose settle timed out is
+never a pass: in a scenario it is `status: timeout` with error class
+`infra_timeout`; the live channel answers `acos_tap`/`acos_text`/`acos_key` with
+`status: timeout`, `details.reason: "settle_timeout"` and the delivered facts in
+`details.delivery`. Content stability backs tree/text/state claims only: a pixel
+claim (`assert_region`, `assert_screenshot`) on a content-settled frame fails
+with `details.reason: "content_settle_pixel"`, and a bounds claim with
+`"content_settle_geometry"`. See `docs/AGENT_GUIDE.md` ("Settle modes").
+
 A run owns its `artifacts` directory: a non-empty directory written by another
 run is refused with `INVALID_ARGUMENT` naming the previous run id
 (`error.details.previous_run_id`). Pass `overwrite: true` to discard that

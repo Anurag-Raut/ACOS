@@ -370,6 +370,14 @@ impl Backend for TrustGuard {
     fn set_input_content_settle(&mut self, content: bool) {
         self.inner.set_input_content_settle(content);
     }
+
+    /// REL3A: the observation settle rule must reach the engine through the
+    /// guard too. Without this forward the trait's default (a no-op) swallowed
+    /// it, so `settle: content` on a `wait_for`/assertion silently ran the strict
+    /// rule and timed out - exactly the quiet downgrade this project forbids.
+    fn set_observation_settle(&mut self, mode: acos_verify::settle::ObservationSettle) {
+        self.inner.set_observation_settle(mode);
+    }
 }
 
 #[cfg(test)]
