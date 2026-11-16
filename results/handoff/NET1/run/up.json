@@ -1,0 +1,12 @@
+{
+  "up": true,
+  "fabric_pid": 971470,
+  "pasta_pid": 971473,
+  "pasta_version": "2026_10_02.cba3570",
+  "pasta_tag_expected": "2026_10_02.cba3570",
+  "host_ports": [],
+  "sessions": [],
+  "relay_veths": [],
+  "session_rules": 0,
+  "attach_ms_last": null
+}

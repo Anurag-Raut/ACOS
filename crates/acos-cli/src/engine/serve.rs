@@ -716,6 +716,9 @@ impl ServeEngine {
             animations,
             insets,
             Some(Arc::clone(&self.zygote)),
+            // NET3: the relay session takes this session's id, so `acos_net`
+            // addresses the network of the session the caller holds.
+            Some(id),
             &services,
         ) {
             Ok(mut session) => {
@@ -972,6 +975,12 @@ impl ServeEngine {
                 "the ART session engine has no swipe command (tap/key/type_text only)",
             )),
             "acos_action" => action(&mut session, args),
+            // NET2/NET4: the session's own network controls (the module wraps
+            // this). Host-side only: the relay supervisor owns the rules, the
+            // guest is never asked and nothing in it participates. The arm is
+            // the module's own verb name, the same constant `acos-mcp`
+            // advertises, so the CLI and MCP surfaces cannot drift.
+            acos_netd::net_ctl::NET_CTL_TOOL => net_ctl(&mut session, args),
             other => {
                 return art_failure(
                     request_id,
@@ -1340,6 +1349,77 @@ fn label_timing(result: &mut Value, session: &ArtSession, tool: &str, started: s
 }
 
 // -- verb implementations --------------------------------------------------- //
+
+/// `acos_net`: the session's network controls, on the live session API.
+///
+/// **NET5: this verb is the module's control path, not a second implementation.**
+/// The `network` service module owns the relay and its five ops; `acos_net` is
+/// the documented convenience spelling of exactly those ops, so this function
+/// parses the arguments (the closed [`acos_netd::net_ctl::net_ctl_schema`] that
+/// `acos-mcp` also advertises) and forwards them as one module control request
+/// `{op: "ctl", id: "network", ctl_op: <action>}`. `acos_service_ctl {module:
+/// "network", op: <action>}` and `acos_net {action: <action>}` therefore run the
+/// same code in the launcher, and `crates/acos-mcp/tests/net_ctl_parity.rs`
+/// pins that neither surface can grow a private copy.
+///
+/// A session without the module answers `NETWORK_UNAVAILABLE` naming the attach
+/// call; a relay that is down does the same (fail closed), never a silent
+/// offline.
+fn net_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    use acos_netd::net_ctl::{action_keys, NetAction};
+    let action = NetAction::from_args(args).map_err(|e| BackendError::Error {
+        code: ErrorCode::InvalidArgument,
+        detail: e.message,
+    })?;
+    // The module's control op is the action name; its arguments are the keys that
+    // action owns (the parser above already refused every other key).
+    let mut ctl_args = serde_json::Map::new();
+    for key in action_keys(action.name()) {
+        if let Some(value) = args.get(*key) {
+            ctl_args.insert((*key).to_string(), value.clone());
+        }
+    }
+    let reply = session.service_op(json!({
+        "op": "ctl",
+        "id": acos_services::modules::network::MODULE_ID,
+        "ctl_op": action.name(),
+        "args": Value::Object(ctl_args),
+    }))?;
+    if reply.get("ok").and_then(Value::as_bool) == Some(false) {
+        // The module's structured refusal, mapped onto the transport's codes: a
+        // missing network is `NETWORK_UNAVAILABLE`, never a silent offline.
+        let code = match reply.get("code").and_then(Value::as_str) {
+            Some(acos_services::error::codes::NETWORK_UNAVAILABLE) => {
+                ErrorCode::NetworkUnavailable
+            }
+            Some(acos_services::error::codes::NETWORK_NO_SUCH_SESSION) => {
+                ErrorCode::SessionNotFound
+            }
+            Some(acos_services::error::codes::SERVICE_MODULE_REJECTED) => {
+                ErrorCode::InvalidArgument
+            }
+            Some(acos_services::error::codes::SERVICE_MODULE_UNAVAILABLE) => {
+                ErrorCode::NetworkUnavailable
+            }
+            _ => ErrorCode::Internal,
+        };
+        return Err(BackendError::Error {
+            code,
+            detail: reply
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("the network module refused the control")
+                .to_string(),
+        });
+    }
+    let mut value = reply.get("value").cloned().unwrap_or(Value::Null);
+    value["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(value)
+}
 
 fn launch_reply(
     request_id: &str,

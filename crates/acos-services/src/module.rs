@@ -1243,6 +1243,7 @@ impl ModuleRegistry {
             Box::new(crate::modules::telephony::TelephonyModule::new()),
             Box::new(crate::modules::bluetooth::BluetoothModule::new()),
             Box::new(crate::modules::biometric::BiometricModule::new()),
+            Box::new(crate::modules::network::NetworkModule::new()),
         ]
         .into_iter()
         .chain(crate::modules::tail_stubs::modules())

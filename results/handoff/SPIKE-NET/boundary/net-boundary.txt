@@ -1,0 +1,3 @@
+acos-net: shim netns=net:[4026533572] userns=user:[4026533566] cap-eff=000001ffffffffff
+acos-net: rules=installed chain=-N acos-net-drop;-A acos-net-drop -d 192.168.0.0/16 -j DROP;-A acos-net-drop -d 10.0.0.0/8 -j DROP;-A acos-net-drop -d 172.16.0.0/12 -j DROP;-A acos-net-drop -d 169.254.0.0/16 -j DROP;-A acos-net-drop -d 100.64.0.0/10 -j DROP;-P OUTPUT ACCEPT;-A OUTPUT -j acos-net-drop;
+acos-net: rules=after chain=-N acos-net-drop;-A acos-net-drop -d 192.168.0.0/16 -j DROP;-A acos-net-drop -d 10.0.0.0/8 -j DROP;-A acos-net-drop -d 172.16.0.0/12 -j DROP;-A acos-net-drop -d 169.254.0.0/16 -j DROP;-A acos-net-drop -d 100.64.0.0/10 -j DROP;-P OUTPUT ACCEPT;-A OUTPUT -j acos-net-drop; guest-exit=0

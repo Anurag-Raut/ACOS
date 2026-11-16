@@ -740,6 +740,15 @@ pub(crate) fn launch_session(
     session_modules
         .attach(&module_specs)
         .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    // NET5: the resolver proxy is served *after* the modules attach, because the
+    // `network` module is what decides whether this session has one (ADR-0030
+    // item 4). `sockets.0` is what the sandbox binds at `/dev/socket` (below), so
+    // it must be served here. With a session directory (ZPROD) this is exactly
+    // `<plan>/<tag>/sock`, the directory the zygote child mounts; without one it
+    // is this run's short socket dir. Serving any other directory leaves
+    // `/dev/socket/dnsproxyd` invisible to the app and `getaddrinfo` answers
+    // `EAI_NODATA` (measured).
+    let _dns = crate::spike_net::serve_dnsproxyd_if_enabled(&sockets.0).map_err(Error::Io)?;
     // ADR-0029 item 4: the attached set is published on the ready line and in
     // every `acos_services` reply, so the agent sees what the session actually
     // attached (never what it asked for).
@@ -1092,6 +1101,15 @@ pub(crate) fn launch_session(
         sb.with_image(Some(image.dir.clone()));
     }
     sb.run_root(run.path());
+    // NET3/NET4: the relay session is named after the session id the engine
+    // published (`ACOS_ART_SESSION_ID`) — for an `acos serve` session and for a
+    // one-shot `verify` run alike — so the live session API's `acos_net` controls
+    // address the session by the id its own client holds.
+    if let Ok(id) = std::env::var(crate::spike_net::SESSION_ID_ENV) {
+        if !id.is_empty() {
+            sb.net_session(Some(&id));
+        }
+    }
     // Z4: a foreign-guest session does not spawn ART itself, so the guest
     // seccomp/Landlock guard is applied per forked child (the child loads the
     // same `libacos_seccomp_guest.so` after its bind mounts, exactly AOSP's

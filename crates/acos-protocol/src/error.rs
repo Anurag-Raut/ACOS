@@ -279,6 +279,12 @@ pub enum ErrorCode {
     /// the last zygote log lines, and the session is closed fail-closed.
     ZygoteDead,
 
+    /// The network relay (`acos-netd`) is down, so the session has **no**
+    /// network: reported instead of a silent offline session or a fake success
+    /// (fail closed, ADR-0030 amendment 3). The supervisor restarts `pasta`
+    /// itself, so a retry after the relay is back succeeds.
+    NetworkUnavailable,
+
     // ---- harness ----------------------------------------------------------
     /// ACOS itself failed (distinct from an app crash).
     Internal,
@@ -453,6 +459,7 @@ impl ErrorCode {
             ErrorCode::SeccompUnavailable => "SECCOMP_UNAVAILABLE",
             ErrorCode::GuestExited => "GUEST_EXITED",
             ErrorCode::ZygoteDead => "ZYGOTE_DEAD",
+            ErrorCode::NetworkUnavailable => "NETWORK_UNAVAILABLE",
             ErrorCode::Internal => "INTERNAL",
         }
     }
@@ -697,6 +704,9 @@ impl ErrorCode {
             ErrorCode::ZygoteDead => {
                 "The persistent zygote keeper died or stopped acking (ACOS_ART_ZYGOTE=on). Read error.details.zygote for the keeper exit status and the last zygote log lines; the session is closed, not silently re-run on the exec path. Re-launch the session (a fresh keeper boots a new zygote and a new boot epoch) after the log names the cause."
             }
+            ErrorCode::NetworkUnavailable => {
+                "The shared network relay (`acos-netd`) is down, so this session has no network. This is a host condition, not app behaviour: the guest's own failure (an exception in the app) is a different code. The relay supervisor restarts `pasta` on its next tick, so retry once it is back; `acos net status` reports `up`."
+            }
             ErrorCode::Internal => {
                 "ACOS harness failure, not app behaviour. Capture request/scenario/artifacts and report it; do not count it as a pass."
             }
@@ -723,6 +733,7 @@ impl ErrorCode {
                 | ErrorCode::HostDiskFull
                 | ErrorCode::HostMemoryLimit
                 | ErrorCode::ZygoteDead
+                | ErrorCode::NetworkUnavailable
                 | ErrorCode::HostMemoryLow
         )
     }
@@ -780,6 +791,7 @@ impl ErrorCode {
             | ErrorCode::HostDiskFull
             | ErrorCode::HostMemoryLimit
             | ErrorCode::ZygoteDead
+            | ErrorCode::NetworkUnavailable
             | ErrorCode::HostMemoryLow => ErrorClass::HostGuard,
 
             // Harness/parse/protocol/invariant failures and codes that need
@@ -1060,6 +1072,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::SeccompUnavailable,
     ErrorCode::GuestExited,
     ErrorCode::ZygoteDead,
+    ErrorCode::NetworkUnavailable,
     ErrorCode::Internal,
 ];
 
