@@ -218,6 +218,112 @@ impl InputDispatch {
         self.publish_tap(token, x, y)
     }
 
+    /// Publish a real swipe/scroll gesture on `token`'s channel: `DOWN` at
+    /// `from`, one `MOVE` per display refresh interval, `UP` at `to`.
+    ///
+    /// The events are **paced** at the refresh cadence (a sleep until each
+    /// sample's scheduled time), so the guest sees the same arrival pattern a
+    /// touchscreen produces instead of a burst that arrives in one looper wake
+    /// up. `eventTime` is `downTime` plus the sample's offset, so the
+    /// timestamps a `VelocityTracker` reads are evenly spaced and end at the
+    /// lift — the list's own fling physics then runs on real numbers.
+    ///
+    /// Coordinates are carried in the message transform, exactly like
+    /// [`Self::inject_tap`] (the image's `MotionEvent` path reads them there).
+    /// `duration` shorter than one refresh interval still publishes one
+    /// interpolated `MOVE`; nothing about the gesture is invented beyond the
+    /// interpolation between the two points the caller named.
+    pub fn inject_swipe(
+        &mut self,
+        token: BinderId,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration: Duration,
+    ) -> Result<Gesture> {
+        self.publish_swipe(token, from, to, duration)
+    }
+
+    fn publish_swipe(
+        &mut self,
+        token: BinderId,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration: Duration,
+    ) -> Result<Gesture> {
+        let samples = crate::input_channel::swipe_samples(
+            from,
+            to,
+            i64::try_from(duration.as_nanos()).unwrap_or(i64::MAX / 2),
+            crate::input_channel::GESTURE_SAMPLE_INTERVAL_NANOS,
+        );
+        let Some(publisher) = self.registry.publisher_mut(token) else {
+            let message = format!("inject_swipe: no input channel for token {:#x}", token.0);
+            self.events.push(InputEvent::Error {
+                token,
+                message: message.clone(),
+            });
+            return Err(ChannelError::Io(message));
+        };
+        let down_time = monotonic_nanos();
+        let started = Instant::now();
+        let last = samples.len().saturating_sub(1);
+        let mut dispatches = Vec::with_capacity(samples.len());
+        for (index, sample) in samples.iter().enumerate() {
+            // Pace the publication to the sample's own event time. The `DOWN`
+            // has offset 0 and goes immediately.
+            let scheduled = started + Duration::from_nanos(u64::try_from(sample.offset_nanos).unwrap_or(0));
+            let now = Instant::now();
+            if scheduled > now {
+                thread::sleep(scheduled - now);
+            }
+            let action = if index == 0 {
+                crate::input_channel::ACTION_DOWN
+            } else if index == last {
+                crate::input_channel::ACTION_UP
+            } else {
+                crate::input_channel::ACTION_MOVE
+            };
+            let event_id = publisher.allocate_event_id();
+            let mut event = crate::input_channel::MotionEvent::touch(
+                event_id,
+                action,
+                down_time,
+                down_time + sample.offset_nanos,
+                0.0,
+                0.0,
+            );
+            event.transform.tx = sample.x;
+            event.transform.ty = sample.y;
+            event.raw_transform.tx = sample.x;
+            event.raw_transform.ty = sample.y;
+            match publisher.publish_motion(&event) {
+                Ok(dispatch) => {
+                    self.events.push(InputEvent::Published {
+                        token,
+                        seq: dispatch.seq,
+                        kind: "motion",
+                        detail: format!(
+                            "{:?} x={} y={} t={}ms",
+                            dispatch.kind,
+                            sample.x.round() as i64,
+                            sample.y.round() as i64,
+                            sample.offset_nanos / 1_000_000
+                        ),
+                    });
+                    dispatches.push(dispatch);
+                }
+                Err(e) => {
+                    self.events.push(InputEvent::Error {
+                        token,
+                        message: format!("inject_swipe: {e}"),
+                    });
+                    return Err(e);
+                }
+            }
+        }
+        Ok(crate::input_channel::Gesture { dispatches })
+    }
+
     fn publish_tap(&mut self, token: BinderId, x: f32, y: f32) -> Result<Gesture> {
         let Some(publisher) = self.registry.publisher_mut(token) else {
             let message = format!("inject_tap: no input channel for token {:#x}", token.0);
@@ -531,6 +637,27 @@ impl InputHost {
             .newest_token()
             .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
         let gesture = lock(&self.state).inject_tap(token, x, y)?;
+        self.collect(&token, &gesture, ack_wait)
+    }
+
+    /// Publish one swipe/scroll on the newest live window and collect the
+    /// guest's `FINISHED` replies for a bounded window.
+    ///
+    /// The stream is paced over `duration` (see
+    /// [`InputDispatch::inject_swipe`]); the ack window starts after the `UP`
+    /// is published, so a slow drag is never reported as "no acks" because the
+    /// gesture itself consumed the budget.
+    pub fn swipe(
+        &self,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration: Duration,
+        ack_wait: Duration,
+    ) -> Result<InjectedGesture> {
+        let token = self
+            .newest_token()
+            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
+        let gesture = lock(&self.state).inject_swipe(token, from, to, duration)?;
         self.collect(&token, &gesture, ack_wait)
     }
 
@@ -891,6 +1018,178 @@ mod ack_accounting_tests {
         assert!(
             gesture.acks.iter().all(|ack| ack.latency_us.is_some()),
             "a matching ack carries its real publish -> FINISHED latency"
+        );
+    }
+}
+
+/// REL3S: the swipe event stream.
+///
+/// A swipe is not "a tap at two places": the framework's scroll/fling physics
+/// read the *timestamps* and the *positions over time*. These tests pin the
+/// properties a real touchscreen stream has, so a regression to "DOWN, UP" (or
+/// to a burst with identical event times) fails here before it reaches an app.
+#[cfg(test)]
+mod swipe_stream_tests {
+    use super::*;
+    use crate::input_channel::{
+        swipe_samples, DispatchKind, InputMessage, LoopbackConsumer, GESTURE_SAMPLE_INTERVAL_NANOS,
+    };
+
+    const TOKEN: BinderId = BinderId(0x8801);
+
+    #[test]
+    fn swipe_samples_interpolate_the_path_at_the_refresh_cadence() {
+        let duration_ns = 320_000_000; // 320 ms
+        let samples = swipe_samples((10.0, 600.0), (10.0, 100.0), duration_ns, GESTURE_SAMPLE_INTERVAL_NANOS);
+        // DOWN + one MOVE per 16 ms (20) with the last sample serving as the UP.
+        assert_eq!(samples.len(), 21, "down + 20 refresh samples");
+        assert_eq!(samples.first().unwrap().offset_nanos, 0);
+        assert_eq!(samples.first().unwrap().x, 10.0);
+        assert_eq!(samples.first().unwrap().y, 600.0);
+        let last = samples.last().unwrap();
+        assert_eq!(last.offset_nanos, duration_ns, "the lift is the last sample");
+        assert_eq!((last.x, last.y), (10.0, 100.0), "the lift is the requested end point");
+        // Timestamps are strictly increasing and evenly spaced (the velocity a
+        // VelocityTracker derives is the gesture's real speed: 500 px / 320 ms).
+        for pair in samples.windows(2) {
+            let step = pair[1].offset_nanos - pair[0].offset_nanos;
+            assert!(step > 0, "event times must increase");
+            assert!(
+                (step - GESTURE_SAMPLE_INTERVAL_NANOS).abs() <= 1,
+                "each sample is one refresh interval after the previous: {step}"
+            );
+            assert!(pair[1].y < pair[0].y, "an upward swipe moves monotonically up");
+        }
+        let travelled = samples.first().unwrap().y - samples.last().unwrap().y;
+        assert!((travelled - 500.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_short_swipe_still_publishes_one_move_and_ends_at_the_lift_time() {
+        let samples = swipe_samples((0.0, 0.0), (100.0, 0.0), 5_000_000, GESTURE_SAMPLE_INTERVAL_NANOS);
+        assert_eq!(samples.len(), 2, "DOWN + one interpolated MOVE==UP");
+        assert_eq!(samples[1].offset_nanos, 5_000_000);
+        assert_eq!((samples[1].x, samples[1].y), (100.0, 0.0));
+    }
+
+    #[test]
+    fn publish_swipe_sends_down_moves_and_up_with_real_event_times() {
+        let mut dispatch = InputDispatch::new();
+        dispatch
+            .register_window(TOKEN, "Surface(name=acos-fixture/scroll-list)/@0x20")
+            .expect("register");
+        let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
+        let mut guest = LoopbackConsumer::new(fd);
+        // Drain the registration messages (touch mode + focus).
+        for _ in 0..2 {
+            guest.recv().expect("recv").expect("registration message");
+        }
+
+        let started = Instant::now();
+        let gesture = dispatch
+            .inject_swipe(
+                TOKEN,
+                (540.0, 1800.0),
+                (540.0, 600.0),
+                Duration::from_millis(160),
+            )
+            .expect("swipe");
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed >= Duration::from_millis(120),
+            "the stream is paced at the refresh cadence, not published in a burst: {elapsed:?}"
+        );
+
+        // 160 ms / 16 ms = 10 samples; adjacent samples share `downTime`.
+        assert_eq!(gesture.dispatches.len(), 11, "down + 10 refresh samples");
+        assert_eq!(gesture.dispatches[0].kind, DispatchKind::MotionDown);
+        assert_eq!(gesture.dispatches[10].kind, DispatchKind::MotionUp);
+        assert!(
+            gesture.dispatches[1..10]
+                .iter()
+                .all(|d| d.kind == DispatchKind::MotionMove)
+        );
+        let down_time = gesture.dispatches[0].down_time;
+        assert!(gesture.dispatches.iter().all(|d| d.down_time == down_time));
+        for pair in gesture.dispatches.windows(2) {
+            assert!(pair[1].event_time > pair[0].event_time);
+        }
+        assert_eq!(
+            gesture.dispatches[10].event_time - down_time,
+            160_000_000,
+            "the lift carries the requested duration"
+        );
+
+        // The guest sees the interpolated positions and the increasing times.
+        let mut events = Vec::new();
+        while let Some(message) = guest.recv().expect("recv") {
+            if let InputMessage::Motion { event, .. } = message {
+                events.push(event);
+            }
+        }
+        assert_eq!(events.len(), 11);
+        assert_eq!(events[0].action, crate::input_channel::ACTION_DOWN);
+        assert_eq!(events[0].transform.ty, 1800.0);
+        assert_eq!(events[10].action, crate::input_channel::ACTION_UP);
+        assert_eq!(events[10].transform.ty, 600.0);
+        assert!(
+            events.windows(2).all(|pair| pair[1].transform.ty < pair[0].transform.ty),
+            "the finger travels up monotonically"
+        );
+        assert!(
+            events.windows(2).all(|pair| pair[1].event_time > pair[0].event_time),
+            "the wire carries real, increasing event times"
+        );
+    }
+
+    #[test]
+    fn input_host_swipe_reports_every_events_handled_bit() {
+        let mut dispatch = InputDispatch::new();
+        dispatch
+            .register_window(TOKEN, "Surface(name=acos-fixture/scroll-list)/@0x30")
+            .expect("register");
+        let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
+        let mut guest = LoopbackConsumer::new(fd);
+        for _ in 0..2 {
+            guest.recv().expect("recv").expect("registration message");
+        }
+        let state = Arc::new(Mutex::new(dispatch));
+        let host = InputHost {
+            state: Arc::clone(&state),
+            relayout_tx: None,
+        };
+        let acker = thread::spawn(move || {
+            let mut acked = 0;
+            while acked < 6 {
+                while let Some(message) = guest.recv().expect("recv") {
+                    if let InputMessage::Motion { seq, .. } = message {
+                        // REL3E: the app window's own finishInputEvent bit.
+                        guest.send_finished(seq, seq % 2 == 0).expect("ack");
+                        acked += 1;
+                    }
+                }
+                thread::sleep(Duration::from_millis(2));
+            }
+        });
+        let gesture = host
+            .swipe(
+                (540.0, 1200.0),
+                (540.0, 900.0),
+                Duration::from_millis(80), // 5 samples + down = 6 events
+                Duration::from_secs(2),
+            )
+            .expect("swipe");
+        acker.join().expect("acker");
+        assert_eq!(gesture.seqs.len(), 6);
+        assert_eq!(gesture.acks.len(), 6, "every published event is acknowledged");
+        let mut want = gesture.seqs.clone();
+        want.sort_unstable();
+        let mut got: Vec<u32> = gesture.acks.iter().map(|ack| ack.seq).collect();
+        got.sort_unstable();
+        assert_eq!(got, want);
+        assert!(
+            gesture.acks.iter().any(|ack| !ack.handled) && gesture.acks.iter().any(|ack| ack.handled),
+            "the mixed handled/unhandled acks are reported per event, not folded away"
         );
     }
 }

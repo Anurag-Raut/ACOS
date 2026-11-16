@@ -1,0 +1,16 @@
+## cargo test -p acos-services --lib swipe_stream (REL3S event stream)
+test window_session::input_dispatch::swipe_stream_tests::a_short_swipe_still_publishes_one_move_and_ends_at_the_lift_time ... ok
+test window_session::input_dispatch::swipe_stream_tests::swipe_samples_interpolate_the_path_at_the_refresh_cadence ... ok
+test window_session::input_dispatch::swipe_stream_tests::input_host_swipe_reports_every_events_handled_bit ... ok
+test window_session::input_dispatch::swipe_stream_tests::publish_swipe_sends_down_moves_and_up_with_real_event_times ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.16s
+
+## cargo test -p acos-mcp --test guide
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+## cargo test -p acos-cli --bins engine::
+test result: ok. 120 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out; finished in 2.00s
+
+## cargo test -p acos-services -p acos-protocol --lib
+test result: ok. 82 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.72s
+test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.10s

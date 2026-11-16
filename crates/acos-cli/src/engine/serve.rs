@@ -983,7 +983,7 @@ impl ServeEngine {
                     "verb": tool,
                     "assertion": assertion,
                     "trust_guard": "crate::trust::TrustGuard (observe/logs_since fail closed)",
-                    "allowed": ["acos_observe (frame only)", "acos_tap", "acos_key", "acos_text"],
+                    "allowed": ["acos_observe (frame only)", "acos_tap", "acos_key", "acos_text", "acos_swipe"],
                 }),
             );
         }
@@ -1005,10 +1005,7 @@ impl ServeEngine {
             "acos_logs" => logs(&mut session, &held.artifacts, args),
             "acos_status" => Ok(status_value(&session)),
             "acos_reset" => reset(&mut session, &held.artifacts, args),
-            "acos_swipe" => Err(BackendError::unsupported(
-                "input.swipe",
-                "the ART session engine has no swipe command (tap/key/type_text only)",
-            )),
+            "acos_swipe" => swipe(&mut session, args),
             "acos_action" => action(&mut session, args),
             other => {
                 return art_failure(
@@ -1026,7 +1023,10 @@ impl ServeEngine {
                 let p3_t_outcome = m5_now_us();
                 let mut result = result;
                 result["session_id"] = json!(id);
-                if matches!(tool, "acos_tap" | "acos_text" | "acos_key" | "acos_action") {
+                if matches!(
+                    tool,
+                    "acos_tap" | "acos_text" | "acos_key" | "acos_swipe" | "acos_action"
+                ) {
                     if let Err(error) = attach_observation(&mut session, &held.artifacts, &mut result, args) {
                         return art_error(request_id, Some(id), trust, &error);
                     }
@@ -1246,7 +1246,7 @@ fn capabilities_for(tool: &str) -> Vec<&'static str> {
     match tool {
         "acos_observe_tree" | "acos_assert" => vec!["ui.tree"],
         "acos_observe" => vec!["ui.frame", "ui.screenshot"],
-        "acos_tap" | "acos_text" | "acos_key" | "acos_action" => vec!["input"],
+        "acos_tap" | "acos_text" | "acos_key" | "acos_swipe" | "acos_action" => vec!["input"],
         "acos_logs" => vec!["logs"],
         "acos_reset" => vec!["reset"],
         "acos_status" => vec!["lifecycle"],
@@ -2138,6 +2138,124 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     Ok(result)
 }
 
+/// REL3S: `acos_swipe` / CLI `acos swipe` / `acos scroll` on the ART engine.
+///
+/// One swipe is a real interpolated `MotionEvent` stream on the live input
+/// channel (see `acos-services::input_dispatch::InputDispatch::inject_swipe`),
+/// delivered through the same path a tap uses and settled with the same rules;
+/// the reply carries REL3E's `handled` contract and FB3's `changes`.
+///
+/// `until` turns it into a bounded `scroll_until` search: swipe, take a fresh
+/// **settled** traversal, look for the selector, repeat. "Found" is only ever
+/// reported from such a traversal, and a miss is a structured `ELEMENT_NOT_FOUND`
+/// naming the attempts and the last tree's texts.
+fn swipe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let settle = requested_settle(args)?;
+    session.set_diff_requested(diff_requested(args)?);
+    reject_expect_change_without_pixel_evidence(args)?;
+    let (from, to, duration_ms) = swipe_points(session, args)?;
+    let fling = fling_requested(args);
+    let Some(until) = args.get("until").filter(|value| !value.is_null()) else {
+        session.set_settle_mode(settle);
+        session.begin_input();
+        session.swipe(from, to, duration_ms, fling)?;
+        return Ok(input_result(session, "swipe", Value::Null));
+    };
+    // A repeated search needs every observation to be settled, and the
+    // selector's visibility is checked on the fresh tree each attempt took.
+    if matches!(settle, "fast" | "content") {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: format!(
+                "`until` needs a strict settle so a found node is backed by a settled \
+                 observation; `settle: {settle}` cannot prove that"
+            ),
+        });
+    }
+    let (selector, describe) = selector_of(until).ok_or_else(|| BackendError::Failed {
+        code: ErrorCode::InvalidArgument,
+        detail: "`until` needs a selector (`id`, `content_desc` or `text`)".to_string(),
+    })?;
+    let max_attempts = args
+        .get("max_attempts")
+        .and_then(Value::as_u64)
+        .unwrap_or(if fling { 10 } else { 6 })
+        .clamp(1, 50) as usize;
+    session.set_settle_mode("strict");
+    session.begin_input();
+    let report = session.scroll_until(&selector, from, to, duration_ms, fling, max_attempts)?;
+    let mut result = input_result(session, "swipe", Value::Null);
+    result["until"] = json!({
+        "selector": describe,
+        "found": true,
+        "attempts": report.attempts,
+        "frame_seq": report.frame_seq,
+    });
+    Ok(result)
+}
+
+/// Resolve a swipe's two points: explicit `from`/`to`, else a `direction`
+/// (+ optional `distance` in pixels) over the session's display.
+fn swipe_points(
+    session: &ArtSession,
+    args: &Value,
+) -> Result<((f32, f32), (f32, f32), u64), BackendError> {
+    let point = |value: Option<&Value>| -> Option<(f32, f32)> {
+        let value = value?;
+        let x = value.get("x").and_then(Value::as_f64)?;
+        let y = value.get("y").and_then(Value::as_f64)?;
+        Some((x as f32, y as f32))
+    };
+    let duration_ms = args
+        .get("duration_ms")
+        .and_then(Value::as_u64)
+        .unwrap_or(if fling_requested(args) { 120 } else { 400 })
+        .clamp(1, 30_000);
+    if let (Some(from), Some(to)) = (point(args.get("from")), point(args.get("to"))) {
+        return Ok((from, to, duration_ms));
+    }
+    let (width, height) = session.display_size();
+    let (w, h) = (width as f32, height as f32);
+    let direction = args
+        .get("direction")
+        .and_then(Value::as_str)
+        .unwrap_or("up")
+        .to_ascii_lowercase();
+    let cx = w / 2.0;
+    let cy = h / 2.0;
+    let axis = if matches!(direction.as_str(), "up" | "down") {
+        h * 0.6
+    } else {
+        w * 0.6
+    };
+    let distance = args
+        .get("distance")
+        .and_then(Value::as_f64)
+        .map_or(axis as f64, f64::abs) as f32;
+    let half = distance / 2.0;
+    let (from, to) = match direction.as_str() {
+        // Finger up = the content scrolls up = later rows come into view.
+        "up" => ((cx, cy + half), (cx, cy - half)),
+        "down" => ((cx, cy - half), (cx, cy + half)),
+        "left" => ((cx + half, cy), (cx - half, cy)),
+        "right" => ((cx - half, cy), (cx + half, cy)),
+        other => {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: format!(
+                    "unknown swipe direction {other:?}; use up, down, left or right, or explicit \
+                     `from`/`to` points"
+                ),
+            })
+        }
+    };
+    Ok((from, to, duration_ms))
+}
+
+fn fling_requested(args: &Value) -> bool {
+    args.get("fling").and_then(Value::as_bool).unwrap_or(false)
+}
+
 /// The selector an input/assert argument names, with the JSON that describes it.
 ///
 /// Precedence is `id` > `content_desc` > `text` (an id is the narrowest thing an
@@ -2146,6 +2264,13 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
 /// with whichever field was used, so `{"text": "Continue", "index": 1}` is the
 /// escape hatch for a legitimately repeated label.
 fn args_selector(args: &Value) -> Option<(Selector, Value)> {
+    selector_of(args)
+}
+
+/// Build a selector from an object's `id` / `content_desc` / `text` (+`index`)
+/// with the JSON that describes it. Shared by an input's own selector and a
+/// `until` search target, so both resolve the same way.
+fn selector_of(args: &Value) -> Option<(Selector, Value)> {
     let index = args.get("index").and_then(Value::as_u64).map(|i| i as usize);
     let mut selector = if let Some(id) = args.get("id").and_then(Value::as_str) {
         Selector::by_id(id)
@@ -2439,9 +2564,11 @@ fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError>
         "tap" => tap(session, &action),
         "key" => key(session, &action),
         "text" => type_text(session, &action),
+        // REL3S: the generic multi-action path reaches the same real gesture.
+        "swipe" | "scroll" => swipe(session, &action),
         other => Err(BackendError::unsupported(
             format!("input.{other}"),
-            "acos_action supports tap, key and text on the ART engine",
+            "acos_action supports tap, key, text, swipe and scroll on the ART engine",
         )),
     }
 }
@@ -2806,9 +2933,9 @@ fn status_value(session: &ArtSession) -> Value {
         "capabilities": {
             "tree": true, "screenshot": true, "tap": true, "tap_text": true,
             "type_text": true, "key": true, "reset": true, "logs": true,
-            "assert": true, "swipe": false, "environment": false,
+            "assert": true, "swipe": true, "environment": false,
         },
-        "unsupported": ["acos_swipe"],
+        "unsupported": [],
     });
     merge_zygote_fields(&mut status, session);
     status

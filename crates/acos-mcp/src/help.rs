@@ -326,7 +326,7 @@ fn tool_returns(tool: &ToolInfo) -> &'static str {
         }
         "acos_key" => "`handled`, `accepted`, `state_changed`, `target`, `acks`",
         "acos_swipe" => {
-            "`handled`, `accepted`, `state_changed`, `target` and the injected gesture seqs; \non the ART engine swipe is still `unsupported` (a structured refusal, never a fake send)"
+            "`handled` (per-event `finishInputEvent` bit of a real DOWN/MOVE/UP stream), \n`accepted`, `state_changed`, `target`, the injected gesture seqs/acks, and `until` \n(`found`/`attempts`/`frame_seq`) when the call searched for a selector"
         }
         "acos_logs" => "`logs[]` (priority, tag, message, line, repeat_count), `total`/`count`, `filter`, `stage_reached`, `crash`",
         "acos_status" => "`launched`, `stage_reached`, `published_frames`, `package`/`activity`, `capabilities`",

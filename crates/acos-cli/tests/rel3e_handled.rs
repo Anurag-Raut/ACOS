@@ -288,14 +288,17 @@ fn tap_on_a_label_is_reported_not_handled_and_names_the_switch() {
     let count = find_node(&tree["result"]["tree"], "count").expect("count node");
     assert_eq!(count["text"], json!("1"), "the handled tap really incremented");
 
+    // REL3S gives ART a real swipe publisher; the same `handled` contract that
+    // governed the tap above governs every event of the gesture.
     let swipe = conn.call(
         "acos_swipe",
         json!({"base": b, "from": {"x": 1, "y": 2}, "to": {"x": 3, "y": 4}}),
     );
+    assert_eq!(swipe["ok"], json!(true), "{swipe:#?}");
     assert_eq!(
-        swipe["error"]["code"],
-        json!("UNSUPPORTED_BACKEND"),
-        "an unsupported input verb is a structured refusal, never a fake send: {swipe:#?}"
+        swipe["result"]["handled_evidence"]["source"],
+        json!("finishInputEvent"),
+        "a swipe reports the window's own handled bit: {swipe:#?}"
     );
 
     let destroy = conn.call("acos_destroy", json!({"base": b}));

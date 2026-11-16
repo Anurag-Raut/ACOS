@@ -193,6 +193,61 @@ pub const KEYCODE_DPAD_CENTER: i32 = 23;
 /// Default DOWN→UP hold for a synthesized tap/key (`50 ms`, as `acos-wm` uses).
 pub const DEFAULT_TAP_HOLD_NANOS: i64 = 50_000_000;
 
+/// The display refresh cadence an interpolated gesture is published at
+/// (`16 ms` ≈ 60 Hz, the `Choreographer` vsync period a real touchscreen
+/// samples at).
+pub const GESTURE_SAMPLE_INTERVAL_NANOS: i64 = 16_000_000;
+
+/// One sample of an interpolated touch gesture.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GestureSample {
+    /// Sample position (window-local, carried in the message transform).
+    pub x: f32,
+    /// Sample position (window-local).
+    pub y: f32,
+    /// `eventTime` offset from the stream's `downTime`, in nanoseconds.
+    pub offset_nanos: i64,
+}
+
+/// Interpolate a swipe/scroll into the samples a real touchscreen would have
+/// produced: one sample at the down point, one `MOVE` per display refresh
+/// interval (`interval_nanos`, 16 ms by default), and a final sample at the up
+/// point whose offset is exactly `duration_nanos`.
+///
+/// This is the shape the framework's own gesture generators use (equidistant
+/// motion events over the gesture duration), and it is what lets
+/// `VelocityTracker`/`OverScroller` see a real velocity: the timestamps are
+/// monotonic, evenly spaced and end at the lift, so the last few samples carry
+/// the gesture's speed. A duration shorter than one refresh interval still
+/// produces one interpolated `MOVE` — never a synthetic "up with no motion".
+#[must_use]
+pub fn swipe_samples(
+    from: (f32, f32),
+    to: (f32, f32),
+    duration_nanos: i64,
+    interval_nanos: i64,
+) -> Vec<GestureSample> {
+    let duration = duration_nanos.max(1);
+    let interval = interval_nanos.max(1);
+    // At least one MOVE, at most 1000 (a bounded stream the receiver can drain).
+    let moves = usize::try_from((duration / interval).max(1)).unwrap_or(1).min(1000);
+    let mut samples = Vec::with_capacity(moves + 1);
+    samples.push(GestureSample {
+        x: from.0,
+        y: from.1,
+        offset_nanos: 0,
+    });
+    for i in 1..=moves {
+        let t = i as f64 / moves as f64;
+        samples.push(GestureSample {
+            x: from.0 + (to.0 - from.0) * t as f32,
+            y: from.1 + (to.1 - from.1) * t as f32,
+            offset_nanos: duration * i as i64 / moves as i64,
+        });
+    }
+    samples
+}
+
 // ---------------------------------------------------------------------------
 // errors
 // ---------------------------------------------------------------------------

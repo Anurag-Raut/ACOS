@@ -290,6 +290,7 @@ impl SessionBackend for FakeSession {
             screenshot: true,
             tap: true,
             tap_text: true,
+            swipe: false,
             type_text: self.supports_type,
             key: true,
             // The fake session has no display-rotation command.

@@ -269,10 +269,8 @@ never happened, so it is refused instead.
 
 ## 1c. `changes`: what an action did
 
-`acos_tap`, `acos_text` and `acos_key` return `result.changes` **by default**
-(`acos_swipe` takes the same `diff` argument and returns `changes` when the engine
-supports the action; the ART engine has no swipe, so it answers
-`UNSUPPORTED_BACKEND` and there is no reply to annotate): the settled UI-tree diff of the action,
+`acos_tap`, `acos_text`, `acos_key` and `acos_swipe` return `result.changes`
+**by default** (`diff: false` omits it): the settled UI-tree diff of the action,
 so the ordinary step is one call instead of tap-then-observe.
 
 ```json
@@ -331,8 +329,8 @@ Rules (they are part of the contract, not implementation detail):
 
 `state_changed: false` used to be ambiguous: it could mean *"nothing tappable
 there / no handler consumed the press"* or *"the app handled it and nothing
-changed"*. Every `acos_tap`/`acos_key`/`acos_text` (and `acos_swipe`, where the
-engine delivers the gesture) reply now separates the two:
+changed"*. Every `acos_tap`/`acos_key`/`acos_text`/`acos_swipe` reply now
+separates the two:
 
 ```json
 "handled": false,
@@ -387,6 +385,40 @@ engine delivers the gesture) reply now separates the two:
   step JSON has an `input` block with `handled`, `handled_evidence`, `target`
   and `expect_change` — which is `"auto"` for a tap (its own state-change rule
   always runs) or the scenario's explicit `true`/`false`.
+
+## 1d-bis. `acos_swipe`: a real gesture, and `scroll_until`
+
+On the ART engine `acos_swipe` publishes a real interpolated `MotionEvent`
+stream on the live input channel: `DOWN`, one `MOVE` every display refresh
+interval (~16 ms) with real `eventTime` values, then `UP` — the same
+`IWindowSession` channel `acos_tap` uses. The app's `VelocityTracker` and
+`OverScroller` see a genuine finger, so `ListView`/`RecyclerView`/RN `FlatList`
+fling with their own physics instead of jumping.
+
+```json
+{"from": {"x": 300, "y": 1100}, "to": {"x": 300, "y": 400},
+ "duration_ms": 300, "fling": true}
+{"direction": "up", "distance": 900}
+{"direction": "up", "until": {"text": "Row 80"}, "max_attempts": 12}
+```
+
+* `from`/`to` are display pixels; `direction` (`up`/`down`/`left`/`right`) with
+  an optional `distance` covers the common scroll.
+* `duration_ms` defaults to 400 (120 with `fling: true`). A fling is a short,
+  fast gesture — the coast is the list's, not the tool's.
+* `handled` is REL3E's per-event `finishInputEvent` bit:
+  `handled_evidence.published == acked` for every published event and
+  `unhandled` lists the sequences the window dropped. A 300 ms swipe is ~20
+  events.
+* `until: <selector>` is a bounded `scroll_until`: swipe, take a fresh **settled**
+  traversal, look for the node, repeat (`max_attempts`, 1..50). The reply carries
+  `until: {selector, found: true, attempts, frame_seq}`; a miss is
+  `ELEMENT_NOT_FOUND` with `details.attempts`, `details.max_attempts`,
+  `details.last_frame_seq` and `details.last_tree_texts`. `until` refuses
+  `settle: fast`/`content` because neither can prove a settled observation.
+* `fling`/`direction`/`distance`/`until`/`max_attempts` on the frozen Rust VM are
+  refused (`until` explicitly: only ART has settled-observation proof).
+
 
 ## 1e. Watching a session (live view)
 

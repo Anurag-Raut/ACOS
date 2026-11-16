@@ -346,18 +346,26 @@ fn art_agent_loop_over_the_socket() {
     assert_eq!(logs["result"]["engine"], json!("art"));
     assert_eq!(logs["result"]["evidence"]["logs"], json!("guest-asserted"));
 
-    // ART has no swipe; that must be structured, never a fake success.
+    // REL3S: ART delivers a real swipe (an interpolated MotionEvent stream),
+    // so the verb is no longer a refusal.
     let swipe = conn.call(
         "acos_swipe",
         json!({"base": b, "from": {"x": 1, "y": 2}, "to": {"x": 3, "y": 4}}),
     );
-    assert_eq!(swipe["error"]["code"], json!("UNSUPPORTED_BACKEND"));
-    assert_eq!(details(&swipe)["capability"], json!("input.swipe"));
+    assert_eq!(swipe["ok"], json!(true), "{swipe:#?}");
+    assert_eq!(swipe["result"]["engine"], json!("art"));
+    assert!(
+        swipe["result"]["handled_evidence"]["published"]
+            .as_u64()
+            .unwrap_or(0)
+            > 2,
+        "a swipe publishes a real event stream: {swipe:#?}"
+    );
 
     let status = conn.call("acos_status", json!({"base": b}));
     assert_eq!(status["ok"], json!(true), "{status:#?}");
     assert_eq!(status["result"]["stage_reached"], json!("first_frame"));
-    assert_eq!(status["result"]["capabilities"]["swipe"], json!(false));
+    assert_eq!(status["result"]["capabilities"]["swipe"], json!(true));
 
     let before_reset = status["result"]["published_frames"].as_u64().unwrap();
     let reset = conn.call("acos_reset", json!({"base": b}));
