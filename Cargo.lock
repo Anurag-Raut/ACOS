@@ -145,6 +145,7 @@ dependencies = [
  "acos-protocol",
  "acos-runtime",
  "acos-sandbox",
+ "acos-services",
  "acos-test-support",
  "libc",
  "png 0.17.16",

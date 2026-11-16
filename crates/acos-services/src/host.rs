@@ -155,6 +155,23 @@ impl Default for Wiring {
 
 type Factory = Arc<dyn Fn(Wiring) -> Box<dyn ServiceObject> + Send + Sync>;
 
+/// The registration tables as they were at [`ServiceHost::begin_scope`].
+///
+/// ADR-0029 requires that detaching a module leaves **no** registration behind,
+/// including the ones a module registered indirectly (an aux binder, a dynamic
+/// node, an alias). Keeping the pre-attach snapshot is the only way to prove
+/// that by construction instead of trusting each module's `detach` to enumerate
+/// what its `attach` did.
+#[derive(Debug)]
+pub struct RegistrationScope {
+    entries: Vec<&'static str>,
+    names: HashMap<&'static str, &'static str>,
+    aux: HashMap<&'static str, BinderId>,
+    dynamic: Vec<u64>,
+    binder_descriptors: HashMap<u64, &'static str>,
+    notification: bool,
+}
+
 struct ServiceEntry {
     binder: BinderId,
     factory: Factory,
@@ -362,6 +379,130 @@ impl ServiceHost {
                 }
             }
         }
+    }
+
+    /// Remove the `ServiceManager` name `name` and whatever binder it resolved
+    /// to, returning the freed handle.
+    ///
+    /// Used when a module attaches over a tombstone: the tombstone (a dynamic
+    /// node with no factory) must disappear, otherwise the name keeps resolving
+    /// to an object that reports "module not attached" while the module *is*
+    /// attached. Entries registered with [`Self::register`] are removed too.
+    pub fn remove_service(&mut self, name: &str) -> Option<BinderId> {
+        let descriptor = self.names.remove(name)?;
+        if let Some(entry) = self.entries.remove(descriptor) {
+            self.binder_descriptors.remove(&entry.binder.0);
+            self.registry.remove(entry.binder);
+            return Some(entry.binder);
+        }
+        let binder = self.binder_for_descriptor(descriptor)?;
+        self.dynamic.remove(&binder.0);
+        self.aux.remove(descriptor);
+        self.binder_descriptors.remove(&binder.0);
+        self.registry.remove(binder);
+        Some(binder)
+    }
+
+    /// Snapshot the registration tables so a module's registrations can be
+    /// rolled back as a unit (ADR-0029 detach).
+    #[must_use]
+    pub fn begin_scope(&self) -> RegistrationScope {
+        RegistrationScope {
+            entries: self.entries.keys().copied().collect(),
+            names: self.names.clone(),
+            aux: self.aux.clone(),
+            dynamic: self.dynamic.keys().copied().collect(),
+            binder_descriptors: self.binder_descriptors.clone(),
+            notification: self.notification.is_some(),
+        }
+    }
+
+    /// Remove every registration made since `scope` was taken and return the
+    /// binder handles that were freed.
+    ///
+    /// Names and aux binders that existed before the scope are restored (a
+    /// module may legitimately re-register a name another module owns only if
+    /// the manifest overlap check rejects it, so this is a safety net, not a
+    /// feature). Binders are dropped from the [`BinderRegistry`] as well, so a
+    /// subsequent `checkService` answers `null` exactly as it did before the
+    /// attach.
+    pub fn end_scope(&mut self, scope: RegistrationScope) -> Vec<BinderId> {
+        let mut freed: Vec<BinderId> = Vec::new();
+        let before_entries: std::collections::HashSet<&'static str> =
+            scope.entries.iter().copied().collect();
+        let added_entries: Vec<&'static str> = self
+            .entries
+            .keys()
+            .copied()
+            .filter(|key| !before_entries.contains(key))
+            .collect();
+        for key in added_entries {
+            if let Some(entry) = self.entries.remove(key) {
+                freed.push(entry.binder);
+            }
+        }
+        let added_names: Vec<&'static str> = self
+            .names
+            .keys()
+            .copied()
+            .filter(|key| !scope.names.contains_key(key))
+            .collect();
+        for key in added_names {
+            self.names.remove(key);
+        }
+        // Restore any pre-existing alias the module overwrote.
+        for (name, descriptor) in &scope.names {
+            self.names.insert(name, descriptor);
+        }
+        let added_aux: Vec<&'static str> = self
+            .aux
+            .keys()
+            .copied()
+            .filter(|key| !scope.aux.contains_key(key))
+            .collect();
+        for key in added_aux {
+            if let Some(binder) = self.aux.remove(key) {
+                freed.push(binder);
+            }
+        }
+        for (descriptor, binder) in &scope.aux {
+            self.aux.insert(descriptor, *binder);
+        }
+        let known_dynamic: std::collections::HashSet<u64> = scope.dynamic.iter().copied().collect();
+        let added_dynamic: Vec<u64> = self
+            .dynamic
+            .keys()
+            .copied()
+            .filter(|id| !known_dynamic.contains(id))
+            .collect();
+        for id in added_dynamic {
+            self.dynamic.remove(&id);
+            freed.push(BinderId(id));
+        }
+        let added_descriptors: Vec<u64> = self
+            .binder_descriptors
+            .keys()
+            .copied()
+            .filter(|id| !scope.binder_descriptors.contains_key(id))
+            .collect();
+        for id in added_descriptors {
+            self.binder_descriptors.remove(&id);
+            if !freed.iter().any(|binder| binder.0 == id) {
+                freed.push(BinderId(id));
+            }
+        }
+        if !scope.notification {
+            self.notification = None;
+        }
+        for binder in &freed {
+            self.registry.remove(*binder);
+        }
+        self.deliveries.retain(|delivery| {
+            !freed.iter().any(|binder| binder.0 == delivery.target.0)
+        });
+        freed.sort_unstable_by_key(|binder| binder.0);
+        freed.dedup_by_key(|binder| binder.0);
+        freed
     }
 
     /// Register the `INotificationManager` state (called by

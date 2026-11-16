@@ -160,6 +160,17 @@ pub const NAMES: &[(&str, &str)] = &[
     ("restrictions", "android.content.IRestrictionsManager"),
 ];
 
+/// Names in [`NAMES`] that are backed by an **aux** binder rather than a service
+/// object.
+///
+/// `netstats` is registered because `TrafficStats.init` asks for the binder on
+/// every process start; it has to *resolve*, it is never transacted on. The
+/// binder is created with [`ServiceHost::register_aux`], which deliberately has
+/// no `ServiceManager` name, so `checkService("netstats")` answers `null`
+/// (exactly as it did before the module framework) and the `core` module does
+/// not claim the name in its manifest.
+pub const AUX_BACKED_NAMES: &[&str] = &["netstats"];
+
 /// Descriptor for a `ServiceManager` name.
 #[must_use]
 pub fn descriptor_for(name: &str) -> Option<&'static str> {

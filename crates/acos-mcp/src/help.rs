@@ -62,10 +62,34 @@ pub fn is_topic(topic: &str) -> bool {
     topic == ALL_TOPIC || topic_list().contains(&topic)
 }
 
-/// The whole guide, trimmed.
+/// The marker `docs/AGENT_GUIDE.md` carries where the generated module table
+/// belongs.
+///
+/// The guide is hand-written prose; the module table is not. Every module, its
+/// profiles and every gap name come from the service-module registry
+/// (ADR-0029 item 6), so a module that exists but is missing from the docs is
+/// impossible by construction, and a doc that promises a module the build does
+/// not ship is impossible too.
+pub const MODULES_MARKER: &str = "<!-- modules:generated -->";
+
+/// The generated limits appendix: every module and every gap name, from the
+/// registry.
+#[must_use]
+pub fn generated_limits() -> String {
+    acos_services::module::ModuleRegistry::standard().limits_markdown()
+}
+
+/// Render the guide, replacing [`MODULES_MARKER`] with the generated module
+/// table.
+#[must_use]
+pub fn render_guide(text: &str) -> String {
+    text.replace(MODULES_MARKER, &generated_limits())
+}
+
+/// The whole guide, trimmed, with the generated module table spliced in.
 #[must_use]
 pub fn full_guide() -> String {
-    AGENT_GUIDE.trim().to_string()
+    render_guide(AGENT_GUIDE.trim())
 }
 
 /// The skeleton `acos_help` returns with **no topic**: the guide's own front
@@ -362,7 +386,8 @@ fn section(topic: &str) -> Option<String> {
     let end = format!("<!-- /topic:{topic} -->");
     match (AGENT_GUIDE.find(&start), AGENT_GUIDE.find(&end)) {
         (Some(from), Some(to)) if to > from => {
-            Some(AGENT_GUIDE[from + start.len()..to].trim().to_string())
+            let raw = AGENT_GUIDE[from + start.len()..to].trim();
+            Some(render_guide(raw).trim().to_string())
         }
         _ => None,
     }

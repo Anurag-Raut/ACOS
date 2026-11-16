@@ -37,6 +37,12 @@ pub mod codes {
     /// sees a remote exception, and the peer records this code, so an overflow is
     /// an observable outcome and never a silent drop.
     pub const ART_RESOURCE_LIMIT: &str = "ART_RESOURCE_LIMIT";
+    /// A service module the request needs is not attached to the session
+    /// (ADR-0029 tombstone: never a silent null, never a fake success).
+    pub const SERVICE_MODULE_UNAVAILABLE: &str = "UNSUPPORTED_ANDROID_API";
+    /// A service-module operation was refused (bad profile, unknown control op,
+    /// live attach of an `at-launch` module).
+    pub const SERVICE_MODULE_REJECTED: &str = "SERVICE_MODULE_REJECTED";
 }
 
 /// Errors returned by [`crate::ServiceHost`] and the service state machines.
@@ -61,6 +67,35 @@ pub enum ServiceError {
         code: u32,
         /// Best-effort method name (`code N` when not decodable).
         method: String,
+    },
+    /// An interface this call needs belongs to a service module that is **not
+    /// attached** to the session (ADR-0029 item 3).
+    ///
+    /// This is the tombstone answer: the `ServiceManager` name resolves to a
+    /// binder that always reports this error, so the app (and the agent) see a
+    /// structured gap naming the module and the exact attach call instead of a
+    /// silent `null` that looks like a working phone, or a fake success.
+    #[error(
+        "{service:?} is provided by service module {module:?}, which is not attached — attach it: {attach}"
+    )]
+    ModuleUnavailable {
+        /// `ServiceManager` name that was asked for (`wifi`, `vibrator_manager`).
+        service: String,
+        /// AIDL interface descriptor the caller transacted on.
+        interface: String,
+        /// Module id that owns the name.
+        module: &'static str,
+        /// The call that attaches it.
+        attach: String,
+    },
+    /// A module refused an operation (unknown control op, unsupported profile,
+    /// live attach of an `at-launch` module, unmet requirement).
+    #[error("service module {module}: {detail}")]
+    ModuleRejected {
+        /// Module id.
+        module: &'static str,
+        /// What was refused and, where possible, the allowed alternative.
+        detail: String,
     },
     /// The interface exists but is deliberately implemented elsewhere.
     #[error("interface {interface}::{method} is owned by {owner}")]
@@ -142,6 +177,8 @@ impl ServiceError {
             Self::UnsupportedAndroidApi { .. } | Self::NotOwned { .. } => {
                 codes::UNSUPPORTED_ANDROID_API
             }
+            Self::ModuleUnavailable { .. } => codes::SERVICE_MODULE_UNAVAILABLE,
+            Self::ModuleRejected { .. } => codes::SERVICE_MODULE_REJECTED,
             Self::UnknownBinder { .. } => codes::SERVICE_UNKNOWN_BINDER,
             Self::UnknownService { .. } => codes::SERVICE_UNKNOWN_NAME,
             Self::BadRequest { .. } | Self::BadReply { .. } => codes::SERVICE_BAD_REQUEST,
@@ -168,7 +205,9 @@ impl ServiceError {
         match self {
             Self::UnsupportedAndroidApi { .. }
             | Self::NotOwned { .. }
+            | Self::ModuleUnavailable { .. }
             | Self::UnsupportedParcelable { .. } => EX_UNSUPPORTED_OPERATION,
+            Self::ModuleRejected { .. } => EX_ILLEGAL_ARGUMENT,
             Self::UnknownBinder { .. } | Self::UnknownService { .. } => EX_ILLEGAL_ARGUMENT,
             Self::BadRequest { .. } | Self::BadReply { .. } => EX_ILLEGAL_ARGUMENT,
             Self::ResourceLimit { .. } => EX_UNSUPPORTED_OPERATION,

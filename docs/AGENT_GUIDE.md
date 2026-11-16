@@ -612,4 +612,6 @@ Two session-specific hints worth memorising:
   directory. Relative paths resolve against the server's working directory,
   never against the APK's directory.
 
+<!-- modules:generated -->
+
 <!-- /topic:limits -->

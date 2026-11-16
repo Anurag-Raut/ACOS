@@ -567,3 +567,63 @@ fn meta_tools_report_fidelity_not_applicable() {
         Some("native-runtime")
     );
 }
+
+/// ADR-0029 item 6: `acos_capabilities` and the guide's limits section are
+/// generated from the service-module registry, and the two cannot disagree.
+///
+/// Before the module framework there was no registry at all: the limits section
+/// was hand-written prose (the feedback log's root cause D) and nothing tied it
+/// to what the build actually served.
+#[test]
+fn the_limits_section_is_generated_from_the_module_registry() {
+    use acos_mcp::help::MODULES_MARKER;
+    let registry = acos_services::module::ModuleRegistry::standard();
+    let generated = registry.limits_markdown();
+
+    // The guide carries the marker in its limits topic, not a hand-written copy
+    // of the table.
+    assert!(
+        acos_mcp::help::AGENT_GUIDE.contains(acos_mcp::help::MODULES_MARKER),
+        "docs/AGENT_GUIDE.md must carry the module marker in its limits topic"
+    );
+    assert_eq!(acos_mcp::help::generated_limits(), generated);
+
+    let limits = acos_mcp::help::guide(Some("limits"));
+    assert!(
+        !limits.contains(acos_mcp::help::MODULES_MARKER),
+        "the marker must be replaced by the generated table"
+    );
+    // Verbatim: the rendered section *ends* with the registry's own table.
+    assert!(
+        limits.ends_with(generated.trim_end()),
+        "the limits topic must carry the registry's own table verbatim"
+    );
+
+    // Every module the build ships appears, with its profiles.
+    for manifest in registry.manifests() {
+        assert!(
+            limits.contains(&format!("`{}`", manifest.id)),
+            "module {} is missing from the limits topic",
+            manifest.id
+        );
+        for profile in manifest.profiles_with_off() {
+            assert!(
+                limits.contains(&format!("`{profile}`")),
+                "module {} does not document its {profile} profile",
+                manifest.id
+            );
+        }
+    }
+    // Every gap name appears with its decision.
+    for tombstone in acos_services::module::TOMBSTONES {
+        assert!(
+            limits.contains(&format!("`{}`", tombstone.name)),
+            "gap name {} is missing from the limits topic",
+            tombstone.name
+        );
+    }
+
+    // `topic: "all"` renders the same generated table (one guide, one source).
+    let all = acos_mcp::help::full_guide();
+    assert!(all.contains(generated.trim_end()));
+}

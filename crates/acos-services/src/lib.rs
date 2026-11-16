@@ -46,6 +46,7 @@ pub mod atms;
 pub mod clipboard;
 pub mod codec;
 pub mod connectivity; // NET1: IConnectivityManager default network + callbacks
+pub mod core_module; // ADR-0029: today's registrations as the always-attached `core` module
 pub mod compositor_client;
 pub mod cursor;
 pub mod declared;
@@ -62,6 +63,8 @@ pub mod input_channel;
 pub mod keychars; // W16: stock KeyCharacterMap (KCM) -> native parcel
 pub mod manifest_resolve; // W27: MAIN/LAUNCHER resolution incl. <activity-alias>
 pub mod misc;
+pub mod module; // ADR-0029: service modules, profiles, tombstones, conformance kit
+pub mod modules; // ADR-0029: the shipped non-core modules
 pub mod native_libs; // W17: APK x86_64 libs -> per-run nativeLibraryDir
 pub mod parcelable;
 pub mod pms;
@@ -74,6 +77,9 @@ pub mod window_session;
 pub mod wms;
 
 pub use error::{codes, Result, ServiceError};
+pub use module::{
+    Module, ModuleConfig, ModuleManifest, ModuleRegistry, ModuleReport, ModuleSpec, Profile,
+};
 pub use host::{CallResult, PendingDelivery, ServiceHost, ServiceObject, Wiring};
 pub use parcelable::{FieldOp, ParcelableSpec, Verification};
 pub use value::{Bundle, Parcelable, Value};
