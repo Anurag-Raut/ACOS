@@ -536,6 +536,33 @@ impl WmsState {
     pub fn set_in_touch_mode(&mut self, in_touch_mode: bool, display_id: i32) {
         self.wm.set_in_touch_mode(in_touch_mode, display_id);
     }
+
+    /// `IWindowManager.isKeyguardLocked`.
+    ///
+    /// ACOS has no keyguard: nothing ever shows a lock screen (the launcher goes
+    /// straight to the activity, and `WmsState` has no KeyguardController).
+    /// `false` is therefore the true answer for this device, not a default: on a
+    /// phone with no lock screen `KeyguardManager.isKeyguardLocked()` answers
+    /// `false` (`KeyguardManager.java:579-585` reads
+    /// `WindowManagerService.mKeyguardController.isKeyguardShowing()`, which is
+    /// false while no keyguard exists). GATENBOOT: Gaten's accessibility service
+    /// calls `KeyguardManager.isKeyguardLocked()` from `onServiceConnected`, so
+    /// an unsupported error here kills the service process at bind time.
+    #[must_use]
+    pub const fn is_keyguard_locked(&self) -> bool {
+        false
+    }
+
+    /// `IWindowManager.isKeyguardSecure(int userId)`.
+    ///
+    /// As [`Self::is_keyguard_locked`]: no keyguard, so no user has a secure lock
+    /// screen (`KeyguardController.isKeyguardSecure` is false without one). A
+    /// locked SIM card also makes AOSP answer `true`; ACOS has no SIM card state
+    /// (the telephony module is scripted), so nothing can be SIM-locked either.
+    #[must_use]
+    pub const fn is_keyguard_secure(&self) -> bool {
+        false
+    }
 }
 
 /// The lazily-constructed service object for the `window` service.
@@ -573,9 +600,9 @@ impl WmsService {
         Arc::clone(&self.state)
     }
 
-    fn unsupported(method: &MethodInfo) -> crate::error::ServiceError {
+    fn unsupported(interface: &str, method: &MethodInfo) -> crate::error::ServiceError {
         crate::error::ServiceError::UnsupportedAndroidApi {
-            interface: "android.view.IWindowSession".to_string(),
+            interface: interface.to_string(),
             code: method.code,
             method: method.name.clone(),
         }
@@ -594,7 +621,7 @@ impl ServiceObject for WmsService {
         args: &[Value],
     ) -> crate::error::Result<CallResult> {
         if interface != "android.view.IWindowManager" {
-            return Err(Self::unsupported(method));
+            return Err(Self::unsupported(interface, method));
         }
         let mut state = self
             .state
@@ -617,6 +644,12 @@ impl ServiceObject for WmsService {
                 state.set_in_touch_mode(on, display);
                 vec![]
             }
+            // AOSP's keyguard queries: this device has no lock screen, so the
+            // honest answer is "not locked, not secure" (see the `WmsState`
+            // methods' AOSP evidence). Gaten's accessibility service asks this
+            // while connecting, before it adds its overlay window.
+            "isKeyguardLocked" => vec![Value::Bool(state.is_keyguard_locked())],
+            "isKeyguardSecure" => vec![Value::Bool(state.is_keyguard_secure())],
             // `IWindowManager.openSession(IWindowSessionCallback)` answers the
             // host's `IWindowSession` node, so `ViewRootImpl`'s next call
             // (`addToDisplayAsUser`) is routable (W1). A new session record is
@@ -632,7 +665,7 @@ impl ServiceObject for WmsService {
                 vec![Value::Binder(Some(binder))]
             }
             // The parcelable-bearing methods are served by `wms_java`.
-            _ => return Err(Self::unsupported(method)),
+            _ => return Err(Self::unsupported(interface, method)),
         };
         Ok(CallResult {
             reply,

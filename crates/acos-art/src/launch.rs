@@ -7581,6 +7581,21 @@ mod skipped_traversal_tests {
             guest.contains("process-initializer installed"),
             "the guest must log what it installed, so a verdict can cite it"
         );
+        // GATENBOOT: AOSP installs the mainline managers in every app process
+        // from `ActivityThread.main` -> `initializeMainlineModules()`; the guest
+        // builds the ActivityThread itself and never runs `main`, so it must
+        // call the same framework method itself, once, before any app code.
+        // Telephony/Bluetooth are covered by that call, which is why the
+        // manifests no longer declare them (a second call throws).
+        assert!(
+            guest.contains("initializeMainlineModules"),
+            "the guest must run AOSP's per-process mainline bootstrap; without it every \
+             mainline ServiceManager holder is null in every guest process"
+        );
+        assert!(
+            guest.contains("mainline-modules initialized"),
+            "the guest must log that it ran the mainline bootstrap, so a verdict can cite it"
+        );
 
         let launcher = include_str!("launch.rs");
         assert!(

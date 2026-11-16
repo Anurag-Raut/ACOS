@@ -173,18 +173,30 @@ pub struct ControlOp {
 }
 
 /// A framework initializer the **guest process** must run before any app code
-/// (`Application.onCreate`) when the module is attached.
+/// (`Application.onCreate`), for a manager AOSP's own process bootstrap does not
+/// install.
 ///
-/// A mainline module on a real device has its own process that installs the
-/// framework's service manager before an app can use it: the telephony module's
-/// process calls `TelephonyFrameworkInitializer.setTelephonyServiceManager`, the
-/// Bluetooth module's calls `BluetoothFrameworkInitializer.setBluetoothServiceManager`.
-/// ACOS has no such process, so the session runs the same call in the guest,
-/// once, before the app boots — but *only* when the module is attached, because
-/// a manager installed without its module would hand the app a binder nothing
-/// serves. The data lives in the manifest (never in a per-module environment
-/// variable) so a new module declares it the same way every other promise is
-/// declared, and the guest side is one generic reflective installer.
+/// AOSP's per-process bootstrap is `ActivityThread.main` ->
+/// `ActivityThread.initializeMainlineModules()`
+/// (`base/core/java/android/app/ActivityThread.java:8601-8610`; image authority:
+/// `framework/classes.dex` `ActivityThread.main` insn 001c). It installs the
+/// telephony, stats, media platform + media, Bluetooth, NFC and DeviceConfig
+/// managers in **every** app process, before BIND_APPLICATION. The guest
+/// launcher runs that same framework call once per process (GATENBOOT), so those
+/// managers are never a module's job: their setters throw
+/// `IllegalStateException` on a second call, and a module that declared one
+/// would double-register.
+///
+/// This field therefore stays for the case AOSP does not cover — a manager a
+/// mainline module's *own* process installs and no app-process bootstrap call
+/// does. None is known today, so every manifest declares `&[]`; the mechanism is
+/// kept because the alternative (a per-module branch in the launcher) is the
+/// thing ADR-0029 item 1 forbids. When a module does declare one, the session
+/// runs it in the guest once, before the app boots, and *only* while the module
+/// is attached, because a manager installed without its module would hand the
+/// app a binder nothing serves. The data lives in the manifest (never in a
+/// per-module environment variable) and the guest side is one generic reflective
+/// installer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProcessInitializer {
     /// Framework class holding the initializer (`android.telephony.TelephonyFrameworkInitializer`).
@@ -247,7 +259,9 @@ pub struct ModuleManifest {
     /// `hasSystemFeature` agrees with the attached set.
     pub features: &'static [&'static str],
     /// Framework initializers the guest process runs before `Application.onCreate`
-    /// (see [`ProcessInitializer`]); empty for a module that needs none.
+    /// and that AOSP's per-process `ActivityThread.initializeMainlineModules()`
+    /// does **not** install (see [`ProcessInitializer`]); empty for a module that
+    /// needs none — which is every module today.
     pub process_initializers: &'static [ProcessInitializer],
     /// Content-provider authorities the module provides.
     pub providers: &'static [&'static str],

@@ -43,8 +43,8 @@ use crate::error::{Result, ServiceError};
 use crate::exception::write_no_exception;
 use crate::host::{CallResult, PendingDelivery, ServiceHost, ServiceObject};
 use crate::module::{
-    AttachMode, Budget, ControlOp, Module, ModuleConfig, ModuleManifest, ModuleReport,
-    ProcessInitializer, Profile, SecurityClass, ServiceProvide,
+    AttachMode, Budget, ControlOp, Module, ModuleConfig, ModuleManifest, ModuleReport, Profile,
+    SecurityClass, ServiceProvide,
 };
 use crate::parcelable;
 use crate::value::{DynamicValue, Parcelable};
@@ -276,17 +276,12 @@ fn manifest_ref() -> &'static ModuleManifest {
         id: MODULE_ID,
         version: "1.0.0",
         summary: "bluetooth: scripted adapter state, name/address, bonded-device list and classic-discovery results (no radio, no BLE/GATT)",
-        // The Bluetooth mainline module's own process installs the framework's
-        // `BluetoothServiceManager`; `BluetoothAdapter.createAdapter` reads it
-        // and logs "BluetoothServiceManager is null" without it
-        // (BluetoothAdapter.java:1096-1114), so no adapter ever reaches the
-        // module's binder. Same at-launch install as telephony.
-        process_initializers: &[ProcessInitializer {
-            class: "android.bluetooth.BluetoothFrameworkInitializer",
-            method: "setBluetoothServiceManager",
-            manager: "android.os.BluetoothServiceManager",
-            evidence: "packages/modules/Bluetooth framework/java/android/bluetooth/BluetoothFrameworkInitializer.java: `setBluetoothServiceManager` throws IllegalStateException on a second call and `getBluetoothServiceManager` returns null until it runs; BluetoothAdapter.createAdapter (BluetoothAdapter.java:1096-1114) returns a null adapter when it is null",
-        }],
+        // AOSP installs `BluetoothServiceManager` in *every* app process:
+        // `ActivityThread.main` -> `initializeMainlineModules()`; the guest
+        // bootstrap runs that call once per process (GATENBOOT). Declaring it
+        // here would double-register (the setter throws) and the manager is
+        // already the framework's own, so this module declares no initializer.
+        process_initializers: &[],
         features: &["android.hardware.bluetooth"],
         services: &[
             ServiceProvide {
