@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use acos_aidl::MethodInfo;
 use acos_parcel::ParcelFd;
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, PendingDelivery, ServiceObject};
 use crate::value::{Bundle, Parcelable, RawFdValue, Value};
 
@@ -21,24 +21,315 @@ use crate::value::{Bundle, Parcelable, RawFdValue, Value};
 // accessibility
 // ---------------------------------------------------------------------------
 
-/// `IAccessibilityManager` state (disabled, matching the reference).
+/// One recorded `IAccessibilityManager.sendAccessibilityEvent` call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct A11yEvent {
+    /// `AccessibilityEvent.getEventType()` (`TYPE_VIEW_CLICKED` = 1, ...).
+    pub event_type: i32,
+    /// `AccessibilityEvent.getEventTime()` (0 when the event was not decoded).
+    pub event_time: i64,
+}
+
+/// One registered `IAccessibilityInteractionConnection`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct A11yConnection {
+    /// `IWindow` binder the app registered the connection for.
+    pub window: u64,
+    /// The `IAccessibilityInteractionConnection` binder.
+    pub connection: u64,
+    /// Package reported by `ViewRootImpl`.
+    pub package: String,
+}
+
+/// `IAccessibilityManager` state.
+///
+/// ADR-0029's `accessibility` module owns the enabled/disabled state that the
+/// stock service answered as a constant. The state is shared with the module
+/// (which writes the secure settings at attach) and with the settings provider
+/// (`Settings.Secure.getInt` must read exactly what the module wrote).
 #[derive(Debug, Default)]
 pub struct A11yState {
     /// Registered client binders.
     pub clients: Vec<u64>,
     /// Next client id (the reference returns 1).
     pub next_client_id: i64,
+    /// The `Settings.Secure` table the module writes; `None` in a bare host
+    /// built without the settings provider (the tests construct that shape).
+    pub settings: Option<Arc<Mutex<crate::provider::SettingsState>>>,
+    /// `Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES` entries, in enable
+    /// order (`pkg/.Class` as stored on the device).
+    pub enabled_services: Vec<String>,
+    /// `Settings.Secure.ACCESSIBILITY_ENABLED`.
+    pub enabled: bool,
+    /// The most recent events (bounded, newest last).
+    pub events: Vec<A11yEvent>,
+    /// Every interaction connection the app registered.
+    pub connections: Vec<A11yConnection>,
+    /// Set when a call arrived that this module cannot answer honestly.
+    pub unsupported: Vec<String>,
 }
 
+/// Keep the event log bounded; an always-on UI sends thousands of events.
+const MAX_EVENTS: usize = 256;
+
 impl A11yState {
-    /// New disabled state.
+    /// New disabled state with no settings table.
     #[must_use]
     pub fn new() -> Self {
         Self {
             clients: Vec::new(),
             next_client_id: 1,
+            settings: None,
+            enabled_services: Vec::new(),
+            enabled: false,
+            events: Vec::new(),
+            connections: Vec::new(),
+            unsupported: Vec::new(),
         }
     }
+
+    /// New disabled state that writes through to `settings`.
+    #[must_use]
+    pub fn with_settings(settings: Arc<Mutex<crate::provider::SettingsState>>) -> Self {
+        let state = Self {
+            settings: Some(settings),
+            ..Self::new()
+        };
+        // Take the initial value from the settings table: the launch config is
+        // the equivalent of switching the service on in Settings, and a host
+        // that was seeded with the value must boot in the same state.
+        let (enabled, services) = match &state.settings {
+            Some(settings) => {
+                let settings = settings
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                (
+                    settings
+                        .secure
+                        .get("accessibility_enabled")
+                        .is_some_and(|v| v == "1"),
+                    settings
+                        .secure
+                        .get("enabled_accessibility_services")
+                        .map(|raw| {
+                            raw.split(':')
+                                .filter(|s| !s.is_empty())
+                                .map(str::to_string)
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default(),
+                )
+            }
+            None => (false, Vec::new()),
+        };
+        Self {
+            enabled,
+            enabled_services: services,
+            ..state
+        }
+    }
+
+    /// Turn the service list on (the launch config's `enable: [...]`).
+    ///
+    /// Writes `Settings.Secure.ACCESSIBILITY_ENABLED` and
+    /// `ENABLED_ACCESSIBILITY_SERVICES` the same way
+    /// `AccessibilityManagerService.setAccessibilityEnabled` does, then records
+    /// the list this session believes is enabled.
+    pub fn enable_services(&mut self, services: &[String]) -> Result<()> {
+        for service in services {
+            validate_component(service)?;
+        }
+        let Some(settings) = &self.settings else {
+            if services.is_empty() {
+                self.enabled_services.clear();
+                self.enabled = false;
+                return Ok(());
+            }
+            return Err(ServiceError::ModuleRejected {
+                module: "accessibility",
+                detail: "host has no settings provider, so the secure settings cannot be written"
+                    .into(),
+            });
+        };
+        {
+            let mut settings = settings
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let value = services.join(":");
+            settings
+                .secure
+                .insert("enabled_accessibility_services".into(), value.clone());
+            settings.secure.insert(
+                "accessibility_enabled".into(),
+                if services.is_empty() { "0" } else { "1" }.into(),
+            );
+            settings.changes.push((
+                crate::provider::Namespace::Secure,
+                "enabled_accessibility_services".into(),
+            ));
+            settings.changes.push((
+                crate::provider::Namespace::Secure,
+                "accessibility_enabled".into(),
+            ));
+        }
+        self.enabled_services = services.to_vec();
+        self.enabled = !services.is_empty();
+        Ok(())
+    }
+
+    /// Turn accessibility off and clear the secure settings (detach).
+    pub fn disable(&mut self) {
+        if let Some(settings) = &self.settings {
+            let mut settings = settings
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            settings
+                .secure
+                .insert("enabled_accessibility_services".into(), String::new());
+            settings
+                .secure
+                .insert("accessibility_enabled".into(), "0".into());
+        }
+        self.enabled_services.clear();
+        self.enabled = false;
+        self.connections.clear();
+    }
+
+    /// The `setState` flag word: bit 0 enabled, bit 1 touch exploration.
+    #[must_use]
+    pub fn flags(&self) -> i32 {
+        let mut bits = 0;
+        if self.enabled {
+            bits |= 1;
+        }
+        if self.settings.as_ref().is_some_and(|settings| {
+            settings
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .secure
+                .get("touch_exploration_enabled")
+                .is_some_and(|v| v == "1")
+        }) {
+            bits |= 2;
+        }
+        bits
+    }
+
+    /// Record one event (bounded).
+    pub fn record_event(&mut self, event_type: i32, event_time: i64) {
+        if self.events.len() >= MAX_EVENTS {
+            self.events.remove(0);
+        }
+        self.events.push(A11yEvent {
+            event_type,
+            event_time,
+        });
+    }
+
+    /// Event counts by type, for the report.
+    #[must_use]
+    pub fn event_counts(&self) -> Vec<(i32, u32)> {
+        let mut counts: Vec<(i32, u32)> = Vec::new();
+        for event in &self.events {
+            match counts.iter_mut().find(|(t, _)| *t == event.event_type) {
+                Some((_, count)) => *count += 1,
+                None => counts.push((event.event_type, 1)),
+            }
+        }
+        counts
+    }
+
+    /// The honest state row the module report and `acos_services` carry.
+    #[must_use]
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "enabled": self.enabled,
+            "enabled_services": self.enabled_services,
+            "clients": self.clients.len(),
+            "connections": self.connections.iter().map(|c| serde_json::json!({
+                "window": format!("{:#x}", c.window),
+                "connection": format!("{:#x}", c.connection),
+                "package": c.package,
+            })).collect::<Vec<_>>(),
+            "event_count": self.events.len(),
+            "event_types": self.event_counts().into_iter().map(|(t, n)| {
+                serde_json::json!({"type": t, "count": n})
+            }).collect::<Vec<_>>(),
+            "unsupported": self.unsupported,
+        })
+    }
+}
+
+/// Validate the device's component spelling: `pkg/.Class`, `pkg/full.Class`
+/// or `pkg/Class`. A bare package (no `/`) is refused: it would enable nothing
+/// while looking enabled in the reply.
+pub fn validate_component(value: &str) -> Result<()> {
+    let Some((package, class)) = value.split_once('/') else {
+        return Err(ServiceError::ModuleRejected {
+            module: "accessibility",
+            detail: format!(
+                "enabled service {value:?} must be spelled `package/.Class` or `package/full.Class`"
+            ),
+        });
+    };
+    if package.is_empty() || class.is_empty() {
+        return Err(ServiceError::ModuleRejected {
+            module: "accessibility",
+            detail: format!("enabled service {value:?} has an empty package or class"),
+        });
+    }
+    Ok(())
+}
+
+/// The `AccessibilityServiceInfo` value the framework reads from
+/// `getInstalledAccessibilityServiceList` / `getEnabledAccessibilityServiceList`.
+///
+/// Only the fields an app actually reads for an installed service are filled;
+/// `resolveInfo` is null (the setting UI's label lookup is a later step) and the
+/// scalar defaults are the ones a manifest without
+/// `<accessibility-service>` metadata produces.
+#[must_use]
+pub fn service_info_value(component: &str) -> Option<Value> {
+    let (package, class) = component.split_once('/')?;
+    let class = if let Some(short) = class.strip_prefix('.') {
+        format!("{package}.{short}")
+    } else {
+        class.to_string()
+    };
+    Some(Value::Parcelable(Parcelable::ordered(
+        "android.accessibilityservice.AccessibilityServiceInfo",
+        vec![
+            Value::Int(-1),           // eventTypes: all
+            Value::StringArray(None), // packageNames
+            Value::Int(1),            // feedbackType: FEEDBACK_SPOKEN
+            Value::Long(0),           // notificationTimeout
+            Value::Int(0),            // nonInteractiveUiTimeout
+            Value::Int(0),            // interactiveUiTimeout
+            Value::Int(0),            // flags
+            Value::Int(0),            // crashed
+            Value::Parcelable(Parcelable::ordered(
+                "android.content.ComponentName",
+                vec![
+                    Value::Str(Some(package.to_string())),
+                    Value::Str(Some(class)),
+                ],
+            )),
+            Value::Parcelable(Parcelable::Null), // resolveInfo
+            Value::Str(None),                    // settingsActivityName
+            Value::Int(0),                       // capabilities
+            Value::Int(0),                       // summaryResId
+            Value::Str(None),                    // nonLocalizedSummary
+            Value::Int(0),                       // descriptionResId
+            Value::Int(0),                       // animatedImageRes
+            Value::Int(0),                       // htmlDescriptionRes
+            Value::Str(None),                    // nonLocalizedDescription
+            Value::Bool(false),                  // isAccessibilityTool
+            Value::Str(None),                    // tileServiceName
+            Value::Int(0),                       // introResId
+            Value::Int(0),                       // motionEventSources
+            Value::Int(0),                       // observedMotionEventSources
+        ],
+    )))
 }
 
 /// `IAccessibilityManager` handler.
@@ -52,6 +343,12 @@ impl A11yService {
     pub fn new(state: Arc<Mutex<A11yState>>) -> Self {
         Self { state }
     }
+
+    /// The shared state (the `accessibility` module configures and reports it).
+    #[must_use]
+    pub fn state(&self) -> Arc<Mutex<A11yState>> {
+        Arc::clone(&self.state)
+    }
 }
 
 impl ServiceObject for A11yService {
@@ -63,33 +360,148 @@ impl ServiceObject for A11yService {
                 method: method.name.clone(),
             });
         }
-        let mut state = self.state.lock().unwrap();
-        let reply = match method.name.as_str() {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match method.name.as_str() {
             "addClient" => {
+                // The image's `addClient` returns
+                // `IntPair.of(stateFlags, relevantEventTypes)`: the high 32
+                // bits are the state, the low bits the event mask
+                // (`AccessibilityManager.tryConnectToServiceLocked` feeds
+                // `IntPair.first` into `setStateLocked`). Returning a bare
+                // client id leaves `isEnabled()` false, which is what the
+                // pre-module service did.
+                let state_flags = state.flags();
                 if let Some(client) = args.first().and_then(Value::as_binder) {
                     state.clients.push(client.0);
                 }
                 let id = state.next_client_id;
                 state.next_client_id += 1;
-                vec![Value::Long(id)]
+                let _ = id;
+                Ok(CallResult {
+                    reply: vec![Value::Long(
+                        (i64::from(state_flags) << 32) | i64::from(0x7fff_ffff),
+                    )],
+                    // The state is in the return value on this image; a
+                    // delivery would be a second, unsolicited `setState`.
+                    deliveries: Vec::new(),
+                })
             }
-            "getRecommendedTimeoutMillis" => vec![Value::Long(0)],
-            "getFocusStrokeWidth" => vec![Value::Int(0)],
-            "getFocusColor" => vec![Value::Int(0)],
-            "isAudioDescriptionByDefaultEnabled" => vec![Value::Bool(false)],
-            "removeClient" => vec![Value::Bool(true)],
+            "getInstalledAccessibilityServiceList" | "getEnabledAccessibilityServiceList" => {
+                // `getEnabled...` takes a feedback-type filter; a configured
+                // service declares `FEEDBACK_SPOKEN` and every answer includes
+                // it. `getInstalled...` lists the same set because the launch
+                // config is this session's installed-service source (the PMS
+                // install happens after module attach; see the module docs).
+                let enabled =
+                    matches!(method.name.as_str(), "getInstalledAccessibilityServiceList")
+                        || state.enabled;
+                let items = if enabled {
+                    state
+                        .enabled_services
+                        .iter()
+                        .filter_map(|service| service_info_value(service))
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                Ok(CallResult {
+                    reply: vec![Value::List(Some(items))],
+                    deliveries: Vec::new(),
+                })
+            }
+            "sendAccessibilityEvent" => {
+                // Decoded by the `read_args_override` in `codec.rs`: the event
+                // parcel is not modelled, only its type and time.
+                let event_type = args.first().and_then(Value::as_int).unwrap_or(0);
+                let event_time = args.get(1).and_then(Value::as_long).unwrap_or(0);
+                state.record_event(event_type, event_time);
+                Ok(CallResult {
+                    reply: Vec::new(),
+                    deliveries: Vec::new(),
+                })
+            }
+            "addAccessibilityInteractionConnection" => {
+                let window = args
+                    .first()
+                    .and_then(Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                let connection = args
+                    .get(2)
+                    .and_then(Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                let package = args
+                    .get(3)
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                state.connections.push(A11yConnection {
+                    window,
+                    connection,
+                    package,
+                });
+                // `AccessibilityWindowId`: the image uses the interaction
+                // connection id as the window id (`AccessibilityWindowInfo`).
+                let id = i32::try_from(state.connections.len()).unwrap_or(i32::MAX);
+                Ok(CallResult {
+                    reply: vec![Value::Int(id)],
+                    deliveries: Vec::new(),
+                })
+            }
+            "removeAccessibilityInteractionConnection" => {
+                let window = args.first().and_then(Value::as_binder).map(|b| b.0);
+                if let Some(window) = window {
+                    state.connections.retain(|c| c.window != window);
+                }
+                Ok(CallResult {
+                    reply: Vec::new(),
+                    deliveries: Vec::new(),
+                })
+            }
+            "interrupt" => {
+                state.record_event(-1, 0);
+                Ok(CallResult {
+                    reply: Vec::new(),
+                    deliveries: Vec::new(),
+                })
+            }
+            "getRecommendedTimeoutMillis" => Ok(CallResult {
+                reply: vec![Value::Long(0)],
+                deliveries: Vec::new(),
+            }),
+            "getFocusStrokeWidth" => Ok(CallResult {
+                reply: vec![Value::Int(0)],
+                deliveries: Vec::new(),
+            }),
+            "getFocusColor" => Ok(CallResult {
+                reply: vec![Value::Int(0)],
+                deliveries: Vec::new(),
+            }),
+            "isAudioDescriptionByDefaultEnabled" => Ok(CallResult {
+                reply: vec![Value::Bool(false)],
+                deliveries: Vec::new(),
+            }),
+            "removeClient" => Ok(CallResult {
+                reply: vec![Value::Bool(true)],
+                deliveries: Vec::new(),
+            }),
             _ => {
-                return Err(ServiceError::UnsupportedAndroidApi {
+                state.unsupported.push(method.name.clone());
+                Err(ServiceError::UnsupportedAndroidApi {
                     interface: interface.to_string(),
                     code: method.code,
                     method: method.name.clone(),
                 })
             }
-        };
-        Ok(CallResult {
-            reply,
-            deliveries: Vec::new(),
-        })
+        }
+    }
+
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
     }
 }
 
@@ -143,8 +555,8 @@ impl InputService {
     /// the honest `hasMap = false` payload (no characters), never a guessed
     /// layout.
     fn key_character_map(id: i32) -> Parcelable {
-        let bytes =
-            crate::keychars::stock_parcel(id < 0).unwrap_or_else(|| crate::keychars::null_parcel(id));
+        let bytes = crate::keychars::stock_parcel(id < 0)
+            .unwrap_or_else(|| crate::keychars::null_parcel(id));
         Parcelable::ordered(
             "android.view.KeyCharacterMap",
             vec![Value::ByteArray(Some(bytes))],
@@ -183,29 +595,29 @@ impl InputService {
             "android.view.InputDevice",
             vec![
                 Value::Parcelable(Self::key_character_map(id)), // mKeyCharacterMap
-                Value::Int(id),                                // mId
-                Value::Int(1),                                 // mGeneration
-                Value::Int(0),                                 // mControllerNumber
-                Value::Str(Some(name.into())),                 // mName (writeString)
-                Value::Int(0),                                 // mVendorId
-                Value::Int(0),                                 // mProductId
-                Value::Str(Some(descriptor.into())),           // mDescriptor (writeString)
-                Value::Int(0),                                 // mIsExternal
-                Value::Int(sources),                           // mSources
-                Value::Int(keyboard_type),                     // mKeyboardType
-                Value::Str8(None),                             // mKeyboardLanguageTag
-                Value::Str8(None),                             // mKeyboardLayoutType
-                Value::Int(0),                                 // mHasVibrator
-                Value::Int(0),                                 // mHasMicrophone
-                Value::Int(0),                                 // mHasButtonUnderPad
-                Value::Int(0),                                 // mHasSensor
-                Value::Int(0),                                 // mHasBattery
+                Value::Int(id),                                 // mId
+                Value::Int(1),                                  // mGeneration
+                Value::Int(0),                                  // mControllerNumber
+                Value::Str(Some(name.into())),                  // mName (writeString)
+                Value::Int(0),                                  // mVendorId
+                Value::Int(0),                                  // mProductId
+                Value::Str(Some(descriptor.into())),            // mDescriptor (writeString)
+                Value::Int(0),                                  // mIsExternal
+                Value::Int(sources),                            // mSources
+                Value::Int(keyboard_type),                      // mKeyboardType
+                Value::Str8(None),                              // mKeyboardLanguageTag
+                Value::Str8(None),                              // mKeyboardLayoutType
+                Value::Int(0),                                  // mHasVibrator
+                Value::Int(0),                                  // mHasMicrophone
+                Value::Int(0),                                  // mHasButtonUnderPad
+                Value::Int(0),                                  // mHasSensor
+                Value::Int(0),                                  // mHasBattery
                 Value::Parcelable(Parcelable::ordered(
                     "android.hardware.input.HostUsiVersion",
                     vec![Value::Int(-1), Value::Int(-1)],
-                )),                                            // mHostUsiVersion
-                Value::Int(-1),                                // mAssociatedDisplayId
-                Value::Int(0),                                 // numRanges
+                )), // mHostUsiVersion
+                Value::Int(-1),                                 // mAssociatedDisplayId
+                Value::Int(0),                                  // numRanges
             ],
         )
     }
@@ -306,7 +718,12 @@ impl TextServicesService {
 }
 
 impl ServiceObject for TextServicesService {
-    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &MethodInfo,
+        _args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "com.android.internal.textservice.ITextServicesManager" {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: interface.to_string(),
@@ -542,7 +959,11 @@ impl ServiceObject for GraphicsStatsService {
         let reply = match method.name.as_str() {
             "requestBufferForProcess" => {
                 let process = args.first().and_then(Value::as_str).unwrap_or_default();
-                self.state.lock().unwrap().requests.push(process.to_string());
+                self.state
+                    .lock()
+                    .unwrap()
+                    .requests
+                    .push(process.to_string());
                 let fd = ParcelFd::memfd("acos-gfxstats").ok();
                 vec![Value::TypedObject(Parcelable::ordered(
                     "android.os.ParcelFileDescriptor",
@@ -609,7 +1030,11 @@ impl ServiceObject for NetService {
             "setUidCleartextNetworkPolicy" => {
                 let uid = args.first().and_then(Value::as_int).unwrap_or(0);
                 let policy = args.get(1).and_then(Value::as_int).unwrap_or(0);
-                self.state.lock().unwrap().cleartext_policies.push((uid, policy));
+                self.state
+                    .lock()
+                    .unwrap()
+                    .cleartext_policies
+                    .push((uid, policy));
                 Vec::new()
             }
             "isBandwidthControlEnabled" => vec![Value::Bool(false)],
@@ -658,7 +1083,12 @@ impl GameService {
 }
 
 impl ServiceObject for GameService {
-    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &MethodInfo,
+        _args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "android.app.IGameManagerService" {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: interface.to_string(),
@@ -715,7 +1145,12 @@ impl VirtualDeviceService {
 }
 
 impl ServiceObject for VirtualDeviceService {
-    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &MethodInfo,
+        _args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "android.companion.virtual.IVirtualDeviceManager" {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: interface.to_string(),
@@ -839,7 +1274,11 @@ impl ServiceObject for VoiceService {
         }
         let reply = match method.name.as_str() {
             "notifyActivityEventChanged" => {
-                let token = args.first().and_then(Value::as_binder).map(|b| b.0).unwrap_or(0);
+                let token = args
+                    .first()
+                    .and_then(Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
                 let event = args.get(1).and_then(Value::as_int).unwrap_or(0);
                 self.state.lock().unwrap().events.push((token, event));
                 Vec::new()
@@ -1113,7 +1552,10 @@ mod tests {
         crate::parcelable::write_payload(&mut parcel, &device).expect("write InputDevice");
         let bytes = parcel.marshall();
         assert_eq!(bytes.len() % 4, 0);
-        let mut p = Reader { bytes: &bytes, pos: 0 };
+        let mut p = Reader {
+            bytes: &bytes,
+            pos: 0,
+        };
 
         // mKeyCharacterMap: FieldOp::Raw -> nativeReadFromParcel payload.
         assert_eq!(p.i32(), -1, "KCM deviceId is the virtual keyboard");
@@ -1151,14 +1593,25 @@ mod tests {
         assert_eq!(p.i32(), 2, "mKeyboardType = ALPHABETIC");
         assert_eq!(p.i32(), -1, "mKeyboardLanguageTag null");
         assert_eq!(p.i32(), -1, "mKeyboardLayoutType null");
-        for field in ["vibrator", "microphone", "buttonUnderPad", "sensor", "battery"] {
+        for field in [
+            "vibrator",
+            "microphone",
+            "buttonUnderPad",
+            "sensor",
+            "battery",
+        ] {
             assert_eq!(p.i32(), 0, "mHas{field}");
         }
         assert_eq!(p.i32(), -1, "HostUsiVersion major");
         assert_eq!(p.i32(), -1, "HostUsiVersion minor");
         assert_eq!(p.i32(), -1, "mAssociatedDisplayId");
         assert_eq!(p.i32(), 0, "numRanges");
-        assert!(p.pos == bytes.len(), "consumed {} of {}", p.pos, bytes.len());
+        assert!(
+            p.pos == bytes.len(),
+            "consumed {} of {}",
+            p.pos,
+            bytes.len()
+        );
     }
 
     /// The native KCM payload has no wire length; the codec's `Raw` reader must
@@ -1194,7 +1647,9 @@ mod tests {
             let utf16: Vec<u16> = (0..len as usize)
                 .map(|i| {
                     u16::from_le_bytes(
-                        self.bytes[start + i * 2..start + i * 2 + 2].try_into().unwrap(),
+                        self.bytes[start + i * 2..start + i * 2 + 2]
+                            .try_into()
+                            .unwrap(),
                     )
                 })
                 .collect();

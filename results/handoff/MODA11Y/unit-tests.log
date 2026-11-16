@@ -1,0 +1,25 @@
+   Compiling acos-services v0.2.2 (/home/Qui/.t3/worktrees/acos/t3-a49853c9-9d0d7b09472b53d2/crates/acos-services)
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-services` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized] target(s) in 2.52s
+     Running unittests src/lib.rs (.cache/moda11y-target/debug/deps/acos_services-ae7f38ef1ea4ef88)
+
+running 8 tests
+test modules::accessibility::tests::settings_default_is_off ... ok
+test modules::accessibility::tests::an_empty_enable_attaches_with_accessibility_off ... ok
+test modules::accessibility::tests::a_bare_package_is_refused ... ok
+test modules::accessibility::tests::detach_clears_the_settings_and_the_state ... ok
+test modules::accessibility::tests::attaching_writes_the_two_secure_settings ... ok
+test modules::accessibility::tests::adding_a_client_returns_the_state_in_the_high_word ... ok
+test modules::accessibility::tests::the_list_transactions_are_answered_not_unsupported ... ok
+test modules::accessibility::tests::an_event_reaches_the_record_through_the_transaction_path ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 94 filtered out; finished in 0.00s
+

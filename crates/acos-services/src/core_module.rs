@@ -59,6 +59,11 @@ impl CoreModule {
                 crate::registry::NAMES
                     .iter()
                     .filter(|(name, _)| !crate::registry::AUX_BACKED_NAMES.contains(name))
+                    // ADR-0029: `accessibility` is owned by the `accessibility`
+                    // module, which configures the same shared state. `core`
+                    // still installs the disabled fallback service so a session
+                    // that does not attach the module keeps the boot behaviour.
+                    .filter(|(name, _)| *name != "accessibility")
                     .map(|(name, descriptor)| ServiceProvide {
                         name,
                         descriptor,

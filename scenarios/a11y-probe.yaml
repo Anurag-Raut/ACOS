@@ -1,0 +1,45 @@
+# ADR-0029 accessibility module: the launch config enables the probe's own
+# service (the equivalent of the user switching it on in Settings), the app's
+# real AccessibilityManager reports enabled + the installed/enabled lists, and
+# a real button click is sent through IAccessibilityManager.sendAccessibilityEvent.
+version: 1
+name: a11y-probe
+description: accessibility module enables a service; isEnabled/list/event path on ART
+app: fixtures/build/apps/a11y-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+services:
+  - id: accessibility
+    profile: real
+    config:
+      enable:
+        - dev.acos.fixtures.a11yprobe/.A11yProbeService
+steps:
+  - launch:
+      activity: dev.acos.fixtures.a11yprobe/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "a11y enabled=true installed=1 enabled_list=1"}
+  - tap:
+      selector: {id: send}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "sent=1"}
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        - "event_sent"

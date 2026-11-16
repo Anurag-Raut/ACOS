@@ -217,6 +217,11 @@ for app in counter todo-list multi-activity form-validation settle-lab thread-he
     build_apk "$app"
 done
 
+# a11y-probe is the ADR-0029 accessibility-module fixture: reads the real
+# AccessibilityManager state (enabled + installed/enabled lists) and sends a
+# real event through IAccessibilityManager.sendAccessibilityEvent.
+build_apk a11y-probe
+
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).
