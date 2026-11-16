@@ -342,11 +342,33 @@ impl Peer {
                 self.reverse_replies += 1;
                 if frame.flags & TF_STATUS_CODE != 0 {
                     self.reverse_failed += 1;
+                    // The guest's driver answers a transaction to a node it can
+                    // no longer address with a `TF_STATUS_CODE` reply instead of
+                    // dropping it (the kernel's `BR_DEAD_REPLY`). That is a
+                    // *lost callback*, not a log line: record it in the
+                    // evidence log so a verdict can see that the framework
+                    // never reached `onTransact`, and name the status.
+                    let status = frame
+                        .data
+                        .get(..4)
+                        .and_then(|b| b.try_into().ok())
+                        .map(i32::from_le_bytes);
                     eprintln!(
                         "acos-binder-peer: reverse delivery seq={} was NOT dispatched \
-                         (TF_STATUS_CODE reply: libbinder never reached onTransact)",
-                        frame.seq
+                         (TF_STATUS_CODE reply: libbinder never reached onTransact, \
+                         status={:?})",
+                        frame.seq, status
                     );
+                    let record = serde_json::json!({
+                        "kind": "REVERSE_DELIVERY_DEAD_OBJECT",
+                        "seq": frame.seq,
+                        // -32 = DEAD_OBJECT: the node is gone, so the host must
+                        // report the callback as undeliverable (the same answer a
+                        // real binder gives a transaction to a dead node).
+                        "status": status,
+                    })
+                    .to_string();
+                    self.log_line(&record);
                 } else if !frame.data.is_empty() {
                     // A non-empty reply body is the binder exception parcel
                     // (status word != 0): print its printable run so a guest

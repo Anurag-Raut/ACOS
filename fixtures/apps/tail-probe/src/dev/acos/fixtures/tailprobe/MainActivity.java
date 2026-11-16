@@ -137,6 +137,22 @@ public final class MainActivity extends Activity {
         listen.setOnClickListener(view -> registerCallStateListener());
         appendToRoot(listen);
 
+        Button stop = new Button(this);
+        stop.setText("Stop listening");
+        stop.setTag("stop-listening");
+        stop.setOnClickListener(view -> {
+            PhoneStateListener listener = callListener;
+            if (listener == null) {
+                log("CALL unregister skipped (no listener)");
+                return;
+            }
+            // A real app flow: `listen(..., LISTEN_NONE)` unregisters the
+            // callback. The registry must stop delivering to it.
+            telephony.listen(listener, PhoneStateListener.LISTEN_NONE);
+            log("CALL unregistered");
+        });
+        appendToRoot(stop);
+
         Button send = new Button(this);
         send.setText("Send SMS");
         send.setTag("send-sms");

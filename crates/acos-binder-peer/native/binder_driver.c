@@ -45,7 +45,15 @@
 //   4. substrate  : property table + framework natives (copied from E2D because
 //                   bionic symbol lookup is namespace-scoped: one .so).
 #define _GNU_SOURCE
+// The driver is built for bionic inside the guest. The driver *core* (transport,
+// object table, BC_*/BR_* handling) is plain Linux C and is also built for the
+// host by `native/driver_test.c` (`ACOS_DRIVER_HOST_TEST`), which is how the
+// delivery rules are tested without ART. The JNI bridge and the AndroidRuntime
+// bootstrap are guest-only substrate and are compiled out of that host build;
+// bionic's `jni.h`/`ucontext`/`ioctl` declarations differ from glibc's.
+#ifndef ACOS_DRIVER_HOST_TEST
 #include <jni.h>
+#endif
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -93,11 +101,47 @@ static int g_dbg = -1;
             dprintf(2, "\n");                        \
         }                                            \
     } while (0)
+// Warnings are the driver's only diagnostic channel, and the guest's stderr is
+// not always captured (a live session keeps a bounded tail, and the tail is
+// dominated by whatever the app printed last). Mirror every warning into logd
+// so a dropped callback always leaves a record an agent can read back with
+// `acos_logs`; resolve the liblog symbol lazily so a host build of this file
+// (the driver unit test) works without liblog.
+static void warn_log(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    dprintf(2, "E3G[warn]: ");
+    vdprintf(2, fmt, ap);
+    dprintf(2, "\n");
+    va_end(ap);
+
+    typedef int (*log_print_fn)(int, const char*, const char*, ...);
+    static log_print_fn log_print;
+    if (log_print == NULL) {
+        // Not cached when missing: liblog may only be loaded later (the driver
+        // is LD_PRELOADed before libbinder pulls in liblog), and libbinder's
+        // dependencies are not in the global symbol group, so `RTLD_DEFAULT`
+        // alone would never find it.
+        static void* log_so;
+        if (log_so == NULL) {
+            log_so = dlopen("liblog.so", RTLD_NOW | RTLD_NOLOAD);
+            if (log_so == NULL) log_so = dlopen("liblog.so", RTLD_NOW | RTLD_GLOBAL);
+        }
+        if (log_so != NULL)
+            log_print = (log_print_fn)dlsym(log_so, "__android_log_print");
+        if (log_print == NULL)
+            log_print = (log_print_fn)dlsym(RTLD_DEFAULT, "__android_log_print");
+    }
+    if (log_print != NULL) {
+        va_start(ap, fmt);
+        log_print(5 /* ANDROID_LOG_WARN */, "acos-binder", fmt, ap);
+        va_end(ap);
+    }
+}
+
 #define WARN(...)                        \
     do {                                 \
-        dprintf(2, "E3G[warn]: ");       \
-        dprintf(2, __VA_ARGS__);         \
-        dprintf(2, "\n");                \
+        warn_log(__VA_ARGS__);           \
     } while (0)
 
 // Crash reporter (defined next to the JNI bridge, below): the sandbox has no
@@ -526,7 +570,8 @@ static void* mm_alloc(size_t n) {
     // 1 MB and a delivered transaction is a few hundred bytes, so never reusing
     // a block is both safe and cheap (E3G's race came from premature reuse).
     if (g_bump + n > g.map_size) {
-        WARN("transaction buffer exhausted (%zu/%zu used)", g_bump, g.map_size);
+        WARN("transaction buffer exhausted (%zu/%zu used, %d blocks) - this transaction is "
+             "dropped", g_bump, g.map_size, g_nblk);
         return NULL;
     }
     size_t off = g_bump;
@@ -876,9 +921,21 @@ static int deliver_incoming(void) {
     if (!g.in_head) pthread_cond_broadcast(&g.cv_txn);
     struct node* n = node_by_wire((uint32_t)q->target);
     if (n == NULL) {
+        // The node is gone (never exported, or released by the remote side).
+        // The kernel answers such a transaction with BR_DEAD_REPLY on the
+        // sender; a userspace driver must do the same, because a silently
+        // dropped callback is indistinguishable from a callback the app
+        // handled. `Binder.getCallingPid()`-style status replies are the
+        // host's contract here: F_REP + TF_STATUS_CODE + DEAD_OBJECT (-32).
         pthread_mutex_unlock(&g.mu);
-        WARN("incoming transaction for unknown node %llu",
-             (unsigned long long)q->target);
+        WARN("incoming transaction seq=%u for unknown node %llu: answering DEAD_OBJECT",
+             q->seq, (unsigned long long)q->target);
+        // -32 = DEAD_OBJECT (binder/Status.h); the value libbinder reports to
+        // the caller when the target's process/node is gone.
+        uint32_t status = (uint32_t)-32;
+        int err = send_frame(F_REP, q->seq, (uint32_t)status, TF_STATUS_CODE, 0, &status,
+                             sizeof(status), NULL, 0, NULL, 0);
+        if (err != 0) WARN("could not answer seq=%u with DEAD_OBJECT", q->seq);
         pthread_mutex_lock(&g.mu);
         free(q->data);
         free(q);
@@ -1416,7 +1473,13 @@ int __open_2(const char* path, int flags) {
     return real(path, flags);
 }
 
-int ioctl(int fd, int request, ...) {
+#ifdef ACOS_DRIVER_HOST_TEST
+typedef unsigned long ioctl_request_t;   // glibc: unsigned long
+#else
+typedef int ioctl_request_t;             // bionic: int
+#endif
+
+int ioctl(int fd, ioctl_request_t request, ...) {
     va_list ap;
     va_start(ap, request);
     void* arg = va_arg(ap, void*);
@@ -1452,6 +1515,7 @@ int ioctl(int fd, int request, ...) {
 }
 
 // --------------------------------------------------------- (4) JNI bridge
+#ifndef ACOS_DRIVER_HOST_TEST
 static void mangle_android_register(const char* plain, char* out, size_t n) {
     snprintf(out, n, "_ZN7android%zu%sEP7_JNIEnv", strlen(plain), plain);
 }
@@ -1505,6 +1569,8 @@ JNIEXPORT jint JNICALL Java_dev_acos_e3g_Nat_register(JNIEnv* env, jclass klass,
     (*env)->ReleaseStringUTFChars(env, name, plain);
     return rc;
 }
+
+#endif  // !ACOS_DRIVER_HOST_TEST (JNI bridge)
 
 // ------------------------------------------------------- fault diagnostics
 // `E3G_CRASH=1` installs a SIGSEGV/SIGBUS/SIGABRT handler that prints the fault
@@ -1562,7 +1628,7 @@ static void crash_print_map(uintptr_t a) {
 
 static void crash_handler(int sig, siginfo_t* si, void* ucv) {
     uintptr_t ip = 0, sp = 0, bp = 0, rdi = 0, rsi = 0;
-#if defined(__x86_64__)
+#if defined(__x86_64__) && !defined(ACOS_DRIVER_HOST_TEST)
     if (ucv != NULL) {
         // bionic x86_64: mcontext_t is { gregset_t gregs; ... } indexed by REG_*.
         struct ucontext* uc = (struct ucontext*)ucv;
@@ -1632,6 +1698,7 @@ static void* __attribute__((noinline)) crash_install(void) {
     return NULL;
 }
 
+#ifndef ACOS_DRIVER_HOST_TEST
 // Attach a native thread to the VM and turn it into a binder looper:
 // IPCThreadState::self()->joinThreadPool(true).  This is the thread that
 // receives peer-initiated BR_TRANSACTIONs (reverse calls into a Java Binder).
@@ -1959,3 +2026,5 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_crashTest(JNIEnv* env, jclass klass
     *unmapped = 0xacc0deadUL;
     return 0;
 }
+
+#endif  // !ACOS_DRIVER_HOST_TEST (JNI bridge / AndroidRuntime bootstrap)
