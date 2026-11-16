@@ -105,6 +105,9 @@ fn run_scenario_for_apk(tag: &str, yaml: &str, app: &str) -> (PathBuf, Value) {
         .env("ACOS_NO_DAEMON", "1")
         .env("ACOS_ART_BIN", art_bin())
         .env("ACOS_RUNTIME_DIR", dir.join("runtime"))
+        // The suite may export ACOS_SESSION_SOCKET; it wins over the runtime
+        // dir, so this test must not inherit it.
+        .env_remove("ACOS_SESSION_SOCKET")
         .env("ACOS_CACHE_DIR", dir.join("cache"))
         .args([
             "verify",

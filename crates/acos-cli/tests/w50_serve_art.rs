@@ -94,6 +94,9 @@ impl Daemon {
             .arg("--idle-timeout")
             .arg("120")
             .env("ACOS_RUNTIME_DIR", dir.join("runtime"))
+            // The suite may export ACOS_SESSION_SOCKET; it wins over the runtime
+            // dir, so this test must not inherit it.
+            .env_remove("ACOS_SESSION_SOCKET")
             .env("ACOS_CACHE_DIR", dir.join("cache"))
             .args(extra)
             .stdout(Stdio::null())
@@ -262,6 +265,9 @@ fn serve_flag_rejects_an_unknown_engine() {
         .arg(sockets.socket("s.sock"))
         .args(["--engine", "native"])
         .env("ACOS_RUNTIME_DIR", dir.join("runtime"))
+        // The suite may export ACOS_SESSION_SOCKET; it wins over the runtime
+        // dir, so this test must not inherit it.
+        .env_remove("ACOS_SESSION_SOCKET")
         .output()
         .expect("run acos serve");
     assert!(!output.status.success(), "an unknown engine must refuse to start");

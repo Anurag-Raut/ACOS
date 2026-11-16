@@ -43,6 +43,7 @@ dependencies = [
  "acos-render",
  "acos-sandbox",
  "acos-services",
+ "acos-test-support",
  "fdeflate",
  "image",
  "libc",
