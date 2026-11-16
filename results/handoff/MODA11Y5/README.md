@@ -293,3 +293,5 @@ cargo test -p acos-services -p acos-wm --no-fail-fast   64 binaries, all green
 * Every ART/gate command went through `tools/art-runtime/run-exclusive.sh`
   (`--mem 8G`; builds `--mem 12G/14G`). Disk 77→78 % throughout, well below
   the 86 % stop line.
+
+> **Correction (orchestrator, after MODA11Y6):** the "WM lock held across a guest round trip" diagnosis in §4.2/§5 above was disproven. The guest answered `getWindows` from its own `AccessibilityCache`, which AOSP only clears on `TYPE_WINDOWS_CHANGED`, an event ACOS did not deliver; no second `getWindows` transaction ever reached the host. See `results/handoff/MODA11Y6/README.md` §1. Also, `FLAG_RETRIEVE_INTERACTIVE_WINDOWS` is `0x40`, not `0x2`.
