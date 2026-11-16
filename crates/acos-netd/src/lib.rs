@@ -14,7 +14,7 @@ pub mod plan;
 pub mod proto;
 pub mod supervisor;
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::os::unix::net::UnixListener;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -80,18 +80,23 @@ pub fn serve() -> std::io::Result<()> {
                 Ok(c) => c,
                 Err(_) => return,
             };
-            let mut reader = BufReader::new(reader);
+            let mut pending: Vec<u8> = Vec::new();
             let mut writer = conn;
             loop {
-                let mut line = String::new();
-                match reader.read_line(&mut line) {
-                    Ok(0) | Err(_) => return,
-                    Ok(_) => {}
-                }
+                // `recvmsg`, not `read`: the guest's stdio descriptors ride
+                // along as `SCM_RIGHTS` ancillary data on the same message as
+                // the `spawn` line (a plain read would silently drop them).
+                let (line, fds) = match read_request(&reader, &mut pending) {
+                    Ok(Some(v)) => v,
+                    _ => return,
+                };
                 let reply = match proto::decode_request(&line) {
                     Err(e) => Reply::fail(e.code, e.message),
-                    Ok(req) => handle(&relay, req),
+                    Ok(req) => handle_with_fds(&relay, req, &fds),
                 };
+                for fd in fds {
+                    unsafe { libc::close(fd) };
+                }
                 if writer.write_all(proto::encode(&reply).as_bytes()).is_err() {
                     return;
                 }
@@ -101,7 +106,66 @@ pub fn serve() -> std::io::Result<()> {
     Ok(())
 }
 
+/// One newline-terminated request line and the descriptors that arrived with
+/// it. `None` means the peer closed (or a read failed).
+fn read_request(
+    sock: &std::os::unix::net::UnixStream,
+    pending: &mut Vec<u8>,
+) -> std::io::Result<Option<(String, Vec<std::os::unix::io::RawFd>)>> {
+    use std::os::unix::io::AsRawFd;
+    let mut fds: Vec<std::os::unix::io::RawFd> = Vec::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        if let Some(at) = pending.iter().position(|b| *b == b'\n') {
+            let line = String::from_utf8_lossy(&pending[..at]).to_string();
+            pending.drain(..=at);
+            return Ok(Some((line, fds)));
+        }
+        let mut iov = libc::iovec {
+            iov_base: buf.as_mut_ptr().cast(),
+            iov_len: buf.len(),
+        };
+        // Room for the stdio triple plus slack.
+        let mut cmsg_space = [0u8; 256];
+        let mut msg: libc::msghdr = unsafe { std::mem::zeroed() };
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = cmsg_space.as_mut_ptr().cast();
+        msg.msg_controllen = cmsg_space.len();
+        let n = unsafe { libc::recvmsg(sock.as_raw_fd(), &mut msg, 0) };
+        if n <= 0 {
+            return Ok(None);
+        }
+        pending.extend_from_slice(&buf[..n as usize]);
+        unsafe {
+            let mut cmsg = libc::CMSG_FIRSTHDR(&msg);
+            while !cmsg.is_null() {
+                if (*cmsg).cmsg_level == libc::SOL_SOCKET
+                    && (*cmsg).cmsg_type == libc::SCM_RIGHTS
+                {
+                    let count = ((*cmsg).cmsg_len as usize
+                        - libc::CMSG_LEN(0) as usize)
+                        / std::mem::size_of::<std::os::unix::io::RawFd>();
+                    let data = libc::CMSG_DATA(cmsg).cast::<std::os::unix::io::RawFd>();
+                    for i in 0..count {
+                        fds.push(*data.add(i));
+                    }
+                }
+                cmsg = libc::CMSG_NXTHDR(&msg, cmsg);
+            }
+        }
+    }
+}
+
 fn handle(relay: &Arc<Mutex<supervisor::Relay>>, req: Request) -> Reply {
+    handle_with_fds(relay, req, &[])
+}
+
+fn handle_with_fds(
+    relay: &Arc<Mutex<supervisor::Relay>>,
+    req: Request,
+    fds: &[std::os::unix::io::RawFd],
+) -> Reply {
     let mut guard = match relay.lock() {
         Ok(g) => g,
         Err(_) => return Reply::fail(ErrorCode::SupervisorGone, "supervisor state poisoned"),
@@ -113,7 +177,7 @@ fn handle(relay: &Arc<Mutex<supervisor::Relay>>, req: Request) -> Reply {
             Ok(()) => Reply::status(r.status()),
             Err(e) => Reply::fail(e.code, e.message),
         },
-        Request::Spawn { .. } => match r.spawn(&req) {
+        Request::Spawn { .. } => match r.spawn_with_fds(&req, fds) {
             Ok((s, ms)) => Reply {
                 ok: true,
                 error: None,
@@ -121,6 +185,10 @@ fn handle(relay: &Arc<Mutex<supervisor::Relay>>, req: Request) -> Reply {
                 session: Some(s),
                 attach_ms: Some(ms),
             },
+            Err(e) => Reply::fail(e.code, e.message),
+        },
+        Request::Session { session } => match r.session(session) {
+            Ok(s) => Reply { session: Some(s), ..Reply::ok() },
             Err(e) => Reply::fail(e.code, e.message),
         },
         Request::Attach { session, netns_pid, index } => match r.attach(session, *netns_pid, *index)

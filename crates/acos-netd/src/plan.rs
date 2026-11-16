@@ -115,6 +115,12 @@ pub fn session(idx: u32) -> Option<SessionNet> {
 /// * `-t none -u none -T none -U none` — every port-mirroring direction is off.
 ///   `-T/-U none` alone is not enough: `-t auto`/`-u auto` still scan the host's
 ///   loopback listeners in `--netns` mode (measured leak, SPIKE-NET attempt 3).
+///
+/// `-t` and `-T` are **opposite directions** (pasta `--help`): `-t SPEC` forwards
+/// *to the namespace* (host → guest), `-T SPEC` forwards *to the init namespace*
+/// (guest → host). An opt-in host port (Metro's 8081) is guest → host, so it is
+/// `-T <port>`; `-t <port>` would open a host listener the guest never reaches
+/// (measured in NET2: guest → gateway:18081 refused with `-t 18081`).
 /// * `--no-splice` — no layer-4 splice between guest and host sockets.
 /// * `--map-host-loopback none --no-map-gw` — the gateway address is not
 ///   rewritten to the host.
@@ -141,29 +147,26 @@ pub fn relay_pasta_args(ports: &[u16]) -> Vec<String> {
         "--no-map-gw".into(),
         "--map-host-loopback".into(),
         "none".into(),
-        "-T".into(),
-        "none".into(),
-        "-U".into(),
-        "none".into(),
         "--no-splice".into(),
         "-D".into(),
         ip(connectivity::NET_DNS_SERVER),
     ];
+    // Every direction starts closed; named host ports are added as `-T`, i.e.
+    // guest -> host (see the doc comment above).
+    args.push("-t".into());
+    args.push("none".into());
+    args.push("-u".into());
+    args.push("none".into());
+    for p in ports {
+        args.push("-T".into());
+        args.push(p.to_string());
+    }
     if ports.is_empty() {
-        args.push("-t".into());
-        args.push("none".into());
-        args.push("-u".into());
-        args.push("none".into());
-    } else {
-        // A named host port only: `-t <port>` forwards guest connections to the
-        // host's loopback listener of the same port, and nothing else.
-        for p in ports {
-            args.push("-t".into());
-            args.push(p.to_string());
-        }
-        args.push("-u".into());
+        args.push("-T".into());
         args.push("none".into());
     }
+    args.push("-U".into());
+    args.push("none".into());
     args.push("-f".into());
     args.push("-q".into());
     args.push("--".into());

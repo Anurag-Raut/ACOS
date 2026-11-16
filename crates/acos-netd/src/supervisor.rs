@@ -57,6 +57,13 @@ struct Session {
     /// Every rule this supervisor installed for the session, exactly as it was
     /// written, so detach can remove precisely those and nothing else.
     rules: Vec<String>,
+    /// The launcher process this session is bound to (see `Request::Spawn`'s
+    /// `owner_pid`). Its death detaches the session.
+    owner_pid: Option<i32>,
+    /// The guest's exit status, once reaped (`None` while it runs or when it
+    /// died from a signal — then `signal` carries the signal).
+    exit: Option<i32>,
+    signal: Option<i32>,
 }
 
 impl Session {
@@ -73,6 +80,8 @@ impl Session {
             loss_pct: self.loss_pct,
             host_ports: self.host_ports.iter().copied().collect(),
             alive: self.pid.is_some_and(pid_alive),
+            exit: self.exit,
+            signal: self.signal,
         }
     }
 }
@@ -348,10 +357,29 @@ impl Relay {
                         &self.state_dir,
                         &format!("session {} exited: {status}", s.name),
                     );
+                    s.exit = status.code();
+                    s.signal = if status.code().is_none() {
+                        std::os::unix::process::ExitStatusExt::signal(&status)
+                    } else {
+                        None
+                    };
                     s.child = None;
                     s.pid = None;
                 }
             }
+        }
+        // A session lives as long as its owner (the launcher's stdio proxy) and
+        // the relay: a `SIGKILL`ed launcher must not leak a guest, a veth or a
+        // rule, and no bookkeeping in the launcher can be trusted to run.
+        let orphans: Vec<String> = self
+            .sessions
+            .values()
+            .filter(|s| s.owner_pid.is_some_and(|p| !pid_alive(p)))
+            .map(|s| s.name.clone())
+            .collect();
+        for name in orphans {
+            self.log(&format!("session {name}: its owner died, detaching"));
+            let _ = self.detach(&name);
         }
         if self.fabric_pid.is_some_and(|p| !pid_alive(p)) {
             self.fabric_pid = None;
@@ -429,11 +457,40 @@ impl Relay {
     /// Create a session netns and run `argv` inside it, joined to the relay by a
     /// veth pair.
     pub fn spawn(&mut self, req: &Request) -> Result<(SessionInfo, f64), ProtoError> {
-        let Request::Spawn { session, argv, index, stdout, stderr, ready_timeout_s, die_with_relay } =
-            req
+        self.spawn_with_fds(req, &[])
+    }
+
+    /// [`Self::spawn`] with the guest's stdio descriptors (stdin, stdout,
+    /// stderr) passed over the control socket.
+    pub fn spawn_with_fds(
+        &mut self,
+        req: &Request,
+        fds: &[std::os::unix::io::RawFd],
+    ) -> Result<(SessionInfo, f64), ProtoError> {
+        let Request::Spawn {
+            session,
+            argv,
+            index,
+            stdout,
+            stderr,
+            ready_timeout_s,
+            die_with_relay,
+            fds: fd_count,
+            owner_pid,
+        } = req
         else {
             unreachable!("spawn() is called with Request::Spawn");
         };
+        if fd_count.unwrap_or(0) as usize != fds.len() {
+            return Err(ProtoError {
+                code: ErrorCode::Invalid,
+                message: format!(
+                    "spawn declares {} fds but {} arrived",
+                    fd_count.unwrap_or(0),
+                    fds.len()
+                ),
+            });
+        }
         self.require_up()?;
         if argv.is_empty() {
             return Err(ProtoError { code: ErrorCode::Invalid, message: "empty argv".into() });
@@ -443,15 +500,42 @@ impl Relay {
         let _ = std::fs::remove_file(&ready);
         let shim = plan::session_shim(&net, &ready.to_string_lossy());
         let t0 = Instant::now();
-        let stdout_f = open_stdio(stdout.as_deref(), &self.state_dir, "session-out.log")?;
-        let stderr_f = open_stdio(stderr.as_deref(), &self.state_dir, "session-err.log")?;
+        // Stdio: the caller's own descriptors when they were passed (identical
+        // capture), else per-session log files.
+        let stdio = |i: usize, default: &str, path: Option<&str>| -> Result<Stdio, ProtoError> {
+            match fds.get(i) {
+                Some(fd) if *fd >= 0 => {
+                    // `dup` first: `Stdio::from_raw_fd` takes ownership, and the
+                    // received descriptor must outlive the request handler.
+                    let dup = unsafe { libc::fcntl(*fd, libc::F_DUPFD_CLOEXEC, 3) };
+                    if dup < 0 {
+                        return Err(io_err(std::io::Error::last_os_error()));
+                    }
+                    Ok(Stdio::from(unsafe {
+                        <std::fs::File as std::os::unix::io::FromRawFd>::from_raw_fd(dup)
+                    }))
+                }
+                // No descriptor (or the caller's stdio slot was closed): the
+                // session's own log file, so a missing fd is never a lost log.
+                _ => open_stdio(path, &self.state_dir, default),
+            }
+        };
+        // stdin: the caller's descriptor when it was passed, else `/dev/null`
+        // (a log file opened write-only would give the guest `EBADF`, not EOF).
+        let stdin_f = if fds.first().is_some_and(|fd| *fd >= 0) {
+            stdio(0, "session-in.log", None)?
+        } else {
+            Stdio::null()
+        };
+        let stdout_f = stdio(1, "session-out.log", stdout.as_deref())?;
+        let stderr_f = stdio(2, "session-err.log", stderr.as_deref())?;
         // `unshare -n` in *this* user namespace: the netns is owned by the same
         // user namespace as the relay netns, which is what lets the fabric move
         // the session's veth end into it.
         let mut cmd = Command::new("unshare");
         cmd.arg("-n").arg("--").arg("/bin/sh").arg("-c").arg(&shim).arg("acos-session");
         cmd.args(argv);
-        cmd.stdin(Stdio::null()).stdout(stdout_f).stderr(stderr_f);
+        cmd.stdin(stdin_f).stdout(stdout_f).stderr(stderr_f);
         if die_with_relay.unwrap_or(true) {
             // The guest dies with the supervisor (`PR_SET_PDEATHSIG` is not
             // available through `unshare`, so the supervisor kills it explicitly
@@ -473,6 +557,9 @@ impl Relay {
             loss_pct: 0,
             host_ports: BTreeSet::new(),
             rules: Vec::new(),
+            owner_pid: owner_pid.map(|p| i32::try_from(p).unwrap_or(-1)),
+            exit: None,
+            signal: None,
         };
         // The attach itself: create the pair in the relay netns and move the
         // session end into the new netns.
@@ -544,6 +631,9 @@ impl Relay {
             loss_pct: 0,
             host_ports: BTreeSet::new(),
             rules: gates,
+            owner_pid: None,
+            exit: None,
+            signal: None,
         };
         let info = s.info();
         self.sessions.insert(session.to_string(), s);
@@ -606,6 +696,34 @@ impl Relay {
         let info = s.info();
         self.log(&format!("session {} detached", s.name));
         Ok(info)
+    }
+
+    /// One session's state (the light query a waiting launcher polls).
+    ///
+    /// Reaps this session's guest first: a query about a guest that has already
+    /// ended must answer with its exit status, not with "not alive, status
+    /// unknown" (the supervision tick is only every `TICK`, so a fast guest can
+    /// otherwise be observed as statusless).
+    pub fn session(&mut self, name: &str) -> Result<SessionInfo, ProtoError> {
+        let Some(s) = self.sessions.get_mut(name) else {
+            return Err(ProtoError {
+                code: ErrorCode::NoSuchSession,
+                message: format!("no session {name}"),
+            });
+        };
+        if let Some(child) = s.child.as_mut() {
+            if let Ok(Some(status)) = child.try_wait() {
+                s.exit = status.code();
+                s.signal = if status.code().is_none() {
+                    std::os::unix::process::ExitStatusExt::signal(&status)
+                } else {
+                    None
+                };
+                s.child = None;
+                s.pid = None;
+            }
+        }
+        Ok(s.info())
     }
 
     fn session_mut(&mut self, name: &str) -> Result<&mut Session, ProtoError> {

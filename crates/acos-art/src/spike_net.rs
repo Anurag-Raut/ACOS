@@ -202,6 +202,73 @@ exit $rc
     )
 }
 
+// ---------------------------------------------------------------------------
+// NET2: the relay arm (design B2) — `acos_netd::client`
+// ---------------------------------------------------------------------------
+
+/// The transport arm, from `ACOS_NET_ARM` (`relay` | `base`).
+///
+/// A typo is a structured error at the call site, never a silent switch of the
+/// transport (the same rule `acos_netd::client::Arm::from_env` keeps).
+pub fn arm() -> Result<acos_netd::client::Arm, String> {
+    acos_netd::client::Arm::from_env().map_err(|e| e.message)
+}
+
+/// The relay session name for an ART session id (`None` = a one-shot run).
+///
+/// One naming rule for both sides: `acos-art` spawns the session under this name
+/// and the session API addresses the same session by its own id, so the controls
+/// (`offline`, `delay`, `hostport`) name the session the guest actually runs in.
+#[must_use]
+pub fn net_session_name(session_id: Option<&str>) -> String {
+    match session_id {
+        Some(id) if !id.is_empty() => format!("acos-{id}"),
+        _ => format!("art-{}", std::process::id()),
+    }
+}
+
+/// The `acos-netd` binary: `ACOS_NETD_BIN`, else the one built next to this
+/// executable (a workspace build puts both in the same target directory), else
+/// `PATH`.
+#[must_use]
+pub fn netd_bin() -> std::ffi::OsString {
+    if let Some(p) = std::env::var_os("ACOS_NETD_BIN") {
+        return p;
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let cand = dir.join("acos-netd");
+            if cand.is_file() {
+                return cand.into_os_string();
+            }
+        }
+    }
+    std::ffi::OsString::from("acos-netd")
+}
+
+/// The relay arm's command: `acos-netd run <name> -- <bwrap argv...>`.
+///
+/// Why a proxy process instead of asking the supervisor from here: the guest is
+/// spawned by the relay supervisor (it owns the user namespace that holds the
+/// session netns, see `acos_netd::supervisor`), so the launcher's `Child` is this
+/// proxy. The proxy passes its own stdin/stdout/stderr over the control socket
+/// (`SCM_RIGHTS`), so the guest's logcat and interaction pipes are the launcher's
+/// own — capture is identical to spawning the guest directly — and it exits with
+/// the guest's status. Killing it, or the launcher dying, tears the session down
+/// (the supervisor detaches a session whose owner is gone).
+#[must_use]
+pub fn relay_wrap(bwrap_argv: &[std::ffi::OsString], session_id: Option<&str>) -> Command {
+    let mut c = Command::new(netd_bin());
+    c.arg("run");
+    c.arg(net_session_name(session_id));
+    c.arg("--");
+    // `bwrap` is the program: `bwrap_argv` is its *argument list*, so the
+    // program name has to be prepended here (exactly as `wrap` does).
+    c.arg("bwrap");
+    c.args(bwrap_argv);
+    c
+}
+
 /// Wrap a bwrap argv in `pasta` + the boundary shim.
 ///
 /// The returned command runs `/bin/sh -c '<boundary script>' sh bwrap ...`

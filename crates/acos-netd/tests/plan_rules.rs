@@ -53,10 +53,12 @@ fn relay_pasta_args_keep_the_host_boundary_and_match_link_properties() {
 #[test]
 fn relay_pasta_args_forward_only_the_named_host_port() {
     let args = plan::relay_pasta_args(&[8081]);
-    assert!(args.windows(2).any(|w| w[0] == "-t" && w[1] == "8081"), "{args:?}");
+    // `-T` is guest -> host (pasta `--help`): the direction an opt-in host
+    // listener (Metro) must be reached in. `-t` is the opposite direction.
+    assert!(args.windows(2).any(|w| w[0] == "-T" && w[1] == "8081"), "{args:?}");
     assert!(
-        !args.windows(2).any(|w| w[0] == "-t" && w[1] == "none"),
-        "a named port must not also be `-t none`: {args:?}"
+        !args.windows(2).any(|w| w[0] == "-T" && w[1] == "none"),
+        "a named port must not also be `-T none`: {args:?}"
     );
     assert_eq!(pair(&args, "-u"), "none", "UDP is never forwarded");
 }

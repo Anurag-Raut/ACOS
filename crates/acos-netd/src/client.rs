@@ -235,6 +235,100 @@ impl Client {
         self.spawn_with(session, argv, stdout, stderr, None)
     }
 
+    /// [`Self::spawn_with`] with the guest's own stdio descriptors
+    /// (stdin, stdout, stderr) passed to the supervisor as `SCM_RIGHTS`.
+    ///
+    /// This is what the ART launcher uses: it keeps its pipes and hands them
+    /// over, so the guest writes logcat and the interaction protocol into the
+    /// same ends the launcher reads. `owner_pid` binds the session's lifetime to
+    /// the calling launcher (its death detaches the session).
+    pub fn spawn_stdio(
+        &mut self,
+        session: &str,
+        argv: Vec<String>,
+        fds: &[std::os::unix::io::RawFd],
+        owner_pid: Option<u32>,
+    ) -> Result<(SessionInfo, f64), ProtoError> {
+        let req = Request::Spawn {
+            session: session.to_string(),
+            argv,
+            index: None,
+            stdout: None,
+            stderr: None,
+            ready_timeout_s: None,
+            die_with_relay: None,
+            fds: Some(u32::try_from(fds.len()).unwrap_or(0)),
+            owner_pid,
+        };
+        let mut r = self.request_with_fds(&req, fds)?;
+        let ms = r.attach_ms.unwrap_or(0.0);
+        match r.session.take() {
+            Some(s) => Ok((s, ms)),
+            None => Err(no_payload(&r)),
+        }
+    }
+
+    /// One session's state, without the relay-wide probes `status()` runs.
+    pub fn session(&mut self, name: &str) -> Result<SessionInfo, ProtoError> {
+        let mut r = self.request(&Request::Session { session: name.to_string() })?;
+        r.session.take().ok_or_else(|| no_payload(&r))
+    }
+
+    /// Block until `name`'s guest has ended, then return its exit code
+    /// (`128 + signal` when it died from a signal). `None` when the session is
+    /// gone without a recorded status (the relay's fail-closed teardown).
+    pub fn wait_exit(&mut self, name: &str, poll: Duration) -> Result<Option<i32>, ProtoError> {
+        // The guest's pid can be gone a moment before the supervisor has reaped
+        // it (`Session` reaps on query, the background tick every 500 ms), so a
+        // dead-but-statusless session is polled for a short grace window instead
+        // of being reported as "exited, status unknown".
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            let s = self.session(name)?;
+            if !s.alive && (s.exit.is_some() || s.signal.is_some()) {
+                return Ok(match s.signal {
+                    Some(sig) => Some(128 + sig),
+                    None => s.exit,
+                });
+            }
+            if !s.alive && Instant::now() > deadline {
+                return Ok(None);
+            }
+            std::thread::sleep(poll);
+        }
+    }
+
+    /// Send one request with descriptors attached (`SCM_RIGHTS`).
+    pub fn request_with_fds(
+        &mut self,
+        req: &Request,
+        fds: &[std::os::unix::io::RawFd],
+    ) -> Result<Reply, ProtoError> {
+        use std::os::unix::io::AsRawFd;
+        let line = proto::encode(req);
+        if !fds.is_empty() {
+            send_with_fds(&self.stream, line.as_bytes(), fds)?;
+        } else {
+            self.stream.write_all(line.as_bytes()).map_err(io)?;
+        }
+        self.stream.flush().map_err(io)?;
+        let _ = AsRawFd::as_raw_fd(&self.stream);
+        let mut reply_line = String::new();
+        BufReader::new(self.stream.try_clone().map_err(io)?)
+            .read_line(&mut reply_line)
+            .map_err(io)?;
+        if reply_line.trim().is_empty() {
+            return Err(ProtoError {
+                code: ErrorCode::SupervisorGone,
+                message: "the supervisor closed the connection".into(),
+            });
+        }
+        serde_json::from_str(reply_line.trim_end()).map_err(|e| ProtoError {
+            code: ErrorCode::Io,
+            message: format!("reply: {e} ({reply_line:?})"),
+        })
+    }
+
     /// [`Self::spawn`] with an explicit address-block index.
     pub fn spawn_with(
         &mut self,
@@ -252,6 +346,8 @@ impl Client {
             stderr,
             ready_timeout_s: None,
             die_with_relay: None,
+            fds: None,
+            owner_pid: None,
         })?;
         let ms = r.attach_ms.unwrap_or(0.0);
         match r.session.take() {
@@ -321,6 +417,39 @@ impl Client {
         let mut r = self.request(&Request::Shutdown)?;
         if r.ok { Ok(()) } else { Err(payload_error(&r)) }
     }
+}
+
+/// `sendmsg` one line with descriptors as `SCM_RIGHTS` ancillary data.
+fn send_with_fds(
+    sock: &UnixStream,
+    line: &[u8],
+    fds: &[std::os::unix::io::RawFd],
+) -> Result<(), ProtoError> {
+    use std::os::unix::io::AsRawFd;
+    let mut iov = libc::iovec { iov_base: line.as_ptr() as *mut _, iov_len: line.len() };
+    let space = unsafe { libc::CMSG_SPACE((fds.len() * std::mem::size_of::<i32>()) as u32) } as usize;
+    let mut control = vec![0u8; space];
+    let mut msg: libc::msghdr = unsafe { std::mem::zeroed() };
+    msg.msg_iov = &mut iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = control.as_mut_ptr().cast();
+    msg.msg_controllen = space;
+    unsafe {
+        let cmsg = libc::CMSG_FIRSTHDR(&msg);
+        (*cmsg).cmsg_level = libc::SOL_SOCKET;
+        (*cmsg).cmsg_type = libc::SCM_RIGHTS;
+        (*cmsg).cmsg_len =
+            libc::CMSG_LEN((fds.len() * std::mem::size_of::<i32>()) as u32) as usize;
+        let data = libc::CMSG_DATA(cmsg).cast::<std::os::unix::io::RawFd>();
+        for (i, fd) in fds.iter().enumerate() {
+            *data.add(i) = *fd;
+        }
+    }
+    let n = unsafe { libc::sendmsg(sock.as_raw_fd(), &msg, libc::MSG_NOSIGNAL) };
+    if n < 0 {
+        return Err(io(std::io::Error::last_os_error()));
+    }
+    Ok(())
 }
 
 fn io(e: std::io::Error) -> ProtoError {

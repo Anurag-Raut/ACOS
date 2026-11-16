@@ -65,7 +65,25 @@ pub enum Request {
         /// `SIGKILL` the guest when the supervisor exits (default true).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         die_with_relay: Option<bool>,
+        /// How many file descriptors ride along with this request as
+        /// `SCM_RIGHTS` ancillary data (0 or 3: stdin, stdout, stderr).
+        ///
+        /// The guest's stdio is the **caller's** stdio: the launcher keeps its
+        /// pipes (logcat capture, the interaction protocol) and the guest
+        /// inherits the same ends, so capture is identical to spawning the
+        /// guest itself. Without fds the supervisor falls back to the per-session
+        /// log files named (or defaulted) by `stdout`/`stderr`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fds: Option<u32>,
+        /// The process whose lifetime this session is bound to (the launcher's
+        /// stdio proxy). When it dies the supervisor detaches the session, so a
+        /// `SIGKILL`ed launcher cannot leak a guest, a veth or a rule.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        owner_pid: Option<u32>,
     },
+    /// One session's state, without the relay-wide probes `Status` runs (this is
+    /// what a waiting launcher polls).
+    Session { session: String },
     /// Attach an existing netns (the proof harness and tests use this; the
     /// product path is [`Request::Spawn`]).
     Attach {
@@ -128,6 +146,15 @@ pub struct SessionInfo {
     pub loss_pct: u32,
     pub host_ports: Vec<u16>,
     pub alive: bool,
+    /// The guest's exit status once it has ended (`None` while it runs or while
+    /// nobody has reaped it yet). bwrap's `128+signal` remap is the raw wait
+    /// status's business; this is `ExitStatus::code()` when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit: Option<i32>,
+    /// The guest was killed by this signal (set when `exit` is absent and the
+    /// guest died from a signal).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal: Option<i32>,
 }
 
 /// Relay state.

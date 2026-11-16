@@ -1246,6 +1246,9 @@ pub struct Sandbox<'a> {
     /// Host-side build step: keep today's fully-writable `<data>` (regenerating
     /// `linkerconfig`, `derive_classpath`, `dex2oat` boot image). Never an APK run.
     staging: bool,
+    /// NET2: the session id this run belongs to. The relay arm names its net
+    /// session after it, so the live session API addresses the same session.
+    net_session: Option<String>,
 }
 
 /// The guest's `ANDROID_ROOT`.
@@ -1300,7 +1303,15 @@ impl<'a> Sandbox<'a> {
             run_root: None,
             seccomp_guest: false,
             staging: false,
+            net_session: None,
         }
+    }
+
+    /// NET2: name the relay session after the caller's session id, so
+    /// `offline`/`delay`/`hostport` on that id reach the guest's netns.
+    pub fn net_session(&mut self, id: Option<&str>) -> &mut Self {
+        self.net_session = id.map(str::to_string);
+        self
     }
 
     /// Make this run install the guest-side seccomp-bpf filter before ART runs.
@@ -1619,8 +1630,21 @@ impl<'a> Sandbox<'a> {
             eprintln!("bwrap {}", a.iter().map(|x| x.to_string_lossy().to_string()).collect::<Vec<_>>().join(" "));
         }
         if spike_net::enabled() {
-            // SPIKE-NET: run bwrap *inside* the netns pasta configured for it.
-            return Ok(spike_net::wrap(&a));
+            match spike_net::arm() {
+                // SPIKE-NET (base arm): run bwrap *inside* the netns pasta
+                // configured for it.
+                Ok(acos_netd::client::Arm::Base) => return Ok(spike_net::wrap(&a)),
+                // NET2 (relay arm): the guest runs in the session netns the relay
+                // supervisor creates and joins to the shared relay. Host-side
+                // build steps (`staging`) stay out of the relay: they need no
+                // network, and every attach costs a netns + veth.
+                Ok(acos_netd::client::Arm::Relay) => {
+                    if self.active_run_root().is_some() {
+                        return Ok(spike_net::relay_wrap(&a, self.net_session.as_deref()));
+                    }
+                }
+                Err(e) => return Err(Error::Layout(format!("{e}"))),
+            }
         }
         b.args(a);
         Ok(b)

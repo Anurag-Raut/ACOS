@@ -24,7 +24,7 @@ use acos_netd::proto::{ErrorCode, ProtoError, Request};
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match run(&args) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => ExitCode::from(u8::try_from(code).unwrap_or(255)),
         Err(e) => {
             eprintln!(
                 "acos-netd: {}",
@@ -35,17 +35,19 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(args: &[String]) -> Result<(), ProtoError> {
+fn run(args: &[String]) -> Result<i32, ProtoError> {
     let Some(cmd) = args.first().map(String::as_str) else {
         usage();
         return Err(invalid("missing command"));
     };
     let rest = &args[1..];
     match cmd {
-        "serve" => acos_netd::serve().map_err(io),
+        "serve" => acos_netd::serve().map(|()| 0).map_err(io),
         "fabric" => {
             let sock = flag_value(rest, "--socket").ok_or_else(|| invalid("--socket"))?;
-            acos_netd::supervisor::run_fabric(std::path::Path::new(&sock)).map_err(io)
+            acos_netd::supervisor::run_fabric(std::path::Path::new(&sock))
+                .map(|()| 0)
+                .map_err(io)
         }
         "up" => {
             let pasta = flag_value(rest, "--pasta");
@@ -57,50 +59,58 @@ fn run(args: &[String]) -> Result<(), ProtoError> {
                 c.status()?
             };
             println!("{}", pretty(&status)?);
-            Ok(())
+            Ok(0)
         }
         "status" => {
             let mut c = Client::connect()?;
             println!("{}", pretty(&c.status()?)?);
-            Ok(())
+            Ok(0)
         }
-        "spawn" | "run" => {
+        // `run` is the launcher's stdio proxy: the guest inherits this process's
+        // own stdin/stdout/stderr (passed as SCM_RIGHTS), so logcat capture and
+        // the interaction protocol are byte-identical to spawning the guest
+        // directly. It exits with the guest's own status.
+        "run" => {
+            let (name, argv) = name_and_argv(rest)?;
+            // Fail closed: an attached session on a down relay reports the
+            // network unavailable instead of restarting the relay.
+            let mut c = Client::attach_client()?;
+            let fds = stdio_fds();
+            let (s, ms) = c.spawn_stdio(&name, argv, &fds, Some(std::process::id()))?;
+            eprintln!(
+                "acos-netd: session {name} attached idx={} addr={} gw={} pid={:?} attach_ms={ms:.1}",
+                s.index, s.address, s.gateway, s.pid
+            );
+            let code = c.wait_exit(&name, Duration::from_millis(20))?;
+            // The proxy owns the session's end: veth, rules, guest.
+            let _ = c.detach(&name);
+            Ok(code.unwrap_or(136))
+        }
+        "spawn" => {
             let (name, argv) = name_and_argv(rest)?;
             let stdout = flag_value(rest, "--stdout");
             let stderr = flag_value(rest, "--stderr");
-            // Fail closed: an attached session on a down relay reports the
-            // network unavailable instead of restarting the host's relay.
             let mut c = Client::attach_client()?;
             let (s, ms) = c.spawn_with(&name, argv, stdout, stderr, int_value(rest, "--index"))?;
             eprintln!(
-                "acos-netd: session {name} attached idx={} addr={}/{}{:?} gw={} pid={:?} attach_ms={ms:.1}",
-                s.index, s.address, "", "", s.gateway, s.pid
+                "acos-netd: session {name} attached idx={} addr={} gw={} pid={:?} attach_ms={ms:.1}",
+                s.index, s.address, s.gateway, s.pid
             );
-            if cmd == "run" {
-                loop {
-                    let st = c.status()?;
-                    match st.sessions.iter().find(|x| x.name == name) {
-                        Some(x) if x.alive => std::thread::sleep(Duration::from_millis(50)),
-                        _ => break,
-                    }
-                }
-                let _ = c.detach(&name);
-            }
             println!("{}", pretty(&c.status()?)?);
-            Ok(())
+            Ok(0)
         }
         "detach" => {
             let name = positional(rest, 0)?;
             let mut c = Client::connect()?;
             c.detach(&name)?;
             println!("{}", pretty(&c.status()?)?);
-            Ok(())
+            Ok(0)
         }
         "offline" | "online" => {
             let name = positional(rest, 0)?;
             let mut c = Client::connect()?;
             println!("{}", pretty(&c.offline(&name, cmd == "offline")?)?);
-            Ok(())
+            Ok(0)
         }
         "delay" => {
             let name = positional(rest, 0)?;
@@ -109,13 +119,13 @@ fn run(args: &[String]) -> Result<(), ProtoError> {
             let loss = int_value(rest, "--loss").unwrap_or(0);
             let mut c = Client::connect()?;
             println!("{}", pretty(&c.delay(&name, ms, jitter, loss)?)?);
-            Ok(())
+            Ok(0)
         }
         "clear" => {
             let name = positional(rest, 0)?;
             let mut c = Client::connect()?;
             println!("{}", pretty(&c.delay(&name, 0, 0, 0)?)?);
-            Ok(())
+            Ok(0)
         }
         "hostport" => {
             let on = match positional(rest, 0)?.as_str() {
@@ -127,24 +137,47 @@ fn run(args: &[String]) -> Result<(), ProtoError> {
             let session = flag_value(rest, "--session");
             let mut c = Client::ensure_up()?;
             println!("{}", pretty(&c.host_port(port, on, session.as_deref())?)?);
-            Ok(())
+            Ok(0)
         }
         "kill-pasta" => {
             let hold = rest.iter().any(|a| a == "--hold");
             let mut c = Client::connect()?;
             c.kill_pasta(hold)?;
             eprintln!("acos-netd: pasta killed; the relay is down until the supervisor restarts it");
-            Ok(())
+            Ok(0)
         }
         "shutdown" => {
             let mut c = Client::connect()?;
-            c.shutdown()
+            c.shutdown().map(|()| 0)
         }
         other => {
             usage();
             Err(invalid(&format!("unknown command {other}")))
         }
     }
+}
+
+/// This process's stdin/stdout/stderr, when they are real descriptors. The
+/// launcher sets them to pipes (or a log file); passing them on is what makes
+/// the guest's stdio identical to a directly spawned guest. A closed slot is
+/// sent as `-1` and the supervisor's per-session log file takes its place.
+fn stdio_fds() -> Vec<std::os::unix::io::RawFd> {
+    use std::os::unix::io::AsRawFd;
+    // `stdin`/`stdout`/`stderr` are distinct types, so the three calls stay
+    // explicit; `-1` marks a closed slot (the supervisor's log file replaces it).
+    let mut fds = Vec::new();
+    for fd in [
+        std::io::stdin().as_raw_fd(),
+        std::io::stdout().as_raw_fd(),
+        std::io::stderr().as_raw_fd(),
+    ] {
+        if unsafe { libc::fcntl(fd, libc::F_GETFD) } >= 0 {
+            fds.push(fd);
+        } else {
+            fds.push(-1);
+        }
+    }
+    fds
 }
 
 fn pretty<T: serde::Serialize>(v: &T) -> Result<String, ProtoError> {

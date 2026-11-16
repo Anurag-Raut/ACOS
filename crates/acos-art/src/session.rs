@@ -462,6 +462,9 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
     sb.run_root(run.path());
+    // NET2: the relay session is addressed by this id (`acos-<id>`), which is
+    // what the live session API's net controls name.
+    sb.net_session(Some(&session_id));
     sb.seccomp_guest(true);
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");

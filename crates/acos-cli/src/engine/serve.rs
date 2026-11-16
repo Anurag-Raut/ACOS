@@ -946,6 +946,10 @@ impl ServeEngine {
                 "the ART session engine has no swipe command (tap/key/type_text only)",
             )),
             "acos_action" => action(&mut session, args),
+            // NET2: the session's own network controls (the module wraps this).
+            // Host-side only: the relay supervisor owns the rules, the guest is
+            // never asked and nothing in it participates.
+            "acos_net" => net_ctl(id, args),
             other => {
                 return art_failure(
                     request_id,
@@ -1313,6 +1317,110 @@ fn label_timing(result: &mut Value, session: &ArtSession, tool: &str, started: s
 }
 
 // -- verb implementations --------------------------------------------------- //
+
+/// `acos_net`: the session's network controls, on the live session API.
+///
+/// `action`:
+/// * `status`  — the relay state and this session's row (`up`, `offline`, …)
+/// * `offline` / `online` — drop/restore this session's traffic (its own veth
+///   only: a control on one session must not change another's result)
+/// * `delay` — `ms`, `jitter_ms`, `loss_pct` on this session's veth (`0/0/0`
+///   clears)
+/// * `hostport` — `port` (and `on`, default true): the explicit host-port
+///   opt-in (Metro). The relay forwards the port only when it is named, and only
+///   sessions that opted in may use it.
+///
+/// A relay that is down answers [`ErrorCode::NetworkUnavailable`] (fail closed),
+/// never a silent offline.
+fn net_ctl(session_id: &str, args: &Value) -> Result<Value, BackendError> {
+    use acos_netd::proto::ErrorCode as NetCode;
+    let name = acos_art::spike_net::net_session_name(Some(session_id));
+    let action = args.get("action").and_then(Value::as_str).unwrap_or("status");
+    let to_backend = |e: acos_netd::proto::ProtoError| {
+        let code = match e.code {
+            NetCode::NetworkUnavailable => ErrorCode::NetworkUnavailable,
+            NetCode::NoSuchSession => ErrorCode::SessionNotFound,
+            NetCode::Invalid | NetCode::Unsupported => ErrorCode::InvalidArgument,
+            _ => ErrorCode::Internal,
+        };
+        BackendError::Error {
+            code,
+            detail: format!(
+                "{} (relay session `{name}`)",
+                e.message
+            ),
+        }
+    };
+    let mut c = acos_netd::client::Client::connect().map_err(|e| BackendError::Error {
+        code: ErrorCode::NetworkUnavailable,
+        detail: format!(
+            "the network relay supervisor is not running ({}); start it with `acos net up`",
+            e.message
+        ),
+    })?;
+    let port = || -> Result<u16, BackendError> {
+        args.get("port")
+            .and_then(Value::as_u64)
+            .and_then(|p| u16::try_from(p).ok())
+            .ok_or_else(|| BackendError::Error {
+                code: ErrorCode::InvalidArgument,
+                detail: "`hostport` needs `port` (1..=65535)".into(),
+            })
+    };
+    let num = |k: &str| args.get(k).and_then(Value::as_u64).unwrap_or(0) as u32;
+    let outcome = match action {
+        "status" => {
+            let st = c.status().map_err(to_backend)?;
+            let row = st.sessions.iter().find(|s| s.name == name).cloned();
+            json!({
+                "action": "status",
+                "relay": {
+                    "up": st.up,
+                    "down_reason": st.down_reason,
+                    "pasta_pid": st.pasta_pid,
+                    "pasta_version": st.pasta_version,
+                    "host_ports": st.host_ports,
+                    "sessions": st.sessions.len(),
+                },
+                // `null` when this session has no relay netns (it is not
+                // networked): a session without a row has no network, and the
+                // reply says so instead of implying one.
+                "session": row,
+                "networked": row.is_some(),
+            })
+        }
+        "offline" | "online" => {
+            let s = c.offline(&name, action == "offline").map_err(to_backend)?;
+            json!({"action": action, "session": s})
+        }
+        "delay" => {
+            let s = c
+                .delay(&name, num("ms"), num("jitter_ms"), num("loss_pct"))
+                .map_err(to_backend)?;
+            json!({"action": "delay", "session": s})
+        }
+        "hostport" => {
+            let on = args.get("on").and_then(Value::as_bool).unwrap_or(true);
+            let st = c.host_port(port()?, on, Some(&name)).map_err(to_backend)?;
+            json!({
+                "action": "hostport",
+                "port": port()?,
+                "on": on,
+                "host_ports": st.host_ports,
+                "session": st.sessions.iter().find(|s| s.name == name).cloned(),
+            })
+        }
+        other => {
+            return Err(BackendError::Error {
+                code: ErrorCode::InvalidArgument,
+                detail: format!(
+                    "acos_net: unknown action `{other}` (status|offline|online|delay|hostport)"
+                ),
+            })
+        }
+    };
+    Ok(outcome)
+}
 
 fn launch_reply(
     request_id: &str,

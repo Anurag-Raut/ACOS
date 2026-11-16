@@ -4776,3 +4776,36 @@ nothing in this change is on the tap path).
   Smallest next action: replace `acos_art::spike_net::wrap` with `Request::Spawn`
   (stdio by fd or per-session log files) behind `ACOS_NET_ARM`, re-run `proof.sh` with a
   `net-check` ART session, then hand `ab-driver.sh` to the bench owner.
+
+## E13.19 — NET2: the relay wired into real ART sessions (`ACOS_NET_ARM=relay`) — PASS on the network half, PARTIAL overall
+
+- **What:** behind `ACOS_SPIKE_NET=1` (default off) `ACOS_NET_ARM=relay` now routes
+  the guest through `acos_netd::client`: `acos-netd run <name> -- bwrap …` passes its
+  own stdin/stdout/stderr to the supervisor with `SCM_RIGHTS`, so logcat and the
+  interaction protocol are the launcher's own pipes; `owner_pid` binds the session's
+  lifetime to that proxy. The 4th `dnsproxyd` producer
+  (`zygote_prod::prepare_session`, `<plan>/<tag>/sock`) is served. `acos_net` serve
+  verb: `status`/`offline`/`online`/`delay`/`hostport`. `ErrorCode::NetworkUnavailable`
+  is the fail-closed answer while the relay is down.
+- **Measured (real ART, shared slots, no exclusive run):** `net-check` N=1 →
+  `pass`, 10 steps, `HTTP 200` + `internet=true validated=true iface=wlan0 addrs=1
+  dns=1 dnsList=1.1.1.1 routes=1`. N=5 concurrent → all five sessions on their own
+  address blocks (idx 1..5, 25–34 ms attach), all five logcat files carry
+  `fetch result=HTTP 200` and the validated-`LinkProperties` line; 2/5 completed the
+  full scenario, 3/5 exited 1 *while binding the tree* after the 200 (open, §4.3).
+  Controls on the wired proxy: offline isolation (6 failures on the dropped session,
+  12× 200 on its peer), host-loopback blocked, relay kill → `network-unavailable` →
+  restart → 200, zero leak (`relay_veths: []`, `session_rules: 0`).
+- **Finding:** `pasta -t` is *host → guest*, `-T` is *guest → host* (`--help` of the
+  pinned tag). NET1 used `-t`; NET2 switched to `-T`, and a duplicate `-T none` made
+  `pasta` refuse to start at all. With `-T 18081` the guest is still refused, so the
+  host-port opt-in needs the addressing spec form or the ADR's REDIRECT — the one
+  blocking item for METRO1.
+- **Regression / false pass:** `off` and `base` are unchanged; `acos-netd` unit tests
+  10/10. No bench was run (bench owner). `acos_net` was not driven through a live
+  `acos serve` daemon in this increment.
+- **Conclusion / next:** the network half of the relay is proven on real ART. Smallest
+  next actions: (1) triage the tree-binding failure at N=5, (2) the host-port path,
+  (3) `Status` carrying the supervisor's own binary identity so a rebuild cannot wedge
+  the relay, (4) pass the cgroup scope to `Request::Spawn` so the guest stays bounded.
+  Evidence: `results/handoff/NET2/REPORT.md`, `run/`.

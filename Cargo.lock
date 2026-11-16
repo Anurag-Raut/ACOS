@@ -39,6 +39,7 @@ name = "acos-art"
 version = "0.2.2"
 dependencies = [
  "acos-binder-peer",
+ "acos-netd",
  "acos-render",
  "acos-sandbox",
  "acos-services",
@@ -72,6 +73,7 @@ dependencies = [
  "acos-jni",
  "acos-mcp",
  "acos-native-loader",
+ "acos-netd",
  "acos-protocol",
  "acos-render",
  "acos-runtime",

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# NET1 A/B driver — PREPARED, NOT RUN. The bench owner runs this once the network
-# module is wired into the ART session launcher (NET2/MOD0); until then the relay
-# arm is measured by `proof.sh` (transport level) and there is nothing for the
-# bench to compare, because acos-art does not call `acos_netd` yet.
+# NET1 A/B driver — PREPARED, NOT RUN. Wired since NET2: `acos-art`'s
+# `spike_net::relay_wrap` calls `acos_netd::client` (through the `acos-netd run`
+# stdio proxy), so the `relay` arm is a live arm and the three arms below are
+# three different code paths. Still the bench owner's run (one exclusive A/B per
+# release candidate); a coding turn must not claim its numbers.
 #
 # Arms (same build, same host, interleaved):
 #   off    ACOS_SPIKE_NET unset                      today's default: no network
