@@ -27,6 +27,17 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
+/// Bytes a diagnostic string keeps from each end when the reply has to fit.
+///
+/// The emergency path below bounds the *content* of a reply (one long string, a
+/// repeated block of text) before it ever considers dropping the reply's
+/// *structure*. 2 KiB is roughly a first screen of stack traces plus the marker
+/// that says what was cut.
+const CAP_STRING_BYTES: usize = 2 * 1024;
+
+/// Floor for [`CAP_STRING_BYTES`]: below this a string stops being a diagnosis.
+const CAP_STRING_FLOOR: usize = 256;
+
 /// Hard ceiling for one serialized agent reply, in bytes.
 ///
 /// The previous bounded-reply code in `acos-mcp` already kept one string under
@@ -461,7 +472,29 @@ fn enforce_cap_measured(
             return before - measure(value);
         }
     }
-    // 3. Anything else: keep the envelope and the diagnosis, replace the
+    // 3. Content before structure: a reply that overflows because of *what it
+    //    says* (a launch ladder repeats the same 13 KB blocker on every unproven
+    //    rung; a stack dump sits in `error.message`) must not lose *which rungs
+    //    it reports*. Bound every long string (head + tail + marker) and replace
+    //    a repeated block by a back-reference, halving the budget while the
+    //    reply still does not fit. `reached_stage`, the rung names/statuses and
+    //    the error code an agent acts on survive; only the prose shrinks.
+    //    Keeping the ladder is not cosmetic: an agent retries on `reached_stage`
+    //    and reads `blocker.code`, and 41566095 (REL3C) replaced the whole
+    //    result here, so a blocked launch answered `result: {reply_capped}` with
+    //    no rungs at all (crates/acos-cli/tests/native_launch.rs).
+    let mut string_cap = CAP_STRING_BYTES;
+    loop {
+        bound_long_strings(value, string_cap);
+        if measure(value) <= max_bytes {
+            return before - measure(value);
+        }
+        if string_cap <= CAP_STRING_FLOOR {
+            break;
+        }
+        string_cap /= 2;
+    }
+    // 4. Anything else: keep the envelope and the diagnosis, replace the
     //    oversized result with a pointer to the artifacts. A silent cut is worse
     //    than an honest "read it from here".
     if let Some(result) = value.get_mut("result").and_then(Value::as_object_mut) {
@@ -493,6 +526,111 @@ fn enforce_cap_measured(
         *result = replacement;
     }
     before - measure(value)
+}
+
+/// Bound every string longer than `cap` in `value`, and replace a repeat of an
+/// already-bounded string with a one-line back-reference.
+///
+/// The whole point is that the value keeps its shape: callers walk
+/// `result.stages[i].status` and `result.reached_stage` after the cap runs.
+fn bound_long_strings(value: &mut Value, cap: usize) {
+    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    bound_in_place(value, "result", cap, &mut seen);
+}
+
+fn bound_in_place(
+    value: &mut Value,
+    path: &str,
+    cap: usize,
+    seen: &mut std::collections::HashMap<String, String>,
+) {
+    match value {
+        Value::String(text) => {
+            if text.len() <= cap {
+                return;
+            }
+            let original = text.to_string();
+            let bytes = original.len();
+            if let Some(first) = seen.get(&original) {
+                // The same block of text twice costs an agent twice and says
+                // nothing new; the first copy carries the whole text. The head
+                // line travels with the back-reference, because that line is the
+                // message an agent greps for (`... re-run with --native`), not
+                // the stack dump behind it.
+                let head = original.lines().next().unwrap_or_default();
+                let head = &head[..floor_char_boundary(head, 512)];
+                *text = format!(
+                    "… [ACOS: identical to {first} ({bytes} bytes), not repeated; it begins: \
+                     {head}] …"
+                );
+                return;
+            }
+            seen.insert(original.clone(), path.to_string());
+            *text = bound_string_head_tail(&original, cap, path);
+        }
+        Value::Array(items) => {
+            for (index, item) in items.iter_mut().enumerate() {
+                bound_in_place(item, &format!("{path}[{index}]"), cap, seen);
+            }
+        }
+        Value::Object(map) => {
+            for (key, item) in map.iter_mut() {
+                // Paths the cap does not shorten: they are the pointer to the
+                // full evidence, and a cut path is useless.
+                if matches!(
+                    key.as_str(),
+                    "tree_path" | "verdict_path" | "artifacts_dir" | "log_path"
+                ) {
+                    continue;
+                }
+                bound_in_place(item, &format!("{path}.{key}"), cap, seen);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Keep the head and the line-aligned tail of `text`, with an honest marker.
+///
+/// Head first (the message, the exception class, the first frames), tail last
+/// (the deepest `caused by:`, the last frames): the two parts a reader uses.
+fn bound_string_head_tail(text: &str, cap: usize, path: &str) -> String {
+    let bytes = text.len();
+    let head = floor_char_boundary(text, cap * 2 / 3);
+    let tail_start = ceil_char_boundary(text, bytes - cap / 3).min(bytes);
+    let (head, tail_start) = if tail_start <= head {
+        (floor_char_boundary(text, cap / 2), ceil_char_boundary(text, bytes - cap / 2))
+    } else {
+        (head, tail_start)
+    };
+    if tail_start <= head || tail_start > bytes {
+        return format!(
+            "… [ACOS: {path} bounded for size — {bytes} bytes; read the run's artifacts] …"
+        );
+    }
+    format!(
+        "{}… [ACOS: {path} bounded for size — {bytes} bytes total, keeping the first {head} and \
+         the last {} bytes; the full text is in the run's artifacts] …{}",
+        &text[..head],
+        bytes - tail_start,
+        &text[tail_start..],
+    )
+}
+
+fn floor_char_boundary(text: &str, mut index: usize) -> usize {
+    index = index.min(text.len());
+    while index > 0 && !text.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
+}
+
+fn ceil_char_boundary(text: &str, mut index: usize) -> usize {
+    index = index.min(text.len());
+    while index < text.len() && !text.is_char_boundary(index) {
+        index += 1;
+    }
+    index
 }
 
 fn shrink_tree_page(value: &mut Value, page: usize) {
@@ -673,12 +811,106 @@ mod tests {
 
     #[test]
     fn an_enormous_non_tree_result_is_replaced_by_a_pointer_not_silently_cut() {
-        let huge = "x".repeat(40_000);
+        // Genuinely unshrinkable: many *small* strings, so bounding a string
+        // cannot help and the result can only be replaced by a pointer.
+        let junk: Vec<Value> = (0..600)
+            .map(|i| json!(format!("junk row {i} {}", "y".repeat(60))))
+            .collect();
         let mut envelope = json!({"ok": false, "error": {"message": "boom"},
-                                  "result": {"tree_path": "out/tree/1.json", "junk": huge}});
+                                  "result": {"tree_path": "out/tree/1.json", "junk": junk}});
         enforce_cap(&mut envelope, 4096);
         assert_eq!(envelope["result"]["reply_capped"], true);
         assert_eq!(envelope["result"]["tree_path"], "out/tree/1.json");
         assert!(serialized_len(&envelope) <= 4096);
+    }
+
+    #[test]
+    fn an_oversized_string_is_bounded_in_place_before_the_result_is_replaced() {
+        // One long string is content, not structure: bound it (head + tail +
+        // marker) and keep the rest of the result, instead of throwing the
+        // result away.
+        let huge = "x".repeat(40_000);
+        let mut envelope = json!({"ok": false, "error": {"message": "boom"},
+                                  "result": {"tree_path": "out/tree/1.json", "junk": huge}});
+        enforce_cap(&mut envelope, 4096);
+        assert!(envelope["result"]["reply_capped"].is_null());
+        assert_eq!(envelope["result"]["tree_path"], "out/tree/1.json");
+        let junk = envelope["result"]["junk"].as_str().unwrap();
+        assert!(junk.contains("bounded for size"), "{junk}");
+        assert!(junk.contains("40000 bytes"), "{junk}");
+        assert!(serialized_len(&envelope) <= 4096);
+    }
+
+    #[test]
+    fn a_blocked_launch_keeps_its_ladder_and_shortens_the_repeated_blocker() {
+        // The launch ladder names every rung and repeats one blocker text on
+        // each unproven one (a real `cos launch` reply: 5 x 13 KB). The cap
+        // must keep `reached_stage`, every rung's status and the blocker code:
+        // that is what an agent acts on. REL3C replaced the whole result here.
+        let blocker =
+            format!("vm: nativeHello() is not implemented\n{}", "frame 1\n".repeat(1600));
+        let stages: Vec<Value> = [
+            ("apk_parsed", "ok"),
+            ("process_booted", "ok"),
+            ("bind_application", "ok"),
+            ("application_on_create", "blocked"),
+            ("client_transaction", "not_reached"),
+            ("activity_on_create", "not_reached"),
+            ("on_resume", "not_reached"),
+            ("first_frame", "not_reached"),
+        ]
+        .into_iter()
+        .map(|(stage, status)| {
+            json!({
+                "stage": stage,
+                "ok": status == "ok",
+                "status": status,
+                "blocker": if status == "ok" { Value::Null } else { json!({
+                    "code": "UNSUPPORTED_JAVA_API",
+                    "message": blocker,
+                    "details": {"stage": stage},
+                }) },
+            })
+        })
+        .collect();
+        let mut envelope = json!({
+            "ok": false,
+            "status": "unsupported",
+            "error": {"code": "UNSUPPORTED_JAVA_API", "message": blocker},
+            "result": {
+                "reached_stage": "bind_application",
+                "stages": stages,
+                "package": "dev.acos.fixtures.nativehello",
+                "events": ["bind_application=ok", "application_on_create=blocked"],
+            },
+        });
+        assert!(serialized_len(&envelope) > MAX_REPLY_BYTES);
+        enforce_cap(&mut envelope, MAX_REPLY_BYTES);
+        assert!(serialized_len(&envelope) <= MAX_REPLY_BYTES);
+        assert!(envelope["result"]["reply_capped"].is_null());
+        assert_eq!(envelope["result"]["reached_stage"], "bind_application");
+        let stages = envelope["result"]["stages"].as_array().unwrap();
+        assert_eq!(stages.len(), 8);
+        assert_eq!(stages[3]["stage"], "application_on_create");
+        assert_eq!(stages[3]["status"], "blocked");
+        assert_eq!(stages[3]["blocker"]["code"], "UNSUPPORTED_JAVA_API");
+        // The whole text appears once (the envelope's top-level error is walked
+        // first), bounded head-and-tail with a marker; every later copy is a
+        // back-reference that still carries the actionable first line, so an
+        // agent reading any rung finds the `--native` hint.
+        let message = envelope["error"]["message"].as_str().unwrap();
+        assert!(message.contains("nativeHello() is not implemented"), "{message}");
+        assert!(message.contains("bounded for size"), "{message}");
+        assert!(message.contains("frame 1"), "the tail survives: {message}");
+        for rung in [3usize, 4, 7] {
+            let repeat = stages[rung]["blocker"]["message"].as_str().unwrap();
+            assert!(repeat.contains("not repeated"), "{repeat}");
+            assert!(
+                repeat.contains("nativeHello() is not implemented"),
+                "{repeat}"
+            );
+        }
+        // The top-level error keeps its code.
+        assert_eq!(envelope["error"]["code"], "UNSUPPORTED_JAVA_API");
     }
 }
