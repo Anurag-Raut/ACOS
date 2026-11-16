@@ -182,6 +182,15 @@ pub struct ModuleManifest {
     pub summary: &'static str,
     /// `ServiceManager` names (with their AIDL descriptors) the module provides.
     pub services: &'static [ServiceProvide],
+    /// `ServiceManager` names this module **replaces** from `core`.
+    ///
+    /// A name listed here must also appear in [`Self::services`], must be a
+    /// name `core` registers (ADR-0029 amendment: `notification`, `statusbar`,
+    /// `permission` move out of `core` into their modules), and is served by
+    /// `core` **only while the module is off**: attaching the module overwrites
+    /// core's registration, detaching it restores it. A module may not replace
+    /// a name another non-core module owns.
+    pub replaces: &'static [&'static str],
     /// Content-provider authorities the module provides.
     pub providers: &'static [&'static str],
     /// Broadcasts the module starts or answers.
@@ -301,6 +310,20 @@ impl ModuleManifest {
                 ));
             }
             seen_ops.push(op.name);
+        }
+        for replaced in self.replaces {
+            if !seen_names.contains(replaced) {
+                return Err(format!(
+                    "module {:?}: replaces {:?} but does not provide it; a replaced name must be one of its own services",
+                    self.id, replaced
+                ));
+            }
+            if self.id == "core" {
+                return Err(
+                    "module \"core\": core cannot replace a name (it is the implementation being replaced)"
+                        .into(),
+                );
+            }
         }
         if self.controls.is_empty() && self.profiles.contains(&Profile::Scripted) {
             return Err(format!(
@@ -1077,6 +1100,7 @@ impl ModuleRegistry {
         let mut registry = Self::new();
         for module in [
             Box::new(crate::core_module::CoreModule::new()) as Box<dyn Module>,
+            Box::new(crate::modules::permissions::PermissionsModule::new()),
             Box::new(crate::modules::vibrator::VibratorModule::new()),
         ] {
             if let Err(error) = registry.add(module) {
@@ -1092,12 +1116,31 @@ impl ModuleRegistry {
         let manifest = module.manifest();
         manifest.validate()?;
         for service in manifest.services {
-            if let Some(owner) = self.providers.insert(service.name, manifest.id) {
-                return Err(format!(
-                    "module {:?} provides {:?}, which module {owner:?} already provides",
-                    manifest.id, service.name
-                ));
+            if let Some(owner) = self.providers.get(service.name).copied() {
+                // ADR-0029 amendment: a module may take a name over from `core`
+                // when its manifest says so (`replaces`); `core` answers that
+                // name only while the module is `off`, so the two never serve
+                // it at the same time and detach restores core's answer.
+                let takes_over_core = owner == "core" && manifest.replaces.contains(&service.name);
+                if !takes_over_core {
+                    return Err(format!(
+                        "module {:?} provides {:?}, which module {owner:?} already provides{}",
+                        manifest.id,
+                        service.name,
+                        if owner == "core" {
+                            " (declare it in `replaces` to take it over)"
+                        } else {
+                            ""
+                        }
+                    ));
+                }
+                // The module is the owner from now on; `core` still answers the
+                // name while the module is off, which is a runtime property of
+                // the host, not of the ownership table.
+                self.providers.insert(service.name, manifest.id);
+                continue;
             }
+            self.providers.insert(service.name, manifest.id);
         }
         self.entries.push(Entry {
             module,

@@ -1037,8 +1037,12 @@ pub struct PmsState {
     pub package: PackageInfo,
     /// Feature answers.
     pub features: FeatureTable,
-    /// Granted permissions (manifest + install `-g`).
+    /// Granted permissions (install-time manifest grants; the runtime table in
+    /// [`crate::permissions`] wins for a permission it has an answer for).
     pub granted_permissions: Vec<String>,
+    /// The one runtime-permission table, shared with the ATMS and the
+    /// `permissions` module (MODNOTIF2).
+    pub runtime_permissions: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
     /// Declared content providers (`<provider>` + `android:authorities`).
     pub providers: Vec<ProviderInfo>,
     /// Declared services (`<service>`).
@@ -1095,6 +1099,7 @@ impl PmsState {
             package,
             features: FeatureTable::default(),
             granted_permissions: vec!["android.permission.INTERNET".into()],
+            runtime_permissions: None,
             providers: Vec::new(),
             services: Vec::new(),
             dex_loads: Vec::new(),
@@ -1210,6 +1215,7 @@ impl PmsState {
             package,
             features: FeatureTable::default(),
             granted_permissions: requested_permissions,
+            runtime_permissions: None,
             providers,
             services,
             dex_loads: Vec::new(),
@@ -1241,9 +1247,18 @@ impl PmsState {
         Self::from_apk(&path).unwrap_or_else(|_| Self::new())
     }
 
-    /// `PackageManager.checkPermission` policy.
+    /// `PackageManager.checkPermission` policy: the shared runtime table first,
+    /// then the manifest's install-time grants.
     #[must_use]
     pub fn check_permission(&self, permission: &str) -> i32 {
+        if let Some(store) = self.runtime_permissions.as_ref() {
+            let store = store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if store.entry(permission).is_some() {
+                return store.check(permission);
+            }
+        }
         const GRANTED: i32 = 0;
         const DENIED: i32 = -1;
         if self.granted_permissions.iter().any(|p| p == permission) {

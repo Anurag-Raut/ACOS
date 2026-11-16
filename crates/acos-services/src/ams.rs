@@ -92,6 +92,9 @@ pub enum Extra {
     Int(i32),
     /// `putExtra(boolean)`.
     Bool(bool),
+    /// `putExtra(String[])` — the permission names of a
+    /// `REQUEST_PERMISSIONS` intent (`EXTRA_REQUEST_PERMISSIONS_NAMES`).
+    Strings(Vec<String>),
     /// A value of a type ACOS records but does not interpret.
     Present,
 }
@@ -221,6 +224,9 @@ fn reduce_extras(bundle: &Bundle) -> BTreeMap<String, Extra> {
     for (key, value) in &bundle.entries {
         let extra = match value {
             Value::Str(Some(s)) | Value::Str8(Some(s)) => Extra::String(s.clone()),
+            Value::StringArray(Some(items)) => Extra::Strings(
+                items.iter().filter_map(|item| item.clone()).collect(),
+            ),
             Value::Int(i) => Extra::Int(*i),
             Value::Bool(b) => Extra::Bool(*b),
             _ => Extra::Present,
@@ -237,6 +243,10 @@ fn encode_extras(extras: &BTreeMap<String, Extra>) -> Bundle {
             Extra::String(s) => bundle.put(key, Value::Str(Some(s.clone()))),
             Extra::Int(i) => bundle.put(key, Value::Int(*i)),
             Extra::Bool(b) => bundle.put(key, Value::Bool(*b)),
+            Extra::Strings(items) => bundle.put(
+                key,
+                Value::StringArray(Some(items.iter().cloned().map(Some).collect())),
+            ),
             Extra::Present => bundle.put(key, Value::Skipped),
         }
     }
@@ -808,6 +818,11 @@ pub struct AmsState {
     pub pending_binds: Vec<PendingBind>,
     /// Pending `IIntentReceiver.performReceive` deliveries.
     pub pending_receivers: Vec<PendingReceiver>,
+    /// The session's one runtime-permission table (MODNOTIF2). Only the
+    /// permission-controller request path in [`dispatch`] reads it; `None` in a
+    /// bare unit-test state, where a request resolves as unsupported.
+    pub runtime_permissions:
+        Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
     /// Next task id.
     next_task_id: i32,
     /// Next activity token.
@@ -823,6 +838,7 @@ impl AmsState {
         Self {
             next_task_id: 1,
             next_token: 0x1000_0000,
+            runtime_permissions: None,
             ..Self::default()
         }
     }
@@ -919,6 +935,72 @@ impl AmsState {
             request_code,
         });
         Ok(START_SUCCESS)
+    }
+
+    /// The structured answer to a `REQUEST_PERMISSIONS` intent (MODNOTIF2).
+    ///
+    /// Real Android shows `GrantPermissionsActivity` from
+    /// `com.android.permissioncontroller`. ACOS does not install that system app
+    /// yet, so this answers with the configured state's honest result:
+    ///
+    /// * all requested permissions already granted -> `state: "granted"`. On a
+    ///   phone the controller grants immediately and returns
+    ///   `onRequestPermissionsResult` without drawing anything; ACOS cannot
+    ///   deliver that result (no `IApplicationThread` activity-result path), so
+    ///   it says exactly that instead of answering success and leaving
+    ///   `mHasCurrentPermissionsRequest` set forever.
+    /// * otherwise -> `state: "denied"`: the dialog is the permission
+    ///   controller app's, and it is not built.
+    ///
+    /// The request is recorded (a refusal is evidence), and nothing is granted.
+    pub fn permission_ui_unavailable(
+        &mut self,
+        request: &crate::permissions::PermissionsRequest,
+    ) -> ServiceError {
+        let (state, detail) = match self.runtime_permissions.as_ref() {
+            Some(store) => {
+                let mut store = store
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                store.refuse_request(&request.permissions, &request.package);
+                if store.all_granted(&request.permissions) {
+                    (
+                        "granted".to_string(),
+                        format!(
+                            "every requested permission is already granted ({}); the controller would auto-grant and return, but ACOS cannot deliver onRequestPermissionsResult without the controller system app",
+                            request.permissions.join(", ")
+                        ),
+                    )
+                } else {
+                    (
+                        "denied".to_string(),
+                        format!(
+                            "{} is not granted and the dialog is the permission controller app's",
+                            request
+                                .permissions
+                                .iter()
+                                .filter(|p| store.check(p) != crate::permissions::PERMISSION_GRANTED)
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    )
+                }
+            }
+            None => (
+                "unknown".to_string(),
+                "no runtime-permission table is published in this host".to_string(),
+            ),
+        };
+        ServiceError::PermissionUiUnavailable {
+            permissions: request.permissions.clone(),
+            state,
+            needs: format!(
+                "a guest system app {} answering ACTION_REQUEST_PERMISSIONS (GrantPermissionsActivity), built on the multi-process work",
+                request.package
+            ),
+            detail,
+        }
     }
 
     /// Bind a real (guest-minted) activity token to the pending launch the host
@@ -1323,6 +1405,15 @@ pub fn dispatch(
                 }
             })?;
             let intent = intent(positions.intent)?;
+            // MODNOTIF2: `Activity.requestPermissions` starts an Intent at the
+            // permission controller package. ACOS has no such system app yet
+            // (ADR-0029 amendment: system UI comes from guest system apps), so
+            // the request resolves here, honestly, instead of falling through to
+            // "activity not found" (which looks like an app bug) or, worse, a
+            // silent grant.
+            if let Some(request) = crate::permissions::permission_request(&intent) {
+                return Err(state.permission_ui_unavailable(&request));
+            }
             let flags = value(positions.flags).and_then(Value::as_int).unwrap_or(0);
             let result_to = value(positions.result_to)
                 .and_then(Value::as_binder)

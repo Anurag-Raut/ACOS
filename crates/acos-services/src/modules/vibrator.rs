@@ -94,6 +94,7 @@ fn manifest_ref() -> &'static ModuleManifest {
             name: SERVICE_NAME,
             descriptor: DESCRIPTOR,
         }],
+        replaces: &[],
         providers: &[],
         broadcasts: &[],
         windows: &[],

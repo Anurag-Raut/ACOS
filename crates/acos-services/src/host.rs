@@ -169,7 +169,15 @@ pub struct RegistrationScope {
     aux: HashMap<&'static str, BinderId>,
     dynamic: Vec<u64>,
     binder_descriptors: HashMap<u64, &'static str>,
-    notification: bool,
+    notification: Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>>,
+    permission_store: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    /// Index of this scope's overwrite log in [`ServiceHost::overwrites`].
+    ///
+    /// A module that replaces a `core` name registers the same descriptor, so
+    /// deleting what was added cannot describe the rollback: `end_scope` must
+    /// restore the **factory and binder** that descriptor had before. Without
+    /// this a detached module's factory kept answering (MODNOTIF2).
+    depth: usize,
 }
 
 struct ServiceEntry {
@@ -202,6 +210,13 @@ pub struct ServiceHost {
     /// a text toast from `NotificationManagerService` in the system process;
     /// ACOS has one process, so the runtime renders the recorded request.
     notification: Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>>,
+    /// The one runtime-permission table `ActivityManager.checkPermission`,
+    /// `PackageManager.checkPermission` and `IPermissionManager` all read
+    /// (`crate::permissions`). Modules that own the name share it through this
+    /// slot, exactly like the notification state.
+    permission_store: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    /// Overwrite logs, one per open [`RegistrationScope`].
+    overwrites: Vec<Vec<(&'static str, BinderId, Factory)>>,
 }
 
 impl core::fmt::Debug for ServiceHost {
@@ -240,6 +255,8 @@ impl ServiceHost {
             seq: AtomicU64::new(1),
             constructions: 0,
             notification: None,
+            permission_store: None,
+            overwrites: Vec::new(),
         }
     }
 
@@ -253,11 +270,20 @@ impl ServiceHost {
         let binder = self.registry.register_local(descriptor);
         self.binder_descriptors.insert(binder.0, descriptor);
         self.names.insert(name, descriptor);
+        let factory: Factory = Arc::new(factory);
+        // A registration over a name that exists is recorded so the open scope
+        // (if any) can put the old factory back on rollback. Modules replacing a
+        // `core` name do exactly this.
+        if let Some(previous) = self.entries.get(descriptor) {
+            if let Some(log) = self.overwrites.last_mut() {
+                log.push((descriptor, previous.binder, Arc::clone(&previous.factory)));
+            }
+        }
         self.entries.insert(
             descriptor,
             ServiceEntry {
                 binder,
-                factory: Arc::new(factory),
+                factory,
                 object: None,
             },
         );
@@ -406,14 +432,17 @@ impl ServiceHost {
     /// Snapshot the registration tables so a module's registrations can be
     /// rolled back as a unit (ADR-0029 detach).
     #[must_use]
-    pub fn begin_scope(&self) -> RegistrationScope {
+    pub fn begin_scope(&mut self) -> RegistrationScope {
+        self.overwrites.push(Vec::new());
         RegistrationScope {
             entries: self.entries.keys().copied().collect(),
             names: self.names.clone(),
             aux: self.aux.clone(),
             dynamic: self.dynamic.keys().copied().collect(),
             binder_descriptors: self.binder_descriptors.clone(),
-            notification: self.notification.is_some(),
+            notification: self.notification.as_ref().map(std::sync::Arc::clone),
+            permission_store: self.permission_store.as_ref().map(std::sync::Arc::clone),
+            depth: self.overwrites.len() - 1,
         }
     }
 
@@ -440,6 +469,33 @@ impl ServiceHost {
             if let Some(entry) = self.entries.remove(key) {
                 freed.push(entry.binder);
             }
+        }
+        // Restore every descriptor this scope overwrote: the module's factory
+        // and binder go away (the binder is in `freed` below), core's factory
+        // and binder come back. The object is dropped, not kept, so the
+        // restored factory constructs core's service again with its own shared
+        // state (the state is behind an `Arc`, so this is not a reset).
+        let overwritten: Vec<(&'static str, BinderId, Factory)> = if self.overwrites.len() > scope.depth
+        {
+            self.overwrites.split_off(scope.depth).concat()
+        } else {
+            Vec::new()
+        };
+        for (descriptor, binder, factory) in overwritten {
+            if let Some(entry) = self.entries.get_mut(descriptor) {
+                freed.push(entry.binder);
+                self.registry.remove(entry.binder);
+                self.binder_descriptors.remove(&entry.binder.0);
+            }
+            self.entries.insert(
+                descriptor,
+                ServiceEntry {
+                    binder,
+                    factory,
+                    object: None,
+                },
+            );
+            self.binder_descriptors.insert(binder.0, descriptor);
         }
         let added_names: Vec<&'static str> = self
             .names
@@ -491,8 +547,20 @@ impl ServiceHost {
                 freed.push(BinderId(id));
             }
         }
-        if !scope.notification {
-            self.notification = None;
+        self.overwrites.truncate(scope.depth);
+        if !scope.notification.as_ref().is_some_and(|before| {
+            self.notification
+                .as_ref()
+                .is_some_and(|now| std::sync::Arc::ptr_eq(before, now))
+        }) {
+            self.notification = scope.notification.clone();
+        }
+        if !scope.permission_store.as_ref().is_some_and(|before| {
+            self.permission_store
+                .as_ref()
+                .is_some_and(|now| std::sync::Arc::ptr_eq(before, now))
+        }) {
+            self.permission_store = scope.permission_store.clone();
         }
         for binder in &freed {
             self.registry.remove(*binder);
@@ -520,6 +588,24 @@ impl ServiceHost {
         &self,
     ) -> Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>> {
         self.notification.as_ref().map(std::sync::Arc::clone)
+    }
+
+    /// Publish the session's one runtime-permission table (called by
+    /// [`crate::registry::install`]).
+    pub fn set_permission_store(
+        &mut self,
+        store: std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>,
+    ) {
+        self.permission_store = Some(store);
+    }
+
+    /// The runtime-permission table, when a standard set (or the `permissions`
+    /// module) published one.
+    #[must_use]
+    pub fn permission_store(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>> {
+        self.permission_store.as_ref().map(std::sync::Arc::clone)
     }
 
     /// Enable the per-call trace.

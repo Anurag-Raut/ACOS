@@ -279,7 +279,16 @@ pub fn install_with_handles_and_insets(
 
     // Shared state. The PMS parses the APK lazily inside its factory so
     // installing the host touches no package data.
-    let atms = Arc::new(Mutex::new(crate::atms::AtmsState::new()));
+    // MODNOTIF2: one runtime-permission table for the whole session. The ATMS
+    // and the PMS both read it (so the two `checkPermission` paths cannot
+    // disagree), and it is published on the host so the `permissions` module
+    // writes to the same table instead of a second one.
+    let permissions = Arc::new(Mutex::new(crate::permissions::PermissionStore::new()));
+    let mut atms_state = crate::atms::AtmsState::new();
+    atms_state.runtime_permissions = Some(Arc::clone(&permissions));
+    atms_state.ams.runtime_permissions = Some(Arc::clone(&permissions));
+    let atms = Arc::new(Mutex::new(atms_state));
+    host.set_permission_store(Arc::clone(&permissions));
     let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
     let display = Arc::new(Mutex::new(crate::display::DisplayState::new(
         crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {
@@ -334,8 +343,25 @@ pub fn install_with_handles_and_insets(
             )) as Box<dyn ServiceObject>
         },
     );
+    let pms_permissions = Arc::clone(&permissions);
     host.register("package", "android.content.pm.IPackageManager", move |w| {
-        let pms = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
+        let mut state = crate::pms::PmsState::hello_views();
+        state.runtime_permissions = Some(Arc::clone(&pms_permissions));
+        {
+            // The manifest's grants are the install-time half of the table, so
+            // the `permissions` module can tell a declared permission from an
+            // undeclared one.
+            let mut store = pms_permissions
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if store.package.is_empty() {
+                store.set_install_time(
+                    &state.package.package_name.clone(),
+                    &state.granted_permissions.clone(),
+                );
+            }
+        }
+        let pms = Arc::new(Mutex::new(state));
         Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
     });
     host.register(
