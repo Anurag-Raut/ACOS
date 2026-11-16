@@ -217,6 +217,13 @@ for app in counter todo-list multi-activity form-validation settle-lab thread-he
     build_apk "$app"
 done
 
+# pms-parcel is the REL3P fixture: it calls
+# getPackageInfo(own package, GET_SIGNATURES|GET_META_DATA|GET_PERMISSIONS =
+# 0x100024c0) and shows the signature / requested-permission counts the
+# framework decoded from the ACOS PMS reply. It is the app-visible check that
+# `PackageInfo.writeToParcel`'s String8 arrays are encoded as String8.
+build_apk pms-parcel
+
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).

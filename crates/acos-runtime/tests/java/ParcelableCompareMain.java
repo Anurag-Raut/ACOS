@@ -129,6 +129,70 @@ public final class ParcelableCompareMain {
         return b;
     }
 
+
+    /**
+     * REL3P: a `PackageInfo` carrying the arrays `PackageInfo.writeToParcel`
+     * writes with {@code writeString8Array} ({@code splitNames},
+     * {@code requestedPermissions}) plus a {@code Signature[]}. This is the
+     * shape a `getPackageInfo(pkg, 0x100024c0)` reply has, and the case that
+     * desynchronised the reader (7 209 071 signatures, 7 676 737 936-byte
+     * allocation) when ACOS encoded those arrays as String16.
+     *
+     * <p>{@code applicationInfo} stays null so the value is a pure function of
+     * these fields and the byte comparison against the Rust encoder is exact.
+     */
+    static PackageInfo packageInfoArrays() throws Exception {
+        PackageInfo pi = new PackageInfo();
+        // Public fields directly, hidden ones (@hide on the SDK stubs, present
+        // on the real framework) through `set`.
+        pi.packageName = "dev.acos.fixtures.pmsprobe";
+        pi.splitNames = new String[] {"config.xxhdpi"};
+        pi.versionCode = 7;
+        pi.versionName = "1.0";
+        pi.applicationInfo = null;
+        pi.firstInstallTime = 1L;
+        pi.lastUpdateTime = 2L;
+        pi.activities = null;
+        pi.receivers = null;
+        pi.services = null;
+        pi.providers = null;
+        pi.instrumentation = null;
+        pi.permissions = null;
+        pi.requestedPermissions =
+                new String[] {"android.permission.INTERNET", "android.permission.VIBRATE"};
+        pi.requestedPermissionsFlags = new int[] {1, 1};
+        pi.signatures = new android.content.pm.Signature[] {
+                new android.content.pm.Signature(
+                        new byte[] {0x30, (byte) 0x82, 0x01, 0x0a, 0x0d, 0x0e})
+        };
+        pi.installLocation = 0;
+        set(pi, "versionCodeMajor", 0);
+        set(pi, "baseRevisionCode", 0);
+        set(pi, "splitRevisionCodes", null);
+        set(pi, "sharedUserId", null);
+        set(pi, "sharedUserLabel", 0);
+        set(pi, "gids", null);
+        set(pi, "configPreferences", null);
+        set(pi, "reqFeatures", null);
+        set(pi, "featureGroups", null);
+        set(pi, "attributions", null);
+        set(pi, "isStub", Boolean.FALSE);
+        set(pi, "coreApp", Boolean.FALSE);
+        set(pi, "requiredForAllUsers", Boolean.FALSE);
+        set(pi, "restrictedAccountType", null);
+        set(pi, "requiredAccountType", null);
+        set(pi, "overlayTarget", null);
+        set(pi, "overlayCategory", null);
+        set(pi, "overlayPriority", 0);
+        set(pi, "mOverlayIsStatic", Boolean.FALSE);
+        set(pi, "compileSdkVersion", 0);
+        set(pi, "compileSdkVersionCodename", null);
+        set(pi, "signingInfo", null);
+        set(pi, "isApex", Boolean.FALSE);
+        set(pi, "isActiveApex", Boolean.FALSE);
+        return pi;
+    }
+
     interface Writer {
         void write(Parcel p) throws Exception;
     }
@@ -146,6 +210,7 @@ public final class ParcelableCompareMain {
     public static void main(String[] args) throws Exception {
         emit("configuration", p -> configuration().writeToParcel(p, 0));
         emit("persistable_bundle", p -> persistableBundle().writeToParcel(p, 0));
+        emit("package_info_arrays", p -> packageInfoArrays().writeToParcel(p, 0));
 
         for (String arg : args) {
             int eq = arg.indexOf('=');
@@ -198,6 +263,30 @@ public final class ParcelableCompareMain {
                         break;
                     case "package_info":
                         got = PackageInfo.CREATOR.createFromParcel(p);
+                        break;
+                    case "package_info_arrays":
+                        got = PackageInfo.CREATOR.createFromParcel(p);
+                        PackageInfo pi = (PackageInfo) got;
+                        check(pi.packageName.equals("dev.acos.fixtures.pmsprobe"),
+                                "package_info_arrays packageName " + pi.packageName);
+                        check(pi.splitNames != null && pi.splitNames.length == 1
+                                && pi.splitNames[0].equals("config.xxhdpi"),
+                                "package_info_arrays splitNames " + java.util.Arrays.toString(pi.splitNames));
+                        check(pi.requestedPermissions != null && pi.requestedPermissions.length == 2
+                                && pi.requestedPermissions[0].equals("android.permission.INTERNET")
+                                && pi.requestedPermissions[1].equals("android.permission.VIBRATE"),
+                                "package_info_arrays requestedPermissions "
+                                        + java.util.Arrays.toString(pi.requestedPermissions));
+                        check(pi.requestedPermissionsFlags != null
+                                && pi.requestedPermissionsFlags.length == 2
+                                && pi.requestedPermissionsFlags[0] == 1
+                                && pi.requestedPermissionsFlags[1] == 1,
+                                "package_info_arrays requestedPermissionsFlags "
+                                        + java.util.Arrays.toString(pi.requestedPermissionsFlags));
+                        check(pi.signatures != null && pi.signatures.length == 1,
+                                "package_info_arrays signatures "
+                                        + (pi.signatures == null ? "null" : pi.signatures.length));
+                        check(pi.versionCode == 7, "package_info_arrays versionCode");
                         break;
                     case "service_info":
                         got = ServiceInfo.CREATOR.createFromParcel(p);

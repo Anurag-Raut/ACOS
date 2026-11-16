@@ -231,6 +231,70 @@ fn resolve_info_value(app: &acos_services::pms::AppInfo) -> Parcelable {
     )
 }
 
+
+/// REL3P: the `PackageInfo` shape a `getPackageInfo(pkg, 0x100024c0)` reply
+/// carries — non-empty `splitNames` / `requestedPermissions` (both
+/// `writeString8Array` in the image's `PackageInfo.writeToParcel`) and a
+/// one-element `Signature[]`. `applicationInfo` is null so the value is a pure
+/// function of these fields and `ParcelableCompareMain.packageInfoArrays()`
+/// builds the identical object for a byte-for-byte comparison.
+fn package_info_arrays_value() -> Parcelable {
+    Parcelable::ordered(
+        "android.content.pm.PackageInfo",
+        vec![
+            Value::Str8(Some("dev.acos.fixtures.pmsprobe".into())),
+            Value::StringArray(Some(vec![Some("config.xxhdpi".into())])), // splitNames (String8[])
+            Value::Int(7),   // versionCode
+            Value::Int(0),   // versionCodeMajor
+            Value::Str8(Some("1.0".into())), // versionName
+            Value::Int(0),   // baseRevisionCode
+            Value::IntArray(None), // splitRevisionCodes
+            Value::Str8(None), // sharedUserId
+            Value::Int(0),   // sharedUserLabel
+            Value::Cond { present: false, values: vec![] }, // applicationInfo
+            Value::Long(1),  // firstInstallTime
+            Value::Long(2),  // lastUpdateTime
+            Value::IntArray(None), // gids
+            Value::List(None), // activities
+            Value::List(None), // receivers
+            Value::List(None), // services
+            Value::List(None), // providers
+            Value::List(None), // instrumentation
+            Value::List(None), // permissions
+            Value::StringArray(Some(vec![
+                Some("android.permission.INTERNET".into()),
+                Some("android.permission.VIBRATE".into()),
+            ])), // requestedPermissions (String8[])
+            Value::IntArray(Some(vec![1, 1])), // requestedPermissionsFlags
+            Value::List(Some(vec![Value::Parcelable(Parcelable::ordered(
+                "android.content.pm.Signature",
+                vec![Value::ByteArray(Some(vec![
+                    0x30, 0x82, 0x01, 0x0a, 0x0d, 0x0e,
+                ]))],
+            ))])), // signatures
+            Value::List(None), // configPreferences
+            Value::List(None), // reqFeatures
+            Value::List(None), // featureGroups
+            Value::List(None), // attributions
+            Value::Int(0),   // installLocation
+            Value::Int(0),   // isStub
+            Value::Int(0),   // coreApp
+            Value::Int(0),   // requiredForAllUsers
+            Value::Str8(None), // restrictedAccountType
+            Value::Str8(None), // requiredAccountType
+            Value::Str8(None), // overlayTarget
+            Value::Str8(None), // overlayCategory
+            Value::Int(0),   // overlayPriority
+            Value::Bool(false), // mOverlayIsStatic
+            Value::Int(0),   // compileSdkVersion
+            Value::Str8(None), // compileSdkVersionCodename
+            Value::Cond { present: false, values: vec![] }, // signingInfo
+            Value::Bool(false), // isApex
+            Value::Bool(false), // isActiveApex
+        ],
+    )
+}
+
 fn encoded(value: &Parcelable) -> Vec<u8> {
     let mut parcel = acos_parcel::Parcel::new();
     parcelable::write_payload(&mut parcel, value).expect("encode payload");
@@ -282,6 +346,15 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         "Configuration real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
         writes.get("configuration"),
         hex(&config_bytes)
+    );
+    let pkg_arrays = package_info_arrays_value();
+    let pkg_arrays_bytes = encoded(&pkg_arrays);
+    assert_eq!(
+        writes.get("package_info_arrays").map(String::as_str),
+        Some(hex(&pkg_arrays_bytes).as_str()),
+        "PackageInfo real-Java bytes differ from the Rust codec (String8[] fields)\njava={:?}\nrust={}",
+        writes.get("package_info_arrays"),
+        hex(&pkg_arrays_bytes)
     );
     let bundle = persistable_bundle_value();
     let bundle_bytes = encoded(&bundle);
@@ -342,6 +415,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         format!("application_info={}", hex(&app_bytes)),
         format!("activity_info={}", hex(&act_bytes)),
         format!("package_info={}", hex(&pkg_bytes)),
+        format!("package_info_arrays={}", hex(&pkg_arrays_bytes)),
         format!("service_info={}", hex(&service_bytes)),
         format!("instrumentation_info={}", hex(&instrumentation_bytes)),
         format!("permission_info={}", hex(&permission_bytes)),
@@ -361,6 +435,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         "application_info",
         "activity_info",
         "package_info",
+        "package_info_arrays",
         "service_info",
         "instrumentation_info",
         "permission_info",
@@ -379,6 +454,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         ("application_info", &app_bytes),
         ("activity_info", &act_bytes),
         ("package_info", &pkg_bytes),
+        ("package_info_arrays", &pkg_arrays_bytes),
         ("service_info", &service_bytes),
         ("instrumentation_info", &instrumentation_bytes),
         ("permission_info", &permission_bytes),

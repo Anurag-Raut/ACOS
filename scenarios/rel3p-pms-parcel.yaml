@@ -1,0 +1,60 @@
+# REL3P: `getPackageInfo(own package, 0x100024c0)` reply decodes in the
+# framework's own `PackageInfo.CREATOR`.
+#
+# 0x100024c0 = GET_SIGNATURES|GET_META_DATA|GET_PERMISSIONS, the flags
+# `WebViewFactory` uses. `PackageInfo.writeToParcel` writes `splitNames` and
+# `requestedPermissions` with `writeString8Array`; ACOS used to write them as
+# String16 arrays, so everything after `requestedPermissions` was read out of
+# the middle of the string payload and the framework threw
+# `OutOfMemoryError: Failed to allocate a 7676737936 byte allocation at
+# Parcel.createString8Array` (SPIKE-WV wall 4).
+#
+# Expected: one signing certificate (the APK's), the two declared permissions,
+# no split APKs, and the package name the reply carries — all decoded by the
+# framework, then rendered by the app into `id=report`.
+version: 1
+name: rel3p-pms-parcel
+description: >-
+  Launch the REL3P fixture and check that a GET_SIGNATURES|GET_META_DATA|
+  GET_PERMISSIONS PackageInfo reply decodes without an exception and carries
+  the APK's signature and its requested permissions.
+app: fixtures/build/apps/pms-parcel.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.pmsparcel/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: report}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: report}
+      text:
+        exact: "report sigs=1 perms=2 splits=-1 meta=N pkg=dev.acos.fixtures.pmsparcel"
+
+  - assert_log:
+      tag: AcosPmsParcel
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^getPackageInfo flags=0x100024c0 sigs=1 perms=2 splits=-1 meta=N '
+        - '^OK$'
+
+  - assert_no_crash: {}
