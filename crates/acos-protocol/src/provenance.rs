@@ -136,12 +136,7 @@ pub fn warning(code: &str, message: impl Into<String>) -> Value {
 /// the execution, not about the inputs: the CLI records the engine that
 /// actually ran (never a guess), and the verifier records the fidelity it
 /// achieved.
-pub fn block(
-    apk: &Path,
-    scenario: Option<&Path>,
-    engine: &str,
-    fidelity: Fidelity,
-) -> Value {
+pub fn block(apk: &Path, scenario: Option<&Path>, engine: &str, fidelity: Fidelity) -> Value {
     json!({
         "scenario": scenario.map(file),
         "apk": file(apk),
@@ -174,10 +169,7 @@ pub fn summary_line(block: &Value) -> String {
         let Some(file) = value.filter(|value| !value.is_null()) else {
             return missing.to_string();
         };
-        let path = file
-            .get("path")
-            .and_then(Value::as_str)
-            .unwrap_or(missing);
+        let path = file.get("path").and_then(Value::as_str).unwrap_or(missing);
         match file.get("sha256_12").and_then(Value::as_str) {
             Some(sha) => format!("{path} (sha {sha})"),
             None => format!("{path} (sha n/a)"),
@@ -188,10 +180,7 @@ pub fn summary_line(block: &Value) -> String {
         describe(block.get("scenario"), "-"),
         describe(block.get("apk"), "-"),
         block.get("engine").and_then(Value::as_str).unwrap_or("-"),
-        block
-            .get("fidelity")
-            .and_then(Value::as_str)
-            .unwrap_or("-"),
+        block.get("fidelity").and_then(Value::as_str).unwrap_or("-"),
     );
     match block
         .get("warnings")
@@ -216,10 +205,8 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "acos-provenance-{}-{name}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("acos-provenance-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -279,15 +266,13 @@ mod tests {
         let scenario = dir.join("s.yaml");
         std::fs::write(&apk, b"apk bytes").unwrap();
         std::fs::write(&scenario, b"version: 1\n").unwrap();
-        let mut block = block(
-            &apk,
-            Some(&scenario),
-            "art",
-            Fidelity::ArtReference,
-        );
+        let mut block = block(&apk, Some(&scenario), "art", Fidelity::ArtReference);
         let line = summary_line(&block);
         assert!(line.contains(apk.display().to_string().as_str()), "{line}");
-        assert!(line.contains(scenario.display().to_string().as_str()), "{line}");
+        assert!(
+            line.contains(scenario.display().to_string().as_str()),
+            "{line}"
+        );
         assert!(line.contains("engine art"), "{line}");
         assert!(line.contains("fidelity art-reference"), "{line}");
         assert_eq!(line.matches("(sha ").count(), 2, "{line}");

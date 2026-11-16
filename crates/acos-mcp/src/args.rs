@@ -158,22 +158,29 @@ mod tests {
 
     #[test]
     fn an_unknown_argument_names_itself_and_the_valid_ones() {
-        let envelope = check("acos_observe", &json!({"apk": "a.apk", "screenshots": true}), &schema())
-            .expect("rejected");
+        let envelope = check(
+            "acos_observe",
+            &json!({"apk": "a.apk", "screenshots": true}),
+            &schema(),
+        )
+        .expect("rejected");
         assert_eq!(envelope.status().as_str(), "error");
         let error = envelope.error().expect("error");
         assert_eq!(error.code, ErrorCode::InvalidArgument);
         assert!(error.message.contains("`screenshots`"), "{}", error.message);
-        assert!(
-            error.hint.as_str().contains("`settle`"),
-            "{:?}",
-            error.hint
-        );
+        assert!(error.hint.as_str().contains("`settle`"), "{:?}", error.hint);
         let details = error.details.clone().expect("details");
         assert_eq!(details["unknown"], json!(["screenshots"]));
-        assert_eq!(details["valid"], json!(["apk", "base", "screenshot", "settle"]));
+        assert_eq!(
+            details["valid"],
+            json!(["apk", "base", "screenshot", "settle"])
+        );
         // The near miss is named, so one retry is enough.
-        assert!(error.message.contains("did you mean `screenshot`"), "{}", error.message);
+        assert!(
+            error.message.contains("did you mean `screenshot`"),
+            "{}",
+            error.message
+        );
     }
 
     #[test]

@@ -15,10 +15,9 @@ use common::*;
 use serde_json::{json, Value};
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = repo_root().join("target/acos-mcp-args").join(format!(
-        "{}-{name}",
-        std::process::id()
-    ));
+    let dir = repo_root()
+        .join("target/acos-mcp-args")
+        .join(format!("{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch");
     dir
@@ -31,14 +30,15 @@ fn client(dir: &Path) -> McpClient {
     let script = repo_root().join("crates/acos-mcp/tests/fixtures/bounded-error.sh");
     ensure_executable(&script);
     let envelope = dir.join("envelope.json");
-    std::fs::write(&envelope, r#"{"ok":true,"status":"pass","request_id":"stub"}"#).expect("stub");
+    std::fs::write(
+        &envelope,
+        r#"{"ok":true,"status":"pass","request_id":"stub"}"#,
+    )
+    .expect("stub");
     let mut server = McpClient::start(
         backend_for(
             &script,
-            vec![(
-                "ACOS_STUB_JSON".to_string(),
-                envelope.display().to_string(),
-            )],
+            vec![("ACOS_STUB_JSON".to_string(), envelope.display().to_string())],
         ),
         test_config(),
     );
@@ -105,10 +105,7 @@ fn an_unknown_argument_is_invalid_argument_not_a_silent_no_op() {
         assert!(valid.contains(&expected), "{valid:?}");
     }
     assert!(
-        error["hint"]
-            .as_str()
-            .unwrap_or("")
-            .contains("`scenario`"),
+        error["hint"].as_str().unwrap_or("").contains("`scenario`"),
         "the hint must list the valid names: {error}"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -119,10 +116,7 @@ fn the_near_miss_that_started_this_is_named_in_one_retry() {
     let dir = scratch("near-miss");
     let mut server = client(&dir);
     // `screenshots` is one character from `screenshot` on the tool that has it.
-    let response = server.call_tool(
-        "acos_observe_tree",
-        json!({"screenshots": true}),
-    );
+    let response = server.call_tool("acos_observe_tree", json!({"screenshots": true}));
     assert!(is_error(&response), "{response}");
     let envelope = envelope_of(&response);
     assert_eq!(envelope["error"]["code"], "INVALID_ARGUMENT", "{envelope}");
@@ -144,8 +138,7 @@ fn a_valid_call_reaches_the_tool_and_a_meta_tool_rejects_a_stray_argument() {
     let ok = server.call_tool("acos_help", json!({"topic": "errors"}));
     assert!(!is_error(&ok), "{ok}");
     assert!(
-        envelope_of(&ok)["result"]["errors"].is_object()
-            || envelope_of(&ok)["result"].is_object(),
+        envelope_of(&ok)["result"]["errors"].is_object() || envelope_of(&ok)["result"].is_object(),
         "{ok}"
     );
     // … and the same tool refuses an argument it does not have.
