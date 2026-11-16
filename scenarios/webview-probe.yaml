@@ -1,0 +1,94 @@
+# WV6: the WebView end-to-end gate. Two real WebViews against the host broker
+# and the pinned Chromium:
+#   A: file:///android_asset/test.html, served by the broker's interception
+#      from this APK's own assets (WIRE.md §4.3);
+#   B: a data: URL (no network, no interception).
+# The page's text must appear in the ACOS UI tree through the WIRE v1.1
+# ax -> AccessibilityNodeProvider path, a tap by that text must reach the page,
+# the page's JS must change it (and call the Java bridge), and frames must be
+# captured. Only then is this expectation `pass`.
+version: 1
+name: webview-probe
+description: >-
+  Launch webview-probe with com.android.webview installed and drive a real page
+  end to end: asset + data URL loads, page text in the ACOS tree via the
+  accessibility provider, tap by text, page JS change, JS interface both ways,
+  and captured frames.
+app: fixtures/build/apps/webview-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+extra_apks:
+  - fixtures/build/apps/webview-provider.apk
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input.tap
+  - screenshot
+expectation: pass
+budgets:
+  memory_mib: 768
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.webview/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 8000
+  # The WebView was constructed by the framework's own provider path.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "WebView created:"}
+      timeout_ms: 12000
+  # Page A came from the APK assets through req.intercept, page B from a data:
+  # URL; both reported a finished load and a JS evaluation result.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "A onPageFinished file:///android_asset/test.html"}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "evaluateJavascript -> \"acos asset page\""}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "evaluateJavascript -> \"acos data page\""}
+      timeout_ms: 20000
+  # The page's own text is in the ACOS UI tree (ax -> AccessibilityNodeProvider).
+  - assert_text:
+      selector: {text: {exact: "acos asset page"}}
+      text: {contains: "acos asset page"}
+      timeout_ms: 12000
+  - assert_text:
+      selector: {text: {exact: "acos data page"}}
+      text: {contains: "acos data page"}
+      timeout_ms: 12000
+  # A real engine frame was painted into the View.
+  - capture:
+      name: webview-first-frame
+  - assert_log:
+      tag: ACOSWvProvider
+      patterns:
+        - 'frame decoded [0-9]+x[0-9]+ seq=[0-9]+ bytes=[0-9]+'
+  # Tap the page's button by the text the accessibility tree exposes; the page's
+  # own JS changes #out to "tapped" and calls the Java bridge.
+  - tap:
+      selector: {text: {exact: "Tap me"}}
+  - assert_text:
+      selector: {text: {exact: "tapped"}}
+      text: {contains: "tapped"}
+      timeout_ms: 12000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "JS->Java: tapped"}
+      timeout_ms: 12000
+  - capture:
+      name: webview-tapped-frame

@@ -5,6 +5,7 @@
 //! JavaScript both ways, deterministic frames, input, request-interception
 //! pauses and the accessibility tree exported in **display coordinates**.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -238,6 +239,12 @@ pub struct View {
     pub nav: Arc<NavState>,
     pub seq: AtomicU64,
     pub bindings: Mutex<Vec<String>>,
+    /// Registered JS interfaces, re-installed on every navigation: the page
+    /// shim lives in the document, and a new document (a `view.loadUrl` after
+    /// `addJavascriptInterface`) drops it. Android's interfaces survive
+    /// navigation; this keeps that contract (measured: the page's button ran
+    /// its JS but `window.acosBridge.report(...)` was gone after the load).
+    pub interfaces: Mutex<HashMap<String, Vec<String>>>,
     pub main_frame: Mutex<Option<String>>,
     pub closed: AtomicBool,
     pub created: Instant,
@@ -286,6 +293,7 @@ impl View {
             nav: Arc::new(NavState::default()),
             seq: AtomicU64::new(0),
             bindings: Mutex::new(Vec::new()),
+            interfaces: Mutex::new(HashMap::new()),
             main_frame: Mutex::new(None),
             closed: AtomicBool::new(false),
             created: Instant::now(),
@@ -355,15 +363,29 @@ impl View {
 
     pub fn set_viewport(&self, vp: Viewport) -> Result<()> {
         *self.viewport.lock().expect("viewport") = vp;
+        // WIRE.md §4: the wire carries **device** pixels; DevTools
+        // `setDeviceMetricsOverride` takes CSS pixels and applies
+        // `deviceScaleFactor`. Passing device pixels straight through made the
+        // page 2.625x too large: a full-width heading's AX box was 2530 device
+        // px in a 900 px View (measured), so page text landed outside the View
+        // and a tap by its bounds missed. Divide here, once.
+        let css_width = (vp.width as f64 / vp.density).round().max(1.0) as u32;
+        let css_height = (vp.height as f64 / vp.density).round().max(1.0) as u32;
         self.call(
             "Emulation.setDeviceMetricsOverride",
             json!({
-                "width": vp.width,
-                "height": vp.height,
+                "width": css_width,
+                "height": css_height,
                 "deviceScaleFactor": vp.density,
-                "mobile": true,
-                "screenWidth": vp.width,
-                "screenHeight": vp.height,
+                // `mobile: true` selects Chromium's wide (980 CSS px) mobile
+                // layout viewport when a page has no `<meta viewport>`, which
+                // puts page CSS in a different space from the View's pixels
+                // (measured: a full-width heading's AX box was 2530 device px
+                // in a 900 px View). ACOS's WebView contract is CSS px =
+                // device px / density, so the engine lays out at that width.
+                "mobile": false,
+                "screenWidth": css_width,
+                "screenHeight": css_height,
             }),
             self.browser.call_timeout,
         )?;
@@ -435,6 +457,162 @@ impl View {
             self.browser.call_timeout,
         )?;
         Ok(())
+    }
+
+    // --- v1.1: visibility, settings, engine scroll -------------------------
+
+    /// `view.setVisibility`: a hidden View stops the renderer. DevTools has no
+    /// visibility message; `Page.setWebLifecycleState` is the closest real
+    /// engine action (the page is frozen while hidden, active again when shown,
+    /// and `document.visibilityState` reports hidden). The broker never claims
+    /// more than that.
+    pub fn set_visibility(&self, visible: bool, window_visible: bool) -> Result<()> {
+        let show = visible && window_visible;
+        self.call(
+            "Page.setWebLifecycleState",
+            json!({"state": if show { "active" } else { "frozen" }}),
+            self.browser.call_timeout,
+        )?;
+        Ok(())
+    }
+
+    /// `view.settings`: apply the fields the pinned engine can honour and name
+    /// every field it cannot. A field is never silently dropped.
+    pub fn apply_settings(&self, settings: &Value) -> Result<(Vec<String>, Vec<String>)> {
+        let mut applied: Vec<String> = Vec::new();
+        let mut rejected: Vec<String> = Vec::new();
+        let Some(map) = settings.as_object() else {
+            return Err(Error::proto(code::BAD_REQUEST, "settings must be an object"));
+        };
+        let needs_network = map.contains_key("cacheMode")
+            || map.contains_key("loadsImagesAutomatically")
+            || map.contains_key("blockNetworkImage");
+        if needs_network {
+            // `Network.setCacheDisabled` / `setBlockedURLs` need the domain;
+            // enabling is idempotent.
+            self.call("Network.enable", json!({}), self.browser.call_timeout)?;
+        }
+        let mut applied: Vec<String> = Vec::new();
+        let mut rejected: Vec<String> = Vec::new();
+        for (key, value) in map {
+            match key.as_str() {
+                "javascriptEnabled" => {
+                    let enabled = value.as_bool().ok_or_else(|| {
+                        Error::proto(code::BAD_REQUEST, "javascriptEnabled must be a boolean")
+                    })?;
+                    self.call(
+                        "Emulation.setScriptExecutionDisabled",
+                        json!({"value": !enabled}),
+                        self.browser.call_timeout,
+                    )?;
+                    applied.push(key.clone());
+                }
+                "userAgent" => {
+                    let ua = value.as_str().ok_or_else(|| {
+                        Error::proto(code::BAD_REQUEST, "userAgent must be a string")
+                    })?;
+                    self.set_user_agent(ua)?;
+                    applied.push(key.clone());
+                }
+                "cacheMode" => {
+                    // Android: LOAD_DEFAULT=-1, LOAD_CACHE_ELSE_NETWORK=1,
+                    // LOAD_NO_CACHE=2, LOAD_CACHE_ONLY=3. Only the
+                    // "no cache" case maps to a DevTools switch; the others
+                    // have no honest equivalent and are refused.
+                    let mode = value.as_i64().unwrap_or(-1);
+                    if mode == 2 {
+                        applied.push(key.clone());
+                    } else {
+                        rejected.push(key.clone());
+                    }
+                }
+                "loadsImagesAutomatically" | "blockNetworkImage" => {
+                    let on = value.as_bool().ok_or_else(|| {
+                        Error::proto(code::BAD_REQUEST, "blockNetworkImage must be a boolean")
+                    })?;
+                    // Both map to blocking image URLs. `loadsImagesAutomatically:
+                    // false` is "do not load images"; `blockNetworkImage: true`
+                    // is the same engine action.
+                    let block = if key == "loadsImagesAutomatically" { !on } else { on };
+                    let patterns = if block {
+                        json!(["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.svg", "*.avif"])
+                    } else {
+                        json!([])
+                    };
+                    self.call(
+                        "Network.setBlockedURLs",
+                        json!({"urls": patterns}),
+                        self.browser.call_timeout,
+                    )?;
+                    applied.push(key.clone());
+                }
+                _ => rejected.push(key.clone()),
+            }
+        }
+        if map
+            .get("cacheMode")
+            .and_then(Value::as_i64)
+            .map(|mode| mode == 2)
+            .unwrap_or(false)
+        {
+            self.call(
+                "Network.setCacheDisabled",
+                json!({"cacheDisabled": true}),
+                self.browser.call_timeout,
+            )?;
+        }
+        Ok((applied, rejected))
+    }
+
+    /// `view.scrollTo`: move the page, in device pixels, and answer with the
+    /// engine's own content/scroll metrics so the guest never invents one.
+    pub fn scroll_to(&self, x: f64, y: f64) -> Result<Value> {
+        let d = self.viewport().density;
+        let _ = self.evaluate(
+            &format!("window.scrollTo({}, {})", x / d, y / d),
+            self.browser.call_timeout,
+            false,
+        )?;
+        self.layout_metrics()
+    }
+
+    /// Content size and scroll offset from the engine, in display pixels.
+    pub fn layout_metrics(&self) -> Result<Value> {
+        let m = self.call("Page.getLayoutMetrics", json!({}), self.browser.call_timeout)?;
+        let d = self.viewport().density;
+        let content = &m["contentSize"];
+        let vv = &m["visualViewport"];
+        let f = |v: &Value, key: &str| v[key].as_f64().unwrap_or(0.0);
+        Ok(json!({
+            "contentWidth": round1(f(content, "width") * d),
+            "contentHeight": round1(f(content, "height") * d),
+            "scrollX": round1(f(vv, "pageX") * d),
+            "scrollY": round1(f(vv, "pageY") * d),
+        }))
+    }
+
+    /// `view.focusChanged` (v1.1): whether the page has a focused editable
+    /// field, so the guest can answer `onCheckIsTextEditor` and open a real IME
+    /// connection. The report is the page's own `document.activeElement`.
+    pub fn focus_report(&self) -> Result<Value> {
+        let script = r#"(() => {
+            const a = document.activeElement;
+            if (!a || a === document.body || a === document.documentElement) {
+                return {focused: false, editable: false, type: '', tag: ''};
+            }
+            const tag = (a.tagName || '').toLowerCase();
+            const type = (a.getAttribute && a.getAttribute('type')) || '';
+            const nonText = ['button','submit','reset','checkbox','radio','range','file','color','image','hidden'];
+            const editable = !!(a.isContentEditable || tag === 'textarea'
+                || (tag === 'input' && nonText.indexOf(type.toLowerCase()) < 0));
+            return {focused: true, editable: editable, type: type, tag: tag};
+        })()"#;
+        let res = self.call(
+            "Runtime.evaluate",
+            json!({"expression": script, "returnByValue": true}),
+            self.browser.call_timeout,
+        )?;
+        Ok(res["result"]["value"].clone())
     }
 
     pub fn history(&self, action: &str) -> Result<Value> {
@@ -520,15 +698,34 @@ impl View {
                 format!("interface name {name:?} must be [A-Za-z0-9_]+"),
             ));
         }
-        let mut bindings = self.bindings.lock().expect("bindings");
-        if !bindings.iter().any(|b| b == "__acos_jsi") {
+        self.interfaces
+            .lock()
+            .expect("interfaces")
+            .insert(name.to_string(), methods.to_vec());
+        self.install_javascript_interface(name, methods)
+    }
+
+    /// Install (or re-install after a navigation) one interface's binding+shim.
+    fn install_javascript_interface(&self, name: &str, methods: &[String]) -> Result<()> {
+        let needs_binding = !self
+            .bindings
+            .lock()
+            .expect("bindings")
+            .iter()
+            .any(|b| b == "__acos_jsi");
+        if needs_binding {
             self.call(
                 "Runtime.addBinding",
                 json!({"name": "__acos_jsi"}),
                 self.browser.call_timeout,
             )?;
-            bindings.push("__acos_jsi".to_string());
+            let mut bindings = self.bindings.lock().expect("bindings");
+            if !bindings.iter().any(|b| b == "__acos_jsi") {
+                bindings.push("__acos_jsi".to_string());
+            }
         }
+        // The shim helper itself is document state too; re-evaluate it before
+        // installing the interface on a new document.
         self.evaluate(JSI_SHIM, self.browser.call_timeout, false)?;
         let methods_json = serde_json::to_string(methods)
             .map_err(|e| Error::proto(code::INTERNAL, e.to_string()))?;
@@ -538,10 +735,21 @@ impl View {
             methods_json
         );
         self.evaluate(&script, self.browser.call_timeout, false)?;
+        let mut bindings = self.bindings.lock().expect("bindings");
         if !bindings.iter().any(|b| b == name) {
             bindings.push(name.to_string());
         }
         Ok(())
+    }
+
+    /// A document loaded: every registered interface must exist in it again.
+    fn reinstall_javascript_interfaces(&self) {
+        let interfaces = self.interfaces.lock().expect("interfaces").clone();
+        for (name, methods) in interfaces {
+            if let Err(e) = self.install_javascript_interface(&name, &methods) {
+                eprintln!("wv-jsi: reinstall {name} failed: {e}");
+            }
+        }
     }
 
     pub fn remove_javascript_interface(&self, name: &str) -> Result<()> {
@@ -554,6 +762,7 @@ impl View {
             .lock()
             .expect("bindings")
             .retain(|b| b != name);
+        self.interfaces.lock().expect("interfaces").remove(name);
         Ok(())
     }
 
@@ -591,19 +800,50 @@ impl View {
             ));
         }
         let t0 = Instant::now();
-        let res = self.call(
-            "HeadlessExperimental.beginFrame",
-            json!({"screenshot": {"format": "png", "optimizeForSpeed": true}}),
-            timeout,
-        )?;
+        // One beginFrame at a time across the whole browser (see Browser).
+        let _render = self.browser.render_lock.lock().expect("render lock");
+        // `beginFrame` can answer "not attached to an active page" while a
+        // navigation is committing, and omits `screenshotData` when the
+        // compositor produced no new frame. Both are transient: retry a few
+        // times (bounded, no invented pixels) rather than hand the guest a
+        // frame-less response or block it for the whole call timeout.
+        let mut b64 = None;
+        let mut has_damage = true;
+        let mut last_error = String::new();
+        let attempt_timeout = timeout.min(Duration::from_secs(2));
+        for attempt in 0..3 {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            match self.call(
+                "HeadlessExperimental.beginFrame",
+                json!({"screenshot": {"format": "png", "optimizeForSpeed": true}}),
+                attempt_timeout,
+            ) {
+                Ok(res) => {
+                    has_damage = res["hasDamage"].as_bool().unwrap_or(true);
+                    if let Some(data) = res["screenshotData"].as_str() {
+                        b64 = Some(data.to_string());
+                        break;
+                    }
+                    last_error = format!(
+                        "beginFrame returned no screenshotData (hasDamage={})",
+                        res["hasDamage"].as_bool().unwrap_or(false)
+                    );
+                }
+                Err(e) => {
+                    last_error = e.to_string();
+                    if !last_error.contains("Not attached to an active page") {
+                        break;
+                    }
+                }
+            }
+        }
         let engine_ms = t0.elapsed().as_secs_f64() * 1000.0;
-        let b64 = res["screenshotData"]
-            .as_str()
-            .ok_or_else(|| Error::proto(code::FRAME_FAILED, "beginFrame returned no screenshotData"))?;
-        let bytes = base64_decode(b64)
+        let b64 = b64.ok_or_else(|| Error::proto(code::FRAME_FAILED, last_error))?;
+        let bytes = base64_decode(&b64)
             .ok_or_else(|| Error::proto(code::FRAME_FAILED, "frame is not valid base64"))?;
         let vp = self.viewport();
-        let has_damage = res["hasDamage"].as_bool().unwrap_or(true);
         let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
         Ok(FrameData {
             seq,
@@ -894,6 +1134,9 @@ impl View {
                     Err(_) => (String::new(), String::new(), false, false),
                 };
                 self.nav.bump_finished(&url, &title, back, forward);
+                // A new document dropped the JS-interface shim; re-install it
+                // before the guest hears `navigation.finished`.
+                self.reinstall_javascript_interfaces();
                 Some(ViewEvent::NavigationFinished {
                     url,
                     title,

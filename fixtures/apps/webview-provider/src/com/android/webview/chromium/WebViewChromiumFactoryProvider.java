@@ -39,7 +39,7 @@ public class WebViewChromiumFactoryProvider implements android.webkit.WebViewFac
     @Override
     public android.webkit.WebViewProvider createWebView(android.webkit.WebView p0, android.webkit.WebView.PrivateAccess p1) {
         WebViewChromiumCore core = new WebViewChromiumCore(transport(p0));
-        core.attach(p0);
+        core.attach(p0, p1);
         return new WebViewChromium(core);
     }
     @Override

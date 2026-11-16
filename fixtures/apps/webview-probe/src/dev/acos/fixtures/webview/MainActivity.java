@@ -17,38 +17,37 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * SPIKE-WV probe: what does the guest do today when an app creates a WebView?
+ * WV6 end-to-end probe: two real WebViews, two real pages, one engine.
  *
- * The whole point is the reported failure, so every stage reports its outcome
- * into a TextView (id=status, visible in the ACOS UI tree) and into logcat with
- * the tag "WVProbe". Nothing is swallowed: the exact throwable class, message
- * and top stack frame are printed.
+ * <p>Page A is served from this APK's assets through the broker's request
+ * interception (`file:///android_asset/test.html` -> `req.intercept` -> the
+ * guest's own `AssetManager`), page B is a `data:` URL. The probe records every
+ * stage in the {@code status} TextView (and logcat tag {@code WVProbe}); the
+ * scenario asserts the page text through the ACOS UI tree (the WIRE v1.1
+ * `ax` -> `AccessibilityNodeProvider` path), taps the page's own button by that
+ * text, and checks that the page's JS changed it and that the JS bridge ran.
  */
 public class MainActivity extends Activity {
     private static final String TAG = "WVProbe";
-    private static final String PAGE =
-            "<!doctype html><html><body style='font:32px sans-serif'>"
-            + "<h1 id=h>acos webview</h1>"
-            + "<button id=b style='font:32px sans-serif' onclick=\"document.getElementById('out')"
-            + ".textContent='tapped';window.acosBridge.report('tapped')\">Tap me</button>"
-            + "<div id=out style='font:28px sans-serif'>not tapped</div></body></html>";
+
+    private static final String DATA_PAGE =
+            "<!doctype html><html><head><meta charset='utf-8'><title>acos data page</title></head>"
+            + "<body style='font:18px sans-serif'><h1 id=h style='font-size:24px;margin:8px 0'>acos data page</h1>"
+            + "<div id=out style='font:16px sans-serif'>data page body</div></body></html>";
 
     private TextView status;
-    private ProbeWebView webView;
     private final StringBuilder log = new StringBuilder();
 
-    /**
-     * WV5a: a WebView the probe can observe after layout. `onSizeChanged` is the
-     * framework's own "the view now has its real size" callback, so the
-     * navigation is issued from there: the engine view is created at measure
-     * (`view.create`) and resized at layout (`view.setViewport`) *before*
-     * `view.loadUrl`, exactly the order a real app produces.
-     */
+    /** A WebView that issues its navigation once the framework gave it a size. */
     private final class ProbeWebView extends WebView {
+        private final String url;
+        private final String label;
         private boolean loaded;
 
-        ProbeWebView(android.content.Context context) {
+        ProbeWebView(android.content.Context context, String label, String url) {
             super(context);
+            this.label = label;
+            this.url = url;
         }
 
         @Override
@@ -58,16 +57,18 @@ public class MainActivity extends Activity {
                 return;
             }
             loaded = true;
-            append("laid out " + w + "x" + h);
-            try {
-                // A `data:` URL goes through `view.loadUrl` (`WIRE.md` §4.2) and
-                // needs no network: Chromium never network-fetches `data:` (§4.3).
-                loadUrl("data:text/html;charset=utf-8,"
-                        + java.net.URLEncoder.encode(PAGE, "UTF-8"));
-                append("loadUrl issued");
-            } catch (Throwable t) {
-                append("loadUrl FAILED: " + t);
-            }
+            append(label + " laid out " + w + "x" + h);
+            // Post the navigation: `loadUrl` waits for the engine's load event,
+            // and the launcher's first-traversal readiness must not be blocked
+            // by a page (or its asset interception) on the UI thread.
+            post(() -> {
+                try {
+                    loadUrl(url);
+                    append(label + " loadUrl issued");
+                } catch (Throwable t) {
+                    append(label + " loadUrl FAILED: " + t);
+                }
+            });
         }
     }
 
@@ -94,6 +95,32 @@ public class MainActivity extends Activity {
         });
     }
 
+    private ProbeWebView addWebView(LinearLayout root, int id, String label, String url) {
+        ProbeWebView wv = new ProbeWebView(this, label, url);
+        wv.setId(id);
+        WebSettings settings = wv.getSettings();
+        settings.setJavaScriptEnabled(true);
+        wv.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String loadedUrl) {
+                String shown = loadedUrl != null && loadedUrl.startsWith("data:")
+                        ? "data:text/html;base64,…" : String.valueOf(loadedUrl);
+                append(label + " onPageFinished " + shown);
+                view.evaluateJavascript(
+                        "(function(){var h=document.getElementById('h');return h?h.textContent:''})()",
+                        new ValueCallback<String>() {
+                            @Override
+                            public void onReceiveValue(String value) {
+                                append(label + " evaluateJavascript -> " + value);
+                            }
+                        });
+            }
+        });
+        wv.setWebChromeClient(new WebChromeClient());
+        root.addView(wv, new LinearLayout.LayoutParams(900, 560));
+        return wv;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -101,78 +128,40 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         status = new TextView(this);
         status.setId(R.id.status);
-        status.setTextSize(14f);
+        status.setTextSize(12f);
         status.setGravity(Gravity.START);
         status.setText("uid=" + Process.myUid() + " pid=" + Process.myPid() + "\n");
+        // Fixed height: the probe's own log must not push the WebViews around
+        // (a wrap-content status TextView outgrew the screen and left page A
+        // clipped). The full text is still the node's `text` for assertions.
         root.addView(status, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, 420));
         ScrollView scroll = new ScrollView(this);
         scroll.addView(root);
         setContentView(scroll);
 
-        String feature;
         try {
-            feature = String.valueOf(getPackageManager().hasSystemFeature("android.software.webview"));
-        } catch (Throwable t) {
-            feature = "hasSystemFeature threw " + t;
-        }
-        append("hasSystemFeature(android.software.webview)=" + feature);
-        append("WebView.getCurrentWebViewPackage()=" + WebView.getCurrentWebViewPackage());
-        append("myUid=" + Process.myUid());
+            append("hasSystemFeature(android.software.webview)="
+                    + getPackageManager().hasSystemFeature("android.software.webview"));
+            append("WebView.getCurrentWebViewPackage()=" + WebView.getCurrentWebViewPackage());
 
-        // SPIKE-WV diagnostic: `WebViewFactory` resolves the provider package
-        // with `getPackageInfo(pkg, GET_SIGNATURES|GET_META_DATA|
-        // GET_SHARED_LIBRARY_FILES|MATCH_UNINSTALLED_PACKAGES|0x10000000)`.
-        // Ask for the *app's own* package with the same flags: it isolates
-        // "the PMS reply for these flags is broken" from "the provider record
-        // is broken".
-        try {
-            android.content.pm.PackageInfo own = getPackageManager().getPackageInfo(
-                    getPackageName(),
-                    (int) 0x100024c0);
-            append("own getPackageInfo(0x100024c0) -> " + own.packageName
-                    + " sigs=" + (own.signatures == null ? "null" : own.signatures.length));
-        } catch (Throwable t) {
-            append("own getPackageInfo(0x100024c0) FAILED: " + t);
-        }
+            // Page A: the broker intercepts file:///android_asset/test.html and
+            // asks this process for the APK asset bytes (WIRE.md §4.3).
+            ProbeWebView a = addWebView(root, R.id.webview, "A", "file:///android_asset/test.html");
+            append("WebView created: " + a);
+            a.addJavascriptInterface(new Bridge(this), "acosBridge");
 
-        try {
-            ProbeWebView wv = new ProbeWebView(this);
-            append("WebView created: " + wv);
-            WebSettings settings = wv.getSettings();
-            settings.setJavaScriptEnabled(true);
-            append("settings ok: jsEnabled=" + settings.getJavaScriptEnabled());
-            wv.addJavascriptInterface(new Bridge(this), "acosBridge");
-            wv.setWebViewClient(new WebViewClient() {
-                @Override
-                public void onPageFinished(WebView view, String url) {
-                    append("onPageFinished " + url);
-                    view.evaluateJavascript("document.getElementById('h').textContent",
-                            new ValueCallback<String>() {
-                                @Override
-                                public void onReceiveValue(String value) {
-                                    append("evaluateJavascript -> " + value);
-                                }
-                            });
-                }
-            });
-            wv.setWebChromeClient(new WebChromeClient());
-            append("clients set");
-            // WV5a: attach and lay the view out *before* the navigation, so the
-            // engine view is created and resized with the View's real geometry
-            // (`view.create` at measure, `view.setViewport` at layout) before
-            // `view.loadUrl` is issued — the same order a real page sees, and the
-            // one the session listener asserts. The load happens from
-            // `onSizeChanged`, i.e. from the fixture's own layout callback, not
-            // from a guessed delay.
-            this.webView = wv;
-            wv.setId(R.id.webview);
-            root.addView(wv, new LinearLayout.LayoutParams(900, 700));
-            append("attached (layout pending)");
+            // Page B: a data: URL; Chromium never network-fetches it, so it
+            // needs no interception at all (WIRE.md §4.3).
+            String encoded = android.util.Base64.encodeToString(
+                    DATA_PAGE.getBytes("UTF-8"), android.util.Base64.NO_WRAP);
+            ProbeWebView b = addWebView(root, R.id.webview2,
+                    "B", "data:text/html;base64," + encoded);
+            append("WebView created: " + b);
         } catch (Throwable t) {
             StringBuilder where = new StringBuilder();
             StackTraceElement[] st = t.getStackTrace();
-            for (int i = 0; i < Math.min(4, st.length); i++) {
+            for (int i = 0; i < Math.min(5, st.length); i++) {
                 where.append("\n  at ").append(st[i]);
             }
             append("WebView FAILED: " + t.getClass().getName() + ": " + t.getMessage() + where);

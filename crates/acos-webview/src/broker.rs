@@ -74,6 +74,10 @@ pub struct Browser {
     pub call_timeout: Duration,
     pub nav_timeout: Duration,
     pub frame_timeout: Duration,
+    /// `HeadlessExperimental.beginFrame` is a browser-global command; two
+    /// targets asking at once crashed the pinned engine in the two-WebView
+    /// ART run. Frame production is serialised per browser (measured).
+    pub render_lock: Mutex<()>,
     started: Instant,
 }
 
@@ -135,6 +139,7 @@ impl Browser {
             call_timeout: cfg.call_timeout,
             nav_timeout: cfg.nav_timeout,
             frame_timeout: cfg.frame_timeout,
+            render_lock: Mutex::new(()),
             started: Instant::now(),
         }))
     }

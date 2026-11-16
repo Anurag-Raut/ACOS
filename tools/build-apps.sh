@@ -225,6 +225,10 @@ if [ -n "${ACOS_APP_ONLY:-}" ]; then
     for app in $ACOS_APP_ONLY; do
         if [ "$app" = "webview-provider" ]; then
             build_provider_apk "$app"
+        elif [ "$app" = "webview-probe" ]; then
+            # WV6: the probe serves its page from its own APK assets through
+            # the broker's request interception.
+            build_apk "$app" "$APPS_DIR/webview-probe/assets:assets"
         else
             build_apk "$app"
         fi
@@ -319,7 +323,7 @@ build_apk keystore-probe
 # SPIKE-WV (ADR-0031 gate, research/spike-wv/): webview-probe creates a real
 # android.webkit.WebView and reports the exact outcome (uid, hasSystemFeature,
 # provider discovery, load, JS) into its UI tree and logcat tag WVProbe.
-build_apk webview-probe
+build_apk webview-probe "$APPS_DIR/webview-probe/assets:assets"
 
 # insets-probe is the W7 window-model fixture: an edge-to-edge Activity that
 # prints the frame and the reported system-bar insets. It is the only fixture

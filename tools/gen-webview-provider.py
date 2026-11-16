@@ -78,7 +78,7 @@ STUB_CLASSES = {
 # of their owner above so javac can resolve `WebView.PrivateAccess` and friends.
 STUB_NESTED = {
     "android/webkit/WebView": [
-        "interface PrivateAccess",
+        "class PrivateAccess",
         "interface VisualStateCallback",
         "interface FindListener",
         "interface PictureListener",
@@ -88,6 +88,40 @@ STUB_NESTED = {
     "android/webkit/WebViewFactoryProvider": ["interface Statics"],
     "android/webkit/WebViewDelegate": ["interface OnTraceEnabledChangeListener"],
 }
+
+
+# `WebView.PrivateAccess` is not listed in METHODS.md (that list is the
+# interfaces the framework *calls*); these are the seam methods the API-34
+# image's own dex declares, extracted from
+# `.cache/w4/classes4-dexdump.txt` (`Landroid/webkit/WebView$PrivateAccess;`).
+# The provider uses them exactly as Chromium's `WebViewChromium` does through
+# `mWebViewPrivate` — no reflection on `View` internals (WV6).
+PRIVATE_ACCESS_METHODS = [
+    ("awakenScrollBars", ["I"], "V"),
+    ("awakenScrollBars", ["I", "Z"], "V"),
+    ("getHorizontalScrollbarHeight", [], "I"),
+    ("getHorizontalScrollFactor", [], "F"),
+    ("getVerticalScrollFactor", [], "F"),
+    ("onScrollChanged", ["I", "I", "I", "I"], "V"),
+    ("overScrollBy", ["I", "I", "I", "I", "I", "I", "I", "I", "Z"], "V"),
+    ("setMeasuredDimension", ["I", "I"], "V"),
+    ("setScrollXRaw", ["I"], "V"),
+    ("setScrollYRaw", ["I"], "V"),
+    ("super_computeScroll", [], "V"),
+    ("super_dispatchKeyEvent", ["Landroid/view/KeyEvent;"], "Z"),
+    ("super_getScrollBarStyle", [], "I"),
+    ("super_onApplyWindowInsets", ["Landroid/view/WindowInsets;"], "Landroid/view/WindowInsets;"),
+    ("super_onDrawVerticalScrollBar", ["Landroid/graphics/Canvas;", "Landroid/graphics/drawable/Drawable;", "I", "I", "I", "I"], "V"),
+    ("super_onGenericMotionEvent", ["Landroid/view/MotionEvent;"], "Z"),
+    ("super_onHoverEvent", ["Landroid/view/MotionEvent;"], "Z"),
+    ("super_performAccessibilityAction", ["I", "Landroid/os/Bundle;"], "Z"),
+    ("super_performLongClick", [], "Z"),
+    ("super_requestFocus", ["I", "Landroid/graphics/Rect;"], "Z"),
+    ("super_scrollTo", ["I", "I"], "V"),
+    ("super_setFrame", ["I", "I", "I", "I"], "Z"),
+    ("super_setLayoutParams", ["Landroid/view/ViewGroup$LayoutParams;"], "V"),
+    ("super_startActivityForResult", ["Landroid/content/Intent;", "I"], "V"),
+]
 
 
 def java_type(desc: str) -> str:
@@ -319,6 +353,25 @@ def main() -> int:
                 "    public WebView(android.content.Context context) { super(context); }",
                 1,
             )
+            # Fill `WebView.PrivateAccess` with the image's seam methods: the
+            # provider calls them exactly as Chromium's WebViewChromium does
+            # (`mWebViewPrivate.super_setLayoutParams(...)`), never through
+            # reflection on the View's own fields.
+            access_lines = []
+            for name, args, ret in PRIVATE_ACCESS_METHODS:
+                params = ", ".join(f"{java_type(a)} p{i}" for i, a in enumerate(args))
+                rtype = java_type(ret)
+                body = "" if rtype == "void" else f"return {DEFAULT.get(rtype, 'null')};"
+                access_lines.append(
+                    f"        public {rtype} {name}({params}) {{ {body} }}"
+                )
+            src = src.replace(
+                "    public class PrivateAccess {}",
+                "    public class PrivateAccess {\n"
+                + "\n".join(access_lines)
+                + "\n    }",
+                1,
+            )
         if nested_of:
             # Fill the nested interfaces with their real method list.
             for nname, nmethods in nested_of.items():
@@ -417,16 +470,10 @@ def main() -> int:
             "onInitializeAccessibilityEvent(Landroid/view/accessibility/AccessibilityEvent;)":
                 "        mProvider.core().onInitializeAccessibilityEvent(p0);",
             "getAccessibilityNodeProvider()":
-                # The page's virtual accessibility tree is engine state (WIRE v1
-                # §4.4 `ax`), and mapping it onto an
-                # `AccessibilityNodeProvider` has not landed. `null` would tell
-                # the platform "this view has no virtual children", which is a
-                # false claim about a page, so this refuses and names itself.
-                "        throw new UnsupportedOperationException(\n"
-                '                "ACOS WebView provider: unsupported method '
-                'ViewDelegate.getAccessibilityNodeProvider()Landroid/view/accessibility/'
-                'AccessibilityNodeProvider; (the page AX tree is the WIRE v1 op ax, not yet '
-                'mapped; see results/handoff/WV5a/WIRE-ADDITIONS.md §5)");',
+                # v1.1: the page's `ax` tree as virtual descendants (WV6). A
+                # WebView with no engine view yet answers null (no page), which
+                # is the truth; once created it never claims "no children".
+                "        return mProvider.core().getAccessibilityNodeProvider();",
         },
         members=(
             "    private final WebViewChromium mProvider;\n\n"
@@ -515,7 +562,7 @@ def main() -> int:
         {
             "createWebView(Landroid/webkit/WebView;Landroid/webkit/WebView$PrivateAccess;)":
                 "        WebViewChromiumCore core = new WebViewChromiumCore(transport(p0));\n"
-                "        core.attach(p0);\n"
+                "        core.attach(p0, p1);\n"
                 "        return new WebViewChromium(core);",
         },
         members=(
@@ -565,6 +612,22 @@ def main() -> int:
                     "        mCore.setUserAgent(p0);",
                 "getUserAgentString()":
                     "        return mCore.userAgent();",
+                # v1.1 `view.settings`: fields the pinned engine can honour
+                # after `view.create` (WIRE.md §4.2). A field the broker cannot
+                # honour comes back in `rejected` and the setter throws, so an
+                # app never believes a setting changed that did not.
+                "setCacheMode(int)":
+                    "        mCore.setCacheMode(p0);",
+                "getCacheMode()":
+                    "        return mCore.cacheMode();",
+                "setLoadsImagesAutomatically(boolean)":
+                    "        mCore.setLoadsImagesAutomatically(p0);",
+                "getLoadsImagesAutomatically()":
+                    "        return mCore.loadsImagesAutomatically();",
+                "setBlockNetworkImage(boolean)":
+                    "        mCore.setBlockNetworkImage(p0);",
+                "getBlockNetworkImage()":
+                    "        return mCore.blockNetworkImage();",
             },
         ),
         check,

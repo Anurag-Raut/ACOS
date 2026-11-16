@@ -278,23 +278,19 @@ public class WebSettingsChromium extends android.webkit.WebSettings {
     }
     @Override
     public void setLoadsImagesAutomatically(boolean p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebSettings: void setLoadsImagesAutomatically(boolean); WIRE v1 has no message for it (see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        mCore.setLoadsImagesAutomatically(p0);
     }
     @Override
     public boolean getLoadsImagesAutomatically() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebSettings: boolean getLoadsImagesAutomatically(); WIRE v1 has no message for it (see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        return mCore.loadsImagesAutomatically();
     }
     @Override
     public void setBlockNetworkImage(boolean p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebSettings: void setBlockNetworkImage(boolean); WIRE v1 has no message for it (see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        mCore.setBlockNetworkImage(p0);
     }
     @Override
     public boolean getBlockNetworkImage() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebSettings: boolean getBlockNetworkImage(); WIRE v1 has no message for it (see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        return mCore.blockNetworkImage();
     }
     @Override
     public void setBlockNetworkLoads(boolean p0) {
@@ -424,13 +420,11 @@ public class WebSettingsChromium extends android.webkit.WebSettings {
     }
     @Override
     public void setCacheMode(int p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebSettings: void setCacheMode(int); WIRE v1 has no message for it (see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        mCore.setCacheMode(p0);
     }
     @Override
     public int getCacheMode() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebSettings: int getCacheMode(); WIRE v1 has no message for it (see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        return mCore.cacheMode();
     }
     @Override
     public void setMixedContentMode(int p0) {

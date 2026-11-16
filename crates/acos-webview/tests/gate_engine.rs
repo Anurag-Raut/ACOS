@@ -97,7 +97,7 @@ fn two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate() {
     // --- session A: the first guest connection starts the shared broker -------
     let a = WireGuest::connect(gate_a.socket());
     let hello_a = a.hello();
-    assert_eq!(hello_a["proto"], json!(1));
+    assert_eq!(hello_a["proto"], json!(1.1));
     assert_eq!(hello_a["session"], json!("session-a"));
     let engine = &hello_a["engine"];
     assert!(

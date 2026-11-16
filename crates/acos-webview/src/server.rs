@@ -641,11 +641,11 @@ impl Conn {
         let sid = req["session"].as_str().unwrap_or("");
         match op {
             "hello" => {
-                if req["proto"].as_u64().unwrap_or(0) != PROTO as u64 {
+                if req["proto"].as_f64().unwrap_or(0.0) != PROTO {
                     return Err(Error::proto(
                         crate::wire::code::PROTO_VERSION,
                         format!(
-                            "proto {:?} unsupported; this broker speaks 1",
+                            "proto {:?} unsupported; this broker speaks 1.1",
                             req["proto"]
                         ),
                     ));
@@ -722,6 +722,9 @@ impl Conn {
                 if let Some(ua) = req["userAgent"].as_str() {
                     view.set_user_agent(ua)?;
                 }
+                if let Some(enabled) = req.get("javascriptEnabled").and_then(Value::as_bool) {
+                    view.apply_settings(&json!({"javascriptEnabled": enabled}))?;
+                }
                 self.spawn_pump(&view);
                 Ok(Outcome::Value(json!({
                     "view": view_id,
@@ -783,6 +786,36 @@ impl Conn {
                         view.set_user_agent(ua)?;
                         Ok(Outcome::Value(json!({"view": view_id, "userAgent": ua})))
                     }
+                    "view.setVisibility" => {
+                        let visible = req["visible"].as_bool().unwrap_or(true);
+                        let window_visible = req["windowVisible"].as_bool().unwrap_or(true);
+                        view.set_visibility(visible, window_visible)?;
+                        Ok(Outcome::Value(json!({
+                            "view": view_id, "visible": visible, "windowVisible": window_visible
+                        })))
+                    }
+                    "view.settings" => {
+                        let settings = req
+                            .get("settings")
+                            .ok_or_else(|| Error::proto(code::BAD_REQUEST, "view.settings needs settings"))?;
+                        let (applied, rejected) = view.apply_settings(settings)?;
+                        Ok(Outcome::Value(json!({
+                            "view": view_id, "applied": applied, "rejected": rejected
+                        })))
+                    }
+                    "view.scrollTo" => {
+                        let x = req["x"].as_f64().unwrap_or(0.0);
+                        let y = req["y"].as_f64().unwrap_or(0.0);
+                        let metrics = view.scroll_to(x, y)?;
+                        self.nudge_render(&view, "scroll");
+                        let mut out = json!({"view": view_id, "x": x, "y": y});
+                        if let (Some(dst), Some(src)) = (out.as_object_mut(), metrics.as_object()) {
+                            for (k, v) in src {
+                                dst.insert(k.clone(), v.clone());
+                            }
+                        }
+                        Ok(Outcome::Value(out))
+                    }
                     "view.evaluateJavascript" => {
                         let script = req["script"]
                             .as_str()
@@ -796,6 +829,7 @@ impl Conn {
                             req["userGesture"].as_bool().unwrap_or(false),
                         )?;
                         r["view"] = json!(view_id);
+                        self.nudge_render(&view, "damage");
                         Ok(Outcome::Value(r))
                     }
                     "view.addJavascriptInterface" => {
@@ -826,8 +860,9 @@ impl Conn {
                             req["timeoutMs"].as_u64().unwrap_or(10_000).clamp(1, 120_000),
                         );
                         let f = view.render(format, timeout)?;
+                        let metrics = view.layout_metrics().unwrap_or_else(|_| json!({}));
                         let (dx, dy, dw, dh) = f.damage;
-                        let meta = json!({
+                        let mut meta = json!({
                             "view": view_id,
                             "seq": f.seq,
                             "width": f.width,
@@ -839,6 +874,11 @@ impl Conn {
                             "hasDamage": f.has_damage,
                             "engineMs": (f.engine_ms * 10.0).round() / 10.0,
                         });
+                        if let (Some(dst), Some(src)) = (meta.as_object_mut(), metrics.as_object()) {
+                            for (k, v) in src {
+                                dst.insert(k.clone(), v.clone());
+                            }
+                        }
                         let blob = Blob {
                             id: req["id"].as_str().unwrap_or("g?").to_string(),
                             format: f.format,
@@ -863,11 +903,16 @@ impl Conn {
                         let y = req["y"].as_f64().unwrap_or(0.0);
                         let hold = Duration::from_millis(req["holdMs"].as_u64().unwrap_or(40));
                         view.tap(x, y, hold)?;
+                        self.emit_focus_event(&view);
+                        self.nudge_render(&view, "damage");
                         Ok(Outcome::Value(json!({"view": view_id, "delivered": true})))
                     }
                     "input.touch" => {
                         let action = req["action"].as_str().unwrap_or("down");
                         view.touch(action, req["points"].clone())?;
+                        if action == "up" || action == "cancel" {
+                            self.nudge_render(&view, "damage");
+                        }
                         Ok(Outcome::Value(json!({"view": view_id, "delivered": true})))
                     }
                     "input.scroll" => {
@@ -895,11 +940,14 @@ impl Conn {
                             .as_str()
                             .ok_or_else(|| Error::proto(code::BAD_REQUEST, "input.text needs text"))?;
                         view.insert_text(text)?;
+                        self.emit_focus_event(&view);
+                        self.nudge_render(&view, "damage");
                         Ok(Outcome::Value(json!({"view": view_id, "delivered": true})))
                     }
                     "input.setFocus" => {
                         let focused = req["focused"].as_bool().unwrap_or(true);
                         view.set_focus(focused)?;
+                        self.emit_focus_event(&view);
                         Ok(Outcome::Value(json!({"view": view_id, "focused": focused})))
                     }
                     "view.setInterceptAll" => {
@@ -994,6 +1042,10 @@ impl Conn {
                             json!({"view": view.id, "url": url, "title": title,
                                    "canGoBack": can_go_back, "canGoForward": can_go_forward}),
                         );
+                        // A page can autofocus a field while it loads; report it.
+                        self.emit_focus_event(&view);
+                        // The first paint of a loaded page is a new frame.
+                        self.nudge_render(&view, "load");
                     }
                     crate::view::ViewEvent::NavigationFailed { url, code, message } => {
                         self.send_event(
@@ -1073,6 +1125,31 @@ impl Conn {
             Err(e) => {
                 let _ = view.resolve_js_call(&call_id, None, Some(&e.to_string()));
             }
+        }
+    }
+
+    /// Ask the guest for a new frame after an action that changed the page.
+    /// `render.invalidated` is coalesced by the guest (`WIRE.md` §5.1), so this
+    /// is a hint, never a per-pixel frame push.
+    fn nudge_render(&self, view: &Arc<crate::view::View>, reason: &str) {
+        self.send_event(
+            "render.invalidated",
+            json!({"view": view.id, "reason": reason}),
+        );
+    }
+
+    /// v1.1: report the page's focused editable field to the guest. Sent after
+    /// every action that can move focus (tap, IME text, `input.setFocus`), so
+    /// `onCheckIsTextEditor` answers from engine truth instead of guessing.
+    fn emit_focus_event(&self, view: &Arc<crate::view::View>) {
+        if let Ok(report) = view.focus_report() {
+            let mut fields = json!({"view": view.id});
+            if let (Some(dst), Some(src)) = (fields.as_object_mut(), report.as_object()) {
+                for (k, v) in src {
+                    dst.insert(k.clone(), v.clone());
+                }
+            }
+            self.send_event("view.focusChanged", fields);
         }
     }
 

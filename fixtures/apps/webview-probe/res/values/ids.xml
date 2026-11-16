@@ -2,4 +2,5 @@
 <resources>
     <item name="status" type="id" />
     <item name="webview" type="id" />
+    <item name="webview2" type="id" />
 </resources>

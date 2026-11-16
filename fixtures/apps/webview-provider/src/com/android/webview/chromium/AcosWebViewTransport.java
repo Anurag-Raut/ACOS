@@ -134,7 +134,7 @@ public final class AcosWebViewTransport {
         public JSONObject hello(String client) throws IOException {
             JSONObject params = new JSONObject();
             try {
-                params.put("proto", 1);
+                params.put("proto", 1.1);
                 params.put("client", client);
             } catch (org.json.JSONException e) {
                 throw new TransportException("BAD_REQUEST", e.toString());
@@ -184,6 +184,10 @@ public final class AcosWebViewTransport {
 
         @Override
         public Frame call(String op, JSONObject params) throws IOException {
+            TransportException broken = failure;
+            if (broken != null) {
+                throw broken;
+            }
             String id = "g" + nextId.incrementAndGet();
             Pending slot = new Pending(op);
             synchronized (pending) {
@@ -204,6 +208,13 @@ public final class AcosWebViewTransport {
                 }
                 writeFrame(KIND_JSON, request.toString().getBytes(StandardCharsets.UTF_8));
                 Frame frame = slot.frames.poll(30, TimeUnit.SECONDS);
+                // A connection-level error frame (id "g?", WIRE.md §2/§6) is
+                // fatal for every pending request, never a per-request answer:
+                // readLoop records it here and wakes every waiter.
+                TransportException nowBroken = failure;
+                if (nowBroken != null) {
+                    throw nowBroken;
+                }
                 if (frame == null) {
                     throw new TransportException("TIMEOUT", op + " answered nothing in 30 s");
                 }
@@ -294,11 +305,61 @@ public final class AcosWebViewTransport {
                         : new TransportException("BAD_FRAME", e.toString());
             } finally {
                 ready.countDown();
-                synchronized (pending) {
-                    for (Pending slot : pending.values()) {
-                        slot.frames.offer(new Frame(new JSONObject(), null));
-                    }
+                if (failure == null) {
+                    failure = new TransportException("ENGINE_CRASHED", "socket closed by the broker");
                 }
+                failAll(failure);
+            }
+        }
+
+        /** Fail every in-flight request with one fatal transport error. */
+        private void failAll(TransportException error) {
+            failure = error;
+            synchronized (pending) {
+                for (Pending slot : pending.values()) {
+                    slot.frames.clear();
+                    slot.frames.offer(new Frame(new JSONObject(), null));
+                }
+            }
+        }
+
+        /** Answer one host -> guest request (`WIRE.md` §5.2). */
+        private void answerHostRequest(String id, String op, JSONObject params) {
+            android.util.Log.i("ACOSWvProvider", "host request " + op + " id=" + id);
+            JSONObject response = new JSONObject();
+            try {
+                response.put("id", id);
+                EventHandler h = handler;
+                if (h == null) {
+                    throw new TransportException(
+                            "UNSUPPORTED", "no request handler for host op " + op);
+                }
+                JSONObject result = h.onRequest(op, params);
+                response.put("ok", true);
+                response.put("result", result == null ? new JSONObject() : result);
+            } catch (TransportException e) {
+                try {
+                    JSONObject error = new JSONObject();
+                    error.put("code", e.code);
+                    error.put("message", e.getMessage());
+                    response.put("ok", false);
+                    response.put("error", error);
+                } catch (org.json.JSONException ignored) {
+                }
+            } catch (Exception e) {
+                try {
+                    JSONObject error = new JSONObject();
+                    error.put("code", "INTERNAL");
+                    error.put("message", e.toString());
+                    response.put("ok", false);
+                    response.put("error", error);
+                } catch (org.json.JSONException ignored) {
+                }
+            }
+            try {
+                writeFrame(KIND_JSON, response.toString().getBytes(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                failure = new TransportException("ENGINE_CRASHED", "answer write: " + e);
             }
         }
 
@@ -339,11 +400,32 @@ public final class AcosWebViewTransport {
                 return;
             }
             String id = json.optString("id", "");
+            // A host -> guest request (`WIRE.md` §5.2: req.intercept,
+            // nav.shouldOverride, js.call) has an `op`. It runs on this reader
+            // thread and its answer goes back as a normal response frame.
+            if (json.has("op")) {
+                answerHostRequest(id, json.optString("op", ""), json);
+                return;
+            }
             Pending slot;
             synchronized (pending) {
                 slot = pending.get(id);
             }
             if (slot == null) {
+                // No request owns this id: the gate's connection-level error
+                // ("g?" on a failed attach, WIRE.md §2/§6) is fatal for the
+                // whole connection, so every pending request fails with the
+                // same structured error instead of hanging until its timeout.
+                if ("g?".equals(id) && json.has("ok") && !json.optBoolean("ok", false)) {
+                    JSONObject error = json.optJSONObject("error");
+                    String codeName = error == null
+                            ? "ENGINE_UNAVAILABLE"
+                            : error.optString("code", "ENGINE_UNAVAILABLE");
+                    String message = error == null
+                            ? "the WebView broker closed the connection"
+                            : error.optString("message", "");
+                    failAll(new TransportException(codeName, message));
+                }
                 return;
             }
             // `render` is the one op with two frames (`WIRE.md` §1, §6): the

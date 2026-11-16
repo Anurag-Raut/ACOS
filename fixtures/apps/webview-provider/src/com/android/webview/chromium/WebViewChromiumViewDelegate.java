@@ -35,8 +35,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public android.view.accessibility.AccessibilityNodeProvider getAccessibilityNodeProvider() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.getAccessibilityNodeProvider()Landroid/view/accessibility/AccessibilityNodeProvider; (the page AX tree is the WIRE v1 op ax, not yet mapped; see results/handoff/WV5a/WIRE-ADDITIONS.md §5)");
+        return mProvider.core().getAccessibilityNodeProvider();
     }
     @Override
     public android.os.Handler getHandler(android.os.Handler p0) {

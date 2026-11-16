@@ -1,10 +1,33 @@
 # WVB/WV2 wire protocol (guest WebView provider ⇄ host WebView broker)
 
-Version **1**. Owner: WVB (host broker, `crates/acos-webview`). Consumer: WV2
+Version **1.1** (WV6). Owner: WVB (host broker, `crates/acos-webview`). Consumer: WV2
 (guest provider). This file is normative: the broker's `wire` module in
 `crates/acos-webview/src/wire.rs` implements exactly this and its unit tests are
 the executable copy of §1–§3. Changes bump `proto` and are additive otherwise
 (unknown ops answer `UNSUPPORTED`, never a silent success).
+
+### v1.1 (WV6, additive except the version number)
+
+`proto` is now the number **1.1** on both sides (a `1`/`1.0` guest is answered
+`PROTO_VERSION`). Added, and implemented by both the broker and the provider:
+
+* `view.setVisibility` (`{view, visible, windowVisible}`) — a hidden View tells
+  the engine (`Page.setWebLifecycleState`: frozen/active) so the renderer stops.
+* `view.settings` (`{view, settings:{…}}` → `{applied:[…], rejected:[…]}`) —
+  settings changed after `view.create`. A rejected key is never silently
+  dropped: the provider raises, naming the setting.
+* `view.scrollTo` (`{view, x, y}` → engine `contentWidth/contentHeight/
+  scrollX/scrollY`); the same four fields are added to every `render` response,
+  so `compute*ScrollRange/Offset/Extent` answer from engine truth after the
+  first frame (guest geometry only until then).
+* `view.focusChanged` (host event `{view, focused, editable, type, tag}`) — the
+  page's focused editable field, from `document.activeElement`; it backs
+  `onCheckIsTextEditor`/`onCreateInputConnection`. The `ax` tree is exposed by
+  the provider as virtual `AccessibilityNodeProvider` descendants (no new op).
+* A connection-level error frame has id **`"g?"`** (a failed gate attach, or a
+  second connection). Both are **fatal for every pending request** on that
+  connection: the provider fails all of them with the frame's code (an attach
+  failure is `ENGINE_UNAVAILABLE`) instead of waiting for their timeouts.
 
 ## 0. Transport
 
@@ -16,8 +39,8 @@ the executable copy of §1–§3. Changes bump `proto` and are additive otherwis
 * Nothing else is on the socket. No TCP, no WebSocket, no payload escaping
   beyond §1 (JSON is UTF-8, never base64-wrapped for frames).
 * The guest connects once per session, sends `hello`, and keeps the connection
-  for the session's life. One connection per session socket; a second
-  connection is rejected with `ALREADY_CONNECTED`.
+  for the session's life. `hello.proto` is `1.1` in v1.1. One connection per
+  session socket; a second connection is rejected with `ALREADY_CONNECTED`.
 * If the engine dies the broker restarts it, closes the socket with a final
   event `engine.restarted` (views are gone) and the guest provider must
   re-create its views. The broker never silently continues.
@@ -107,11 +130,14 @@ DevTools taps `density` times too far right and down).
 | `view.loadData` | `{view, data, mime:"text/html", encoding:"utf8"\|"base64", baseUrl?}` | `{view, url:"data:…", loadMs}` |
 | `view.reload` / `view.stop` | `{view}` | `{view}` |
 | `view.setUserAgent` | `{view, userAgent}` | `{view, userAgent}` |
+| `view.setVisibility` | `{view, visible, windowVisible}` | `{view, visible, windowVisible}` (v1.1) |
+| `view.settings` | `{view, settings:{key:value,…}}` | `{view, applied:[…], rejected:[…]}` (v1.1) |
+| `view.scrollTo` | `{view, x, y}` (display px) | `{view, x, y, contentWidth, contentHeight, scrollX, scrollY}` (v1.1) |
 | `view.evaluateJavascript` | `{view, script, timeoutMs?, userGesture?}` | `{view, valueJson:string\|null, type:"string"\|"number"\|…\|"undefined"}` — `valueJson` is the JSON text of the result (Android's `ValueCallback<String>` contract) |
 | `view.addJavascriptInterface` | `{view, name, methods:[string]}` | `{view, name, methods}` |
 | `view.removeJavascriptInterface` | `{view, name}` | `{view, name}` |
 | `view.history` | `{view, action:"back"\|"forward"\|"clear"}` | `{view, canGoBack, canGoForward}` |
-| `render` | `{view, format:"png"\|"rgba", timeoutMs?, ack?:bool}` | JSON `{view, seq, width, height, density, format, bytes, damage:{x,y,w,h}, engineMs, hasDamage}` **then** the BLOB (§1) |
+| `render` | `{view, format:"png"\|"rgba", timeoutMs?, ack?:bool}` | JSON `{view, seq, width, height, density, format, bytes, damage:{x,y,w,h}, engineMs, hasDamage, contentWidth, contentHeight, scrollX, scrollY}` **then** the BLOB (§1); the four scroll/content fields are v1.1 |
 | `ax` | `{view, maxNodes?, includeIgnored?}` | `{view, count, truncated, nodes:[…]}` (§4.4) |
 | `input.touch` | `{view, action:"down"\|"move"\|"up"\|"cancel", points:[{id,x,y,radiusX?,radiusY?,force?}], holdMs?}` | `{view, delivered:true}` |
 | `input.tap` | `{view, x, y, holdMs?}` | `{view, delivered:true}` (convenience: down→frame→up) |
@@ -184,6 +210,7 @@ order from the AX tree).
 | `render.invalidated` | `{view, reason:"damage"\|"load"\|"scroll"}` — the provider should schedule a `render`; coalesced, never queued per pixel |
 | `js.call` is a **request**, not an event (below) |
 | `view.titleChanged` | folded into `navigation.finished` |
+| `view.focusChanged` | `{view, focused, editable, type, tag}` — page focus/IME report (v1.1) |
 | `engine.restarted` | `{restarts, reason}` — every view is gone; the socket stays open |
 | `session.closing` | `{reason}` — broker is going away (idle shutdown, host exit); the guest must close and reconnect on the next session |
 
@@ -232,6 +259,7 @@ the page (Android's `@JavascriptInterface` rule, enforced host-side).
 
 ## 7. Versioning
 
-`proto:1`. The broker rejects `proto` ≠ 1 with `PROTO_VERSION` and the numeric
-range it supports in `detail`. Additive ops/fields do not bump the version; a
+`proto:1.1`. The broker rejects any other `proto` with `PROTO_VERSION`; the
+message names `1.1`. Additive v1.1 ops/fields are listed at the top of this
+file. Additive ops/fields do not bump the version; a
 changed frame layout, id scheme, or an op whose semantics change does.
