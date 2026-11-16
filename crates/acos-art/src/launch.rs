@@ -3576,6 +3576,157 @@ fn animations_state() -> Option<&'static str> {
     }
 }
 
+/// MPROC1: one session control op over a session service.
+///
+/// Only the `intents` module exists today (the capture target); any other
+/// `module`/`op` is a structured `UNSUPPORTED_ANDROID_API`, never a silent
+/// no-op. `op:"result"` also writes the scripted answer to
+/// `<staging>/activity-result.json`, which the guest's result watcher delivers
+/// as the framework's own `ActivityResultItem` transaction; the guest's ack is
+/// `<staging>/activity-result.ack`.
+fn session_ctl(
+    request: &serde_json::Value,
+    intents: &Arc<std::sync::Mutex<acos_services::intents::IntentState>>,
+    staging: &Path,
+) -> serde_json::Value {
+    let module = request.get("module").and_then(|v| v.as_str()).unwrap_or("");
+    let op = request.get("op").and_then(|v| v.as_str()).unwrap_or("");
+    if module != "intents" {
+        return serde_json::json!({
+            "ok": false, "cmd": "ctl", "code": "UNSUPPORTED_ANDROID_API",
+            "module": module, "op": op,
+            "error": format!(
+                "no session service `{module}` is attached; the only control module this \
+                 build serves is `intents` (the intent capture target)"
+            ),
+        });
+    }
+    let args = request.get("args").cloned().unwrap_or(serde_json::Value::Null);
+    let mut state = intents.lock().unwrap_or_else(|e| e.into_inner());
+    match op {
+        "last" => serde_json::json!({
+            "ok": true, "cmd": "ctl", "module": module, "op": op,
+            "capture": state.last().map(|c| c.to_json()),
+        }),
+        "list" => serde_json::json!({
+            "ok": true, "cmd": "ctl", "module": module, "op": op,
+            "captures": state.list().iter().map(|c| c.to_json()).collect::<Vec<_>>(),
+        }),
+        "clear" => {
+            let cleared = state.clear();
+            serde_json::json!({
+                "ok": true, "cmd": "ctl", "module": module, "op": op, "cleared": cleared,
+            })
+        }
+        "result" => {
+            let str_arg = |key: &str| {
+                args.get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            };
+            let capture_seq = args
+                .get("capture_seq")
+                .and_then(serde_json::Value::as_u64);
+            let result_code = args
+                .get("result_code")
+                .and_then(serde_json::Value::as_i64)
+                .and_then(|v| i32::try_from(v).ok());
+            let mut extras = std::collections::BTreeMap::new();
+            if let Some(map) = args.get("extras").and_then(serde_json::Value::as_object) {
+                for (key, value) in map {
+                    if let Some(text) = value.as_str() {
+                        extras.insert(key.clone(), text.to_string());
+                    } else {
+                        return serde_json::json!({
+                            "ok": false, "cmd": "ctl", "module": module, "op": op,
+                            "code": "BAD_REQUEST",
+                            "error": format!("extras.{key} must be a string"),
+                        });
+                    }
+                }
+            }
+            let scripted = match state.script_result(
+                capture_seq,
+                result_code,
+                str_arg("data"),
+                str_arg("mime_type"),
+                str_arg("action"),
+                extras,
+            ) {
+                Ok(scripted) => scripted,
+                Err(error) => {
+                    return serde_json::json!({
+                        "ok": false, "cmd": "ctl", "module": module, "op": op,
+                        "code": "BAD_REQUEST", "error": error.to_string(),
+                    })
+                }
+            };
+            // Hand it to the guest: the result file is the session's control
+            // channel (the guest reads only this run's own tree).
+            let path = staging.join("activity-result.json");
+            let doc = serde_json::json!({
+                "capture_seq": scripted.capture_seq,
+                "request_code": scripted.request_code,
+                "result_code": scripted.result_code,
+                "action": scripted.action,
+                "data": scripted.data,
+                "mime_type": scripted.mime_type,
+                "extras": scripted.extras,
+            });
+            let written = std::fs::write(&path, serde_json::to_vec(&doc).unwrap_or_default());
+            // Bound the wait for the guest's ack: a session whose guest is not
+            // running must say `delivered:false` instead of claiming a delivery.
+            let ack_path = staging.join("activity-result.ack");
+            let _ = std::fs::remove_file(&ack_path);
+            let deadline = std::time::Instant::now() + Duration::from_millis(2000);
+            let mut delivered = false;
+            if written.is_ok() {
+                while std::time::Instant::now() < deadline {
+                    if let Ok(text) = std::fs::read_to_string(&ack_path) {
+                        if serde_json::from_str::<serde_json::Value>(&text)
+                            .ok()
+                            .and_then(|v| v.get("capture_seq").and_then(serde_json::Value::as_u64))
+                            == Some(scripted.capture_seq)
+                        {
+                            delivered = true;
+                            break;
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            }
+            if delivered {
+                let _ = std::fs::remove_file(&path);
+                state.mark_delivered(scripted.capture_seq, acos_services::intents::now_ms());
+            }
+            // The reply names the record *after* the delivery mark, so a caller
+            // that only reads this reply sees the same `delivered`/`delivered_utc_ms`
+            // as a later `op:"last"`.
+            let mut result = state
+                .list()
+                .into_iter()
+                .find(|capture| capture.seq == scripted.capture_seq)
+                .and_then(|capture| capture.scripted_result.as_ref().map(|r| r.to_json()))
+                .unwrap_or_else(|| scripted.to_json());
+            result["delivered"] = serde_json::json!(delivered);
+            serde_json::json!({
+                "ok": true, "cmd": "ctl", "module": module, "op": op,
+                "result": result,
+                "delivered": delivered,
+                "control_file": path.display().to_string(),
+                "error": written.err().map(|e| e.to_string()),
+            })
+        }
+        other => serde_json::json!({
+            "ok": false, "cmd": "ctl", "module": module, "op": other,
+            "code": "BAD_REQUEST",
+            "error": format!(
+                "intents control op {other:?} does not exist (ops: last, list, clear, result)"
+            ),
+        }),
+    }
+}
+
 fn protocol_write(value: &serde_json::Value) {
     use std::io::Write;
     // P12: every reply for this session states the animation scales it ran
@@ -5931,6 +6082,16 @@ fn interactive_serve(
                     "cmd": "logs", "ok": true,
                     "total": stats.total, "kept": entries.len(), "dropped": stats.dropped,
                 }));
+            }
+            // MPROC1: the session control op (`acos_service_ctl`). The capture
+            // target is a session service, so the agent reads and scripts it
+            // through here: `{cmd:"ctl", module:"intents", op:"last"|"list"|
+            // "clear"|"result"}`. It never fabricates a handler: a capture says
+            // `handled_by:"captured"`.
+            "ctl" => {
+                let reply = session_ctl(&request, &live.intents, &staging);
+                protocol_write(&reply);
+                evidence.push(reply);
             }
             "reset" => {
                 let reply = serde_json::json!({

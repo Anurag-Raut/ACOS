@@ -189,6 +189,10 @@ pub struct LiveHandles {
     /// is a WMS operation, so the interactive session drives the same state the
     /// `IWindowSession` relayout replies are computed from.
     pub wms: std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>,
+    /// MPROC1: the intent capture target (the broker's own state). The session
+    /// control op reads and scripts it; the activity manager writes to it when
+    /// an implicit intent has no installed target.
+    pub intents: std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>,
 }
 
 /// Install the standard ACOS service set on `host`.
@@ -244,10 +248,16 @@ pub fn install_with_handles_and_insets(
     let window_id = host.register_aux("android.view.IWindowId");
     let session_state = Arc::clone(&wms_state);
     let input_host = crate::window_session::input_dispatch::InputHost::from_env();
+    // MPROC1: the intent capture target. One state per session, shared by the
+    // activity manager (which captures an unresolvable share/pick/view) and
+    // the broker service (which the session control op reads and scripts).
+    let intents = Arc::new(Mutex::new(crate::intents::IntentState::new()));
+
     let live = LiveHandles {
         input: input_host.clone(),
         compositor: Arc::clone(&compositor),
         wms: Arc::clone(&wms_state),
+        intents: Arc::clone(&intents),
     };
     let session_binder = host.register_dynamic(
         "android.view.IWindowSession",
@@ -269,6 +279,12 @@ pub fn install_with_handles_and_insets(
     // Shared state. The PMS parses the APK lazily inside its factory so
     // installing the host touches no package data.
     let atms = Arc::new(Mutex::new(crate::atms::AtmsState::new()));
+    // MPROC1: the activity manager captures an unresolvable share/pick/view into
+    // the same state the broker service (and the session control op) reads.
+    atms.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .ams
+        .intents = Some(Arc::clone(&intents));
     let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
     let display = Arc::new(Mutex::new(crate::display::DisplayState::new(
         crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {
@@ -321,6 +337,19 @@ pub fn install_with_handles_and_insets(
                 Arc::clone(&atms_at),
                 w,
             )) as Box<dyn ServiceObject>
+        },
+    );
+    // MPROC1: the capture target itself. It has no process and no app-facing
+    // AIDL surface; it is a session service so the control op and
+    // `ServiceManager` can name it.
+    let intents_service = Arc::clone(&intents);
+    host.register(
+        crate::intents::SERVICE_NAME,
+        crate::intents::DESCRIPTOR,
+        move |_w| {
+            Box::new(crate::intents::IntentBrokerService::new(Arc::clone(
+                &intents_service,
+            ))) as Box<dyn ServiceObject>
         },
     );
     host.register("package", "android.content.pm.IPackageManager", move |w| {

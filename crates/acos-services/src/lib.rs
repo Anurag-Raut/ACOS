@@ -56,6 +56,7 @@ pub mod exception;
 pub mod extras;
 pub mod host;
 pub mod ime;
+pub mod intents;
 pub mod ime_wire;
 pub mod input;
 pub mod input_channel;

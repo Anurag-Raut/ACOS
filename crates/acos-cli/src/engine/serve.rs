@@ -1011,6 +1011,9 @@ impl ServeEngine {
             "acos_assert" => assert(&mut session, args, trust),
             "acos_logs" => logs(&mut session, args),
             "acos_status" => Ok(status_value(&session)),
+            // MPROC1: session control ops (`acos_service_ctl`). The module and
+            // op are the session's own vocabulary; nothing is translated here.
+            "acos_service_ctl" => service_ctl(&mut session, args),
             "acos_reset" => reset(&mut session, args),
             "acos_swipe" => Err(BackendError::unsupported(
                 "input.swipe",
@@ -2572,6 +2575,30 @@ fn regex_lite_matches(pattern: &str, text: &str) -> Result<bool, String> {
 /// Nothing is lost: the guest buffer is untouched (and `logs/logcat.txt` in a
 /// verify run is still the full log), `"all": true` or `min_priority: "V"`
 /// returns every record, and an explicit `tag` narrows further.
+/// MPROC1: `acos_service_ctl {module, op, args}` — one session service control
+/// op. `intents` is the capture target: `op:"last"`/`"list"` read what the app
+/// shared/picked, `op:"result"` scripts the answer a picker returns (and the
+/// session delivers it as the framework's own `ActivityResultItem`), `op:"clear"`
+/// empties the record. Every capture says `handled_by:"captured"`.
+fn service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let module = args
+        .get("module")
+        .and_then(Value::as_str)
+        .ok_or_else(|| BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_service_ctl needs a string `module` (a session service name)".into(),
+        })?;
+    let op = args
+        .get("op")
+        .and_then(Value::as_str)
+        .ok_or_else(|| BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_service_ctl needs a string `op`".into(),
+        })?;
+    let inner = args.get("args").cloned().unwrap_or(Value::Null);
+    session.ctl(module, op, inner)
+}
+
 fn logs(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let records = session.logs_since(0)?;
     let crash = session.last_crash();

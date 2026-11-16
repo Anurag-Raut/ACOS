@@ -508,6 +508,7 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
         component: None,
         categories: Vec::new(),
         extras: BTreeMap::<String, Extra>::new(),
+        ..IntentFacts::default()
     }
     .to_parcelable();
     // `broadcastIntent(caller, intent, resolvedType, resultTo, resultCode,
@@ -558,6 +559,7 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
         component: None,
         categories: Vec::new(),
         extras: BTreeMap::<String, Extra>::new(),
+        ..IntentFacts::default()
     }
     .to_parcelable();
     let mut other_args = args.to_vec();

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Intent probe</string>
+    <string name="share">Share text</string>
+    <string name="pick">Pick image</string>
+    <string name="idle">nothing shared yet</string>
+    <string name="shared_text">Shared from ACOS</string>
+</resources>

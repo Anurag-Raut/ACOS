@@ -224,6 +224,11 @@ done
 # time; the session installs `counter.apk` with `--extra-apk`.
 build_apk multi-package-probe
 
+# intent-probe (MPROC1 step 2) drives the two intents a device routes to another
+# app: an implicit ACTION_SEND text share (`startActivity`) and an
+# ACTION_GET_CONTENT image pick (`startActivityForResult`, requestCode 42).
+build_apk intent-probe
+
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).

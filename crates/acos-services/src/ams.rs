@@ -56,6 +56,10 @@ use crate::value::{Bundle, Parcelable, Value};
 pub const INTENT_FIELD_ACTION: usize = crate::parcelable::INTENT_ACTION;
 /// `Intent.mData` (rendered as a string; a non-null Uri is refused by the codec).
 pub const INTENT_FIELD_DATA: usize = crate::parcelable::INTENT_DATA;
+/// `Intent.mType` (the MIME type).
+pub const INTENT_FIELD_TYPE: usize = crate::parcelable::INTENT_TYPE;
+/// `Intent.mFlags`.
+pub const INTENT_FIELD_FLAGS: usize = crate::parcelable::INTENT_FLAGS;
 /// `Intent.mPackage`.
 pub const INTENT_FIELD_PACKAGE: usize = crate::parcelable::INTENT_PACKAGE;
 /// `Intent.mComponent` (`android.content.ComponentName`, 2 String16 fields).
@@ -72,6 +76,14 @@ pub struct IntentFacts {
     pub action: Option<String>,
     /// `Intent.getDataString()`.
     pub data: Option<String>,
+    /// `Intent.getType()` (the MIME type). MPROC1: the capture target records
+    /// it and the intent-filter match uses it; `None` for an intent without a
+    /// type, which is not the same as the wildcard `*/*`.
+    pub mime_type: Option<String>,
+    /// `Intent.getFlags()`. MPROC1 records it on a capture; the launch path
+    /// takes the flag word from the transaction's own argument (they are the
+    /// same value the framework wrote).
+    pub flags: i32,
     /// `Intent.getPackage()`.
     pub package: Option<String>,
     /// Explicit component `(package, class)`.
@@ -84,7 +96,8 @@ pub struct IntentFacts {
 }
 
 /// One intent extra value.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Extra {
     /// `putExtra(String)`.
     String(String),
@@ -156,6 +169,8 @@ impl IntentFacts {
         Self {
             action: f.get(INTENT_FIELD_ACTION).and_then(Value::as_str).map(str::to_string),
             data: f.get(INTENT_FIELD_DATA).and_then(Value::as_str).map(str::to_string),
+            mime_type: f.get(INTENT_FIELD_TYPE).and_then(Value::as_str).map(str::to_string),
+            flags: f.get(INTENT_FIELD_FLAGS).and_then(Value::as_int).unwrap_or(0),
             package: f.get(INTENT_FIELD_PACKAGE).and_then(Value::as_str).map(str::to_string),
             component,
             categories,
@@ -184,9 +199,9 @@ impl IntentFacts {
             vec![
                 Value::Str(self.action.clone()),
                 Value::Str(self.data.clone()),
-                Value::Str(None),           // type
+                Value::Str(self.mime_type.clone()), // type
                 Value::Str(None),           // identifier
-                Value::Int(0),              // flags
+                Value::Int(self.flags),     // flags
                 Value::Str(self.package.clone()),
                 Value::Parcelable(component.unwrap_or(Parcelable::Null)),
                 Value::Parcelable(Parcelable::Null), // sourceBounds
@@ -665,6 +680,20 @@ pub const START_SUCCESS: i32 = 0;
 pub const START_CANCELED: i32 = 2;
 /// `ActivityManager.START_NOT_FOUND`.
 pub const START_NOT_FOUND: i32 = 4;
+
+/// The start code for a captured intent.
+///
+/// `START_SUCCESS` is what the framework would return for
+/// `startActivityForResult`; `START_RETURN_INTENT_TO_CALLER` would tell the
+/// caller nobody handled it, which is wrong here — the capture target *did*
+/// accept the intent (and will answer if a result was scripted), so the app
+/// gets the normal "it was handled" path and the reply says `captured`.
+const START_SUCCESS_CAPTURED: i32 = 0;
+
+fn capture_start_success(record: &crate::intents::CapturedIntent) -> i32 {
+    let _ = record;
+    START_SUCCESS_CAPTURED
+}
 /// `Service.START_NOT_STICKY`.
 pub const START_NOT_STICKY: i32 = 2;
 
@@ -842,6 +871,10 @@ pub struct AmsState {
     next_token: u64,
     /// Last `onNewIntent` records (evidence).
     pub new_intents: Vec<(u64, IntentFacts)>,
+    /// MPROC1: the session's intent **capture target**. `Some` in a session
+    /// (set by the standard registry); `None` in a bare state machine, where an
+    /// unresolvable intent stays the structured `START_NOT_FOUND`.
+    pub intents: Option<std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>>,
 }
 
 impl AmsState {
@@ -877,7 +910,46 @@ impl AmsState {
                 method: format!("startActivity flags {flags:#x}"),
             });
         }
-        let component = self.manifests.resolve_activity(intent)?;
+        let component = match self.manifests.resolve_activity(intent) {
+            Ok(component) => component,
+            Err(ServiceError::IllegalState { .. }) => {
+                // MPROC1: nothing installed handles this intent. On a phone the
+                // share sheet / browser / picker would; the session's capture
+                // target stands in for it (no process, no fabricated app) and
+                // `START_SUCCESS` is the honest answer because the intent was
+                // accepted and its payload recorded. Anything the capture
+                // target does not stand in for stays `START_NOT_FOUND`.
+                let captured = self.intents.as_ref().and_then(|state| {
+                    state.lock().ok().and_then(|mut state| {
+                        state.capture(
+                            intent,
+                            flags,
+                            request_code,
+                            // AOSP's `Instrumentation.execStartActivity` passes
+                            // requestCode `-1` for a plain `startActivity`, and
+                            // `>= 0` only when the caller waits for a result
+                            // (`startActivityForResult`). That — not the result
+                            // token, which is the activity token either way —
+                            // is what "waiting for a result" means.
+                            request_code >= 0,
+                            crate::intents::now_ms(),
+                        )
+                    })
+                });
+                return match captured {
+                    Some(record) => Ok(capture_start_success(&record)),
+                    None => Err(ServiceError::IllegalState {
+                        component: "atms",
+                        detail: format!(
+                            "no installed package handles action {:?} (and it is not an intent \
+                             the capture target stands in for)",
+                            intent.action.as_deref().unwrap_or("")
+                        ),
+                    }),
+                };
+            }
+            Err(other) => return Err(other),
+        };
         let behaviour = if flags & NEW_TASK != 0 || component.launch_mode == 3 {
             LaunchBehaviour::NewTask
         } else {

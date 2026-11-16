@@ -416,6 +416,13 @@ public final class LaunchMain {
         // the real `Application` to exist, then (for activity-resumed) sends the
         // one ClientTransaction AMS would send.
         startWatcher(thread, at, appThread);
+        // MPROC1: the scripted activity-result watcher. The agent scripts the
+        // answer a share sheet / picker would give (session control op
+        // `acos_service_ctl {module:"intents", op:"result"}`); the launcher
+        // writes it to this run's own `/data/out/launch/activity-result.json`
+        // and this thread delivers it as the framework's own
+        // `ActivityResultItem` transaction, acking in `activity-result.ack`.
+        startResultWatcher();
         // Frame-clock probe (L1): post a real `Choreographer` frame callback on
         // the main thread *before* the looper runs. `Choreographer.getInstance()`
         // builds the `DisplayEventReceiver` (ISurfaceComposer →
@@ -2597,16 +2604,25 @@ public final class LaunchMain {
                                 String call = "android.app.IActivityTaskManager." + n;
                                 android.content.Intent intent = n.startsWith("startActivities")
                                         ? null : findIntent(a);
-                                if (intent == null || intent.getComponent() == null) {
-                                    // No component to launch truthfully: keep the
-                                    // W27 structured marker and fabricate nothing.
+                                if (intent == null) {
+                                    // `startActivities` bundles its Intents in a list:
+                                    // there is nothing to resolve one-by-one here, so
+                                    // keep the structured marker and fabricate nothing.
                                     System.out.println("ACOSUNSUPPORTED {\"code\":\"UNSUPPORTED_ANDROID_API\","
                                             + "\"call\":\"" + esc(call) + "\","
-                                            + "\"detail\":\"the request has no explicit component and ACOS "
-                                            + "has no package-manager Intent resolution; no Activity was fabricated\"}");
+                                            + "\"detail\":\"ACOS cannot launch a bundled startActivities "
+                                            + "request; no Activity was fabricated\"}");
                                     System.out.flush();
                                     return m.getReturnType() == int.class ? 0 : null;
                                 }
+                                // MPROC1: an implicit intent is decided by the
+                                // **host** package manager, exactly as on a
+                                // device. That is what lets the capture target
+                                // stand in for an installed share sheet / browser
+                                // / picker, and it is why this branch no longer
+                                // rejects a component-less request here: the old
+                                // short-circuit made the host unable to see the
+                                // intent at all.
                                 // Record it host-side first (W35 decodes the
                                 // Intent and `AmsState` records the launch),
                                 // then deliver what AMS would deliver.
@@ -2625,6 +2641,22 @@ public final class LaunchMain {
                                     System.out.flush();
                                     return result;
                                 }
+                                android.content.ComponentName target = intent.getComponent();
+                                if (target == null) {
+                                    // MPROC1: the host accepted the intent without
+                                    // an installed target, i.e. the session's
+                                    // **capture target** recorded it. The app is
+                                    // told exactly what a device's share sheet
+                                    // says ("handled"); the reply/control op says
+                                    // `captured`. A scripted result arrives later
+                                    // as a real ActivityResultItem transaction.
+                                    System.out.println("ACOSLAUNCH MARK start-activity-captured"
+                                            + " action=" + esc(String.valueOf(intent.getAction()))
+                                            + " type=" + esc(String.valueOf(intent.getType()))
+                                            + " data=" + esc(String.valueOf(intent.getDataString())));
+                                    System.out.flush();
+                                    return result;
+                                }
                                 try {
                                     if (launchLocalActivity(intent)) return result;
                                 } catch (Throwable t) {
@@ -2638,7 +2670,7 @@ public final class LaunchMain {
                                 }
                                 System.out.println("ACOSUNSUPPORTED {\"code\":\"UNSUPPORTED_ANDROID_API\","
                                         + "\"call\":\"" + esc(call) + "\","
-                                        + "\"detail\":\"the Intent names a component this process cannot "
+                                        + "\"detail\":\"the Intent names a component this package cannot "
                                         + "launch; no Activity was fabricated\"}");
                                 System.out.flush();
                                 return m.getReturnType() == int.class ? 2 : null;
@@ -4612,6 +4644,153 @@ public final class LaunchMain {
             data.recycle();
             reply.recycle();
         }
+    }
+
+    // ---------------------------------------------- scripted activity results
+
+    /**
+     * MPROC1: watch for a scripted activity result and deliver it.
+     *
+     * <p>A session with no installed picker still has to be able to test what
+     * the app does with the picture a picker returns. The capture target records
+     * the intent; the agent scripts the answer (`resultCode` + a data `Intent`,
+     * e.g. an image `content://` URI); this thread turns it into the stock
+     * `ActivityResultItem` `ClientTransaction` and hands it to the real
+     * `ActivityThread` — `onActivityResult` runs as it would on a device. The
+     * file is inside this run's own tree; a JSON parse error is a marker, never
+     * a silent drop.
+     */
+    static void startResultWatcher() {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                java.io.File file = new java.io.File(sOut, "activity-result.json");
+                java.io.File ack = new java.io.File(sOut, "activity-result.ack");
+                long lastSeq = -1;
+                while (true) {
+                    try {
+                        Thread.sleep(50);
+                        if (!file.isFile()) continue;
+                        String text = readText(file.getPath());
+                        if (text.isEmpty()) continue;
+                        org.json.JSONObject o = new org.json.JSONObject(text);
+                        long seq = o.optLong("capture_seq", -1);
+                        if (seq <= 0 || seq == lastSeq) continue;
+                        int requestCode = o.optInt("request_code", 0);
+                        int resultCode = o.optInt("result_code", 0);
+                        android.content.Intent data = null;
+                        if (o.has("data") || o.has("action") || o.has("mime_type")) {
+                            data = new android.content.Intent();
+                            if (!o.isNull("action")) data.setAction(o.optString("action"));
+                            // `setData` and `setType` each clear the other on
+                            // Android; a picker answer carries both, so they go
+                            // in through `setDataAndType` (the framework's own
+                            // API for exactly this).
+                            if (!o.isNull("data") && !o.isNull("mime_type")) {
+                                data.setDataAndType(
+                                        android.net.Uri.parse(o.optString("data")),
+                                        o.optString("mime_type"));
+                            } else if (!o.isNull("data")) {
+                                data.setData(android.net.Uri.parse(o.optString("data")));
+                            } else if (!o.isNull("mime_type")) {
+                                data.setType(o.optString("mime_type"));
+                            }
+                            org.json.JSONObject extras = o.optJSONObject("extras");
+                            if (extras != null) {
+                                java.util.Iterator<String> keys = extras.keys();
+                                while (keys.hasNext()) {
+                                    String key = keys.next();
+                                    data.putExtra(key, extras.optString(key));
+                                }
+                            }
+                        }
+                        deliverScriptedResult(requestCode, resultCode, data);
+                        lastSeq = seq;
+                        write(ack, "{\"capture_seq\":" + seq
+                                + ",\"utc_ms\":" + System.currentTimeMillis() + "}");
+                        System.out.println("ACOSLAUNCH MARK activity-result-delivered seq=" + seq
+                                + " request_code=" + requestCode + " result_code=" + resultCode
+                                + " data=" + (data == null ? "null"
+                                        : String.valueOf(data.getDataString())));
+                        System.out.flush();
+                    } catch (Throwable e) {
+                        System.out.println("ACOSLAUNCH MARK activity-result-delivery-error "
+                                + unwrap(e));
+                        System.out.flush();
+                        try {
+                            Thread.sleep(200);
+                        } catch (InterruptedException ignored) {
+                        }
+                    }
+                }
+            }
+        });
+        t.setDaemon(true);
+        t.setName("acos-result-watcher");
+        t.start();
+        System.out.println("ACOSLAUNCH MARK activity-result-watcher started");
+        System.out.flush();
+    }
+
+    /**
+     * Deliver one `ActivityResultItem` for the current Activity through the real
+     * `IApplicationThread.scheduleTransaction` (the same path AMS uses).
+     */
+    static void deliverScriptedResult(int requestCode, int resultCode,
+            android.content.Intent data) throws Throwable {
+        IBinder token = sCurrentToken;
+        if (token == null) throw new IllegalStateException("no current activity token");
+        // `ResultInfo` has no public constructor on this image (only a `Parcel`
+        // one, which is package-private for AMS). Build it the way the wire does:
+        // write the fields with the framework's own writers
+        // (`ResultInfo.writeToParcel` = String16 who, requestCode, resultCode,
+        // data presence + `Intent.writeToParcel`) and let `CREATOR` read them
+        // back. Nothing here is a hand-marshalled struct.
+        Class<?> riCls = Class.forName("android.app.ResultInfo");
+        android.os.Parcel rp = android.os.Parcel.obtain();
+        Object resultInfo;
+        try {
+            rp.writeString(null);
+            rp.writeInt(requestCode);
+            rp.writeInt(resultCode);
+            if (data != null) {
+                rp.writeInt(1);
+                data.writeToParcel(rp, 0);
+            } else {
+                rp.writeInt(0);
+            }
+            rp.setDataPosition(0);
+            java.lang.reflect.Field creator = riCls.getField("CREATOR");
+            Object c = creator.get(null);
+            resultInfo = ((android.os.Parcelable.Creator<?>) c).createFromParcel(rp);
+        } finally {
+            rp.recycle();
+        }
+        java.util.ArrayList<Object> list = new java.util.ArrayList<Object>();
+        list.add(resultInfo);
+        Class<?> itemCls =
+                Class.forName("android.app.servertransaction.ActivityResultItem");
+        Object item = null;
+        for (java.lang.reflect.Method m : itemCls.getDeclaredMethods()) {
+            if (!m.getName().equals("obtain")) continue;
+            Class<?>[] types = m.getParameterTypes();
+            if (types.length != 1 || !java.util.List.class.isAssignableFrom(types[0])) continue;
+            m.setAccessible(true);
+            item = m.invoke(null, list);
+        }
+        if (item == null) {
+            throw new NoSuchMethodException("ActivityResultItem.obtain(List)");
+        }
+        Class<?> ctxCls = Class.forName("android.app.servertransaction.ClientTransaction");
+        Class<?> iatCls = Class.forName("android.app.IApplicationThread");
+        Object tx = ctxCls.getMethod("obtain", iatCls, IBinder.class)
+                .invoke(null, sClient, token);
+        java.util.ArrayList<Object> callbacks = new java.util.ArrayList<Object>();
+        callbacks.add(item);
+        setPrivateField(ctxCls, tx, "mActivityCallbacks", callbacks);
+        setPrivateField(ctxCls, tx, "mLifecycleStateRequest", null);
+        setPrivateFieldIfPresent(ctxCls, tx, "mTransactionItems", callbacks);
+        scheduleLocal(tx);
     }
 
     // ------------------------------------------------------------- helpers

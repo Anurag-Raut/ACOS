@@ -2314,6 +2314,47 @@ impl ArtSession {
         &self.extra_apks
     }
 
+    /// MPROC1: run one session control op (`acos_service_ctl`).
+    ///
+    /// `module` names a session service (`intents` today); `op` is that
+    /// service's own operation and `args` its arguments. The launcher answers
+    /// with its own record, so the reply is the service's, not a translation:
+    /// an unknown module/op is a structured `UNSUPPORTED_ANDROID_API`/
+    /// `BAD_REQUEST` from the session, never a local guess.
+    pub fn ctl(
+        &mut self,
+        module: &str,
+        op: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        let request = serde_json::json!({
+            "cmd": "ctl",
+            "module": module,
+            "op": op,
+            "args": args,
+        });
+        let reply = self.command(request)?;
+        if reply.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+            let code = reply
+                .get("code")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("INTERNAL");
+            let detail = reply
+                .get("error")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("the session refused the control op");
+            return Err(BackendError::Failed {
+                code: match code {
+                    "BAD_REQUEST" => acos_protocol::ErrorCode::InvalidArgument,
+                    "UNSUPPORTED_ANDROID_API" => acos_protocol::ErrorCode::UnsupportedAndroidApi,
+                    _ => acos_protocol::ErrorCode::Internal,
+                },
+                detail: detail.to_string(),
+            });
+        }
+        Ok(reply)
+    }
+
     /// W7: the app-window inset model this guest was launched with.
     pub fn insets(&self) -> &'static str {
         self.insets

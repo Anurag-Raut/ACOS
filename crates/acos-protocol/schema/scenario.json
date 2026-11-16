@@ -1855,6 +1855,16 @@
       "default": "pass",
       "description": "Expected outcome."
     },
+    "extra_apks": {
+      "description": "MPROC1: extra APKs installed into the session beside `app`, each at its own uid and reachable through `PackageManager`/`createPackageContext`.\n\nPaths are workspace-relative or absolute, resolved like `app`. A scenario that names packages here is self-contained: the run installs exactly this set, or fails with a structured error naming the APK.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
     "fallback": {
       "allOf": [
         {

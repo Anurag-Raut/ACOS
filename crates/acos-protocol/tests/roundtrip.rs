@@ -1090,6 +1090,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         output: OutputOptions::default(),
         animations: None,
         insets: None,
+        extra_apks: None,
     };
     round_trip(&scenario);
     for step in &scenario.steps {

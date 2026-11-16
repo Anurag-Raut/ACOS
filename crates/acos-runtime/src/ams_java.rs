@@ -349,6 +349,13 @@ fn intent_facts(vm: &mut Vm, intent: Handle) -> JResult<IntentFacts> {
     Ok(IntentFacts {
         action,
         data,
+        // MPROC1: the two fields the capture target records too. The Rust VM
+        // path reads them from the real Intent object, never infers them.
+        mime_type: opt_string(vm, intent, "getType", "()Ljava/lang/String;").map_err(err)?,
+        flags: match vm.call_method(intent, "getFlags", "()I", &[]).map_err(err)? {
+            JavaValue::Int(value) => value,
+            _ => 0,
+        },
         package,
         component,
         categories,
