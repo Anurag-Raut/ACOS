@@ -24,7 +24,7 @@ description: >-
   An indeterminate ProgressBar animates forever: wait_for and assert_text pass on
   the content-stable tree (auto fallback), and say so in their settle records.
 app: fixtures/build/apps/settle-lab.apk
-engine: native-preferred
+engine: art
 fallback: report-and-escalate
 api_level: 34
 isolation: process

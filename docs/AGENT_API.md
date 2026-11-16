@@ -484,7 +484,13 @@ optional `settle` argument (`strict` default, `fast` navigation,
   prove the draw is after the action, and requiring different pixels only
   produced false timeouts. `ACOS_STRICT_SETTLE_PIXEL_GUARD=on` restores the P11
   experiment. A tap with **no draw after the action** still times out
-  (`reason:"no-draw-after-action"`). On timeout the reply is not settled and
+  (`reason:"no-draw-after-action"`) **unless every one of its events was
+  acknowledged `finishInputEvent(handled) = false`**: nothing consumed the input,
+  so the quiet, unchanged screen is the settled outcome and the reply is
+  `settled:true` with `bound:"unhandled-input"`, `reason:"unhandled_input"` and
+  `pixels_changed:false` (REL3H) - a pass for the delivery rule only, never a
+  claimed change (`expect_change:true` fails on it). On a real timeout the reply
+  is not settled and
   names the guest's reason (`reason`, plus `animating:true` for frame/animator
   reasons) under `bound:"timeout"` — but it still carries the latest tree and
   frame identity, so the agent can use what is on screen (next bullet and
@@ -1248,7 +1254,12 @@ scenario and every settle reply are untouched.
 
 A step that provokes no **draw** at all does not settle, so it is a `TIMEOUT`
 (`reason: "no-draw-after-action"`), not an `expect_change` failure; both are
-non-passes. The same flag is available per action on the serve/MCP input tools
+non-passes. The exception is input the app provably did not handle: when every
+event of a `tap`/`key`/`type` came back `finishInputEvent(handled) = false` and
+no draw followed, the strict settle ends as a settled `unhandled_input` record
+(`pixels_changed:false`), and `expect_change: true` then fails with
+`ASSERTION_FAILED` / `details.reason: "expect_change"` instead of a timeout.
+The same flag is available per action on the serve/MCP input tools
 (`acos_tap`, `acos_key`, `acos_text`) as `expect_change: true`.
 
 ---

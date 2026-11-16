@@ -208,8 +208,13 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    (bounded by `max_attempts`, default 6, 10 with `fling`) and after **every**
    swipe takes a fresh **settled** traversal and looks for the node. `until.found`
    is only ever reported from such a traversal (`until.attempts`,
-   `until.frame_seq` name it). If the node never appears, the call fails with
-   `ELEMENT_NOT_FOUND`, `error.details.attempts`, `error.details.max_attempts` and
+   `until.frame_seq` name it). **A swipe that moved nothing ends the search:**
+   when the settled tree before and after a gesture is identical the list has
+   reached its end, and the call fails with `END_OF_LIST`
+   (`error.details.end_of_list: true`, `attempts`, `max_attempts`,
+   `last_tree_texts`) instead of spending the remaining attempts. Otherwise a
+   node that never appears fails with `ELEMENT_NOT_FOUND`,
+   `error.details.attempts`, `error.details.max_attempts` and
    `error.details.last_tree_texts` (what the list actually showed at the end) —
    never a pass, and never a guess from a cached tree. `until` requires the
    strict settle; `settle: fast`/`content` is refused because neither can prove a
@@ -234,10 +239,11 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    `expect_change`. `scroll_until` takes the same geometry plus the `selector`
    to find and `max_attempts` (1..50); it always runs strict. Both report REL3E's
    `input` block (`handled`, `handled_evidence`, `target`), and `scroll_until`
-   also reports `input.until {selector, found, attempts, frame_seq}`; a miss
-   fails the step with `ELEMENT_NOT_FOUND` and `details.attempts` /
-   `details.last_tree_texts`. The next `assert_*` binds to the swipe/search's own
-   settled frame.
+   also reports `input.until {selector, found, end_of_list, attempts, frame_seq}`;
+   a miss fails the step with `ELEMENT_NOT_FOUND` (every attempt used) or
+   `END_OF_LIST` (a swipe moved nothing: the list ended) plus `details.attempts`
+   / `details.last_tree_texts`. The next `assert_*` binds to the swipe/search's
+   own settled frame.
    Identity rule, compared fields and the 40-entry cap: `docs/MCP.md` §1c.
    **`handled` is the app's own answer, and it is the one you branch on.**
    Every `acos_tap`/`acos_key`/`acos_text`/`acos_swipe` reply (and every
@@ -601,7 +607,19 @@ frame), so a `bounds` claim — an assertion's own `bounds` **or**
   then fails with `ASSERTION_FAILED` / `details.reason: "expect_change"`.
   `expect_change: true` + `settle: fast`/`content` is rejected at parse time. Use
   it for any flow whose point is that a control did something.
-* A step that provokes no draw at all cannot settle and ends as `TIMEOUT`
+* **Unhandled input is a settled observation, not a timeout (REL3H).** When
+  *every* event of an action was delivered and acknowledged
+  `finishInputEvent(handled) = false` and the app drew nothing, the strict settle
+  ends immediately with `settle: {mode: "strict", settled: true, reason:
+  "unhandled_input", bound: "unhandled-input", pixels_changed: false}` (the live
+  reply and every step JSON carry it; REL3E's `handled: false` hint still names
+  the clickable neighbour). Nothing consumed the input, so the unchanged screen
+  *is* the outcome - a pass for the delivery rule only: an assertion after it
+  still sees the unchanged screen, and `expect_change: true` fails on
+  `pixels_changed: false`. If any event was handled, or the ack list is short
+  (unknown, never "not handled"), the normal settle applies.
+* A step that provokes no draw at all *and was handled* (or whose acks are
+  unknown) cannot settle and ends as `TIMEOUT`
   (`reason: "no-draw-after-action"`). A content settle whose signature keeps
   changing ends as `TIMEOUT` (`reason: "content-not-stable"`). Both are
   non-passes.

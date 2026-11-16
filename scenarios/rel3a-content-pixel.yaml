@@ -11,7 +11,7 @@ description: >-
   On an endlessly animating screen the content-stable rule backs text claims but
   never a pixel claim: assert_region after a content-settled wait fails closed.
 app: fixtures/build/apps/settle-lab.apk
-engine: native-preferred
+engine: art
 fallback: report-and-escalate
 api_level: 34
 isolation: process

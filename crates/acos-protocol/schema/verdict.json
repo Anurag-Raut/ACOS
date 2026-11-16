@@ -733,6 +733,13 @@
           "type": "string"
         },
         {
+          "description": "A bounded `scroll_until` search reached the end of the list: a swipe moved nothing (the settled tree is identical before and after it), so the selector is not reachable by scrolling further.\n\nThis is the honest end of a search, not a guess: `details.attempts` says how many gestures it took, `details.last_tree_texts` what the last settled tree actually showed. Before this the search burned every remaining attempt and reported `ELEMENT_NOT_FOUND`, which an agent could not tell from \"the selector names a node that never renders\".",
+          "enum": [
+            "END_OF_LIST"
+          ],
+          "type": "string"
+        },
+        {
           "description": "A UI node reference is no longer valid.",
           "enum": [
             "STALE_REF"

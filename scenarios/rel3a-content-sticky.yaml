@@ -21,7 +21,7 @@ description: >-
   content mode: the following assert_region takes its own strict capture and
   cannot pass on a screen whose pixels never settle.
 app: fixtures/build/apps/settle-lab.apk
-engine: native-preferred
+engine: art
 fallback: report-and-escalate
 api_level: 34
 isolation: process

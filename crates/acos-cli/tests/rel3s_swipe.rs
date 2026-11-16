@@ -52,7 +52,11 @@ fn art_bin() -> PathBuf {
             return path;
         }
     }
-    for target in [".cache/rel3s-target", ".cache/rel3s2-target"] {
+    for target in [
+        ".cache/rel3h-target",
+        ".cache/rel3s-target",
+        ".cache/rel3s2-target",
+    ] {
         let path = repo_root().join(target).join("release/acos-art");
         if path.is_file() {
             return path;
@@ -359,6 +363,10 @@ fn swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row() {
     );
 
     // ---- and a miss is honest ---------------------------------------------
+    // Two gestures cannot reach the end of a 100-row list from here, so this is
+    // the "used every attempt" miss. If a gesture did reach the end first the
+    // answer is `END_OF_LIST` (REL3H, pinned by the case below) - both are
+    // structured non-passes naming the same facts, and neither is a pass.
     let missing = conn.call(
         "acos_swipe",
         json!({
@@ -370,19 +378,59 @@ fn swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row() {
         }),
     );
     assert_eq!(missing["ok"], json!(false), "{missing:#?}");
-    assert_eq!(
-        missing["error"]["code"],
-        json!("ELEMENT_NOT_FOUND"),
+    let code = missing["error"]["code"].as_str().unwrap_or_default();
+    assert!(
+        code == "ELEMENT_NOT_FOUND" || code == "END_OF_LIST",
         "a scroll_until miss is a structured failure, never a pass: {missing:#?}"
     );
     let details = &missing["error"]["details"];
-    assert_eq!(details["attempts"], json!(2), "{missing:#?}");
     assert_eq!(details["max_attempts"], json!(2), "{missing:#?}");
+    assert!(
+        (1..=2).contains(&details["attempts"].as_u64().unwrap_or(0)),
+        "the failure says how many gestures it took: {missing:#?}"
+    );
     assert!(
         details["last_tree_texts"]
             .as_array()
             .is_some_and(|texts| !texts.is_empty()),
         "the failure names what the last tree actually showed: {missing:#?}"
+    );
+
+    // ---- REL3H: a swipe that moves nothing ends the search -----------------
+    // Row 9999 does not exist. With enough attempts the list reaches its end;
+    // the next gesture then moves nothing, and the search must stop there with
+    // END_OF_LIST - in *fewer* attempts than `max_attempts`, not by burning
+    // every remaining gesture and reporting ELEMENT_NOT_FOUND.
+    let end = conn.call(
+        "acos_swipe",
+        json!({
+            "base": b,
+            "direction": "up",
+            "duration_ms": 200,
+            "fling": true,
+            "until": {"text": "Row 9999"},
+            "max_attempts": 12,
+        }),
+    );
+    assert_eq!(end["ok"], json!(false), "{end:#?}");
+    assert_eq!(
+        end["error"]["code"],
+        json!("END_OF_LIST"),
+        "the end of the list is its own structured answer: {end:#?}"
+    );
+    let details = &end["error"]["details"];
+    assert_eq!(details["end_of_list"], json!(true), "{end:#?}");
+    let attempts = details["attempts"].as_u64().unwrap_or(0);
+    assert!(
+        attempts >= 1 && attempts < 12,
+        "the search stops at the end instead of spending every attempt: {end:#?}"
+    );
+    assert_eq!(details["max_attempts"], json!(12), "{end:#?}");
+    assert!(
+        details["last_tree_texts"]
+            .as_array()
+            .is_some_and(|texts| texts.iter().any(|text| text == "Row 99")),
+        "the last settled tree is the end of the list: {end:#?}"
     );
 
     let destroy = conn.call("acos_destroy", json!({"base": b}));

@@ -43,7 +43,11 @@ fn art_bin() -> PathBuf {
             return path;
         }
     }
-    for target in [".cache/rel3s-target", ".cache/rel3s2-target"] {
+    for target in [
+        ".cache/rel3h-target",
+        ".cache/rel3s-target",
+        ".cache/rel3s2-target",
+    ] {
         let path = repo_root().join(target).join("release/acos-art");
         if path.is_file() {
             return path;
@@ -76,9 +80,15 @@ steps:
 
 /// Run one scenario with `--engine art` and return its artifacts dir + verdict.
 fn run_scenario(tag: &str, steps: &str) -> (PathBuf, Value) {
+    run_scenario_yaml(tag, &format!("{PRELUDE}{steps}"))
+}
+
+/// Run a complete scenario document (a negative twin needs its own top-level
+/// `expectation`, which the shared prelude does not carry).
+fn run_scenario_yaml(tag: &str, yaml: &str) -> (PathBuf, Value) {
     let dir = scratch(tag);
     let scenario = dir.join("scenario.yaml");
-    std::fs::write(&scenario, format!("{PRELUDE}{steps}")).expect("write scenario");
+    std::fs::write(&scenario, yaml).expect("write scenario");
     let apk = repo_root().join("fixtures/build/apps/scroll-list.apk");
     assert!(
         apk.is_file(),
@@ -302,5 +312,72 @@ fn swipe_reveals_an_offscreen_row_and_scroll_until_taps_a_deep_row() {
         step(&scroll_verdict, 3)["input"]["handled"],
         true,
         "the row's click handler consumed the tap"
+    );
+}
+
+/// REL3H: a scenario `scroll_until` that reaches the end of the list stops
+/// there and says so.
+///
+/// `Row 9999` does not exist in a 100-row list. The search must walk to the last
+/// row, notice that the next gesture moved nothing, and fail with
+/// `END_OF_LIST` - `input.until.end_of_list: true`, its attempt count, and the
+/// last settled tree's texts - instead of spending every remaining gesture and
+/// answering `ELEMENT_NOT_FOUND` (which an agent cannot tell from a selector
+/// that never renders). Both are non-passes; only one says *why*.
+#[test]
+#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+fn scroll_until_stops_at_the_end_of_the_list() {
+    let (_, verdict) = run_scenario_yaml(
+        "end-of-list",
+        r#"
+version: 1
+name: rel3h-end-of-list
+app: fixtures/build/apps/scroll-list.apk
+expectation: non_pass
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+steps:
+  - launch: {activity: .MainActivity}
+  - scroll_until: {selector: {text: {exact: "Row 9999"}}, direction: up, fling: true, max_attempts: 12}
+"#,
+    );
+    assert_ne!(
+        verdict["verdict"],
+        Value::from("pass"),
+        "a search for a row that is not in the list is never a pass: {}",
+        verdict_string(&verdict)
+    );
+    let search = step(&verdict, 1);
+    assert_eq!(search["step"], Value::from("scroll_until"));
+    assert_eq!(
+        search["status"],
+        Value::from("fail"),
+        "the step failed: {}",
+        verdict_string(&verdict)
+    );
+    assert_eq!(
+        search["error"]["code"],
+        Value::from("END_OF_LIST"),
+        "the end of the list is its own answer: {}",
+        verdict_string(&verdict)
+    );
+    let until = &search["input"]["until"];
+    assert_eq!(until["found"], Value::from(false), "{until}");
+    assert_eq!(
+        until["end_of_list"],
+        Value::from(true),
+        "the step JSON says the list ended: {until}"
+    );
+    let attempts = until["attempts"].as_u64().unwrap_or(0);
+    assert!(
+        (1..12).contains(&attempts),
+        "the search stops at the end instead of spending every attempt: {until}"
+    );
+    assert_eq!(until["max_attempts"], Value::from(12), "{until}");
+    assert!(
+        until["last_tree_texts"]
+            .as_array()
+            .is_some_and(|texts| texts.iter().any(|text| text == "Row 99")),
+        "the last settled tree is the end of the list: {until}"
     );
 }

@@ -1,0 +1,46 @@
+# REL3H: an input the app did not handle is a *settled* observation.
+#
+# REL3E's scenario taps the non-clickable `title` label of the `tap-targets`
+# fixture with `settle: content`, because the strict settle timed out: nothing
+# consumed the press, so nothing drew, and the pre-REL3H rule called that a
+# `TIMEOUT` (`reason: no-draw-after-action`). That is an honest screen described
+# by a dishonest status - the tap *was* delivered and the framework *did* answer
+# `finishInputEvent(handled) = false`.
+#
+# This scenario is the same flow with the label tap back on the default (strict)
+# settle and no `settle:` override at all. It must pass, and the step JSON must
+# say `settle: {mode: strict, settled: true, reason: unhandled_input, bound:
+# unhandled-input, pixels_changed: false}` while `input.handled` stays `false`
+# with REL3E's hint naming the clickable `toggle` sibling.
+#
+# The negative twin is rel3h-unhandled-input-expect-change.yaml: the same tap
+# with `expect_change: true` (a pixel claim) fails, because the screen really did
+# not change.
+version: 1
+name: rel3h-unhandled-input
+description: >-
+  A tap whose every event the app window acknowledged unhandled settles
+  immediately as an unhandled-input observation instead of timing out.
+app: fixtures/build/apps/tap-targets.apk
+engine: art
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+animations: off
+expectation: pass
+steps:
+  - launch:
+      activity: dev.acos.fixtures.taptargets/.MainActivity
+  # The label is not clickable: the window answers handled=false for both events
+  # and draws nothing. Strict settle, no `settle: content`, no per-step budget.
+  - tap:
+      selector: {id: title}
+  # A control that really is clickable still goes through the normal settle.
+  - tap:
+      selector: {id: inc}
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}

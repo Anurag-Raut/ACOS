@@ -543,8 +543,14 @@ pub trait SessionBackend {
     /// Bounded by `max_attempts`; every attempt is one real swipe followed by a
     /// fresh traversal (never a cached tree), so "found" can only be reported
     /// for a node the framework was actually showing after the gesture settled.
-    /// The failure names the attempts and the last tree's nodes so an agent can
-    /// decide where the list actually stopped.
+    ///
+    /// REL3H: a swipe that moved nothing (the settled tree before and after it is
+    /// identical) has reached the end of the list, so the search stops there
+    /// with a structured `END_OF_LIST` instead of spending the remaining
+    /// attempts on gestures that cannot reveal anything. A search that used
+    /// every attempt without reaching the end stays `ELEMENT_NOT_FOUND`. Both
+    /// name the attempts and the last settled tree's texts, and neither is ever
+    /// a pass.
     fn scroll_until(
         &mut self,
         selector: &acos_protocol::Selector,
@@ -555,52 +561,46 @@ pub trait SessionBackend {
         max_attempts: usize,
     ) -> Result<ScrollUntilReport, BackendError> {
         let attempts = max_attempts.max(1);
+        // The baseline is a settled traversal *before* the first gesture: without
+        // it the very first swipe (which may already be at the end) could not be
+        // recognised as having moved nothing.
+        let mut before = self.tree()?;
         let mut last: Option<(u64, usize, Vec<String>)> = None;
         for attempt in 1..=attempts {
             self.swipe(from, to, duration_ms, fling)?;
             let tree = self.tree()?;
-            let seen: Vec<String> = tree
-                .all_nodes()
-                .into_iter()
-                .filter_map(|node| {
-                    (!node.text.is_empty())
-                        .then(|| node.text.clone())
-                        .or_else(|| {
-                            (!node.content_desc.is_empty()).then(|| node.content_desc.clone())
-                        })
-                })
-                .take(40)
-                .collect();
+            // REL3H: `found` may only come from a *settled* observation. A tree
+            // request that timed out still answers with the latest tree (P12b),
+            // and the node it shows may be a mid-animation state, so the search
+            // stops with the settle's own TIMEOUT instead of claiming a hit.
+            if let Some(settle) = self.tree_settle_timeout() {
+                return Err(settle_timeout_error(
+                    settle,
+                    "scroll_until",
+                    self.last_frame_seq(),
+                ));
+            }
+            let seen = acos_verify::backend::scroll_until_seen_texts(&tree);
+            let frame_seq = tree.frame.frame_seq;
             let hit = tree.find_one(selector).is_some_and(|node| node.visible);
-            last = Some((tree.frame.frame_seq, attempt, seen));
+            last = Some((frame_seq, attempt, seen.clone()));
             if hit {
                 return Ok(ScrollUntilReport {
                     attempts: attempt,
-                    frame_seq: tree.frame.frame_seq,
+                    frame_seq,
                 });
             }
+            if tree.nodes == before.nodes {
+                return Err(acos_verify::backend::scroll_until_end_of_list(
+                    selector, attempt, attempts, frame_seq, &seen,
+                ));
+            }
+            before = tree;
         }
         let (frame_seq, attempt, seen) = last.unwrap_or((0, 0, Vec::new()));
-        Err(BackendError::Protocol {
-            code: ErrorCode::ElementNotFound,
-            detail: format!(
-                "scroll_until: {selector:?} was not visible after {attempt} swipe(s); the last \
-                 settled tree (frame {frame_seq}) does not contain it"
-            ),
-            hint: Some(
-                "The list may have reached its end, the gesture may be too short to scroll, or \
-                 the selector may name a node that is never rendered. Check the last tree nodes \
-                 in `details.last_tree_texts` before raising `max_attempts`."
-                    .to_string(),
-            ),
-            details: Some(serde_json::json!({
-                "attempts": attempt,
-                "max_attempts": attempts,
-                "last_frame_seq": frame_seq,
-                "selector": selector.human(),
-                "last_tree_texts": seen,
-            })),
-        })
+        Err(acos_verify::backend::scroll_until_not_found(
+            selector, attempt, attempts, frame_seq, &seen,
+        ))
     }
 
     /// The first fatal crash signature this session has observed, if any.

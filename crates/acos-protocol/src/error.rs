@@ -185,6 +185,16 @@ pub enum ErrorCode {
     /// (`UiTree::truncated`, any window). The node may exist beyond the
     /// sampled prefix, so this is not proof of absence.
     TreeTruncated,
+    /// A bounded `scroll_until` search reached the end of the list: a swipe
+    /// moved nothing (the settled tree is identical before and after it), so
+    /// the selector is not reachable by scrolling further.
+    ///
+    /// This is the honest end of a search, not a guess: `details.attempts` says
+    /// how many gestures it took, `details.last_tree_texts` what the last
+    /// settled tree actually showed. Before this the search burned every
+    /// remaining attempt and reported `ELEMENT_NOT_FOUND`, which an agent could
+    /// not tell from "the selector names a node that never renders".
+    EndOfList,
     /// A UI node reference is no longer valid.
     StaleRef,
     /// A tree-only assertion ran on an untrusted APK run, where the tree is
@@ -420,6 +430,7 @@ impl ErrorCode {
             ErrorCode::ElementOffscreen => "ELEMENT_OFFSCREEN",
             ErrorCode::AmbiguousSelector => "AMBIGUOUS_SELECTOR",
             ErrorCode::TreeTruncated => "TREE_TRUNCATED",
+            ErrorCode::EndOfList => "END_OF_LIST",
             ErrorCode::StaleRef => "STALE_REF",
             ErrorCode::InsufficientHostEvidence => "INSUFFICIENT_HOST_EVIDENCE",
             ErrorCode::UnsupportedAssertion => "UNSUPPORTED_ASSERTION",
@@ -610,6 +621,9 @@ impl ErrorCode {
             ErrorCode::TreeTruncated => {
                 "The tree was truncated at the node budget (2000 nodes per window by default), so the node may exist beyond the sampled prefix. Raise the probe node budget or narrow the selector (id/class/bounds); this is not proof the node is absent."
             }
+            ErrorCode::EndOfList => {
+                "The scroll_until search reached the end of the list: the last swipe moved nothing, so the selector is not below the current position. Read `details.last_tree_texts` for what the last settled tree showed. If the node is genuinely on the screen, scroll the other way (`direction: down`) or fix the selector; the list really has no more content in this direction."
+            }
             ErrorCode::StaleRef => {
                 "Re-run observe/assert to obtain fresh node ids; never reuse node refs across a mutation."
             }
@@ -768,6 +782,7 @@ impl ErrorCode {
             | ErrorCode::ElementOffscreen
             | ErrorCode::AmbiguousSelector
             | ErrorCode::TreeTruncated
+            | ErrorCode::EndOfList
             | ErrorCode::InsufficientHostEvidence => ErrorClass::Assertion,
 
             // Deadlines.
@@ -808,6 +823,7 @@ impl ErrorCode {
             | ErrorCode::ElementOffscreen
             | ErrorCode::AmbiguousSelector
             | ErrorCode::TreeTruncated
+            | ErrorCode::EndOfList
             | ErrorCode::InsufficientHostEvidence => Status::Fail,
             ErrorCode::AppCrashed => Status::Crash,
             ErrorCode::AppNotResponding | ErrorCode::Timeout => Status::Timeout,
@@ -1027,6 +1043,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::ElementOffscreen,
     ErrorCode::AmbiguousSelector,
     ErrorCode::TreeTruncated,
+    ErrorCode::EndOfList,
     ErrorCode::StaleRef,
     ErrorCode::InsufficientHostEvidence,
     ErrorCode::UnsupportedAssertion,

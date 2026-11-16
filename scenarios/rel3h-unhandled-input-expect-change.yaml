@@ -1,0 +1,32 @@
+# REL3H negative twin of rel3h-unhandled-input.yaml.
+#
+# The same non-clickable label tap, but with `expect_change: true`: the caller
+# claims the screen must change. It must not - the window acknowledged
+# `finishInputEvent(handled) = false` and drew nothing - so the step must fail
+# with `ASSERTION_FAILED` / `details.reason: expect_change` on the measured
+# `settle.pixels_changed: false`.
+#
+# This is what keeps REL3H honest: "unhandled input settles" is a statement
+# about the *settle*, never a licence to claim a change that did not happen. A
+# pass here would be a false green.
+version: 1
+name: rel3h-unhandled-input-expect-change
+description: >-
+  expect_change: true on an unhandled tap fails on the measured
+  pixels_changed:false instead of passing as a settled unhandled input.
+app: fixtures/build/apps/tap-targets.apk
+engine: art
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+animations: off
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.taptargets/.MainActivity
+  - tap:
+      selector: {id: title}
+      expect_change: true

@@ -3479,6 +3479,37 @@ struct SettleTiming {
     task_finished: bool,
 }
 
+/// REL3H: the settle `reason` of an input whose every published event the app
+/// window acknowledged `finishInputEvent(handled=false)`, with no draw.
+///
+/// Nothing consumed the input, so there is no new state to settle into; the
+/// unchanged, quiet screen the gesture produced **is** the settled observation.
+/// Before this the same input was a `TIMEOUT` (`reason: no-draw-after-action`),
+/// which charged a delivered no-op the whole settle deadline and reported an
+/// honest, stable screen as a failure (REL3E left it open for REL3A's track).
+pub const SETTLE_UNHANDLED_INPUT: &str = "unhandled_input";
+
+/// REL3H: did the framework acknowledge **every** published event of this
+/// gesture as unhandled?
+///
+/// The rule is only as strong as the acks behind it, so it needs all of them:
+/// one `FINISHED` reply per published `InputMessage` (`acks.len() ==
+/// seqs.len()`, each acknowledging a sequence this gesture published) and every
+/// one of those replies `handled == false`. A short or missing ack list is
+/// **unknown**, never "not handled" (REL3E's rule), and any event the app *did*
+/// handle means the app consumed the gesture: both keep the pre-REL3H settle.
+fn every_event_acked_unhandled(
+    seqs: &[u32],
+    acks: &[acos_services::window_session::input_dispatch::InjectedAck],
+) -> bool {
+    !seqs.is_empty()
+        && acks.len() == seqs.len()
+        && acks.iter().all(|ack| !ack.handled)
+        && seqs
+            .iter()
+            .all(|seq| acks.iter().any(|ack| ack.seq == *seq))
+}
+
 impl SettleTiming {
     fn to_json(&self, settled: bool, ack_ms: u64) -> serde_json::Value {
         let mut value = serde_json::json!({
@@ -3594,6 +3625,17 @@ fn wait_for_event_settled(
     // the reply is the app's *next* committed state and not the same skeleton
     // the caller already holds.
     await_tree: Option<&serde_json::Value>,
+    // REL3H: every event of this gesture came back
+    // `finishInputEvent(handled=false)` (see [`every_event_acked_unhandled`]).
+    // An input nothing consumed has no state to settle into: a fresh sample
+    // whose newest draw predates the publish and that reports no pending work
+    // is the settled observation "the app did not handle this", not a timeout.
+    unhandled_input: bool,
+    // REL3H: the newest C1 capture's pixel hash **at publish**, used only when
+    // the caller has no pre-action capture of its own (`previous_fnv: None`,
+    // e.g. after a `pixels:false` launch). The unhandled-input branch measures
+    // `pixels_changed` against it instead of inventing a value.
+    entry_fnv: Option<u64>,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
     // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
@@ -3783,6 +3825,60 @@ fn wait_for_event_settled(
                         .cloned()
                         .unwrap_or_else(|| "unsettled".to_string());
                 } else if publish_epoch_ms != 0 && sample.draw_ms < publish_epoch_ms {
+                    // REL3H: no draw landed since the action *and* the framework
+                    // acknowledged every event as unhandled. Nothing consumed
+                    // the input, so the app has no new state to settle into: the
+                    // screen this sample describes **is** the settled outcome.
+                    // Reporting this as `TIMEOUT no-draw-after-action` (the
+                    // pre-REL3H rule) charged a delivered, provably-unhandled
+                    // tap the whole settle deadline and called an honest, stable
+                    // screen a failure.
+                    if unhandled_input {
+                        // `pixels_changed` is measured exactly like the normal
+                        // strict path measures it (newest C1 capture against the
+                        // caller's pre-action one), never assumed: it is what
+                        // `expect_change: true` judges, so an unhandled tap must
+                        // fail that claim on a measured `false` rather than a
+                        // hard-coded one. No pre-action capture (a tree request)
+                        // keeps the established conservative `true` = no claim.
+                        let pixels_changed = match previous_fnv.or(entry_fnv) {
+                            None => true,
+                            Some(previous) => {
+                                let current = {
+                                    let state = live
+                                        .compositor
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner());
+                                    state.capture_latest().map(|c| c.fnv1a)
+                                };
+                                current != Some(previous) && current.is_some()
+                            }
+                        };
+                        let timing = SettleTiming {
+                            mode: SettleMode::Strict,
+                            first_change_ms: None,
+                            frame_ms: None,
+                            state_changed: None,
+                            bound: "unhandled-input",
+                            rule: Some("event"),
+                            reason: Some(SETTLE_UNHANDLED_INPUT.to_string()),
+                            pixels_changed: Some(pixels_changed),
+                            task_finished: false,
+                        };
+                        trace_host(
+                            probe_state,
+                            &format!(
+                                "settle unhandled-input ready gen={generation} probe_seq={} \
+                                 draw_seq={}",
+                                sample.seq, sample.draw_seq
+                            ),
+                        );
+                        return SettleEnd::Settled(Settled {
+                            probe: sample.clone(),
+                            generation,
+                            timing,
+                        });
+                    }
                     last_reason = "no-draw-after-action".to_string();
                 } else if sample.generation < generation {
                     last_reason = "newer-store".to_string();
@@ -3961,6 +4057,11 @@ fn wait_for_settled_observation(
     // for the *next* state instead of polling; `None` keeps every existing
     // caller byte-identical.
     await_tree: Option<&serde_json::Value>,
+    // REL3H: the gesture's own acks said nothing consumed it (input verbs only;
+    // every tree/launch caller passes `false`), and the pixel hash the unhandled
+    // branch measures against when the caller has no capture of its own.
+    unhandled_input: bool,
+    entry_fnv: Option<u64>,
 ) -> SettleEnd {
     if mode == SettleMode::Strict {
         return wait_for_event_settled(
@@ -3975,6 +4076,8 @@ fn wait_for_settled_observation(
             previous_fnv,
             publish_epoch_ms,
             await_tree,
+            unhandled_input,
+            entry_fnv,
         );
     }
     // ---- fast (P1): first probe tree that differs from the pre-action baseline.
@@ -5022,6 +5125,10 @@ fn interactive_serve(
                         None,
                         0,
                         baseline_tree.as_ref(),
+                        // A tree request publishes no input, so no gesture's
+                        // acks can make it an unhandled-input settle (REL3H).
+                        false,
+                        None,
                     );
                     match settled {
                         SettleEnd::Settled(settled) => {
@@ -5563,6 +5670,16 @@ fn interactive_serve(
                         ack_wait.as_millis()
                     ),
                 );
+                // REL3H: the newest C1 buffer at publish is the fallback
+                // pre-action pixels for an unhandled-input settle. Only taken
+                // when the caller has no capture of its own, so a normal input
+                // pays nothing for it.
+                let entry_fnv = if last_capture_fnv.is_none() {
+                    let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                    state.capture_latest().map(|capture| capture.fnv1a)
+                } else {
+                    None
+                };
                 let injected = match (cmd, key_code) {
                     ("tap", _) => live.input.tap(x, y, ack_wait),
                     ("swipe", _) => live
@@ -5615,6 +5732,10 @@ fn interactive_serve(
                 // P12b: per-request strict/fast deadline, default = the engine's
                 // long-standing frame wait.
                 let settle_timeout = request_settle_timeout(&request, frame_wait);
+                // REL3H: only a strict input whose *every* event came back
+                // acknowledged unhandled can settle as "unhandled input".
+                let unhandled_input = mode == SettleMode::Strict
+                    && every_event_acked_unhandled(&injected.seqs, &injected.acks);
                 let settled = wait_for_settled_observation(
                     child,
                     cgroup,
@@ -5629,6 +5750,8 @@ fn interactive_serve(
                     baseline_probe,
                     publish_epoch_ms,
                     None,
+                    unhandled_input,
+                    entry_fnv,
                 );
                 let (settled_probe, g1, p1, settle_timing) = match settled {
                     SettleEnd::Settled(settled) => (
@@ -7465,5 +7588,79 @@ mod abi_gate_tests {
         let result = disk_full_result(&opts("/tmp/app.apk"), "dev.acos.app", 1, 2);
         assert!(result.abi.is_none());
         assert_eq!(result.code.as_deref(), Some("HOST_DISK_FULL"));
+    }
+}
+
+/// REL3H: unhandled input is a settled observation, not a timeout.
+///
+/// The rule is only as strong as the framework acks behind it, so these pin the
+/// two halves: *when* the guest may take the shortcut (every published event
+/// delivered and acknowledged unhandled) and *what* it reports when it does
+/// (`settled: true`, `reason: unhandled_input`, `pixels_changed: false`, under
+/// the strict rule).
+#[cfg(test)]
+mod rel3h_unhandled_input_tests {
+    use super::*;
+    use acos_services::window_session::input_dispatch::InjectedAck;
+
+    fn ack(seq: u32, handled: bool) -> InjectedAck {
+        InjectedAck {
+            seq,
+            handled,
+            latency_us: Some(1_200),
+        }
+    }
+
+    /// A tap publishes DOWN+UP; both acks must be present and both unhandled.
+    #[test]
+    fn every_published_event_must_be_acked_unhandled() {
+        assert!(every_event_acked_unhandled(
+            &[3, 4],
+            &[ack(3, false), ack(4, false)]
+        ));
+        // Any handled event means the app consumed the gesture: normal settle.
+        assert!(!every_event_acked_unhandled(
+            &[3, 4],
+            &[ack(3, false), ack(4, true)]
+        ));
+        // A short ack list is "unknown", never "not handled" (REL3E): the
+        // pre-REL3H settle (and so the timeout) stays.
+        assert!(!every_event_acked_unhandled(&[3, 4], &[ack(3, false)]));
+        assert!(!every_event_acked_unhandled(&[3, 4], &[]));
+        // An empty gesture proves nothing.
+        assert!(!every_event_acked_unhandled(&[], &[]));
+        // An ack for a sequence this gesture never published cannot stand in for
+        // a published one (stale FOCUS/TOUCH_MODE acks are filtered upstream;
+        // this is the rule that makes that filtering load-bearing).
+        assert!(!every_event_acked_unhandled(
+            &[3, 4],
+            &[ack(3, false), ack(9, false)]
+        ));
+    }
+
+    /// The reply's settle block is the REL3A record shape with this rule's own
+    /// bound/reason, and it says the pixels did not change (so `expect_change`
+    /// can fail on it instead of reporting "unmeasured").
+    #[test]
+    fn the_unhandled_input_settle_is_settled_with_its_own_reason() {
+        let timing = SettleTiming {
+            mode: SettleMode::Strict,
+            first_change_ms: None,
+            frame_ms: None,
+            state_changed: None,
+            bound: "unhandled-input",
+            rule: Some("event"),
+            reason: Some(SETTLE_UNHANDLED_INPUT.to_string()),
+            pixels_changed: Some(false),
+            task_finished: false,
+        };
+        let json = timing.to_json(true, 7);
+        assert_eq!(json["mode"], serde_json::json!("strict"));
+        assert_eq!(json["settled"], serde_json::json!(true));
+        assert_eq!(json["reason"], serde_json::json!("unhandled_input"));
+        assert_eq!(json["bound"], serde_json::json!("unhandled-input"));
+        assert_eq!(json["strict_rule"], serde_json::json!("event"));
+        assert_eq!(json["pixels_changed"], serde_json::json!(false));
+        assert_eq!(json["ack_ms"], serde_json::json!(7));
     }
 }

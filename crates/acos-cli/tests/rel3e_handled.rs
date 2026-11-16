@@ -13,8 +13,13 @@
 //! the `tap-targets` fixture:
 //!
 //! * a tap on the non-clickable label `title` → `handled: false`,
-//!   `state_changed: false`, and a `target.hit` block that names the label and
-//!   the clickable `toggle` switch to tap instead;
+//!   `state_changed: false`, a `target.hit` block that names the label and the
+//!   clickable `toggle` switch to tap instead, and (REL3H) a **settled** strict
+//!   reply: `settle.reason: "unhandled_input"`, not the old `TIMEOUT
+//!   no-draw-after-action`;
+//! * the same label tap with `expect_change: true` → `fail`
+//!   (`ASSERTION_FAILED` / `reason: expect_change` on measured
+//!   `pixels_changed: false`), because an unhandled tap changes nothing;
 //! * a tap on the clickable `inc` button → `handled: true`, `state_changed: true`
 //!   and the counter moves.
 //!
@@ -54,6 +59,24 @@ fn acos() -> &'static str {
 
 /// Scratch under this checkout's `.cache`; the socket lives in a short dir so a
 /// deep worktree path cannot overflow `sun_path` (see `common`).
+/// The release `acos-art` launcher to run: `ACOS_ART_BIN` when it points at a
+/// file, else this branch's own target dir (REL3H's, then REL3E's).
+fn art_bin() -> PathBuf {
+    if let Some(path) = std::env::var_os("ACOS_ART_BIN") {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            return path;
+        }
+    }
+    for target in [".cache/rel3h-target", ".cache/rel3e-target"] {
+        let path = repo_root().join(target).join("release/acos-art");
+        if path.is_file() {
+            return path;
+        }
+    }
+    repo_root().join(".cache/rel3e-target/release/acos-art")
+}
+
 fn scratch(tag: &str) -> PathBuf {
     let dir = repo_root()
         .join(".cache")
@@ -76,10 +99,10 @@ impl Daemon {
         let dir = scratch(tag);
         let sockets = ShortSocketDir::new(tag);
         let socket = sockets.socket("serve.sock");
-        // REL3E runs its own release build under `.cache/rel3e-target`; point
-        // the launcher at that `acos-art` so the guest is the binary this
-        // branch built, never a stale one from another target dir.
-        let art_bin = repo_root().join(".cache/rel3e-target/release/acos-art");
+        // Point the launcher at the `acos-art` this branch built, never a
+        // stale one from another target dir (`ACOS_ART_BIN` wins, so another
+        // checkout can run the test without editing it).
+        let art_bin = art_bin();
         let mut command = Command::new(acos());
         command
             .arg("serve")
@@ -196,7 +219,7 @@ fn find_node<'a>(nodes: &'a Value, resource: &str) -> Option<&'a Value> {
 #[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
 fn tap_on_a_label_is_reported_not_handled_and_names_the_switch() {
     let apk = repo_root().join("fixtures/build/apps/tap-targets.apk");
-    let art = repo_root().join(".cache/rel3e-target/release/acos-art");
+    let art = art_bin();
     if !apk.is_file() || !art.is_file() {
         eprintln!(
             "SKIP: {} or {} missing (build with ACOS_APP_ONLY=tap-targets tools/build-apps.sh \
@@ -216,33 +239,40 @@ fn tap_on_a_label_is_reported_not_handled_and_names_the_switch() {
 
     // ---- the feedback case: a tap on the non-clickable label ----------------
     // REL3E: the app window itself says `handled=false` and the hit-test names
-    // the clickable switch instead of the label. REL3A: the tap drew nothing, so
-    // the strict settle times out - and a settle that timed out is never a plain
-    // pass (F-06). The reply is therefore a structured non-pass (`status:
-    // timeout`, `ok: false`, `error.code: TIMEOUT`) whose delivered facts are
-    // still carried in `result` and in `error.details.delivery`, so nothing the
-    // app told us is lost and the caller never sees a green light on a frame
-    // nothing can be asserted about.
+    // the clickable switch instead of the label. REL3H: an input whose every
+    // event was acknowledged unhandled, with no draw, is a **settled**
+    // observation (`settle.reason: unhandled_input`) - not the pre-REL3H
+    // `TIMEOUT no-draw-after-action`. A tap the app never handled has no state
+    // to settle into, so the quiet, unchanged screen is the honest outcome.
     let label = conn.call("acos_tap", json!({"base": b, "id": "title"}));
-    assert_eq!(label["ok"], json!(false), "{label:#?}");
-    assert_eq!(label["status"], json!("timeout"), "{label:#?}");
-    assert_eq!(label["error"]["code"], json!("TIMEOUT"), "{label:#?}");
-    assert_eq!(
-        label["error"]["details"]["reason"],
-        json!("settle_timeout"),
-        "a timed-out settle says so in the error: {label:#?}"
-    );
-    assert_eq!(
-        label["error"]["details"]["settle"]["settled"],
-        json!(false),
-        "the settle that timed out is reported: {label:#?}"
-    );
-    assert_eq!(
-        label["error"]["details"]["delivery"]["handled"],
-        json!(false),
-        "the delivered facts stay in the error's delivery block: {label:#?}"
-    );
+    assert_eq!(label["ok"], json!(true), "{label:#?}");
+    assert_eq!(label["status"], json!("pass"), "{label:#?}");
     let result = &label["result"];
+    assert_eq!(
+        result["settle"]["mode"],
+        json!("strict"),
+        "the default rule is still strict: {label:#?}"
+    );
+    assert_eq!(
+        result["settle"]["settled"],
+        json!(true),
+        "an unhandled tap is settled, not a timeout: {label:#?}"
+    );
+    assert_eq!(
+        result["settle"]["reason"],
+        json!("unhandled_input"),
+        "the settle names the rule that settled it: {label:#?}"
+    );
+    assert_eq!(
+        result["settle"]["bound"],
+        json!("unhandled-input"),
+        "the settle says what it bound to: {label:#?}"
+    );
+    assert_eq!(
+        result["settle"]["pixels_changed"],
+        json!(false),
+        "nothing drew, and the record says so (measured): {label:#?}"
+    );
     assert_eq!(
         result["handled"],
         json!(false),
@@ -285,6 +315,33 @@ fn tap_on_a_label_is_reported_not_handled_and_names_the_switch() {
     assert!(
         hint.contains("nearest clickable"),
         "the hint says what to tap instead: {hint}"
+    );
+
+    // ---- the same unhandled tap with a pixel claim must fail ---------------
+    // REL3H keeps the shortcut honest: `expect_change: true` is a claim that
+    // the screen changed, and an unhandled tap provably changed nothing. It
+    // fails on the measured `pixels_changed:false`, never as a timeout and
+    // never as a pass.
+    let no_change = conn.call(
+        "acos_tap",
+        json!({"base": b, "id": "title", "expect_change": true}),
+    );
+    assert_eq!(no_change["ok"], json!(false), "{no_change:#?}");
+    assert_eq!(no_change["status"], json!("fail"), "{no_change:#?}");
+    assert_eq!(
+        no_change["error"]["code"],
+        json!("ASSERTION_FAILED"),
+        "{no_change:#?}"
+    );
+    assert_eq!(
+        no_change["error"]["details"]["reason"],
+        json!("expect_change"),
+        "the failure is the pixel claim, not a settle timeout: {no_change:#?}"
+    );
+    assert_eq!(
+        no_change["error"]["details"]["pixels_changed"],
+        json!(false),
+        "the claim failed on a measured fact: {no_change:#?}"
     );
 
     // ---- and a control that really is clickable ----------------------------

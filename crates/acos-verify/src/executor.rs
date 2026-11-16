@@ -1807,9 +1807,11 @@ fn scroll_until_step(
             exec.delivery = backend.last_input_delivery();
             // Keep the search report even on a miss: the error details already
             // carry the attempts and the last tree's texts, and this block is
-            // the step-shaped view of the same facts.
+            // the step-shaped view of the same facts. REL3H: a search that
+            // reached the end of the list says so (`end_of_list: true`) instead
+            // of looking like a node that was never rendered.
             if let BackendError::Protocol {
-                code: ErrorCode::ElementNotFound,
+                code: ErrorCode::ElementNotFound | ErrorCode::EndOfList,
                 details: Some(details),
                 ..
             } = &error
@@ -1817,6 +1819,7 @@ fn scroll_until_step(
                 exec.until = Some(serde_json::json!({
                     "selector": details.get("selector").cloned().unwrap_or(describe),
                     "found": false,
+                    "end_of_list": details.get("end_of_list").cloned().unwrap_or(serde_json::Value::Bool(false)),
                     "attempts": details.get("attempts").cloned().unwrap_or(serde_json::Value::Null),
                     "max_attempts": details.get("max_attempts").cloned().unwrap_or(serde_json::Value::Null),
                     "frame_seq": details.get("last_frame_seq").cloned().unwrap_or(serde_json::Value::Null),

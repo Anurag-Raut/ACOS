@@ -538,6 +538,140 @@ pub struct ScrollUntilReport {
     pub frame_seq: u64,
 }
 
+/// The texts (else content descriptions) a settled tree shows, in document
+/// order, capped at 40.
+///
+/// Both `scroll_until` search loops report their last settled observation with
+/// this list, so an agent can see *where* the list actually stopped without a
+/// second call.
+pub fn scroll_until_seen_texts(tree: &UiTree) -> Vec<String> {
+    tree.all_nodes()
+        .into_iter()
+        .filter_map(|node| {
+            (!node.text.is_empty())
+                .then(|| node.text.clone())
+                .or_else(|| (!node.content_desc.is_empty()).then(|| node.content_desc.clone()))
+        })
+        .take(40)
+        .collect()
+}
+
+/// REL3H: the structured end of a `scroll_until` search.
+///
+/// A search whose last gesture moved nothing (the settled tree before and after
+/// it is identical) has reached the end of the list: there is no content left to
+/// reveal in this direction, so spending the remaining attempts would only make
+/// the same gesture again. That is a different fact from "the selector names a
+/// node that is never rendered" and from "the gesture is too short", so it has
+/// its own `END_OF_LIST` code, the number of gestures it took and the last
+/// settled tree's texts - and it is still a non-pass (the requested node was not
+/// observed).
+pub fn scroll_until_end_of_list(
+    selector: &Selector,
+    attempts: usize,
+    max_attempts: usize,
+    frame_seq: u64,
+    last_tree_texts: &[String],
+) -> BackendError {
+    BackendError::Protocol {
+        code: ErrorCode::EndOfList,
+        detail: format!(
+            "scroll_until: the list ended after {attempts} swipe(s) - the last one moved \
+             nothing, so {selector:?} cannot be reached by scrolling further; the last \
+             settled tree (frame {frame_seq}) does not contain it"
+        ),
+        hint: Some(
+            "The list is at its end in this direction, so the node is either above the current \
+             position (scroll `direction: down`) or not rendered at all. Read \
+             `details.last_tree_texts` for what the last settled tree showed; raising \
+             `max_attempts` cannot help here."
+                .to_string(),
+        ),
+        details: Some(serde_json::json!({
+            "end_of_list": true,
+            "attempts": attempts,
+            "max_attempts": max_attempts,
+            "last_frame_seq": frame_seq,
+            "selector": selector.human(),
+            "last_tree_texts": last_tree_texts,
+        })),
+    }
+}
+
+/// REL3H: the refusal for a `scroll_until` traversal that did not settle.
+///
+/// A search may only report `found` from a settled observation, and a backend
+/// that says its traversal did not settle (`settled: false`) cannot back that
+/// claim: the node may be a mid-animation state the app is about to move. This
+/// is a `TIMEOUT` (the harness could not complete the observation), never a
+/// miss and never a pass. A backend that reports **no** settle record keeps the
+/// REL3S behaviour (an absent record is not proof of the opposite - REL3A's
+/// rule); only an explicit `settled: false` refuses.
+pub fn scroll_until_not_settled(
+    selector: &Selector,
+    attempts: usize,
+    frame_seq: u64,
+    settle: &serde_json::Value,
+) -> BackendError {
+    let reason = settle
+        .get("reason")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("the backend reported an unsettled observation");
+    BackendError::Protocol {
+        code: ErrorCode::Timeout,
+        detail: format!(
+            "scroll_until: attempt {attempts} produced no settled observation ({reason}); \
+             {selector:?} was not looked for in a frame the app had stopped changing"
+        ),
+        hint: Some(
+            "A found node must come from a settled observation. Raise `settle_timeout_ms` for a \
+             slow screen, use `settle: content` on the surrounding assertions for a screen whose \
+             pixels animate forever, or scroll with plain `swipe` steps and assert afterwards. \
+             Nothing is reported as found."
+                .to_string(),
+        ),
+        details: Some(serde_json::json!({
+            "reason": "settle_timeout",
+            "attempts": attempts,
+            "frame_seq": frame_seq,
+            "selector": selector.human(),
+            "settle": settle,
+        })),
+    }
+}
+
+/// The structured miss of a `scroll_until` search that used every attempt
+/// without finding the node and without reaching the end of the list.
+pub fn scroll_until_not_found(
+    selector: &Selector,
+    attempts: usize,
+    max_attempts: usize,
+    frame_seq: u64,
+    last_tree_texts: &[String],
+) -> BackendError {
+    BackendError::Protocol {
+        code: ErrorCode::ElementNotFound,
+        detail: format!(
+            "scroll_until: {selector:?} was not visible after {attempts} swipe(s); the last \
+             settled tree (frame {frame_seq}) does not contain it"
+        ),
+        hint: Some(
+            "The gesture may be too short to scroll, the selector may name a node that is never \
+             rendered, or the list may still have more content. Check the last tree nodes in \
+             `details.last_tree_texts` before raising `max_attempts`."
+                .to_string(),
+        ),
+        details: Some(serde_json::json!({
+            "end_of_list": false,
+            "attempts": attempts,
+            "max_attempts": max_attempts,
+            "last_frame_seq": frame_seq,
+            "selector": selector.human(),
+            "last_tree_texts": last_tree_texts,
+        })),
+    }
+}
+
 /// One environment change (`set_*` step).
 #[derive(Debug, Clone, PartialEq)]
 pub enum EnvironmentChange {
@@ -809,9 +943,14 @@ pub trait Backend {
     /// a fresh observation (never a cached tree), so a "found" can only come
     /// from a frame the app itself produced after the gesture. The default loops
     /// over [`Self::input`]; an engine with its own search command (ART) overrides
-    /// it and reports the same facts. A miss is a structured
-    /// `ELEMENT_NOT_FOUND` naming the attempts and the last tree's texts - never
-    /// a pass and never a silent no-op.
+    /// it and reports the same facts.
+    ///
+    /// REL3H: a gesture that moved nothing (the settled tree before and after it
+    /// is identical) has reached the end of the list, so the search stops there
+    /// with a structured `END_OF_LIST` instead of spending the remaining
+    /// attempts on gestures that cannot reveal anything. A search that used
+    /// every attempt without reaching the end is `ELEMENT_NOT_FOUND`. Both are
+    /// non-passes naming the attempts and the last tree's texts.
     fn scroll_until(
         &mut self,
         selector: &Selector,
@@ -822,6 +961,9 @@ pub trait Backend {
         max_attempts: usize,
     ) -> Result<(ScrollUntilReport, SessionObservation), BackendError> {
         let attempts = max_attempts.max(1);
+        // The baseline is the settled tree *before* the first gesture: the very
+        // first swipe may already be at the end, and that has to be measurable.
+        let mut before = self.refresh()?.tree;
         let mut last: Option<(u64, usize, Vec<String>)> = None;
         for attempt in 1..=attempts {
             let observation = self.input(&InputAction::Swipe {
@@ -830,25 +972,21 @@ pub trait Backend {
                 duration_ms,
                 fling,
             })?;
-            let seen: Vec<String> = observation
-                .tree
-                .all_nodes()
-                .into_iter()
-                .filter_map(|node| {
-                    (!node.text.is_empty())
-                        .then(|| node.text.clone())
-                        .or_else(|| {
-                            (!node.content_desc.is_empty()).then(|| node.content_desc.clone())
-                        })
-                })
-                .take(40)
-                .collect();
+            let seen = scroll_until_seen_texts(&observation.tree);
             let frame_seq = observation.frame.frame_seq;
+            // REL3H: a `found` claim needs a settled observation. A backend that
+            // says this traversal did not settle never backs one; a backend that
+            // reports no record at all keeps the REL3S behaviour.
+            if let Some(settle) = observation.settle.as_ref() {
+                if settle.get("settled").and_then(serde_json::Value::as_bool) == Some(false) {
+                    return Err(scroll_until_not_settled(selector, attempt, frame_seq, settle));
+                }
+            }
             let hit = observation
                 .tree
                 .find_one(selector)
                 .is_some_and(|node| node.visible);
-            last = Some((frame_seq, attempt, seen));
+            last = Some((frame_seq, attempt, seen.clone()));
             if hit {
                 return Ok((
                     ScrollUntilReport {
@@ -858,28 +996,17 @@ pub trait Backend {
                     observation,
                 ));
             }
+            if observation.tree.nodes == before.nodes {
+                return Err(scroll_until_end_of_list(
+                    selector, attempt, attempts, frame_seq, &seen,
+                ));
+            }
+            before = observation.tree.clone();
         }
         let (frame_seq, attempt, seen) = last.unwrap_or((0, 0, Vec::new()));
-        Err(BackendError::Protocol {
-            code: ErrorCode::ElementNotFound,
-            detail: format!(
-                "scroll_until: {selector:?} was not visible after {attempt} swipe(s); the last \
-                 settled observation (frame {frame_seq}) does not contain it",
-            ),
-            hint: Some(
-                "The list may have reached its end, the gesture may be too short to scroll, or \
-                 the selector may name a node that is never rendered. Check the last tree nodes \
-                 in `details.last_tree_texts` before raising `max_attempts`."
-                    .to_string(),
-            ),
-            details: Some(serde_json::json!({
-                "attempts": attempt,
-                "max_attempts": attempts,
-                "last_frame_seq": frame_seq,
-                "selector": selector.human(),
-                "last_tree_texts": seen,
-            })),
-        })
+        Err(scroll_until_not_found(
+            selector, attempt, attempts, frame_seq, &seen,
+        ))
     }
 
     /// Reset session state.
@@ -936,6 +1063,7 @@ pub trait Backend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use acos_protocol::{Bounds, UiNode};
 
     #[test]
     fn resolve_component_handles_forms() {
@@ -1002,6 +1130,190 @@ mod tests {
             ..Capabilities::default()
         };
         assert_eq!(caps.names(), vec!["static-manifest", "lifecycle"]);
+    }
+
+    // ---- REL3H: a scroll_until search stops at the end of the list ---------
+
+    /// A list that either keeps moving (a row counter changes with every
+    /// gesture) or is already at its end (the settled tree never changes).
+    struct ListBackend {
+        frame: u64,
+        at_end: bool,
+    }
+
+    impl ListBackend {
+        fn observation(&self) -> SessionObservation {
+            let row = if self.at_end { 0 } else { self.frame };
+            let mut list = UiNode::new("list", "android.widget.ListView", Bounds::new(0, 0, 1080, 2400))
+                .clickable(false);
+            list.scrollable = true;
+            let first = UiNode::new(
+                "row_0",
+                "android.widget.TextView",
+                Bounds::new(0, 0, 1080, 240),
+            )
+            .with_text(format!("Row {row}"));
+            let last = UiNode::new(
+                "row_end",
+                "android.widget.TextView",
+                Bounds::new(0, 2160, 1080, 2400),
+            )
+            .with_text("Row 99");
+            list.children = vec![first, last];
+            SessionObservation {
+                session_id: "s_rel3h".to_string(),
+                package: "dev.acos.fixtures.scrolllist".to_string(),
+                frame: FrameMeta::new(
+                    self.frame,
+                    "2026-11-16T00:00:00Z",
+                    "req_rel3h",
+                    1080,
+                    2400,
+                    420,
+                    "h",
+                    true,
+                ),
+                tree: UiTree::new(
+                    FrameMeta::new(
+                        self.frame,
+                        "2026-11-16T00:00:00Z",
+                        "req_rel3h",
+                        1080,
+                        2400,
+                        420,
+                        "h",
+                        true,
+                    ),
+                    "dev.acos.fixtures.scrolllist",
+                    vec![list],
+                ),
+                screenshot_png: None,
+                crashed: None,
+                input: None,
+                settle: None,
+            }
+        }
+    }
+
+    impl Backend for ListBackend {
+        fn id(&self) -> &'static str {
+            "rel3h-list"
+        }
+
+        fn protocol_backend(&self) -> ProtocolBackend {
+            ProtocolBackend::AcosNative
+        }
+
+        fn fidelity(&self) -> Fidelity {
+            Fidelity::ArtReference
+        }
+
+        fn capabilities(&self) -> Capabilities {
+            Capabilities {
+                launch: true,
+                ui_tree: true,
+                input: true,
+                ..Capabilities::default()
+            }
+        }
+
+        fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
+            Ok(ManifestInfo {
+                path: apk.display().to_string(),
+                sha256: "0".repeat(64),
+                package: "dev.acos.fixtures.scrolllist".to_string(),
+                version_code: 1,
+                version_name: "1.0".to_string(),
+                min_sdk: 26,
+                target_sdk: 34,
+                label: None,
+                launcher_activity: Some(
+                    "dev.acos.fixtures.scrolllist.MainActivity".to_string(),
+                ),
+                activities: vec!["dev.acos.fixtures.scrolllist.MainActivity".to_string()],
+                native_abis: Vec::new(),
+                debuggable: true,
+            })
+        }
+
+        fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+            Ok(self.observation())
+        }
+
+        fn input(&mut self, action: &InputAction) -> Result<SessionObservation, BackendError> {
+            assert!(
+                matches!(action, InputAction::Swipe { .. }),
+                "a scroll_until search only publishes swipes"
+            );
+            self.frame += 1;
+            Ok(self.observation())
+        }
+    }
+
+    fn missing() -> Selector {
+        Selector::by_text("Row 9999")
+    }
+
+    /// A gesture that moved nothing ends the search with `END_OF_LIST` after one
+    /// attempt - not with a full run of identical gestures and
+    /// `ELEMENT_NOT_FOUND`.
+    #[test]
+    fn a_swipe_that_moves_nothing_ends_the_search() {
+        let mut backend = ListBackend {
+            frame: 7,
+            at_end: true,
+        };
+        let error = backend
+            .scroll_until(&missing(), (540.0, 1800.0), (540.0, 600.0), 200, true, 6)
+            .expect_err("a node that is not in a list at its end is never found");
+        assert_eq!(error.code(), ErrorCode::EndOfList);
+        assert_eq!(error.status(), Status::Fail, "END_OF_LIST is never a pass");
+        let details = error.to_protocol_error().details.expect("details");
+        assert_eq!(details["end_of_list"], serde_json::json!(true));
+        assert_eq!(details["attempts"], serde_json::json!(1));
+        assert_eq!(details["max_attempts"], serde_json::json!(6));
+        assert_eq!(details["selector"], serde_json::json!("text==\"Row 9999\""));
+        let texts = details["last_tree_texts"].as_array().expect("texts");
+        assert!(texts.iter().any(|text| text == "Row 99"), "{details}");
+    }
+
+    /// A list that keeps moving is not "at its end": all attempts are used and
+    /// the miss stays `ELEMENT_NOT_FOUND` (never a false END_OF_LIST).
+    #[test]
+    fn a_moving_list_uses_every_attempt() {
+        let mut backend = ListBackend {
+            frame: 0,
+            at_end: false,
+        };
+        let error = backend
+            .scroll_until(&missing(), (540.0, 1800.0), (540.0, 600.0), 200, true, 3)
+            .expect_err("the row never exists");
+        assert_eq!(error.code(), ErrorCode::ElementNotFound);
+        let details = error.to_protocol_error().details.expect("details");
+        assert_eq!(details["end_of_list"], serde_json::json!(false));
+        assert_eq!(details["attempts"], serde_json::json!(3));
+    }
+
+    /// A node that *is* in the first settled observation is found without a
+    /// second gesture, and the report names that frame.
+    #[test]
+    fn a_visible_node_is_found_in_the_first_settled_observation() {
+        let mut backend = ListBackend {
+            frame: 2,
+            at_end: true,
+        };
+        let (report, observation) = backend
+            .scroll_until(
+                &Selector::by_text("Row 99"),
+                (540.0, 1800.0),
+                (540.0, 600.0),
+                200,
+                true,
+                6,
+            )
+            .expect("Row 99 is in the list");
+        assert_eq!(report.attempts, 1);
+        assert_eq!(report.frame_seq, observation.frame.frame_seq);
     }
 
     #[test]

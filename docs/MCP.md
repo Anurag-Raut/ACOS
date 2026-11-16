@@ -412,10 +412,12 @@ fling with their own physics instead of jumping.
   events.
 * `until: <selector>` is a bounded `scroll_until`: swipe, take a fresh **settled**
   traversal, look for the node, repeat (`max_attempts`, 1..50). The reply carries
-  `until: {selector, found: true, attempts, frame_seq}`; a miss is
-  `ELEMENT_NOT_FOUND` with `details.attempts`, `details.max_attempts`,
-  `details.last_frame_seq` and `details.last_tree_texts`. `until` refuses
-  `settle: fast`/`content` because neither can prove a settled observation.
+  `until: {selector, found: true, attempts, frame_seq}`. A miss is
+  `ELEMENT_NOT_FOUND` (every attempt used), or `END_OF_LIST` when a swipe moved
+  nothing — the list ended, `details.end_of_list: true` — with `details.attempts`,
+  `details.max_attempts`, `details.last_frame_seq` and
+  `details.last_tree_texts`. `until` refuses `settle: fast`/`content` because
+  neither can prove a settled observation.
 * `fling`/`direction`/`distance`/`until`/`max_attempts` on the frozen Rust VM are
   refused (`until` explicitly: only ART has settled-observation proof).
 
