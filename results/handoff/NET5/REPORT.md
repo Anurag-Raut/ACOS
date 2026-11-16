@@ -178,12 +178,20 @@ Artifacts: `run/proof/off/`, `run/proof/real/`, `run/proof/hostport/`
 ## 7. Acceptance
 
 * `cargo check --workspace --all-targets` — **PASS** (clean after both merges).
-* `cargo test -p acos-netd -p acos-services -p acos-mcp -p acos-cli` — see
-  `run/acceptance-tests.log`. Environment-only failures are named there: the
-  `fb1_live_input` / `view` tests that bind a Unix socket under this worktree's
-  long path (`sun_path` 108) — the same class NET4 reported, unrelated to this
-  work, and they pass only with a short `ACOS_VIEW_TEST_DIR`
-  (`$WT/.cache/net5/lv`, which the run sets).
+* `cargo test -p acos-netd -p acos-services -p acos-mcp -p acos-cli` — **PASS**
+  (`run/acceptance-tests.log`, `rc=0`, every `test result: ok`; 181 + 129 + 83 +
+  the per-test binaries, no failures). Two environment-only facts are named
+  because they are *not* code and they do bite in this worktree:
+  * the socket-path family (`fb1_live_input`, `view`, `serve_daemon`) binds a
+    Unix socket under the worktree path (109 bytes > `sun_path`'s 108). They pass
+    with a short `ACOS_VIEW_TEST_DIR` (`$WT/.cache/net5/lv`, which the recorded
+    run sets) — the same class NET4 reported. `serve_daemon` additionally owns its
+    socket path: a `ACOS_SESSION_SOCKET` in the environment overrides it and makes
+    that test fail ("must exist after --keep"), so the recorded run unsets it.
+  * `engine::art::tests::a_zygote_session_signals_and_proves_instead_of_waiting_the_grace`
+    is a 100 ms timing assertion; it failed once (114 ms) while another agent's
+    full suite held the shared lock on this 60 GiB host, and passes alone (0.38 s)
+    and in the final full run. Nothing in NET5 touches the zygote stop path.
 
 ## 8. What is not done
 
