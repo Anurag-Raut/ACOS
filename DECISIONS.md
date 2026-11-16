@@ -1229,3 +1229,7 @@ launcher, Settings targets and the share chooser. ACOS does not paint host-side 
 rejected). The `notifications` and `permissions` service layers (state, control ops) are built now;
 names a module replaces (`notification`, `statusbar`, `permission`) move out of `core` into their
 modules so detach restores the core answer (orchestrator).
+ADR-0029 note (MODSENS, orchestrator): for a service whose framework client caches the proxy
+(sensorservice, location), `core` publishes the binder node and the module fills it
+(`core_module::FILLED_BY_MODULE` + `ServiceHost::dynamic_object_mut`); detach empties the node back to
+the honest off answer. This is the framework pattern for such names.
