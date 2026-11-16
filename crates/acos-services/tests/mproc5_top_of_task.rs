@@ -153,7 +153,7 @@ fn finishing_the_new_top_resumes_the_activity_below_in_the_other_process() {
     }
     atms.pending_lifecycle_calls.clear();
 
-    atms.finish_activity(b).expect("B finishes");
+    atms.finish_activity(b, 0, None).expect("B finishes");
 
     assert_eq!(atms.pending_lifecycle_calls.len(), 1);
     let (tag, method, args) = &atms.pending_lifecycle_calls[0];

@@ -677,6 +677,10 @@ impl SecondaryShared {
         sb.env("ACOS_PROCESS_TAG", &spec.tag.to_string());
         sb.env("ACOS_PROCESS_NAME", &spec.package);
         sb.env("ACOSLAUNCH_RESUME_MS", &self.resume_ms.to_string());
+        // MPROC7 (ADR-0029 amendment): this process's first launch is a
+        // host-built `ClientTransaction` (system_server owns the activity
+        // token); the guest waits for it instead of marshalling its own.
+        sb.env("ACOSLAUNCH_HOST_SCHEDULES", "1");
         for (var, value) in &self.geometry {
             sb.env(var, &value.to_string());
         }

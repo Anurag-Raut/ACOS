@@ -80,9 +80,11 @@ pub struct IntentFacts {
     /// it and the intent-filter match uses it; `None` for an intent without a
     /// type, which is not the same as the wildcard `*/*`.
     pub mime_type: Option<String>,
-    /// `Intent.getFlags()`. MPROC1 records it on a capture; the launch path
-    /// takes the flag word from the transaction's own argument (they are the
-    /// same value the framework wrote).
+    /// `Intent.getFlags()`. MPROC1 records it on a capture. The launch path
+    /// ORs it with the AIDL `startFlags` argument, which stock
+    /// `Instrumentation.execStartActivity` always passes as `0`: the caller's
+    /// flags travel inside the Intent, so this field is the one that carries
+    /// `FLAG_ACTIVITY_SINGLE_TOP`/`NEW_TASK`/`CLEAR_TOP` for a real app.
     pub flags: i32,
     /// `Intent.getPackage()`.
     pub package: Option<String>,
@@ -888,6 +890,9 @@ pub struct AmsState {
     next_token: u64,
     /// Last `onNewIntent` records (evidence).
     pub new_intents: Vec<(u64, IntentFacts)>,
+    /// MPROC7: `onNewIntent` deliveries the host still owes a process
+    /// (`FLAG_ACTIVITY_SINGLE_TOP` to an activity that is already the top).
+    pub pending_new_intents: Vec<(u64, IntentFacts)>,
     /// MPROC1: the session's intent **capture target**. `Some` in a session
     /// (set by the standard registry); `None` in a bare state machine, where an
     /// unresolvable intent stays the structured `START_NOT_FOUND`.
@@ -925,9 +930,18 @@ impl AmsState {
         result_to: u64,
         request_code: i32,
     ) -> Result<i32> {
+        // `Instrumentation.execStartActivity` passes `0` as the AIDL
+        // `startFlags` argument; the flags the caller set live **in the
+        // `Intent`** (`intent.getFlags()`), and stock `ActivityStarter` ORs the
+        // two (`mLaunchFlags`). Reading only the argument made
+        // `FLAG_ACTIVITY_SINGLE_TOP` invisible (MPROC7: B's `startActivity` with
+        // the flag arrived as a second launch instead of `onNewIntent`).
+        let flags = flags | intent.flags;
         const NEW_TASK: i32 = 0x1000_0000;
         const CLEAR_TOP: i32 = 0x0400_0000;
-        const HONOURED: i32 = NEW_TASK | CLEAR_TOP;
+        /// `Intent.FLAG_ACTIVITY_SINGLE_TOP` (MPROC7).
+        const SINGLE_TOP: i32 = 0x2000_0000;
+        const HONOURED: i32 = NEW_TASK | CLEAR_TOP | SINGLE_TOP;
         if flags & !HONOURED != 0 {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: "android.app.IActivityManager".into(),
@@ -981,6 +995,11 @@ impl AmsState {
             match component.launch_mode {
                 1 => LaunchBehaviour::ReuseTop,
                 2 => LaunchBehaviour::FinishAboveAndReuse,
+                // `FLAG_ACTIVITY_SINGLE_TOP` is the per-call spelling of
+                // `launchMode="singleTop"` (AOSP `ActivityStarter` folds the flag
+                // into the launch flags): a top instance is reused and gets
+                // `NewIntentItem`, never a second instance.
+                _ if flags & SINGLE_TOP != 0 => LaunchBehaviour::ReuseTop,
                 _ => LaunchBehaviour::NewInstance,
             }
         };
@@ -1010,6 +1029,7 @@ impl AmsState {
             let token = top.expect("top_same implies a top token");
             if behaviour == LaunchBehaviour::ReuseTop {
                 self.new_intents.push((token, intent.clone()));
+                self.pending_new_intents.push((token, intent.clone()));
                 return Ok(START_SUCCESS);
             }
             // `singleTask`: finish everything above the existing instance.
@@ -1081,6 +1101,64 @@ impl AmsState {
             }
         }
         Some((pending.token, pending.class))
+    }
+
+    /// MPROC7: the launch recorded for `package` that the host has not
+    /// delivered yet (the first one in launch order).
+    #[must_use]
+    pub fn pending_launch_for(&self, package: &str) -> Option<&PendingLaunch> {
+        self.pending_launches.iter().find(|l| l.package == package)
+    }
+
+    /// MPROC7: take one `onNewIntent` delivery owed to process `tag`
+    /// (`singleTop` / `FLAG_ACTIVITY_SINGLE_TOP`). `new_intents` stays the
+    /// evidence stream; this queue is what the peer drains into a
+    /// `NewIntentItem`.
+    pub fn take_pending_new_intent(&mut self, tag: u32) -> Option<(u64, IntentFacts)> {
+        let index = self
+            .pending_new_intents
+            .iter()
+            .position(|(token, _)| crate::atms::process_tag_of(*token) == tag)?;
+        Some(self.pending_new_intents.remove(index))
+    }
+
+    /// MPROC7: bind the recorded launch of placeholder token `old` to `new`.
+    ///
+    /// The host mints the activity token for a launch it encodes itself (a
+    /// running process, or a freshly spawned secondary whose first launch is no
+    /// longer marshalled by its guest). The placeholder `start_activity`
+    /// recorded is rewritten in the task stack, so the caller's
+    /// `activityResumed(new)` finds the record in `AtmsState` and the
+    /// `startActivityForResult` receiver (`result_to`, an activity token) still
+    /// names the right activity.
+    pub fn bind_launch_token(&mut self, old: u64, new: u64) {
+        for activity in &mut self.activities {
+            if activity.token == old {
+                activity.token = new;
+            }
+        }
+        for task in &mut self.tasks {
+            for token in &mut task.activities {
+                if *token == old {
+                    *token = new;
+                }
+            }
+        }
+        for launch in &mut self.pending_launches {
+            if launch.token == old {
+                launch.token = new;
+            }
+            if launch.result_to == old {
+                launch.result_to = new;
+            }
+        }
+    }
+
+    /// MPROC7: mark the launch of `token` as delivered (it leaves the queue; the
+    /// activity record now carries the lifecycle).
+    pub fn take_launch(&mut self, token: u64) -> Option<PendingLaunch> {
+        let index = self.pending_launches.iter().position(|l| l.token == token)?;
+        Some(self.pending_launches.remove(index))
     }
 
     /// `finishActivity`: pop the activity from its task. Returns whether the

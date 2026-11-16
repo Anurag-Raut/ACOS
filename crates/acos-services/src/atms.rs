@@ -302,6 +302,22 @@ pub struct ActivityRecord {
     pub finished: bool,
     /// Saved instance state (`clicks`).
     pub saved_clicks: u32,
+    /// MPROC7: the activity token that waits for this activity's result
+    /// (`PendingLaunch.result_to`, i.e. the caller's activity token; `0` when
+    /// nobody waits).
+    pub result_to: u64,
+    /// MPROC7: `startActivityForResult` request code (`-1`/`0` for a plain
+    /// `startActivity`).
+    pub request_code: i32,
+    /// MPROC7: the result `finish(resultCode, data)` set (`RESULT_CANCELED` =
+    /// `0` until the app sets one).
+    pub result_code: i32,
+    /// MPROC7: the result `Intent` (`finish`'s data; `None` when it passed
+    /// `null`).
+    pub result_data: Option<crate::ams::IntentFacts>,
+    /// MPROC7: the result was taken from the record and queued to the caller's
+    /// `IApplicationThread` (delivered once).
+    pub result_delivered: bool,
 }
 
 impl ActivityRecord {
@@ -316,6 +332,11 @@ impl ActivityRecord {
             idle: false,
             finished: false,
             saved_clicks: 0,
+            result_to: 0,
+            request_code: 0,
+            result_code: 0,
+            result_data: None,
+            result_delivered: false,
         }
     }
 }
@@ -1232,8 +1253,28 @@ impl AtmsState {
     }
 
     /// Report `activityStopped` (with saved state).
+    ///
+    /// A stop for an activity that is already **destroyed** is a no-op, exactly
+    /// as stock answers it: `ActivityTaskManagerService.activityStopped` looks
+    /// the token up in the task manager's record map, which
+    /// `onActivityDestroyed` has already cleared, so a late stop is ignored
+    /// rather than an illegal transition. The guest produces that order itself:
+    /// `ActivityThread.handleStopActivity` reports `activityStopped` from a
+    /// posted `PendingTransactionActions.StopInfo` runnable, so a finishing
+    /// activity's Stop report lands *after* its Destroy transaction's
+    /// `activityDestroyed` (MPROC7 measured `illegal transition Stop from
+    /// Destroyed` on proc-b's finish). AOSP's answer is the honest one; ACOS
+    /// must not turn it into a structured error.
     pub fn activity_stopped(&mut self, token: u64, saved_clicks: Option<u32>) -> Result<()> {
-        self.ensure_known(token)?;
+        let index = self.ensure_known(token)?;
+        if self.activities[index].lifecycle == ActivityLifecycle::Destroyed {
+            self.log_event(
+                "ActivityManagerStopped",
+                acos_protocol::LogLevel::Debug,
+                format!("token={token:#x} stop after destroy ignored (stock: record is gone)"),
+            );
+            return Ok(());
+        }
         if let Some(clicks) = saved_clicks {
             self.save_instance_state(token, clicks);
         }
@@ -1243,7 +1284,11 @@ impl AtmsState {
     /// Report `activityDestroyed`.
     pub fn activity_destroyed(&mut self, token: u64) -> Result<()> {
         self.ensure_known(token)?;
-        self.transition(token, Transition::Destroy).map(|_| ())
+        self.transition(token, Transition::Destroy)?;
+        // MPROC7: the activity is gone; the result it set (if any) is final and
+        // goes to the caller's own app thread.
+        self.deliver_result(token);
+        Ok(())
     }
 
     /// `onSaveInstanceState` bookkeeping.
@@ -1254,8 +1299,19 @@ impl AtmsState {
         self.emit(LifecycleState::SaveInstanceState, None);
     }
 
-    /// `finishActivity` (the app asked to finish).
-    pub fn finish_activity(&mut self, token: u64) -> Result<()> {
+    /// `finishActivity` (the app asked to finish), with the result the app set.
+    ///
+    /// `IClientController.finishActivity(IBinder token, int resultCode, Intent
+    /// resultData, boolean finishTask)` carries the `setResult` answer; stock
+    /// AMS keeps it on the record and delivers it to the caller
+    /// (`resultTo`) once the activity is gone. ACOS records the same fields and
+    /// [delivers](Self::deliver_result) them at destroy.
+    pub fn finish_activity(
+        &mut self,
+        token: u64,
+        result_code: i32,
+        result_data: Option<crate::ams::IntentFacts>,
+    ) -> Result<()> {
         if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
             eprintln!(
                 "ACOSATMS finish-request token={token:#x} known={:?} n={}",
@@ -1273,14 +1329,128 @@ impl AtmsState {
             }
         };
         self.activities[index].finished = true;
+        self.activities[index].result_code = result_code;
+        if result_data.is_some() {
+            self.activities[index].result_data = result_data;
+        }
         // Keep `AmsState`'s task stack in step: the finished Activity leaves the
         // task, so the record below it is the new top (what the guest's
         // destroy+resume transactions return to).
         self.ams.finish_activity(token);
-        // MPROC5: when the activity below belongs to another process, the host
-        // resumes it (the guest can only resume its own process's records).
-        self.resume_below_after_finish(token);
+        // MPROC7: when the caller waits for a result, its resume travels with
+        // that result (`ActivityResultItem` + `ResumeActivityItem`, stock ATMS's
+        // shape), not as a second, earlier resume.
+        let result_to = self.activities[index].result_to;
+        let owes_result = result_to != 0 && result_to != token;
+        if owes_result {
+            self.log_event(
+                "ActivityManagerResult",
+                acos_protocol::LogLevel::Debug,
+                format!(
+                    "token={token:#x} finished code={result_code} -> result_to={result_to:#x} \
+                     request={}",
+                    self.activities[index].request_code
+                ),
+            );
+        } else {
+            // MPROC5: when the activity below belongs to another process, the
+            // host resumes it (the guest can only resume its own process's
+            // records).
+            self.resume_below_after_finish(token);
+        }
         Ok(())
+    }
+
+    /// MPROC7: deliver a finished activity's result to its caller.
+    ///
+    /// Stock `ActivityTaskSupervisor` sends the caller one `ClientTransaction`
+    /// whose callback is `ActivityResultItem` (a `ResultInfo` with the who /
+    /// requestCode / resultCode / data `Intent`) and whose lifecycle request is
+    /// `ResumeActivityItem`: `onActivityResult` runs, then the caller resumes.
+    /// This is the host-built transaction the ADR requires (no guest helper),
+    /// encoded by the one MPROC6 encoder and handed to the caller's own
+    /// `IApplicationThread` through the existing per-tag delivery transport.
+    fn deliver_result(&mut self, token: u64) {
+        let trace = std::env::var_os("ACOS_ATMS_TRACE").is_some();
+        let Some(index) = self.activities.iter().position(|a| a.token == token) else {
+            return;
+        };
+        let record = &self.activities[index];
+        if trace {
+            eprintln!(
+                "ACOSATMS result token={token:#x} result_to={:#x} request={} delivered={} \
+                 finished={}",
+                record.result_to, record.request_code, record.result_delivered, record.finished
+            );
+        }
+        if record.result_delivered || record.result_to == 0 || record.result_to == token {
+            return;
+        }
+        let caller = record.result_to;
+        let request_code = record.request_code;
+        let result_code = record.result_code;
+        let data = record.result_data.clone();
+        let tag = self.activity_tag(caller);
+        if !self.processes.iter().any(|p| p.tag == tag && p.attached) {
+            self.log_event(
+                "ActivityManagerResult",
+                acos_protocol::LogLevel::Warn,
+                format!("result for token={caller:#x} belongs to process {tag}, which is not attached"),
+            );
+            return;
+        }
+        let data_intent = match data {
+            Some(facts) => match crate::client_transaction::intent(&facts) {
+                Ok(intent) => Some(intent),
+                Err(err) => {
+                    self.log_event(
+                        "ActivityManagerResult",
+                        acos_protocol::LogLevel::Warn,
+                        format!("result data Intent could not be encoded: {err}"),
+                    );
+                    None
+                }
+            },
+            None => None,
+        };
+        // `mResultWho` is **null** for a normal `startActivityForResult`
+        // (`Instrumentation.execStartActivity` passes `mEmbeddedID`, which is
+        // null; only an `ActivityGroup`-style embedded activity has a value).
+        // `Activity.dispatchActivityResult` treats a non-null `who` as an
+        // embedded id and does **not** call `onActivityResult` for it, so an
+        // empty string silently swallowed the result (MPROC7).
+        let info = crate::client_transaction::result_info(
+            None,
+            request_code,
+            result_code,
+            data_intent,
+        );
+        let item = crate::client_transaction::activity_result_item(vec![info]);
+        let resume = crate::client_transaction::resume_item(2, true, false, false);
+        let transaction = crate::client_transaction::client_transaction(
+            Some(acos_parcel::BinderId(caller)),
+            Some(resume),
+            vec![item],
+        );
+        self.log_event(
+            "ActivityManagerResult",
+            acos_protocol::LogLevel::Debug,
+            format!(
+                "tag={tag} token={caller:#x} ActivityResultItem(request={request_code}, \
+                 code={result_code}) + ResumeActivityItem"
+            ),
+        );
+        self.pending_lifecycle_calls.push((
+            tag,
+            "scheduleTransaction".into(),
+            vec![Value::TypedObject(transaction)],
+        ));
+        self.activities[index].result_delivered = true;
+        // The caller is the resumed, foreground activity now (stock: the result
+        // transaction resumes it).
+        self.tops.insert(tag, caller);
+        self.publish_top(tag);
+        self.mark_process_active(tag);
     }
 
     /// `checkPermission` from the manifest/grant policy.
@@ -1439,6 +1609,17 @@ impl AtmsService {
             .map(|p| p.uid)
             .unwrap_or(0);
         state.process_started(tag, package, uid);
+    }
+
+    /// MPROC7: the launch recorded for `package` that the host still owes,
+    /// as `(placeholder token, activity class)`.
+    #[must_use]
+    pub fn pending_launch_for(&self, package: &str) -> Option<(u64, String)> {
+        let state = self.state.lock().ok()?;
+        state
+            .ams
+            .pending_launch_for(package)
+            .map(|launch| (launch.token, launch.class.clone()))
     }
 
     /// MPROC5c: record that process `tag` is gone (idle kill, crash, transport
@@ -1800,8 +1981,16 @@ impl ServiceObject for AtmsService {
             (AtmsInterface::ClientController, "setTaskDescription")
             | (AtmsInterface::ClientController, "reportSizeConfigurations") => Vec::new(),
             (AtmsInterface::ClientController, "finishActivity") => {
+                // `finishActivity(IBinder token, int resultCode, Intent
+                // resultData, int finishTask)`: the `setResult` answer travels
+                // with the finish, exactly as stock AMS reads it.
                 let token = binder_u64(args.first());
-                state.finish_activity(token)?;
+                let result_code = args.get(1).and_then(Value::as_int).unwrap_or(0);
+                let result_data = args
+                    .get(2)
+                    .and_then(Value::as_parcelable)
+                    .map(crate::ams::IntentFacts::from_parcelable);
+                state.finish_activity(token, result_code, result_data)?;
                 vec![Value::Bool(true)]
             }
             (AtmsInterface::ClientController, "activityLocalRelaunch") => {

@@ -76,6 +76,11 @@ STEP3B = {
     "proc-b-window-on-top",
     "proc-a-paused-or-stopped-under-b",
     "back-from-b-returns-to-a",
+    # MPROC7: the extras, the onNewIntent and the result are the rows this
+    # step's gate claims.
+    "proc-b-intent-extras",
+    "proc-b-onNewIntent-from-single-top",
+    "proc-a-onActivityResult-from-b",
 }
 
 
@@ -224,6 +229,34 @@ want(
     "proc-a-paused-or-stopped-under-b",
     {"lines": [l for l in lines if l.startswith("ACOSPROBE a")][:12]},
 )
+# MPROC7 step 1: the intent extras the host encoded into the launch
+# `LaunchActivityItem` crossed into the second process.
+want(
+    any(line.startswith("ACOSPROBE b created") and "note=hello" in line for line in lines),
+    "proc-b-intent-extras",
+    {"lines": [l for l in lines if l.startswith("ACOSPROBE b created")][:4]},
+)
+
+# MPROC7 step 3: FLAG_ACTIVITY_SINGLE_TOP to the resumed activity is an
+# onNewIntent (the host delivers NewIntentItem, not a second launch).
+again_reply, tree_again = tap_text("Start B Again", tree_b)
+want(again_reply is not None and again_reply.get("ok") is True, "tap-start-b-again", again_reply)
+new_intent = None
+deadline = time.time() + 15
+while time.time() < deadline:
+    logs = send({"cmd": "logs"}) or {}
+    lines = probe_lines(logs.get("entries") or logs.get("logs") or [])
+    new_intent = next(
+        (l for l in lines if l.startswith("ACOSPROBE b newIntent")), None
+    )
+    if new_intent:
+        break
+    time.sleep(0.5)
+want(
+    new_intent is not None and "note=again" in new_intent,
+    "proc-b-onNewIntent-from-single-top",
+    {"line": new_intent},
+)
 
 # B: setResult + finish -> A's onActivityResult (Back from B returns to A).
 finish_reply, _ = tap_text("Finish B", tree_b)
@@ -237,6 +270,9 @@ while time.time() < deadline:
     if result:
         break
     time.sleep(0.5)
+if os.environ.get("MPROC4_DUMP_LOGS"):
+    with open(os.path.join(out, "logs-after-result.json"), "w") as fh:
+        json.dump(logs, fh, indent=1)
 want(
     result is not None and "data=from-b" in result,
     "proc-a-onActivityResult-from-b",

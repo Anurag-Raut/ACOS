@@ -549,3 +549,88 @@ fn sample_for(class: &str) -> Option<Parcelable> {
         _ => return None,
     })
 }
+
+/// MPROC7: `PackageItemInfo.writeToParcel`'s field order is
+/// `name, packageName, labelRes, label, icon, logo, metaData, banner,
+/// showUser` — labelRes **before** the inline label, and the logo slot after
+/// the icon.
+///
+/// The PMS encoder used to write `banner, label, icon, labelRes`, i.e. it put
+/// the application's `labelRes` into the guest's `logo` slot. Nothing noticed
+/// while every fixture's `android:label` was a literal string (`labelRes = 0`);
+/// `proc-b` declares `android:label="@string/app_name"`, and the guest's
+/// `ComponentInfo.getLogoResource()` (`logo != 0 ? logo :
+/// applicationInfo.logo`) then asked for a Drawable with a *string* resource id
+/// (`Resources$NotFoundException: Drawable … string/app_name`). The isolated
+/// ApplicationInfo differential could not catch it: it compares a
+/// *name-built* Java object with all-zero label/logo fields.
+#[test]
+fn application_info_writes_label_res_before_label_and_logo_after_icon() {
+    use acos_services::pms::AppInfo;
+    let mut app = AppInfo::hello_views_fallback(std::path::Path::new("/data/app/x.apk"));
+    app.label_res = 0x7f03_0001; // @string/app_name
+    app.icon = 0x7f02_0003;
+    let encoded = app.to_parcelable();
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &encoded).expect("encode ApplicationInfo");
+    let bytes = parcel.marshall();
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.unmarshall(&bytes);
+    let decoded = parcelable::read_payload("android.content.pm.ApplicationInfo", &mut parcel)
+        .expect("decode ApplicationInfo");
+    let values = decoded.fields().expect("ordered ApplicationInfo");
+    // Field 0 is the `maybeWriteSquashed` marker; PackageItemInfo starts at 1.
+    assert_eq!(
+        values[3],
+        Value::Int(0x7f03_0001),
+        "field 3 is `PackageItemInfo.labelRes`"
+    );
+    assert_eq!(values[4], Value::Str(None), "field 4 is the inline label");
+    assert_eq!(values[5], Value::Int(0x7f02_0003), "field 5 is `icon`");
+    assert_eq!(
+        values[6],
+        Value::Int(0),
+        "field 6 is `logo` (never the label resource)"
+    );
+    assert_eq!(values[8], Value::Int(0), "field 8 is `banner`");
+    assert_eq!(values[9], Value::Int(0), "field 9 is `showUser`");
+}
+
+/// MPROC7: `activityStopped`'s saved-state `Bundle` carries a `VAL_LIST` (the
+/// image's tag 12). The reader had no model for it, so the whole
+/// `activityStopped` request failed (`unmodelled Parcel.VAL_* tag 12`) and the
+/// stop never reached the activity manager. The tag is length-prefixed, and the
+/// decoder verifies the length word: a differently shaped body (e.g. a
+/// `SparseArray`) fails there instead of desynchronising the rest of the parcel.
+#[test]
+fn bundle_reader_consumes_a_val_list_and_checks_its_length() {
+    use acos_services::value::DynamicValue;
+    let list = DynamicValue::List(Some(vec![
+        DynamicValue::Int(7),
+        DynamicValue::String(Some("state".into())),
+        DynamicValue::Bool(true),
+    ]));
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_dynamic(&mut parcel, &list).expect("write VAL_LIST");
+    let bytes = parcel.marshall();
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.unmarshall(&bytes);
+    assert_eq!(
+        parcelable::read_dynamic(&mut parcel).expect("read VAL_LIST"),
+        list
+    );
+    assert_eq!(parcel.data_position(), bytes.len(), "the list consumed its bytes");
+
+    // A declared length that does not match the body is refused (the check is
+    // what makes a wrong tag shape a structured error, not silent corruption).
+    let mut bad = bytes.clone();
+    // The length word sits right after the 4-byte tag.
+    let declared = i32::from_le_bytes(bad[4..8].try_into().expect("len word"));
+    bad[4..8].copy_from_slice(&(declared + 4).to_le_bytes());
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.unmarshall(&bad);
+    assert!(
+        parcelable::read_dynamic(&mut parcel).is_err(),
+        "a VAL_LIST whose body does not match its length word must be refused"
+    );
+}

@@ -451,6 +451,33 @@ impl ServiceHost {
         binder
     }
 
+    /// Register the host-minted activity token of process `tag` (MPROC7).
+    ///
+    /// On a device the activity token is a `Binder` created in system_server
+    /// (`ActivityRecord.token`). ACOS's system service side is the host, so the
+    /// host mints it here. Its id carries `tag` in the same bits the peer uses
+    /// for a guest-minted binder ([`crate::atms::process_tag_of`] reads bits
+    /// 34..40), so "which process owns this activity" stays derivable from the
+    /// token alone, exactly as for the guest-minted tokens of MPROC5.
+    ///
+    /// The node is routable: a transaction addressed to it reaches the host
+    /// dispatcher like any other auxiliary node (the activity token is an
+    /// opaque `Binder` to the framework; it is never used as an interface).
+    pub fn register_activity_token(&mut self, tag: u32) -> BinderId {
+        const PROCESS_TAG_SHIFT: u32 = 34;
+        const PROCESS_TAG_MASK: u64 = 0x3f;
+        const LOW_MASK: u64 = (1 << PROCESS_TAG_SHIFT) - 1;
+        let binder = self.registry.register_local("android.app.ActivityToken");
+        // Free the untagged id: only the tagged one is the token.
+        self.registry.remove(binder);
+        self.binder_descriptors.remove(&binder.0);
+        let id = (u64::from(tag) & PROCESS_TAG_MASK) << PROCESS_TAG_SHIFT | (binder.0 & LOW_MASK);
+        self.registry
+            .register_at(id, "android.app.ActivityToken", BinderKind::Local);
+        self.binder_descriptors.insert(id, "android.app.ActivityToken");
+        BinderId(id)
+    }
+
     /// Record which app process owns a binder (MPROC2 step 3a).
     ///
     /// Called whenever a process hands the service layer a binder of its own:

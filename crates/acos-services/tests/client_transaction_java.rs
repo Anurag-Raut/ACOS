@@ -375,6 +375,16 @@ fn real_java_client_transaction_matches_the_host_encoder() {
                 vec![launch],
             ),
         ),
+        // MPROC7: the result delivery the host encodes when a
+        // `startActivityForResult` activity finishes.
+        (
+            "client_transaction_result",
+            ctx::client_transaction(
+                None,
+                Some(ctx::resume_item(2, true, false, false)),
+                vec![ctx::activity_result_item(vec![case_result_info()])],
+            ),
+        ),
         // The answer to MPROC5's open question: a lifecycle-only transaction
         // writes the callbacks-presence `false` and no list at all.
         ("client_transaction_lifecycle_only", lifecycle),

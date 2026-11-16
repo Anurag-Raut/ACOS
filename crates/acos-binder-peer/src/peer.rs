@@ -178,8 +178,15 @@ struct LaunchState {
     /// The launch delivery was queued (once).
     delivered: bool,
     /// The `IApplicationThread.scheduleTransaction` request bytes stashed by the
-    /// guest (one `ClientTransaction`, framework-marshalled).
+    /// guest (one `ClientTransaction`, framework-marshalled). The guest no
+    /// longer pushes one; kept so an older guest still works.
     txn: Option<Vec<u8>>,
+    /// MPROC7: the host-encoded launch request (`LaunchActivityItem` +
+    /// `ResumeActivityItem`, ADR-0029 amendment) delivered to this process's
+    /// app thread instead of a guest-marshalled transaction. A `Parcel` (not
+    /// bytes) because its activity token is a binder object: the frame writer
+    /// must emit the object table and stability record.
+    host_txn: Option<Parcel>,
     /// The transaction delivery was queued (once).
     txn_delivered: bool,
 }
@@ -866,9 +873,10 @@ impl Peer {
             }
         }
         out.extend(self.take_delivery_frames());
-        if let Some(frame) = self.take_launch_delivery(tag) {
+        for frame in self.take_launch_delivery(tag) {
             out.push((tag, frame));
         }
+        out.extend(self.take_host_transactions());
         out.extend(self.take_death_frames());
         out
     }
@@ -1709,24 +1717,40 @@ impl Peer {
     }
 
     /// Queue the one `bindApplication` delivery for process `tag`, after its
-    /// `attachApplication`, then the one `scheduleTransaction` delivery once the
-    /// guest pushed it (P4b).
-    fn take_launch_delivery(&mut self, tag: u32) -> Option<Frame> {
-        // Take the `seq` before borrowing the state: both are fields of
-        // `self`.
-        let seq = self.next_launch_seq();
-        let state = self.launch_state_mut(tag)?;
-        let wire = state.app_thread?;
-        if !state.delivered {
-            let bytes = state.bind.clone()?;
-            state.delivered = true;
+    /// `attachApplication`, then its one launch `ClientTransaction` (P4b,
+    /// MPROC7).
+    ///
+    /// The transaction the host delivers is its **own** encoding
+    /// ([`Self::encode_host_launch`], ADR-0029: the host builds launch
+    /// transactions) when the activity manager has a launch pending for this
+    /// process. The guest-pushed `txn` is only a fallback for an older guest.
+    fn take_launch_delivery(&mut self, tag: u32) -> Vec<Frame> {
+        let mut out = Vec::new();
+        let Some(wire) = self.launch_state(tag).and_then(|s| s.app_thread) else {
+            return out;
+        };
+        let bind = {
+            let Some(state) = self.launch_state(tag) else {
+                return out;
+            };
+            if state.delivered {
+                None
+            } else {
+                state.bind.clone()
+            }
+        };
+        if let Some(bytes) = bind {
+            if let Some(state) = self.launch_state_mut(tag) {
+                state.delivered = true;
+            }
+            let seq = self.next_launch_seq();
             eprintln!(
                 "acos-binder-peer: process {tag}: delivering bindApplication ({} bytes, code {}) to 
                  java binder wire={wire}",
                 bytes.len(),
                 BIND_APPLICATION_CODE
             );
-            return Some(Frame::plain(
+            out.push(Frame::plain(
                 F_TXN,
                 seq,
                 BIND_APPLICATION_CODE,
@@ -1735,25 +1759,233 @@ impl Peer {
                 bytes,
             ));
         }
-        if state.txn_delivered {
-            return None;
+        if !self.launch_state(tag).is_some_and(|s| s.delivered)
+            || self.launch_state(tag).is_some_and(|s| s.txn_delivered)
+        {
+            return out;
         }
-        let bytes = state.txn.clone()?;
-        state.txn_delivered = true;
+        // MPROC7: the host owns the first launch of a spawned process; encode it
+        // once, then deliver it (the guest waits for it instead of building its
+        // own).
+        let host = match self.launch_state(tag).and_then(|s| s.host_txn.clone()) {
+            Some(parcel) => Some(parcel),
+            None => {
+                let encoded = self.encode_host_launch(tag);
+                if let (Some(parcel), Some(state)) = (encoded.clone(), self.launch_state_mut(tag)) {
+                    state.host_txn = Some(parcel);
+                }
+                encoded
+            }
+        };
+        if let Some(parcel) = host {
+            if let Some(state) = self.launch_state_mut(tag) {
+                state.txn_delivered = true;
+            }
+            let seq = self.next_launch_seq();
+            let mut frame =
+                frame_from_parcel(F_TXN, &Frame { seq, ..Default::default() }, &parcel);
+            frame.target = u64::from(wire);
+            frame.code = SCHEDULE_TRANSACTION_CODE;
+            frame.flags = 0;
+            eprintln!(
+                "acos-binder-peer: process {tag}: delivering ClientTransaction ({} bytes, \
+                 IApplicationThread.scheduleTransaction code {}) to java binder wire={wire}",
+                frame.data.len(),
+                SCHEDULE_TRANSACTION_CODE
+            );
+            out.push(frame);
+            return out;
+        }
+        let Some(bytes) = self.launch_state(tag).and_then(|s| s.txn.clone()) else {
+            return out;
+        };
+        if let Some(state) = self.launch_state_mut(tag) {
+            state.txn_delivered = true;
+        }
+        let seq = self.next_launch_seq();
         eprintln!(
-            "acos-binder-peer: process {tag}: delivering ClientTransaction ({} bytes, \
-             IApplicationThread.scheduleTransaction code {}) to java binder wire={wire}",
-            bytes.len(),
-            SCHEDULE_TRANSACTION_CODE
+            "acos-binder-peer: process {tag}: delivering guest-marshalled ClientTransaction \
+             ({} bytes) to java binder wire={wire}",
+            bytes.len()
         );
-        Some(Frame::plain(
+        out.push(Frame::plain(
             F_TXN,
             seq,
             SCHEDULE_TRANSACTION_CODE,
             0,
             u64::from(wire),
             bytes,
-        ))
+        ));
+        out
+    }
+
+    /// MPROC7: encode, with the host's one MPROC6 encoder, the launch the
+    /// activity manager recorded for process `tag`'s package.
+    ///
+    /// This is the ADR-0029 shape: the `ActivityInfo`/`ApplicationInfo` come
+    /// from the real PMS, the `ClientTransaction` from
+    /// [`acos_services::client_transaction`], and the activity token is a binder
+    /// the host mints ([`ServiceHost::register_activity_token`]). Returns the
+    /// `IApplicationThread.scheduleTransaction` request parcel bytes.
+    fn encode_host_launch(&mut self, tag: u32) -> Option<Parcel> {
+        let package = self.package_of(tag)?;
+        let class = {
+            let atms = self.atms_service_mut()?;
+            atms.pending_launch_for(&package)?.1
+        };
+        let (app, activity) = {
+            let object = self.host.ensure("android.content.pm.IPackageManager").ok()?;
+            let pms = object
+                .as_any_mut()?
+                .downcast_mut::<acos_services::pms::PmsService>()?;
+            let state = pms.shared_state();
+            let state = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let installed = state.lookup(Some(&package))?;
+            let activity = installed
+                .package
+                .activities
+                .iter()
+                .find(|a| a.name == class)
+                .cloned()
+                .unwrap_or(acos_services::pms::ActivityInfo {
+                    name: class.clone(),
+                    package_name: package.clone(),
+                    launch_mode: 0,
+                    // ActivityInfo.FLAG_HARDWARE_ACCELERATED, the API default.
+                    flags: 0x200,
+                    theme: 0,
+                    exported: true,
+                    parent_activity_name: String::new(),
+                    meta_data: Vec::new(),
+                });
+            (installed.app.clone(), activity)
+        };
+        let token = self.host.register_activity_token(tag);
+        let transaction = {
+            let atms = self.atms_service_mut()?;
+            let state = atms.shared_state();
+            let mut state = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            state
+                .take_launch_for_process(&package, &app, &activity, token)
+                .ok()??
+        };
+        let parcel = acos_services::client_transaction::schedule_transaction_request(&transaction)
+            .map_err(|err| {
+                eprintln!(
+                    "acos-binder-peer: process {tag}: host launch transaction could not be \
+                     encoded: {err}"
+                );
+            })
+            .ok()?;
+        eprintln!(
+            "acos-binder-peer: process {tag}: host-built launch for {package}/{class} \
+             (token={:#x}, {} bytes)",
+            token.0,
+            parcel.data_size()
+        );
+        Some(parcel)
+    }
+
+    /// The package the activity manager recorded for `tag`, else the handshake
+    /// name (the guest names itself by its package).
+    fn package_of(&mut self, tag: u32) -> Option<String> {
+        if let Some(atms) = self.atms_service_mut() {
+            if let Some((_, package, ..)) = atms
+                .process_list()
+                .into_iter()
+                .find(|(process_tag, ..)| *process_tag == tag)
+            {
+                return Some(package);
+            }
+        }
+        self.process_name(tag).map(str::to_string)
+    }
+
+    fn atms_service_mut(&mut self) -> Option<&mut acos_services::atms::AtmsService> {
+        let object = self.host.ensure("android.app.IActivityTaskManager").ok()?;
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+    }
+
+    /// MPROC7: deliver every host-owned transaction whose process is ready.
+    ///
+    /// Called after each handled frame: a `startActivity` into an
+    /// **already-running** process records a launch (or an `onNewIntent`) with
+    /// no spawn request, so this is what makes it reach the process's app
+    /// thread. A process whose `bindApplication` has not been delivered yet is
+    /// skipped; [`Self::take_launch_delivery`] sends the launch right after the
+    /// bind.
+    fn take_host_transactions(&mut self) -> Vec<(u32, Frame)> {
+        let mut out = Vec::new();
+        let tags: Vec<u32> = self
+            .conns
+            .iter()
+            .flatten()
+            .filter(|c| c.connected)
+            .map(|c| c.tag)
+            .collect();
+        for tag in tags {
+            let Some(wire) = self.launch_state(tag).and_then(|s| s.app_thread) else {
+                continue;
+            };
+            if !self.launch_state(tag).is_some_and(|s| s.delivered) {
+                continue;
+            }
+            // A pending launch for this process's package (startActivity into a
+            // running process). The first launch (bind time) is delivered by
+            // `take_launch_delivery`; every later launch is a new transaction and
+            // must not be gated on `txn_delivered`.
+            let launch = self.encode_host_launch(tag);
+            if let Some(parcel) = launch {
+                if let Some(state) = self.launch_state_mut(tag) {
+                    state.host_txn = Some(parcel.clone());
+                    state.txn_delivered = true;
+                }
+                let seq = self.next_launch_seq();
+                let mut frame =
+                    frame_from_parcel(F_TXN, &Frame { seq, ..Default::default() }, &parcel);
+                frame.target = u64::from(wire);
+                frame.code = SCHEDULE_TRANSACTION_CODE;
+                frame.flags = 0;
+                eprintln!(
+                    "acos-binder-peer: process {tag}: delivering host-built ClientTransaction \
+                     ({} bytes, IApplicationThread.scheduleTransaction) to java binder wire={wire}",
+                    frame.data.len()
+                );
+                out.push((tag, frame));
+            }
+            // An `onNewIntent` owed to this process's resumed activity.
+            let new_intent = {
+                let atms = self.atms_service_mut();
+                atms.map(|atms| {
+                    let state = atms.shared_state();
+                    let mut state = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    state.take_new_intent_for_tag(tag)
+                })
+                .flatten()
+            };
+            if let Some(transaction) = new_intent {
+                if let Ok(parcel) =
+                    acos_services::client_transaction::schedule_transaction_request(&transaction)
+                {
+                    let exported = self.export_for_process(tag, &parcel);
+                    let seq = self.next_launch_seq();
+                    let mut frame =
+                        frame_from_parcel(F_TXN, &Frame { seq, ..Default::default() }, &exported);
+                    frame.target = u64::from(wire);
+                    frame.code = SCHEDULE_TRANSACTION_CODE;
+                    frame.flags = 0;
+                    eprintln!(
+                        "acos-binder-peer: process {tag}: delivering host-built NewIntentItem \
+                         ({} bytes) to java binder wire={wire}",
+                        frame.data.len()
+                    );
+                    out.push((tag, frame));
+                }
+            }
+        }
+        out
     }
 
     fn next_launch_seq(&mut self) -> u32 {

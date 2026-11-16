@@ -267,6 +267,15 @@ public final class ClientTransactionCompareMain {
         emit("activity_result_item", p -> activityResultItem().writeToParcel(p, 0));
         emit("new_intent_item", p -> newIntentItem().writeToParcel(p, 0));
         emit("client_transaction", p -> transaction().writeToParcel(p, 0));
+        // MPROC7: a result delivery — `ActivityResultItem` callback +
+        // `ResumeActivityItem` — the transaction ATMS sends to a caller whose
+        // `startActivityForResult` returns.
+        emit("client_transaction_result", p -> {
+            ClientTransaction tx = ClientTransaction.obtain(null, null);
+            tx.addCallback((android.app.servertransaction.ClientTransactionItem) activityResultItem());
+            tx.setLifecycleStateRequest(ResumeActivityItem.obtain(2, false, false));
+            tx.writeToParcel(p, 0);
+        });
         emit("client_transaction_lifecycle_only",
                 p -> lifecycleTransaction().writeToParcel(p, 0));
 
@@ -383,6 +392,24 @@ public final class ClientTransactionCompareMain {
                         check(get(got, "mActivityCallbacks") != null,
                                 "a transaction with a callback has a non-null callback list");
                         check(get(got, "mActivityToken") == null, "mActivityToken");
+                        break;
+                    }
+                    case "client_transaction_result": {
+                        got = ClientTransaction.CREATOR.createFromParcel(p);
+                        List<?> callbacks = (List<?>) get(got, "mActivityCallbacks");
+                        check(callbacks != null && callbacks.size() == 1, "one callback");
+                        check(callbacks.get(0) instanceof ActivityResultItem,
+                                "callback is an ActivityResultItem");
+                        List<?> results = (List<?>) get(callbacks.get(0), "mResultInfoList");
+                        check(results != null && results.size() == 1, "one pending result");
+                        ResultInfo result = (ResultInfo) results.get(0);
+                        check(get(result, "mRequestCode").equals(5), "result requestCode");
+                        check(get(result, "mResultCode").equals(-1), "result resultCode");
+                        Rect bounds = ((Intent) get(result, "mData")).getParcelableExtra("bounds");
+                        check(bounds != null && bounds.bottom == 4,
+                                "result data survives the client transaction");
+                        Object lifecycle = get(got, "mLifecycleStateRequest");
+                        check(lifecycle instanceof ResumeActivityItem, "lifecycle request");
                         break;
                     }
                     case "client_transaction_lifecycle_only": {

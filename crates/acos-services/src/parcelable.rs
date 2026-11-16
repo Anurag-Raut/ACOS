@@ -2568,6 +2568,14 @@ pub mod val {
     pub const IBINDER: i32 = 15;
     /// `VAL_PARCELABLE`.
     pub const PARCELABLE: i32 = 4;
+    /// `VAL_LIST` (`writeValue` of a `List<Parcelable>`/`ArrayList`).
+    ///
+    /// The **image's** build numbers this tag 12 (the AOSP `android-14.0.0_r75`
+    /// source has `VAL_LIST = 11` and `VAL_SPARSEARRAY = 12`; the brief's
+    /// instruction and the guest's actual `activityStopped` bundle both say 12,
+    /// and the decode is validated by the length word: a mis-shaped body fails
+    /// `check_value_length` instead of desynchronising the parcel).
+    pub const LIST: i32 = 12;
 }
 
 /// Read a `writeBundle` payload.
@@ -3189,6 +3197,13 @@ fn dynamic_to_value(v: crate::value::DynamicValue) -> Value {
         D::StringArray(a) => Value::StringArray(a),
         D::Binder(b) => Value::Binder(b),
         D::Map(m) => Value::Map(Some(m)),
+        D::List(_) => {
+            // `Value` has no list-of-arbitrary-values variant: a decoded
+            // `VAL_LIST` is represented honestly as skipped when it has to
+            // become a `Value` (the readers that matter, the `Bundle` one
+            // above, keep the list itself).
+            Value::Skipped
+        }
         D::Parcelable(p) => Value::Parcelable(p),
         D::Skipped { .. } => Value::Skipped,
     }
@@ -3350,6 +3365,24 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
             check_value_length(parcel, declared, start, val::MAP)?;
             value
         }
+        val::LIST => {
+            let (declared, start) = read_value_length(parcel, val::LIST)?;
+            let size = parcel.read_int32()?;
+            let value = if size < 0 {
+                D::List(None)
+            } else {
+                // Guest-controlled count: each element is at least one 4-byte
+                // type tag, so never reserve more than the parcel can hold.
+                let cap = (size as usize).min(parcel.remaining() / 4);
+                let mut items = Vec::with_capacity(cap);
+                for _ in 0..size {
+                    items.push(read_dynamic(parcel)?);
+                }
+                D::List(Some(items))
+            };
+            check_value_length(parcel, declared, start, val::LIST)?;
+            value
+        }
         val::BUNDLE => {
             let b = read_bundle(parcel)?;
             D::Map(
@@ -3477,6 +3510,25 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
                 for (k, v) in entries {
                     write_dynamic(parcel, k)?;
                     write_dynamic(parcel, v)?;
+                }
+                Ok(())
+            })?;
+        }
+        D::List(items) => {
+            // `writeValue` of a `List`: the length word, the count (`-1` for
+            // null) and one `writeValue` per element.
+            write_value_length_prefixed(parcel, val::LIST, |parcel| {
+                match items {
+                    None => parcel.write_int32(-1),
+                    Some(items) => {
+                        parcel.write_int32(
+                            i32::try_from(items.len())
+                                .map_err(|_| bad("VAL_LIST too large"))?,
+                        );
+                        for item in items {
+                            write_dynamic(parcel, item)?;
+                        }
+                    }
                 }
                 Ok(())
             })?;

@@ -648,6 +648,29 @@ pub fn activity_info(app: &AppInfo, activity: &PmsActivityInfo) -> Parcelable {
     activity.to_parcelable(app)
 }
 
+/// The `ActivityInfo` a launch item carries on the ACOS guest.
+///
+/// `ActivityInfo.FLAG_HARDWARE_ACCELERATED` is the API's default for
+/// `targetSdk >= 14`, but the ACOS ART guest cannot initialise the framework's
+/// hardware renderer: `ActivityThread.handleResumeActivity` →
+/// `ViewRootImpl.setView` → `ThreadedRenderer.create` →
+/// `HardwareRenderer.ProcessInitializer.initDisplayInfo`, and the guest's
+/// `RenderThread` then aborts (SIGABRT; measured MPROC7, proc-b: two
+/// `ACOSCRASH` records from the RenderThread). MPROC4's guest-marshalled launch
+/// always carried `flags = 0` for exactly that reason; the host encoder must
+/// state the same capability or a host-built launch would claim a renderer the
+/// session does not have. Clearing the one bit (nothing else) keeps every other
+/// manifest field intact.
+///
+/// Giving the guest a real GL/EGL render path is a separate track (a
+/// compositor/engine capability, not an activity-manager decision).
+#[must_use]
+pub fn launched_activity_info(app: &AppInfo, activity: &PmsActivityInfo) -> Parcelable {
+    let mut activity = activity.clone();
+    activity.flags &= !FLAG_HARDWARE_ACCELERATED;
+    activity_info(app, &activity)
+}
+
 /// Build the `ClientTransaction` of a launch: `LaunchActivityItem` callback and
 /// a `ResumeActivityItem` lifecycle request, i.e. exactly what ATMS sends for
 /// `ActivityRecord` with `andResume = true`.
@@ -686,7 +709,121 @@ pub enum LaunchDelivery {
     ProcessNotRunning,
 }
 
+/// The `IApplicationThread.scheduleTransaction` request parcel for one
+/// `ClientTransaction` (MPROC7).
+///
+/// The peer delivers a host-built transaction exactly like a `PendingDelivery`:
+/// an `F_TXN` whose payload is the AIDL request (`interface token` + the
+/// `ClientTransaction` payload). Building it through the decoded
+/// `android.app.IApplicationThread` table means the bytes are the same the
+/// delivery transport already produces — no second encoder, no second shape.
+///
+/// # Errors
+/// A structured error when the AIDL table has no `scheduleTransaction` or the
+/// transaction cannot be encoded.
+pub fn schedule_transaction_request(transaction: &Parcelable) -> Result<Parcel> {
+    let info = acos_aidl::lookup_by_name("android.app.IApplicationThread", "scheduleTransaction")
+        .ok_or_else(|| ServiceError::UnsupportedAndroidApi {
+            interface: "android.app.IApplicationThread".into(),
+            code: 0,
+            method: "scheduleTransaction".into(),
+        })?;
+    crate::codec::build_request(
+        "android.app.IApplicationThread",
+        &info,
+        &[Value::TypedObject(transaction.clone())],
+    )
+}
+
 impl AtmsState {
+    /// MPROC7: encode the launch recorded for `package` for its **running**
+    /// process, adopting a host-minted activity token.
+    ///
+    /// This is the one launch path the ADR asks for: the host builds
+    /// `ClientTransaction{LaunchActivityItem + ResumeActivityItem}` from the
+    /// image's dex shape (MPROC6's encoder) and the process receives it as
+    /// `IApplicationThread.scheduleTransaction`, exactly what `system_server`
+    /// sends. It serves
+    ///
+    /// * `startActivity` into a process that is already running (the next
+    ///   activity of the same package, or a second activity of another one), and
+    /// * the first launch of a freshly spawned secondary process, whose guest no
+    ///   longer marshals its own launch.
+    ///
+    /// `token` is the host-minted activity token (its id carries the process
+    /// tag, see [`crate::host::ServiceHost::register_activity_token`]). The
+    /// placeholder token `startActivity` recorded is rewritten to it before the
+    /// transaction is encoded, so the guest's `activityResumed(token)` finds the
+    /// record and the result routing (`result_to`) keeps naming the caller.
+    ///
+    /// Returns `None` when no launch is pending for `package` (already
+    /// delivered, or never recorded).
+    ///
+    /// # Errors
+    /// A structured error when the recorded intent cannot be encoded.
+    pub fn take_launch_for_process(
+        &mut self,
+        package: &str,
+        app: &AppInfo,
+        activity: &PmsActivityInfo,
+        token: BinderId,
+    ) -> Result<Option<Parcelable>> {
+        let Some(launch) = self.ams.pending_launch_for(package).cloned() else {
+            return Ok(None);
+        };
+        let transaction = self.encode_launch_parcelable(&launch, app, activity, token)?;
+        // Only after a successful encode: the record is now the host's launch,
+        // not work the runtime still owes.
+        self.ams.take_launch(launch.token);
+        self.ams.bind_launch_token(launch.token, token.0);
+        self.ensure_activity(token.0, &launch.class);
+        if launch.result_to != 0 && launch.result_to != token.0 {
+            self.note_result_route(token.0, launch.result_to, launch.request_code);
+        }
+        Ok(Some(transaction))
+    }
+
+    /// MPROC7: encode the next `onNewIntent` owed to process `tag` as the
+    /// `ClientTransaction` `system_server` sends for `FLAG_ACTIVITY_SINGLE_TOP`.
+    ///
+    /// The image's `NewIntentItem.obtain(List, boolean resume)`: one
+    /// `ReferrerIntent` in the list and `resume = true`, which is what
+    /// `TransactionExecutor` uses to resume the reused activity after
+    /// `onNewIntent` (no separate lifecycle request is needed).
+    ///
+    /// Returns `None` when the process has no `onNewIntent` pending.
+    pub fn take_new_intent_for_tag(&mut self, tag: u32) -> Option<Parcelable> {
+        let (token, facts) = self.ams.take_pending_new_intent(tag)?;
+        let intent = match intent(&facts) {
+            Ok(intent) => intent,
+            Err(err) => {
+                self.log_event(
+                    "ActivityManagerNewIntent",
+                    acos_protocol::LogLevel::Warn,
+                    format!("tag={tag} token={token:#x} NewIntentItem not encoded: {err}"),
+                );
+                return None;
+            }
+        };
+        let item = new_intent_item(vec![referrer_intent(intent, None)], true);
+        self.log_event(
+            "ActivityManagerNewIntent",
+            acos_protocol::LogLevel::Debug,
+            format!("tag={tag} token={token:#x} NewIntentItem(resume=true)"),
+        );
+        Some(client_transaction(Some(BinderId(token)), None, vec![item]))
+    }
+
+    /// MPROC7: record that the activity `token` waits for the result of the
+    /// activity `caller` starts (`startActivityForResult`).
+    pub fn note_result_route(&mut self, token: u64, result_to: u64, request_code: i32) {
+        let Some(index) = self.activities.iter().position(|a| a.token == token) else {
+            return;
+        };
+        self.activities[index].result_to = result_to;
+        self.activities[index].request_code = request_code;
+    }
+
     /// Encode the `scheduleTransaction` delivery for a recorded launch.
     ///
     /// This is the narrow host-side call site (MPROC6): it reads the
@@ -750,10 +887,25 @@ impl AtmsState {
         activity: &PmsActivityInfo,
         activity_token: BinderId,
     ) -> Result<Vec<u8>> {
+        encode(&self.encode_launch_parcelable(launch, app, activity, activity_token)?)
+    }
+
+    /// The `ClientTransaction` parcelable of a recorded launch (the item tree
+    /// MPROC6 pins against real Java, without the IPC parcel envelope).
+    ///
+    /// # Errors
+    /// As [`Self::encode_launch`].
+    pub fn encode_launch_parcelable(
+        &self,
+        launch: &PendingLaunch,
+        app: &AppInfo,
+        activity: &PmsActivityInfo,
+        activity_token: BinderId,
+    ) -> Result<Parcelable> {
         let config = process_configuration();
         let item = LaunchActivity::plain(
             intent(&launch.intent)?,
-            activity_info(app, activity),
+            launched_activity_info(app, activity),
             config.clone(),
             config,
             Some(launch.intent_package()),
@@ -761,7 +913,7 @@ impl AtmsState {
         // `ResumeActivityItem.obtain(PROCESS_STATE_TOP, false, false)`: the
         // image's factory re-evaluates the process state.
         let resume = resume_item(PROCESS_STATE_TOP, true, false, false);
-        encode(&launch_transaction(&item, activity_token, resume))
+        Ok(launch_transaction(&item, activity_token, resume))
     }
 }
 

@@ -303,15 +303,23 @@ impl AppInfo {
             "android.content.pm.ApplicationInfo",
             vec![
                 Value::Int(0), // maybeWriteSquashed marker: not squashed
+                // `PackageItemInfo.writeToParcel` (the image's shape):
+                //   name, packageName, **labelRes**, label, icon, **logo**,
+                //   metaData, banner, showUser.
+                // The label resource comes *before* the inline label, and the
+                // logo slot follows the icon; writing them in the other order
+                // put `labelRes` into `logo` on the guest (MPROC7: proc-b's
+                // window asked Drawable(R.string.app_name) because
+                // `ComponentInfo.getLogoResource()` read `applicationInfo.logo`).
                 Value::Str8(Some(self.name.clone())),
                 Value::Str8(Some(self.package_name.clone())),
-                Value::Int(0),    // banner
-                Value::Str(None), // label (TextUtils.writeToParcel)
-                Value::Int(self.icon),
-                Value::Int(self.label_res),
+                Value::Int(self.label_res), // labelRes
+                Value::Str(None),           // label (TextUtils.writeToParcel)
+                Value::Int(self.icon),      // icon
+                Value::Int(0),              // logo
                 meta_data_value(&self.meta_data, flags), // metaData
+                Value::Int(0),       // banner
                 Value::Int(0),       // showUser
-                Value::Int(0),       // showBadge / isArchived
                 Value::Str8(None),   // taskAffinity
                 Value::Str8(None),   // permission
                 Value::Str8(Some(self.process_name.clone())),
@@ -462,13 +470,13 @@ impl ActivityInfo {
             vec![
                 Value::Str8(Some(self.name.clone())),
                 Value::Str8(Some(self.package_name.clone())),
-                Value::Int(0),    // banner
+                Value::Int(0),    // labelRes (the activity declares no label)
                 Value::Str(None), // label
                 Value::Int(0),    // icon
-                Value::Int(0),    // labelRes
+                Value::Int(0),    // logo
                 meta_data_value(&self.meta_data, flags),
+                Value::Int(0), // banner
                 Value::Int(0), // showUser
-                Value::Int(0), // showBadge
                 Value::Parcelable(app.to_parcelable_with_flags(flags)), // ComponentInfo.applicationInfo
                 Value::Str8(Some(self.package_name.clone())), // processName
                 Value::Str8(None), // splitName
@@ -1612,6 +1620,13 @@ impl PmsService {
     /// silent fallback to the previous package.
     pub fn set_package_from_apk(&mut self, apk_path: &Path) -> Result<()> {
         self.set_package_from_apk_as(apk_path, None)
+    }
+
+    /// The shared PMS state (MPROC7: the peer resolves the `ApplicationInfo` and
+    /// the `ActivityInfo` of a launch the host encodes itself).
+    #[must_use]
+    pub fn shared_state(&self) -> Arc<Mutex<PmsState>> {
+        Arc::clone(&self.state)
     }
 
     /// The same install with the APK path the **guest** uses.

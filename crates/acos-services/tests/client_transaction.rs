@@ -405,3 +405,62 @@ fn a_bundle_extra_keeps_the_frameworks_array_map_order() {
     };
     assert_eq!(bundle.len(), 3);
 }
+
+/// MPROC7: `FLAG_ACTIVITY_SINGLE_TOP` to the resumed top activity is an
+/// `onNewIntent`, never a second launch.
+///
+/// This pins the activity-manager decision (the peer turns
+/// `pending_new_intents` into a `NewIntentItem` `ClientTransaction`): with the
+/// flag, no `PendingLaunch` is recorded and the delivery is queued for the
+/// existing activity token.
+#[test]
+fn single_top_to_the_top_activity_records_a_new_intent_not_a_launch() {
+    const FLAG_ACTIVITY_SINGLE_TOP: i32 = 0x2000_0000;
+    let mut atms = atms_with_process(1);
+    let facts = IntentFacts::explicit(PACKAGE, SECOND);
+    assert_eq!(
+        atms.ams.start_activity(&facts, 0, 0, -1).expect("startActivity"),
+        START_SUCCESS
+    );
+    let placeholder = atms.ams.pending_launches[0].token;
+    // The host delivered that launch with its own token (MPROC7).
+    let host_token = 0x4000_0004d;
+    atms.ams.take_launch(placeholder);
+    atms.ams.bind_launch_token(placeholder, host_token);
+    atms.ensure_activity(host_token, SECOND);
+    atms.activity_resumed(host_token, true).expect("the app resumed it");
+
+    // The real caller's shape: `Instrumentation.execStartActivity` passes `0`
+    // as the AIDL startFlags argument and the flag travels in the Intent.
+    let mut with_flag = facts.clone();
+    with_flag.flags = FLAG_ACTIVITY_SINGLE_TOP;
+    assert_eq!(
+        atms.ams
+            .start_activity(&with_flag, 0, 0, -1)
+            .expect("singleTop startActivity"),
+        START_SUCCESS
+    );
+    assert!(
+        atms.ams.pending_launches.is_empty(),
+        "singleTop reuses the instance: no launch transaction"
+    );
+    assert!(
+        atms.ams
+            .pending_new_intents
+            .iter()
+            .any(|(token, _)| *token == host_token),
+        "the onNewIntent is queued for the activity that is already on top"
+    );
+    let transaction = atms
+        .take_new_intent_for_tag(1)
+        .expect("NewIntentItem transaction for the process that owns the activity");
+
+    assert_eq!(class_of(&transaction), ctx::CLIENT_TRANSACTION);
+}
+
+fn class_of(value: &Parcelable) -> &str {
+    match value {
+        Parcelable::Ordered { class, .. } => class.as_str(),
+        _ => "",
+    }
+}

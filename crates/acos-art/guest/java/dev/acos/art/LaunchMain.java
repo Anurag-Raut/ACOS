@@ -2657,6 +2657,24 @@ public final class LaunchMain {
                                     System.out.flush();
                                     return result;
                                 }
+                                if (System.getenv("ACOSLAUNCH_HOST_SCHEDULES") != null) {
+                                    // MPROC7 (ADR-0029 amendment): this process's
+                                    // launches are host-built. The request is
+                                    // already recorded host-side; the peer
+                                    // delivers the `LaunchActivityItem` (or the
+                                    // `NewIntentItem` for a reused top) to this
+                                    // process's own app thread. The guest must
+                                    // not instantiate a second activity with a
+                                    // guest-minted token: that token is not the
+                                    // one the host's `ActivityRecord` carries
+                                    // (it would report the wrong token on
+                                    // `activityResumed`/`finishActivity`).
+                                    System.out.println("ACOSLAUNCH MARK start-activity-host-scheduled"
+                                            + " component=" + esc(String.valueOf(target))
+                                            + " flags=0x" + Integer.toHexString(intent.getFlags()));
+                                    System.out.flush();
+                                    return result;
+                                }
                                 if (target == null) {
                                     // MPROC1: the host accepted the intent without
                                     // an installed target, i.e. the session's
@@ -2885,27 +2903,70 @@ public final class LaunchMain {
         // marshalled across the peer's byte pipe, which is why the token used to
         // be null (`no activity for token 0x0`). The transaction items are still
         // the framework's own (`LaunchActivityItem` + `ResumeActivityItem`).
-        IBinder token = new android.os.Binder();
-        try {
-            Object tx = buildLaunchTransaction(sClient, token, app, sActivity);
-            scheduleLocal(tx);
-            sCurrentToken = token;
-            // ROT6: the Activity was launched, so it is the top of the task and the
-            // last one: when the app finishes it (`Activity.finish()`), the *server*
-            // side owns the rest of the lifecycle. Start the watcher that delivers
-            // it (see [`startTopFinishWatcher`]).
-            startTopFinishWatcher(token);
-            System.out.println("ACOSLAUNCH MARK schedule-transaction-delivered activity="
-                    + sActivity + " token=binder:" + Integer.toHexString(System.identityHashCode(token))
-                    + " transport=local-iapplicationthread");
-        } catch (Throwable x) {
-            System.out.println("ACOSLAUNCH MARK schedule-transaction-failed " + x);
-            x.printStackTrace(System.out);
-            dumpActivityState(thread, at);
-            quit();
-            return;
+        // MPROC7 (ADR-0029 amendment): for a **spawned secondary process** the
+        // host builds and delivers the first launch. Its `ClientTransaction`
+        // carries a system_server-side activity token, which a guest cannot
+        // mint, so the guest waits for the host's
+        // `IApplicationThread.scheduleTransaction` instead of marshalling its
+        // own. The primary process keeps the local path (its token is the one
+        // the guest itself must report back).
+        if (System.getenv("ACOSLAUNCH_HOST_SCHEDULES") != null) {
+            System.out.println("ACOSLAUNCH MARK waiting-for-host-transaction activity="
+                    + sActivity);
+            System.out.flush();
+            Object launched = null;
+            long hostDeadline = System.currentTimeMillis() + sResumeMs;
+            while (launched == null && System.currentTimeMillis() < hostDeadline) {
+                Thread.sleep(5);
+                launched = resumedActivity(thread);
+            }
+            if (launched == null) {
+                System.out.println("ACOSLAUNCH MARK host-transaction-timeout activity="
+                        + sActivity + " timeout_ms=" + sResumeMs);
+                write(new File(sOut, "activity-not-resumed.marker"),
+                        "package=" + sPkg + "\nactivity=" + sActivity
+                                + "\ntimeout_ms=" + sResumeMs
+                                + "\nreason=HOST_TRANSACTION_TIMEOUT\n");
+                dumpActivityState(thread, at);
+                quit();
+                return;
+            }
+            Object hostToken = get(launched, "mToken");
+            if (hostToken instanceof IBinder) {
+                sCurrentToken = (IBinder) hostToken;
+                // ROT6: the host delivered the launch, so the server side owns
+                // the rest of the lifecycle; the finish watcher reports it.
+                startTopFinishWatcher(sCurrentToken);
+            }
+            System.out.println("ACOSLAUNCH MARK host-transaction-resumed activity="
+                    + launched.getClass().getName()
+                    + " token=" + (sCurrentToken == null ? "none" : "binder:"
+                            + Integer.toHexString(System.identityHashCode(sCurrentToken))));
+            System.out.flush();
+        } else {
+            IBinder token = new android.os.Binder();
+            try {
+                Object tx = buildLaunchTransaction(sClient, token, app, sActivity);
+                scheduleLocal(tx);
+                sCurrentToken = token;
+                // ROT6: the Activity was launched, so it is the top of the task and the
+                // last one: when the app finishes it (`Activity.finish()`), the *server*
+                // side owns the rest of the lifecycle. Start the watcher that delivers
+                // it (see [`startTopFinishWatcher`]).
+                startTopFinishWatcher(token);
+                System.out.println("ACOSLAUNCH MARK schedule-transaction-delivered activity="
+                        + sActivity + " token=binder:"
+                        + Integer.toHexString(System.identityHashCode(token))
+                        + " transport=local-iapplicationthread");
+            } catch (Throwable x) {
+                System.out.println("ACOSLAUNCH MARK schedule-transaction-failed " + x);
+                x.printStackTrace(System.out);
+                dumpActivityState(thread, at);
+                quit();
+                return;
+            }
+            System.out.flush();
         }
-        System.out.flush();
         long adeadline = System.currentTimeMillis() + sResumeMs;
         while (System.currentTimeMillis() < adeadline) {
             Object activity = resumedActivity(thread);
@@ -4010,6 +4071,20 @@ public final class LaunchMain {
         setField(cls, info, "rotation", 0);
         setField(cls, info, "modeId", 1);
         setField(cls, info, "defaultModeId", 1);
+        // MPROC7: a real display always lists its modes. Without this array the
+        // framework's `DisplayInfo.findMode()` throws `IllegalStateException:
+        // Unable to locate mode id=1,supportedModes=[]` as soon as something
+        // initialises hardware rendering (`HardwareRenderer.ProcessInitializer
+        // .initDisplayInfo` from `ViewRootImpl.setView`) — which is exactly
+        // what an activity with `ActivityInfo.FLAG_HARDWARE_ACCELERATED` does.
+        Class<?> modeCls = Class.forName("android.view.Display$Mode");
+        java.lang.reflect.Constructor<?> modeCtor = modeCls.getDeclaredConstructor(
+                int.class, int.class, int.class, float.class);
+        modeCtor.setAccessible(true);
+        Object mode = modeCtor.newInstance(1, PANEL_W, PANEL_H, 60.0f);
+        Object modes = java.lang.reflect.Array.newInstance(modeCls, 1);
+        java.lang.reflect.Array.set(modes, 0, mode);
+        setField(cls, info, "supportedModes", modes);
         setField(cls, info, "logicalDensityDpi", DENSITY_DPI);
         setField(cls, info, "state", 2);
         setField(cls, info, "colorMode", 0);

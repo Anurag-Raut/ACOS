@@ -181,6 +181,12 @@ pub enum DynamicValue {
     Binder(Option<BinderId>),
     /// A `VAL_MAP`/`VAL_BUNDLE`-shaped nested map (best effort).
     Map(Vec<(DynamicValue, DynamicValue)>),
+    /// A `VAL_LIST` (`writeValue` of a `List`): the image's tag 12. The bundle
+    /// reader had no model for it, so `activityStopped`'s saved-state Bundle
+    /// (`Activity.onSaveInstanceState` puts the window hierarchy's
+    /// `SparseArray`/list values in it) desynchronised the parcel: every later
+    /// field of the same transaction failed (MPROC7).
+    List(Option<Vec<DynamicValue>>),
     /// A `VAL_PARCELABLE` payload.
     Parcelable(Parcelable),
     /// A value this crate does not model; its bytes were skipped.
