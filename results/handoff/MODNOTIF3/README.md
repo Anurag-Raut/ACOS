@@ -55,7 +55,17 @@ marshaling scratch list of the intents that were already written field-by-field 
 |---|---|
 | `codec-verification.txt` | `codec_field_orders_match_the_framework_dex --nocapture`: `Notification Full 63/45 real=63`, `$Action Full 11/9 real=11`, `PendingIntent Full 1/1`, `Icon Curated real=4` |
 | `codec-tests.txt` | the parcelable test binary's list |
-| `full-suite.txt` | `cargo test -p acos-services`: **47/47 test binaries ok, 0 failed** (the shared `read_field` change does not disturb any existing codec) |
+| `full-suite.txt` | `cargo test -p acos-services`: **48/48 test binaries ok, 0 failed** (the shared `read_field` change does not disturb any existing codec) |
+| `notify-request.txt` | `cargo test -p acos-services --test modnotif3_notify` — a real `enqueueNotificationWithTag` request decodes through `ServiceHost` and the decoded notification re-encodes byte-for-byte |
+| `before-codec.txt` | the same test against `2240731b`: `UnsupportedParcelable { class: "android.app.Notification" }` (0 passed, 2 failed) |
+
+The decode path the codec exists for is proven at the wire level in
+`crates/acos-services/tests/modnotif3_notify.rs`: the request bytes the framework proxy writes
+for `INotificationManager.enqueueNotificationWithTag` (`tables.rs:6324`, a `typed_object`) are
+handed to the registered service through `ServiceHost::transact`, the service answers
+`NO_EXCEPTION`, and the decoded `(package, id)` reaches the `INotificationManager` state. The
+same file proves the reply direction (a decoded notification re-encodes byte-for-byte, which is
+what `getActiveNotifications` will need).
 
 Round-trip coverage: `every_spec_round_trips_through_a_parcel` now has samples for
 `android.app.Notification` (resource small icon, content PendingIntent binder, `android.title`
