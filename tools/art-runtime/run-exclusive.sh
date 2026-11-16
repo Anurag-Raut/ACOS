@@ -7,7 +7,7 @@
 #
 # Slots (2026-11-14). The host has room for more than one guarded ART run, and a
 # single global lock made agents queue 4-8 min per acquisition. So there are
-# ACOS_ART_SLOTS (default 2) slot files; slot 0 is the historical `art.lock`, so
+# ACOS_ART_SLOTS (default 4; raised 2026-11-16, host has 32 cores and ~48 GiB free during agent work) slot files; slot 0 is the historical `art.lock`, so
 # older copies of this script (which flock only art.lock) still interlock.
 #
 #   * default (shared): correctness runs (gates, scenarios, crate tests, corpus).
@@ -35,7 +35,7 @@ done
 root=/home/Qui/Projects/acos
 lockdir=${ACOS_ART_LOCKDIR:-$root/.cache/art-locks}; mkdir -p "$lockdir"
 log=$lockdir/runs.log
-slots=${ACOS_ART_SLOTS:-2}
+slots=${ACOS_ART_SLOTS:-4}
 headroom=${ACOS_ART_SLOT_HEADROOM_GIB:-12}
 t0=$(date +%s); u0=$(date -u +%FT%TZ)
 
