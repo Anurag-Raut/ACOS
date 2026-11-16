@@ -1312,7 +1312,178 @@ pub fn ui_tree_from_json(
         .get("truncated")
         .and_then(|value| value.as_bool())
         .unwrap_or(false);
+    // LAYER1: apply the AOSP layer policy to the guest's window facts and tag
+    // every node with its window. The guest sends insertion order + raw
+    // `LayoutParams.type`/flags; the host owns the one layer table
+    // (`acos_wm::layers::policy_layer`), so the reply's z order, the tree order
+    // and C1's placement cannot drift (D1/D3).
+    tree.windows = windows_from_json(value);
+    apply_window_tags(&mut tree);
     Ok(tree)
+}
+
+/// Parse the probe's `windows:[{z,window,id,type,focus,touch,bounds,parent}]`
+/// block into protocol [`WindowInfo`] rows, **ordered by the AOSP layer policy**
+/// (bottom first).
+///
+/// A probe without the block yields no rows; its nodes keep their `window`
+/// label, which is the pre-LAYER1 reply shape. A `type` the table does not know
+/// is reported as `TYPE_<n>` / kind `unknown`, never merged into the app band.
+fn windows_from_json(value: &serde_json::Value) -> Vec<acos_protocol::ui::WindowInfo> {
+    use acos_protocol::ui::WindowInfo;
+    use acos_wm::layers::{policy_layer, sub_window_layer, type_name, WindowKind};
+    let Some(rows) = value.get("windows").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    struct Raw {
+        info: WindowInfo,
+        layer: i32,
+        seq: i64,
+        sublayer: i32,
+        is_sub: bool,
+        parent: String,
+    }
+    let mut raw = Vec::with_capacity(rows.len());
+    for (index, row) in rows.iter().enumerate() {
+        let label = row
+            .get("window")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let type_ = row.get("type").and_then(|v| v.as_i64());
+        let kind = type_
+            .map(|t| WindowKind::of(t as i32))
+            .unwrap_or(WindowKind::Unknown);
+        let type_text = match type_ {
+            Some(t) => type_name(t as i32)
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("TYPE_{t}")),
+            None => String::new(),
+        };
+        let seq = row
+            .get("z")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(index as i64);
+        let mut info = WindowInfo::new(0);
+        info.id = row
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        info.label = label.clone();
+        info.type_name = type_text;
+        info.kind = if type_.is_some() {
+            kind.name().to_string()
+        } else {
+            String::new()
+        };
+        info.focus = row.get("focus").and_then(|v| v.as_bool()).unwrap_or(false);
+        info.touchable = row.get("touch").and_then(|v| v.as_bool()).unwrap_or(false);
+        info.bounds = row
+            .get("bounds")
+            .and_then(|v| v.as_str())
+            .and_then(parse_bounds);
+        let is_sub = kind.is_sub_window();
+        raw.push(Raw {
+            layer: type_
+                .map(|t| policy_layer(t as i32, false))
+                .unwrap_or(acos_wm::layers::APPLICATION_LAYER),
+            sublayer: type_.map(|t| sub_window_layer(t as i32)).unwrap_or(0),
+            parent: row
+                .get("parent")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            is_sub,
+            seq,
+            info,
+        });
+    }
+    // Top-level windows by (policy layer, creation order); a sub-window is
+    // placed next to its parent at its own sub-layer, exactly as
+    // `WindowLayerStack::ordered` does from the WMS records.
+    let mut top: Vec<usize> = (0..raw.len()).filter(|i| !raw[*i].is_sub).collect();
+    top.sort_by_key(|i| (raw[*i].layer, raw[*i].seq));
+    let mut subs: Vec<usize> = (0..raw.len()).filter(|i| raw[*i].is_sub).collect();
+    subs.sort_by_key(|i| (raw[*i].sublayer, raw[*i].seq));
+    let mut order = Vec::with_capacity(raw.len());
+    for i in &top {
+        for s in &subs {
+            if raw[*s].parent == raw[*i].info.label && raw[*s].sublayer < 0 {
+                order.push(*s);
+            }
+        }
+        order.push(*i);
+        for s in &subs {
+            if raw[*s].parent == raw[*i].info.label && raw[*s].sublayer >= 0 {
+                order.push(*s);
+            }
+        }
+    }
+    let known: Vec<&str> = top.iter().map(|i| raw[*i].info.label.as_str()).collect();
+    for s in subs {
+        if !known.contains(&raw[s].parent.as_str()) {
+            order.push(s);
+        }
+    }
+    // A label that appeared twice (a guest that reuses a title) is still one
+    // row per root: the z index is the row's own position.
+    let mut out = Vec::with_capacity(order.len());
+    for (z, i) in order.into_iter().enumerate() {
+        let mut info = raw[i].info.clone();
+        info.z = z as i64;
+        out.push(info);
+    }
+    out
+}
+
+/// Tag every node with its window's id/type/kind/z and put the roots in window
+/// z order (bottom first). Nodes whose label has no window row are untouched.
+fn apply_window_tags(tree: &mut UiTree) {
+    use std::collections::HashMap;
+    if tree.windows.is_empty() {
+        return;
+    }
+    let by_label: HashMap<String, (String, String, String, i64)> = tree
+        .windows
+        .iter()
+        .map(|w| {
+            (
+                w.label.clone(),
+                (w.id.clone(), w.type_name.clone(), w.kind.clone(), w.z),
+            )
+        })
+        .collect();
+    // A single-window probe may leave `window` empty on the nodes; the one row
+    // is then the owner.
+    let single = (tree.windows.len() == 1).then(|| tree.windows[0].clone());
+    fn tag(node: &mut UiNode, by_label: &HashMap<String, (String, String, String, i64)>, single: Option<&acos_protocol::ui::WindowInfo>) {
+        let found = by_label.get(&node.window).cloned().or_else(|| {
+            single.map(|w| (w.id.clone(), w.type_name.clone(), w.kind.clone(), w.z))
+        });
+        if let Some((id, type_name, kind, z)) = found {
+            node.window_id = id;
+            node.window_type = type_name;
+            node.window_kind = kind;
+            node.window_z = Some(z);
+        }
+        for child in &mut node.children {
+            tag(child, by_label, single);
+        }
+    }
+    for node in &mut tree.nodes {
+        tag(node, &by_label, single.as_ref());
+    }
+    tree.nodes.sort_by_key(|node| {
+        if node.window.is_empty() && single.is_some() {
+            node.window_z.unwrap_or(0)
+        } else {
+            by_label
+                .get(&node.window)
+                .map(|(_, _, _, z)| *z)
+                .unwrap_or(i64::MAX)
+        }
+    });
 }
 
 fn ui_node_from_json(value: &serde_json::Value, depth: usize) -> UiNode {
@@ -2766,6 +2937,78 @@ mod engine_tests {
             "clear: false must not delete anything: {calls:?}"
         );
         assert!(calls.iter().any(|call| call == "type_text(8)"));
+    }
+
+    /// LAYER1: the tree applies the AOSP policy order, not the guest's
+    /// `WindowManagerGlobal` insertion order, and tags every node with its
+    /// window's id/type/kind/z. Fails before `windows_from_json` existed (the
+    /// reply kept insertion order and carried no window rows).
+    #[test]
+    fn a_probe_tree_is_ordered_by_the_layer_policy_and_every_node_is_window_tagged() {
+        let probe = serde_json::json!({
+            // Insertion order: the overlay was added first, then the activity,
+            // then the dialog. The policy order is activity, dialog, overlay.
+            "windows": [
+                {"z":0,"window":"Overlay#0","id":"aa","type":2038,"focus":false,"touch":true,
+                 "bounds":"[0,128][300,428]"},
+                {"z":1,"window":"main","id":"bb","type":2,"focus":true,"touch":true,
+                 "bounds":"[0,128][1080,2337]"},
+                {"z":2,"window":"Dialog#2","id":"cc","type":2,"focus":false,"touch":true,
+                 "bounds":"[28,976][1052,1489]"},
+            ],
+            "nodes": [
+                {"class":"android.widget.TextView","id":"overlay_text","window":"Overlay#0",
+                 "bounds":"[0,0][300,300]","bounds_on_screen":"[0,128][300,428]"},
+                {"class":"android.widget.FrameLayout","id":"main_root","window":"main",
+                 "bounds":"[0,0][1080,2209]","bounds_on_screen":"[0,128][1080,2337]"},
+                {"class":"android.widget.TextView","id":"message","window":"Dialog#2",
+                 "bounds":"[0,0][1024,513]","bounds_on_screen":"[28,976][1052,1489]"},
+            ],
+            "truncated": false,
+        });
+        let tree = ui_tree_from_json(
+            "dev.acos.fixtures.overlaystack",
+            FrameMeta::new(1, "t", "c", 1080, 2400, 420, "h", true),
+            &probe,
+        )
+        .expect("tree");
+        let kinds: Vec<&str> = tree.windows.iter().map(|w| w.kind.as_str()).collect();
+        assert_eq!(kinds, vec!["application", "application", "application_overlay"]);
+        let types: Vec<&str> = tree.windows.iter().map(|w| w.type_name.as_str()).collect();
+        assert_eq!(types, vec!["TYPE_APPLICATION", "TYPE_APPLICATION", "TYPE_APPLICATION_OVERLAY"]);
+        let zs: Vec<i64> = tree.windows.iter().map(|w| w.z).collect();
+        assert_eq!(zs, vec![0, 1, 2]);
+        assert!(tree.windows[0].focus && !tree.windows[1].focus && !tree.windows[2].focus);
+        // The roots are in window z order, and every node carries the window.
+        let ids: Vec<&str> = tree.nodes.iter().map(|n| n.resource_id.as_str()).collect();
+        assert_eq!(ids, vec!["main_root", "message", "overlay_text"]);
+        assert_eq!(tree.nodes[0].window_kind, "application");
+        assert_eq!(tree.nodes[0].window_z, Some(0));
+        assert_eq!(tree.nodes[1].window_kind, "application");
+        assert_eq!(tree.nodes[1].window_z, Some(1));
+        assert_eq!(tree.nodes[2].window_kind, "application_overlay");
+        assert_eq!(tree.nodes[2].window_z, Some(2));
+        assert_eq!(tree.nodes[2].window_id, "aa");
+        assert_eq!(tree.nodes[2].window_type, "TYPE_APPLICATION_OVERLAY");
+    }
+
+    /// A probe that predates the window block keeps its old shape: no window
+    /// rows, no invented type, nodes unchanged.
+    #[test]
+    fn a_legacy_probe_without_windows_keeps_the_pre_layer1_shape() {
+        let probe = serde_json::json!({
+            "nodes": [{"class":"android.widget.TextView","id":"t","window":"main",
+                       "bounds":"[0,0][10,10]","bounds_on_screen":"[0,0][10,10]"}],
+        });
+        let tree = ui_tree_from_json(
+            "p",
+            FrameMeta::new(1, "t", "c", 1080, 2400, 420, "h", true),
+            &probe,
+        )
+        .expect("tree");
+        assert!(tree.windows.is_empty());
+        assert!(tree.nodes[0].window_kind.is_empty());
+        assert_eq!(tree.nodes[0].window_z, None);
     }
 
     #[test]

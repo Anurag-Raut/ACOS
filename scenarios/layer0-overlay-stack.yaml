@@ -1,0 +1,150 @@
+# layer0-overlay-stack: the window layer stack, end to end on real ART.
+#
+# LAYER0 built the AOSP window-type/z policy (activity < dialog < application
+# overlay) in the WMS; LAYER1 transcribed the full system-band table from
+# `WindowManagerPolicy.getWindowLayerFromTypeLw`, made the ART/verify path route
+# taps by that stack, and tagged every tree node with its window.
+#
+# The fixture (`fixtures/apps/overlay-stack`) has one Activity, two
+# `SYSTEM_ALERT_WINDOW` overlays (A touchable, B `FLAG_NOT_TOUCHABLE`) and an
+# AlertDialog. The gate asserts:
+#   * the tree's `windows[]` is in policy z order (bottom first) and the
+#     activity keeps focus because both overlays are `FLAG_NOT_FOCUSABLE`;
+#   * the overlay is drawn above the activity in the PNG (flat red vs the
+#     activity's dark blue background);
+#   * a tap on overlay A lands on the overlay;
+#   * a tap beside it lands on the activity;
+#   * a tap on the not-touchable overlay B passes through to the activity.
+version: 1
+name: layer0-overlay-stack
+description: >-
+  Launch overlay-stack on real ART: assert the window stack order
+  application < dialog < application_overlay, that the overlay is drawn above
+  the activity, and that taps are routed by the stack (overlay hit, activity
+  beside it, pass-through through a FLAG_NOT_TOUCHABLE overlay).
+app: fixtures/build/apps/overlay-stack.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+  - screenshot
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.overlaystack/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: show_dialog}
+      timeout_ms: 5000
+
+  # --- activity + two application overlays -------------------------------
+  # The overlays are added in onCreate; both are TYPE_APPLICATION_OVERLAY
+  # (policy layer 11) and the activity is TYPE_APPLICATION (layer 2). Focus
+  # stays on the activity because both overlays are FLAG_NOT_FOCUSABLE.
+  - assert_windows:
+      order: [application, application_overlay, application_overlay]
+      focus: application
+      focus_type: TYPE_BASE_APPLICATION
+      types: [TYPE_BASE_APPLICATION, TYPE_APPLICATION_OVERLAY, TYPE_APPLICATION_OVERLAY]
+
+  # Overlay A must be drawn ABOVE the activity: its flat red is the pixel at
+  # (200,520), while the activity's own background is the pixel at (900,700).
+  - assert_region:
+      x: 180
+      y: 720
+      w: 40
+      h: 20
+      hash: "85ad4aaa5810afbf1fe6370cbb6c61ed0e252be9cbf43d64fb9f13f39b1b897c"
+
+  - assert_region:
+      x: 880
+      y: 680
+      w: 40
+      h: 20
+      hash: "f8e6fa0fea475b4b6b87426cdab52143de49ebb9c2a132b346a0b09ddfd6d51b"
+
+  # Not-touchable overlay B is drawn too (its z is above the activity)...
+  - assert_region:
+      x: 780
+      y: 1530
+      w: 40
+      h: 20
+      hash: "e8556fd711d4969c5a29c135ff6849d11f57df44a3b6c9c79e2a54e8f5fbf7d2"
+
+  # --- input is routed by the layer stack --------------------------------
+  # A point inside overlay A goes to overlay A.
+  - tap:
+      x: 200
+      y: 740
+  - assert_log:
+      tag: AcosOverlay
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^overlay_tapped$'
+
+  # A point beside overlay A (activity background, above the dialog) goes to
+  # the activity, not to the newest window (the old ART `newest_token()` bug).
+  - tap:
+      x: 900
+      y: 600
+  - assert_log:
+      tag: AcosOverlay
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^activity_tapped$'
+
+  # Overlay B covers this point but is FLAG_NOT_TOUCHABLE: the touch passes
+  # through to the activity below it.
+  - tap:
+      x: 800
+      y: 1550
+  - assert_log:
+      tag: AcosOverlay
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^activity_tapped$'
+
+  # --- the dialog enters between the activity and the overlays ------------
+  - tap:
+      selector: {id: show_dialog}
+  - assert_log:
+      tag: AcosOverlay
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^dialog_shown$'
+
+  # The AlertDialog is a second TYPE_APPLICATION window above the activity;
+  # the overlays stay above it by policy layer (11 > 2).
+  - assert_windows:
+      order: [application, application, application_overlay, application_overlay]
+      focus: application
+      focus_type: TYPE_APPLICATION
+      types: [TYPE_BASE_APPLICATION, TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY, TYPE_APPLICATION_OVERLAY]
+
+  - assert_text:
+      selector: {id: message}
+      text: {exact: "Activity < dialog < application overlay"}
+
+  - capture:
+      name: overlay-stack
+      format: png
+      fresh: true
+
+  - assert_no_crash: {}

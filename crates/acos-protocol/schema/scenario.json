@@ -1267,6 +1267,17 @@
           ],
           "description": "Assert node visibility."
         },
+        "assert_windows": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WindowOrderAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert the window stack order (bottom to top) and focus."
+        },
         "back": {
           "anyOf": [
             {
@@ -1797,6 +1808,46 @@
       },
       "required": [
         "selector"
+      ],
+      "type": "object"
+    },
+    "WindowOrderAssertion": {
+      "description": "`assert_windows`: the window stack in policy z order, bottom first.\n\nThis is the LAYER1 assertion: it reads the tree's `windows[]` block (the host's AOSP layer policy, not insertion order), so an application overlay that is drawn and tapped above an activity can only pass when the reported stack actually says so.",
+      "properties": {
+        "focus": {
+          "description": "Optional expected kind of the focused window.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "focus_type": {
+          "description": "Optional expected `LayoutParams.TYPE_*` name of the focused window. This is the precise form: the activity is `TYPE_BASE_APPLICATION`, a dialog is `TYPE_APPLICATION`, and both have kind `application`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "order": {
+          "description": "Expected window kinds, bottom to top (`application`, `application_overlay`, `sub_window`, …). The count must match exactly: a missing or extra window is a failure, never silently ignored.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "types": {
+          "description": "Optional expected `LayoutParams.TYPE_*` names, bottom to top. When present this must have the same length as `order`.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "order"
       ],
       "type": "object"
     }

@@ -1926,6 +1926,11 @@ fn observe_tree(
     // FB2: the screenshot is of *this* bound frame, and its `display_origin`
     // says how a PNG pixel maps to a tree bound.
     attach_screenshot(session, artifacts, screenshot, "acos_observe_tree", &mut result)?;
+    // LAYER1: the screenshot names the same window stack as the tree it is
+    // bound to, so a frame and a tree from one reply cannot disagree.
+    if let (Some(shot), false) = (result.get_mut("screenshot"), tree.windows.is_empty()) {
+        shot["windows"] = json!(tree.windows.len());
+    }
     Ok(result)
 }
 
@@ -1970,6 +1975,9 @@ fn observe(
         // agent got a tree, no file, no error). It is honoured here on the same
         // bound frame.
         attach_screenshot(session, artifacts, screenshot, "acos_observe", &mut result)?;
+        if let (Some(shot), false) = (result.get_mut("screenshot"), tree.windows.is_empty()) {
+            shot["windows"] = json!(tree.windows.len());
+        }
         return Ok(result);
     }
     // A frame-only observe is a real, fresh host capture.
@@ -3193,6 +3201,9 @@ fn tree_json(tree: &UiTree, max_nodes: usize) -> (usize, usize, bool, Value) {
         json!({
             "max_nodes": max_nodes,
             "truncated": truncated,
+            // LAYER1: the windows in policy z order (bottom first). Short
+            // per-window rows only; nodes carry the same z as `window_z`.
+            "windows": tree.windows,
             "nodes": roots,
         }),
     )
@@ -3235,12 +3246,23 @@ fn node_json(
         "selected": node.selected,
         "password": node.password,
         "window": node.window,
+        // LAYER1 window tag (short strings; omitted when the probe has none).
+        "window_id": node.window_id,
+        "window_type": node.window_type,
+        "window_kind": node.window_kind,
+        "window_z": node.window_z,
         "package": node.package,
         "children": children,
     }))
 }
 
 fn distinct_windows(tree: &UiTree) -> usize {
+    // LAYER1: the probe's window block is authoritative (it includes a window
+    // with no visible node). Fall back to the per-node labels for an older
+    // probe that has no block.
+    if !tree.windows.is_empty() {
+        return tree.windows.len();
+    }
     fn collect(node: &UiNode, seen: &mut Vec<String>) {
         if !node.window.is_empty() && !seen.contains(&node.window) {
             seen.push(node.window.clone());

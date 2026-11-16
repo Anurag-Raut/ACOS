@@ -39,9 +39,11 @@ name = "acos-art"
 version = "0.2.2"
 dependencies = [
  "acos-binder-peer",
+ "acos-parcel",
  "acos-render",
  "acos-sandbox",
  "acos-services",
+ "acos-wm",
  "fdeflate",
  "image",
  "libc",
@@ -80,6 +82,7 @@ dependencies = [
  "acos-test-support",
  "acos-verify",
  "acos-vm",
+ "acos-wm",
  "assert_cmd",
  "clap",
  "libc",

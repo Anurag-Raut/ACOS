@@ -891,6 +891,10 @@ fn probe_input_offset(tree: &serde_json::Value) -> Option<(i32, i32)> {
 /// The offset to subtract for one window. An unknown or empty label falls back
 /// to the first window's measured offset (a single-window tree, or an explicit
 /// screen point on a pre-multi-window probe).
+// LAYER1: taps now carry display coordinates and the guest picks the window by
+// policy, so this helper is only used by the probe-offset tests. Keep it: it is
+// the documented mapping for a future node -> window conversion.
+#[allow(dead_code)]
 fn offset_for_window(
     offsets: &HashMap<String, (i32, i32)>,
     fallback: (i32, i32),
@@ -4945,25 +4949,21 @@ impl SessionBackend for ArtSession {
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
-        // No window label: subtract the first window's measured origin. This is
-        // the pre-multi-window behaviour and is right for a single-window tree.
-        let (dx, dy) = self.input_offset;
-        self.input_command(
-            serde_json::json!({"cmd":"tap","x":x - dx,"y":y - dy}),
-            "input.tap",
-        )
+        // LAYER1: send display coordinates. The guest hit-tests them against the
+        // WMS layer stack and converts to the target window's own input space,
+        // so a tap beside an overlay reaches the activity below it and a
+        // `FLAG_NOT_TOUCHABLE` overlay passes the touch through. The CLI must
+        // not pre-subtract a window origin: it does not know which window the
+        // policy will pick.
+        self.input_command(serde_json::json!({"cmd":"tap","x":x,"y":y}), "input.tap")
     }
 
-    fn tap_in_window(&mut self, window: &str, x: i32, y: i32) -> Result<(), BackendError> {
-        // The engine's tap coordinates are display/screen coordinates (resolved
-        // from the probe's `bounds_on_screen`). The interactive input channel's
-        // transform is window-local (W10/I2), so subtract the origin of the
-        // window that contains the node, measured from the same probe tree.
-        let (dx, dy) = offset_for_window(&self.window_offsets, self.input_offset, window);
-        self.input_command(
-            serde_json::json!({"cmd":"tap","x":x - dx,"y":y - dy}),
-            "input.tap",
-        )
+    fn tap_in_window(&mut self, _window: &str, x: i32, y: i32) -> Result<(), BackendError> {
+        // The node's window label selects the *node*; the tap still carries
+        // display coordinates and the guest routes it by the layer stack (a
+        // point the policy sends to another window is a real disagreement, not
+        // something this layer hides).
+        self.tap(x, y)
     }
 
     fn tap_text(&mut self, text: &str) -> Result<(), BackendError> {

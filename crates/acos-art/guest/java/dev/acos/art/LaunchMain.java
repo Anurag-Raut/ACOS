@@ -1984,6 +1984,14 @@ public final class LaunchMain {
         // saved tree claim completeness it did not have. One flag for the whole
         // sample: true if any window stopped at the cap.
         boolean[] truncated = new boolean[]{false};
+        // LAYER1: window facts (identity, real type/flags, focus, parent) travel
+        // with every root. The host applies the AOSP layer policy and tags the
+        // nodes; the guest never re-derives z (D3).
+        String[] labels = new String[roots.size()];
+        for (int i = 0; i < roots.size(); i++) {
+            View r = roots.get(i);
+            labels[i] = r == decor ? "main" : (r == null ? "" : windowLabel(r, i));
+        }
         int z = 0;
         boolean sawMain = false;
         for (View root : roots) {
@@ -1993,11 +2001,13 @@ public final class LaunchMain {
                 label = "main";
                 sawMain = true;
             } else {
-                label = windowLabel(root, z);
+                label = labels[z];
             }
             if (windows.length() > 0) windows.append(',');
             windows.append("{\"z\":").append(z)
-                    .append(",\"window\":\"").append(jesc(label)).append("\"}");
+                    .append(",\"window\":\"").append(jesc(label)).append("\"")
+                    .append(windowMeta(root, roots, labels));
+            windows.append('}');
             int[] budget = new int[]{PROBE_NODE_BUDGET};
             // Each root is built in its own buffer: a throw can never leave a
             // half-written object in the shared `nodes` array (W36: the missing
@@ -2080,6 +2090,66 @@ public final class LaunchMain {
         j.append('}');
         System.out.println(j);
         System.out.flush();
+    }
+
+    /** LAYER1 window facts: identity, real type/flags, focus and parent link. */
+    static String windowMeta(View root, java.util.List<View> roots, String[] labels) {
+        StringBuilder sb = new StringBuilder(128);
+        Object vr = null;
+        try {
+            vr = Class.forName("android.view.View").getMethod("getViewRootImpl").invoke(root);
+        } catch (Throwable ignored) {
+        }
+        Object own = get(vr, "mWindow");
+        if (own != null) {
+            sb.append(",\"id\":\"").append(Integer.toHexString(System.identityHashCode(own)))
+              .append('"');
+        }
+        Object attrs = get(vr, "mWindowAttributes");
+        int type = -1;
+        int flags = 0;
+        Object token = null;
+        if (attrs != null) {
+            Object t = get(attrs, "type");
+            Object f = get(attrs, "flags");
+            if (t instanceof Integer) type = (Integer) t;
+            if (f instanceof Integer) flags = (Integer) f;
+            token = get(attrs, "token");
+        }
+        if (type >= 0) sb.append(",\"type\":").append(type);
+        // FLAG_NOT_TOUCHABLE (0x10): the same bit the WMS reads.
+        sb.append(",\"touch\":").append((flags & 0x10) == 0);
+        boolean focus = false;
+        try {
+            focus = root.hasWindowFocus();
+        } catch (Throwable ignored) {
+        }
+        sb.append(",\"focus\":").append(focus);
+        int[] loc = new int[2];
+        try {
+            root.getLocationOnScreen(loc);
+        } catch (Throwable ignored) {
+        }
+        sb.append(",\"bounds\":\"[").append(loc[0]).append(',').append(loc[1])
+          .append("][").append(loc[0] + root.getWidth()).append(',')
+          .append(loc[1] + root.getHeight()).append("]\"");
+        if (token != null) {
+            for (int i = 0; i < roots.size(); i++) {
+                View other = roots.get(i);
+                if (other == null || other == root) continue;
+                Object otherVr = null;
+                try {
+                    otherVr = Class.forName("android.view.View").getMethod("getViewRootImpl")
+                            .invoke(other);
+                } catch (Throwable ignored) {
+                }
+                if (get(otherVr, "mWindow") == token) {
+                    sb.append(",\"parent\":\"").append(jesc(labels[i])).append('"');
+                    break;
+                }
+            }
+        }
+        return sb.toString();
     }
 
     /** All attached root views, via the stock WindowManagerGlobal API. */

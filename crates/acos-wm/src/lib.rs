@@ -49,6 +49,7 @@ pub mod facade;
 pub mod geom;
 pub mod ime;
 pub mod input;
+pub mod layers;
 pub mod replay;
 pub mod transport;
 pub mod vsync;
@@ -61,6 +62,7 @@ pub use error::{Result, WmError};
 pub use callbacks::{PendingCallback, WmCallback};
 pub use facade::{FrameView, InputOutcome, SessionWm};
 pub use geom::{InsetsI, PointI, RectI};
+pub use layers::{LayerEntry, WindowKind, WindowLayerStack};
 pub use wms::{AddWindowResult, RelayoutResult, WindowRecord, WindowState};
 
 /// Version of the derived WMS layouts, surfaced in evidence metadata.
