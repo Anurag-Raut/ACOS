@@ -1560,10 +1560,14 @@ mod tests {
                 "rotate",
                 "logs",
                 "environment",
+                // ADR-0029 item 4: a session without the `services` command
+                // cannot run a `service_ctl` step.
+                "service_ctl",
                 "crash_reports"
             ]
         );
         assert!(!caps.to_protocol().environment);
+        assert!(!caps.to_protocol().services);
         assert!(caps.to_protocol().input);
     }
 
@@ -2102,6 +2106,7 @@ mod engine_tests {
             None,
             None,
             None,
+            &[],
         );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["engine"], "art");
@@ -2459,6 +2464,7 @@ mod engine_tests {
             None,
             None,
             None,
+            &[],
         );
         assert!(!envelope.status().is_pass());
         assert_eq!(envelope.status(), Status::Unsupported);

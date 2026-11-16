@@ -6078,6 +6078,9 @@ mod tests {
             // Fatal guest log entries (ART LOG(FATAL)/CHECK/abort_message and
             // the JVM's `FATAL EXCEPTION` line) are a real crash signature.
             crash_reports: true,
+            // ADR-0029 item 4: the launcher's peer thread owns the module
+            // registry, so `service_ctl` is a command.
+            services: true,
         };
         assert_eq!(caps.missing(), vec!["environment"]);
         // The executor sees the same two gaps through its capability names.
