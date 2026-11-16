@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ADR-0031: the ACOS WebView provider package. The framework loads a provider
+  from an *installed system package* (`WebViewFactory.getWebViewContextAndSetProvider`
+  -> `PackageManager.getPackageInfo` -> `Application.createApplicationContext`
+  -> `Class.forName("com.android.webview.chromium.WebViewChromiumFactoryProviderForT")`),
+  so the package is an ordinary APK that the session installs like any other
+  extra package; nothing in it is special to the framework except the package
+  name and the class name it looks up by hand.
+
+  No `com.android.webview.WebViewLibrary` meta-data: that key makes
+  `WebViewLibraryLoader.loadNativeLibrary` load a `.so`. The provider is pure
+  Java (it drives the host's pinned Chromium over the broker socket), so the key
+  is deliberately absent and no native library is loaded.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.android.webview"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:hasCode="true"
+        android:label="Android System WebView"
+        android:usesCleartextTraffic="true" />
+</manifest>

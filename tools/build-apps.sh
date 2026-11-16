@@ -151,15 +151,90 @@ build_apk() {
     echo "build-apps: [$name] -> $out ($(stat -c '%s' "$out") bytes)"
 }
 
+# --- webview-provider (ADR-0031) --------------------------------------------
+#
+# The WebView provider is not a normal app: the framework's
+# `WebViewFactoryProvider`/`WebViewProvider`/`WebViewDelegate`/`WebView$PrivateAccess`
+# are hidden, so the sources compile against generated compile-time stubs
+# (`tools/gen-webview-provider.py`, from the API-34 image's own dex) instead of
+# against `android.jar` alone. The stubs are **not** dexed: the image's boot
+# classpath supplies those classes at runtime.
+build_provider_apk() {
+    local name="$1"
+    local app_dir="$APPS_DIR/$name"
+    local work="$BUILD_DIR/$name"
+    local out="$BUILD_DIR/$name.apk"
+
+    rm -rf "$work"
+    mkdir -p "$work/stub-classes" "$work/classes" "$work/dex"
+
+    echo "build-apps: [$name] generating hidden-API stubs + provider surface"
+    python3 "$ROOT/tools/gen-webview-provider.py"
+
+    echo "build-apps: [$name] compiling hidden-API stubs (compile-time only)"
+    # shellcheck disable=SC2046
+    javac --release 11 -encoding UTF-8 -cp "$ANDROID_JAR" -d "$work/stub-classes" \
+        $(find "$app_dir/hidden-stubs" -name '*.java')
+
+    echo "build-apps: [$name] linking manifest"
+    "$AAPT2" link \
+        -o "$work/base.apk" \
+        -I "$ANDROID_JAR" \
+        --manifest "$app_dir/AndroidManifest.xml" \
+        --min-sdk-version 26 \
+        --target-sdk-version 34
+
+    echo "build-apps: [$name] compiling java (stubs first: they own the hidden names)"
+    # shellcheck disable=SC2046
+    javac --release 11 -encoding UTF-8 \
+        -cp "$work/stub-classes:$ANDROID_JAR" -d "$work/classes" \
+        $(find "$app_dir/src" -name '*.java')
+
+    echo "build-apps: [$name] dexing (provider classes only, never the stubs)"
+    # shellcheck disable=SC2046
+    "$D8" --lib "$ANDROID_JAR" --min-api 26 --output "$work/dex" \
+        $(find "$work/classes" -name '*.class')
+
+    python3 "$APPEND_PY" "$work/base.apk" "$work/dex/classes.dex"
+
+    echo "build-apps: [$name] aligning"
+    rm -f "$out" "$work/aligned.apk"
+    "$ZIPALIGN" -f 4 "$work/base.apk" "$work/aligned.apk"
+
+    echo "build-apps: [$name] signing"
+    "$APKSIGNER" sign \
+        --ks "$KEYSTORE" \
+        --ks-pass "pass:$KEY_PASS" \
+        --key-pass "pass:$KEY_PASS" \
+        --ks-key-alias "$KEY_ALIAS" \
+        --v1-signing-enabled true \
+        --v2-signing-enabled true \
+        --v3-signing-enabled true \
+        --out "$out" \
+        "$work/aligned.apk"
+
+    echo "build-apps: [$name] verifying"
+    "$APKSIGNER" verify --verbose "$out" >/dev/null
+    "$AAPT2" dump badging "$out" | sed 's/^/    /' | head -n 8
+    echo "build-apps: [$name] -> $out ($(stat -c '%s' "$out") bytes)"
+}
+
 # K5b: `ACOS_APP_ONLY="a b"` builds just the named fixtures, so one app can be
 # iterated without rebuilding the whole corpus.
 if [ -n "${ACOS_APP_ONLY:-}" ]; then
     for app in $ACOS_APP_ONLY; do
-        build_apk "$app"
+        if [ "$app" = "webview-provider" ]; then
+            build_provider_apk "$app"
+        else
+            build_apk "$app"
+        fi
     done
     echo "build-apps: done (ACOS_APP_ONLY=$ACOS_APP_ONLY) -> $BUILD_DIR"
     exit 0
 fi
+
+# --- webview-provider (ADR-0031: the host-Chromium WebView provider) --------
+build_provider_apk webview-provider
 
 # --- hello-views -------------------------------------------------------------
 build_apk hello-views
