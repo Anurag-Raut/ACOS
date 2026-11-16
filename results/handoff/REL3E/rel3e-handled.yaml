@@ -1,0 +1,27 @@
+# REL3E: a real-ART scenario proving the step JSON carries the app's own
+# `handled` answer, the resolved target/hit-test and `expect_change: "auto"`.
+version: 1
+name: rel3e-handled
+app: fixtures/build/apps/tap-targets.apk
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+animations: off
+expectation: pass
+steps:
+  - launch:
+      activity: dev.acos.fixtures.taptargets/.MainActivity
+  # A tap on the non-clickable label produces no new frame, so a strict settle
+  # times out (settle semantics are REL3A's track). `settle: content` proves the
+  # *content* is stable and lets the step report the app's own handled=false.
+  - tap:
+      selector: {id: title}
+      settle: content
+  - tap:
+      selector: {id: inc}
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}

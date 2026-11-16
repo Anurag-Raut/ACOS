@@ -1,0 +1,317 @@
+{
+  "request_id": "req_3a26f4_18e808e5efb89af8",
+  "ok": false,
+  "status": "fail",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_offscreen-pager",
+  "isolation": "process",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "code": "ELEMENT_OFFSCREEN",
+    "class": "assertion",
+    "message": "selector text==\"Hidden\" matched no visible node, but it matches a node that is not visible to the user (text \"Hidden\" content_desc \"\" class android.widget.TextView bounds [1122,317][1239,368] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass",
+    "hint": "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass.",
+    "retryable": false
+  },
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/negative_offscreen-pager-visible",
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "trust": "trusted",
+    "verdict": {
+      "animations": "on",
+      "app": {
+        "package": "dev.acos.fixtures.offscreenpager",
+        "path": "fixtures/build/apps/offscreen-pager.apk",
+        "sha256": "7e2a469d20614c5ecde47b0a3407b40d4930991a23cdf0cc928179a298c51d80"
+      },
+      "backend": "acos-native",
+      "certification": "certified-with-limits",
+      "certification_limits": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "section": "§8.7"
+      },
+      "certification_policy": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+        "section": "§8.8"
+      },
+      "engine": "art",
+      "evidence": {
+        "artifacts": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/negative_offscreen-pager-visible",
+        "engine_report": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/negative_offscreen-pager-visible/engine.json",
+        "retention": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/negative_offscreen-pager-visible/retention.json",
+        "verdict": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/negative_offscreen-pager-visible/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "failure": {
+        "code": "ELEMENT_OFFSCREEN",
+        "error": {
+          "class": "assertion",
+          "code": "ELEMENT_OFFSCREEN",
+          "hint": "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass.",
+          "message": "selector text==\"Hidden\" matched no visible node, but it matches a node that is not visible to the user (text \"Hidden\" content_desc \"\" class android.widget.TextView bounds [1122,317][1239,368] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass",
+          "retryable": false
+        },
+        "step_index": 2,
+        "summary": "step 2 (assert_visible) fail"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-14T22:10:35.529Z",
+      "insets": "report",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "stopped at step 2 (assert_visible): fail; later steps were not executed",
+        "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+        "artifacts: referenced (keep-all): 14 file(s) / 0.3 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+      ],
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.2.0",
+        "apk_path": "fixtures/build/apps/offscreen-pager.apk",
+        "apk_sha256": "7e2a469d20614c5ecde47b0a3407b40d4930991a23cdf0cc928179a298c51d80",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/negative/offscreen-pager-visible.yaml",
+        "scenario_sha256": "634a0dd579f7a65d8967c888470e419a71de688811b428d218ff97be5917b847"
+      },
+      "request_id": "req_3a26f4_18e808e5efb89af8",
+      "resources": {
+        "events": 85,
+        "frames_captured": 3,
+        "memory_mib": 13,
+        "peak_rss_bytes": 14667776,
+        "sessions": 1,
+        "steps": 3,
+        "wall_ms": 210
+      },
+      "scenario": {
+        "name": "negative-offscreen-pager-visible",
+        "path": "scenarios/negative/offscreen-pager-visible.yaml",
+        "sha256": "634a0dd579f7a65d8967c888470e419a71de688811b428d218ff97be5917b847"
+      },
+      "schema_version": 1,
+      "session_exit": {
+        "abi": null,
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=66MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3811071-i3859797.scope)",
+        "code": null,
+        "disk_free_bytes": 169675485184,
+        "guest_crash": null,
+        "guest_exit": 0,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "ok",
+        "panic": null,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/negative_offscreen-pager-visible/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": "teardown-evidence"
+      },
+      "session_id": "s_art_offscreen-pager",
+      "started_at": "2026-11-14T22:10:35.319Z",
+      "status": "fail",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 156,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 54,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "settle": {
+            "bound": "strict-event",
+            "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+            "mode": "strict",
+            "probe_seq": 7,
+            "settled": true,
+            "strict_rule": "event",
+            "tree_age_ms": 40
+          },
+          "status": "pass",
+          "step": "wait_for"
+        },
+        {
+          "assertions": [
+            {
+              "actual": {
+                "bounds": [
+                  1122,
+                  317,
+                  1239,
+                  368
+                ],
+                "content_desc": "",
+                "id": "n6_dev.acos.fixtures.offscreenpager:id/hidden",
+                "text": "Hidden",
+                "visible": false,
+                "visible_bounds": null,
+                "window": "main"
+              },
+              "diff": {
+                "actual": {
+                  "bounds": [
+                    1122,
+                    317,
+                    1239,
+                    368
+                  ],
+                  "content_desc": "",
+                  "id": "n6_dev.acos.fixtures.offscreenpager:id/hidden",
+                  "text": "Hidden",
+                  "visible": false,
+                  "visible_bounds": null,
+                  "window": "main"
+                },
+                "detail": "selector matched only a node that is not visible to the user (text \"Hidden\" content_desc \"\" class android.widget.TextView bounds [1122,317][1239,368] visible_bounds <none> in window \"main\"); scroll it into view first",
+                "expected": {
+                  "selector": {
+                    "text": {
+                      "exact": "Hidden"
+                    }
+                  },
+                  "visible": true
+                },
+                "path": "nodes[0].visible"
+              },
+              "expected": {
+                "selector": {
+                  "text": {
+                    "exact": "Hidden"
+                  }
+                },
+                "visible": true
+              },
+              "kind": "visible",
+              "matched_node_ids": [
+                "n6_dev.acos.fixtures.offscreenpager:id/hidden"
+              ],
+              "passed": false
+            }
+          ],
+          "duration_ms": 0,
+          "error": {
+            "class": "assertion",
+            "code": "ELEMENT_OFFSCREEN",
+            "hint": "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass.",
+            "message": "selector text==\"Hidden\" matched no visible node, but it matches a node that is not visible to the user (text \"Hidden\" content_desc \"\" class android.widget.TextView bounds [1122,317][1239,368] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass",
+            "retryable": false
+          },
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/02-assert_visible.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 2,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "settle": {
+            "bound": "strict-event",
+            "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+            "mode": "strict",
+            "probe_seq": 7,
+            "settled": true,
+            "strict_rule": "event",
+            "tree_age_ms": 40
+          },
+          "status": "fail",
+          "step": "assert_visible"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "fail"
+    },
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/negative_offscreen-pager-visible/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 210,
+    "peak_rss_bytes": 14667776
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}

@@ -2435,6 +2435,7 @@ public final class LaunchMain {
         String contentDescription = "";
         boolean password = false;
         boolean fromNode = false;
+        boolean passwordUnknown = false;
         try {
             AccessibilityNodeInfo info = v.createAccessibilityNodeInfo();
             if (info != null) {
@@ -2469,6 +2470,33 @@ public final class LaunchMain {
                     if (text.isEmpty()) text = hint;
                 }
             } catch (Throwable ignored) {
+            }
+            // AOSP TextView.onInitializeAccessibilityNodeInfoInternal flags
+            // isAnyPasswordInputType() (TYPE_TEXT_VARIATION_PASSWORD, _WEB_PASSWORD,
+            // _VISIBLE_PASSWORD, TYPE_NUMBER_VARIATION_PASSWORD) and
+            // hasPasswordTransformationMethod(). Mirror both; if a TextView's
+            // state cannot be read, the node is marked password_unknown so a
+            // focused one never proves a non-password focus (input stays masked).
+            if (v instanceof TextView) {
+                try {
+                    TextView tv = (TextView) v;
+                    int it = tv.getInputType();
+                    int variation = it & (android.text.InputType.TYPE_MASK_CLASS
+                            | android.text.InputType.TYPE_MASK_VARIATION);
+                    password = variation == (android.text.InputType.TYPE_CLASS_TEXT
+                                    | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD)
+                            || variation == (android.text.InputType.TYPE_CLASS_TEXT
+                                    | android.text.InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)
+                            || variation == (android.text.InputType.TYPE_CLASS_TEXT
+                                    | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD)
+                            || variation == (android.text.InputType.TYPE_CLASS_NUMBER
+                                    | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD)
+                            || tv.getTransformationMethod()
+                                    instanceof android.text.method.PasswordTransformationMethod;
+                } catch (Throwable t) {
+                    passwordUnknown = true;
+                    password = true;
+                }
             }
             try {
                 CharSequence cd = v.getContentDescription();
@@ -2534,6 +2562,7 @@ public final class LaunchMain {
                 .append(",\"text\":\"").append(jesc(text)).append('"')
                 .append(",\"hint\":\"").append(jesc(hint)).append('"')
                 .append(",\"password\":").append(password)
+                .append(passwordUnknown ? ",\"password_unknown\":true" : "")
                 .append(",\"content_description\":\"").append(jesc(contentDescription)).append('"')
                 .append(",\"window\":\"").append(jesc(window)).append('"')
                 .append(",\"bounds\":\"[").append(loc[0]).append(',').append(loc[1])

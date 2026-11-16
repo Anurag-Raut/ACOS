@@ -5,10 +5,10 @@ reference=art-api34-x86_64 title="Hello ACOS" 14sp=36.75px glyphs=9
 renderer=freetype FT_LOAD_NO_HINTING|FT_LOAD_RENDER (bundled FreeType 2.13.2) + rustybuzz
 whole_string_shift_x=0
 whole_string_shift_y=0
-whole_string_mean=0.009967
-whole_string_rmse=0.070489
-whole_after_per_glyph_align_mean=0.004785
-whole_after_per_glyph_align_rmse=0.041178
-per_glyph_mean=0.013021
-per_glyph_rmse=0.039007
+whole_string_mean=0.009971
+whole_string_rmse=0.070473
+whole_after_per_glyph_align_mean=0.004790
+whole_after_per_glyph_align_rmse=0.041176
+per_glyph_mean=0.013031
+per_glyph_rmse=0.038976
 thresholds_per_glyph_mean<=0.02 per_glyph_rmse<=0.05

@@ -503,6 +503,15 @@ pub struct UiNode {
     /// Whether the node is selected (`View.isSelected()`).
     #[serde(default)]
     pub selected: bool,
+    /// Whether this is a password field (`AccessibilityNodeInfo.isPassword()`,
+    /// i.e. the view's `inputType` carries `TYPE_TEXT_VARIATION_PASSWORD`).
+    ///
+    /// The platform still reports the field's text (AOSP `TextView` sets the
+    /// node text unconditionally and only *flags* the node), so this is what an
+    /// input verb uses to decide to **mask** the typed text in its reply, logs
+    /// and events. It never hides the tree.
+    #[serde(default)]
+    pub password: bool,
     /// Child nodes, in layout order.
     #[serde(default)]
     pub children: Vec<UiNode>,
@@ -535,6 +544,7 @@ impl UiNode {
             scrollable: false,
             checked: false,
             selected: false,
+            password: false,
             children: Vec::new(),
             package: String::new(),
             window: String::new(),
@@ -577,6 +587,18 @@ impl UiNode {
         self
     }
 
+    /// Builder: flag a password field.
+    pub fn with_password(mut self, password: bool) -> Self {
+        self.password = password;
+        self
+    }
+
+    /// Builder: set the framework's focus flag.
+    pub fn with_focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
     /// The rect a tap on this node must use: the clipped visible rect when the
     /// engine reports one, otherwise the full bounds. Never a point outside it.
     pub fn visible_rect(&self) -> Bounds {
@@ -602,6 +624,273 @@ impl UiNode {
             "{} | {} | {} | {}",
             self.class, self.resource_id, self.text, self.bounds
         )
+    }
+}
+
+/// Where a pointer event at one screen point lands in a [`UiTree`].
+///
+/// This is the *tree geometry* answer to "what is under the tap", computed from
+/// the same tree the tap's selectors were resolved against (the visible rect of
+/// every node, deepest match first). It is deliberately separate from the
+/// authoritative framework fact: whether the app's window **consumed** the
+/// event is `handled` in the reply, which comes from the guest's
+/// `InputEventReceiver.finishInputEvent(handled)` and is never derived from this
+/// geometry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TapHit<'a> {
+    /// The visible nodes whose rect contains the point, root first, deepest last.
+    pub path: Vec<&'a UiNode>,
+    /// The node that consumes a press at the point: the deepest node on the path
+    /// that is `clickable`. `None` means nothing on that branch takes a click.
+    pub consumer: Option<&'a UiNode>,
+    /// When `consumer` is `None`, the clickable node nearest the point that is
+    /// **not** on the path: the sibling or cousin an agent should tap instead
+    /// (a switch's label next to the switch, a row's title next to its
+    /// pressable). `None` when the tree shows no clickable node at all.
+    pub suggestion: Option<&'a UiNode>,
+}
+
+impl TapHit<'_> {
+    /// The deepest node at the point, when any node's rect contains it.
+    #[must_use]
+    pub fn node(&self) -> Option<&UiNode> {
+        self.path.last().copied()
+    }
+
+    /// Squared centre distance from `(x, y)` to a node, the ranking used to pick
+    /// a `suggestion`.
+    fn distance(node: &UiNode, x: i32, y: i32) -> i64 {
+        let (cx, cy) = node.visible_rect().center();
+        let dx = i64::from(cx) - i64::from(x);
+        let dy = i64::from(cy) - i64::from(y);
+        dx * dx + dy * dy
+    }
+}
+
+/// The child list that contains the node whose id is `id` (its siblings,
+/// including itself), anywhere in the tree.
+fn sibling_nodes<'a>(nodes: &'a [UiNode], id: &str) -> Option<&'a [UiNode]> {
+    if nodes.iter().any(|node| node.id == id) {
+        return Some(nodes);
+    }
+    nodes
+        .iter()
+        .find_map(|node| sibling_nodes(&node.children, id))
+}
+
+/// Append the visible nodes whose rect contains `(x, y)`, root first.
+///
+/// A hidden node hides its whole subtree, matching `visible`'s definition (a
+/// node is visible only when it and every ancestor are shown).
+fn hit_path<'a>(node: &'a UiNode, x: i32, y: i32, out: &mut Vec<&'a UiNode>) -> bool {
+    if !node.visible {
+        return false;
+    }
+    let rect = node.visible_rect();
+    let inside = x >= rect.left() && x < rect.right() && y >= rect.top() && y < rect.bottom();
+    if !inside {
+        return false;
+    }
+    out.push(node);
+    for child in &node.children {
+        if hit_path(child, x, y, out) {
+            break;
+        }
+    }
+    true
+}
+
+/// One node as an input reply describes it: identity, its accessible name, its
+/// geometry and the input flags an agent has to reason about.
+///
+/// `withhold_text` is the password rule: a focused password node's own text is
+/// the secret the field holds, so it is reported as `null`, never echoed.
+#[must_use]
+pub fn node_input_json(node: &UiNode, withhold_text: bool) -> serde_json::Value {
+    serde_json::json!({
+        "id": node.id,
+        "class": node.class,
+        "resource_id": node.resource_id,
+        "content_desc": node.content_desc,
+        "text": if withhold_text { serde_json::Value::Null } else { serde_json::json!(node.text) },
+        "bounds": node.bounds.to_string(),
+        "visible_bounds": node.visible_bounds.map(|b| b.to_string()),
+        "clickable": node.clickable,
+        "scrollable": node.scrollable,
+        "enabled": node.enabled,
+        "focused": node.focused,
+        "password": node.password,
+        "window": node.window,
+    })
+}
+
+/// The `target` block of a tap reply (REL3E).
+///
+/// It answers the two questions `state_changed: false` left open: **what the
+/// selector resolved to** (`selector`, `node`) and **what the injected point
+/// actually hit** (`point`, `hit`). `hit` is the tree-geometry answer computed
+/// from the same tree the tap resolved against; whether the app consumed the
+/// press is `handled` in the reply, which comes from the guest's
+/// `finishInputEvent(handled)` and never from this geometry.
+#[must_use]
+pub fn tap_target_json(
+    selector: Option<&serde_json::Value>,
+    node: Option<&UiNode>,
+    tree: Option<&UiTree>,
+    x: i32,
+    y: i32,
+) -> serde_json::Value {
+    let mut target = serde_json::Map::new();
+    if let Some(selector) = selector {
+        target.insert("selector".into(), selector.clone());
+    }
+    if let Some(node) = node {
+        target.insert("node".into(), node_input_json(node, false));
+    }
+    target.insert("point".into(), serde_json::json!({"x": x, "y": y}));
+    let mut hit_json = serde_json::Map::new();
+    hit_json.insert("method".into(), serde_json::json!("tree-geometry"));
+    match tree.map(|tree| tree.tap_hit(x, y)) {
+        Some(hit) => {
+            hit_json.insert(
+                "node".into(),
+                hit.node().map_or(serde_json::Value::Null, |node| {
+                    node_input_json(node, false)
+                }),
+            );
+            hit_json.insert(
+                "clickable".into(),
+                serde_json::json!(hit.node().is_some_and(|node| node.clickable)),
+            );
+            hit_json.insert(
+                "consumer".into(),
+                hit.consumer.map_or(serde_json::Value::Null, |node| {
+                    node_input_json(node, false)
+                }),
+            );
+            hit_json.insert(
+                "suggest".into(),
+                hit.suggestion.map_or(serde_json::Value::Null, |node| {
+                    node_input_json(node, false)
+                }),
+            );
+        }
+        None => {
+            // No tree: the point was never hit-tested. Say so rather than
+            // pretending nothing is there.
+            hit_json.insert("node".into(), serde_json::Value::Null);
+            hit_json.insert("clickable".into(), serde_json::Value::Null);
+            hit_json.insert("consumer".into(), serde_json::Value::Null);
+            hit_json.insert("suggest".into(), serde_json::Value::Null);
+            hit_json.insert(
+                "note".into(),
+                serde_json::json!("no bound tree to hit-test against"),
+            );
+        }
+    }
+    target.insert("hit".into(), serde_json::Value::Object(hit_json));
+    serde_json::Value::Object(target)
+}
+
+/// The `name` an agent would use for a node: its text, else its content
+/// description (the platform's accessible name), for a one-line hint.
+fn hint_node_name(node: &serde_json::Value) -> String {
+    for field in ["text", "content_desc"] {
+        if let Some(value) = node.get(field).and_then(serde_json::Value::as_str) {
+            if !value.trim().is_empty() {
+                return format!("{value:?}");
+            }
+        }
+    }
+    String::from("(no name)")
+}
+
+/// REL3E: the one-line reason a reply is not enough on its own.
+///
+/// It only ever explains the framework fact (`handled`) together with the
+/// hit-test in `target`; it never invents a reason the evidence does not show.
+/// `None` means the action needs no explanation (the app consumed it and the
+/// screen changed).
+#[must_use]
+pub fn handling_hint(
+    target: Option<&serde_json::Value>,
+    handled: Option<bool>,
+    state_changed: bool,
+) -> Option<String> {
+    let hit = target.and_then(|target| target.get("hit"));
+    let consumer = hit
+        .and_then(|hit| hit.get("consumer"))
+        .filter(|value| !value.is_null());
+    let suggest = hit
+        .and_then(|hit| hit.get("suggest"))
+        .filter(|value| !value.is_null());
+    let hit_node = hit
+        .and_then(|hit| hit.get("node"))
+        .filter(|value| !value.is_null());
+    match handled {
+        None => Some(
+            "the guest did not ack every event of this action (see handled_evidence.published \
+             vs acked), so whether the app consumed it is unknown; nothing here claims it was \
+             handled or that nothing happened"
+                .to_string(),
+        ),
+        Some(false) => {
+            if let Some(consumer) = consumer {
+                return Some(format!(
+                    "the app's window did NOT consume this input even though the point is on the \
+                     clickable {} {} at {} (its own `finishInputEvent(handled)` answered false): \
+                     the control is disabled or a parent intercepted the press, so no state change \
+                     is expected",
+                    consumer["class"].as_str().unwrap_or("view"),
+                    hint_node_name(consumer),
+                    consumer["bounds"].as_str().unwrap_or("?"),
+                ));
+            }
+            let Some(hit_node) = hit_node else {
+                return Some(
+                    "nothing at this point consumed the input and the tree has no node there \
+                     (the app's window answered `finishInputEvent(handled) = false`); nothing \
+                     changed because nothing was tappable"
+                        .to_string(),
+                );
+            };
+            let mut hint = format!(
+                "nothing tappable there: the node at this point is {} {} at {}, which is not \
+                 clickable and neither is any ancestor, and the app's window answered \
+                 `finishInputEvent(handled) = false` (no handler consumed the input)",
+                hit_node["class"].as_str().unwrap_or("view"),
+                hint_node_name(hit_node),
+                hit_node["bounds"].as_str().unwrap_or("?"),
+            );
+            if let Some(suggest) = suggest {
+                let (cx, cy) = suggest
+                    .get("bounds")
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(|bounds| bounds.parse::<Bounds>().ok())
+                    .map(|bounds| bounds.center())
+                    .unwrap_or((0, 0));
+                hint.push_str(&format!(
+                    "; tap the nearest clickable {} {} at {} (centre {cx},{cy}) instead",
+                    suggest["class"].as_str().unwrap_or("view"),
+                    hint_node_name(suggest),
+                    suggest["bounds"].as_str().unwrap_or("?"),
+                ));
+            } else {
+                hint.push_str(
+                    "; this screen shows no clickable node, so scroll or open the control that \
+                     owns the state first",
+                );
+            }
+            Some(hint)
+        }
+        Some(true) if !state_changed => Some(
+            "the app's window consumed the input (`finishInputEvent(handled) = true`) but the \
+             settled frame shows no change: the handler may be asynchronous, or the control \
+             already had that state. Assert on the state you expect instead of expecting a \
+             change"
+                .to_string(),
+        ),
+        Some(true) => None,
     }
 }
 
@@ -679,6 +968,58 @@ impl UiTree {
             .find(|node| no_index.accepts_node(node))
     }
 
+    /// Hit-test `(x, y)` against the tree's visible rects.
+    ///
+    /// The deepest chain wins; when two windows both contain the point the later
+    /// root (the window drawn on top in the probe's document order) wins, which
+    /// is the same order every other tree consumer reads. Only nodes that are
+    /// `visible` to the user can be hit: an off-screen node never answers a tap,
+    /// exactly as it never resolves as a tap target.
+    #[must_use]
+    pub fn tap_hit(&self, x: i32, y: i32) -> TapHit<'_> {
+        let mut best: Vec<&UiNode> = Vec::new();
+        for root in &self.nodes {
+            let mut path = Vec::new();
+            hit_path(root, x, y, &mut path);
+            // `>=` keeps the later (top-most) window when both contain the point.
+            if !path.is_empty() && path.len() >= best.len() {
+                best = path;
+            }
+        }
+        let consumer = best.iter().rev().find(|node| node.clickable).copied();
+        let suggestion = if consumer.is_some() {
+            None
+        } else {
+            // A **sibling** of the deepest node on the path wins over anything
+            // further away: the switch beside a row's label is the control that
+            // owns the state, even when a button in the next row is closer to
+            // the finger. Only when no level of the path has a clickable
+            // sibling does the nearest clickable node anywhere answer.
+            best.iter()
+                .rev()
+                .find_map(|on_path| {
+                    sibling_nodes(&self.nodes, &on_path.id).and_then(|siblings| {
+                        siblings
+                            .iter()
+                            .filter(|node| node.id != on_path.id && node.visible && node.clickable)
+                            .min_by_key(|node| TapHit::distance(node, x, y))
+                    })
+                })
+                .or_else(|| {
+                    self.all_nodes()
+                        .into_iter()
+                        .filter(|node| node.visible && node.clickable)
+                        .filter(|node| !best.iter().any(|on_path| on_path.id == node.id))
+                        .min_by_key(|node| TapHit::distance(node, x, y))
+                })
+        };
+        TapHit {
+            path: best,
+            consumer,
+            suggestion,
+        }
+    }
+
     /// The first node that matches the selector's *fields* but is not visible to
     /// the user. Turns a silent "not found" into an honest `ELEMENT_OFFSCREEN`
     /// failure that names the off-screen node and its bounds.
@@ -715,25 +1056,55 @@ impl UiTree {
     /// node tappable, and a node that is not visible to the user resolves to
     /// nothing here (callers report `ELEMENT_OFFSCREEN`).
     pub fn find_input_target(&self, selector: &Selector) -> Option<&UiNode> {
-        if let Some(node) = self.find_one(selector) {
-            return Some(node);
+        self.find_input_candidates(selector).into_iter().next()
+    }
+
+    /// Every node [`UiTree::find_input_candidates`] would consider a target for
+    /// `selector`, so a caller can refuse an **ambiguous** selector instead of
+    /// silently picking one.
+    ///
+    /// Resolution is two-staged and the stages are never mixed:
+    ///
+    /// 1. the ordinary field match among user-visible nodes ([`UiTree::find_all`]);
+    /// 2. only when stage 1 is empty **and** the selector is a `text` selector:
+    ///    user-visible nodes whose own text is empty and whose `content_desc`
+    ///    matches (the RN accessible-name case).
+    ///
+    /// An exact field match therefore always outranks a content-description
+    /// match: the drawn label of the active bottom tab wins over the text-less
+    /// pressable that carries the same name. Within the stage that wins, every
+    /// match is returned in document order, so a caller that gets more than one
+    /// knows the selector does not name a single node.
+    ///
+    /// `selector.index`, when set, is honoured by stage 1 (it is an explicit
+    /// pick) and makes the result that one node.
+    pub fn find_input_candidates(&self, selector: &Selector) -> Vec<&UiNode> {
+        let direct = self.find_all(selector);
+        if !direct.is_empty() {
+            return direct;
         }
-        let text = selector.text.as_ref()?;
+        let Some(text) = selector.text.as_ref() else {
+            return Vec::new();
+        };
+        // A caller that pinned an occurrence gets exactly that one; never a
+        // second-stage list that ignores the pin.
+        if selector.index.is_some() {
+            return Vec::new();
+        }
         // The other selector fields (id/content_desc/class/bounds) still have to
         // match; only the text field is answered by the content description.
         let mut probe = selector.clone();
         probe.text = None;
         probe.index = None;
-        let mut hits = self.all_nodes().into_iter().filter(|node| {
-            node.visible
-                && node.text.is_empty()
-                && probe.matches_node(node)
-                && text.matches(&node.content_desc)
-        });
-        match selector.index {
-            Some(index) => hits.nth(index),
-            None => hits.next(),
-        }
+        self.all_nodes()
+            .into_iter()
+            .filter(|node| {
+                node.visible
+                    && node.text.is_empty()
+                    && probe.matches_node(node)
+                    && text.matches(&node.content_desc)
+            })
+            .collect()
     }
 
     /// The canonical `observe --text` rendering, one line per node with text or
@@ -905,6 +1276,101 @@ mod tests {
         assert!(!policy_only.validation_errors().is_empty());
     }
 
+    /// The Gaten search field as the API-34 guest reports it: an RN
+    /// `TextInput` whose `text` is its placeholder (AOSP takes the hint when the
+    /// field is empty) and whose accessible *name* is the content description.
+    fn rn_search_field(collapsed_text: bool) -> UiNode {
+        UiNode::new("n27_", "Z4.g", Bounds::new(189, 366, 978, 482))
+            .with_text(if collapsed_text { "猫, ねこ, neko..." } else { "" })
+            .with_password(false)
+    }
+
+    fn with_content_desc(mut node: UiNode, desc: &str) -> UiNode {
+        node.content_desc = desc.to_string();
+        node
+    }
+
+    #[test]
+    fn content_desc_is_an_explicit_selector_field() {
+        // FB1: an agent must be able to name the field by the label it read,
+        // without hand-computing bounds. `text` cannot: the node's text is the
+        // placeholder, so the accessible-name stage never reaches it either.
+        let tree = UiTree::new(
+            frame(),
+            "com.gaten",
+            vec![with_content_desc(rn_search_field(true), "Search Japanese dictionary")],
+        );
+        let desc = Selector {
+            content_desc: Some(TextMatch::exact("Search Japanese dictionary")),
+            ..Selector::default()
+        };
+        assert_eq!(tree.find_all(&desc).len(), 1);
+        assert_eq!(tree.find_input_candidates(&desc).len(), 1);
+        assert!(tree
+            .find_input_target(&Selector::by_text("Search Japanese dictionary"))
+            .is_none());
+    }
+
+    #[test]
+    fn several_visible_matches_are_all_returned_as_candidates() {
+        // Two user-visible buttons that share a label: the caller must be able
+        // to see that the selector is ambiguous (and refuse), not get a pick.
+        let first = UiNode::new("n1", "android.widget.Button", Bounds::new(0, 0, 100, 60))
+            .with_text("Continue");
+        let second = UiNode::new("n2", "android.widget.Button", Bounds::new(0, 60, 100, 120))
+            .with_text("Continue");
+        let hidden = UiNode::new("n3", "android.widget.Button", Bounds::new(0, 120, 100, 180))
+            .with_text("Continue");
+        let mut hidden = hidden;
+        hidden.visible = false;
+        let tree = UiTree::new(frame(), "dev.test", vec![first, second, hidden]);
+        let selector = Selector::by_text("Continue");
+        let candidates = tree.find_input_candidates(&selector);
+        assert_eq!(
+            candidates.len(),
+            2,
+            "only the user-visible matches count: {candidates:#?}"
+        );
+        assert_eq!(candidates[0].id, "n1");
+        assert_eq!(candidates[1].id, "n2");
+        // `index` is an explicit pick and collapses the list to one.
+        let pinned = Selector {
+            index: Some(1),
+            ..Selector::by_text("Continue")
+        };
+        assert_eq!(tree.find_input_candidates(&pinned).len(), 1);
+        assert_eq!(tree.find_input_candidates(&pinned)[0].id, "n2");
+    }
+
+    #[test]
+    fn the_text_stage_wins_over_the_content_desc_stage() {
+        // RNTAP: an exact text match outranks a content-description match, and
+        // the stages are never mixed, so the candidates of one answer belong to
+        // one field.
+        let label = UiNode::new("n1", "X4.e", Bounds::new(362, 2214, 445, 2251))
+            .with_text("Home");
+        let pressable = with_content_desc(
+            UiNode::new("n2", "b5.g", Bounds::new(280, 2151, 453, 2316)),
+            "Home",
+        );
+        let tree = UiTree::new(frame(), "com.gaten", vec![label, pressable]);
+        let candidates = tree.find_input_candidates(&Selector::by_text("Home"));
+        assert_eq!(candidates.len(), 1, "the drawn label is the only text match");
+        assert_eq!(candidates[0].class, "X4.e");
+        // With no text match at all, the content description answers alone.
+        let tree = UiTree::new(
+            frame(),
+            "com.gaten",
+            vec![with_content_desc(
+                UiNode::new("n2", "b5.g", Bounds::new(280, 2151, 453, 2316)),
+                "Home",
+            )],
+        );
+        let candidates = tree.find_input_candidates(&Selector::by_text("Home"));
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].class, "b5.g");
+    }
+
     #[test]
     fn regex_and_validation() {
         assert!(TextMatch::regex("^Hello, .+! clicks: [0-9]+$").matches("Hello, World! clicks: 1"));
@@ -961,5 +1427,65 @@ mod tests {
             "bounds=[0,0][100,100] include_invisible=true"
         );
         assert_eq!(Selector::default().human(), "<empty selector>");
+    }
+
+    /// REL3E: the hit-test answers "what is at this point", deepest node first,
+    /// and ranks a clickable **sibling** above a nearer clickable node in
+    /// another subtree - the switch beside a row's label is the control that
+    /// owns the state even when a button below is closer to the finger.
+    #[test]
+    fn tap_hit_finds_the_deepest_node_and_prefers_a_clickable_sibling() {
+        let label = UiNode::new("label", "android.widget.TextView", Bounds::new(40, 300, 660, 405))
+            .with_text("Floating button");
+        let switch = UiNode::new("switch", "android.widget.Switch", Bounds::new(670, 300, 1040, 405))
+            .with_text("Floating button")
+            .clickable(true);
+        let row = UiNode::new("row", "android.widget.LinearLayout", Bounds::new(40, 300, 1040, 430))
+            .with_children(vec![label, switch]);
+        // A clickable button in the next row is geometrically closer to (350,350)
+        // than the switch is, and must still lose to the sibling.
+        let button = UiNode::new("inc", "android.widget.Button", Bounds::new(40, 430, 280, 560))
+            .with_text("Increment")
+            .clickable(true);
+        let root = UiNode::new("root", "android.widget.LinearLayout", Bounds::new(0, 0, 1080, 2400))
+            .with_children(vec![row, button]);
+        let tree = UiTree::new(frame(), "dev.acos.fixtures.taptargets", vec![root]);
+
+        let hit = tree.tap_hit(350, 350);
+        assert_eq!(hit.path.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), vec!["root", "row", "label"]);
+        assert_eq!(hit.node().map(|n| n.id.as_str()), Some("label"));
+        assert_eq!(hit.consumer, None, "neither the label nor its ancestors are clickable");
+        assert_eq!(
+            hit.suggestion.map(|n| n.id.as_str()),
+            Some("switch"),
+            "the sibling switch wins over the nearer button in another row"
+        );
+
+        // The switch itself is a consumer: no suggestion, and the hit node is it.
+        let hit = tree.tap_hit(800, 350);
+        assert_eq!(hit.node().map(|n| n.id.as_str()), Some("switch"));
+        assert_eq!(hit.consumer.map(|n| n.id.as_str()), Some("switch"));
+        assert_eq!(hit.suggestion, None);
+
+        // A clickable ancestor is the consumer even when the leaf takes no click.
+        let inner = UiNode::new("inner", "android.widget.TextView", Bounds::new(60, 320, 200, 380))
+            .with_text("Row title");
+        let pressable =
+            UiNode::new("pressable", "android.view.ViewGroup", Bounds::new(40, 300, 660, 405))
+                .with_children(vec![inner])
+                .clickable(true);
+        let root = UiNode::new("root", "android.widget.LinearLayout", Bounds::new(0, 0, 1080, 2400))
+            .with_children(vec![pressable]);
+        let tree = UiTree::new(frame(), "dev.acos.fixtures.taptargets", vec![root]);
+        let hit = tree.tap_hit(100, 350);
+        assert_eq!(hit.node().map(|n| n.id.as_str()), Some("inner"));
+        assert_eq!(hit.consumer.map(|n| n.id.as_str()), Some("pressable"));
+
+        // A point outside every rect hits nothing at all (the root is a real
+        // node, so only a point outside the root is empty).
+        let empty = tree.tap_hit(2000, 2000);
+        assert!(empty.path.is_empty());
+        assert_eq!(empty.node(), None);
+        assert_eq!(empty.consumer, None);
     }
 }

@@ -1,0 +1,26 @@
+{
+  "request_id": "req_2d7d3_18e865e83f117fca",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "native-runtime",
+  "session_id": "s_cli",
+  "capabilities_used": [],
+  "result": {
+    "already_absent": true,
+    "destroyed": false,
+    "engine": "rust-vm, frozen",
+    "engine_frozen": true,
+    "evidence": {
+      "frame": "guest-asserted",
+      "logs": "guest-asserted",
+      "tree": "guest-asserted"
+    },
+    "evidence_label": "none",
+    "note": "the frozen Rust VM produced this reply; it is not real ART",
+    "trust": "trusted"
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

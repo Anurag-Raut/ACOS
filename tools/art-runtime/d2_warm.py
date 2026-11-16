@@ -40,6 +40,7 @@ import glob
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -273,13 +274,26 @@ class Serve:
                    ACOS_RUNTIME_DIR=str(self.scratch / "runtime"),
                    ACOS_CACHE_DIR=str(self.scratch / "cache"),
                    ACOS_SERVE_ARTIFACTS=str(self.scratch / "sessions"))
+        # SERVELEAK: `--owner-pid` ties this rep's daemon to the harness. If the
+        # harness dies hard (kill -9, a killed guard), the daemon destroys its
+        # guest sessions and exits instead of holding live ART guests for
+        # `idle` seconds. The daemon is nobody else's: it is spawned here, with
+        # this rep's socket under this rep's scratch.
         self.argv = [acos, "serve", "--socket", self.socket_path,
                      "--engine", engine, "--idle-timeout", str(idle),
-                     "--max-sessions", str(max_sessions)]
+                     "--max-sessions", str(max_sessions),
+                     "--owner-pid", str(os.getpid())]
         self.proc = subprocess.Popen(self.argv, cwd=str(REPO), env=env,
                                      stdin=subprocess.DEVNULL,
                                      stdout=self.stdout, stderr=self.stderr,
                                      start_new_session=True)
+        # SERVELEAK2/F2: record this daemon (pid + start time) for the run's
+        # reaper. `acos-bench.sh` sets ACOS_BENCH_PIDFILE per run and exports
+        # ACOS_BENCH_RUN_ID, which this daemon inherits through `env`; the reaper
+        # re-verifies both before it signals anything, so a concurrent bench run
+        # sharing the scratch root can never reap this daemon (or be reaped by
+        # it).
+        _record_daemon(self.proc.pid)
         deadline = time.time() + 30
         while time.time() < deadline:
             if Path(self.socket_path).exists():
@@ -294,12 +308,29 @@ class Serve:
         return agent_loop.Daemon(self.socket_path, timeout=180.0)
 
     def close(self):
+        """Stop the daemon and prove it is gone (SERVELEAK).
+
+        `acos serve` destroys its guest sessions on SIGTERM before it exits, so a
+        terminated daemon cannot leave a bwrap/dalvikvm64 behind. The daemon is
+        started with `start_new_session=True`, so the group kill below can only
+        reach processes this rep created — never another agent's.
+        """
         try:
             if self.proc.poll() is None:
                 self.proc.terminate()
                 try:
-                    self.proc.wait(timeout=15)
+                    self.proc.wait(timeout=20)
                 except subprocess.TimeoutExpired:
+                    # SERVELEAK2/F4: signal the group **while the leader is still
+                    # unreaped**. Its pid (hence its group id) cannot be recycled
+                    # until it is waited for, so `killpg` here names this rep's
+                    # own group and never a stranger's. A `killpg` after `wait()`
+                    # is the hazard the review found: the id is free by then and
+                    # another agent's `setsid`/`bwrap` can own it.
+                    try:
+                        os.killpg(self.proc.pid, signal.SIGKILL)
+                    except OSError:
+                        pass
                     self.proc.kill()
                     self.proc.wait(timeout=10)
         finally:
@@ -323,6 +354,14 @@ def survivors(scratch):
         except OSError:
             continue
         if str(scratch) in cmd and int(name) != os.getpid():
+            # SERVELEAK2/F2/F1: a name match is not ownership. Two runs sharing
+            # the default scratch root name the same paths, so a report must be
+            # filtered by the run id every process this run started inherits
+            # (`acos-bench.sh` exports it; the daemon passes it on). A process
+            # without our run id belongs to another run: not a leak of ours.
+            run_id = os.environ.get("ACOS_BENCH_RUN_ID")
+            if run_id and not _environ_has(int(name), "ACOS_BENCH_RUN_ID=" + run_id):
+                continue
             out.append({"pid": int(name), "comm": comm_of(int(name)), "cmd": cmd[:240]})
     return out
 

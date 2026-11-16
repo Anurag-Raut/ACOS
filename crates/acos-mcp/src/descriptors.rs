@@ -225,11 +225,17 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
                 ),
                 None => (false, Some("unrecognised protocol command".to_string())),
             };
+            let input_schema =
+                if SESSION_ADDRESSED_PROTOCOL_TOOLS.contains(&descriptor.name.as_str()) {
+                    with_session_id(descriptor.input_schema)
+                } else {
+                    descriptor.input_schema
+                };
             ToolInfo {
                 tool_name: descriptor.name,
                 command,
                 description: descriptor.description,
-                input_schema: descriptor.input_schema,
+                input_schema,
                 available,
                 fidelity: command
                     .map(command_fidelity)
@@ -242,6 +248,40 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
     tools.push(help_tool());
     tools.extend(session_tools());
     tools
+}
+
+/// Protocol tools the session backend addresses by session id.
+///
+/// `SessionBackend` resolves the session from `base.session_id` **or** a
+/// top-level `session_id` (`session_backend::session_id`, and
+/// `forward_session_tool` copies the top-level form into `base` before any
+/// daemon sees it). The typed protocol request structs carry the id in `base`
+/// only, so the published schema is extended here — one helper used by both the
+/// tool list and the dispatcher's argument check, so the two cannot drift and a
+/// documented call (`tools/release/mcp_smoke.py`'s
+/// `acos_destroy {"session_id": sid}`) is not rejected by our own schema.
+pub const SESSION_ADDRESSED_PROTOCOL_TOOLS: &[&str] =
+    &["acos_observe", "acos_reset", "acos_destroy", "acos_run"];
+
+/// The `session_id` property every session-addressed tool publishes.
+fn session_id_property() -> Value {
+    json!({
+        "type": "string",
+        "description": "Session to address, the same value as `base.session_id` (the \
+                        documented short form: `acos_observe_tree {\"session_id\": \
+                        \"mcp-1234\", \"screenshot\": true}`). Omit it for this server \
+                        process's default session."
+    })
+}
+
+/// Add the top-level `session_id` to a closed schema (idempotent).
+fn with_session_id(mut schema: Value) -> Value {
+    if let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) {
+        properties
+            .entry("session_id".to_string())
+            .or_insert_with(session_id_property);
+    }
+    schema
 }
 
 /// The tools `tools/list` advertises: every tool this build can actually run.
@@ -271,9 +311,11 @@ pub fn session_tools() -> Vec<ToolInfo> {
     let mut out = Vec::with_capacity(SESSION_TOOL_NAMES.len());
     for name in SESSION_TOOL_NAMES {
         let (description, schema) = session_tool_spec(name);
-        // `acos_doctor` is a host preflight, not a runtime session op.
+        // `acos_doctor` is a host preflight, not a runtime session op — and, like
+        // `acos_help`/`acos_capabilities`, it says nothing about app behaviour, so
+        // its fidelity is `n/a` rather than a misleading `static-analysis`.
         let fidelity = if *name == "acos_doctor" {
-            Fidelity::StaticAnalysis
+            Fidelity::NotApplicable
         } else {
             Fidelity::NativeRuntime
         };
@@ -290,6 +332,56 @@ pub fn session_tools() -> Vec<ToolInfo> {
     out
 }
 
+/// The published argument schema of one tool, for the dispatcher's
+/// unknown-argument check.
+///
+/// It is the same schema `tools/list` publishes (protocol command, session tool,
+/// `acos_capabilities`, `acos_help`), so the rule a client validates against and
+/// the rule the server enforces cannot drift.
+#[must_use]
+pub fn tool_schema(tool_name: &str) -> Option<Value> {
+    if tool_name == CAPABILITIES_TOOL {
+        return Some(capabilities_tool().input_schema);
+    }
+    if tool_name == HELP_TOOL {
+        return Some(help_tool().input_schema);
+    }
+    if SESSION_TOOL_NAMES.contains(&tool_name) {
+        return Some(session_tool_spec(tool_name).1);
+    }
+    // ARGS: the protocol descriptors already close their object
+    // (`McpToolDescriptor::new`), so the schema a client validates and the
+    // schema this check enforces are the same document — including the
+    // top-level `session_id` the session backend accepts (see
+    // [`SESSION_ADDRESSED_PROTOCOL_TOOLS`]).
+    acos_protocol::mcp_tools()
+        .tools
+        .into_iter()
+        .find(|tool| tool.name == tool_name)
+        .map(|tool| {
+            if SESSION_ADDRESSED_PROTOCOL_TOOLS.contains(&tool_name) {
+                with_session_id(tool.input_schema)
+            } else {
+                tool.input_schema
+            }
+        })
+}
+
+/// The tool names `tools/list` may advertise: protocol commands plus
+/// `acos_capabilities`, `acos_help` and the session tools.
+#[must_use]
+pub fn known_tool_names() -> Vec<String> {
+    let mut names: Vec<String> = acos_protocol::mcp_tools()
+        .tools
+        .into_iter()
+        .map(|tool| tool.name)
+        .collect();
+    names.push(CAPABILITIES_TOOL.to_string());
+    names.push(HELP_TOOL.to_string());
+    names.extend(SESSION_TOOL_NAMES.iter().map(|name| (*name).to_string()));
+    names
+}
+
 fn session_tool_spec(name: &str) -> (&'static str, Value) {
     let base = json!({
         "type": "object",
@@ -299,15 +391,37 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             "session_id": {"type": "string"}
         }
     });
-    let with_base = |properties: Value| {
+    // ARGS: a closed object. An unknown argument is a caller error, not a flag
+    // to ignore: `acos_observe_tree {"screenshot": true}` on a build without it
+    // read as a success (feedback 2026-11-15). The server enforces the same rule
+    // in `crate::args::check`, so a client that does not validate still cannot
+    // get a silent no-op.
+    //
+    // The published schema names **every** argument the session backend reads.
+    // The backend accepts `session_id` at the top level as well as in `base`
+    // (older clients and `tools/release/mcp_smoke.py` send it there), and a
+    // closed schema that rejected it would be lying about what works — the
+    // exact failure this module was created to stop, from the other side. The
+    // test `tests/documentation_args.rs` walks every documented call in
+    // `docs/*.md`, `tools/**/*mcp*.py` and `tests/` and fails when a documented
+    // argument is not in the schema.
+    let closed = |properties: Value| {
         let mut schema = json!({
             "type": "object",
             "properties": properties,
-            "additionalProperties": true
+            "additionalProperties": false
         });
         schema["properties"]["base"] = base.clone();
         schema
     };
+    let with_base = |properties: Value| {
+        let mut schema = closed(properties);
+        schema["properties"]["session_id"] = session_id_property();
+        schema
+    };
+    // `acos_doctor` is a host preflight, not a session operation: it has no
+    // session to address, so it does not publish `session_id`.
+    let host_only = closed;
     match name {
         "acos_launch" => (
             "Call this FIRST for an app you want to drive: it boots the APK in an in-process \
@@ -322,7 +436,24 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              framework native the engine does not implement yet, naming `details.api`).",
             with_base(json!({
                 "apk": {"type": "string", "description": "Path to the .apk, under ACOS_ALLOWED_ROOTS."},
+                "full": {
+                    "type": "boolean",
+                    "description": "Include the full tree inline instead of the compact screen (default false). \
+                                    The full tree is always written to `tree_path`; a full tree that would \
+                                    exceed the reply cap is replaced by the compact view and the path."
+                },
+                "cursor": {
+                    "type": "integer", "minimum": 0,
+                    "description": "Compact-screen page cursor from a previous reply's `tree_next_cursor`."
+                },
                 "timeout_ms": {"type": "integer", "minimum": 1, "description": "Wall-clock ceiling for the launch (defaults to the server call budget)."},
+                "display": {
+                    "type": "string",
+                    "description": "Display override for the in-process session, `WIDTHxHEIGHT@DPI` (for \
+                                    example `1080x2400@400`). This argument is accepted by the \
+                                    in-process engine; the ART daemon route reports the display it \
+                                    used instead of overriding it."
+                },
                 "settle": {
                     "type": "string", "enum": ["fast", "strict", "content"],
                     "description": "How the launch reply binds its tree. `strict` (default) keeps the \
@@ -363,18 +494,63 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     single-threaded child session process that enters the \
                                     sandbox before launching; later observe/action calls are \
                                     proxied to that confined child."
+                },
+                "flutter": {
+                    "type": "boolean",
+                    "description": "Declare this APK a Flutter app: forces the native \
+                                    (confined child) route even before the structural check \
+                                    sees libflutter.so/flutter_assets, and picks the Flutter \
+                                    engine session when the APK really is Flutter. Detection \
+                                    is otherwise structural, never a manifest guess; the \
+                                    reply's `engine` says which engine actually ran."
+                },
+                "rn": {
+                    "type": "boolean",
+                    "description": "Declare this APK a React Native app: forces the native \
+                                    (confined child) route and picks the React Native bridge \
+                                    session when the APK really is RN. Detection is otherwise \
+                                    structural (libreactnativejni.so / index.android.bundle); \
+                                    the reply's `engine` says which engine actually ran."
+                },
+                "label": {
+                    "type": "string",
+                    "description": "FB5: a name for this session, echoed in the launch reply and in \
+                                    `acos_status` (`sessions[].label`). Give each session you park a \
+                                    label you can recognise — the server destroys its own idle \
+                                    sessions, and the label is how you tell which one went."
+                },
+                "idle_ttl_s": {
+                    "type": "integer", "minimum": 0,
+                    "description": "FB5: seconds of idleness before this server destroys the session \
+                                    (default 600 = 10 min, or ACOS_SESSION_IDLE_TTL_S; `0` disables). \
+                                    Any later MCP call on the session renews the clock. An expired \
+                                    session's guest is gone and the next call returns \
+                                    SESSION_NOT_FOUND with `details.reason=idle_ttl_expired` and the \
+                                    TTL, so a parked session fails loudly instead of eating memory."
                 }
             })),
         ),
         "acos_observe_tree" => (
             "Walk the live framework View hierarchy of the held session (WindowManagerGlobal -> \
-             ViewRootImpl -> ViewGroup) and return the structured node tree (class, bounds, text, \
-             resource_id, clickable/enabled/focused/scrollable, children). Call it after \
+             ViewRootImpl -> ViewGroup) and return a COMPACT screen by default: the visible \
+             text/content_desc nodes in reading order with bounds, clickable flag and ids, paged \
+             with `cursor` (never head/tail-cut). The full tree is always written to `tree_path`; \
+             `full:true` returns it inline when it fits the reply cap. Call it after \
              `acos_launch`, before any selector-based tap. Before the app adds a window it returns \
              `UNSUPPORTED_BACKEND` with `details.reason=not_ready` and `details.stage_reached`, \
              never an empty tree. Common errors: UNSUPPORTED_BACKEND (not_ready), TIMEOUT.",
             with_base(json!({
                 "max_nodes": {"type": "integer", "minimum": 1, "description": "Truncate the walk after this many nodes."},
+                "full": {
+                    "type": "boolean",
+                    "description": "Include the full tree inline instead of the compact screen (default false). \
+                                    The full tree is always written to `tree_path`; a full tree that would \
+                                    exceed the reply cap is replaced by the compact view and the path."
+                },
+                "cursor": {
+                    "type": "integer", "minimum": 0,
+                    "description": "Compact-screen page cursor from a previous reply's `tree_next_cursor`."
+                },
                 "settle": {
                     "type": "string", "enum": ["fast", "strict", "content"],
                     "description": "`strict` (default) is the event-settled rule and assertion evidence. \
@@ -387,24 +563,61 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                     "type": "integer", "minimum": 1, "maximum": 600000,
                     "description": "P12: bound the strict settle wait. On timeout the tree is still \
                                     returned with `settled:false` and `bound:timeout`."
+                },
+                "screenshot": {
+                    "type": ["boolean", "string"],
+                    "description": "FB2: `true` writes this frame's lossless PNG under the session's \
+                                    artifacts and returns `screenshot.path` (absolute), `width`, \
+                                    `height`, `display_size`, `display_origin` and `frame_seq`, plus \
+                                    a bounded inline preview in this reply. A string writes to that \
+                                    path instead. A placeholder/no-pixel frame answers \
+                                    NO_FRESH_FRAME, never an empty success. `display_origin` is the \
+                                    offset between PNG pixels and tree bounds: png_y = display_y - \
+                                    display_origin.y."
                 }
             })),
         ),
         "acos_tap" => (
             "Tap in the held session. Identify the target by `id` (a node whose `resource_id` \
              equals it, or its bare local name after `/`, exactly what `acos_observe_tree` \
-             exposes), by `text` (a node whose text or content-desc equals it), by a React Native \
-             `testID` (resolves to the nearest clickable ancestor), or by a point `x`,`y` (both \
-             required). Precedence is `id`, then `text`, then `testID`, then `x`/`y`. Requires \
-             `acos_observe_tree` first for selector taps. Returns action/accepted/input_ack_seq. \
-             Common errors: ELEMENT_NOT_FOUND with `details.kind=NoSuchNode`/`NoUiTree` (observe \
-             first), `NoWindowAtPoint` (no frame yet), TIMEOUT. A React Native session has no View \
-             tree and no pixel frame, so point taps are unsupported there.",
+             exposes), by `content_desc` (a node's accessibility label — what a React Native \
+             pressable carries its whole name in, e.g. \"Search Japanese dictionary\"), by \
+             `text` (the platform's *accessible name*: the node's text, else its content \
+             description among nodes the user can see), by a React Native `testID` (resolves \
+             to the nearest clickable ancestor), or by a point `x`,`y` (both required). \
+             Precedence is `id`, then `content_desc`, then `text`, then `testID`, then `x`/`y`. \
+             A selector that matches more than one user-visible node is refused as \
+             `AMBIGUOUS_SELECTOR` with every candidate (`id`, `text`, `content_desc`, `bounds`) \
+             — narrow it or pass `index`; nothing is tapped silently. Requires \
+             `acos_observe_tree` first for selector taps. Returns action/accepted/input_ack_seq \
+             plus `changes`, the settled tree diff of the tap (`added`/`removed`/`changed` \
+             nodes, current activity, focused node) so the next step usually needs no \
+             `acos_observe_tree`; `diff:false` turns it off. \
+             Common errors: AMBIGUOUS_SELECTOR (several matches), ELEMENT_NOT_FOUND with \
+             `details.kind=NoSuchNode`/`NoUiTree` (observe first), ELEMENT_OFFSCREEN (only an \
+             invisible node matches), TIMEOUT. A React Native session has no View tree and no \
+             pixel frame, so point taps are unsupported there.",
             with_base(json!({
+                "diff": {
+                    "type": "boolean",
+                    "description": "FB3: include `changes`, the settled UI-tree diff of this action \
+                                    (added/removed/changed nodes with `id`/`text`/`content_desc`/ \
+                                    `class`/`bounds`; a changed node also lists which `fields` \
+                                    changed, old -> new; plus the current activity and the focused \
+                                    node). Computed from trees the session already holds, so it \
+                                    costs no extra traversal and no extra guest round trip. \
+                                    Default `true`; `false` returns the pre-FB3 reply byte for \
+                                    byte. Each list is capped at 40 entries with \
+                                    `truncated:true` and the true `counts`; \
+                                    `changes.baseline:\"none\"` means the session held no \
+                                    pre-action tree (no diff is invented)."
+                },
                 "x": {"type": "integer", "description": "X coordinate for a point tap (requires `y`)."},
                 "y": {"type": "integer", "description": "Y coordinate for a point tap (requires `x`)."},
-                "text": {"type": "string", "description": "Node label to tap."},
-                "id": {"type": "string", "description": "Node `resource_id` (or bare local name) to tap; takes precedence over text and x/y."},
+                "text": {"type": "string", "description": "Node label to tap: the platform's accessible name (text, else content description) among visible nodes."},
+                "content_desc": {"type": "string", "description": "Node `content_desc` to tap (exact). Prefer it for React Native `accessibilityLabel`s; takes precedence over `text`."},
+                "id": {"type": "string", "description": "Node `resource_id` (or bare local name) to tap; takes precedence over content_desc/text and x/y."},
+                "index": {"type": "integer", "minimum": 0, "description": "Pick the Nth match of the other fields, document order. Use it only when the same label is legitimately repeated."},
                 "testID": {"type": "string", "description": "React Native testID to tap (resolves to the nearest clickable ancestor); used when `id` and `text` are absent."},
                 "settle": {
                     "type": "string", "enum": ["fast", "strict", "content"],
@@ -435,8 +648,23 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         "acos_key" => (
             "Press a key in the held session. `code` is an Android key code (4=BACK, 66=ENTER, \
              3=HOME) or a name (`back`, `home`, `enter`, `menu`, `tab`, `escape`, `delete`). \
+             Returns `changes` (the settled tree diff of the key) by default. \
              Common errors: ELEMENT_NOT_FOUND with `details.kind=NoFocusedWindow` (launch/observe first).",
             with_base(json!({
+                "diff": {
+                    "type": "boolean",
+                    "description": "FB3: include `changes`, the settled UI-tree diff of this action \
+                                    (added/removed/changed nodes with `id`/`text`/`content_desc`/ \
+                                    `class`/`bounds`; a changed node also lists which `fields` \
+                                    changed, old -> new; plus the current activity and the focused \
+                                    node). Computed from trees the session already holds, so it \
+                                    costs no extra traversal and no extra guest round trip. \
+                                    Default `true`; `false` returns the pre-FB3 reply byte for \
+                                    byte. Each list is capped at 40 entries with \
+                                    `truncated:true` and the true `counts`; \
+                                    `changes.baseline:\"none\"` means the session held no \
+                                    pre-action tree (no diff is invented)."
+                },
                 "code": {"type": ["integer", "string"], "description": "Numeric key code or name."},
                 "expect_change": {
                     "type": "boolean",
@@ -453,18 +681,37 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             })),
         ),
         "acos_text" => (
-            "Type `text` into the session's focused editor. Prefers the real framework IME \
-             commit path (`View.onCreateInputConnection` -> `InputConnection.commitText`), so \
-             `TextWatcher`s, the selection and the cursor update exactly as on a device; falls \
-             back to a `KeyEvent` sequence through the input dispatcher only when the focused \
-             view has no editable connection. `result.text_path` is `input-connection` or \
-             `key-events`. The field must already have input focus: observe the tree and tap it \
-             first. Common errors: ELEMENT_NOT_FOUND with `details.kind=NoFocusedEditor` (tap the \
-             field first) or `NoFocusedWindow`; UNSUPPORTED_BACKEND when a character cannot be \
-             represented on the key-event fallback. Composing text and IME actions are not \
-             modelled.",
+            "Type `text` into the session's focused editor — the same path a scenario `type` \
+             step takes: the guest's own `type_text` command drives the focused text field \
+             (real `InputConnection.commitText`/virtual-keyboard path), so `TextWatcher`s, the \
+             selection and the cursor update as on a device. There is no need for the node's \
+             class to be `EditText`: React Native `TextInput`s are obfuscated subclasses, so a \
+             field you focused by `content_desc` accepts text. Focus the field first (observe, \
+             then `acos_tap`), then type. The reply's `result.target.node` is the field the input went to, \
+             as the tree shows it (the focused node). The typed text is echoed only for a focused non-password field; \
+             otherwise it is masked (`target.text_masked = true`, `chars` only, `reason`): a \
+             password field, `mask: true`, or an unknown target (the tree names no focused field \
+             -- nothing is guessed). Common errors: UNSUPPORTED_BACKEND when a character cannot be \
+             represented on the key-event fallback, TIMEOUT when the screen never settles. Composing text and IME \
+             actions are not modelled. Returns `changes` (the settled tree diff of the typing) \
+             by default; `diff:false` turns it off.",
             with_base(json!({
+                "diff": {
+                    "type": "boolean",
+                    "description": "FB3: include `changes`, the settled UI-tree diff of this action \
+                                    (added/removed/changed nodes with `id`/`text`/`content_desc`/ \
+                                    `class`/`bounds`; a changed node also lists which `fields` \
+                                    changed, old -> new; plus the current activity and the focused \
+                                    node). Computed from trees the session already holds, so it \
+                                    costs no extra traversal and no extra guest round trip. \
+                                    Default `true`; `false` returns the pre-FB3 reply byte for \
+                                    byte. Each list is capped at 40 entries with \
+                                    `truncated:true` and the true `counts`; \
+                                    `changes.baseline:\"none\"` means the session held no \
+                                    pre-action tree (no diff is invented)."
+                },
                 "text": {"type": "string", "description": "Text to type into the focused field."},
+                "mask": {"type": "boolean", "description": "Withhold the typed text from the reply (`target.text_masked`, `target.chars`). Use it for a secret whose field the tree does not report as focused. Without it, a focused non-password field is echoed and any other target is masked."},
                 "expect_change": {
                     "type": "boolean",
                     "description": "SE1: opt-in verification of the action's effect. After the \
@@ -481,31 +728,56 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         ),
         "acos_swipe" => (
             "Swipe in the held session from `from` to `to`; each point is an object with integer \
-             `x` and `y`. `duration_ms` defaults to 300. Common errors: ELEMENT_NOT_FOUND with \
+             `x` and `y`. `duration_ms` defaults to 300. The ART engine has no swipe command \
+             (UNSUPPORTED_BACKEND, `input.swipe`), so it returns no `changes` there. `changes` \
+             (the `diff` argument) applies when the engine supports the action. Common errors: ELEMENT_NOT_FOUND with \
              `details.kind=NoWindowAtPoint` (no frame yet), INVALID_ARGUMENT (a point missing x/y).",
             with_base(json!({
+                "diff": {
+                    "type": "boolean",
+                    "description": "FB3: include `changes`, the settled UI-tree diff of this action \
+                                    (added/removed/changed nodes with `id`/`text`/`content_desc`/ \
+                                    `class`/`bounds`; a changed node also lists which `fields` \
+                                    changed, old -> new; plus the current activity and the focused \
+                                    node). Computed from trees the session already holds, so it \
+                                    costs no extra traversal and no extra guest round trip. \
+                                    Default `true`; `false` returns the pre-FB3 reply byte for \
+                                    byte. Each list is capped at 40 entries with \
+                                    `truncated:true` and the true `counts`; \
+                                    `changes.baseline:\"none\"` means the session held no \
+                                    pre-action tree (no diff is invented)."
+                },
                 "from": {"type": "object", "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}, "required": ["x", "y"]},
                 "to": {"type": "object", "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}, "required": ["x", "y"]},
                 "duration_ms": {"type": "integer", "minimum": 1}
             })),
         ),
         "acos_logs" => (
-            "Read the guest log buffer of the held session. Optional `tag` (substring, \
-             case-insensitive) and `min_priority` (`V`/`D`/`I`/`W`/`E`/`F` or `2`..=`7`) filter the \
-             records. Consecutive identical records are collapsed: each carries `repeat_count` and \
-             its `line` gains a `(repeated N times)` suffix. Returns `total`, `count` and \
-             `collapsed` plus `launched` and `stage_reached`. An empty buffer is a valid pass, but \
-             is only meaningful once the app reached `onCreate`; check `stage_reached` before \
-             concluding the run was clean. It never fabricates lifecycle lines.",
+            "Read the guest log buffer of the held session. By DEFAULT it returns the agent-relevant \
+             view: records at priority `W` and above plus anything that names the app's own package, \
+             so framework/SoLoader noise does not bury the app's words. Optional `tag` (substring, \
+             case-insensitive), `min_priority` (`V`/`D`/`I`/`W`/`E`/`F` or `2`..=`7`, default `W`) and \
+             `all: true` (no defaults at all: the whole buffer) filter the records. The unfiltered \
+             buffer stays on disk (`logs/logcat.txt` in a verify run), and `min_priority: \"V\"` \
+             returns it. Consecutive identical records are collapsed: each carries `repeat_count` and \
+             its `line` gains a `(repeated N times)` suffix. Returns `total`, `count`, `collapsed`, \
+             `filter` (the defaults that were applied) plus `launched` and `stage_reached`. An empty \
+             buffer is a valid pass, but is only meaningful once the app reached `onCreate`; check \
+             `stage_reached` before concluding the run was clean. It never fabricates lifecycle lines.",
             with_base(json!({
                 "tag": {"type": "string", "description": "Keep only records whose tag contains this substring."},
-                "min_priority": {"type": ["string", "integer"], "description": "Minimum logcat priority (`V`/`D`/`I`/`W`/`E`/`F` or 2..7)."}
+                "min_priority": {"type": ["string", "integer"], "description": "Minimum logcat priority (`V`/`D`/`I`/`W`/`E`/`F` or 2..7). Defaults to `W`."},
+                "all": {"type": "boolean", "description": "Return the whole buffer with no default priority/package filter (the same view as `min_priority: \"V\"`)."}
             })),
         ),
         "acos_status" => (
             "Report whether the held session has launched, the last launch stage reached, and the \
              published frame count. Use it to tell 'app never started' from 'app started but no \
-             window/frame yet' before reading logs or observing.",
+             window/frame yet' before reading logs or observing. Also lists **this server's** \
+             sessions under `sessions[]` (FB5): `session_id`, `label`, `package`, `activity`, \
+             `age_s`, `idle_s`, the applicable `idle_ttl_s`, the guest's `guest_pid` and \
+             `guest_rss_kb`, and `live`. Use it to find and clean up every session you left \
+             behind — the server also reclaims its own after the idle TTL.",
             with_base(json!({})),
         ),
         "acos_doctor" => (
@@ -515,7 +787,7 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              keystore, the boot-classpath cache, and host memory. Each failing check carries a \
              concrete `fix` string. The tool returns `fail` with `ASSERTION_FAILED` when any \
              required check fails, with the full report under `result.checks`.",
-            with_base(json!({})),
+            host_only(json!({})),
         ),
         _ => ("In-process session tool.", with_base(json!({}))),
     }
@@ -592,7 +864,7 @@ pub fn capabilities_tool() -> ToolInfo {
             "additionalProperties": false
         }),
         available: true,
-        fidelity: Fidelity::StaticAnalysis,
+        fidelity: Fidelity::NotApplicable,
         reason: None,
     }
 }
@@ -605,11 +877,13 @@ pub fn help_tool() -> ToolInfo {
         description: concat!(
             "The ACOS agent guide. With no `topic` this returns a SHORT skeleton: the three status ",
             "rules, the loop in ten lines, and the topic list with one-line descriptions. Call it ",
-            "before your first ACOS call, then ask for one section by name: `workflow` (the loop), ",
-            "`cli` (every command with a runnable example), `scenarios` (writing a verify YAML), ",
-            "`errors` (code -> action), `limits` (rotate unsupported, Flutter/RN deferred, x86_64 ",
-            "native libs, API 34, memory admission). `topic: \"all\"` returns the complete guide; ",
-            "an unknown topic returns the skeleton again."
+            "before your first ACOS call, then ask for one section by name: `mcp` (every advertised ",
+            "MCP tool: required/optional args, one example call, what it returns — generated from the ",
+            "tool descriptors), `workflow` (the loop plus the screenshot/type/content_desc/prove-a-flow ",
+            "recipes), `cli` (every command with a runnable example), `scenarios` (writing a verify YAML), ",
+            "`errors` (code -> action), `limits` (one support row per route for native Views, React ",
+            "Native and Flutter; API 34, x86_64, rotation, memory admission). `topic: \"all\"` returns the ",
+            "complete guide; an unknown topic returns the skeleton again."
         )
         .to_string(),
         input_schema: json!({
@@ -617,14 +891,14 @@ pub fn help_tool() -> ToolInfo {
             "properties": {
                 "topic": {
                     "type": "string",
-                    "enum": ["overview", "workflow", "cli", "scenarios", "errors", "limits", "all"],
+                    "enum": ["overview", "mcp", "workflow", "cli", "scenarios", "errors", "limits", "all"],
                     "description": "Optional section of the guide: `overview` (the default skeleton), \n`workflow` (the loop), `cli` (commands + examples), `scenarios` (verify YAML), `errors` \n(codes -> action), `limits` (what is not supported), `all` (the whole guide)."
                 }
             },
             "additionalProperties": false
         }),
         available: true,
-        fidelity: Fidelity::StaticAnalysis,
+        fidelity: Fidelity::NotApplicable,
         reason: None,
     }
 }

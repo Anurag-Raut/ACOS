@@ -1077,3 +1077,106 @@ the tracked benchmark metrics (M4–M8) at parity with the viewer off.
 
 **Order.** Finish v0.2.0 → screenshot compression and live view (phase 1) in parallel → T3 preview
 pane check → Metro spike → Metro bridge.
+
+## ADR-0028 — v0.2.1 release, lattice-aware fast-settle gate (orchestrator, 2026-11-15)
+
+**Context.** Fast-settle latencies (M4/M6/M8 `fast`) sit on a ~16.4 ms frame-period lattice; a rep's
+p50 is whichever frame slot holds the middle sample, so the old gate (medians of per-rep p50s, +5 %
+and +2 ms) flips by a whole frame between reps (REL3-AB, INT-021-AB). PERF-REL3 measured the v0.2.1
+launch-fast "shift" with 40 samples/rep: pooled trimmed mean +1.0 % (+1.7 ms), first-slot share 44 %
+vs 43 % (n = 120/120) — noise.
+
+**Decision.**
+1. Fast-settle metrics are gated on the **pooled 5 %-trimmed mean** (+5 % and +2 ms) from raw
+   samples (`tools/bench/ab-compare.py`), with a ≥ 10 pp drop in first-slot share flagged for a
+   look. The old median-of-p50s gate is still printed beside it and still gates strict metrics.
+2. The bench takes 40 fast samples per rep by default (+~57 s/rep; `--fast-reps` / `ACOS_BENCH_FAST_REPS`).
+3. Ship v0.2.1 (main = int-021): no metric regresses under either gate; M5 −57 %, M8 form fast −28 %.
+4. The FB2 placeholder verdict and the VIEW1 live view are NOT in v0.2.1: both reviews returned
+   "merge after fixes" (FB2c, VIEW1c in flight).
+
+## ADR-0029 — Service modules: attachable Android building blocks (owner + orchestrator, 2026-11-16)
+
+**Context.** The Gaten floating-button run showed ACOS covered ~15 % of a real change: no
+accessibility service, overlay windows, second app, intents, WebView, network, notifications,
+permissions, rotation or sensors. Today ~50 services are registered lazily in
+`crates/acos-services/src/registry.rs`; unknown names return null. Owner: every missing service must
+be buildable and attachable/detachable per session like building blocks. Full plan:
+`docs/PLAN_2026-11-16.md`.
+
+**Decision.**
+1. A *module* owns a set of Android system pieces and has a manifest (provides, requires, profiles,
+   RAM/startup budget, security class, control ops, `hot` or `at-launch`). Today's services are the
+   always-attached `core` module.
+2. Profiles: `off`, `stub`, `scripted`, `real`. Interface in `acos-services`: `attach`, `detach`,
+   `control`, `report`, on the existing `ServiceHost::register` seam. Detach leaves no registration,
+   thread, fd or socket.
+3. Unattached known names answer with a tombstone: `UNSUPPORTED_ANDROID_API` naming the module and the
+   attach call. Never a silent null presented as a phone, never a fake success.
+4. API: `acos_launch {services:[...]}`, scenario `services:` block, `acos_services`
+   (attach/detach/list/status, `hot` modules only on live sessions), `acos_service_ctl`.
+5. Verdicts list attached modules and profiles; a pass relying on `stub`/`scripted` says so; an
+   assertion needing an `off` module is `unsupported`.
+6. `acos_capabilities` and help limits are generated from the module registry.
+7. Conformance kit per module: manifest valid; attach/detach twice returns RAM, threads, fds to
+   baseline; honest-report test; negative test; N=20 density within budget.
+8. Foundations: module framework, window layer stack in C1 (absorbs ROT9), multi-process sessions
+   (second app forked lazily from the session zygote, binder routed by the Rust service layer, idle
+   kill after ~30 s with saved state; un-installed share/pick targets land in a broker capture
+   target, no process), host broker.
+9. All modules ship together in v0.4.0; each needs its real-app proof (plan §3.4).
+
+## ADR-0030 — Real network through pasta (owner + orchestrator, 2026-11-16)
+
+**Decision.**
+1. The session keeps its network namespace; `pasta` (passt, rootless) provides a NATed interface,
+   bundled static in the install (GPL-2 licence shipped), checked by `acos doctor`.
+2. seccomp allows `AF_INET`/`AF_INET6` only when the network module is attached.
+3. No route to host loopback or the LAN gateway by default (`--no-map-gw`); host ports only when named
+   (Metro 8081 in v0.5.0).
+4. ACOS serves `/dev/socket/dnsproxyd` (netd replacement); the image ships the AOSP CA store.
+5. Connectivity reports a validated internet network; hot controls: offline/online, latency/loss,
+   optional HAR recording proxy.
+6. Default profile `real` only if the spike A/B shows no regression in cold launch, warm launch,
+   per-session memory or N=20 density beyond noise (owner); otherwise default `off`.
+7. Fresh Opus security review before merge.
+
+## ADR-0031 — WebView on the host's Chromium (owner + orchestrator, 2026-11-16)
+
+**Context.** The guest renders on the CPU with no GPU stack; the Android System WebView needs a
+separate renderer process and a hwui GPU functor and would cost ~150–250 MiB per session.
+
+**Decision.**
+1. ACOS ships its own WebView provider package, loaded by the framework's `WebViewFactory`. It
+   implements `android.webkit` by driving a pinned `chrome-headless-shell` (Chrome for Testing,
+   installer download with checksum) on the host over the DevTools protocol, through the host broker.
+   The guest never sees a raw DevTools socket. Chromium runs in its own bwrap sandbox and follows the
+   session's network profile.
+2. Frames are painted into the View at its size and density; touch, scroll and IME go through
+   DevTools input; `evaluateJavascript` and `addJavascriptInterface` (bindings + shim) work both
+   ways; request interception backs `shouldOverrideUrlLoading`/`shouldInterceptRequest` and serves
+   `file:///android_asset` and `content://`; the page accessibility tree is merged into the ACOS UI
+   tree as virtual nodes.
+3. One Chromium per host, one browser context per session. Verdicts name the engine version and
+   `fidelity` states it is host Blink, not the phone's WebView build.
+4. Spike gate (2 days): real HTTPS page, JS bridge round trip both ways, tap on web text, frame
+   < 50 ms, ≤ 60 MiB per extra session. If it fails, fall back to the Android WebView APK and accept
+   the per-session cost.
+
+**ADR-0030 amendment (2026-11-16, after SPIKE-NET).** pasta's defaults leak host loopback (measured:
+the guest reached a host 127.0.0.1 listener). pasta runs with `-T none -U none --no-splice
+--map-host-loopback none` and no port forwards except ones named explicitly. pasta has no destination
+ACL, so RFC1918, link-local and CGNAT ranges are dropped by netfilter rules installed in the session
+netns before the guest starts. That must be a real boundary: the guest has no capability over that
+netns (no CAP_NET_ADMIN, AF_NETLINK blocked by seccomp), and a test proves the guest cannot change
+the rules. Default stays `off` until the A/B gate (item 6) passes.
+
+**ADR-0031 amendment (2026-11-16, after SPIKE-WV2).** The host-Chromium engine passed every gate on
+the host (page load, JS bridge both ways, AX tap, 3–8 ms frames, +32 MiB PSS per extra session, ~202
+MiB once per host). The in-session gate could not run: the framework cannot load a provider package
+until the package manager knows a second package, and a pre-existing `PackageInfo` parcel defect
+(String16 arrays written where AOSP writes `writeString8Array`) desyncs `getPackageInfo` for any
+app. Decision: keep the host-Chromium design; the in-session gate is re-run in v0.4.0 right after the
+multi-package PMS foundation lands; the parcel defect is fixed in v0.3.0 as its own root-cause item
+(audit every ACOS parcelable writer against AOSP `writeToParcel`). The Android WebView APK fallback
+stays rejected.

@@ -4,3 +4,10 @@ target/
 /.cache/
 *.class
 /results/aidl/all_interfaces.json
+# HotSpot dump files: a build-only JVM (javac/d8) that dies writes these into
+# its inherited working directory. ACOS now routes them into
+# .cache/art/jvm-dumps (`crates/acos-art/src/jvm.rs`); these patterns keep a
+# stray one from a hand-run tool out of the repository.
+replay_pid*.log
+hs_err_pid*.log
+core.[0-9]*

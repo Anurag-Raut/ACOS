@@ -562,29 +562,40 @@ fn state_counters_record_each_registration_and_release() {
 }
 
 /// The four connectivity parcelables live in the `framework-connectivity`
-/// APEX, not in `dex/framework`, so `tests/parcelable.rs`'s boot-DEX check
-/// skips them. Scan the APEX DEX instead: the **image's own** `writeToParcel`
-/// then decides whether the specs are right.
+/// APEX, not in `dex/framework`. The oracle now scans the whole boot classpath
+/// and inlines the writer's private helpers (`writeParcelableArraySet`,
+/// `writeAddresses`, `writeAddress`), so every one of them is checked against
+/// the **image's own** `writeToParcel` call for call.
 ///
-/// `android.net.NetworkRequest` and `android.net.NetworkInfo` line up call for
-/// call, so they are verified as `Full` (every field, in the image's order).
-///
-/// `NetworkCapabilities` and `LinkProperties` call private helpers
-/// (`writeParcelableArraySet`, `writeAddresses`, `writeAddress`), which the DEX
-/// scanner cannot see into; the specs model those helpers as their inlined
-/// wire form (an int count, a nullable byte array), so an op-by-op alignment is
-/// impossible by construction even though the bytes are identical. For those
-/// two the image's observed call sequence is pinned below: the pin fails if the
-/// image's `writeToParcel` ever changes order or arity.
+/// The exact call sequences are pinned here as well: they are the contract the
+/// specs were written against, and a pin fails loudly if a future image moves a
+/// field, instead of a `Full` claim quietly becoming false.
 #[test]
 fn the_connectivity_specs_match_the_boot_images_write_to_parcel() {
-    let dir = acos_services::workspace_path(".cache/boot/android-34/dex/framework-connectivity")
-        .expect("boot DEX cache (run from the repo root)");
+    // REL3P2: scanning the whole boot classpath is the point. If this test used
+    // one directory again, `android.net.*` would be "class not found" and the
+    // specs would go back to being unverified.
+    let framework_only =
+        acos_services::workspace_path(".cache/boot/android-34/dex/framework")
+            .expect("boot DEX cache (run from the repo root)");
+    assert!(
+        acos_services::parcelable::Scanner::write_to_parcel(
+            &framework_only,
+            "android.net.NetworkCapabilities"
+        )
+        .is_err(),
+        "the framework-only scan must not see the APEX class; the multi-dir scan is"
+    );
 
-    for class in ["android.net.NetworkRequest", "android.net.NetworkInfo"] {
+    for class in [
+        "android.net.NetworkRequest",
+        "android.net.NetworkInfo",
+        "android.net.NetworkCapabilities",
+        "android.net.LinkProperties",
+    ] {
         let spec = acos_services::parcelable::spec_for(class)
             .unwrap_or_else(|| panic!("{class} has no spec"));
-        let scanned = acos_services::parcelable::Scanner::write_to_parcel(&dir, class)
+        let scanned = acos_services::parcelable::Scanner::write_to_parcel_boot(class)
             .unwrap_or_else(|e| panic!("{class}: {e}"));
         let result = acos_services::parcelable::verify(spec, &scanned);
         assert!(
@@ -597,67 +608,114 @@ fn the_connectivity_specs_match_the_boot_images_write_to_parcel() {
         );
     }
 
-    // The image's `NetworkCapabilities.writeToParcel`, helper call included.
-    let caps = acos_services::parcelable::Scanner::write_to_parcel(
-        &dir,
+    // The image's `NetworkCapabilities.writeToParcel`, helper body included.
+    let caps = acos_services::parcelable::Scanner::write_to_parcel_boot(
         "android.net.NetworkCapabilities",
     )
     .expect("NetworkCapabilities writeToParcel");
     assert_eq!(
         caps.calls,
         vec![
-            "writeLong",  // mNetworkCapabilities
-            "writeLong",  // mForbiddenNetworkCapabilities
-            "writeLong",  // mTransportTypes
-            "writeInt",   // mLinkUpBandwidthKbps
-            "writeInt",   // mLinkDownBandwidthKbps
+            "writeLong",       // mNetworkCapabilities
+            "writeLong",       // mForbiddenNetworkCapabilities
+            "writeLong",       // mTransportTypes
+            "writeInt",        // mLinkUpBandwidthKbps
+            "writeInt",        // mLinkDownBandwidthKbps
             "writeParcelable", // mNetworkSpecifier
             "writeParcelable", // mTransportInfo
-            "writeInt",   // mSignalStrength
-            // `writeParcelableArraySet(mUids)` — invisible to the scanner; the
-            // spec models it as the `writeInt` count it emits (-1 = null).
-            "writeIntArray", // mAllowedUids
-            "writeString",   // mSSID
-            "writeBoolean",  // mPrivateDnsBroken
-            "writeIntArray", // administrator uids
-            "writeInt",      // mOwnerUid
-            "writeInt",      // mRequestorUid
-            "writeString",   // mRequestorPackageName
-            "writeIntArray", // mSubIds
+            "writeInt",        // mSignalStrength
+            // `writeParcelableArraySet(mUids)`: count + writeParcelable.
+            "writeInt",
+            "writeParcelable",
+            "writeIntArray",  // mAllowedUids
+            "writeString",    // mSSID
+            "writeBoolean",   // mPrivateDnsBroken
+            "writeIntArray",  // administrator uids
+            "writeInt",       // mOwnerUid
+            "writeInt",       // mRequestorUid
+            "writeString",    // mRequestorPackageName
+            "writeIntArray",  // mSubIds
             "writeTypedList", // mUnderlyingNetworks
-            "writeInt",      // mEnterpriseId
+            "writeInt",       // mEnterpriseId
         ],
         "the image's NetworkCapabilities.writeToParcel changed"
     );
 
     // The image's `LinkProperties.writeToParcel`: the three `writeAddresses`
-    // helpers and `writeAddress(dhcp)` are invisible; the address/route loops
-    // show one `writeParcelable` each, and the nullable proxy/NAT64/captive-
-    // portal slots are `writeParcelable`.
-    let link =
-        acos_services::parcelable::Scanner::write_to_parcel(&dir, "android.net.LinkProperties")
-            .expect("LinkProperties writeToParcel");
+    // helpers and `writeAddress(dhcp)` are inlined, so each address list shows
+    // its count and one collapsed element body.
+    let link = acos_services::parcelable::Scanner::write_to_parcel_boot(
+        "android.net.LinkProperties",
+    )
+    .expect("LinkProperties writeToParcel");
     assert_eq!(
         link.calls,
         vec![
-            "writeString", // interface name
-            "writeInt",    // link address count
+            "writeString",     // interface name
+            "writeInt",        // link address count
             "writeParcelable", // LinkAddress loop
+            "writeInt",        // DNS count
+            "writeByteArray",  // writeAddress
+            "writeBoolean",    // Inet6 scope marker
+            "writeInt",        // Inet6 scope id
+            "writeInt",        // validated private DNS count
+            "writeByteArray",  // writeAddress
+            "writeBoolean",
+            "writeInt",
             "writeBoolean", // usePrivateDns
-            "writeString", // privateDnsServerName
-            "writeString", // domains
-            "writeInt",    // mtu
-            "writeString", // tcpBufferSizes
-            "writeInt",    // route count
+            "writeString",  // privateDnsServerName
+            "writeInt",     // PCSCF count
+            "writeByteArray",
+            "writeBoolean",
+            "writeInt",
+            "writeString",    // domains
+            "writeByteArray", // dhcp server address (writeAddress)
+            "writeBoolean",
+            "writeInt",
+            "writeInt",        // mtu
+            "writeString",     // tcpBufferSizes
+            "writeInt",        // route count
             "writeParcelable", // RouteInfo loop
-            "writeByte",   // httpProxy presence
+            "writeByte",       // httpProxy presence
             "writeParcelable", // httpProxy
             "writeParcelable", // nat64Prefix
-            "writeList",   // stacked links
-            "writeBoolean", // wakeOnLanSupported
+            "writeList",       // stacked links
+            "writeBoolean",    // wakeOnLanSupported
             "writeParcelable", // captivePortalApiUrl
             "writeParcelable", // captivePortalData
         ],
         "the image's LinkProperties.writeToParcel changed"
     );
+}
+
+/// REL3P2: the two replies ACOS serves today encode and decode through the
+/// framework's own field order, and the *decoded* value (what a client reading
+/// the reply sees) is the same value the service meant to send. `Value` equality
+/// covers the nullable parcelables, the counted lists and the absent HTTP proxy,
+/// so a field op that writes the right bytes but reads a different shape fails
+/// here. (`crates/acos-runtime/tests/parcelable_java.rs` proves the same bytes
+/// against the real framework writer/reader.)
+#[test]
+fn net_capabilities_and_link_properties_round_trip_through_their_specs() {
+    for value in [
+        default_network_capabilities(),
+        acos_services::connectivity::default_link_properties(),
+    ] {
+        let class = value.class().expect("class");
+        let mut out = Parcel::new();
+        write_payload(&mut out, &value).expect("encode reply");
+        let bytes = out.marshall();
+        let mut back = Parcel::new();
+        back.unmarshall(&bytes);
+        back.set_data_position(0);
+        let decoded = read_payload(class, &mut back).expect("decode reply");
+        assert_eq!(decoded, value, "{class} does not round-trip through its spec");
+        assert_eq!(
+            back.data_position() as usize,
+            bytes.len(),
+            "{class} left {} of {} reply bytes unread",
+            bytes.len() - back.data_position() as usize,
+            bytes.len()
+        );
+    }
 }

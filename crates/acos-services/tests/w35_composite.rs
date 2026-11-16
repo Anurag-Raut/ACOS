@@ -431,6 +431,7 @@ fn the_window_managers_dim_layer_darkens_what_is_below_it() {
                 z: 1,
                 alpha: 1.0,
                 dim_amount: 0.5,
+                secure: false,
             },
         ));
     }
@@ -442,6 +443,44 @@ fn the_window_managers_dim_layer_darkens_what_is_below_it() {
     // Behind it: the Activity at half brightness (200,100,50) * 0.5.
     assert_eq!(pixel(&frame, 3, 3), [100, 50, 25, 255]);
     assert_eq!(pixel(&frame, 2, 0), [100, 50, 25, 255]);
+}
+
+/// VIEW1c L1: the compositor knows `FLAG_SECURE` from the window manager's
+/// placement, so the live view can blank its frame while a secure window shows.
+#[test]
+fn a_visible_flag_secure_window_is_reported_so_the_live_view_can_blank_frames() {
+    let mut r = rig();
+    let (handle, id) = r.create_surface("login");
+    let buffer = Buf::solid(2, 2, 2, 0x2_0000_0013, [1, 2, 3, 255]);
+    let mut parcel = transaction(&[Layer {
+        handle,
+        layer_id: id,
+        x: 0.0,
+        y: 0.0,
+        z: 0,
+        buffer: &buffer,
+    }]);
+    r.transact(&mut parcel).expect("transaction decodes");
+    let placement = |secure| LayerPlacement {
+        x: 0,
+        y: 0,
+        z: 0,
+        alpha: 1.0,
+        dim_amount: 0.0,
+        secure,
+    };
+    let mut state = r.state.lock().expect("state");
+    assert!(!state.has_secure_window(), "no placement: not secure");
+    assert!(state.set_layer_placement(handle, placement(false)));
+    assert!(!state.has_secure_window());
+    assert!(state.set_layer_placement(handle, placement(true)));
+    assert!(state.has_secure_window(), "a visible FLAG_SECURE window");
+    assert!(state.set_layer_hidden(handle, true));
+    assert!(!state.has_secure_window(), "a hidden secure window shows nothing");
+    assert!(state.set_layer_hidden(handle, false));
+    assert!(state.has_secure_window());
+    assert!(state.set_layer_placement(handle, placement(false)));
+    assert!(!state.has_secure_window(), "FLAG_SECURE cleared again");
 }
 
 #[test]
@@ -480,6 +519,7 @@ fn a_translucent_window_blends_over_the_layer_below() {
                 z: 1,
                 alpha: 0.5,
                 dim_amount: 0.0,
+                secure: false,
             },
         ));
     }

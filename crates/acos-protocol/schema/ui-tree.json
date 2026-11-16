@@ -152,6 +152,11 @@
           "description": "Owning package (empty when unknown).",
           "type": "string"
         },
+        "password": {
+          "default": false,
+          "description": "Whether this is a password field (`AccessibilityNodeInfo.isPassword()`, i.e. the view's `inputType` carries `TYPE_TEXT_VARIATION_PASSWORD`).\n\nThe platform still reports the field's text (AOSP `TextView` sets the node text unconditionally and only *flags* the node), so this is what an input verb uses to decide to **mask** the typed text in its reply, logs and events. It never hides the tree.",
+          "type": "boolean"
+        },
         "resource_id": {
           "default": "",
           "description": "Android resource id (empty when absent).",

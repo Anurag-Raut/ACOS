@@ -72,6 +72,12 @@ pub struct LaunchArgs {
     #[arg(long)]
     pub keep: bool,
 
+    /// Optional agent label for the session (the MCP `acos_launch {label}`).
+    /// `acos session list` / `acos_status` print it, so a parked session is
+    /// recognisable without remembering its id.
+    #[arg(long)]
+    pub label: Option<String>,
+
     /// Override the display density (dpi) the client sees. `--density 400`
     /// lays ACOS out at 1080x2400 @ 400 dpi (the moto g35 under test) instead
     /// of the API-34 emulator's 420 dpi, so geometry can be compared on the
@@ -233,7 +239,7 @@ pub fn run(args: LaunchArgs) -> ExitCode {
 
     match result {
         Ok(report) => {
-            let envelope = launch_envelope(&request_id, &session_id, &report);
+            let envelope = launch_envelope(&request_id, &session_id, &report, &args.apk);
             finish(&envelope, &args, &report);
             if envelope.status().is_pass() {
                 ExitCode::SUCCESS
@@ -282,6 +288,7 @@ fn run_keep(
         "insets": args.insets.clone(),
         "animations": args.animations.clone(),
         "timeout_ms": args.timeout.saturating_mul(1000),
+        "label": args.label.clone(),
     });
     // The engine is forwarded verbatim: the daemon must answer with the engine
     // that actually ran and must never fall back to another one.
@@ -375,6 +382,16 @@ fn print_daemon_launch(result: &Value) {
         .unwrap_or(0);
     let wall = result.get("wall_ms").and_then(Value::as_u64).unwrap_or(0);
     println!("launch: reached {reached} (classes={classes}, wall={wall}ms)");
+    if let Some(block) = result.get("provenance") {
+        println!(
+            "  provenance: {}",
+            acos_protocol::provenance::summary_line(block)
+        );
+    } else if let Some(apk) = result.get("apk").and_then(Value::as_str) {
+        // Older daemons do not report provenance; name the APK they do report
+        // rather than printing nothing about the input.
+        println!("  apk: {apk} (no digest reported by this daemon)");
+    }
     if let Some(package) = result.get("package").and_then(Value::as_str) {
         println!("  package: {package}");
     }
@@ -418,15 +435,27 @@ fn finish(envelope: &Envelope, args: &LaunchArgs, report: &LaunchReport) {
     if args.json {
         crate::print_json(envelope);
     } else {
-        print_text(report);
+        print_text(envelope, report);
     }
 }
 
-fn print_text(report: &LaunchReport) {
+fn print_text(envelope: &Envelope, report: &LaunchReport) {
     println!(
         "launch: reached {} (classes={}, wall={}ms)",
         report.reached_stage, report.classes_loaded, report.wall_ms
     );
+    // PROVENANCE: a launch reply names the APK it booted and its digest. An
+    // agent that sees only `reached first_frame` cannot tell a stale build from
+    // the one it just made; the digest can.
+    if let Some(block) = envelope
+        .result()
+        .and_then(|result| result.get("provenance"))
+    {
+        println!(
+            "  provenance: {}",
+            acos_protocol::provenance::summary_line(block)
+        );
+    }
     if let Some(package) = &report.package {
         println!("  package: {package}");
     }
@@ -448,8 +477,22 @@ fn first_line(text: &str) -> &str {
 }
 
 /// Build the `launch` envelope from a completed ladder.
-pub fn launch_envelope(request_id: &str, session_id: &str, report: &LaunchReport) -> Envelope {
-    let result = ladder_json(report);
+///
+/// The reply carries a `provenance` block (absolute APK path + digest, engine,
+/// fidelity) next to the ladder: which bytes booted is part of the evidence.
+pub fn launch_envelope(
+    request_id: &str,
+    session_id: &str,
+    report: &LaunchReport,
+    apk: &std::path::Path,
+) -> Envelope {
+    let mut result = ladder_json(report);
+    result["provenance"] = acos_protocol::provenance::block(
+        apk,
+        None,
+        Engine::RustVm.as_str(),
+        Fidelity::NativeRuntime,
+    );
     let mut metrics = Metrics::wall_ms(report.wall_ms);
     if report.peak_rss_bytes > 0 {
         metrics = metrics.with_peak_rss_bytes(report.peak_rss_bytes);
@@ -536,6 +579,11 @@ pub fn ladder_json(report: &LaunchReport) -> Value {
                 "stage": stage.name,
                 "ok": stage.status == StageStatus::Ok,
                 "status": status,
+                // FB5: `ms` is present on every rung. This ladder evaluates its
+                // rungs from one lifecycle report at the end of the launch, so
+                // `ok` rungs carry the launch wall time as their observation
+                // time and unproven rungs carry `null` — `ms_basis` says so.
+                "ms": if stage.status == StageStatus::Ok { Some(report.wall_ms) } else { None },
                 "blocker": stage.blocker.as_ref().map(|b| json!({
                     "code": b.code,
                     "message": b.message,
@@ -552,6 +600,8 @@ pub fn ladder_json(report: &LaunchReport) -> Value {
         "classes_loaded": report.classes_loaded,
         "events": report.events,
         "wall_ms": report.wall_ms,
+        "total_ms": report.wall_ms,
+        "ms_basis": "observed_at_end",
         "peak_rss_bytes": report.peak_rss_bytes,
     })
 }

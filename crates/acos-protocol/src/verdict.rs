@@ -65,6 +65,14 @@ pub struct StepResult {
     /// `pixels_changed`, `reason`, ... `None` for steps with no settle reply.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle: Option<serde_json::Value>,
+    /// REL3E: the input step's own evidence. `handled` is the app window's
+    /// `finishInputEvent(handled)` answer (`null` when the guest did not ack),
+    /// `target` is what the selector resolved to plus the hit-test at the
+    /// injected point, and `expect_change` says whether a change was required -
+    /// `"auto"` for a `tap` (the step's own state-change check), `true`/`false`
+    /// for the scenario's explicit flag. `None` for steps that inject no input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<serde_json::Value>,
     /// Evidence backing this step. A passing step must have at least one entry.
     #[serde(default)]
     pub evidence: Vec<ArtifactRef>,
@@ -85,6 +93,7 @@ impl StepResult {
             name: None,
             assertions: Vec::new(),
             settle: None,
+            input: None,
             evidence: Vec::new(),
             error: None,
         }
@@ -278,6 +287,17 @@ pub struct Verdict {
     pub resources: ResourceReport,
     /// Deterministic reproducer.
     pub reproducer: Reproducer,
+    /// PROVENANCE: the exact inputs this verdict judged — absolute scenario and
+    /// APK paths, their SHA-256 (full and the 12-character display form), the
+    /// engine that ran and the fidelity it reached, plus structured
+    /// `warnings[]` (for example `SCENARIO_APP_OVERRIDDEN` when `--apk` and the
+    /// scenario's own `app:` disagree). See [`crate::provenance`].
+    ///
+    /// Written by the verifier; the CLI re-states the same block in the
+    /// envelope `result` and in the human summary line, so a reader never has to
+    /// open a second file to find out which scenario and APK produced a `pass`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<serde_json::Value>,
     /// Additional human notes (warnings, reconciliation items).
     #[serde(default)]
     pub notes: Vec<String>,
@@ -317,6 +337,7 @@ impl Verdict {
             failure: None,
             resources: ResourceReport::default(),
             reproducer,
+            provenance: None,
             notes: Vec::new(),
         }
     }

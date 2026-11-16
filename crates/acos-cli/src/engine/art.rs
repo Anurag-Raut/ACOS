@@ -40,9 +40,11 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Read, Write};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -113,6 +115,9 @@ pub struct ArtSession {
     /// `{mode, cache: hit|built|fallback|external|none, reason}` — so a serve's
     /// launch reply and session list can say whether the shared-image cache hit.
     boot_image: Option<serde_json::Value>,
+    /// VIEW1a: the live-view stream socket the ready line reported
+    /// (`docs/LIVE_VIEW.md`); `None` when the launcher could not bind one.
+    stream_socket: Option<PathBuf>,
     /// The newest *bound* frame seen (tree and, when the reply carried one,
     /// PNG of one traversal). A tree-only reply updates the tree but never
     /// invents pixels.
@@ -139,6 +144,38 @@ pub struct ArtSession {
     crash: Option<CrashRecord>,
     /// The process group the session child leads (its pid).
     process_group: Option<i32>,
+    /// SERVELEAK: the process group the **guest** leads, which `acos-art` puts in
+    /// its own group (`launcher.rs: process_group(0)`), so it is *not* a member of
+    /// [`Self::process_group`]. Reported by the launcher's ready line as
+    /// `guest_process_group`. Without it a teardown proof covers only the launcher
+    /// and a live bwrap/dalvikvm64 could be reported as a clean tree.
+    guest_group: Option<i32>,
+    /// SERVELEAK2/F1: the pid of the `acos-art` launcher this session spawned.
+    ///
+    /// Ownership of a leftover is proved from *this*, never from a command-line
+    /// substring: two agents running `acos verify counter.yaml` in different
+    /// directories both name `out/counter`, so a substring match let one
+    /// session's teardown SIGKILL the other agent's guest.
+    launcher_pid: Option<i32>,
+    /// SERVELEAK2/F1: a random per-session token exported as
+    /// [`SESSION_TOKEN_ENV`] into the launcher's environment. Every process the
+    /// launcher starts (`bwrap`, `dalvikvm64`) inherits it, and it survives the
+    /// launcher's death (a guest reparented to init keeps its environment), so
+    /// it is the one ownership proof that is stable for the session's whole
+    /// life. A process can only carry it if this session started it.
+    session_token: String,
+    /// SERVELEAK2/F4: a pidfd for the launcher. A pid **number** can be recycled
+    /// once the leader is reaped; a pidfd pins the process, not the number, so
+    /// liveness and the leader's SIGKILL cannot hit somebody else's process.
+    leader_pidfd: Option<OwnedFd>,
+    /// SERVELEAK2/F4: the group id the session still names in its teardown
+    /// report after [`Self::proven_empty`] cleared the live records.
+    reported_group: Option<i32>,
+    /// SERVELEAK2/F4: true once a teardown proved every group this session owns
+    /// empty. The group ids are cleared at that point, so neither a later
+    /// `Drop` nor a repeat `shutdown` can signal an id the kernel may since
+    /// have recycled for another agent's `setsid`/`bwrap`.
+    proven_empty: bool,
     /// Host-observed delivery of the most recent input action.
     last_input: Option<InputDelivery>,
     /// `(dx, dy)` from display/screen coordinates to the input channel's
@@ -166,6 +203,14 @@ pub struct ArtSession {
     /// [`SessionBackend::begin_input`], before the traversal a selector tap
     /// needs to resolve its point): its content hash and its tree signature.
     input_baseline: Option<(String, u64)>,
+    /// FB3: the tree the session held immediately before the current input
+    /// action, snapshotted by [`Self::begin_input`] from the already-bound
+    /// frame (no traversal, no extra guest round trip). `None` when the action
+    /// asked for no diff, when no baseline exists, or before any action.
+    diff_baseline: Option<DiffBaseline>,
+    /// FB3: whether the reply for the *current* action carries `changes`.
+    /// Serve sets it per verb (`diff: true` is the default).
+    diff_requested: bool,
     /// Input settle accounting, written next to the guest evidence.
     settle: SettleStats,
     /// Host-observed phase timings of the most recent input command (W55).
@@ -710,6 +755,15 @@ pub(crate) struct CapturedFrame {
     pub bytes: u64,
 }
 
+/// FB3: the tree a session held before the current input action.
+///
+/// Cloned from the already-bound frame in [`ArtSession::begin_input`]: the diff
+/// must never cost a traversal or a guest round trip.
+struct DiffBaseline {
+    tree: UiTree,
+    seq: u64,
+}
+
 #[derive(Clone)]
 struct CachedFrame {
     seq: u64,
@@ -877,12 +931,44 @@ fn acks_from_reply(reply: &serde_json::Value) -> Vec<InputAck> {
 /// tree with the pre-action one (see [`tree_signature`]). The acks are copied
 /// verbatim and remain guest-asserted.
 fn delivery(reply: &serde_json::Value, visual_change: bool) -> InputDelivery {
+    let (handled, published) = handled_from_reply(reply);
     InputDelivery {
         delivered: true,
         visual_change,
+        handled,
+        published,
         acks: acks_from_reply(reply),
+        target: reply.get("target").cloned(),
         settle: reply.get("settle").cloned(),
     }
+}
+
+/// REL3E: the app window's own answer, read from the guest's `gesture` record.
+///
+/// The guest acks every published `InputMessage` with the `handled` bit its
+/// `InputEventReceiver.finishInputEvent` was called with (AOSP `ViewRootImpl`
+/// passes `FLAG_FINISHED_HANDLED`, and drops with `false`), so this is the
+/// framework's verdict, never a heuristic:
+///
+/// * **any** unhandled ack proves nothing consumed that event → `Some(false)`;
+/// * every published event acked handled → `Some(true)`;
+/// * a short or missing ack list → `None` (unknown; the reply says so, it never
+///   claims "not handled" for an event the guest never answered).
+fn handled_from_reply(reply: &serde_json::Value) -> (Option<bool>, usize) {
+    let published = reply
+        .pointer("/gesture/seqs")
+        .and_then(|value| value.as_array())
+        .map(Vec::len)
+        .unwrap_or(0);
+    let acks = acks_from_reply(reply);
+    let handled = if acks.iter().any(|ack| !ack.handled) {
+        Some(false)
+    } else if published > 0 && acks.len() == published {
+        Some(true)
+    } else {
+        None
+    };
+    (handled, published)
 }
 
 /// P1: the guest's own fast-mode verdict, when it reported one. `None` means
@@ -917,8 +1003,52 @@ pub(crate) struct FirstFrameReport {
     /// Nodes in the bound tree.
     pub nodes: usize,
     /// True when the bound tree is still only the window skeleton after the
-    /// budget: no app content, so the frame is a placeholder, never a claim.
+    /// budget **and** the frame moved no content: no newer frame identity and
+    /// the same pixels (see [`first_frame_placeholder_verdict`]). Only then is
+    /// the frame a placeholder, never a claim.
     pub placeholder: bool,
+    /// FB2c: the bound tree is still the window skeleton, but the frame *did*
+    /// move (a newer frame identity and/or changed pixels). That is the normal
+    /// frame of a text-free screen (a custom View, a SurfaceView/GL surface, an
+    /// image-only activity, Flutter without semantics): a pass that carries a
+    /// warning, never a blocked verdict.
+    pub suspect: bool,
+    /// The frame the report describes (`cached.seq` at bind time).
+    pub frame_seq: Option<u64>,
+    /// The guest's own frame number for it, when the reply carried one.
+    pub frame_number: Option<u64>,
+    /// Frames (tree replies) the launch bound, including the launch's own.
+    pub frames: usize,
+    /// Did the frame identity advance across the content wait?
+    pub frames_advanced: bool,
+    /// Were the pixels comparable (both frames carried a frame digest)?
+    pub pixels_compared: bool,
+    /// Did the pixels change across the content wait?
+    pub pixels_changed: bool,
+    /// The budget the content wait was allowed (`ACOS_ART_FIRST_FRAME_MS`).
+    pub budget_ms: u64,
+}
+
+impl Default for FirstFrameReport {
+    fn default() -> Self {
+        FirstFrameReport {
+            traversals: 0,
+            waited_ms: 0,
+            event_waits: 0,
+            settled: true,
+            bound: None,
+            nodes: 0,
+            placeholder: false,
+            suspect: false,
+            frame_seq: None,
+            frame_number: None,
+            frames: 0,
+            frames_advanced: false,
+            pixels_compared: false,
+            pixels_changed: false,
+            budget_ms: 0,
+        }
+    }
 }
 
 impl FirstFrameReport {
@@ -931,23 +1061,14 @@ impl FirstFrameReport {
     /// `placeholder` flag). Re-describing it keeps `first_frame` evidence and
     /// `frame.meaningful`/`frame.placeholder` about the same tree.
     fn describes_tree(mut self, tree: &UiTree) -> Self {
+        let skeleton = first_frame_is_bare_skeleton(tree);
         self.nodes = ui_tree_node_count(&tree.nodes);
-        self.placeholder = first_frame_is_bare_skeleton(tree);
+        // FB2c: the verdict (`placeholder` / `suspect`) is frame evidence taken
+        // on the pre-settle traversal; the settled tree can only *clear* it
+        // (the app's content mounted), never raise it from the node count alone.
+        self.placeholder = self.placeholder && skeleton;
+        self.suspect = self.suspect && skeleton;
         self
-    }
-
-    /// The report for a launch whose first traversal is the frame (no wait,
-    /// no claim about content).
-    fn one_traversal(tree: &UiTree, settled: bool, bound: Option<String>) -> Self {
-        FirstFrameReport {
-            traversals: 1,
-            waited_ms: 0,
-            event_waits: 0,
-            settled,
-            bound,
-            nodes: ui_tree_node_count(&tree.nodes),
-            placeholder: first_frame_is_bare_skeleton(tree),
-        }
     }
 
     /// The evidence object a launch reply publishes (`result.first_frame`).
@@ -960,8 +1081,143 @@ impl FirstFrameReport {
             "bound": self.bound,
             "nodes": self.nodes,
             "placeholder": self.placeholder,
+            "placeholder_suspect": self.suspect,
+            "budget_ms": self.budget_ms,
+            "frame_seq": self.frame_seq,
+            "frame_number": self.frame_number,
+            "frames": self.frames,
+            "frames_advanced": self.frames_advanced,
+            "pixels_compared": self.pixels_compared,
+            "pixels_changed": self.pixels_changed,
         })
     }
+}
+
+/// FB2c: the frame identity a launch baseline was bound to.
+///
+/// The placeholder verdict needs evidence *beyond the tree*: a node count alone
+/// cannot tell an unmounted window from a text-free mounted screen.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct FrameIdentity {
+    seq: Option<u64>,
+    frame_number: Option<u64>,
+    md5: Option<String>,
+}
+
+/// FB2c: what the frame did while the launch's content wait ran.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct FirstFrameEvidence {
+    /// Frames bound by the launch (the launch's own traversal counts).
+    frames: usize,
+    /// A newer frame identity was published (`frame_number` or `frame_seq`).
+    frames_advanced: bool,
+    /// Both the baseline and the bound frame carried a digest.
+    pixels_compared: bool,
+    /// The digest changed (the frame's pixels are not the skeleton's).
+    pixels_changed: bool,
+}
+
+fn frame_identity(frame: Option<&CachedFrame>) -> FrameIdentity {
+    match frame {
+        Some(frame) => FrameIdentity {
+            seq: Some(frame.seq),
+            frame_number: frame.frame_number,
+            md5: (!frame.md5.is_empty()).then(|| frame.md5.clone()),
+        },
+        None => FrameIdentity::default(),
+    }
+}
+
+fn frame_evidence(
+    baseline: &FrameIdentity,
+    current: &FrameIdentity,
+    frames: usize,
+) -> FirstFrameEvidence {
+    let seq_advanced = match (baseline.seq, current.seq) {
+        (Some(before), Some(after)) => after > before,
+        _ => false,
+    };
+    let number_advanced = match (baseline.frame_number, current.frame_number) {
+        (Some(before), Some(after)) => after > before,
+        _ => false,
+    };
+    let pixels_compared = baseline.md5.is_some() && current.md5.is_some();
+    let pixels_changed = match (&baseline.md5, &current.md5) {
+        (Some(before), Some(after)) => before != after,
+        _ => false,
+    };
+    FirstFrameEvidence {
+        frames,
+        frames_advanced: seq_advanced || number_advanced,
+        pixels_compared,
+        pixels_changed,
+    }
+}
+
+/// FB2c: is this bound frame a placeholder, and is it merely *suspect*?
+///
+/// * a mounted frame (text, a description/hint, or more nodes than the skeleton)
+///   is never either;
+/// * a skeleton whose **pixels changed** while the content wait ran is the app's
+///   frame — a text-free screen is a real screen — so it is a pass with a
+///   `placeholder_suspect` warning, never a blocked verdict;
+/// * a skeleton whose frame identity advanced but whose pixels are the same is
+///   *still* the window (the launcher re-published the same buffer), so the
+///   pixels decide when they are comparable;
+/// * a skeleton that nothing moved is the placeholder: the app never mounted.
+fn first_frame_placeholder_verdict(
+    tree: &UiTree,
+    evidence: &FirstFrameEvidence,
+) -> (bool, bool) {
+    if !first_frame_is_bare_skeleton(tree) {
+        return (false, false);
+    }
+    let moved = if evidence.pixels_compared {
+        evidence.pixels_changed
+    } else {
+        evidence.frames_advanced
+    };
+    (!moved, moved)
+}
+
+/// FB2c: what the launch actually measured, in one sentence.
+///
+/// Never asserts an unmeasured fact: a frame number is quoted only when the
+/// guest reported one, and pixel identity is only claimed when both frames
+/// carried a digest.
+pub(crate) fn placeholder_evidence_sentence(report: &FirstFrameReport) -> String {
+    let mut facts: Vec<String> = Vec::new();
+    match (report.frame_number, report.frames_advanced) {
+        (Some(number), true) => facts.push(format!("frame_number advanced to {number}")),
+        (Some(number), false) => facts.push(format!("frame_number stayed {number}")),
+        (None, true) => facts.push("the frame sequence advanced".to_string()),
+        (None, false) => facts.push("no newer frame was published".to_string()),
+    }
+    match (report.pixels_compared, report.pixels_changed) {
+        (true, true) => facts.push("the pixels changed".to_string()),
+        (true, false) => facts.push("the pixels are identical to the skeleton's".to_string()),
+        (false, _) => facts.push("no pixel digest was comparable".to_string()),
+    }
+    format!(
+        "{} frame(s) over {} traversal(s)/{} ms ({} event wait(s), budget ACOS_ART_FIRST_FRAME_MS={} ms): {}",
+        report.frames,
+        report.traversals,
+        report.waited_ms,
+        report.event_waits,
+        report.budget_ms,
+        facts.join(", ")
+    )
+}
+
+/// FB2c: the `PLACEHOLDER_CONTENT` detail for the verify/launch route.
+pub(crate) fn placeholder_evidence_detail(report: &FirstFrameReport) -> String {
+    format!(
+        "launch reached the window skeleton and nothing about the frame moved, so the app's content \
+         never mounted ({} node(s), no app text); {}; reason: placeholder-content. Read the guest log \
+         for the first UnsatisfiedLinkError / SoLoader / fatal JS line.",
+        report.nodes,
+        placeholder_evidence_sentence(report)
+    )
 }
 
 /// G3c: node count of a tree (all windows, all depths).
@@ -1465,6 +1721,15 @@ impl ArtSession {
         if std::env::var_os("ACOSLAUNCH_FRAME_WAIT_SECS").is_none() {
             command.env("ACOSLAUNCH_FRAME_WAIT_SECS", frame_wait_secs.to_string());
         }
+        // SERVELEAK2/F1: a per-session ownership token in the environment.
+        //
+        // The teardown may only kill processes this session provably started.
+        // A command-line match cannot prove that (two agents verifying
+        // `scenarios/counter.yaml` both name `out/counter`), so every process
+        // the launcher starts carries this random token; its presence in
+        // `/proc/<pid>/environ` is the proof that our launcher started it.
+        let session_token = new_session_token(artifacts);
+        command.env(SESSION_TOKEN_ENV, &session_token);
         // Own process group: a `close` that does not take must not leave ART or
         // its sandbox behind.
         command.process_group(0);
@@ -1504,6 +1769,9 @@ impl ArtSession {
             ),
         })?;
         let _pid = child.id();
+        // SERVELEAK2/F4: pin the launcher **process** (not its pid number) so
+        // liveness checks and the leader's SIGKILL cannot hit a recycled pid.
+        let leader_pidfd = open_pidfd(_pid);
         // ZPROD5: the launcher's stderr is drained **before** the zygote contract
         // wait, so a launcher that dies before it publishes `<plan>/<tag>/argv`
         // reports *why* instead of the engine waiting out the 180 s contract
@@ -1575,6 +1843,7 @@ impl ArtSession {
                 Err(error) => {
                     // SAFETY: the launcher was spawned with `process_group(0)`,
                     // so `-_pid` names its group and no other.
+                    note_group_signal();
                     unsafe {
                         libc::kill(-(_pid as i32), libc::SIGKILL);
                     }
@@ -1588,6 +1857,7 @@ impl ArtSession {
             "session": artifacts.display().to_string(),
             "pid": _pid,
             "process_group": _pid,
+            "pidfd": leader_pidfd.is_some(),
             "unix_ms": now_unix_ms(),
         }));
         let stdin = child.stdin.take();
@@ -1641,6 +1911,7 @@ impl ArtSession {
             height: 2400,
             density: 420,
             boot_image: None,
+            stream_socket: None,
             cached: None,
             last_pixel: None,
             seen_seq: 0,
@@ -1649,6 +1920,12 @@ impl ArtSession {
             logs_total_raw: 0,
             crash: None,
             process_group: Some(_pid as i32),
+            guest_group: None,
+            launcher_pid: Some(_pid as i32),
+            session_token,
+            leader_pidfd,
+            reported_group: Some(_pid as i32),
+            proven_empty: false,
             last_input: None,
             input_offset: (0, 0),
             window_offsets: HashMap::new(),
@@ -1657,6 +1934,8 @@ impl ArtSession {
             settle_budget,
             settle_polls,
             input_baseline: None,
+            diff_baseline: None,
+            diff_requested: false,
             settle: SettleStats::default(),
             last_input_timing: None,
             last_phase: None,
@@ -1749,6 +2028,13 @@ impl ArtSession {
             }
             return Err(BackendError::from_protocol(error));
         }
+        // SERVELEAK: the guest's own process group, so `shutdown` can kill and
+        // prove the *guest*, not just the launcher that spawned it.
+        session.guest_group = ready
+            .get("guest_process_group")
+            .and_then(|v| v.as_i64())
+            .and_then(|v| i32::try_from(v).ok())
+            .filter(|group| *group > 1);
         if let Some(width) = ready.get("width").and_then(|v| v.as_u64()) {
             session.width = width as u32;
         }
@@ -1768,6 +2054,13 @@ impl ArtSession {
         if let Some(activity) = ready.get("activity").and_then(|v| v.as_str()) {
             session.activity = Some(activity.to_string());
         }
+        // VIEW1a: the session's live-view stream socket (protocol v1). The
+        // registry publishes it; a session without one still runs normally.
+        if let Some(path) = ready.get("stream_socket").and_then(|v| v.as_str()) {
+            if !path.is_empty() {
+                session.stream_socket = Some(PathBuf::from(path));
+            }
+        }
         // `acos verify` starts the guest before its own step clock, so this is
         // the boot cost the verdict never showed.
         session.session_start_ms = spawned_at.elapsed().as_millis() as u64;
@@ -1779,6 +2072,17 @@ impl ArtSession {
     /// step clock starts, so no step could be charged with it.
     pub const fn session_start_ms(&self) -> u64 {
         self.session_start_ms
+    }
+
+    /// The guest's own pid: the process group `acos-art` started for it
+    /// (`guest_process_group` on the ready line; the guest is its own group
+    /// leader, so the group id is the pid). `None` before a ready line or for a
+    /// launcher that does not report one. FB5: `session_list` reports it so the
+    /// owning MCP server can say how much memory a session's guest holds.
+    pub fn guest_pid(&self) -> Option<u32> {
+        self.guest_group
+            .and_then(|group| u32::try_from(group).ok())
+            .filter(|pid| *pid > 1)
     }
 
     /// ZPROD3: the zygote child facts this session really runs on, or `None`
@@ -1853,9 +2157,17 @@ impl ArtSession {
         cached.observed(previous).map(Some)
     }
 
+    /// REL3E: attach the resolved-target/hit-test block to the action's own
+    /// delivery record, so `verify` publishes the same `target` the MCP reply
+    /// carries instead of re-deriving it.
+    pub fn attach_input_target(&mut self, target: serde_json::Value) {
+        if let Some(input) = self.last_input.as_mut() {
+            input.target = Some(target);
+        }
+    }
+
     /// The bound tree of the most recent completed traversal, without issuing a
     /// command.
-    #[allow(dead_code)]
     pub fn bound_tree(&self) -> Option<UiTree> {
         self.cached.as_ref().map(|frame| frame.tree.clone())
     }
@@ -1918,6 +2230,25 @@ impl ArtSession {
     /// The launched Activity, when the guest reported one.
     pub fn activity(&self) -> Option<&str> {
         self.activity.as_deref()
+    }
+
+    /// VIEW1a: the live-view stream socket this session's ready line reported.
+    #[must_use]
+    pub fn stream_socket(&self) -> Option<&Path> {
+        self.stream_socket.as_deref()
+    }
+
+    /// VIEW1a: the launcher (`acos-art`) pid of the current guest, so the live
+    /// registry can name it and a reader can tell a live entry from a stale one.
+    #[must_use]
+    pub fn launcher_pid(&self) -> Option<u32> {
+        self.process_group.map(|pid| pid as u32)
+    }
+
+    /// VIEW1a: the session's display size as the guest booted it.
+    #[must_use]
+    pub const fn display_size(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 
     /// The APK this session runs.
@@ -2577,10 +2908,14 @@ impl ArtSession {
         if self.last_input_settle.is_none() {
             self.last_input_settle = reply.get("settle").cloned();
         }
+        let (handled, published) = handled_from_reply(reply);
         self.last_input = Some(InputDelivery {
             delivered: true,
             visual_change,
+            handled,
+            published,
             acks: acks_from_reply(reply),
+            target: reply.get("target").cloned(),
             settle: reply.get("settle").cloned(),
         });
         Ok(())
@@ -2721,6 +3056,20 @@ impl ArtSession {
             self.last_pixel = Some(frame.clone());
         }
         self.cached = Some(frame);
+        // FB2c: the placeholder label describes the frame it was bound to. A
+        // later traversal that binds app content clears it, so a sticky report
+        // can never block a launch/screenshot of an app that has since mounted.
+        if self
+            .first_frame_report
+            .as_ref()
+            .is_some_and(|report| report.placeholder)
+            && self
+                .cached
+                .as_ref()
+                .is_some_and(|frame| !first_frame_is_bare_skeleton(&frame.tree))
+        {
+            self.first_frame_report = None;
+        }
         Ok(())
     }
 
@@ -2908,49 +3257,220 @@ impl ArtSession {
     }
 
     fn kill_group(&mut self) {
+        // SERVELEAK2/F4: a teardown that proved the tree empty cleared every
+        // group id, so there is nothing left to signal — and, more importantly,
+        // nothing left for a recycled id to be confused with.
+        if self.proven_empty {
+            self.stdin = None;
+            return;
+        }
         if let Some(mut child) = self.child.take() {
             let pid = child.id() as i32;
             dm6_trace(serde_json::json!({
                 "event": "drop.kill",
                 "session": self.artifacts.display().to_string(),
                 "pid": pid,
+                "pidfd": self.leader_pidfd.is_some(),
                 "unix_ms": now_unix_ms(),
             }));
-            let _ = child.kill();
-            // SAFETY: `pid` is the direct child's pid and the child was spawned
-            // into its own process group (`process_group(0)`), so `-pid` names
-            // that group and no other process.
+            // F4: SIGKILL the leader **through its pidfd** when there is one, so
+            // the signal names the process this session spawned and never a
+            // recycled pid number.
+            match self.leader_pidfd.as_ref() {
+                Some(fd) => {
+                    pidfd_send_signal(fd, libc::SIGKILL);
+                }
+                None => {
+                    let _ = child.kill();
+                }
+            }
+            // The leader is still **unreaped** here (`child` was not waited
+            // yet), so its pid and group id cannot have been recycled: `-pid`
+            // still names this session's group and nothing else.
+            // SAFETY: the child leads its own process group
+            // (`process_group(0)`) and is still a zombie of this process.
             unsafe {
+                note_group_signal();
                 libc::kill(-pid, libc::SIGKILL);
             }
             let _ = child.wait();
         }
+        // SERVELEAK: the guest has its own group (`acos-art` spawns it with
+        // `process_group(0)`), so a drop that only killed the launcher's group
+        // left bwrap/dalvikvm64 running. Kill everything this session provably
+        // owns, always.
+        //
+        // Only *proved* ownership is killed here: `*self = fresh` drops the
+        // previous incarnation after `reset` has already spawned the
+        // replacement, which names the same artifacts directory, so a
+        // directory-wide sweep would kill the guest that just started.
+        self.sigkill_group();
         self.stdin = None;
     }
 
-    /// Members of the session's process group (empty when it has no group).
-    fn group_survivors(&self) -> Vec<u32> {
-        self.process_group
-            .map(processes_in_group)
-            .unwrap_or_default()
+    /// Every process group this session owns, guarded.
+    ///
+    /// The launcher's group and the guest's group are distinct by design
+    /// (`crates/acos-art/src/launcher.rs` spawns the guest with
+    /// `process_group(0)`). A group id is only ever signalled when it is a real
+    /// positive pid-like value and **not** this process's own group, so a
+    /// malformed or stale record can never signal the daemon's (or a caller's)
+    /// group.
+    fn own_groups(&self) -> Vec<i32> {
+        // SAFETY: `getpgrp` takes no arguments and cannot fail.
+        let own = unsafe { libc::getpgrp() };
+        let mut groups: Vec<i32> = Vec::new();
+        for group in [self.process_group, self.guest_group].into_iter().flatten() {
+            if group > 1 && group != own && !groups.contains(&group) {
+                groups.push(group);
+            }
+        }
+        groups
     }
 
-    /// SIGKILL the session's whole process group (idempotent; `ESRCH` is fine).
-    fn sigkill_group(&self) {
-        let Some(group) = self.process_group else {
-            return;
-        };
-        dm6_trace(serde_json::json!({
-            "event": "sigkill.group",
-            "session": self.artifacts.display().to_string(),
-            "process_group": group,
-            "unix_ms": now_unix_ms(),
-        }));
-        // SAFETY: `group` was the child's own process group id
-        // (`process_group(0)`), so `-group` names that group and no other.
-        unsafe {
-            libc::kill(-group, libc::SIGKILL);
+    /// Pids this session can **prove** it owns (SERVELEAK2/F1).
+    ///
+    /// Three independent proofs, and nothing else:
+    ///
+    /// 1. membership of a process group this session recorded (the launcher's
+    ///    and the guest's);
+    /// 2. the `/proc` ppid chain from the launcher pid this session spawned
+    ///    (walked while the launcher lives);
+    /// 3. [`SESSION_TOKEN_ENV`] carrying this session's random token — the only
+    ///    proof that survives the launcher's death and a guest reparented to
+    ///    init, and the one a *different* session (even one running the same
+    ///    scenario into a path-identical artifacts directory) can never carry.
+    ///
+    /// A command-line substring is deliberately **not** a proof: two agents
+    /// running `acos verify counter.yaml` in different worktrees both have
+    /// `out/counter` on their launcher's command line, and treating that as
+    /// ownership let one teardown SIGKILL the other's live guest.
+    fn owned_pids(&self) -> Vec<u32> {
+        let me = std::process::id();
+        let mut pids: Vec<u32> = Vec::new();
+        // Proof 1 — membership of a process group this session recorded. This is
+        // the widest proof and the one that makes the teardown *complete*: a
+        // guest whose environment was cleared (`bwrap --clearenv`) and whose
+        // parent already died is still a member of the group this session
+        // started, so it must be named in the teardown proof rather than
+        // reported as a clean tree over a live process.
+        for group in self.own_groups() {
+            pids.extend(processes_in_group(group));
         }
+        pids.extend(self.provable_pids());
+        pids.retain(|pid| *pid != me);
+        pids.sort_unstable();
+        pids.dedup();
+        pids
+    }
+
+    /// Pids this session can prove it started **independently of a group id**
+    /// (SERVELEAK2/F1 proofs 2 and 3).
+    ///
+    /// These, and only these, are what a signal is aimed at: a recorded group id
+    /// can be recycled by another agent once its leader is reaped (F4), so a
+    /// group is signalled only while it holds one of these pids (see
+    /// [`Self::owned_live_groups`]). A member that cannot be attributed this way
+    /// is still *reported* as a survivor — never silently dropped, never killed
+    /// on a guess.
+    fn provable_pids(&self) -> Vec<u32> {
+        let mut pids: Vec<u32> = Vec::new();
+        if let Some(launcher) = self.launcher_pid {
+            pids.extend(descendants_of(launcher as u32));
+        }
+        if !self.session_token.is_empty() {
+            let needle = format!("{}={}", SESSION_TOKEN_ENV, self.session_token);
+            for pid in all_pids() {
+                if environ_has(pid, &needle) {
+                    pids.push(pid);
+                }
+            }
+        }
+        pids
+    }
+
+    /// The process groups that currently hold at least one **provably owned**
+    /// pid (SERVELEAK2/F1, F4).
+    ///
+    /// `kill(-group)` is only ever issued for one of these. A recorded group id
+    /// whose members are no longer ours (the leader was reaped and the id was
+    /// recycled by another agent's `setsid`/`bwrap`) therefore dies here
+    /// without being signalled at all: nobody in it is ours to kill.
+    fn owned_live_groups(&self) -> Vec<i32> {
+        // SAFETY: `getpgrp` takes no arguments and cannot fail.
+        let own = unsafe { libc::getpgrp() };
+        let mut groups: Vec<i32> = Vec::new();
+        for pid in self.provable_pids() {
+            if let Some((_ppid, pgrp, _alive)) = proc_ppid_pgrp(pid) {
+                if pgrp > 1 && pgrp != own && !groups.contains(&pgrp) {
+                    groups.push(pgrp);
+                }
+            }
+        }
+        groups.sort_unstable();
+        groups
+    }
+
+    /// SIGKILL every process this session provably owns. Idempotent.
+    ///
+    /// SERVELEAK2/F1: the old shape also SIGKILLed every process whose command
+    /// line *mentioned* the session's artifacts directory. That is not
+    /// ownership: a second agent verifying the same scenario into a
+    /// path-identical directory was killed by this session's teardown. Only the
+    /// three proofs in [`Self::owned_pids`] are used now.
+    fn reap_session_leftovers(&self) -> usize {
+        // A signal is aimed only at a pid this session can prove it started
+        // (F1: not at a command-line name, not at a recycled group id).
+        let owned: Vec<u32> = self
+            .provable_pids()
+            .into_iter()
+            .filter(|pid| *pid != std::process::id())
+            .collect();
+        for pid in &owned {
+            // SAFETY: `pid` is a live process this session proved it owns; a
+            // process that died in between answers `ESRCH`.
+            unsafe {
+                libc::kill(*pid as i32, libc::SIGKILL);
+            }
+        }
+        owned.len()
+    }
+
+    /// Members of every process group the session owns, plus any other process
+    /// it provably started and still has alive.
+    ///
+    /// SERVELEAK: the launcher and the guest are in *different* groups
+    /// (`crates/acos-art/src/launcher.rs` gives the guest its own with
+    /// `process_group(0)`), so a proof that only walked the launcher's group
+    /// reported "clean" while bwrap/dalvikvm64 kept running.
+    fn group_survivors(&self) -> Vec<u32> {
+        self.owned_pids()
+    }
+
+    /// SIGKILL every process this session provably owns (idempotent; `ESRCH` is
+    /// fine).
+    fn sigkill_group(&self) {
+        // Groups first: `kill(-group)` reaches a whole tree in one call. Only
+        // groups with an owned member are signalled (F1/F4).
+        for group in self.owned_live_groups() {
+            dm6_trace(serde_json::json!({
+                "event": "sigkill.group",
+                "session": self.artifacts.display().to_string(),
+                "process_group": group,
+                "unix_ms": now_unix_ms(),
+            }));
+            // SAFETY: every id here holds at least one process this session
+            // proved it owns, and is never this process's own group; `-group`
+            // names that group and no other.
+            unsafe {
+                note_group_signal();
+                libc::kill(-group, libc::SIGKILL);
+            }
+        }
+        // Then every owned process whose group was not signalled above (a child
+        // that called `setsid`, or a guest whose group id was recorded before a
+        // relaunch). Guarded by ownership, never by a name match.
+        self.reap_session_leftovers();
     }
 
     /// Stop the guest and prove its whole process group is gone. Shared by
@@ -3011,6 +3531,11 @@ impl ArtSession {
         } else {
             self.group_survivors()
         };
+        // SERVELEAK: a survivor is not reported until it has been **killed**.
+        // The old code returned `Err(PROCESS_TREE_DIRTY)` here without ever
+        // signalling the guest group, so a destroy could fail *and* leave the
+        // guest running. Every group the session owns is SIGKILLed first (the
+        // guest's own group included), then the proof is re-taken.
         if !survivors.is_empty() {
             self.sigkill_group();
         }
@@ -3025,6 +3550,9 @@ impl ArtSession {
             while Instant::now() < grace && !report.survivors.is_empty() {
                 std::thread::sleep(step);
                 step = (step * 2).min(Duration::from_millis(10));
+                // A process may have forked between the scan and the signal;
+                // re-signal the whole tree before re-taking the proof.
+                self.sigkill_group();
                 report = self.teardown_report();
             }
         }
@@ -3054,14 +3582,35 @@ impl ArtSession {
         // wait alone, so the poll replacement and the /proc proof can be told
         // apart. Inert unless `DM6_RESET_TRACE` names a file; no reply or
         // control flow changes.
+        //
+        // SERVELEAK2/F4: once the teardown has *proven* the tree empty the group
+        // ids are dropped. Holding them any longer is a hazard, not a
+        // convenience: the kernel may hand the id to another agent's
+        // `setsid`/`bwrap`, and a later `Drop` or repeat `shutdown` would then
+        // SIGKILL a stranger. Every later signal path derives its target from
+        // ownership (`owned_live_groups`), so a cleared record is also the
+        // cheapest correct state.
+        // SERVELEAK2/F1: a command-line mention of this session's directory by
+        // a process this session does **not** own (another agent verifying the
+        // same scenario). Reported in the trace, never signalled: a name match
+        // is not ownership.
+        let foreign_mentions = self.foreign_artifacts_mentions();
+        self.proven_empty = true;
+        self.reported_group = self.process_group.or(self.reported_group);
+        self.process_group = None;
+        self.guest_group = None;
+        self.launcher_pid = None;
+        self.session_token = String::new();
+        self.leader_pidfd = None;
         dm6_trace(serde_json::json!({
             "event": "stop",
             "session": self.artifacts.display().to_string(),
-            "process_group": self.process_group,
+            "process_group": self.reported_group,
             "path": path.as_str(),
             "zygote": self.zygote.is_some(),
             "grace_ms": grace.as_millis() as u64,
             "exit_ms": exit_ms,
+            "foreign_mentions": foreign_mentions,
             "stop_ms": started.elapsed().as_millis() as u64,
             "reaped_before_deadline": exited,
             "unix_ms": now_unix_ms(),
@@ -3085,14 +3634,36 @@ impl ArtSession {
         self.relaunch_retry.as_ref()
     }
 
-    /// GL1: processes that still name this session's artifacts directory on
-    /// their command line (the `acos-art` launcher and anything it left).
+    /// GL1: processes this session **provably** started and that are still
+    /// alive (SERVELEAK2/F1).
     ///
-    /// The process-group proof above only covers the group the engine spawned;
-    /// this is the *session*-wide check the destroy reply reports, so a leftover
-    /// launcher from the same session cannot be missed.
+    /// The process-group proof above only covers the groups the engine recorded;
+    /// this is the *session*-wide check the destroy reply reports. It is derived
+    /// from ownership (groups, the launcher's descendant chain, the inherited
+    /// session token), never from a command-line match: a second agent verifying
+    /// the same scenario into a path-identical artifacts directory is not this
+    /// session's leftover and must not be named or killed as one.
     pub fn session_leftovers(&self) -> Vec<u32> {
+        if self.proven_empty {
+            return Vec::new();
+        }
+        self.owned_pids()
+    }
+
+    /// Processes whose command line **names** this session's artifacts
+    /// directory but which this session does not own (SERVELEAK2/F1: report
+    /// only, never a signal target).
+    ///
+    /// This is the case a substring match got wrong: another agent running the
+    /// same scenario from another directory. Canonicalising the directory and
+    /// requiring a whole argv element to be it (or sit under it) makes the
+    /// report precise; ownership is still what decides a kill.
+    fn foreign_artifacts_mentions(&self) -> Vec<u32> {
+        let owned = self.owned_pids();
         processes_mentioning(&self.artifacts)
+            .into_iter()
+            .filter(|pid| !owned.contains(pid))
+            .collect()
     }
 
     /// Whether no process is left in the session's process group, asked of the
@@ -3105,7 +3676,28 @@ impl ArtSession {
     /// then the proof and the survivor list. No group recorded (`None`) keeps
     /// the old unverified-report behaviour.
     fn group_is_empty(&self) -> bool {
-        self.process_group.map(group_is_empty).unwrap_or(true)
+        // Every group the session owns, not just the launcher's (SERVELEAK).
+        let groups = self.own_groups();
+        groups.is_empty() || groups.iter().all(|group| group_is_empty(*group))
+    }
+
+    /// Kill every process this session provably owns and report what is still
+    /// alive afterwards. Called by `acos_destroy` (SERVELEAK): a destroy that
+    /// names a leftover must kill it, never only report it. (SERVELEAK2/F1: the
+    /// leftover set is the ownership set, so a stranger that merely names the
+    /// same directory is neither killed nor reported as a survivor.)
+    pub fn reap_leftovers(&self) -> Vec<u32> {
+        self.reap_session_leftovers();
+        let mut alive = self.session_leftovers();
+        let deadline = Instant::now() + Duration::from_millis(500);
+        let mut step = Duration::from_millis(1);
+        while !alive.is_empty() && Instant::now() < deadline {
+            std::thread::sleep(step);
+            step = (step * 2).min(Duration::from_millis(10));
+            self.sigkill_group();
+            alive = self.session_leftovers();
+        }
+        alive
     }
 
     /// Wait for the child to exit, without polling, up to `deadline`.
@@ -3164,18 +3756,32 @@ impl ArtSession {
     /// alive here: a process that has not been reaped still owns resources, and
     /// the caller must see it rather than a clean report.
     fn teardown_report(&self) -> TeardownReport {
+        if self.proven_empty {
+            return TeardownReport {
+                process_group: self.reported_group,
+                survivors: Vec::new(),
+                verified: true,
+            };
+        }
         let Some(group) = self.process_group else {
             return TeardownReport::unverified();
         };
         TeardownReport {
             process_group: Some(group),
-            survivors: processes_in_group(group),
+            survivors: self.group_survivors(),
             verified: true,
         }
     }
 
     /// A teardown report from a `/proc` scan already taken by the caller.
     fn teardown_report_with(&self, survivors: Vec<u32>) -> TeardownReport {
+        if self.proven_empty {
+            return TeardownReport {
+                process_group: self.reported_group,
+                survivors: Vec::new(),
+                verified: true,
+            };
+        }
         let Some(group) = self.process_group else {
             return TeardownReport::unverified();
         };
@@ -3481,10 +4087,120 @@ impl ArtSession {
         }
     }
 
+    /// FB2c item 6: a tree traversal that **captures** the frame in the same
+    /// request when the caller wants a screenshot, so the tree and the PNG of one
+    /// reply are one frame (`screenshot.frame_seq == tree frame_seq`). Without a
+    /// screenshot it is exactly [`ArtSession::tree_with_settle`] (tree-only).
+    pub fn tree_with_settle_pixels(
+        &mut self,
+        settle: &'static str,
+        pixels: bool,
+    ) -> Result<UiTree, BackendError> {
+        let settle = if settle == "fast" { "fast" } else { "strict" };
+        self.request_tree_with(settle, pixels)?;
+        self.require_cached_tree()
+    }
+
     /// G3c: how the most recent launch bound its first frame (serve publishes
     /// it in the launch reply, so a placeholder is visible and never silent).
     pub(crate) fn first_frame_report(&self) -> Option<FirstFrameReport> {
         self.first_frame_report.clone()
+    }
+
+    /// FB2: is the bound launch frame still the bare window skeleton?
+    ///
+    /// True only when the launch waited its whole content budget and the frame
+    /// never grew past the skeleton **and** nothing about the frame moved (see
+    /// [`first_frame_placeholder_verdict`]). A screenshot of such a frame is not
+    /// a screenshot of the app, so the session verbs refuse it instead of
+    /// returning splash pixels.
+    ///
+    /// FB2c: the label is not sticky. Every later traversal that binds a frame
+    /// with content clears it (see [`ArtSession::absorb`]), so a second `launch`, a
+    /// `reset` or a screenshot after the app mounted is judged on the current
+    /// frame, never on a report from the failed launch.
+    pub(crate) fn placeholder_frame(&self) -> bool {
+        self.placeholder_frame_report().is_some()
+    }
+
+    /// FB2c: the placeholder report, when the **current** bound frame is still
+    /// the placeholder (the reply publishes it; `None` once content was seen).
+    pub(crate) fn placeholder_frame_report(&self) -> Option<&FirstFrameReport> {
+        let report = self.first_frame_report.as_ref()?;
+        if !report.placeholder {
+            return None;
+        }
+        match self.cached.as_ref() {
+            Some(frame) => {
+                if report.frame_seq.is_some() && report.frame_seq != Some(frame.seq) {
+                    // A newer frame is bound: its content decides, not the
+                    // launch report. `absorb` clears the report on content; this
+                    // is the same rule for a frame bound by another path.
+                    if first_frame_is_bare_skeleton(&frame.tree) {
+                        return Some(report);
+                    }
+                    return None;
+                }
+                Some(report)
+            }
+            None => Some(report),
+        }
+    }
+
+    /// FB2: the PNG artifact the session's current frame is bound to.
+    ///
+    /// The bound traversal's own PNG (the normal case: a strict tree traversal
+    /// captures). The returned path is the launcher's artifact — the SHOTZ
+    /// encoder already wrote it, so a caller copies the compressed bytes and
+    /// never re-encodes.
+    ///
+    /// FB2c item 6: never a *newer* frame than the tree in the same reply. This
+    /// used to fall back to `capture_frame()`, so a `pixels:false` tree reply got
+    /// a screenshot whose `frame_seq` was newer than the tree's and the two
+    /// disagreed about what was on screen. A tree without its own pixels is now
+    /// a structured refusal.
+    pub(crate) fn screenshot_source(&mut self) -> Result<(PathBuf, u64, String, u64), BackendError> {
+        if let Some(cached) = self.cached.as_ref() {
+            if let Some(artifact) = cached.png.as_ref() {
+                if artifact.frame_seq == cached.seq {
+                    return Ok((
+                        artifact.path.clone(),
+                        cached.seq,
+                        cached.md5.clone(),
+                        artifact.size,
+                    ));
+                }
+            }
+            return Err(live_frame_unavailable(format!(
+                "the bound tree's frame (frame_seq {}) carries no pixel artifact of its own, so a \
+                 screenshot would have to be a *different* frame than the tree in this reply; \
+                 refusing to pair them. Request the tree with pixels (the default strict \
+                 traversal) and ask for the screenshot again",
+                cached.seq
+            )));
+        }
+        Err(live_frame_unavailable(
+            "no frame is bound to the session, so there is nothing to screenshot",
+        ))
+    }
+
+    /// W58/FB2: the bound frame's display-space origin, in pixels.
+    ///
+    /// Measured from the probe tree (`bounds_on_screen` minus window-local
+    /// `bounds`), the same offset the input channel already applies. A PNG
+    /// covers `[display_origin, display_origin + png size)` of the display, so
+    /// `png_y = display_y - display_origin.y`; publishing it is what stops an
+    /// agent from mis-tapping a screenshot by the status-bar inset.
+    pub(crate) fn display_origin(&self) -> (i32, i32) {
+        self.input_offset
+    }
+
+    /// FB2: the producer frame number of the bound frame, when the reply
+    /// carried one. A placeholder launch is reported with it, because a number
+    /// that never advances is what "the app never mounted" looks like from the
+    /// frame store.
+    pub(crate) fn last_frame_number(&self) -> Option<u64> {
+        self.cached.as_ref().and_then(|frame| frame.frame_number)
     }
 
     /// G3f1: the settle verdict of the frame the last launch bound
@@ -3546,6 +4262,26 @@ pub(crate) fn ensure_launch_tree(
         Ok(tree)
     }
 
+    /// FB2c: the frame identity the placeholder verdict compares.
+    ///
+    /// The tree's own identity (`frame_number`/`frame_seq`) is always available;
+    /// the pixel digest only when the traversal captured one. A bare-skeleton
+    /// traversal that did not capture is captured here: the pixel comparison is
+    /// what keeps a text-free **mounted** screen (SurfaceView/GL/image-only) from
+    /// being called a placeholder, so the one extra capture is paid only on the
+    /// path where the verdict is genuinely in doubt.
+    fn verdict_identity(&mut self, tree: &UiTree) -> FrameIdentity {
+        let mut identity = frame_identity(self.cached.as_ref());
+        if first_frame_is_bare_skeleton(tree) && identity.md5.is_none() {
+            if let Ok(captured) = self.capture_frame() {
+                if !captured.md5.is_empty() {
+                    identity.md5 = Some(captured.md5.clone());
+                }
+            }
+        }
+        identity
+    }
+
     /// G3c/G3f1: bind a launch's first frame, waiting past an unmounted window
     /// skeleton.
     ///
@@ -3602,19 +4338,18 @@ pub(crate) fn ensure_launch_tree(
         waited_ms += started.elapsed().as_millis() as u64;
         first?;
         let mut tree = self.require_cached_tree()?;
-        if !tree_settle_settled(&self.last_tree_settle) {
-            // Pre-existing behaviour: a first traversal that did not settle is
-            // handed back as-is (the caller's settle deadline decides).
-            let bound = settle_bound(&self.last_tree_settle);
-            let report =
-                FirstFrameReport::one_traversal(&tree, false, bound.clone());
-            self.first_frame_bound = Some((false, bound));
-            return Ok((tree, report));
-        }
-        // The last **settled** binding. A retry is an optimisation, never a new
-        // failure mode: when it does not settle, the launch frame and its settle
-        // verdict roll back to this one, exactly as a launch without the wait
-        // would have.
+        // FB2c: the frame the launch's own traversal bound is the baseline for
+        // the placeholder evidence. A skeleton tree alone is not evidence of an
+        // unmounted app (a custom View / SurfaceView / GL / image-only / Flutter
+        // screen is text-free too), so the verdict compares the frame identity
+        // and the pixels across the content wait.
+        let baseline_identity = self.verdict_identity(&tree);
+        let budget_ms = first_frame_budget_ms();
+        // FB2c item 2: an unsettled first traversal is **not** an early return.
+        // It used to return `one_traversal` (waited_ms 0, placeholder from the
+        // bare skeleton), so an animating splash answered a placeholder verdict
+        // before the content budget ever ran. It is the rollback baseline here
+        // and the wait below still gets its budget.
         let mut settled_binding = (
             self.require_cached_frame()?.clone(),
             self.last_tree_settle.clone(),
@@ -3622,7 +4357,7 @@ pub(crate) fn ensure_launch_tree(
 
         // 2. The content wait. Only an unmounted skeleton reaches it.
         if first_frame_is_unmounted(&tree) {
-            let deadline = Instant::now() + Duration::from_millis(first_frame_budget_ms());
+            let deadline = Instant::now() + Duration::from_millis(budget_ms);
             while first_frame_is_unmounted(&tree) && traversals < FIRST_FRAME_MAX_ATTEMPTS {
                 let remaining = deadline.saturating_duration_since(Instant::now());
                 if remaining.is_zero() {
@@ -3684,6 +4419,12 @@ pub(crate) fn ensure_launch_tree(
             }
         }
 
+        // FB2c: the evidence is what the *latest* traversal saw, taken before the
+        // rollback below can restore an older bound frame (an animating skeleton
+        // that never settles is rolled back to the baseline, which would make
+        // "nothing moved" true by construction).
+        let observed_identity = self.verdict_identity(&tree);
+
         // 3. Keep the settled binding as the launch frame whenever the last
         // traversal did not leave a usable one of its own (a settle timeout or a
         // guest error). A `change-draw` bind *is* usable and stays.
@@ -3697,6 +4438,9 @@ pub(crate) fn ensure_launch_tree(
             bound = settle_bound(&self.last_tree_settle);
         }
         let unmounted = first_frame_is_unmounted(&tree);
+        let current_identity = self.verdict_identity(&tree);
+        let evidence = frame_evidence(&baseline_identity, &observed_identity, traversals);
+        let (placeholder, suspect) = first_frame_placeholder_verdict(&tree, &evidence);
         self.first_frame_bound = Some((settled, bound.clone()));
         let report = FirstFrameReport {
             traversals,
@@ -3705,16 +4449,49 @@ pub(crate) fn ensure_launch_tree(
             settled,
             bound,
             nodes: ui_tree_node_count(&tree.nodes),
-            placeholder: unmounted && first_frame_is_bare_skeleton(&tree),
+            placeholder,
+            suspect,
+            frame_seq: current_identity.seq,
+            frame_number: current_identity.frame_number,
+            frames: evidence.frames,
+            frames_advanced: evidence.frames_advanced,
+            pixels_compared: evidence.pixels_compared,
+            pixels_changed: evidence.pixels_changed,
+            budget_ms,
         };
+        if suspect {
+            eprintln!(
+                "acos serve: launch first frame is a text-free skeleton ({} nodes) but the frame \
+                 moved ({} frame(s), identity advanced: {}, pixels compared: {}, pixels changed: \
+                 {}); reported as placeholder_suspect, never blocked",
+                report.nodes,
+                report.frames,
+                report.frames_advanced,
+                report.pixels_compared,
+                report.pixels_changed
+            );
+        }
         if report.placeholder && warn_placeholder {
             eprintln!(
                 "acos serve: launch first frame is a window skeleton ({} nodes, no app text) \
-                 after {} traversal(s)/{} ms ({} event wait(s)); reported as placeholder, \
-                 never as app content",
-                report.nodes, report.traversals, report.waited_ms, report.event_waits
+                 after {} traversal(s)/{} ms ({} event wait(s), budget {} ms); nothing about the \
+                 frame moved (identity advanced: {}, pixels compared: {}, pixels changed: {}), so \
+                 it is reported as a placeholder, never as app content",
+                report.nodes,
+                report.traversals,
+                report.waited_ms,
+                report.event_waits,
+                report.budget_ms,
+                report.frames_advanced,
+                report.pixels_compared,
+                report.pixels_changed
             );
         }
+        // FB2c: the report is session state (serve publishes it, the screenshot
+        // verbs read it, `reset` replaces it). Storing it here means every route
+        // that binds a first frame — serve, verify, reset — keeps it honest.
+        self.first_frame_report = Some(report.clone());
+        let _ = unmounted;
         Ok((tree, report))
     }
 
@@ -3837,9 +4614,56 @@ pub(crate) fn ensure_launch_tree(
     }
 }
 
+impl ArtSession {
+    /// FB3: ask the next input command's reply for a settled tree diff.
+    pub fn set_diff_requested(&mut self, requested: bool) {
+        self.diff_requested = requested;
+    }
+
+    /// FB3: whether the current action's reply carries `changes`.
+    pub fn diff_requested(&self) -> bool {
+        self.diff_requested
+    }
+
+    /// FB3: the settled tree diff of the action that just ran.
+    ///
+    /// `before` is the tree snapshotted before the input was injected and
+    /// `after` is the tree the action's own settle bound -- both were already in
+    /// the session, so this reads and compares, nothing more. With no pre-action
+    /// tree the reply says `baseline: "none"`; no diff is ever invented.
+    pub fn tree_changes(&self) -> acos_protocol::TreeChanges {
+        let after = self.cached.as_ref();
+        let frames = acos_protocol::DiffFrames {
+            before: self.diff_baseline.as_ref().map_or(0, |b| b.seq),
+            after: after.map_or(0, |frame| frame.seq),
+        };
+        let activity = self.activity.as_deref().unwrap_or("");
+        match (self.diff_baseline.as_ref(), after) {
+            (Some(baseline), Some(after)) => acos_protocol::TreeChanges::diff(
+                Some(&baseline.tree),
+                &after.tree,
+                frames,
+                activity,
+            ),
+            // A tree is required on both sides. Without an `after` tree the
+            // action bound no observation, so the honest answer is "no
+            // baseline" rather than a diff against nothing.
+            _ => acos_protocol::TreeChanges::none(frames, activity),
+        }
+    }
+}
+
 impl SessionBackend for ArtSession {
     fn engine(&self) -> Engine {
         Engine::Art
+    }
+
+    fn bound_tree(&self) -> Option<UiTree> {
+        ArtSession::bound_tree(self)
+    }
+
+    fn attach_input_target(&mut self, target: serde_json::Value) {
+        ArtSession::attach_input_target(self, target);
     }
 
     fn mode(&self) -> Mode {
@@ -3894,8 +4718,20 @@ impl SessionBackend for ArtSession {
         // the launch step is judged exactly as it was before G3c.
         let settle_before = self.last_tree_settle.clone();
         let (_tree, report) =
-            self.bind_first_frame(if content { "fast" } else { "strict" }, !content, !content)?;
+            self.bind_first_frame(if content { "fast" } else { "strict" }, !content, true)?;
         self.last_tree_settle = settle_before;
+        if report.placeholder {
+            // FB2: the false green reported by agents. `reached_stage:
+            // first_frame` with `placeholder: true` is *not* a launch pass: the
+            // window exists, the app's own content never mounted (measured:
+            // 9-node empty RN surface, `frame_number` stuck at 1 for 40+ s while
+            // SoLoader looped on a missing `libworklets.so`). A launch step that
+            // reached only the skeleton is `blocked` / `placeholder-content`.
+            return Err(BackendError::Error {
+                code: ErrorCode::PlaceholderContent,
+                detail: placeholder_evidence_detail(&report),
+            });
+        }
         // SE2: a content-settled launch proves the tree's content only. Its
         // frame is never pixel evidence, so no PNG is claimed for it and the
         // reply carries the measured content record.
@@ -3918,13 +4754,10 @@ impl SessionBackend for ArtSession {
         };
         let mut meta = frame.tree.frame.clone();
         // SE2: a content-settled launch binds the content-stable traversal, not
-        // the fast skeleton probe; its meaning is the content tree's own.
+        // the fast skeleton probe; its meaning is the content tree's own. (A
+        // placeholder never reaches here: FB2c blocks it above.)
         if content {
             meta.meaningful = !first_frame_is_bare_skeleton(&frame.tree);
-        } else if report.placeholder {
-            // The protocol rule: a placeholder must never satisfy a UI
-            // assertion. Say so in the frame itself, not only in prose.
-            meta.meaningful = false;
         }
         Ok(LaunchOutcome {
             session_id: format!(
@@ -4111,6 +4944,18 @@ impl SessionBackend for ArtSession {
             .cached
             .as_ref()
             .map(|frame| (frame.md5.clone(), frame.signature));
+        // FB3: the "before" side of the action's diff is the tree this session
+        // already holds -- the bound frame of the previous observation. It is
+        // only cloned when the caller asked for a diff (`diff:false` costs
+        // nothing), and it never triggers a traversal or a guest round trip.
+        self.diff_baseline = if self.diff_requested {
+            self.cached.as_ref().map(|frame| DiffBaseline {
+                tree: frame.tree.clone(),
+                seq: frame.seq,
+            })
+        } else {
+            None
+        };
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
@@ -4374,13 +5219,33 @@ impl SessionBackend for ArtSession {
         // no PNG; `strict` (default) is the unchanged 150 ms settled rule.
         let (bind_settle, bind_pixels) = (self.reset_settle, self.reset_pixels);
         let bind_started = Instant::now();
-        let bound = fresh
-            .request_tree_with(bind_settle, bind_pixels)
-            .and_then(|()| fresh.require_cached_tree());
-        if let Err(error) = bound {
+        // FB2c item 3: the reset binds the relaunched guest's **first frame**
+        // through the same rule a launch uses — the content wait and the
+        // placeholder verdict included. Before this, reset bound one plain
+        // traversal and `acos_reset` hardcoded `stage_reached: first_frame`, so
+        // a relaunched app that never mounted passed the step and every later
+        // screenshot served splash pixels.
+        let bound = fresh.bind_first_frame(bind_settle, bind_pixels, true);
+        let report = match bound {
+            Ok((_tree, report)) => report,
+            Err(error) => {
+                let _ = fresh.close();
+                self.invalidate_frame();
+                return Err(error);
+            }
+        };
+        if report.placeholder {
+            let detail = format!(
+                "reset relaunched the app and its first frame is still the window skeleton: {}",
+                placeholder_evidence_detail(&report)
+            );
             let _ = fresh.close();
             self.invalidate_frame();
-            return Err(error);
+            self.first_frame_report = None;
+            return Err(BackendError::Error {
+                code: ErrorCode::PlaceholderContent,
+                detail,
+            });
         }
         let bind_ms = bind_started.elapsed().as_millis() as u64;
         fresh.last_input = None;
@@ -4783,6 +5648,27 @@ fn teardown_grace_ms() -> u64 {
         .unwrap_or(DEFAULT_TEARDOWN_GRACE_MS)
 }
 
+/// SERVELEAK2/F1: the environment variable a session's launcher — and every
+/// process it starts — inherits, naming the session that owns it. Its presence
+/// in `/proc/<pid>/environ` is proof that this session started that process; no
+/// other session, and no command-line coincidence, can produce it.
+pub(crate) const SESSION_TOKEN_ENV: &str = "ACOS_ART_SESSION_TOKEN";
+
+/// SERVELEAK2/F4: how many `kill(-group)` signals this process has issued. A
+/// test seam: the F4 regression asserts that a teardown which already proved
+/// the tree empty issues **no** further group signal (a recycled group id is
+/// then never signalled).
+static GROUP_SIGNALS: AtomicUsize = AtomicUsize::new(0);
+
+fn note_group_signal() {
+    GROUP_SIGNALS.fetch_add(1, AtomicOrdering::Relaxed);
+}
+
+/// How many `kill(-group)` signals this process has issued (F4 test seam).
+pub(crate) fn kill_group_signals() -> usize {
+    GROUP_SIGNALS.load(AtomicOrdering::Relaxed)
+}
+
 /// The grace this session's stop may spend waiting for its own child to exit.
 ///
 /// The operator knob still wins (so an experiment can restore the old bound for
@@ -4800,45 +5686,166 @@ fn teardown_grace_ms_for(zygote: bool) -> u64 {
     }
 }
 
-/// Live (non-zombie) processes whose command line names `dir`.
+/// A fresh, unguessable-per-session ownership token (F1).
 ///
-/// The process-group proof is scoped to the group the engine spawned; this is
-/// the wider check the destroy reply reports (a launcher left behind by the
-/// same session is named on its own command line: `--out <dir>/art-frames`).
-fn processes_mentioning(dir: &Path) -> Vec<u32> {
-    let needle = dir.display().to_string();
-    let mut pids = Vec::new();
+/// Read from `/dev/urandom` (never a clock alone: two agents can start in the
+/// same millisecond, and the token is a capability that must not collide). The
+/// artifacts directory name is mixed in for a readable `ps e` / trace label.
+fn new_session_token(artifacts: &Path) -> String {
+    let mut bytes = [0u8; 16];
+    let read = std::fs::File::open("/dev/urandom")
+        .and_then(|mut file| file.read_exact(&mut bytes))
+        .is_ok();
+    if !read {
+        // `/dev/urandom` is present on every host ACOS runs on; a clock+pid mix
+        // is a weaker but still per-session-unique fallback.
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        bytes[..8].copy_from_slice(&(nanos as u64).to_le_bytes());
+        bytes[8..].copy_from_slice(&(std::process::id() as u64).to_le_bytes());
+    }
+    let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    let label = artifacts
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("session");
+    format!("acos-{label}-{hex}")
+}
+
+/// Every pid the kernel currently lists (F1's ownership walk).
+fn all_pids() -> Vec<u32> {
     let Ok(entries) = std::fs::read_dir("/proc") else {
-        return pids;
+        return Vec::new();
     };
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let Some(pid) = name.to_str().and_then(|name| name.parse::<u32>().ok()) else {
-            continue;
-        };
-        let Ok(raw) = std::fs::read(entry.path().join("cmdline")) else {
+    entries
+        .flatten()
+        .filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
+        .collect()
+}
+
+/// `(ppid, pgrp, alive)` for `pid`, from `/proc/<pid>/stat`.
+///
+/// The command name can contain spaces and parentheses, so parsing starts after
+/// the last `)`. `alive` is false for a zombie (it still occupies its group).
+fn proc_ppid_pgrp(pid: u32) -> Option<(i32, i32, bool)> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let rest = &stat[stat.rfind(')')? + 1..];
+    let mut fields = rest.split_whitespace();
+    let state = fields.next()?;
+    let ppid = fields.next()?.parse::<i32>().ok()?;
+    let pgrp = fields.next()?.parse::<i32>().ok()?;
+    Some((ppid, pgrp, state != "Z"))
+}
+
+/// Every live process descended from `root`, walked through `/proc`'s ppid
+/// links (F1 proof 2). Empty once the root itself is gone.
+fn descendants_of(root: u32) -> Vec<u32> {
+    let mut children: HashMap<i32, Vec<u32>> = HashMap::new();
+    for pid in all_pids() {
+        if let Some((ppid, _pgrp, _alive)) = proc_ppid_pgrp(pid) {
+            children.entry(ppid).or_default().push(pid);
+        }
+    }
+    let mut out: Vec<u32> = Vec::new();
+    let mut stack = vec![root as i32];
+    while let Some(parent) = stack.pop() {
+        for child in children.get(&parent).cloned().unwrap_or_default() {
+            if child == root || out.contains(&child) {
+                continue;
+            }
+            out.push(child);
+            stack.push(child as i32);
+        }
+    }
+    out.sort_unstable();
+    out
+}
+
+/// Whether `pid`'s environment contains the exact `NAME=value` entry `needle`
+/// (F1 proof 3; `\0`-separated, so a prefix/suffix can never match).
+fn environ_has(pid: u32, needle: &str) -> bool {
+    let Ok(raw) = std::fs::read(format!("/proc/{pid}/environ")) else {
+        return false;
+    };
+    raw.split(|byte| *byte == 0)
+        .any(|entry| entry == needle.as_bytes())
+}
+
+/// A pidfd for `pid`, or `None` where the kernel or the pid does not allow one
+/// (F4: a stable handle on the process, not on its pid number).
+fn open_pidfd(pid: u32) -> Option<OwnedFd> {
+    // SAFETY: `pidfd_open` takes the pid and flags; a valid fd is wrapped in an
+    // `OwnedFd` immediately, so it is closed exactly once.
+    let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid as libc::c_int, 0) as libc::c_int };
+    if fd < 0 {
+        return None;
+    }
+    // SAFETY: `fd` is a fresh, owned pidfd returned by `pidfd_open`.
+    Some(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
+/// Send `signal` through a pidfd (F4). Returns false when the process is gone.
+fn pidfd_send_signal(fd: &OwnedFd, signal: libc::c_int) {
+    // SAFETY: `fd` is an open pidfd this session owns; the info argument is NULL
+    // and ignored, which the kernel documents for this call.
+    unsafe {
+        libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            fd.as_raw_fd(),
+            signal,
+            std::ptr::null::<libc::siginfo_t>(),
+            0,
+        );
+    }
+    if signal == libc::SIGKILL {
+        note_group_signal();
+    }
+}
+
+/// Live (non-zombie) processes whose command line names `dir` (SERVELEAK2/F1).
+///
+/// **Report only** — ownership is decided by [`ArtSession::owned_pids`], never
+/// by this function; a name match is not proof that this session started a
+/// process. Two agents running `acos verify counter.yaml` from different
+/// directories both name `out/counter`, and `s1` is a prefix of `s10`.
+///
+/// The directory is canonicalised and must match a **whole argv element** (it, or
+/// a path under it), so `out/counter` can never match `other/out/counter2`.
+fn processes_mentioning(dir: &Path) -> Vec<u32> {
+    let key = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let key = key.display().to_string();
+    let mut pids = Vec::new();
+    for pid in all_pids() {
+        let Ok(raw) = std::fs::read(format!("/proc/{pid}/cmdline")) else {
             continue;
         };
         if raw.is_empty() {
             continue;
         }
-        let cmdline = String::from_utf8_lossy(&raw).replace('\0', " ");
-        if !cmdline.contains("acos-art") || !cmdline.contains(&needle) {
+        let names_acos_art = raw
+            .split(|byte| *byte == 0)
+            .any(|arg| String::from_utf8_lossy(arg).contains("acos-art"));
+        if !names_acos_art {
             continue;
         }
-        // A zombie is not running code; init/the subreaper still reaps it.
-        let state = std::fs::read_to_string(entry.path().join("status"))
-            .ok()
-            .and_then(|status| {
-                status
-                    .lines()
-                    .find(|line| line.starts_with("State:"))
-                    .and_then(|line| line.split_whitespace().nth(1).map(str::to_string))
-            });
-        if state.as_deref() == Some("Z") {
+        let names_dir = raw.split(|byte| *byte == 0).any(|arg| {
+            let arg = String::from_utf8_lossy(arg);
+            // Canonicalise the argv path when it exists, so `/a/out/counter` and
+            // `out/counter` are the same key; otherwise fall back to the text.
+            let arg_key = std::fs::canonicalize(arg.as_ref())
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|_| arg.to_string());
+            arg_key == key || arg_key.starts_with(&format!("{key}/"))
+        });
+        if !names_dir {
             continue;
         }
-        pids.push(pid);
+        match proc_ppid_pgrp(pid) {
+            Some((_ppid, _pgrp, true)) => pids.push(pid),
+            _ => continue,
+        }
     }
     pids.sort_unstable();
     pids
@@ -4941,7 +5948,14 @@ mod tests {
         };
         // The window skeleton the fast launch bind sees before the app mounts.
         let skeleton = tree(vec![node("com.android.internal.policy.DecorView", vec![])]);
-        let report = FirstFrameReport::one_traversal(&skeleton, true, Some("probe-fresh".into()));
+        let report = FirstFrameReport {
+            traversals: 1,
+            settled: true,
+            bound: Some("probe-fresh".into()),
+            nodes: ui_tree_node_count(&skeleton.nodes),
+            placeholder: first_frame_is_bare_skeleton(&skeleton),
+            ..FirstFrameReport::default()
+        };
         assert!(report.placeholder, "the pre-settle probe is a placeholder");
         assert_eq!(report.nodes, 1);
 
@@ -4957,6 +5971,91 @@ mod tests {
         );
         assert_eq!(report.nodes, ui_tree_node_count(&settled.nodes));
         assert_eq!(report.nodes, 2);
+    }
+
+    /// FB2c item 1: the placeholder verdict is frame evidence, not a node count.
+    ///
+    /// A synthetic window skeleton whose pixels **change** (a text-free mounted
+    /// screen) is a pass with a `placeholder_suspect` warning; the same tree whose
+    /// frame never moves is the placeholder. A content tree is neither.
+    #[test]
+    fn the_placeholder_verdict_needs_frame_evidence_not_a_node_count() {
+        use acos_protocol::ui::Bounds;
+        let node = |class: &str, children: Vec<UiNode>| {
+            let mut node = UiNode::new("n", class, Bounds::new(0, 0, 1080, 2209));
+            node.children = children;
+            node
+        };
+        let tree = |nodes: Vec<UiNode>| {
+            UiTree::new(
+                FrameMeta::new(1, "t", "c", 1080, 2400, 420, "h", true),
+                "com.gaten",
+                nodes,
+            )
+        };
+        let app_root = node("android.widget.FrameLayout", vec![]);
+        let content = node("android.widget.FrameLayout", vec![app_root]);
+        let skeleton = vec![node(
+            "com.android.internal.policy.DecorView",
+            vec![node(
+                "android.widget.LinearLayout",
+                vec![content, node("android.view.ViewStub", vec![])],
+            )],
+        )];
+        let identity = |seq: u64, md5: &str| FrameIdentity {
+            seq: Some(seq),
+            frame_number: Some(seq),
+            md5: Some(md5.to_string()),
+        };
+        let evidence = |before: &FrameIdentity, after: &FrameIdentity| {
+            frame_evidence(before, after, 2)
+        };
+
+        // Skeleton, same pixels, no newer frame: the placeholder.
+        let still = evidence(&identity(1, "aa"), &identity(1, "aa"));
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &still),
+            (true, false),
+            "a skeleton that nothing moved is the placeholder"
+        );
+        // Skeleton, same pixels but a republished frame: the pixels decide, so it
+        // is still the placeholder (the launcher re-published the window).
+        let republished = evidence(&identity(1, "aa"), &identity(2, "aa"));
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &republished),
+            (true, false)
+        );
+        // Skeleton, changed pixels: a text-free mounted screen — pass + suspect.
+        let animating = evidence(&identity(1, "aa"), &identity(2, "bb"));
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &animating),
+            (false, true),
+            "changing pixels are the app's frame, never a blocked verdict"
+        );
+        // No comparable digest: the frame identity decides.
+        let no_digest_moved = evidence(
+            &FrameIdentity { seq: Some(1), frame_number: Some(1), md5: None },
+            &FrameIdentity { seq: Some(2), frame_number: Some(2), md5: None },
+        );
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &no_digest_moved),
+            (false, true)
+        );
+        let no_digest_still = evidence(
+            &FrameIdentity { seq: Some(1), frame_number: Some(1), md5: None },
+            &FrameIdentity { seq: Some(1), frame_number: Some(1), md5: None },
+        );
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &no_digest_still),
+            (true, false)
+        );
+        // Content is never a placeholder, whatever the pixels did.
+        let mut painted = skeleton.clone();
+        painted[0].children[0].children[0].text = "Set up Gaten".to_string();
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(painted), &still),
+            (false, false)
+        );
     }
 
     #[test]
@@ -5116,7 +6215,7 @@ mod tests {
         body.push_str("    *'\"cmd\":\"tree\"'*)\n");
         body.push_str("      seq=$((seq+1))\n");
         body.push_str(&format!(
-            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}'\n",
+            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[{{\"class\":\"android.widget.TextView\",\"text\":\"Counter\",\"children\":[]}}]}}}}'\n",
             png.display()
         ));
         body.push_str("      ;;\n");
@@ -5629,7 +6728,7 @@ mod tests {
         body.push_str("while IFS= read -r line; do\n");
         body.push_str("  case \"$line\" in\n");
         body.push_str(&format!(
-            "    *'\"cmd\":\"tree\"'*) echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}' ;;\n",
+            "    *'\"cmd\":\"tree\"'*) echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[{{\"class\":\"android.widget.TextView\",\"text\":\"Counter\",\"children\":[]}}]}}}}' ;;\n",
             png.display()
         ));
         body.push_str("    *'\"cmd\":\"logs\"'*) echo '{\"ok\":true,\"cmd\":\"logs\",\"total\":0,\"kept\":0,\"dropped\":0,\"entries\":[]}' ;;\n");
@@ -5687,6 +6786,314 @@ mod tests {
     /// Scratch under the worktree `.cache/` (never `/tmp`), per O2.
     /// Serialises tests that point `ACOS_ART_BIN` at a fake launcher: the
     /// variable is process-global, so parallel tests would race on it.
+    /// SERVELEAK: a fake `acos-art` whose guest runs in its **own** process group
+    /// (exactly like the real launcher, `crates/acos-art/src/launcher.rs` uses
+    /// `process_group(0)`), reports it in the ready line, and — this is the bug —
+    /// leaves it running when `close` arrives.
+    ///
+    /// `ignore_close` makes the launcher ignore `close` entirely, which forces
+    /// `shutdown`'s bounded grace to expire and take the killed path.
+    fn fake_art_with_own_guest_group(dir: &Path, ignore_close: bool) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let script = dir.join(if ignore_close {
+            "fake-acos-art-guest-ignores-close.sh"
+        } else {
+            "fake-acos-art-guest-outlives-close.sh"
+        });
+        let mut body = String::new();
+        body.push_str("#!/bin/sh\n");
+        // The guest pid goes under the `--out` directory this launcher was given
+        // (the session's own artifacts), so two sessions in one test file cannot
+        // share a pid file.
+        body.push_str("out=''\nprev=''\nfor a in \"$@\"; do\n");
+        body.push_str("  [ \"$prev\" = \"--out\" ] && out=\"$a\"\n  prev=\"$a\"\ndone\n");
+        body.push_str("mkdir -p \"$out\" 2>/dev/null || true\n");
+        body.push_str("guest_pid_file=\"${out:-.}/guest.pid\"\n");
+        // The guest: its own session (hence its own process group), the way the
+        // real launcher spawns bwrap.
+        body.push_str("setsid sleep 600 &\n");
+        body.push_str("guest=$!\n");
+        body.push_str("echo \"$guest\" > \"$guest_pid_file\"\n");
+        body.push_str(&format!(
+            "echo '{{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"activity\":\"dev.test/.Main\",\"width\":1080,\"height\":2400,\"density\":420,\"guest_process_group\":'\"$guest\"'}}'\n"
+        ));
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"close\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"close\"}'\n");
+        if ignore_close {
+            // Keep running (and past the EOF `shutdown` causes by closing the
+            // pipe): the caller's grace must expire and kill the tree.
+            body.push_str("      sleep 600\n");
+            body.push_str("      ;;\n");
+        } else {
+            // The graceful path replies and exits, and the guest it started is
+            // left behind — the leaked-guest shape SERVELEAK reported.
+            body.push_str("      exit 0\n");
+            body.push_str("      ;;\n");
+        }
+        body.push_str("    *'\"cmd\":\"tree\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"tree\":{\"nodes\":[]}}'\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *)\n");
+        body.push_str("      echo '{\"ok\":false,\"code\":\"UNSUPPORTED_ANDROID_API\",\"error\":\"unsupported\"}'\n");
+        body.push_str("      ;;\n");
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        script
+    }
+
+    /// Is `pid` still a live (non-zombie) process?
+    fn process_is_alive(pid: u32) -> bool {
+        match std::fs::read_to_string(format!("/proc/{pid}/status")) {
+            Ok(status) => !status
+                .lines()
+                .find(|line| line.starts_with("State:"))
+                .map(|line| line.split_whitespace().nth(1) == Some("Z"))
+                .unwrap_or(false),
+            Err(_) => false,
+        }
+    }
+
+    fn wait_until_gone(pid: u32, within: Duration) -> bool {
+        let deadline = Instant::now() + within;
+        while Instant::now() < deadline {
+            if !process_is_alive(pid) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        !process_is_alive(pid)
+    }
+
+    /// SERVELEAK regression 1 — the bench's shape: the graceful `close` path
+    /// succeeds (the launcher exits by itself, `lifecycle`), but the guest it
+    /// started is in its own process group and is still running. Before the fix
+    /// the destroy's proof only covered the launcher's group, so it either
+    /// reported a clean tree over a live guest or failed with `INTERNAL` and
+    /// killed nothing. A destroy must leave no guest process behind.
+    #[test]
+    fn destroy_kills_the_guest_group_the_launcher_reports() {
+        let dir = scratch_dir("guest-group-lifecycle");
+        let script = fake_art_with_own_guest_group(&dir, false);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let guest_pid_file = dir.join("art-frames").join("guest.pid");
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let guest: u32 = std::fs::read_to_string(&guest_pid_file)
+            .expect("the fake launcher wrote its guest pid")
+            .trim()
+            .parse()
+            .expect("guest pid");
+        assert!(
+            process_is_alive(guest),
+            "the fake guest must be running before the destroy"
+        );
+        assert_eq!(
+            session.last_teardown(),
+            None,
+            "no teardown has happened yet"
+        );
+        let report = session.teardown().expect("teardown reports no survivors");
+        assert!(
+            report.is_clean(),
+            "the destroy proof must be clean once the guest group is killed: {report:?}"
+        );
+        assert_eq!(
+            session.last_teardown().map(|(path, _)| path),
+            Some(TeardownPath::Lifecycle),
+            "the launcher itself ended by lifecycle"
+        );
+        assert!(
+            wait_until_gone(guest, Duration::from_secs(3)),
+            "the guest process {guest} must not survive its session's destroy"
+        );
+        assert!(
+            session.session_leftovers().is_empty(),
+            "no launcher leftover may remain: {:?}",
+            session.session_leftovers()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SERVELEAK regression 2 — the graceful path fails outright: the launcher
+    /// ignores `close`, so the bounded grace expires and the killed path runs.
+    /// Both groups (launcher and guest) must die, and the reply must still say
+    /// which path was taken.
+    #[test]
+    fn destroy_kills_the_whole_tree_when_close_is_ignored() {
+        let dir = scratch_dir("guest-group-killed");
+        let script = fake_art_with_own_guest_group(&dir, true);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let guest_pid_file = dir.join("art-frames").join("guest.pid");
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        std::env::set_var("ACOS_ART_TEARDOWN_GRACE_MS", "150");
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let guest: u32 = std::fs::read_to_string(&guest_pid_file)
+            .expect("the fake launcher wrote its guest pid")
+            .trim()
+            .parse()
+            .expect("guest pid");
+        let report = session.teardown().expect("teardown reports no survivors");
+        std::env::remove_var("ACOS_ART_TEARDOWN_GRACE_MS");
+        assert!(
+            report.is_clean(),
+            "a killed tree is still a clean teardown: {report:?}"
+        );
+        assert_eq!(
+            session.last_teardown().map(|(path, _)| path),
+            Some(TeardownPath::Killed),
+            "an ignored close takes the bounded-kill path"
+        );
+        assert!(
+            wait_until_gone(guest, Duration::from_secs(3)),
+            "the guest process {guest} must not survive the killed path"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SERVELEAK2/F1 regression — two sessions whose artifacts directories are
+    /// prefixes/substrings of each other.
+    ///
+    /// Agent A runs `acos verify counter.yaml` (artifacts `out/counter`), agent B
+    /// runs the same scenario from another directory (artifacts
+    /// `<dir>/x/out/counter`). Both launchers therefore name `out/counter` on
+    /// their command line. The old teardown SIGKILLed every `acos-art` whose
+    /// command line *contained* the session's artifacts path, so destroying A
+    /// killed B's live guest (and, inside one daemon, `s1` matched
+    /// `…/art-sessions/s10`). This asserts the opposite: destroying one session
+    /// leaves the other session's guest running, and both teardowns are clean.
+    #[test]
+    fn destroy_kills_only_its_own_guest_when_artifact_paths_share_a_prefix() {
+        let dir = o2_scratch_dir("f1-prefix");
+        let script = fake_art_with_own_guest_group(&dir, false);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+
+        // `out/counter` (agent A) and `<dir>/x/out/counter` (agent B): one path
+        // is a suffix of the other, so a substring match cannot tell them apart.
+        let artifacts_a = dir.join("out").join("counter");
+        let artifacts_b = dir.join("x").join("out").join("counter");
+        std::fs::create_dir_all(&artifacts_a).unwrap();
+        std::fs::create_dir_all(&artifacts_b).unwrap();
+        let mut session_a = ArtSession::start(&apk, &artifacts_a).expect("session A starts");
+        let mut session_b = ArtSession::start(&apk, &artifacts_b).expect("session B starts");
+        let guest = |artifacts: &Path| -> u32 {
+            std::fs::read_to_string(artifacts.join("art-frames").join("guest.pid"))
+                .expect("the fake launcher wrote its guest pid")
+                .trim()
+                .parse()
+                .expect("guest pid")
+        };
+        let guest_a = guest(&artifacts_a);
+        let guest_b = guest(&artifacts_b);
+        assert!(process_is_alive(guest_a) && process_is_alive(guest_b));
+
+        // A's teardown must not touch B's guest.
+        let report_a = session_a.teardown().expect("A tears down cleanly");
+        assert!(report_a.is_clean(), "A's own tree is proved gone: {report_a:?}");
+        assert!(
+            wait_until_gone(guest_a, Duration::from_secs(3)),
+            "A's guest must be gone"
+        );
+        assert!(
+            process_is_alive(guest_b),
+            "destroying session A killed session B's live guest (F1 regression)"
+        );
+        // And B's own teardown still works afterwards.
+        let report_b = session_b.teardown().expect("B tears down cleanly");
+        assert!(report_b.is_clean(), "{report_b:?}");
+        assert!(wait_until_gone(guest_b, Duration::from_secs(3)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The same shape one level down: `art-sessions/s1` and
+    /// `art-sessions/s10` share a directory, and `s1` is a *prefix* of `s10`.
+    #[test]
+    fn destroy_kills_only_its_own_guest_when_session_dirs_are_prefixes() {
+        let dir = o2_scratch_dir("f1-s1-s10");
+        let script = fake_art_with_own_guest_group(&dir, false);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let root = dir.join("art-sessions");
+        let artifacts_1 = root.join("s1");
+        let artifacts_10 = root.join("s10");
+        std::fs::create_dir_all(&artifacts_1).unwrap();
+        std::fs::create_dir_all(&artifacts_10).unwrap();
+        let mut session_1 = ArtSession::start(&apk, &artifacts_1).expect("s1 starts");
+        let mut session_10 = ArtSession::start(&apk, &artifacts_10).expect("s10 starts");
+        let guest = |artifacts: &Path| -> u32 {
+            std::fs::read_to_string(artifacts.join("art-frames").join("guest.pid"))
+                .expect("guest pid")
+                .trim()
+                .parse()
+                .expect("guest pid")
+        };
+        let guest_1 = guest(&artifacts_1);
+        let guest_10 = guest(&artifacts_10);
+        assert!(session_1.teardown().expect("s1 tears down").is_clean());
+        assert!(wait_until_gone(guest_1, Duration::from_secs(3)));
+        assert!(
+            process_is_alive(guest_10),
+            "destroying s1 killed s10's guest (prefix-match regression)"
+        );
+        assert!(session_10.teardown().expect("s10 tears down").is_clean());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SERVELEAK2/F4 regression — once a teardown has proved the tree empty the
+    /// session holds **no** group id, so no later `kill(-group)` is issued and a
+    /// recycled group id (another agent's `setsid`/`bwrap`) can never be hit.
+    ///
+    /// The seam is the process-wide count of group signals: a proven-empty
+    /// session's second `teardown` and its `Drop` must both leave it unchanged.
+    #[test]
+    fn a_proven_empty_session_issues_no_further_group_signal() {
+        let dir = o2_scratch_dir("f4-no-resignal");
+        let script = fake_art_with_own_guest_group(&dir, false);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let guest: u32 = std::fs::read_to_string(dir.join("art-frames").join("guest.pid"))
+            .expect("guest pid")
+            .trim()
+            .parse()
+            .expect("guest pid");
+        assert!(session.teardown().expect("teardown is clean").is_clean());
+        assert!(wait_until_gone(guest, Duration::from_secs(3)));
+        let settled = kill_group_signals();
+        // A repeat teardown of the same session is still a clean proof...
+        let again = session.teardown().expect("a repeat teardown is still clean");
+        assert!(again.is_clean(), "{again:?}");
+        assert_eq!(
+            kill_group_signals(),
+            settled,
+            "a proven-empty session must not signal a process group again (F4)"
+        );
+        // ...and so is dropping it.
+        drop(session);
+        assert_eq!(
+            kill_group_signals(),
+            settled,
+            "Drop of a proven-empty session must not signal a process group (F4)"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn art_bin_env_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -6085,7 +7492,7 @@ mod tests {
         body.push_str("  case \"$line\" in\n");
         body.push_str("    *'\"cmd\":\"tree\"'*)\n");
         body.push_str(&format!(
-            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}'\n",
+            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[{{\"class\":\"android.widget.TextView\",\"text\":\"Counter\",\"children\":[]}}]}}}}'\n",
             png.display()
         ));
         body.push_str("      ;;\n");
@@ -6275,7 +7682,13 @@ mod tests {
         dir
     }
 
-    /// `mode`: `content-first` | `late` | `never` | `unsettled-change`.
+    /// `mode`: `content-first` | `late` | `never` | `unsettled-change` |
+    /// `skeleton-animating` | `unsettled-first`.
+    ///
+    /// FB2c: the frame identity (`frame_seq`/`md5`) is what the placeholder
+    /// verdict measures, so the fake is explicit about it: `never` re-publishes
+    /// one stored frame (constant identity, like an app whose SoLoader loop never
+    /// mounts), every other mode publishes a new one.
     fn fake_first_frame_art(dir: &Path, mode: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         let png = dir.join("tiny.png");
@@ -6288,36 +7701,57 @@ mod tests {
         body.push_str("seq=0\ngated=0\n");
         body.push_str(&format!("requests='{}'\n", requests.display()));
         body.push_str(&format!("png='{}'\n", png.display()));
+        // The mode lives in a file so a test can change the app's behaviour
+        // mid-session (FB2c: a placeholder that later mounts).
+        let mode_file = dir.join("mode.txt");
+        std::fs::write(&mode_file, mode).unwrap();
         body.push_str(&format!("mode='{mode}'\n"));
+        body.push_str(&format!("mode_file='{}'\n", mode_file.display()));
         body.push_str(&format!("skeleton='{FAKE_SKELETON}'\n"));
         body.push_str(&format!("content='{FAKE_CONTENT}'\n"));
         body.push_str("while IFS= read -r line; do\n");
         body.push_str("  printf '%s\\n' \"$line\" >> \"$requests\"\n");
+        body.push_str("  mode=$(cat \"$mode_file\")\n");
         body.push_str("  case \"$line\" in\n");
         body.push_str("    *'\"cmd\":\"tree\"'*)\n");
         body.push_str("      seq=$((seq+1))\n");
+        // A `pixels:false` request gets no PNG (like the real launcher).
+        body.push_str("      case \"$line\" in *'\"pixels\":false'*) pngf= ;; *) pngf=\"\\\"png\\\":\\\"$png\\\",\" ;; esac\n");
+        body.push_str("      fseq=$seq\n");
+        body.push_str("      fmd5=m$seq\n");
+        body.push_str("      if [ \"$mode\" = never ]; then fseq=1; fmd5=m1; fi\n");
         body.push_str("      case \"$line\" in\n");
         body.push_str("        *'baseline_tree'*)\n");
         body.push_str("          gated=$((gated+1))\n");
         body.push_str("          case \"$mode\" in\n");
         body.push_str("            late)\n");
-        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
         body.push_str("            never)\n");
-        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"tree-unchanged\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"tree-unchanged\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              ;;\n");
+        body.push_str("            skeleton-animating)\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
         body.push_str("            late-change-draw)\n");
-        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"change-draw\\\",\\\"awaited\\\":\\\"tree-change\\\",\\\"changed_since_baseline\\\":true}}\"\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"change-draw\\\",\\\"awaited\\\":\\\"tree-change\\\",\\\"changed_since_baseline\\\":true}}\"\n");
+        body.push_str("              ;;\n");
+        body.push_str("            unsettled-first)\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
         body.push_str("            unsettled-change)\n");
-        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
         body.push_str("          esac\n");
         body.push_str("          ;;\n");
         body.push_str("        *)\n");
         body.push_str("          tree=$skeleton\n");
         body.push_str("          [ \"$mode\" = content-first ] && tree=$content\n");
-        body.push_str("          echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$tree,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\"}}\"\n");
+        body.push_str("          if [ \"$mode\" = unsettled-first ]; then\n");
+        body.push_str("            echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$tree,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("          else\n");
+        body.push_str("            echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$tree,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\"}}\"\n");
+        body.push_str("          fi\n");
         body.push_str("          ;;\n");
         body.push_str("      esac\n");
         body.push_str("      ;;\n");
@@ -6427,6 +7861,183 @@ mod tests {
             Some("strict-event"),
             "{settle}"
         );
+        // FB2c: the placeholder needed evidence beyond the tree — the frame
+        // never moved (constant identity, identical pixels) — and the label is
+        // what refuses a screenshot.
+        assert!(!report.frames_advanced, "{report:?}");
+        assert!(report.pixels_compared, "{report:?}");
+        assert!(!report.pixels_changed, "{report:?}");
+        assert!(session.placeholder_frame());
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 1: a text-free skeleton whose pixels **change** is a mounted,
+    /// image-only screen (a custom `View`, a SurfaceView/GL surface, an
+    /// image-only activity, Flutter without semantics). The node count alone used
+    /// to call it a placeholder — a blocked verdict on both routes. It is a pass
+    /// with a `placeholder_suspect` warning now.
+    #[test]
+    fn fb2c_a_skeleton_with_changing_pixels_passes_with_a_suspect_warning() {
+        let dir = g3f1_scratch("skeleton-animating");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "skeleton-animating");
+        let apk = dir.join("fake.apk");
+        let outcome = session
+            .launch(&apk)
+            .expect("a text-free mounted screen must not be a blocked launch");
+        let report = session.first_frame_report().expect("report");
+        assert!(!report.placeholder, "changing pixels are app frame: {report:?}");
+        assert!(report.suspect, "…but the skeleton is still a suspicion: {report:?}");
+        assert!(report.pixels_compared && report.pixels_changed, "{report:?}");
+        assert!(
+            !session.placeholder_frame(),
+            "a suspect frame is not a placeholder: no screenshot may be refused"
+        );
+        assert_eq!(
+            outcome.detail["first_frame"]["placeholder_suspect"],
+            serde_json::json!(true),
+            "the launch reply carries the warning: {}",
+            outcome.detail
+        );
+        assert_eq!(
+            outcome.detail["first_frame"]["placeholder"],
+            serde_json::json!(false),
+            "{}",
+            outcome.detail
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 2: a first traversal that does not settle (an animating splash)
+    /// used to answer `placeholder` with `waited_ms: 0` — the content budget never
+    /// ran. The wait now runs first and the launch binds the content frame.
+    #[test]
+    fn fb2c_an_unsettled_first_traversal_still_spends_the_content_budget() {
+        let dir = g3f1_scratch("unsettled-first");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "unsettled-first");
+        let tree = session
+            .ensure_launch_tree("strict", true)
+            .expect("the wait binds the content frame");
+        let report = session.first_frame_report().expect("report");
+        assert_eq!(report.traversals, 2, "the content wait ran: {report:?}");
+        assert_eq!(report.event_waits, 1, "{report:?}");
+        assert!(!report.placeholder && !report.suspect, "{report:?}");
+        assert!(
+            ui_tree_has_app_text(&tree.nodes),
+            "the bound tree is the app's content, not the splash skeleton"
+        );
+        assert_eq!(report.budget_ms, first_frame_budget_ms(), "{report:?}");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 4: the placeholder label is not sticky. Once a later frame
+    /// carries content the session answers from that frame, so a second launch or
+    /// a screenshot is not refused forever.
+    #[test]
+    fn fb2c_a_placeholder_is_cleared_once_a_later_frame_has_content() {
+        let dir = g3f1_scratch("sticky");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "never");
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "60");
+        session
+            .ensure_launch_tree("strict", true)
+            .expect("the launch binds");
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        assert!(session.placeholder_frame(), "the launch is a placeholder");
+        // The app mounts after all (the fake reads its mode each request).
+        std::fs::write(dir.join("mode.txt"), "content-first").unwrap();
+        let tree = session.tree_with_settle("strict").expect("a later traversal");
+        assert!(ui_tree_has_app_text(&tree.nodes), "the frame has content now");
+        assert!(
+            !session.placeholder_frame(),
+            "the placeholder label must clear when content arrives"
+        );
+        assert!(
+            session.first_frame_report().is_none(),
+            "a cleared report is cleared, not silently rewritten"
+        );
+        // …and the screenshot path works again (no `NO_FRESH_FRAME` forever).
+        // …a second launch is judged on the current frame, not refused, and its
+        // own PNG is what a screenshot serves.
+        session
+            .ensure_launch_tree("strict", true)
+            .expect("a relaunch after the app mounted is not blocked");
+        session
+            .request_tree_with("strict", true)
+            .expect("a traversal with pixels");
+        let tree = session.require_cached_tree().expect("bound tree");
+        assert!(!session.placeholder_frame());
+        let (path, seq, _md5, bytes) = session.screenshot_source().expect("pixels of the content frame");
+        assert!(path.is_file() && bytes > 0);
+        assert_eq!(seq, tree.frame.frame_seq);
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 3: `reset` binds the relaunched guest's first frame through the
+    /// same content wait and placeholder verdict a launch uses. A relaunch that
+    /// never mounts is `PLACEHOLDER_CONTENT`, not a `first_frame` pass.
+    #[test]
+    fn fb2c_a_reset_that_never_mounts_is_blocked() {
+        let dir = g3f1_scratch("reset-never");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "never");
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "60");
+        let error = session
+            .reset()
+            .expect_err("a relaunch that never mounts is not a pass");
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        match &error {
+            BackendError::Error { code, detail } => {
+                assert_eq!(*code, crate::engine::ErrorCode::PlaceholderContent);
+                assert!(detail.contains("placeholder-content"), "{detail}");
+                assert!(detail.contains("ACOS_ART_FIRST_FRAME_MS"), "{detail}");
+            }
+            other => panic!("expected PLACEHOLDER_CONTENT, got {other:?}"),
+        }
+        assert!(session.last_frame().is_none(), "no stale frame survives");
+        assert!(!session.placeholder_frame());
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 5/6: the screenshot source is the frame the tree is bound to.
+    /// A tree bound without pixels is refused instead of being paired with a
+    /// newer capture.
+    #[test]
+    fn fb2c_a_screenshot_never_comes_from_a_newer_frame_than_the_tree() {
+        let dir = g3f1_scratch("shot-frame");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "late");
+        session
+            .ensure_launch_tree("strict", true)
+            .expect("the launch binds");
+        let (path, seq, _md5, bytes) = session.screenshot_source().expect("the bound PNG");
+        assert!(path.is_file() && bytes > 0);
+        assert_eq!(Some(seq), session.frame_info().map(|info| info.0));
+        // A tree traversal without pixels has no artifact of its own.
+        session
+            .tree_with_settle("strict")
+            .expect("a pixels:false traversal");
+        let error = session
+            .screenshot_source()
+            .expect_err("a tree without its own pixels must not borrow a newer frame");
+        assert!(
+            error.to_string().contains("NO_FRESH_FRAME") || error.to_string().contains("frame"),
+            "{error}"
+        );
+        // The screenshot path asks the *same traversal* for pixels, so the tree
+        // and the PNG of one reply are one frame.
+        let tree = session
+            .tree_with_settle_pixels("strict", true)
+            .expect("a traversal that captures");
+        let (path, seq, _md5, bytes) = session.screenshot_source().expect("the same frame's PNG");
+        assert!(path.is_file() && bytes > 0);
+        assert_eq!(seq, tree.frame.frame_seq, "screenshot.frame_seq == tree.frame_seq");
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -6476,7 +8087,13 @@ mod tests {
             .ensure_launch_tree("strict", true)
             .expect("launch binds");
         let report = session.first_frame_report().expect("report");
-        assert!(report.placeholder, "{report:?}");
+        // FB2c: the retry *saw* app content (a newer frame with different
+        // pixels), it just never settled. The launch is not a blocked
+        // placeholder any more (the frame moved) — it keeps the settled skeleton
+        // as its bound frame and carries the `placeholder_suspect` warning, so no
+        // assertion can rest on a frame the launch could not prove.
+        assert!(!report.placeholder, "{report:?}");
+        assert!(report.suspect, "{report:?}");
         assert_eq!(report.traversals, 2, "{report:?}");
         assert!(
             first_frame_is_bare_skeleton(&tree),
@@ -6505,7 +8122,9 @@ mod tests {
         let report = session.first_frame_report().expect("report");
         assert_eq!(report.traversals, 1, "{report:?}");
         assert_eq!(report.event_waits, 0, "{report:?}");
-        assert_eq!(report.waited_ms, 0, "{report:?}");
+        // The single traversal's own wall time (a forked shell answers in ~1 ms);
+        // no content wait ran, which `event_waits == 0` and the request count prove.
+        assert!(report.waited_ms < 250, "{report:?}");
         assert!(!report.placeholder, "{report:?}");
         assert!(report.settled, "{report:?}");
         assert!(ui_tree_has_app_text(&tree.nodes));

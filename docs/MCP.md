@@ -86,14 +86,18 @@ one of the roots in `ACOS_ALLOWED_ROOTS` (a `:`-separated list):
 * `..` components are rejected before resolution;
 * anything else — a relative path that climbs out, an absolute path in another
   repo, a link into `/etc` — fails with **`UNSAFE_PATH`** (`error.hint` names
-  the path and the roots; nothing is read and no guest starts).
+  the path and the roots; nothing is read and no guest starts);
+* **a relative path is refused before any of that** (FB5): the server's cwd is
+  not your shell's, so `apk`, `scenario` and `artifacts` must be absolute. A
+  relative one returns **`INVALID_ARGUMENT`** with
+  `details.resolved_path` = the absolute path the server *would* have used and
+  `details.server_cwd`, plus a hint. Pass an absolute path.
 
 `register-mcp.sh` defaults the value to **`$HOME`** so an agent working in
 another repository (for example `~/Projects/gaten`) can pass that repo's APK and
 its own `scenarios/*.yaml` while still being unable to reach outside the home
 directory. The artifacts directory (`ACOS_ARTIFACTS_DIR`) is always allowed in
-addition, and a bare relative path is resolved against the server's working
-directory first. On a shared or multi-user host, list the specific repositories
+addition. On a shared or multi-user host, list the specific repositories
 instead (`ACOS_ALLOWED_ROOTS=/srv/agent-a:/srv/agent-b`).
 
 **If you get `UNSAFE_PATH`,** pick one:
@@ -153,8 +157,9 @@ Server limits (all optional):
 | `ACOS_MCP_MAX_OUTPUT_BYTES` | `16777216` | maximum captured bytes per child stream |
 | `ACOS_MCP_MAX_IMAGE_BYTES` | `524288` | maximum bytes of the image inlined as MCP image content (a preview that would exceed it is downscaled further, then dropped to a link) |
 | `ACOS_MCP_PREVIEW_MAX_SIDE` | `1280` | long edge in pixels of an inlined image preview |
-| `ACOS_MCP_MAX_TEXT` | `4000` | maximum bytes for one string in a tool reply. A longer string (an error message carrying a 200-frame java tail and a 400-line native tail) is head/tail-capped with a marker naming its original size and the artifact path, and an identical repeat is replaced by a back-reference, so the full text appears once. `0` disables the bound (the raw CLI behaviour). The guide text (`acos_help`) is exempt |
-| `ACOS_MCP_SESSION_TTL_MS` | `600000` | idle session TTL |
+| `ACOS_MCP_MAX_TEXT` | `4000` | maximum bytes for one string in a tool reply. A longer string (an error message carrying a 200-frame java tail and a 400-line native tail) is head/tail-capped with a marker naming its original size and the artifact path, and an identical repeat is replaced by a back-reference, so the full text appears once. The **whole reply** is also capped at 20 KiB (`acos_protocol::reply::MAX_REPLY_BYTES`, see §1c); a tree is compacted/paged, and the full evidence is named by a path. `0` disables both bounds (the raw CLI behaviour). The guide text (`acos_help`) is exempt |
+| `ACOS_MCP_SESSION_TTL_MS` | `600000` | idle session TTL in **milliseconds**; the FB5 fallback when `ACOS_SESSION_IDLE_TTL_S` is unset |
+| `ACOS_SESSION_IDLE_TTL_S` | `600` | FB5: idle TTL in **seconds** for the sessions this MCP server launched (any later call renews it). `0` disables. `acos_launch {idle_ttl_s}` overrides it per session |
 | `ACOS_MCP_SHUTDOWN_GRACE_MS` | `2000` | how long in-flight calls may finish after stdin closes |
 | `ACOS_MCP_QUIET` | unset | silence stderr logging |
 | `ACOS_ART_MEM_MAX` | `2G` | per-session guest cgroup memory ceiling (also the budget the host admission check accounts for) |
@@ -180,7 +185,33 @@ the guest in a fresh app-data directory (`data_cleared: true`).
 That daemon is a child of the server: `PR_SET_PDEATHSIG(SIGTERM)` is set when it
 is spawned, and on MCP stdin EOF/exit the server destroys its sessions, sends
 `SIGTERM` (the daemon closes every ART guest), reaps the child and removes the
-socket directory. Nothing outlives `acos-mcp`.
+socket directory. Nothing outlives `acos-mcp`. **The same teardown runs on
+`SIGTERM`/`SIGINT`** (FB5): a client that is killed never closes stdin, and a
+supervisor stops the server with `SIGTERM` — both destroy exactly the sessions
+this server launched, and no foreign `acos serve` is signalled.
+
+### Session hygiene (FB5)
+
+Sessions cost memory (up to `ACOS_ART_MEM_MAX` each), so the server reclaims the
+ones it owns:
+
+* **Idle TTL.** A session untouched for `ACOS_SESSION_IDLE_TTL_S` (default 600 s;
+  `0` disables) is destroyed by the server — one stderr line, the guest is gone.
+  `acos_launch {"idle_ttl_s": N}` overrides it per session; every later MCP call
+  on the session renews the clock. The launch reply reports `idle_ttl_s` (and
+  `label`), so the deadline is visible.
+* **An expired session says so.** The next call on it returns
+  `SESSION_NOT_FOUND` with `details.reason: "idle_ttl_expired"`, the
+  `idle_ttl_s` it missed, and a hint to relaunch — never a generic "unknown id".
+  `acos_launch` on that id starts a fresh session.
+* **`acos_status` lists this server's sessions** under `sessions[]`:
+  `session_id`, `label`, `package`, `activity`, `age_s`, `idle_s`,
+  `idle_ttl_s`, `guest_pid`, `guest_rss_kb` (the guest's own `VmRSS`) and
+  `live`. Use `acos_launch {"label": "..."}` to give a parked session a name you
+  can recognise.
+* **Per-rung `ms`.** The launch ladder reports `ms` on every rung (and
+  `total_ms`/`ms_basis`), so "how long did each stage take" is answerable
+  without a separate timing call.
 
 The in-process backend still exists but is **frozen and opt-in only**:
 `ACOS_MCP_ENGINE=legacy` selects it; it is for diagnostics and cannot run a real
@@ -200,10 +231,193 @@ ART) and `rust-vm` (the frozen Rust VM). Omitted means `art`; the reply's
 and `required_fidelity: "art-reference"` on a non-ART run is refused
 (`UNSUPPORTED_BACKEND`), never passed.
 
-The **scenario YAML `engine:` field is a different thing**: it is the legacy
-native-vs-reference preference (`native-preferred` | `native-only` |
-`reference-only`) and ART verification does not read it. Do not confuse the two;
-the tool/CLI argument selects the execution engine.
+The **scenario YAML `engine:` field uses the same two words** (`art` /
+`rust-vm`) and is metadata about what the scenario was written for; the
+tool/CLI argument selects the execution engine. The legacy spellings
+(`native-preferred`, `native-only` → `rust-vm`; `reference-only` → `art`) still
+parse and produce a scenario warning naming the current word.
+
+### Provenance: every reply names its inputs
+
+`acos_verify` and `acos_launch` results carry a `provenance` block (also written
+into `verdict.json` and printed in the CLI's summary line):
+
+```json
+"provenance": {
+  "scenario": {"path": "/abs/s.yaml", "sha256": "<64 hex>", "sha256_12": "<12 hex>"},
+  "apk":      {"path": "/abs/app.apk", "sha256": "<64 hex>", "sha256_12": "<12 hex>"},
+  "engine": "art", "fidelity": "art-reference", "warnings": []
+}
+```
+
+Paths are absolute and `launch` sets `scenario: null` (it has no scenario). A
+warning is structured, never a fail: `SCENARIO_APP_OVERRIDDEN` means the
+scenario's own `app:` names a different file than the `--apk` that ran. Use
+`sha256_12` to check that the build you just made is the binary the verdict is
+about.
+
+### Unknown arguments are rejected
+
+Every tool's `inputSchema` is a closed object (`additionalProperties: false`)
+and the server enforces the same rule: an argument the tool does not have is
+`INVALID_ARGUMENT`, naming the argument, the valid ones and a near-miss
+suggestion. A silently ignored argument (for example `acos_observe_tree
+{"screenshot": true}` on a build without it) reads as a success for work that
+never happened, so it is refused instead.
+
+---
+
+## 1c. `changes`: what an action did
+
+`acos_tap`, `acos_text` and `acos_key` return `result.changes` **by default**
+(`acos_swipe` takes the same `diff` argument and returns `changes` when the engine
+supports the action; the ART engine has no swipe, so it answers
+`UNSUPPORTED_BACKEND` and there is no reply to annotate): the settled UI-tree diff of the action,
+so the ordinary step is one call instead of tap-then-observe.
+
+```json
+"changes": {
+  "baseline": "session",
+  "frames": {"before": 7, "after": 9},
+  "activity": "dev.acos.fixtures.counter.MainActivity",
+  "focused": {"id": "n6", "text": "", "content_desc": "",
+              "class": "android.widget.Button", "bounds": [42, 368, 273, 494]},
+  "added": [{"id": "n9", "text": "Settings", "content_desc": "Settings tab",
+             "class": "android.widget.TextView", "bounds": [0, 2200, 360, 2337]}],
+  "removed": [{"id": "n5", "text": "Home", "content_desc": "Home tab",
+               "class": "android.widget.TextView", "bounds": [0, 2200, 360, 2337]}],
+  "changed": [{"id": "n3", "text": "1", "content_desc": "",
+               "class": "android.widget.TextView", "bounds": [42, 317, 63, 368],
+               "fields": {"text": {"old": "0", "new": "1"}}}],
+  "counts": {"added": 1, "removed": 1, "changed": 1},
+  "truncated": false
+}
+```
+
+Rules (they are part of the contract, not implementation detail):
+
+* **No extra cost.** The diff is computed from two trees the session already
+  holds — the tree bound before the input was injected and the tree the
+  action's own settle produced. It never triggers a traversal, an extra capture
+  or an extra guest round trip, and it does not change the settle the action was
+  going to take anyway.
+* **No invented diffs.** When the session held no pre-action tree (an action
+  right after a launch that bound none, or after a reset) the reply carries
+  `changes: {"baseline": "none"}` with empty lists and zero counts. It never
+  reports the whole tree as "added".
+* **Identity is the stable id path, not list position.** A node's identity is a
+  chain of segments joined with `/` from the root: the Android `resource_id`
+  when the node has one, else `class#N` where `N` is its ordinal among
+  same-class *unnamed* siblings. A duplicate identity inside one tree is
+  disambiguated `~N` in document order. A named node therefore keeps its
+  identity when a different sibling is added or removed, while a node that
+  really moved (or was replaced) is reported as removed + added — never as an
+  edit of its neighbour.
+* **Compared fields** for a matched node: `text`, `content_desc`, `hint`,
+  `class`, `resource_id`, `bounds`, `visible_bounds`, `visible`, `enabled`,
+  `focused`, `clickable`, `scrollable`, `checked`, `selected`. Each changed one
+  is reported as `{"old": …, "new": …}`; a `changed` entry always has at
+  least one field.
+* **Bounded.** Each of `added`/`removed`/`changed` stops at **40 entries**.
+  `counts` always carries the true totals and `truncated: true` says a list was
+  cut, so a whole-screen navigation still fits the MCP reply bound (REL3b) and
+  a capped list can never be read as "that was everything".
+* **`diff: false`** returns the reply with **no `changes` key**, byte for byte
+  otherwise. A non-boolean `diff` is `INVALID_ARGUMENT`. The same reply is what a
+  CLI `acos tap`/`acos key`/`acos text` prints through the session daemon
+  (`acos serve`), since both share one engine.
+
+## 1d. `handled` and `target`: did the app consume it, and what was there
+
+`state_changed: false` used to be ambiguous: it could mean *"nothing tappable
+there / no handler consumed the press"* or *"the app handled it and nothing
+changed"*. Every `acos_tap`/`acos_key`/`acos_text` (and `acos_swipe`, where the
+engine delivers the gesture) reply now separates the two:
+
+```json
+"handled": false,
+"handled_evidence": {"source": "finishInputEvent", "published": 2, "acked": 2,
+                     "unhandled": [11, 12]},
+"target": {
+  "selector": {"text": "Floating button"},
+  "node":   {"id": "n5_…:id/title", "class": "android.widget.TextView",
+             "text": "Floating button", "content_desc": "", "bounds": "[42,342][669,405]",
+             "clickable": false, "scrollable": false, "enabled": true,
+             "focused": false, "window": "main"},
+  "point":  {"x": 355, "y": 373},
+  "hit": {"method": "tree-geometry",
+          "node":    {"class": "android.widget.TextView", "clickable": false, …},
+          "clickable": false,
+          "consumer": null,
+          "suggest": {"id": "…:id/toggle", "class": "android.widget.Switch",
+                      "text": "Floating button", "bounds": "[669,338][1038,409]",
+                      "clickable": true, …}}
+},
+"handled_hint": "nothing tappable there: the node at this point is android.widget.TextView «Floating button» at [42,342][669,405], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` …; tap the nearest clickable android.widget.Switch … instead"
+```
+
+* **`handled` is the framework's answer, never a heuristic.** It is the bit the
+  app window passes to Android's `InputEventReceiver.finishInputEvent(handled)`
+  (AOSP `ViewRootImpl` sets it from `FLAG_FINISHED_HANDLED`, and a dropped event
+  finishes with `false`). It arrives on the real `InputChannel` `FINISHED`
+  message, one ack per published `InputMessage`.
+  * any unhandled ack → `false` (nothing consumed that event);
+  * every published event acked handled → `true`;
+  * a short or missing ack list → `null` **unknown**, never "not handled".
+  `handled_evidence` always travels with it: `source` (always
+  `finishInputEvent` for a real delivery), `published`, `acked` and the
+  `unhandled` sequence numbers.
+* **`target` says what was there.** `node` is the node the selector resolved to
+  (for a coordinate tap there is none); `hit` is the tree-geometry hit-test at
+  the injected point from the same tree — the deepest visible node whose rect
+  contains it (`node`), whether it is itself `clickable`, the nearest clickable
+  ancestor-or-self (`consumer`), and, when nothing on that branch is clickable,
+  the nearest clickable **sibling** (`suggest`; a switch beside a row's label
+  wins over a nearer button in the next row). `hit.clickable: false` +
+  `hit.consumer: null` is the "nothing tappable there" case.
+* **`handled_hint`** explains the combination in one line, and only ever quotes
+  the evidence above: nothing tappable + the node to tap instead; a clickable
+  control that still refused the press (disabled or intercepted); a consumed
+  input with no visible change (asynchronous handler or unchanged state); or an
+  unknown answer.
+* **`state_changed` is about the screen, `handled` is about the app.** Read
+  `handled` first: with `handled: false` a `state_changed: false` is the correct
+  outcome, not a broken tap.
+* **Scenario steps** publish the same facts: every `tap`/`type`/`key`/`back`
+  step JSON has an `input` block with `handled`, `handled_evidence`, `target`
+  and `expect_change` — which is `"auto"` for a tap (its own state-change rule
+  always runs) or the scenario's explicit `true`/`false`.
+
+## 1e. Watching a session (live view)
+
+Every live ART session publishes one small file
+(`$XDG_RUNTIME_DIR/acos/live/<session_id>-<daemon_pid>.json`: client, project
+dir, APK, package, activity, display, and the session's `stream_socket`) and
+streams its screen and an action/event feed to any local viewer that connects to
+that socket. The viewer is **view-only** and optional: with nobody watching the
+session costs what it cost before (ADR-0027). The wire protocol — subscribe
+line, framing, `H`/`F`/`E` messages, cost rules, registry fields, stale
+handling — is `docs/LIVE_VIEW.md`; `tools/view/stream_probe.py` is a stdlib
+reference consumer. The MCP tools themselves are unchanged and do not expose the
+stream.
+
+To watch it, start the browser hub in a terminal:
+
+```
+$ acos view
+acos view: http://127.0.0.1:54321/?t=<token>
+```
+
+It binds 127.0.0.1 only, requires that random token on every request (no token
+or a wrong one is `403`), and serves one self-contained page: the grid of live
+sessions (client/agent, project dir, APK, activity, age) and, for the session
+you click, its live screen with tap ripples, the current activity and the recent
+action feed. Open the printed URL in any browser, or paste it into **T3 Code's
+preview pane** (ADR-0027: no patch, no plugin). The page is view-only — no input
+is ever forwarded to a guest — and the hub subscribes to a session's
+`stream_socket` only while a tab has it open, one upstream subscription shared by
+every tab, so an unwatched session still costs nothing. `acos view --once
+--json` prints the session list and exits. Details: `docs/LIVE_VIEW.md` §8.
 
 ---
 
@@ -240,8 +454,8 @@ server.
 | `acos_destroy` | protocol | `destroy` | `native-runtime` | `base` |
 | `acos_verify` | protocol | `verify` | `native-runtime` | `artifacts`, `base`, `scenario` |
 | `acos_capability_report` | protocol | `capability-report` | `static-analysis` | `apk`, `base` |
-| `acos_capabilities` | server | - | `static-analysis` | - |
-| `acos_help` | server | - | `static-analysis` | - |
+| `acos_capabilities` | server | - | `n/a` | - |
+| `acos_help` | server | - | `n/a` | - |
 | `acos_launch` | server | - | `native-runtime` | - |
 | `acos_observe_tree` | server | - | `native-runtime` | - |
 | `acos_tap` | server | - | `native-runtime` | - |
@@ -250,14 +464,16 @@ server.
 | `acos_swipe` | server | - | `native-runtime` | - |
 | `acos_logs` | server | - | `native-runtime` | - |
 | `acos_status` | server | - | `native-runtime` | - |
-| `acos_doctor` | server | - | `static-analysis` | - |
+| `acos_doctor` | server | - | `n/a` | - |
 <!-- ACOS_TOOLS_END -->
 
 Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
 
 `acos_verify` also accepts `engine: "art"` (mapped to the CLI's `--engine`).
-Without it `acos verify` uses its default engine, which cannot honour an
-ART-only scenario (`animations: off`); pass `engine: "art"` for real ART.
+`art` is the default in the tool, in the schema and in `acos verify` itself
+(one constant: `acos_protocol::commands::DEFAULT_VERIFY_ENGINE`), so the CLI and
+the tool never disagree about which engine a run used. Pass `engine: "rust-vm"`
+only for the frozen VM.
 
 A run owns its `artifacts` directory: a non-empty directory written by another
 run is refused with `INVALID_ARGUMENT` naming the previous run id
@@ -272,7 +488,7 @@ instead of calling tools:
 | uri | content |
 |---|---|
 | `acos://guide` | the complete agent guide (markdown) |
-| `acos://guide/workflow`, `/cli`, `/scenarios`, `/errors`, `/limits` | one section |
+| `acos://guide/workflow`, `/mcp`, `/cli`, `/scenarios`, `/errors`, `/limits` | one section |
 | `acos://errors` | the error-code playbook (alias of `/errors`) |
 
 `resources/list` advertises all of them with `mimeType: text/markdown`,
@@ -291,10 +507,144 @@ alongside `capabilities.tools`; both are supported on `2025-03-26` and
 
 The server-local tools are served in-process (they never shell out):
 `acos_launch` boots an APK into a session that persists across calls and returns
-the stage ladder; `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_text`/`acos_swipe`/`acos_logs`/`acos_status`
+the stage ladder plus the **compact screen** by default (counts and visible texts;
+`{"full": true}` returns the previous inline tree, and `tree_path` always names
+the full tree file); `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_text`/`acos_swipe`/`acos_logs`/`acos_status`
 drive it; and `acos_doctor` runs the `acos doctor --json` host preflight (Android
 SDK/build-tools, `android.jar`, JDK, workspace helper, debug keystore,
 boot-classpath cache, host memory) and returns each failing check's `fix`.
+
+`acos_logs` returns an **agent-relevant default view**: records at priority `W`
+and above plus anything that names the app's own package, with `filter` naming
+the defaults that were applied. The guest buffer is untouched —
+`logs/logcat.txt` in a verify run is still the full log — and `"log_path"` in a
+live session reply names that complete file. `{"all": true}` (or
+`min_priority: "V"`) returns every record, subject to the 20 KiB reply cap.
+
+The three **meta** tools (`acos_help`, `acos_capabilities`, `acos_doctor`)
+report `fidelity: "n/a"`: they say nothing about the app under test, so
+`static-analysis` would imply the reply came from the APK. `n/a` never satisfies
+a fidelity requirement and is never a pass.
+
+### Reply size: the compact screen, paging, and tree files
+
+Every MCP tool and the CLI's `--json` output obey one rule (REL3C). A
+tree-bearing reply is **not** a dump of the hierarchy:
+
+* the default `tree` is the **compact screen**: every visible node with a
+  non-empty `text` or `content_desc`, in document (reading) order, carrying its
+  tree `id`, Android `resource_id`, `class`, `bounds`, `text`/`content_desc`,
+  `clickable`, `window` and `package`. Structural wrappers (a `DecorView`, a
+  `FrameLayout` with no words) carry no answer and are omitted;
+* the compact list is **paged**, never head/tail-cut. The first page carries
+  `next_cursor` (also `tree_next_cursor`); pass `{"cursor": N}` to read the next
+  page. A middle-of-screen row is on page 3, not lost in the middle;
+* the **full tree** is always written to the session's
+  `tree/<frame_seq>.json`, and the reply names the absolute `tree_path`
+  (live sessions get a per-session artifacts directory; verify runs keep
+  `tree/<frame_seq>.json` in `--artifacts`). Read that file when you need the
+  hierarchy, ids of non-text nodes, or bounds of an invisible node;
+* `acos_launch` defaults to the compact summary/visible texts; `{"full": true}`
+  (or `{"full_tree": true}`) returns the old inline tree when it fits. The full
+  tree is still the file above. `acos_observe_tree`, `acos_observe` and
+  `acos_reset` take the same arguments;
+* the hard reply cap is **20 KiB** (`acos_protocol::reply::MAX_REPLY_BYTES`). If
+  even a requested full tree or a long log list does not fit, the reply keeps
+  the compact/paged view and the path, and `_meta.acos_mcp.reply_capped` says
+  how many bytes were removed. A reply never silently exceeds the cap.
+
+`acos_logs` uses the same principle: the default view is small (`W` + the app's
+package), while `log_path` names the complete `logs/logcat.txt` in the session
+artifacts. `{"all": true}` returns the whole in-memory view (subject to the
+20 KiB cap and `logs_truncated`), not a different file.
+
+### Getting a screenshot through the observe verbs
+
+`acos_observe_tree` and `acos_observe` both take `screenshot`:
+
+```json
+{"name": "acos_observe_tree", "arguments": {"session_id": "mcp-1234", "screenshot": true}}
+{"name": "acos_observe_tree", "arguments": {"session_id": "mcp-1234", "screenshot": "/abs/out/home.png"}}
+```
+
+* `true` writes `<session artifacts>/screenshots/<verb>-<frame_seq>.png`; a
+  **relative** path resolves against the session's artifacts directory (never the
+  daemon's cwd) and an **absolute** path must stay inside it. `..` components, a
+  symlink that leaves the directory and a destination that is the frame artifact
+  itself are refused with `INVALID_ARGUMENT` before anything is created or
+  written — a screenshot can never create directories or overwrite files outside
+  the session. Anything that is not `true` or such a path (`7`, `""`) is
+  `INVALID_ARGUMENT` — never a silent no-op.
+* The screenshot is always bound to the frame of the tree in the same reply: a
+  request that asks for a screenshot makes the tree traversal capture pixels
+  itself, so the reply's `screenshot.frame_seq` equals the tree's. A bound tree
+  that has no pixels of its own is `NO_FRESH_FRAME` (refused) rather than paired
+  with a newer capture.
+* The reply's `result.screenshot` carries `path` (absolute), `bytes`, `md5`,
+  `frame_seq`, `width`/`height` from the PNG's IHDR, and the coordinate mapping
+  `display_size` + `display_origin`: PNG pixels are display pixels shifted by
+  `display_origin` (`png_x = display_x - origin.x`), the same offset the input
+  channel applies, so a tap by eye is not off by the status bar.
+* The bytes are the launcher's own lossless artifact (60-140 KB for a 1080x2400
+  frame), copied — never re-encoded.
+* A placeholder frame (window exists, app content never mounted) has no app
+  pixels: the call answers `NO_FRESH_FRAME` with `details.reason =
+  "placeholder-content"` instead of writing the splash.
+* The MCP reply also inlines the bounded preview (see *Content items* below) and
+  a text line naming the lossless file, so the agent gets pixels and a path in
+  one call.
+
+### A launch that never mounts is `blocked`, not `pass`
+
+`acos_launch`,`acos_reset` (and `acos_verify`'s `launch`/`reset` step) report
+`status: "blocked"` with `error.code = PLACEHOLDER_CONTENT` when the window and
+its decor exist but the app's own content never mounts. The label needs evidence
+beyond the tree: the frame is the bare window skeleton (<= 16 nodes, no app text)
+**and** nothing about the frame moved while the whole first-frame budget ran —
+no newer `frame_number`/`frame_seq` and the same pixel digest. A text-free
+skeleton whose pixels *did* change (a custom `View`, a `SurfaceView`/GL surface,
+an image-only activity, Flutter without semantics) is a normal pass with a
+`warning` (`code: PLACEHOLDER_SUSPECT`, `result.first_frame.placeholder_suspect:
+true`), never a blocked verdict. The reply keeps the ladder in `result` for
+diagnosis: `stage_reached: "window"`, `content: {"mounted": false,
+"reason": "placeholder-content"}`, the `first_frame` rung rewritten to
+`blocked`, `error.details` with `nodes`, `traversals`, `waited_ms`, `budget_ms`,
+`frames_advanced`, `pixels_changed`, and `error.details.log_hint` with the one
+guest log line that explains it (`UnsatisfiedLinkError`, `SoLoader`, `couldn't
+find`, `FATAL`, else the first `E` line).
+
+Never retry a placeholder launch with a longer timeout: the launch already spent
+its whole `ACOS_ART_FIRST_FRAME_MS` budget (default 5000 ms) and the frame never
+changed, so a bigger budget only reproduces the same answer more slowly. The
+budget is for the opposite case — a **slow React Native bundle**: a launch whose
+first paint lands after a second is waited for, and the wait is what makes the
+first frame the app's content instead of the skeleton. Read the log line, then
+`acos_inspect`.
+
+A placeholder label is never sticky: once a later frame carries content, the
+session answers from the current frame (a second `acos_launch`, a `reset` or a
+screenshot are judged on what is on screen now).
+
+### `acos_inspect` cross-checks the native libraries
+
+`acos_inspect` stays static, but it now also answers "does the APK ship the
+native libraries it asks for?": `result.native_lib_check` =
+
+```json
+{"abi": "x86_64", "platform_libs_ignored": 27,
+ "warnings": [{"code": "NATIVE_LIB_MISSING", "lib": "libworklets.so",
+               "abi": "x86_64", "source": "elf-needed",
+               "referenced_by": ["libgesturehandler.so", "libreanimated.so"]}]}
+```
+
+References come from two places inside the APK: the ELF `DT_NEEDED` entries of
+the libraries the APK ships for that ABI (`source: "elf-needed"`), and the string
+arguments of the app's own `System.loadLibrary`/`SoLoader.loadLibrary` call sites
+in the DEX (`source: "dex-load-library"`). A reference that resolves to a
+`lib/<abi>/` entry is never a warning, and platform libraries (`libc.so`,
+`libm.so`, …: the documented `SYSTEM_LIBS` set) are never warnings, so a healthy
+APK answers `warnings: []` and a non-empty list is a packaging bug — usually the
+cause of a `PLACEHOLDER_CONTENT` launch.
 
 Every `tools/list` entry carries the protocol `description`, an `inputSchema`
 generated from the request type, and annotations:
@@ -333,9 +683,19 @@ files to find. It covers the loop (doctor → inspect → launch →
 observe/observe_tree → tap/text/key/swipe → verify → reset → destroy), every CLI
 command with a runnable example, how to write a scenario YAML (step types,
 selectors, settle modes, `expect_change`, assertion kinds), every error code and
-its next action, and the limits (rotate unsupported, Flutter/RN deferred, x86_64
-native libs, API 34, memory admission). `{"topic": "workflow"|"cli"|
-"scenarios"|"errors"|"limits"}` returns just that section.
+its next action, and the limits (one support row per route for native Views,
+React Native and Flutter; rotate unsupported, x86_64 native libs, API 34, memory
+admission). `{"topic": "workflow"|"mcp"|"cli"|"scenarios"|"errors"|"limits"}`
+returns just that section.
+
+`{"topic": "mcp"}` is special: it is **generated from the tool descriptors on
+every reply**, not a section of the markdown guide. It lists every tool
+`tools/list` advertises for this build with its required and optional arguments,
+one paste-able example call and what the reply contains, plus the recipes that
+used to be unanswerable from the tool list (how to get a screenshot today, how
+to type into a field, how to find a control by `content_desc`, how to prove a
+flow). A tool this build does not implement is absent from the table, so the
+guide never teaches a call that answers `unsupported`.
 
 ---
 
@@ -473,8 +833,8 @@ snapshot is in [`results/mcp/tools.md`](../results/mcp/tools.md) and
 * **Concurrency.** At most `ACOS_MCP_MAX_CONCURRENCY` calls run at once;
   additional calls queue up to `ACOS_MCP_QUEUE_TIMEOUT_MS`, then return a
   structured `RESOURCE_LIMIT`.
-* **Sessions.** A registry keyed by `session_id` with an idle TTL exists for the
-  future stateful commands (`run`/`observe`/`action`/...). `inspect` and
+* **Sessions.** A registry keyed by `session_id` with an idle TTL (FB5, see
+  §1b) backs the session tools (`run`/`observe`/`action`/...). `inspect` and
   `run-dex` are one-shot.
 * **Shutdown.** Closing stdin makes the server wait
   `ACOS_MCP_SHUTDOWN_GRACE_MS` for in-flight calls to finish, then cancels any

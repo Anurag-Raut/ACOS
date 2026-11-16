@@ -1,0 +1,19 @@
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-services` (lib) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/parcelable_java.rs (.cache/rel3p2-target/release/deps/parcelable_java-03537677ed40d7d8)
+
+running 1 test
+Note: /home/Qui/.t3/worktrees/acos/t3-f47ca457-2272ba1e60af2cde/crates/acos-runtime/../../crates/acos-runtime/tests/java/ParcelableCompareMain.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+test real_java_write_to_parcel_matches_the_rust_codec ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.00s
+

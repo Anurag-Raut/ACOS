@@ -617,6 +617,50 @@ pub struct ObserveRequest {
     /// Maximum nodes to return (truncation is reported).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_nodes: Option<usize>,
+    /// Write this frame's PNG (`true` = under the session's artifacts and return
+    /// the path; a string = that destination inside the artifacts directory).
+    ///
+    /// The pixels are always those of the frame the tree in the same reply
+    /// describes; a placeholder/no-pixel frame is `NO_FRESH_FRAME`, never an
+    /// empty success.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(schema_with = "screenshot_argument_schema")]
+    pub screenshot: Option<serde_json::Value>,
+    /// Capture this frame's PNG into the reply (`true`).
+    ///
+    /// The ART daemon writes it under the session's artifacts and reports the
+    /// path (same as `screenshot: true`); the Flutter route returns the PNG
+    /// inline (`png_base64`/`png_bytes`). A route that cannot produce pixels
+    /// answers `UNSUPPORTED_BACKEND` instead of a reply that silently has none.
+    #[serde(default)]
+    pub png: bool,
+}
+
+/// JSON Schema for the `screenshot` argument: `true` or a path string.
+///
+/// It is a boolean-or-string union at the wire level because `true` means "put
+/// it where the session keeps its frames" and a string means "there". Expressing
+/// it as one `["boolean","string"]` type keeps the published schema honest
+/// without inventing a wrapper object no caller uses.
+fn screenshot_argument_schema(_: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    use schemars::schema::{InstanceType, Metadata, SchemaObject, SingleOrVec};
+    let object = SchemaObject {
+        instance_type: Some(SingleOrVec::Vec(vec![
+            InstanceType::Boolean,
+            InstanceType::String,
+        ])),
+        metadata: Some(Box::new(Metadata {
+            description: Some(
+                "Write this frame's PNG: `true` writes under the session's artifacts and \
+                 returns the path; a string is a destination inside that directory. The \
+                 pixels are always the frame the returned tree describes."
+                    .to_string(),
+            ),
+            ..Default::default()
+        })),
+        ..Default::default()
+    };
+    object.into()
 }
 
 /// `observe` result.
@@ -1114,10 +1158,17 @@ pub struct DestroyResponse {
 
 /// The execution engine `verify` runs on.
 ///
-/// This is the **execution** engine (real ART or the frozen Rust VM). It is not
-/// the scenario YAML `engine:` field, which is a legacy native/reference
-/// preference (`native-preferred` | `native-only` | `reference-only`) that ART
-/// verification does not consume.
+/// One vocabulary, three front doors: `art` (real ART, or recorded ART evidence
+/// with `--reference`) and `rust-vm` (the frozen Rust VM) are the words the
+/// `--engine` flag, this schema and the scenario YAML `engine:` field all use.
+///
+/// The scenario field records the engine a scenario was *written for*; it does
+/// not select one — the request's `engine` (CLI `--engine`, MCP `engine`) stays
+/// authoritative, and a disagreement is reported as
+/// `SCENARIO_ENGINE_MISMATCH` in the verdict's `provenance.warnings[]` rather
+/// than silently changing the engine. The pre-v0.3 spellings are accepted as
+/// aliases (`native-preferred`/`native-only` -> `rust-vm`,
+/// `reference-only` -> `art`) with a warning that names the current word.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum VerifyEngine {
@@ -1129,9 +1180,27 @@ pub enum VerifyEngine {
 
 impl Default for VerifyEngine {
     fn default() -> Self {
-        VerifyEngine::Art
+        DEFAULT_VERIFY_ENGINE
     }
 }
+
+/// The **one** default execution engine for a verification run.
+///
+/// It is the single source for `acos verify --help` (clap's
+/// `default_value`), the MCP `acos_verify` schema (`#[serde(default)]` +
+/// `Default`) and every dispatcher that fills the engine in for a caller that
+/// did not name one. Two different defaults for the same command (the CLI said
+/// `rust-vm`, the MCP tool ran `art`) is exactly the proven-answer-to-the-wrong-
+/// question bug the v0.3.0 verdict work removes: help text and behaviour must
+/// come from this constant.
+///
+/// `art` is the default because a pass has to rest on real Android behaviour;
+/// `rust-vm` is a diagnostics engine and is only ever selected explicitly (or
+/// by `--reference`, which replays recorded evidence, not live ART).
+pub const DEFAULT_VERIFY_ENGINE: VerifyEngine = VerifyEngine::Art;
+
+/// [`DEFAULT_VERIFY_ENGINE`] as the wire/CLI string.
+pub const DEFAULT_VERIFY_ENGINE_NAME: &str = DEFAULT_VERIFY_ENGINE.as_str();
 
 impl VerifyEngine {
     /// The stable CLI string.
@@ -1141,6 +1210,20 @@ impl VerifyEngine {
             VerifyEngine::Art => "art",
             VerifyEngine::RustVm => "rust-vm",
         }
+    }
+
+    /// Every engine name, in the order an error message should list them.
+    #[must_use]
+    pub const fn all() -> [VerifyEngine; 2] {
+        [VerifyEngine::Art, VerifyEngine::RustVm]
+    }
+
+    /// Parse a CLI/MCP engine name. No aliases, no guessing.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<VerifyEngine> {
+        VerifyEngine::all()
+            .into_iter()
+            .find(|engine| engine.as_str() == value)
     }
 }
 
@@ -1172,7 +1255,14 @@ pub struct VerifyRequest {
     /// Minimum fidelity the verdict must achieve.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_fidelity: Option<Fidelity>,
-    /// Execution engine: `art` (default, real ART) or `rust-vm` (frozen).
+    /// Execution engine: `art` (the default: real ART) or `rust-vm` (the frozen
+    /// Rust VM).
+    ///
+    /// The default is `art`, qualified by one rule: a request that sets
+    /// `reference` and omits `engine` replays recorded ART evidence with the
+    /// `rust-vm` side, because `--reference` is replay, not live ART execution.
+    /// An explicit `engine: art` together with `reference` is refused
+    /// (`INVALID_ARGUMENT`), never silently reinterpreted.
     #[serde(default)]
     pub engine: VerifyEngine,
     /// Deterministic `NAME=VALUE` flags recorded in the reproducer

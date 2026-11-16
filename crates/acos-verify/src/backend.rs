@@ -395,8 +395,22 @@ pub struct InputDelivery {
     pub delivered: bool,
     /// The completed frame after the action differs from the one before it.
     pub visual_change: bool,
+    /// REL3E: the app window's own `finishInputEvent(handled)` answer for the
+    /// whole gesture. `Some(false)` proves nothing consumed the event (a tap on
+    /// a label with no handler), `Some(true)` proves the window consumed it,
+    /// `None` means the guest did not ack every dispatched event: unknown, never
+    /// a guess.
+    pub handled: Option<bool>,
+    /// REL3E: how many `InputMessage`s the host published for this gesture.
+    /// Compared with `acks.len()` it says whether `handled` is a complete
+    /// answer.
+    pub published: usize,
     /// Guest acknowledgments, in delivery order.
     pub acks: Vec<InputAck>,
+    /// REL3E: the action reply's `target` block, verbatim: the node the selector
+    /// resolved to and the hit-test result at the injected point. `None` when the
+    /// backend reports no target.
+    pub target: Option<serde_json::Value>,
     /// The settle block the action's reply carried (P12). Includes
     /// `pixels_changed`; this is evidence, not a pass/fail rule.
     pub settle: Option<serde_json::Value>,
@@ -698,6 +712,17 @@ pub trait Backend {
 
     /// Static APK identity. Required by every backend.
     fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError>;
+
+    /// REL3E: the most recent action's delivery evidence (`handled`, acks and
+    /// the resolved target), when this backend records one.
+    ///
+    /// The executor keeps it even when the step failed: a tap the app never
+    /// consumed produces no new frame and times out its settle, and the agent
+    /// still has to be told *that nothing consumed it*. `None` means the backend
+    /// has no delivery record, and the step says `handled: null`, never `false`.
+    fn last_input_delivery(&self) -> Option<InputDelivery> {
+        None
+    }
 
     /// Launch the app and return the first observation.
     fn launch(&mut self, _request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {

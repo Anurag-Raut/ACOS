@@ -31,9 +31,11 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 
 1. `acos_doctor` — host preflight; fix every failing check's `fix:` first.
 2. `acos_inspect {"apk": ...}` — static: package, launcher, SDK, DEX/native.
-3. `acos_launch {"apk": ...}` — boot it, read `reached_stage`; the first
-   non-ok rung carries the blocker.
-4. `acos_observe_tree` — nodes with `id`/`text`/`bounds`; act on those.
+3. `acos_launch {"apk": ...}` — boot it (**absolute** paths only), read
+   `reached_stage`; the first non-ok rung carries the blocker. The launch reply
+   is compact (`tree_path` = full tree). Idle sessions expire after 600 s.
+4. `acos_observe_tree` — visible text/desc nodes with `id`/`bounds`/`clickable`;
+   long lists page with `cursor`.
 5. `acos_tap` / `acos_text` / `acos_key` / `acos_swipe` — then re-observe.
 6. `acos_logs` — the app's own words; `launched`/`stage_reached` included.
 7. `acos_verify {"apk","scenario"}` — the verdict and its artifacts are the
@@ -47,7 +49,9 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 `acos_help {"topic": "<name>"}` returns one section; `"all"` returns everything.
 
 * `overview` — this page: the three rules, the loop in ten lines, the topic list.
-* `workflow` — the loop step by step, with what each reply tells you.
+* `mcp` — every MCP tool: arguments, an example call, what it returns.
+* `workflow` — the loop step by step, plus screenshot / type / find / prove-a-
+  flow recipes.
 * `cli` — every `acos` command with a runnable example.
 * `scenarios` — writing a YAML scenario: steps, selectors, settle rules.
 * `errors` — error code → what to do next.
@@ -60,6 +64,52 @@ Call `acos_help {"topic": "workflow"}` next if you are about to run an app.
 <!-- /topic:overview -->
 
 <!-- topic:workflow -->
+## Recipes (answer these first)
+
+**Take a screenshot.** There is no capture tool on the MCP surface yet. Two
+routes work today: (a) a `capture: {name: shot, format: png, fresh: true}` step
+in an `acos_verify` scenario — the PNG lands as `frames/<seq>.png` under the
+artifacts directory and the step JSON names it; (b) with the CLI on a live
+daemon session, `acos observe --screenshot out/shot.png --json`. Coming:
+`screenshot: true` on `acos_observe_tree`, which returns the PNG path in the
+reply (and `NO_FRESH_FRAME` instead of a silent no-op when the frame carries no
+pixels).
+
+**Type into a field.** Observe the tree, tap the field (`acos_tap {"id": ...}`
+or `{"text": ...}`), type with `acos_text {"text": "Ada"}`, then observe again to
+read the value. Text goes to the *focused* editor through the real
+`InputConnection`; `ELEMENT_NOT_FOUND` with `details.kind = NoFocusedEditor`
+means the tap did not land on an editable field. If `acos_text` answers
+`UNSUPPORTED_BACKEND` on a live session, the same interaction as a scenario
+`type:` step runs through `acos_verify` and does work.
+
+**Find a control by `content_desc`.** `acos_observe_tree` returns `text` **and**
+`content_desc` per node; icon buttons usually carry their name only in
+`content_desc` (for example `Search Japanese dictionary`). Select it in a
+scenario with `selector: {content_desc: {contains: Search}}`, or hand the label
+to `acos_tap {"text": ...}` (text or content-desc), or tap the centre of the
+node's `bounds` with `x`/`y`. Never read a coordinate off a PNG: PNG space is
+offset by `frame.display_origin`.
+
+**Prove a flow.** Put the interaction in a YAML scenario (`topic: "scenarios"`)
+and run `acos_verify` (real ART by default). The pass counts only with its
+evidence on disk: `verdict.json`, `steps/NN-*.json` and the referenced frames —
+and `expect_change: true` on the taps whose point is to change the screen is
+what makes the pass mean something.
+
+**Launch arguments.** Paths must be **absolute**: the server's cwd is not your
+shell's, and a relative path is `INVALID_ARGUMENT` with
+`details.resolved_path`. Each launch rung carries `ms`. Pass `"label": "..."`
+and, if you will park the session, `"idle_ttl_s": N`: the server destroys its
+own sessions after the idle TTL (default 600 s, `ACOS_SESSION_IDLE_TTL_S`) and
+the next call on an expired one returns `SESSION_NOT_FOUND` with
+`details.reason=idle_ttl_expired` and the TTL.
+
+**Assert, do not eyeball.** `assert_text` (optionally with `bounds`),
+`assert_visible` / `assert_not_visible` (collapsed content stays in the tree with
+`visible: false`, so assert visibility, never presence) and `assert_log` turn a
+visual claim into a machine check with a diff.
+
 ## The loop
 
 ```
@@ -74,7 +124,17 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 2. **Know the APK before running it.** `acos_inspect` / `acos inspect <apk>`
    is static only (package, launcher activity, min/target SDK, DEX and native
    inventory). It never executes the app and is never proof of runtime
-   behaviour.
+   behaviour. It also cross-checks the **native libraries the app asks for**
+   against the ones the APK ships: `result.native_lib_check.warnings` lists
+   `{"code": "NATIVE_LIB_MISSING", "lib": "libworklets.so", "abi": "x86_64",
+   "source": "elf-needed"|"dex-load-library", "referenced_by": [...]}` for every
+   library named by a bundled library's `DT_NEEDED` or by a
+   `System.loadLibrary`/`SoLoader.loadLibrary` call site in the DEX that has no
+   `lib/<abi>/` entry. Platform libraries (`libc.so`, `libm.so`, …) are never
+   warnings, and a healthy APK answers `warnings: []` — so a non-empty list is a
+   **hint**, not the cause: it says "this library is referenced and absent", not
+   "this is why the app misbehaves". Treat it as the first thing to check before
+   debugging the UI, then confirm at runtime.
 3. **Run it.** `acos_launch {"apk": "..."}` (MCP, session persists) or
    `acos launch <apk> --engine art --json`. **The MCP session tools always run
    real ART** (the server starts its own private `acos serve --engine art`
@@ -83,26 +143,94 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    `apk_parsed -> process_booted -> bind_application -> application_on_create ->
    client_transaction -> activity_on_create -> on_resume -> first_frame`.
    `reached_stage` is the honest answer to "how far did it get"; the first
-   rung that is not `ok` carries the blocker.
+   rung that is not `ok` carries the blocker. **A launch that gets a window but
+   never mounts the app's own content is `blocked` with
+   `error.code = PLACEHOLDER_CONTENT`**, never `pass`/`first_frame`: the reply's
+   `result.content` says `{"mounted": false, "reason": "placeholder-content"}`,
+   `stage_reached` is `window`, and `error.details.log_hint` quotes the one guest
+   log line that explains it (an `UnsatisfiedLinkError`, a `SoLoader` line, a
+   `couldn't find` line, else the first `E` line; if the log says nothing the
+   hint says so instead of guessing). The usual cause is a native library the
+   APK references and does not ship — `acos_inspect`'s
+   `native_lib_check.warnings` names it statically. Do not retry the same APK
+   with a longer timeout; it is the packaging.
 4. **Observe before acting.** `acos_observe_tree` returns nodes with
    `resource_id`, `text`, `content_desc`, `class`, `bounds`,
    `clickable/enabled/focused/scrollable`. Use those bounds and ids for the
    next step. Before the app has a window the reply is `unsupported` with
    `details.reason = "not_ready"` — never an empty tree.
-5. **Act.** `acos_tap {"text": "Increment"}` (preferred), `acos_tap {"x":..,
-   "y":..}`, `acos_key {"code": "back"}`, `acos_text {"text": "hello"}` (types
-   into the focused editor through the real `InputConnection`),
-   `acos_swipe {"from":[x1,y1], "to":[x2,y2]}`. `text` names a node the way the
-   platform does — its text, else its content description — so a React Native
-   pressable (`accessibilityLabel`, e.g. a bottom tab) is reachable by the label
-   you read on screen; `content_desc`/`id` select exactly one field when you want
-   that. A node that is not visible to the user is never tapped: `ELEMENT_OFFSCREEN`
-   names its bounds. Re-observe after every action;
+5. **Act.** `acos_tap {"text": "Increment"}` (preferred),
+   `acos_tap {"content_desc": "Search Japanese dictionary"}`,
+   `acos_tap {"id": "inc"}`, `acos_tap {"x":.., "y":..}`,
+   `acos_key {"code": "back"}`, `acos_text {"text": "hello"}` (types into the
+   focused editor — the same guest `type_text` command a scenario `type` step
+   sends), `acos_swipe {"from":[x1,y1], "to":[x2,y2]}`. `text` names a node the
+   way the platform does — its text, else its content description — so a React
+   Native pressable (`accessibilityLabel`, e.g. a bottom tab) is reachable by the
+   label you read on screen. `content_desc` and `id` are the *explicit* fields:
+   use them when the label lives in a content description while the node's text
+   is something else (an RN `TextInput` whose text is its placeholder), or simply
+   when you want the model to be exact. A selector that matches **several** nodes
+   the user can see is refused (`AMBIGUOUS_SELECTOR`, `error.details.candidates`
+   lists every match with id/text/content_desc/bounds) — narrow it with
+   `content_desc`/`id`/`bounds`, or pass `index`; nothing is tapped on a guess.
+   A node that is not visible to the user is never tapped: `ELEMENT_OFFSCREEN`
+   names its bounds. **The reply already says what changed** (FB3): `changes`
+   carries the settled tree diff of the action — `added`, `removed` and
+   `changed` nodes (each with `id`, `text`, `content_desc`, `class`, `bounds`; a
+   changed node also lists the `fields` that changed, old → new), plus the
+   current `activity` and the `focused` node. A normal step is one call, not
+   tap-then-observe; call `acos_observe_tree` only when you need the whole tree
+   or bounds you have not seen (`diff: false` restores the old reply).
    `state_changed: false` with `accepted: true` means the event was delivered
-   but the screen did not change — read the in-band `note`.
+   but the screen did not change — read the in-band `note` and `changes`.
+   Identity rule, compared fields and the 40-entry cap: `docs/MCP.md` §1c.
+   **`handled` is the app's own answer, and it is the one you branch on.**
+   Every `acos_tap`/`acos_key`/`acos_text`/`acos_swipe` reply (and every
+   scenario `tap`/`type`/`key`/`back` step JSON, under `input`) carries
+   `handled`: the bit the app window passed to Android's
+   `InputEventReceiver.finishInputEvent(handled)`. It is the framework's
+   verdict, not a guess from pixels:
+
+   - `handled: false` — **nothing in the app consumed the input.** A tap on a
+     label whose row is not pressable (the switch beside it is) is exactly this:
+     `state_changed: false` is then the correct, expected outcome, not a broken
+     tap. The same reply's `target` names what happened: `target.node` is the
+     node the selector resolved to, `target.hit.node` is what the injected point
+     actually hit (its `class`, `text`/`content_desc`, `bounds`, `clickable`),
+     `target.hit.consumer` is the nearest clickable ancestor-or-self (`null`
+     when there is none), and `target.hit.suggest` is the nearest clickable node
+     off that branch — the switch, the row's pressable, the button. A
+     `handled_hint` spells it out: *"nothing tappable there … tap the nearest
+     clickable android.widget.Switch … instead"*.
+   - `handled: true` + `state_changed: false` — the app **did** consume it and
+     the settled frame still shows no change: the handler may be asynchronous,
+     or the control already had that state. `handled_hint` says so. Assert on
+     the state you expect rather than expecting a change.
+   - `handled: true` + `state_changed: true` — the press was consumed and the
+     screen changed; `changes` says what.
+   - `handled: null` — the guest did not ack every event
+     (`handled_evidence.acked` < `published`): **unknown**, never reported as
+     "not handled". `handled_evidence` always travels with the boolean
+     (`source`, `published`, `acked`, `unhandled` seqs).
+
+   Two consequences worth knowing. (a) `state_changed` is evidence about the
+   screen; `handled` is evidence about the app. An agent that only reads
+   `state_changed` cannot tell "nothing tappable there" from "handled, nothing
+   changed" — read `handled` first. (b) The hit-test in `target.hit` is
+   computed from the tree the tap resolved against (visible rects, deepest
+   node first); it tells you *what is there*. `handled` tells you *whether the
+   app took it*. When they disagree (`hit.clickable: true`, `handled: false`)
+   the control was hit but refused the press — disabled, or a parent
+   intercepted it.
 6. **Read the app's own words.** `acos_logs` returns the guest log buffer and
    also `launched` / `stage_reached`, so an empty buffer is only clean if the
-   app actually reached `onCreate`.
+   app actually reached `onCreate`. The **default view is `min_priority: "W"`
+   plus the app's own package** (records at warning or above, plus anything that
+   names the app), which keeps SoLoader/framework noise out of the reply. The
+   full buffer stays in `logs/logcat.txt` (a live reply names `log_path`),
+   `"all": true` or `min_priority: "V"` returns all of it, and `tag` narrows
+   further.
 7. **Prove the flow.** `acos_verify {"apk": ..., "scenario": ...}` (or
    `acos verify <scenario.yaml> --artifacts out/<name>`) runs a YAML scenario and
    writes `verdict.json`, per-step JSON and the frames. The tool runs **real
@@ -115,21 +243,65 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    an empty app-data directory) and `acos_destroy` (idempotent). Sessions also
    die with the `acos-mcp` process.
 
+### Recipe: type into a search field
+
+A live session can type — the same path a scenario `type` step uses — so a
+search flow no longer has to become a scenario. In four calls:
+
+```
+1. acos_observe_tree                      # read the field's name from the tree
+2. acos_tap {"content_desc": "Search Japanese dictionary"}
+3. acos_text {"text": "kayou"}
+4. acos_observe_tree                      # the query is in the field, results below
+```
+
+* **Pick the field by `content_desc`, not by `text`.** A React Native
+  `TextInput` reports its *placeholder* as `text` (AOSP's accessibility mapping
+  takes the hint when the field is empty) and keeps the accessibility label in
+  `content_desc`. So `acos_tap {"text": "Search Japanese dictionary"}` is
+  `ELEMENT_NOT_FOUND` while `acos_tap {"content_desc": "..."}` hits the field —
+  the same value works in a scenario selector.
+* **Tap first, then type.** Typing goes to the focused editor. The tap's
+  `accepted: true` + `state_changed: true` is the delivery evidence; the next
+  tree's `focused: true` on the field node is the focus evidence.
+* **No class check is needed.** RN inputs are obfuscated subclasses
+  (`Z4.g`), not `android.widget.EditText`; `acos_text` does not care what the
+  class is called — it sends the guest's `type_text` command and judges the
+  settled result, exactly like `type:` in YAML.
+* **The tree proves it.** After `acos_text {"text": "kayou"}` on Gaten, the next
+  tree carries `kayou` in the field and the result list (`19 results`, `歌謡`,
+  `かよう`, ...). Assert on those texts (or in a scenario with
+  `assert_text`) — never on the call's `status` alone.
+* **The reply names the field, and masks unless it is known to be plain.**
+  `acos_text`'s `result.target.node` is the focused field the input went to, as
+  the tree shows it. The typed text is echoed (`target.text`) only when that
+  field is focused and is not a password. Otherwise the reply carries
+  `target.text_masked: true`, `target.chars` (the honest count), `target.text:
+  "*"` and a `reason`: a focused password field, `mask: true`, or an
+  **unknown target** (the tree names no focused field; nothing is guessed, and no
+  other field is ever reported in its place). Masking only hides the echo: the
+  tree still shows what the app displays, so prove typing with the next
+  `acos_observe_tree`, not with the reply.
+
 <!-- /topic:workflow -->
 
 <!-- topic:cli -->
 ## CLI reference (runnable examples)
 
 ```
+acos guide                                    # the agent guide (same text as MCP acos_help)
+acos guide workflow                           # one topic: workflow|cli|scenarios|errors|limits|mcp
+acos guide all                                # the whole guide
 acos doctor --json
 acos inspect fixtures/build/apps/counter.apk --json
 acos launch fixtures/build/apps/counter.apk --engine art --json
-acos launch fixtures/build/apps/counter.apk --engine art --keep --json   # session survives in the daemon
+acos launch fixtures/build/apps/counter.apk --engine art --keep --label counter --json  # session survives in the daemon
 acos observe --tree --json                        # the daemon's live session
 acos observe --tree --apk fixtures/build/apps/counter.apk --json         # one-shot: launch then observe
 acos observe --screenshot out/counter.png --json
 acos tap --text Increment --json
 acos tap --id inc --json
+acos tap --content-desc "Search Japanese dictionary" --json
 acos tap 100 400 --json
 acos key back --json
 acos swipe 540 1800 540 600 --duration-ms 300 --json
@@ -164,11 +336,16 @@ Notes that save a run:
   MCP tools `acos_reset` / `acos_destroy`. There is no top-level `acos reset`.
 * `acos run-dex <path> --main Main` executes a DEX `main` on the Rust
   interpreter: console-tier checks only, not UI evidence.
+* `acos guide [topic]` prints the agent guide from the same source as the MCP
+  `acos_help` tool (`docs/AGENT_GUIDE.md`); `acos guide all` is the whole text.
+  A CLI-only agent does not need the checkout to read the scenario schema.
+* **Human output contract:** with `--json`, stdout is the JSON document and
+  nothing else; the human summary (status line, warnings, the next action) goes
+  to stderr. In text mode the human summary is stdout. Never parse text mode to
+  get a verdict, and never mix the streams (`2>&1`) when the output is JSON.
 * Every command takes `--json` and prints the same envelope the MCP tools
-  return. With `--json`, **stdout carries only the JSON document**; progress,
-  warnings and the one-line failure summary go to **stderr**. So
-  `acos verify … --json > out.json 2>&1` is *not* JSON — send stderr elsewhere
-  (`2>err.txt`). Text mode prints the human summary on stdout.
+  return. So `acos verify … --json > out.json 2>&1` is *not* JSON — send stderr
+  elsewhere (`2>err.txt`).
 * `acos verify --artifacts <dir>` gives one run ownership of that directory. A
   non-empty dir written by another run is refused (`INVALID_ARGUMENT` naming the
   previous run id); use a fresh dir, or `--overwrite` to replace that evidence
@@ -186,7 +363,7 @@ A scenario is YAML with `version: 1`. Minimal, runnable shape:
 version: 1
 name: counter-increment
 app: fixtures/build/apps/counter.apk
-engine: native-preferred        # native-preferred | native-only | reference-only (see note)
+engine: rust-vm                 # art | rust-vm (the same names --engine takes)
 fallback: report-and-escalate   # report-and-escalate | report-only | forbid
 api_level: 34
 isolation: process              # shared-task | process | sandbox | core | vm
@@ -203,11 +380,16 @@ steps:
   - assert_no_crash: {}
 ```
 
-`engine:` and `fallback:` above are the legacy **native-vs-reference** preference
-(`native-preferred` | `native-only` | `reference-only`) and are **not** the
-execution engine. The execution engine is `acos verify --engine art|rust-vm`
-(CLI) or the `engine` argument of the `acos_verify` tool (default: `art`, real
-ART). ART verification does not read the YAML field.
+`engine:` and `fallback:` are **metadata** about what the scenario was written
+for; the execution engine is chosen by `acos verify --engine art|rust-vm` (CLI)
+or the `engine` argument of `acos_verify` (MCP). Both use the **same two words**:
+`art` (real ART) and `rust-vm` (the frozen Rust VM). The default is `art` in
+both front doors, from one constant, so `--help` cannot disagree with behaviour.
+
+The pre-v0.3 YAML spellings still parse and are reported as a warning that names
+the current word: `native-preferred` and `native-only` mean `rust-vm`,
+`reference-only` means `art`. `engine: art` is accepted, not
+`INVALID_SCENARIO: unknown variant 'art'`.
 
 A step is a **one-key map**. Valid keys:
 
@@ -278,7 +460,10 @@ to the user at all). The tap lands at the centre of the target's *visible* rect
 (or `x`/`y`), and a node that is not visible to the user is never a tap target:
 if only such a node matches, the reply is `ELEMENT_OFFSCREEN` with its bounds,
 never a tap. When several nodes match, the first in document order wins;
-`index` picks another.
+`index` picks another. (The **live** channel — `acos_tap`/`acos_assert` on a
+`acos serve` session and the CLI `tap` that forwards to it — refuses several
+user-visible matches instead: `AMBIGUOUS_SELECTOR` with the candidates listed.
+A scenario step is a fixed document: it keeps first-match-plus-`index`.)
 
 **Settle modes (the part that decides whether a pass is real).**
 
@@ -289,6 +474,18 @@ never a tap. When several nodes match, the first in document order wins;
   latency-sensitive probing only: it may be mid-animation, it is **never**
   assertion evidence, and `acos_assert` rejects it with `INVALID_ARGUMENT`.
   Scenarios cannot request fast for an assertion step at all.
+* **A `tap` step always runs its own state-change check**
+  (`expect_change: "auto"`). The step JSON's `input` block says
+  `expect_change: "auto"` for every tap, so this is no longer hidden: when the
+  tap's settled frame differs from the previous observation, the step
+  additionally requires the change to be visible in **both** the UI tree and the
+  screenshot (`state_change` assertion), and fails with `ASSERTION_FAILED` if
+  only one moved. A tap that the app did
+  not handle (`input.handled: false`) or that changed nothing
+  (`state_changed: false`) passes with an `input_delivery` assertion and an
+  explanatory message — the auto rule never asks a no-op tap to repaint. Set
+  `expect_change: true` when you want "this tap must change something" to be a
+  hard requirement; `input.expect_change` then reads `true`.
 * Strict settle does *not* require pixels to change. `expect_change: true` on a
   `tap`/`type`/`key`/`back` step is the opt-in that does: `pixels_changed:false`
   then fails with `ASSERTION_FAILED` / `details.reason: "expect_change"`.
@@ -337,6 +534,15 @@ that returns a screenshot) inlines at most 1280 px on the long side and 512 KiB
 arrives as a 576x1280 PNG plus the path of the lossless file. Use the file when
 you need to compare pixels, and the inline preview for "is it the right screen".
 
+**Ask the observe verb for the frame you just read.**
+`acos_observe_tree {"screenshot": true}` (or `screenshot: "<path>"`) writes a PNG
+of the tree's own frame and returns its absolute path, `display_size` and
+`display_origin` in the same reply — `png_x = display_x - display_origin.x`, the
+same offset the input channel applies. `screenshot: true` lands under the
+session's artifacts (`<artifacts>/screenshots/`), so it is reachable from any cwd.
+On a placeholder frame (window exists, app content never mounted) the answer is
+`NO_FRESH_FRAME`, never a splash PNG presented as the app.
+
 <!-- /topic:scenarios -->
 
 <!-- topic:errors -->
@@ -345,11 +551,12 @@ you need to compare pixels, and the inline preview for "is it the right screen".
 | code(s) | what it means | what to do |
 |---|---|---|
 | `UNSUPPORTED_ANDROID_API`, `UNSUPPORTED_JAVA_API`, `UNSUPPORTED_BYTECODE`, `UNSUPPORTED_NATIVE_SYMBOL`, `UNSUPPORTED_RELOCATION`, `UNSUPPORTED_BACKEND`, `NEEDS_REAL_DEVICE`, `REQUIRES_GMS`, `WRONG_ABI`, `NO_DISPLAY`, `NO_TEXT` | the engine cannot do this | read `details.api`/`details.at`/`details.symbol`/`details.reason`, avoid the API, or report unsupported. Never rewrite the app to hide it |
-| `ASSERTION_FAILED`, `ELEMENT_NOT_FOUND`, `ELEMENT_OFFSCREEN`, `TREE_TRUNCATED` | the app ran, a check did not hold | read the diff, re-observe the tree, fix the app or the expectation |
+| `ASSERTION_FAILED`, `ELEMENT_NOT_FOUND`, `ELEMENT_OFFSCREEN`, `AMBIGUOUS_SELECTOR`, `TREE_TRUNCATED` | the app ran, a check did not hold | read the diff, re-observe the tree, fix the app or the expectation. `AMBIGUOUS_SELECTOR` means several visible nodes match: pick one with `id`/`content_desc`/`bounds` or `index` (`error.details.candidates` lists them) |
+| `PLACEHOLDER_CONTENT` | the window exists but the app's own content never mounted (a bare skeleton tree **and** no frame movement: `frame.placeholder: true`, unchanged `frame_number`/`frame_seq`, identical pixels, after the whole `ACOS_ART_FIRST_FRAME_MS` budget) | read `error.details.log_hint` (one quoted log line) and `error.details` (`nodes`, `traversals`, `waited_ms`, `budget_ms`, `frames_advanced`, `pixels_changed`); then run `acos_inspect` and look at `native_lib_check.warnings` (`NATIVE_LIB_MISSING`) — a missing `lib/<abi>/*.so` is a common **hint**, not a proven cause. A longer timeout cannot help (the budget was already spent). Not a pass, and not an app verdict until the library or the JS bundle is fixed |
 | `APP_CRASHED`, `APP_NOT_RESPONDING`, `JAVA_EXCEPTION` | the app crashed or hung | read `details.root_cause` (deepest `caused by:`) and `acos_logs`; fix the app |
 | `APK_*`, `AXML_MALFORMED`, `ARSC_MALFORMED`, `DEX_*`, `ELF_MALFORMED`, `NATIVE_*` | the build artifact is broken | rebuild/re-sign/repackage, then `acos inspect` again. Not an app verdict |
 | `UNSUPPORTED_ABI` | the APK ships native code but no `lib/x86_64/` | rebuild with the x86_64 ABI, or run the pure-Java path |
-| `SESSION_NOT_FOUND`, `SESSION_BUSY`, `STALE_REF` | session misuse | create the session first, serialise mutations on one session, re-observe before using a node |
+| `SESSION_NOT_FOUND`, `SESSION_BUSY`, `STALE_REF` | session misuse — or the session **expired**: `details.reason=idle_ttl_expired` means the server destroyed it after `details.idle_ttl_s` seconds of idleness | create/relaunch the session (`acos_launch`), serialise mutations on one session, re-observe before using a node; pass a longer `idle_ttl_s` if you intend to park it |
 | `TIMEOUT`, `NO_FRESH_FRAME`, `RESOURCE_LIMIT`, `RAM_GUARD`, `RAM_ABORT` | a deadline or budget was hit | raise the explicit budget, wait for the next frame, reduce concurrency. A timeout is never a pass |
 | `HOST_MEMORY_LOW` | **no** session was started: `MemAvailable` minus this session's budget would leave the host under 10% of `MemTotal` | free memory (destroy a session, clear scratch) and call again. Nothing is queued; `error.details` carries `mem_available_mib`, `mem_total_mib`, `requested_mib`, `min_free_mib` |
 | `HOST_MEMORY_LIMIT` | a memory ceiling was hit **while** the guest ran | reduce concurrency or run on a host with more headroom; the guest was capped by its cgroup |
@@ -384,6 +591,29 @@ Two session-specific hints worth memorising:
   that directory is installed, and a library that exists solely under another
   ABI fails later at its own `dlopen` (`UnsatisfiedLinkError`) — an app
   packaging bug, not an ABI gate. A pure-Java APK (no `lib/` at all) launches.
+* **Watching a session is view-only and costs nothing when unused.** A live
+  session publishes a registry entry (`$XDG_RUNTIME_DIR/acos/live/`) and a
+  `stream_socket` for local viewers (half-resolution frames + an action feed,
+  ≤ 15 fps). Agents never need it; `docs/LIVE_VIEW.md` has the protocol and the
+  measured cost. Nothing an agent reads or asserts comes from the stream.
+  Agent screenshots (`observe` screenshot / `capture_c1`) do **not** honour
+  `FLAG_SECURE`; only the live stream blanks secure windows.
+  To actually **watch** one (yours, or an agent's, from a browser or T3 Code),
+  run `acos view` in a terminal and open the one line it prints:
+
+  ```
+  $ acos view
+  acos view: http://127.0.0.1:54321/?t=<token>
+  ```
+
+  The page lists every live session (agent/client, project, APK, activity, age)
+  and streams the one you click with tap ripples and the action feed. It is
+  127.0.0.1 only and every request needs the token, so treat the URL as a
+  secret: no other route exists, no input reaches the guest, and the frames stop
+  the moment the last tab closes. `acos view --once --json` lists the sessions
+  and exits (for scripts and tests). In **T3 Code**, open that URL in the
+  built-in preview pane (paste it in the pane's address bar); no patch or
+  plugin is needed, per ADR-0027.
 * **The MCP session tools run real ART by default.** On the first session tool
   call the server starts its **own** private `acos serve --engine art` on a
   private socket under `$XDG_RUNTIME_DIR/acos/mcp-<pid>-…/` and forwards
@@ -392,17 +622,23 @@ Two session-specific hints worth memorising:
   a child of the server: on stdin EOF/exit its sessions are destroyed and it is
   terminated and reaped, so sessions never outlive `acos-mcp`.
   `ACOS_SESSION_DAEMON=1` still forwards to an external `acos serve` when one is
-  listening. `ACOS_MCP_ENGINE=legacy` selects the frozen in-process Rust VM /
+  listening. The server finds the CLI it spawns as `ACOS_BIN` when set, else the
+  `acos` next to its own executable (how a normal install ships it), else the
+  first `acos` on `PATH`. `ACOS_MCP_ENGINE=legacy` selects the frozen in-process Rust VM /
   RN-bridge backend: it is **legacy, diagnostics only**, cannot run real APKs
   and is never chosen implicitly. Default session ids are unique per server
   (`mcp-<pid>`), so two agents on one daemon cannot collide.
 * **Rotation is not supported** on the ART session channel: the guest line
   protocol has no `rotate`, so a `rotate` step returns `UNSUPPORTED_BACKEND`
   (`capability: input`). Do not build a scenario that depends on it.
-* **Flutter and React Native are deferred.** Their APKs are recognised
-  structurally, and the native-child session paths exist, but full driver
-  coverage is not there; treat any result as experimental, never as the
-  framework-View verdict. Framework (View-based) APKs are the supported path.
+* **App types, one row per route.** Same APK, same engine, same verdict rules:
+
+  | app type | MCP session tools (`acos_launch` -> `acos_verify`) | CLI `acos launch/observe/verify --engine art` | notes |
+  |---|---|---|---|
+  | Framework Views (Java/Kotlin native) | supported | supported | The reference path: real ART, real `View` tree, real frames. |
+  | React Native | **supported** (real ART via the MCP session tools, since v0.2.0) | **supported** (real ART, since v0.2.0) | Verified end-to-end on a React Native release APK: launch ladder, tree, taps and `acos_verify` pass with `fidelity: art-reference`. The tree is the framework `View` hierarchy the RN host creates, not a JS component tree. |
+  | Flutter | deferred | deferred | Recognised structurally; no driver coverage, so any result is a structural observation, never a Flutter framework verdict. |
+
 * **`reset` is host-side**: it stops the guest and starts the same APK again in
   a fresh process with an empty app-data directory. That is the honest meaning
   of "back to the initial UI" on this channel; the app's own Reset button is

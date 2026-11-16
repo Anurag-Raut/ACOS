@@ -991,7 +991,7 @@
       "type": "object"
     },
     "Fidelity": {
-      "description": "How faithful the execution behind a result is.\n\n* `static-analysis` — host parsing only. Proves nothing about runtime behaviour. * `jvm-reference` — host OpenJDK. Proves pure-Java semantics only; never Android/ART/framework/JNI/rendering behaviour. * `native-runtime` — executed by ACOS itself (its Rust VM/loader/renderer). This is **not** validated against ART unless `validated_against` says so. * `art-reference` — real ART on a reference Android image. Authoritative for Android framework behaviour at the stated API/ABI. * `physical-device` — a real device/OEM target. * `simulated` — a mock/stub path. A simulated success is not an Android success.",
+      "description": "How faithful the execution behind a result is.\n\n* `static-analysis` — host parsing only. Proves nothing about runtime behaviour. * `jvm-reference` — host OpenJDK. Proves pure-Java semantics only; never Android/ART/framework/JNI/rendering behaviour. * `native-runtime` — executed by ACOS itself (its Rust VM/loader/renderer). This is **not** validated against ART unless `validated_against` says so. * `art-reference` — real ART on a reference Android image. Authoritative for Android framework behaviour at the stated API/ABI. * `physical-device` — a real device/OEM target. * `simulated` — a mock/stub path. A simulated success is not an Android success. * `n/a` — a **meta** reply: a tool that reports on ACOS itself (`acos_help`, `acos_capabilities`, `acos_doctor`). It says nothing about app behaviour, so labelling it `static-analysis` would imply the reply was derived from the APK. `n/a` never satisfies a fidelity requirement and is never a pass.",
       "oneOf": [
         {
           "description": "Static host analysis only.",
@@ -1032,6 +1032,13 @@
           "description": "Mocked/simulated behaviour.",
           "enum": [
             "simulated"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Not applicable: a meta reply about ACOS itself (help/capabilities/doctor).",
+          "enum": [
+            "n/a"
           ],
           "type": "string"
         }
@@ -1235,6 +1242,18 @@
           "type": [
             "integer",
             "null"
+          ]
+        },
+        "png": {
+          "default": false,
+          "description": "Capture this frame's PNG into the reply (`true`).\n\nThe ART daemon writes it under the session's artifacts and reports the path (same as `screenshot: true`); the Flutter route returns the PNG inline (`png_base64`/`png_bytes`). A route that cannot produce pixels answers `UNSUPPORTED_BACKEND` instead of a reply that silently has none.",
+          "type": "boolean"
+        },
+        "screenshot": {
+          "description": "Write this frame's PNG (`true` = under the session's artifacts and return the path; a string = that destination inside the artifacts directory).\n\nThe pixels are always those of the frame the tree in the same reply describes; a placeholder/no-pixel frame is `NO_FRESH_FRAME`, never an empty success.",
+          "type": [
+            "boolean",
+            "string"
           ]
         },
         "text": {
@@ -1747,7 +1766,7 @@
       "type": "object"
     },
     "VerifyEngine": {
-      "description": "The execution engine `verify` runs on.\n\nThis is the **execution** engine (real ART or the frozen Rust VM). It is not the scenario YAML `engine:` field, which is a legacy native/reference preference (`native-preferred` | `native-only` | `reference-only`) that ART verification does not consume.",
+      "description": "The execution engine `verify` runs on.\n\nOne vocabulary, three front doors: `art` (real ART, or recorded ART evidence with `--reference`) and `rust-vm` (the frozen Rust VM) are the words the `--engine` flag, this schema and the scenario YAML `engine:` field all use.\n\nThe scenario field records the engine a scenario was *written for*; it does not select one — the request's `engine` (CLI `--engine`, MCP `engine`) stays authoritative, and a disagreement is reported as `SCENARIO_ENGINE_MISMATCH` in the verdict's `provenance.warnings[]` rather than silently changing the engine. The pre-v0.3 spellings are accepted as aliases (`native-preferred`/`native-only` -> `rust-vm`, `reference-only` -> `art`) with a warning that names the current word.",
       "oneOf": [
         {
           "description": "Real Google ART through an `acos-art` guest (the default).",
@@ -1794,7 +1813,7 @@
             }
           ],
           "default": "art",
-          "description": "Execution engine: `art` (default, real ART) or `rust-vm` (frozen)."
+          "description": "Execution engine: `art` (the default: real ART) or `rust-vm` (the frozen Rust VM).\n\nThe default is `art`, qualified by one rule: a request that sets `reference` and omits `engine` replays recorded ART evidence with the `rust-vm` side, because `--reference` is replay, not live ART execution. An explicit `engine: art` together with `reference` is refused (`INVALID_ARGUMENT`), never silently reinterpreted."
         },
         "flags": {
           "default": [],

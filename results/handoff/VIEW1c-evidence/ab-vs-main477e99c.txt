@@ -1,0 +1,45 @@
+# main477e99c vs view1c -- lattice-aware A/B (PERF-REL3)
+
+Arms: main477e99c = 2 file(s) [f0184e06, f0184e06]; view1c = 2 file(s) [f0184e06, f0184e06]
+
+## 1. Old gate -- medians of per-rep p50s (unchanged rule)
+
+| metric | main477e99c | view1c | delta | delta % | threshold | verdict |
+|---|---:|---:|---:|---:|---:|---|
+| M4 warm launch (strict) | 305.85 | 306.02 | 0.17 | +0.1% | ±5.00% / 2.00 | within-noise |
+| M4 warm launch (fast) | 163.23 | 159.21 | -4.03 | -2.5% | ±5.00% / 2.00 | within-noise |
+| M5 fresh screenshot (PNG) | 11.92 | 24.26 | 12.34 | +103.5% | ±5.00% / 2.00 | REGRESSION |
+| M6 reset -> first correct screen (strict) | 332.97 | 347.95 | 14.98 | +4.5% | ±5.00% / 2.00 | within-noise |
+| M6 reset -> first correct screen (fast) | 195.17 | 199.60 | 4.43 | +2.3% | ±5.00% / 2.00 | within-noise |
+| M7 UI tree with text (strict) | 41.43 | 41.23 | -0.20 | -0.5% | ±5.00% / 2.00 | within-noise |
+| M7 UI tree with text (fast) | 0.57 | 0.53 | -0.03 | -5.9% | ±5.00% / 2.00 | within-noise |
+| M8 tap -> settled, counter (strict) | 944.60 | 958.53 | 13.94 | +1.5% | ±5.00% / 2.00 | within-noise |
+| M8 tap -> settled, counter (fast) | 41.40 | 47.46 | 6.05 | +14.6% | ±5.00% / 2.00 | REGRESSION |
+| M8 tap -> settled, form (strict) | 927.99 | 941.37 | 13.38 | +1.4% | ±5.00% / 2.00 | within-noise |
+| M8 tap -> settled, form (fast) | 32.63 | 44.37 | 11.74 | +36.0% | ±5.00% / 2.00 | REGRESSION |
+| tap acknowledgement | 5.00 | 5.00 | 0.00 | +0.0% | ±5.00% / 2.00 | within-noise |
+| acos_destroy teardown_ms | 13.50 | 13.00 | -0.50 | -3.7% | ±5.00% / 2.00 | within-noise |
+| cpu_active_tap_strict_pct | 44.09 | 46.98 | 2.89 | +6.5% | ±10.00% / 0.20 | within-noise |
+| teardown_wall_ms | 19.67 | 19.15 | -0.53 | -2.7% | ±5.00% / 2.00 | within-noise |
+
+## 2. Pooled 5 %-trimmed mean, and 3. frame-slot shares
+
+| metric | n main477e99c/view1c | main477e99c trimmed | view1c trimmed | delta | delta % | frame ms | first slot main477e99c/view1c | slot shares main477e99c | slot shares view1c | verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|
+| M4 warm launch (fast) | 0/0 | - | - | +0.00 | - | - | -/- | - | - | no-samples |
+| M6 reset -> first correct screen (fast) | 0/0 | - | - | +0.00 | - | - | -/- | - | - | no-samples |
+| M8 tap -> settled, counter (fast) | 0/0 | - | - | +0.00 | - | - | -/- | - | - | no-samples |
+| M8 tap -> settled, form (fast) | 0/0 | - | - | +0.00 | - | - | -/- | - | - | no-samples |
+
+## 4. Verdict
+
+Lattice gate (proposal): pooled 5 percent-trimmed mean worse by > 5 percent and > 2 ms; a first-slot share shift >= 10 pp is flagged separately.
+
+* M4 warm launch (fast): no-samples -- trimmed - vs - (+0.00 ms, -), first-slot - vs - [no raw samples: old gate only]
+* M6 reset -> first correct screen (fast): no-samples -- trimmed - vs - (+0.00 ms, -), first-slot - vs - [no raw samples: old gate only]
+* M8 tap -> settled, counter (fast): no-samples -- trimmed - vs - (+0.00 ms, -), first-slot - vs - [no raw samples: old gate only]
+* M8 tap -> settled, form (fast): no-samples -- trimmed - vs - (+0.00 ms, -), first-slot - vs - [no raw samples: old gate only]
+
+* 4 fast metric(s) carry no raw samples (old baseline JSON); re-run with the PERF-REL3 bench to score them on the lattice.
+
+Old gate regressions: M5 fresh screenshot (PNG), M8 tap -> settled, counter (fast), M8 tap -> settled, form (fast)

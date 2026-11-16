@@ -1,0 +1,93 @@
+class | verification | matched/real | verdict
+---|---|---|---
+android.graphics.Rect | Full | 4/4 | match
+android.graphics.Point | Full | 2/2 | match
+android.content.ComponentName | Curated | 0/1 | curated (no Full claim)
+android.content.pm.PackageItemInfo | Full | 9/9 | match
+android.content.pm.ApplicationInfo | Full | 84/84 | match
+android.content.pm.ComponentInfo | Full | 17/17 | match
+android.content.pm.ActivityInfo | Full | 45/45 | match
+android.content.pm.PackageInfo | Full | 43/43 | match
+android.content.pm.Signature | Full | 1/1 | match
+android.content.pm.ProviderInfo | Full | 28/28 | match
+android.content.pm.ServiceInfo | Full | 20/20 | match
+android.content.pm.InstrumentationInfo | Full | 26/26 | match
+android.content.pm.PermissionInfo | Full | 17/17 | match
+android.content.pm.ResolveInfo | Full | 20/20 | match
+android.content.pm.FeatureInfo | Full | 4/4 | match
+android.app.ContentProviderHolder | Full | 5/5 | match
+android.view.DisplayInfo | Prefix | 24/52 | prefix match
+android.view.Display$Mode | Full | 6/6 | match
+android.view.DisplayShape | Full | 8/8 | match
+android.view.SurfaceControl$RefreshRateRange | Full | 2/2 | match
+android.graphics.Insets | Full | 4/4 | match
+android.os.LocaleList | Full | 1/1 | match
+android.app.WindowConfiguration | Full | 9/9 | match
+android.content.res.Configuration | Full | 27/27 | match
+android.app.ActivityManager$TaskDescription | Curated | 3/31 | curated (no Full claim)
+android.window.SizeConfigurationBuckets | Full | 5/5 | match
+android.view.autofill.AutofillId | Curated | 2/4 | curated (no Full claim)
+android.view.autofill.AutofillValue | Curated | 1/1 | curated (no Full claim)
+android.view.InputDevice | Prefix | 21/28 | prefix match
+android.view.KeyCharacterMap | Curated | - | no `writeToParcel` in the image (native/serialized/no Java writer)
+android.hardware.input.HostUsiVersion | Curated | 2/2 | curated (no Full claim)
+android.hardware.OverlayProperties | Curated | 0/2 | curated (no Full claim)
+android.os.ParcelFileDescriptor | Curated | 2/3 | curated (no Full claim)
+android.os.Bundle | Curated | - | no `writeToParcel` in the image (native/serialized/no Java writer)
+android.util.MemoryIntArray | Curated | 1/1 | curated (no Full claim)
+android.os.IBinder | Curated | - | no `writeToParcel` in the image (native/serialized/no Java writer)
+android.view.textservice.SpellCheckerInfo | Curated | 0/5 | curated (no Full claim)
+android.view.textservice.SpellCheckerSubtype | Curated | 2/5 | curated (no Full claim)
+android.app.ActivityManager$RunningAppProcessInfo | Curated | 0/16 | curated (no Full claim)
+android.app.servertransaction.ClientTransaction | Full | 5/5 | match
+android.content.AttributionSource | Curated | 0/1 | curated (no Full claim)
+android.content.AttributionSourceState | Curated | 8/9 | curated (no Full claim)
+android.net.Uri | Curated | 1/1 | curated (no Full claim)
+com.android.internal.infra.AndroidFuture | Curated | 0/3 | curated (no Full claim)
+android.view.accessibility.AccessibilityManager$ClientInfo | Curated | - | class absent from every boot-classpath dex the image ships
+android.content.pm.ProviderInfoList | Full | 1/1 | match
+android.app.ProfilerInfo | Full | 9/9 | match
+android.content.res.CompatibilityInfo | Full | 4/4 | match
+android.content.AutofillOptions | Curated | 1/8 | curated (no Full claim)
+android.content.ContentCaptureOptions | Curated | 0/8 | curated (no Full claim)
+android.os.SharedMemory | Curated | 0/1 | curated (no Full claim)
+android.app.assist.AssistStructure | Curated | 1/4 | curated (no Full claim)
+android.app.assist.AssistContent | Curated | 1/11 | curated (no Full claim)
+android.content.ContentValues | Curated | 0/2 | curated (no Full claim)
+android.view.inputmethod.ImeTracker$Token | Curated | 0/2 | curated (no Full claim)
+android.app.ResultInfo | Full | 5/5 | match
+android.os.PersistableBundle | Curated | - | no `writeToParcel` in the image (native/serialized/no Java writer)
+android.app.servertransaction.LaunchActivityItem | Full | 21/21 | match
+android.app.servertransaction.ResumeActivityItem | Full | 4/4 | match
+android.app.servertransaction.ActivityRelaunchItem | Full | 5/5 | match
+android.window.ClientWindowFrames | Full | 6/6 | match
+android.util.MergedConfiguration | Full | 3/3 | match
+android.graphics.Insets | Full | 4/4 | match
+android.view.InsetsSource | Full | 8/8 | match
+android.view.InsetsSourceControl | Full | 7/7 | match
+android.view.InsetsSourceControl$Array | Full | 1/1 | match
+android.view.InsetsState | Full | 8/8 | match
+android.view.RoundedCorners | Full | 2/2 | match
+android.view.PrivacyIndicatorBounds | Full | 2/2 | match
+android.view.DisplayShape | Full | 8/8 | match
+android.view.DisplayCutout$ParcelableWrapper | Full | 1/1 | match
+android.view.DisplayCutout | Curated | - | no `writeToParcel` in the image (native/serialized/no Java writer)
+android.app.ApplicationErrorReport$ParcelableCrashInfo | Curated | - | no `writeToParcel` in the image (native/serialized/no Java writer)
+android.os.PatternMatcher | Full | 3/3 | match
+android.content.IntentFilter$AuthorityEntry | Full | 4/4 | match
+android.content.IntentFilter | Full | 25/25 | match
+android.app.ActivityManager$MemoryInfo | Full | 9/9 | match
+android.content.pm.InstallSourceInfo | Prefix | 6/6 | prefix match
+android.net.Network | Full | 1/1 | match
+android.os.Messenger | Full | 1/1 | match
+android.net.NetworkCapabilities | Full | 20/20 | match
+android.net.NetworkRequest | Full | 4/4 | match
+android.net.LinkProperties | Full | 32/32 | match
+android.net.NetworkInfo | Full | 11/11 | match
+android.app.NotificationChannel | Prefix | 32/32 | prefix match
+android.app.NotificationChannelGroup | Prefix | 10/10 | prefix match
+android.os.storage.StorageVolume | Full | 15/15 | match
+android.os.UserHandle | Curated | 0/1 | curated (no Full claim)
+android.media.AudioAttributes | Prefix | 5/10 | prefix match
+
+BAD: [] no-writer: 7

@@ -220,6 +220,18 @@ for app in counter todo-list multi-activity finish-start form-validation settle-
     build_apk "$app"
 done
 
+# pms-parcel is the REL3P fixture: it calls
+# getPackageInfo(own package, GET_SIGNATURES|GET_META_DATA|GET_PERMISSIONS =
+# 0x100024c0) and shows the signature / requested-permission counts the
+# framework decoded from the ACOS PMS reply. It is the app-visible check that
+# `PackageInfo.writeToParcel`'s String8 arrays are encoded as String8.
+build_apk pms-parcel
+# tap-targets is the REL3E input-handling fixture: a non-clickable label whose
+# clickable switch sits beside it (a tap there is a press the app never
+# consumes: `finishInputEvent(handled) = false`) and a clickable button that
+# changes state (handled = true). See fixtures/apps/tap-targets/res/layout/main.xml.
+build_apk tap-targets
+
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).

@@ -418,6 +418,13 @@
           "type": "string"
         },
         {
+          "description": "The window exists but the app's own content never mounted: after the content budget the launch frame is still the bare window skeleton (no app text, no mounted view of the app's own). Reason `placeholder-content`; always a `blocked`, never a pass (FB2).",
+          "enum": [
+            "PLACEHOLDER_CONTENT"
+          ],
+          "type": "string"
+        },
+        {
           "description": "Evidence cannot be tied to the required fidelity level.",
           "enum": [
             "UNVERIFIED_FIDELITY"
@@ -712,6 +719,13 @@
           "type": "string"
         },
         {
+          "description": "A selector matched **several** user-visible nodes and the caller did not say which one it meant.\n\nInput and assertion verbs on the live channel refuse a silent pick: the error's `details.candidates` (`id`, `text`, `content_desc`, `class`, `bounds`) plus `details.selector` say exactly what matched, so the caller can pass a narrower selector (`id`, `content_desc`, `bounds`) or `index`.",
+          "enum": [
+            "AMBIGUOUS_SELECTOR"
+          ],
+          "type": "string"
+        },
+        {
           "description": "A selector matched nothing in a tree the probe reported as truncated (`UiTree::truncated`, any window). The node may exist beyond the sampled prefix, so this is not proof of absence.",
           "enum": [
             "TREE_TRUNCATED"
@@ -999,7 +1013,7 @@
       "type": "object"
     },
     "Fidelity": {
-      "description": "How faithful the execution behind a result is.\n\n* `static-analysis` — host parsing only. Proves nothing about runtime behaviour. * `jvm-reference` — host OpenJDK. Proves pure-Java semantics only; never Android/ART/framework/JNI/rendering behaviour. * `native-runtime` — executed by ACOS itself (its Rust VM/loader/renderer). This is **not** validated against ART unless `validated_against` says so. * `art-reference` — real ART on a reference Android image. Authoritative for Android framework behaviour at the stated API/ABI. * `physical-device` — a real device/OEM target. * `simulated` — a mock/stub path. A simulated success is not an Android success.",
+      "description": "How faithful the execution behind a result is.\n\n* `static-analysis` — host parsing only. Proves nothing about runtime behaviour. * `jvm-reference` — host OpenJDK. Proves pure-Java semantics only; never Android/ART/framework/JNI/rendering behaviour. * `native-runtime` — executed by ACOS itself (its Rust VM/loader/renderer). This is **not** validated against ART unless `validated_against` says so. * `art-reference` — real ART on a reference Android image. Authoritative for Android framework behaviour at the stated API/ABI. * `physical-device` — a real device/OEM target. * `simulated` — a mock/stub path. A simulated success is not an Android success. * `n/a` — a **meta** reply: a tool that reports on ACOS itself (`acos_help`, `acos_capabilities`, `acos_doctor`). It says nothing about app behaviour, so labelling it `static-analysis` would imply the reply was derived from the APK. `n/a` never satisfies a fidelity requirement and is never a pass.",
       "oneOf": [
         {
           "description": "Static host analysis only.",
@@ -1040,6 +1054,13 @@
           "description": "Mocked/simulated behaviour.",
           "enum": [
             "simulated"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Not applicable: a meta reply about ACOS itself (help/capabilities/doctor).",
+          "enum": [
+            "n/a"
           ],
           "type": "string"
         }
@@ -1402,6 +1423,9 @@
           "minimum": 0.0,
           "type": "integer"
         },
+        "input": {
+          "description": "REL3E: the input step's own evidence. `handled` is the app window's `finishInputEvent(handled)` answer (`null` when the guest did not ack), `target` is what the selector resolved to plus the hit-test at the injected point, and `expect_change` says whether a change was required - `\"auto\"` for a `tap` (the step's own state-change check), `true`/`false` for the scenario's explicit flag. `None` for steps that inject no input."
+        },
         "name": {
           "description": "`capture` step name (the scenario's own label for this screenshot).\n\nWritten into the step JSON so \"the screenshot for X\" is answerable from the artifacts; the same name keys `verdict.json`'s `captures` map.",
           "type": [
@@ -1497,6 +1521,9 @@
         "type": "string"
       },
       "type": "array"
+    },
+    "provenance": {
+      "description": "PROVENANCE: the exact inputs this verdict judged — absolute scenario and APK paths, their SHA-256 (full and the 12-character display form), the engine that ran and the fidelity it reached, plus structured `warnings[]` (for example `SCENARIO_APP_OVERRIDDEN` when `--apk` and the scenario's own `app:` disagree). See [`crate::provenance`].\n\nWritten by the verifier; the CLI re-states the same block in the envelope `result` and in the human summary line, so a reader never has to open a second file to find out which scenario and APK produced a `pass`."
     },
     "reproducer": {
       "allOf": [

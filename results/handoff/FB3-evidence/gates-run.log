@@ -1,0 +1,27 @@
+v2-art-counter exit=0 status=pass None
+w22-counter-reset exit=0 status=pass None
+w54-dialog-pixels exit=0 status=pass None
+w42-back-frame exit=0 status=pass None
+w15-dialog-menu exit=0 status=pass None
+form-validation exit=0 status=pass None
+suite/T03-render-good exit=0 status=pass None
+v1-offscreen-pager exit=0 status=pass None
+w7-insets-report exit=0 status=pass None
+se1-expect-change-tap exit=0 status=pass None
+suite/T03-render-wrong exit=1 status=fail ASSERTION_FAILED
+w7-insets-carve-negative exit=1 status=fail ASSERTION_FAILED
+negative/se1-expect-change-noop exit=1 status=fail ASSERTION_FAILED
+negative/offscreen-pager-visible exit=1 status=fail ELEMENT_OFFSCREEN
+p11-progress-timeout exit=1 status=timeout TIMEOUT
+gates sweep done
+gaten-home exit=0 status=pass None
+gaten-tabs exit=0 status=pass None
+gaten-settings exit=0 status=pass None
+gaten-search exit=0 status=pass None
+gaten-lesson exit=0 status=pass None
+negative/gaten-home-wrong exit=1 status=fail ASSERTION_FAILED
+negative/gaten-tabs-wrong exit=1 status=fail ASSERTION_FAILED
+negative/gaten-settings-wrong exit=1 status=fail ASSERTION_FAILED
+negative/gaten-search-wrong exit=1 status=fail ASSERTION_FAILED
+negative/gaten-lesson-wrong exit=1 status=fail ASSERTION_FAILED
+gaten sweep done

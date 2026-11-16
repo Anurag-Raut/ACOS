@@ -33,10 +33,20 @@ impl McpToolDescriptor {
         command: CommandName,
         description: impl Into<String>,
     ) -> McpToolDescriptor {
+        // ARGS: the published schema is a **closed** object. schemars does not
+        // emit `additionalProperties: false` for a struct, and an open schema
+        // tells a client that any extra key is acceptable — which is how
+        // `acos_observe_tree {"screenshot": true}` on a build that ignored it
+        // looked like a success (feedback 2026-11-15). The server rejects an
+        // unknown argument for the same reason; see `acos-mcp::args`.
+        let mut input_schema = schema_value::<T>();
+        if let Some(object) = input_schema.as_object_mut() {
+            object.insert("additionalProperties".to_string(), Value::Bool(false));
+        }
         McpToolDescriptor {
             name: command.tool_name().to_string(),
             description: description.into(),
-            input_schema: schema_value::<T>(),
+            input_schema,
         }
     }
 }
@@ -74,6 +84,10 @@ pub fn mcp_tools() -> McpToolsList {
             McpToolDescriptor::new::<RunRequest>(
                 CommandName::Run,
                 concat!(
+                    "NOT THE CANONICAL TOOL — prefer `acos_launch`, which boots the APK on real ART in a ",
+                    "session that persists across MCP calls and returns the launch stage ladder. This tool ",
+                    "keeps the reference/generic session path (its own isolation/display vocabulary) and is ",
+                    "kept for compatibility. ",
                     "Create a session by launching an APK activity. Every later observe/capture/action/assert targets the returned session_id. ",
                     "Set isolation and display explicitly: `sandbox` for independent app data, `none` display for headless logic. ",
                     "Returns session_id, package, effective isolation/display/fidelity and optionally the first frame. ",
@@ -83,6 +97,10 @@ pub fn mcp_tools() -> McpToolsList {
             McpToolDescriptor::new::<ObserveRequest>(
                 CommandName::Observe,
                 concat!(
+                    "NOT THE CANONICAL TOOL — prefer `acos_observe_tree` for the live View hierarchy ",
+                    "(nodes, `content_desc`, bounds, flags) of an ART session; that is what selectors act on. ",
+                    "This tool observes the reference session (tree and/or text plus frame metadata) and is ",
+                    "kept for compatibility. ",
                     "Read the current UI tree and/or text for a session. Selectors in later steps refer to this tree's nodes. ",
                     "Returns node id/class/resource_id/text/content_desc/bounds/flags and frame metadata (frame_seq, cause_id, content_hash, meaningful). ",
                     "A headless session returns NO_DISPLAY; a route without text returns NO_TEXT. ",
@@ -100,8 +118,14 @@ pub fn mcp_tools() -> McpToolsList {
             McpToolDescriptor::new::<ActionRequest>(
                 CommandName::Action,
                 concat!(
-                    "Deliver one input action: tap, long_press, swipe, type, key, back, rotate or wait. ",
-                    "Prefer selectors over coordinates. Returns accepted/state_changed, an input-ack event seq and optionally a fresh frame. ",
+                    "NOT THE CANONICAL TOOL — prefer the one-purpose session tools on a live ART session: ",
+                    "`acos_tap` (id/text/testID or a point), `acos_text` (focused editor), `acos_key` and ",
+                    "`acos_swipe`. They report the action's own ack and settle evidence, including ",
+                    "`handled` (the app window's own `finishInputEvent` answer) and `target` (the resolved ",
+                    "node and the hit-test at the injected point). This tool keeps the ",
+                    "generic multi-action path (tap, long_press, swipe, type, key, back, rotate, wait) and is ",
+                    "kept for compatibility. ",
+                    "Deliver one input action. Prefer selectors over coordinates. Returns accepted/state_changed/handled, an input-ack event seq and optionally a fresh frame. ",
                     "Common errors: ELEMENT_NOT_FOUND, SESSION_NOT_FOUND, TIMEOUT, APP_NOT_RESPONDING, NO_DISPLAY."
                 ),
             ),

@@ -34,6 +34,12 @@
 # --scratch-root or ACOS_BENCH_SCRATCH; never /tmp). ACOS_FONT_DIR is exported;
 # ACOS_BOOT_DIR is not set.
 #
+# --fast-reps N (or ACOS_BENCH_FAST_REPS) is the per-rep sample count of the
+# fast-settle metrics (M4 launch fast, M6 reset fast, M8 tap fast); default 40.
+# Those samples sit on a frame-period lattice, so the merged baseline records the
+# raw samples, a 5 %-trimmed mean and per-slot shares (PERF-REL3); see
+# tools/bench/ab-compare.py for the A/B view.
+#
 # --groups "<name>:<phases>:<mem>:<time>" runs a custom bundle in one lock
 # acquisition (used by the H14 A/B arms). --animations on|off (or
 # ACOS_BENCH_ANIMATIONS) is the process-wide launch arm for every phase and is
@@ -67,6 +73,8 @@ TASK="${ACOS_BENCH_TASK:-H6}"
 ANIMATIONS="${ACOS_BENCH_ANIMATIONS:-on}"
 REPS=3
 LATENCY_REPS=20
+FAST_REPS="${ACOS_BENCH_FAST_REPS:-40}"
+FAST_REPS_SET=0
 P11_REPS=3
 LOOPS=0
 QUICK=0
@@ -97,6 +105,7 @@ while [ $# -gt 0 ]; do
         --task) TASK="$2"; shift 2 ;;
         --scratch-root) SCRATCH_ROOT="$2"; shift 2 ;;
         --latency-reps) LATENCY_REPS="$2"; shift 2 ;;
+        --fast-reps) FAST_REPS="$2"; FAST_REPS_SET=1; shift 2 ;;
         --p11-reps) P11_REPS="$2"; shift 2 ;;
         --loops) LOOPS="$2"; shift 2 ;;
         --accept) ACCEPT=1; shift ;;
@@ -120,6 +129,9 @@ export ACOS_BENCH_ANIMATIONS="$ANIMATIONS"
 if [ "$QUICK" -eq 1 ]; then
     REPS=1
     LATENCY_REPS=8
+    # PERF-REL3: 40 fast samples/rep add ~57 s of wall time per rep (measured on
+    # the 9950X), too much for the < 5 min CI subset; keep the quick arm at 8.
+    [ "$FAST_REPS_SET" -eq 1 ] || FAST_REPS=8
     P11_REPS=2
     LOOPS=0
     PHASE_GROUPS="a1:latency,loop1:8G:300
@@ -164,11 +176,21 @@ fi
 
 mkdir -p "$RUN_DIR" "$SCRATCH_ROOT" "$(dirname "$OUT")"
 
+# SERVELEAK2/F2: this run's own identity. The scratch root (and the
+# `r<rep>-<group>` directory names under it) is shared between concurrent bench
+# runs, so a daemon may only be reaped by the run that started it. Every daemon
+# spawned below inherits these two variables.
+ACOS_BENCH_RUN_ID="${ACOS_BENCH_RUN_ID:-$(basename "$RUN_DIR")-$$}"
+export ACOS_BENCH_RUN_ID
+ACOS_BENCH_PIDFILE="${ACOS_BENCH_PIDFILE:-$RUN_DIR/daemons.pids}"
+export ACOS_BENCH_PIDFILE
+: > "$ACOS_BENCH_PIDFILE"
+
 export ACOS_FONT_DIR="${ACOS_FONT_DIR:-/home/Qui/Projects/acos/.cache/boot/android-34/fonts}"
 unset ACOS_BOOT_DIR
 
 echo "acos-bench: start $STARTED_UTC"
-echo "acos-bench: groups [$(echo "$PHASE_GROUPS" | tr '\n' ' ')] reps=$REPS latency_reps=$LATENCY_REPS p11_reps=$P11_REPS animations=$ANIMATIONS task=$TASK"
+echo "acos-bench: groups [$(echo "$PHASE_GROUPS" | tr '\n' ' ')] reps=$REPS latency_reps=$LATENCY_REPS fast_reps=$FAST_REPS p11_reps=$P11_REPS animations=$ANIMATIONS task=$TASK"
 echo "acos-bench: run dir $RUN_DIR"
 
 # --- build (release only) ---------------------------------------------------
@@ -198,6 +220,14 @@ phase_time() {
 }
 phase_mem() { [ "$1" = memory ] && echo "$MEM_PHASE_MEM" || echo "$OTHER_MEM"; }
 
+# SERVELEAK2/F2: a daemon a phase spawned must never outlive the run, and a
+# *different* run's daemon must never be reaped by this one. The reaper reads the
+# pids this run recorded (ACOS_BENCH_PIDFILE, written by the driver at spawn) and
+# re-verifies each one (run id in its environment, `acos serve` command line,
+# identical /proc start time) before signalling. See tools/bench/reap-daemons.sh.
+. "$ROOT/tools/bench/reap-daemons.sh"
+trap 'bench_reap_daemons' EXIT INT TERM
+
 FAILED=0
 for rep in $(seq 1 "$REPS"); do
     repdir="$RUN_DIR/rep-$rep"
@@ -216,7 +246,8 @@ for rep in $(seq 1 "$REPS"); do
             tools/guarded.sh --mem "$gmem" --time "$gtime" -- \
             python3 "$PY" --bundle "$gphases" --acos "$BIN" \
             --out-dir "$repdir" --scratch-root "$scratch" \
-            --reps "$LATENCY_REPS" --p11-reps "$P11_REPS" --loops "$LOOPS" \
+            --reps "$LATENCY_REPS" --fast-reps "$FAST_REPS" \
+            --p11-reps "$P11_REPS" --loops "$LOOPS" \
             --animations "$ANIMATIONS"
         rc=$?
         t1=$(date +%s)

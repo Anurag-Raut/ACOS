@@ -1,0 +1,5 @@
+cand r1 rc=0 00:06:33
+base r1 rc=0 00:10:51
+cand r2 rc=0 00:14:13
+base r2 rc=0 00:17:34
+DONE

@@ -552,4 +552,439 @@ To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
 Error reading attached process's symbol file.
 /system/apex/com.android.art/bin/dalvikvm64: No such file or directory.
 warning: Unable to find dynamic linker breakpoint function.
-GDB will be unabl
+GDB will be unable to debug shared library initializers
+and track explicitly loaded dynamic code.
+Error reading attached process's symbol file.
+/system/apex/com.android.art/bin/dalvikvm64: No such file or directory.
+Error reading attached process's symbol file.
+/system/apex/com.android.art/bin/dalvikvm64: No such file or directory.
+
+Thread 1 "main" received signal SIGSEGV, Segmentation fault.
+0x00007f0ffed97d15 in android::AndroidRuntime::getJNIEnv() () from /home/Qui/Projects/acos/.cache/art-exp/sysroot/system/lib64/libandroid_runtime.so
+
+==== SIGSEGV CAUGHT ====
+rip            0x7f0ffed97d15      0x7f0ffed97d15 <android::AndroidRuntime::getJNIEnv()+37>
+rsp            0x7fffcc5a8b90      0x7fffcc5a8b90
+rdi            0x0                 0
+rsi            0x7f0ffeee9540      139706678285632
+rdx            0x4                 4
+=> 0x7f0ffed97d15 <_ZN7android14AndroidRuntime9getJNIEnvEv+37>:	mov    (%rdi),%rax
+#0  0x00007f0ffed97d15 in android::AndroidRuntime::getJNIEnv() () from /home/Qui/Projects/acos/.cache/art-exp/sysroot/system/lib64/libandroid_runtime.so
+#1  0x00007f0ffedf39b1 in android::NativeDisplayEventReceiver::~NativeDisplayEventReceiver() () from /home/Qui/Projects/acos/.cache/art-exp/sysroot/system/lib64/libandroid_runtime.so
+#2  0x00007f0ffedf3ae2 in virtual thunk to android::NativeDisplayEventReceiver::~NativeDisplayEventReceiver() () from /home/Qui/Projects/acos/.cache/art-exp/sysroot/system/lib64/libandroid_runtime.so
+#3  0x00007f10101d1807 in android::RefBase::decStrong(void const*) const () from /home/Qui/Projects/acos/.cache/art-exp/sysroot/system/lib64/libutils.so
+#4  0x00007f0ffedf48a2 in android::nativeInit(_JNIEnv*, _jclass*, _jobject*, _jobject*, _jobject*, int, int, long) () from /home/Qui/Projects/acos/.cache/art-exp/sysroot/system/lib64/libandroid_runtime.so
+#5  0x00007f0ff2791a4c in ?? ()
+#6  0x0000000000000000 in ?? ()
+==== END ====
+[Inferior 1 (process 2049468) detached]
+=== Q3-CRASHTRACE sig=11 code=1 addr=0x0 ===
+regs rip=0x7f0ffed97d15 rsp=0x7fffcc5a8b90 rbp=0xffffffed rax=0x7f0ffeeffae0 rdi=0x0 rsi=0x7f0ffeee9540 rdx=0x4
+FAULT  0x7f0ffed97d15  libandroid_runtime.so+0x9d15  _ZN7android14AndroidRuntime9getJNIEnvEv
+-- interesting exec maps (name base..end) --
+   /system/apex/com.android.art/bin/dalvikvm64  [0x55a11a8ea000,0x55a11a8ed000)
+   /apex/sharedlibs/lib64/libc++.so/bdb4b81337c003ef4ed7bf093ed616  [0x7f0fd91a6000,0x7f0fd91f3000)
+   /system/lib64/libutilscallstack.so  [0x7f0fec372000,0x7f0fec375000)
+   /apex/sharedlibs/lib64/libbase.so/a5cce001552a532d111a59af51bbb  [0x7f0ff23b3000,0x7f0ff23de000)
+   /apex/com.android.art/lib64/libart.so  [0x7f0ff2766000,0x7f0ff2d4b000)
+   /system/lib64/libbinder.so  [0x7f0ff4d54000,0x7f0ff4dbb000)
+   /system/lib64/libbinder_ndk.so  [0x7f0ff706b000,0x7f0ff7079000)
+   /system/lib64/libminikin.so  [0x7f0ff7a51000,0x7f0ff7a7d000)
+   /system/lib64/libandroid_runtime_lazy.so  [0x7f0ff7edb000,0x7f0ff7edc000)
+   /system/lib64/libEGL.so  [0x7f0ff8023000,0x7f0ff803f000)
+   /system/lib64/libnativewindow.so  [0x7f0ff816a000,0x7f0ff816e000)
+   /system/lib64/libhwui.so  [0x7f0ff859b000,0x7f0ff8d34000)
+   /system/lib64/libandroid_runtime.so  [0x7f0ffed8e000,0x7f0ffeede000)
+   /system/lib64/libui.so  [0x7f10002c7000,0x7f10002f6000)
+   /apex/com.android.i18n/lib64/libbase.so  [0x7f10003c3000,0x7f10003ee000)
+   /apex/com.android.i18n/lib64/libc++.so  [0x7f100a793000,0x7f100a7ee000)
+   /system/lib64/libgui.so  [0x7f100c0ec000,0x7f100c1d5000)
+   /system/lib64/libutils.so  [0x7f10101d0000,0x7f10101de000)
+   /system/lib64/libbase.so  [0x7f1016cbc000,0x7f1016ce7000)
+   /apex/com.android.runtime/lib64/bionic/libc.so  [0x7f12a9a71000,0x7f12a9b05000)
+   /system/lib64/libc++.so  [0x7f12ad893000,0x7f12ad8ee000)
+   /data/lib/libbindershim.so  [0x7f12ad911000,0x7f12ad914000)
+   /apex/sharedlibs/lib64/libc++.so/bdb4b81337c003ef4ed7bf093ed616  [0x7f12ad997000,0x7f12ad9e4000)
+   /system/lib64/liblog.so  [0x7f12adb4f000,0x7f12adb5a000)
+   /system/lib64/liblogshim.so  [0x7f12adb93000,0x7f12adb95000)
+   /data/lib/libcrashtrace.so  [0x7f12adbde000,0x7f12adbe1000)
+-- executable mappings (verbatim) --
+   42600000-44600000 r-xs 02000000 00:01 241238                             [anon_shmem:dalvik-jit-code-cache]
+   55a11a8ea000-55a11a8ed000 r-xp 00000000 103:06 30805335                  /system/apex/com.android.art/bin/dalvikvm64
+   7f0fd1eba000-7f0fd1fc4000 r-xp 00067000 103:06 30806074                  /apex/sharedlibs/lib64/libcrypto.so/f66da077c8b2938f361c7f3b302052e28c435918e8c8d6629acc4cca4b682ca2879fecd9f64835b4ab53e686952b469ff5c72de00b8d580842904674fb53dae6/libcrypto.so
+   7f0fd91a6000-7f0fd91f3000 r-xp 00050000 103:06 30806071                  /apex/sharedlibs/lib64/libc++.so/bdb4b81337c003ef4ed7bf093ed61675650aa8a45e36ed5ef9e6a41f9f598616e9a7644a51b37d2f939e669f75ae64032f6e8137738202f72e221c99497a5604/libc++.so
+   7f0fdd460000-7f0fdd6f2000 r-xp 00060000 103:06 30805347                  /apex/com.android.art/lib64/libart-compiler.so
+   7f0fe0469000-7f0fe0573000 r-xp 00067000 103:06 30806074                  /apex/sharedlibs/lib64/libcrypto.so/f66da077c8b2938f361c7f3b302052e28c435918e8c8d6629acc4cca4b682ca2879fecd9f64835b4ab53e686952b469ff5c72de00b8d580842904674fb53dae6/libcrypto.so
+   7f0fe47a4000-7f0fe47e8000 r-xp 0001e000 103:06 30806080                  /apex/sharedlibs/lib64/libssl.so/67f8686cf2e22860c9ce69fbc0a70e4900e2975438e9fc3ab2f93abd60adf1c2fa2044a361a7f38378f07191e06dab004151cbba6d21749f8b0b0325156f89ec/libssl.so
+   7f0fe485d000-7f0fe4940000 r-xp 00058000 103:06 25446030                  /system/lib64/libxml2.so
+   7f0feb15c000-7f0feb176000 r-xp 00013000 103:06 30805451                  /apex/com.android.conscrypt/lib64/libjavacrypto.so
+   7f0fec09c000-7f0fec0ba000 r-xp 0001a000 103:06 30805370                  /apex/com.android.art/lib64/libopenjdk.so
+   7f0fec0f3000-7f0fec0f7000 r-xp 00003000 103:06 30805371                  /apex/com.android.art/lib64/libopenjdkjvm.so
+   7f0fec118000-7f0fec119000 r-xp 00000000 103:06 30805346                  /apex/com.android.art/lib64/libandroidio.so
+   7f0fec153000-7f0fec17c000 r-xp 00011000 103:06 30805362                  /apex/com.android.art/lib64/libjavacore.so
+   7f0fec19d000-7f0fec1bb000 r-xp 0000a000 103:06 30805361                  /apex/com.android.art/lib64/libexpat.so
+   7f0fec1ed000-7f0fec1f8000 r-xp 00006000 103:06 30690572                  /apex/com.android.i18n/lib64/libicu_jni.so
+   7f0fec22c000-7f0fec22e000 r-xp 00001000 103:06 25446026                  /system/lib64/libwebviewchromium_plat_support.so
+   7f0fec26a000-7f0fec26c000 r-xp 00001000 103:06 25445995                  /system/lib64/libstdc++.so
+   7f0fec295000-7f0fec2a0000 r-xp 00006000 103:06 25445574                  /system/lib64/libRS.so
+   7f0fec2e4000-7f0fec330000 r-xp 00021000 103:06 25445496                  /system/lib64/android.hardware.renderscript@1.0.so
+   7f0fec372000-7f0fec375000 r-xp 00003000 103:06 25446017                  /system/lib64/libutilscallstack.so
+   7f0fec3a6000-7f0fec3a7000 r-xp 00001000 103:06 25445572                  /system/lib64/libOpenSLES.so
+   7f0fec3d2000-7f0fec3d4000 r-xp 00001000 103:06 25445983                  /system/lib64/libstagefright_http_support.so
+   7f0fec42c000-7f0fec42d000 r-xp 00001000 103:06 25445571                  /system/lib64/libOpenMAXAL.so
+   7f0fec45f000-7f0fec481000 r-xp 00018000 103:06 25446029                  /system/lib64/libwilhelm.so
+   7f0fec4da000-7f0fec4dd000 r-xp 00002000 103:06 25445788                  /system/lib64/libjnigraphics.so
+   7f0fec54b000-7f0fec57c000 r-xp 00011000 103:06 25445665                  /system/lib64/libcamera2ndk.so
+   7f0fec5b0000-7f0fec5b4000 r-xp 00003000 103:06 25445589                  /system/lib64/libamidi.so
+   7f0fec5e6000-7f0fec5ef000 r-xp 00007000 103:06 25445333                  /system/lib64/aaudio-aidl-cpp.so
+   7f0fec632000-7f0fec635000 r-xp 00004000 103:06 25445582                  /system/lib64/libaaudio.so
+   7f0fec66c000-7f0fec6a4000 r-xp 00025000 103:06 25445583                  /system/lib64/libaaudio_internal.so
+   7f0fec6ed000-7f0fec6f8000 r-xp 0000b000 103:06 25445487                  /system/lib64/android.hardware.power@1.2.so
+   7f0fec715000-7f0fec719000 r-xp 00004000 103:06 25445585                  /system/lib64/libactivitymanager_aidl.so
+   7f0feca97000-7f0feca9d000 r-xp 00006000 103:06 25445481                  /system/lib64/android.hardware.power-V4-ndk.so
+   7f0fecad9000-7f0fecae4000 r-xp 0000b000 103:06 25445486                  /system/lib64/android.hardware.power@1.1.so
+   7f0fecb19000-7f0fecb36000 r-xp 00017000 103:06 25445925                  /system/lib64/libpowermanager.so
+   7f0fecb4f000-7f0fecb5a000 r-xp 0000a000 103:06 25445485                  /system/lib64/android.hardware.power@1.0.so
+   7f0feccd3000-7f0feccde000 r-xp 0000c000 103:06 25445488                  /system/lib64/android.hardware.power@1.3.so
+   7f0fed519000-7f0fed52c000 r-xp 00016000 103:06 25445590                  /system/lib64/libandroid.so
+   7f0fed6ae000-7f0fed6b4000 r-xp 00006000 103:06 25445480                  /system/lib64/android.hardware.power-V4-cpp.so
+   7f0ff2303000-7f0ff2375000 r-xp 0003e000 103:06 30805376                  /apex/com.android.art/lib64/libunwindstack.so
+   7f0ff23b3000-7f0ff23de000 r-xp 00014000 103:06 30806068                  /apex/sharedlibs/lib64/libbase.so/a5cce001552a532d111a59af51bbb6cc5e93475522f033f9807fa5f8ad346840deb8c6475491b3425ed7ef34094fb412761afd70b2205820f67d8a4c71c39832/libbase.so
+   7f0ff2766000-7f0ff2d4b000 r-xp 00166000 103:06 30805350                  /apex/com.android.art/lib64/libart.so
+   7f0ff31e7000-7f0ff31ec000 r-xp 00003000 103:06 25445600                  /system/lib64/libartpalette-system.so
+   7f0ff4c68000-7f0ff4c72000 r-xp 0000a000 103:06 25445434                  /system/lib64/android.hardware.graphics.allocator@2.0.so
+   7f0ff4cb5000-7f0ff4cb7000 r-xp 00001000 103:06 25445671                  /system/lib64/libcgrouprc.so
+   7f0ff4d54000-7f0ff4dbb000 r-xp 00061000 103:06 25445640                  /system/lib64/libbinder.so
+   7f0ff6e70000-7f0ff6e72000 r-xp 00001000 103:06 25445554                  /system/lib64/av-types-aidl-cpp.so
+   7f0ff6eaf000-7f0ff6ebd000 r-xp 00009000 103:06 25445896                  /system/lib64/libnetdutils.so
+   7f0ff6ed7000-7f0ff6ef6000 r-xp 00016000 103:06 25445387                  /system/lib64/android.hardware.camera.device@3.2.so
+   7f0ff6f2d000-7f0ff6f64000 r-xp 00019000 103:06 25445551                  /system/lib64/audioflinger-aidl-cpp.so
+   7f0ff6fa9000-7f0ff6fb1000 r-xp 00004000 103:06 25445599                  /system/lib64/libappfuse.so
+   7f0ff6fd3000-7f0ff6ff8000 r-xp 0000b000 103:06 25445861                  /system/lib64/libmemunreachable.so
+   7f0ff7016000-7f0ff7018000 r-xp 00000000 103:06 25445757                  /system/lib64/libhardware.so
+   7f0ff706b000-7f0ff7079000 r-xp 0000b000 103:06 25445641                  /system/lib64/libbinder_ndk.so
+   7f0ff70ad000-7f0ff70ba000 r-xp 0000a000 103:06 25445836                  /system/lib64/libmediadrmmetrics_lite.so
+   7f0ff70f2000-7f0ff70f4000 r-xp 00001000 103:06 25445852                  /system/lib64/libmediandk_utils.so
+   7f0ff7152000-7f0ff71af000 r-xp 0003b000 103:06 25445833                  /system/lib64/libmediadrm.so
+   7f0ff71dd000-7f0ff71f5000 r-xp 00013000 103:06 25445414                  /system/lib64/android.hardware.drm-V1-ndk.so
+   7f0ff7215000-7f0ff7224000 r-xp 0000a000 103:06 25445775                  /system/lib64/libimg_utils.so
+   7f0ff727d000-7f0ff727f000 r-xp 00001000 103:06 25445689                  /system/lib64/libcodec2_hidl_client@1.2.so
+   7f0ff72b1000-7f0ff72e5000 r-xp 00013000 103:06 25445552                  /system/lib64/audiopolicy-aidl-cpp.so
+   7f0ff730d000-7f0ff732f000 r-xp 00008000 103:06 25445822                  /system/lib64/liblzma.so
+   7f0ff7395000-7f0ff73e2000 r-xp 00033000 103:06 25445666                  /system/lib64/libcamera_client.so
+   7f0ff7401000-7f0ff7402000 r-xp 00000000 103:06 25445684                  /system/lib64/libcodec2.so
+   7f0ff746b000-7f0ff746e000 r-xp 00002000 103:06 25445832                  /system/lib64/libmedia_omx_client.so
+   7f0ff74b1000-7f0ff74b3000 r-xp 00002000 103:06 25445986                  /system/lib64/libstagefright_omx_utils.so
+   7f0ff74d1000-7f0ff74f1000 r-xp 00010000 103:06 25445982                  /system/lib64/libstagefright_framecapture_utils.so
+   7f0ff751a000-7f0ff7533000 r-xp 00014000 103:06 25445469                  /system/lib64/android.hardware.media.c2@1.1.so
+   7f0ff755d000-7f0ff755e000 r-xp 00000000 103:06 25445593                  /system/lib64/libandroid_net.so
+   7f0ff75a9000-7f0ff75b1000 r-xp 00011000 103:06 25445568                  /system/lib64/libGLESv2.so
+   7f0ff75e5000-7f0ff75ea000 r-xp 00004000 103:06 25445704                  /system/lib64/libdebuggerd_client.so
+   7f0ff761b000-7f0ff764d000 r-xp 0001a000 103:06 25445611                  /system/lib64/libaudioclient_aidl_conversion.so
+   7f0ff76c5000-7f0ff771c000 r-xp 00036000 103:06 25445826                  /system/lib64/libmedia.so
+   7f0ff7751000-7f0ff7753000 r-xp 00001000 103:06 25445688                  /system/lib64/libcodec2_hidl_client@1.1.so
+   7f0ff77a3000-7f0ff77ab000 r-xp 00009000 103:06 25445525                  /system/lib64/android.hidl.memory.token@1.0.so
+   7f0ff77df000-7f0ff77e5000 r-xp 00006000 103:06 25445754                  /system/lib64/libgraphicsenv.so
+   7f0ff7824000-7f0ff7826000 r-xp 00001000 103:06 25445960                  /system/lib64/libshmemcompat.so
+   7f0ff7876000-7f0ff7877000 r-xp 00001000 103:06 25445924                  /system/lib64/libprocinfo.so
+   7f0ff7890000-7f0ff7893000 r-xp 0000b000 103:06 30690571                  /apex/com.android.i18n/lib64/libicu.so
+   7f0ff78d6000-7f0ff78f4000 r-xp 0000a000 103:06 25445724                  /system/lib64/libexpat.so
+   7f0ff7912000-7f0ff7914000 r-xp 00001000 103:06 25446046                  /system/lib64/shared-file-region-aidl-cpp.so
+   7f0ff7942000-7f0ff7944000 r-xp 00000000 103:06 25445408                  /system/lib64/android.hardware.configstore-utils.so
+   7f0ff79a7000-7f0ff79b3000 r-xp 00003000 103:06 25445999                  /system/lib64/libtimeinstate.so
+   7f0ff79e6000-7f0ff79f0000 r-xp 00009000 103:06 25445524                  /system/lib64/android.hidl.allocator@1.0.so
+   7f0ff7a39000-7f0ff7a3b000 r-xp 00001000 103:06 25445961                  /system/lib64/libshmemutil.so
+   7f0ff7a51000-7f0ff7a7d000 r-xp 00010000 103:06 25445863                  /system/lib64/libminikin.so
+   7f0ff7a9c000-7f0ff7aaa000 r-xp 00009000 103:06 25445857                  /system/lib64/libmeminfo.so
+   7f0ff7ae4000-7f0ff7aef000 r-xp 0000a000 103:06 25445404                  /system/lib64/android.hardware.cas.native@1.0.so
+   7f0ff7b45000-7f0ff7bb6000 r-xp 0002d000 103:06 25445744                  /system/lib64/libft2.so
+   7f0ff7bd3000-7f0ff7bec000 r-xp 00012000 103:06 25445978                  /system/lib64/libstagefright_bufferpool@2.0.1.so
+   7f0ff7c2f000-7f0ff7c3c000 r-xp 00008000 103:06 25445979                  /system/lib64/libstagefright_bufferqueue_helper.so
+   7f0ff7c55000-7f0ff7c5b000 r-xp 00005000 103:06 25445667                  /system/lib64/libcamera_metadata.so
+   7f0ff7c93000-7f0ff7c9d000 r-xp 0000a000 103:06 25445529                  /system/lib64/android.hidl.token@1.0.so
+   7f0ff7cf2000-7f0ff7cf4000 r-xp 00004000 103:06 30690568                  /apex/com.android.i18n/lib64/libandroidicu.so
+   7f0ff7d52000-7f0ff7d76000 r-xp 00017000 103:06 25445437                  /system/lib64/android.hardware.graphics.bufferqueue@1.0.so
+   7f0ff7d92000-7f0ff7db0000 r-xp 0000f000 103:06 25445776                  /system/lib64/libincfs.so
+   7f0ff7dd5000-7f0ff7de1000 r-xp 00009000 103:06 25446048                  /system/lib64/spatializer-aidl-cpp.so
+   7f0ff7e2c000-7f0ff7e2d000 r-xp 00000000 103:06 25446023                  /system/lib64/libvndksupport.so
+   7f0ff7e64000-7f0ff7e67000 r-xp 00001000 103:06 25445971                  /system/lib64/libspeexresampler.so
+   7f0ff7e94000-7f0ff7eb8000 r-xp 00013000 103:06 25445604                  /system/lib64/libaudio_aidl_conversion_common_cpp.so
+   7f0ff7edb000-7f0ff7edc000 r-xp 00000000 103:06 25445595                  /system/lib64/libandroid_runtime_lazy.so
+   7f0ff7f53000-7f0ff7fab000 r-xp 00036000 103:06 25445468                  /system/lib64/android.hardware.media.c2@1.0.so
+   7f0ff7fd8000-7f0ff7ff2000 r-xp 00016000 103:06 25445470                  /system/lib64/android.hardware.media.c2@1.2.so
+   7f0ff8023000-7f0ff803f000 r-xp 00015000 103:06 25445564                  /system/lib64/libEGL.so
+   7f0ff809f000-7f0ff80b9000 r-xp 00012000 103:06 25446024                  /system/lib64/libvulkan.so
+   7f0ff80de000-7f0ff80df000 r-xp 00000000 103:06 30690550                  /apex/com.android.runtime/lib64/bionic/libdl_android.so
+   7f0ff812c000-7f0ff8130000 r-xp 00002000 103:06 25445439                  /system/lib64/android.hardware.graphics.common-V4-ndk.so
+   7f0ff816a000-7f0ff816e000 r-xp 00003000 103:06 25445870                  /system/lib64/libnativewindow.so
+   7f0ff819e000-7f0ff81a1000 r-xp 00001000 103:06 25446015                  /system/lib64/libusbhost.so
+   7f0ff81df000-7f0ff81fd000 r-xp 0001a000 103:06 25445774                  /system/lib64/libimage_io.so
+   7f0ff859b000-7f0ff8d34000 r-xp 0019b000 103:06 25445771                  /system/lib64/libhwui.so
+   7f0ff91db000-7f0ff91fa000 r-xp 00017000 103:06 25445847                  /system/lib64/libmediandk.so
+   7f0ffb0d3000-7f0ffb1df000 r-xp 000bd000 103:06 30690574                  /apex/com.android.i18n/lib64/libicuuc.so
+   7f0ffc065000-7f0ffc06d000 r-xp 00011000 103:06 25445569                  /system/lib64/libGLESv3.so
+   7f0ffc09c000-7f0ffc09f000 r-xp 00004000 103:06 25446037                  /system/lib64/mediametricsservice-aidl-cpp.so
+   7f0ffc12f000-7f0ffc1b7000 r-xp 0004e000 103:06 25445610                  /system/lib64/libaudioclient.so
+   7f0ffec50000-7f0ffec51000 r-xp 00000000 103:06 25445442                  /system/lib64/android.hardware.graphics.common@1.2.so
+   7f0ffed8e000-7f0ffeede000 r-xp 000dc000 103:06 25445594                  /system/lib64/libandroid_runtime.so
+   7f0ffef79000-7f0ffefb1000 r-xp 00022000 103:06 25445928                  /system/lib64/libprocessgroup.so
+   7f0ffefda000-7f0ffefea000 r-xp 0000e000 103:06 25445828                  /system/lib64/libmedia_helper.so
+   7f1000065000-7f1000066000 r-xp 00000000 103:06 25445441                  /system/lib64/android.hardware.graphics.common@1.1.so
+   7f1000099000-7f10000a7000 r-xp 00009000 103:06 25445531                  /system/lib64/android.media.audio.common.types-V2-cpp.so
+   7f10000d5000-7f10000d8000 r-xp 00004000 103:06 25445555                  /system/lib64/capture_state_listener-aidl-cpp.so
+   7f1000135000-7f1000137000 r-xp 00001000 103:06 25445859                  /system/lib64/libmemtrack.so
+   7f1000164000-7f100019e000 r-xp 0001f000 103:06 25445854                  /system/lib64/libmediautils.so
+   7f10001df000-7f10001f7000 r-xp 00014000 103:06 25445976                  /system/lib64/libstagefright_aidl_bufferpool2.so
+   7f1000225000-7f1000226000 r-xp 00000000 103:06 25445384                  /system/lib64/android.hardware.camera.common@1.0.so
+   7f1000265000-7f100026a000 r-xp 00005000 103:06 25445762                  /system/lib64/libheif.so
+   7f10002c7000-7f10002f6000 r-xp 0002a000 103:06 25446008                  /system/lib64/libui.so
+   7f1000346000-7f1000375000 r-xp 00029000 103:06 25445419                  /system/lib64/android.hardware.drm@1.4.so
+   7f10003c3000-7f10003ee000 r-xp 00014000 103:06 30690569                  /apex/com.android.i18n/lib64/libbase.so
+   7f100040e000-7f100041a000 r-xp 0000b000 103:06 25445448                  /system/lib64/android.hardware.graphics.mapper@2.0.so
+   7f100046e000-7f1000471000 r-xp 00001000 103:06 25445636                  /system/lib64/libbattery.so
+   7f10004a2000-7f10004bc000 r-xp 00017000 103:06 25445443                  /system/lib64/android.hardware.graphics.composer3-V2-ndk.so
+   7f10004fa000-7f1000520000 r-xp 00018000 103:06 25445405                  /system/lib64/android.hardware.cas@1.0.so
+   7f1000580000-7f10005e7000 r-xp 00039000 103:06 25446021                  /system/lib64/libvintf.so
+   7f1000634000-7f1000637000 r-xp 00003000 103:06 25445563                  /system/lib64/lib-platform-compat-native-api.so
+   7f1000665000-7f100066f000 r-xp 0000a000 103:06 25445435                  /system/lib64/android.hardware.graphics.allocator@3.0.so
+   7f1000694000-7f10006a6000 r-xp 00007000 103:06 25445948                  /system/lib64/libselinux.so
+   7f10006fe000-7f1000725000 r-xp 0001c000 103:06 25445416                  /system/lib64/android.hardware.drm@1.1.so
+   7f100075d000-7f1000770000 r-xp 0000e000 103:06 25445409                  /system/lib64/android.hardware.configstore@1.0.so
+   7f10007ad000-7f10007b8000 r-xp 00006000 103:06 25445841                  /system/lib64/libmediametrics.so
+   7f10007de000-7f10007eb000 r-xp 00007000 103:06 25445625                  /system/lib64/libaudiopolicy.so
+   7f1000815000-7f1000817000 r-xp 00001000 103:06 25445791                  /system/lib64/libjpegencoder.so
+   7f100086f000-7f100087b000 r-xp 00005000 103:06 25445702                  /system/lib64/libdataloader.so
+   7f1000897000-7f10008a3000 r-xp 0000d000 103:06 25445410                  /system/lib64/android.hardware.configstore@1.1.so
+   7f1000903000-7f100093d000 r-xp 0002b000 103:06 25445417                  /system/lib64/android.hardware.drm@1.2.so
+   7f1000990000-7f1000996000 r-xp 00004000 103:06 25445655                  /system/lib64/libbpf_bcc.so
+   7f10009e0000-7f10009e3000 r-xp 00004000 103:06 25445558                  /system/lib64/framework-permission-aidl-cpp.so
+   7f1003c55000-7f1003c7f000 r-xp 00010000 103:06 25445921                  /system/lib64/libpng.so
+   7f1003caf000-7f1003cb0000 r-xp 00001000 103:06 25445528                  /system/lib64/android.hidl.token@1.0-utils.so
+   7f1003cd7000-7f1003cf5000 r-xp 00014000 103:06 25445438                  /system/lib64/android.hardware.graphics.bufferqueue@2.0.so
+   7f1003d2f000-7f1003d75000 r-xp 00025000 103:06 25445415                  /system/lib64/android.hardware.drm@1.0.so
+   7f1003d8e000-7f1003d96000 r-xp 00003000 103:06 25445656                  /system/lib64/libbpf_minimal.so
+   7f1003de6000-7f1003df2000 r-xp 00009000 103:06 25446034                  /system/lib64/libziparchive.so
+   7f1003e20000-7f1003e31000 r-xp 0000e000 103:06 25445526                  /system/lib64/android.hidl.memory@1.0.so
+   7f1003e67000-7f1003e78000 r-xp 00008000 103:06 25445988                  /system/lib64/libstagefright_xmlparser.so
+   7f1003ed4000-7f1003f17000 r-xp 00043000 103:06 25445932                  /system/lib64/libprotobuf-cpp-lite.so
+   7f1003f91000-7f1003f93000 r-xp 00000000 103:06 25445785                  /system/lib64/libion.so
+   7f1003fdb000-7f1003ffa000 r-xp 00017000 103:06 25445981                  /system/lib64/libstagefright_foundation.so
+   7f1007e57000-7f1007e59000 r-xp 00001000 103:06 25445406                  /system/lib64/android.hardware.common-V2-ndk.so
+   7f1007eb2000-7f1007f30000 r-xp 0002c000 103:06 25445959                  /system/lib64/libsfplugin_ccodec_utils.so
+   7f1007f78000-7f1007f7c000 r-xp 00005000 103:06 25445980                  /system/lib64/libstagefright_codecbase.so
+   7f1007fa4000-7f1007faf000 r-xp 00009000 103:06 25445579                  /system/lib64/libSurfaceFlingerProp.so
+   7f1007fe6000-7f1007fef000 r-xp 0000b000 103:06 25445466                  /system/lib64/android.hardware.media.bufferpool2-V1-ndk.so
+   7f1008025000-7f1008027000 r-xp 00001000 103:06 25445740                  /system/lib64/libfmq.so
+   7f10080aa000-7f100814e000 r-xp 0003c000 103:06 25445759                  /system/lib64/libharfbuzz_ng.so
+   7f10081cf000-7f10081d8000 r-xp 0000c000 103:06 25445573                  /system/lib64/libPlatformProperties.so
+   7f100a455000-7f100a465000 r-xp 00011000 103:06 25445418                  /system/lib64/android.hardware.drm@1.3.so
+   7f100a528000-7f100a686000 r-xp 0009a000 103:06 25445975                  /system/lib64/libstagefright.so
+   7f100a712000-7f100a71e000 r-xp 00009000 103:06 25445709                  /system/lib64/libdmabufheap.so
+   7f100a793000-7f100a7ee000 r-xp 0004f000 103:06 30690570                  /apex/com.android.i18n/lib64/libc++.so
+   7f100be6e000-7f100be6f000 r-xp 00000000 103:06 25445867                  /system/lib64/libnativebridge_lazy.so
+   7f100bed2000-7f100bf37000 r-xp 00043000 103:06 25445690                  /system/lib64/libcodec2_vndk.so
+   7f100bf57000-7f100bf69000 r-xp 00010000 103:06 25445703                  /system/lib64/libdatasource.so
+   7f100bf96000-7f100bf99000 r-xp 00002000 103:06 25445758                  /system/lib64/libhardware_legacy.so
+   7f100bfcf000-7f100bfe0000 r-xp 00008000 103:06 25445687                  /system/lib64/libcodec2_hidl_client@1.0.so
+   7f100c025000-7f100c039000 r-xp 0000b000 103:06 25446011                  /system/lib64/libultrahdr.so
+   7f100c0ec000-7f100c1d5000 r-xp 00086000 103:06 25445756                  /system/lib64/libgui.so
+   7f100d051000-7f100d06d000 r-xp 0000f000 103:06 25445685                  /system/lib64/libcodec2_client.so
+   7f100d0bd000-7f100d0f1000 r-xp 00029000 103:06 25445912                  /system/lib64/libpcre2.so
+   7f100d151000-7f100d1da000 r-xp 00046000 103:06 25445710                  /system/lib64/libdng_sdk.so
+   7f100fa75000-7f100fa77000 r-xp 00000000 103:06 25445909                  /system/lib64/libpackagelistparser.so
+   7f100fa8c000-7f100fa90000 r-xp 00005000 103:06 25445433                  /system/lib64/android.hardware.graphics.allocator-V2-ndk.so
+   7f100fb04000-7f100fba8000 r-xp 00043000 103:06 25445779                  /system/lib64/libinput.so
+   7f100fbf5000-7f100fbfc000 r-xp 00006000 103:06 25445557                  /system/lib64/effect-aidl-cpp.so
+   7f100fc0b000-7f100fc0d000 r-xp 00001000 103:06 25445830                  /system/lib64/libmedia_jni_utils.so
+   7f100fcd1000-7f100fddb000 r-xp 00067000 103:06 25445696                  /system/lib64/libcrypto.so
+   7f100fe2f000-7f100fe30000 r-xp 00000000 103:06 25445472                  /system/lib64/android.hardware.media@1.0.so
+   7f100fe4c000-7f100fe50000 r-xp 00001000 103:06 25445790                  /system/lib64/libjpegdecoder.so
+   7f100fea3000-7f100fea7000 r-xp 00004000 103:06 25445544                  /system/lib64/android.system.suspend-V1-ndk.so
+   7f100fee5000-7f100feee000 r-xp 00009000 103:06 25445436                  /system/lib64/android.hardware.graphics.allocator@4.0.so
+   7f100ff1e000-7f100ff21000 r-xp 00005000 103:06 25445567                  /system/lib64/libGLESv1_CM.so
+   7f100ff7c000-7f100ffe4000 r-xp 0002d000 103:06 25445789                  /system/lib64/libjpeg.so
+   7f101000f000-7f1010012000 r-xp 00000000 103:06 25445565                  /system/lib64/libETC1.so
+   7f101004d000-7f101005b000 r-xp 0000c000 103:06 25445450                  /system/lib64/android.hardware.graphics.mapper@3.0.so
+   7f10100ae000-7f10100ee000 r-xp 00017000 103:06 25445634                  /system/lib64/libaudioutils.so
+   7f1010129000-7f1010130000 r-xp 00008000 103:06 25445917                  /system/lib64/libpermission.so
+   7f101016d000-7f10101b4000 r-xp 00029000 103:06 25445471                  /system/lib64/android.hardware.media.omx@1.0.so
+   7f10101d0000-7f10101de000 r-xp 0000e000 103:06 25446016                  /system/lib64/libutils.so
+   7f1010221000-7f1010237000 r-xp 00016000 103:06 25445831                  /system/lib64/libmedia_omx.so
+   7f1010298000-7f1010307000 r-xp 0004a000 103:06 25445767                  /system/lib64/libhidlbase.so
+   7f101036c000-7f101036e000 r-xp 00001000 103:06 25446044                  /system/lib64/server_configurable_flags.so
+   7f1010398000-7f10103a5000 r-xp 0000b000 103:06 25445449                  /system/lib64/android.hardware.graphics.mapper@2.1.so
+   7f10103f2000-7f10103fc000 r-xp 00006000 103:06 25445550                  /system/lib64/audioclient-types-aidl-cpp.so
+   7f1010425000-7f1010426000 r-xp 00000000 103:06 25445440                  /system/lib64/android.hardware.graphics.common@1.0.so
+   7f101049a000-7f10105aa000 r-xp 0002e000 103:06 25445972                  /system/lib64/libsqlite.so
+   7f1013891000-7f10138f0000 r-xp 0003c000 103:06 25445597                  /system/lib64/libandroidfw.so
+   7f1013a0e000-7f1013baf000 r-xp 00102000 103:06 30690573                  /apex/com.android.i18n/lib64/libicui18n.so
+   7f1014663000-7f1014667000 r-xp 00003000 103:06 25445553                  /system/lib64/audiopolicy-types-aidl-cpp.so
+   7f1014687000-7f101468a000 r-xp 00002000 103:06 25445987                  /system/lib64/libstagefright_surface_utils.so
+   7f1014733000-7f10147b9000 r-xp 00033000 103:06 25445958                  /system/lib64/libsfplugin_ccodec.so
+   7f1015666000-7f1015667000 r-xp 00000000 103:06 25445527                  /system/lib64/android.hidl.safe_union@1.0.so
+   7f1015682000-7f1015684000 r-xp 00000000 103:06 25445996                  /system/lib64/libsync.so
+   7f10156d8000-7f10156fc000 r-xp 00016000 103:06 25445872                  /system/lib64/libnblog.so
+   7f1015726000-7f101572f000 r-xp 00009000 103:06 25445474                  /system/lib64/android.hardware.memtrack@1.0.so
+   7f1015766000-7f1015771000 r-xp 00009000 103:06 25445700                  /system/lib64/libcutils.so
+   7f10157b5000-7f10157dd000 r-xp 00025000 103:06 25445985                  /system/lib64/libstagefright_omx.so
+   7f10159d5000-7f1015bdf000 r-xp 001d1000 103:06 25445913                  /system/lib64/libpdfium.so
+   7f1016a4e000-7f1016a62000 r-xp 00006000 103:06 25445918                  /system/lib64/libpiex.so
+   7f1016a89000-7f1016a8b000 r-xp 00002000 103:06 25445768                  /system/lib64/libhidlmemory.so
+   7f1016ade000-7f1016adf000 r-xp 00000000 103:06 25445407                  /system/lib64/android.hardware.common.fmq-V1-ndk.so
+   7f1016b16000-7f1016b40000 r-xp 00013000 103:06 25445615                  /system/lib64/libaudiofoundation.so
+   7f1016b8d000-7f1016b9e000 r-xp 0000a000 103:06 25446004                  /system/lib64/libtinyxml2.so
+   7f1016bc9000-7f1016bcc000 r-xp 00004000 103:06 25445473                  /system/lib64/android.hardware.memtrack-V1-ndk.so
+   7f1016c16000-7f1016c1c000 r-xp 00007000 103:06 25446041                  /system/lib64/packagemanager_aidl-cpp.so
+   7f1016c6a000-7f1016c71000 r-xp 00006000 103:06 25445827                  /system/lib64/libmedia_codeclist.so
+   7f1016cbc000-7f1016ce7000 r-xp 00014000 103:06 25445627                  /system/lib64/libbase.so
+   7f1016d0a000-7f1016d0b000 r-xp 00000000 103:06 25445869                  /system/lib64/libnativeloader_lazy.so
+   7f1016d61000-7f1016d6c000 r-xp 00008000 103:06 25445753                  /system/lib64/libgralloctypes.so
+   7f1016db8000-7f1016db9000 r-xp 00000000 103:06 25445766                  /system/lib64/libhidlallocatorutils.so
+   7f1016dd4000-7f1016de8000 r-xp 0000f000 103:06 25445451                  /system/lib64/android.hardware.graphics.mapper@4.0.so
+   7f1016e25000-7f1016e37000 r-xp 00007000 103:06 25446032                  /system/lib64/libz.so
+   7f1016ebd000-7f1016f2f000 r-xp 0003e000 103:06 25446012                  /system/lib64/libunwindstack.so
+   7f1016f9f000-7f1016fb9000 r-xp 00016000 103:06 25445467                  /system/lib64/android.hardware.media.bufferpool@2.0.so
+   7f1016fef000-7f1016ff9000 r-xp 0000b000 103:06 25445949                  /system/lib64/libsensor.so
+   7f1019270000-7f1019277000 r-xp 00007000 103:06 25445868                  /system/lib64/libnativedisplay.so
+   7f10192b3000-7f10192b5000 r-xp 00002000 103:06 25445624                  /system/lib64/libaudiomanager.so
+   7f101930f000-7f1019314000 r-xp 00002000 103:06 25446006                  /system/lib64/libtombstoned_client.so
+   7f10193d7000-7f10193d8000 r-xp 00001000 103:06 30805352                  /apex/com.android.art/lib64/libartpalette.so
+   7f1019420000-7f1019448000 r-xp 00015000 103:06 30805358                  /apex/com.android.art/lib64/libdexfile.so
+   7f10194cd000-7f10194e8000 r-xp 0000c000 103:06 30805368                  /apex/com.android.art/lib64/libnativeloader.so
+   7f1019565000-7f1019568000 r-xp 00001000 103:06 30805366                  /apex/com.android.art/lib64/libnativebridge.so
+   7f101961e000-7f1019639000 r-xp 0000c000 103:06 30805374                  /apex/com.android.art/lib64/libprofile.so
+   7f101966d000-7f101969f000 r-xp 00023000 103:06 30805351                  /apex/com.android.art/lib64/libartbase.so
+   7f10196e5000-7f10196ed000 r-xp 00003000 103:06 25445561                  /system/lib64/heapprofd_client_api.so
+   7f101970e000-7f1019730000 r-xp 00008000 103:06 30805365                  /apex/com.android.art/lib64/liblzma.so
+   7f10197c9000-7f10197f1000 r-xp 00004000 103:06 30805364                  /apex/com.android.art/lib64/liblz4.so
+   7f1099894000-7f1099897000 r-xp 00001000 103:06 30805719                  /apex/com.android.os.statsd/lib64/libstatssocket.so
+   7f12a9a71000-7f12a9b05000 r-xp 00043000 103:06 30690548                  /apex/com.android.runtime/lib64/bionic/libc.so
+   7f12ad893000-7f12ad8ee000 r-xp 0004f000 103:06 25445663                  /system/lib64/libc++.so
+   7f12ad911000-7f12ad914000 r-xp 00001000 103:06 30066351                  /data/lib/libbindershim.so
+   7f12ad997000-7f12ad9e4000 r-xp 00050000 103:06 30806071                  /apex/sharedlibs/lib64/libc++.so/bdb4b81337c003ef4ed7bf093ed61675650aa8a45e36ed5ef9e6a41f9f598616e9a7644a51b37d2f939e669f75ae64032f6e8137738202f72e221c99497a5604/libc++.so
+   7f12ada05000-7f12ada06000 r-xp 00000000 103:06 30690549                  /apex/com.android.runtime/lib64/bionic/libdl.so
+   7f12ada82000-7f12adab1000 r-xp 00012000 103:06 30690551                  /apex/com.android.runtime/lib64/bionic/libm.so
+   7f12adaea000-7f12adaed000 r-xp 00002000 103:06 30805367                  /apex/com.android.art/lib64/libnativehelper.so
+   7f12adb37000-7f12adb38000 r-xp 00000000 103:06 30066354                  /data/lib/libq3prop.so
+   7f12adb4f000-7f12adb5a000 r-xp 00004000 103:06 25445814                  /system/lib64/liblog.so
+   7f12adb93000-7f12adb95000 r-xp 00001000 103:06 25446051                  /system/lib64/liblogshim.so
+   7f12adbde000-7f12adbe1000 r-xp 00000000 103:06 30016256                  /data/lib/libcrashtrace.so
+   7f12ae80c000-7f12ae810000 r-xp 00002000 103:06 30805375                  /apex/com.android.art/lib64/libsigchain.so
+   7f12ae856000-7f12ae85a000 r-xp 00003000 103:06 25445895                  /system/lib64/libnetd_client.so
+   7f12aeb14000-7f12aeb16000 r-xp 00000000 00:00 0                          [vdso]
+   7f12aeb5d000-7f12aec60000 r-xp 00046000 103:06 30181968                  /apex/com.android.runtime/bin/linker64
+   ffffffffff600000-ffffffffff601000 --xp 00000000 00:00 0                  [vsyscall]
+-- frame-pointer chain (rbp) --
+-- stack scan for return addresses into the interesting modules --
+  stack[0x7fffcc5a8ba8] = 0x7f0ffedf39b1  libandroid_runtime.so+0x659b1
+  stack[0x7fffcc5a8bc8] = 0x7f0ffedf3ae2  libandroid_runtime.so+0x65ae2
+  stack[0x7fffcc5a8be8] = 0x7f10101d1807  libutils.so+0x1807
+  stack[0x7fffcc5a8c08] = 0x7f0ffedf48a2  libandroid_runtime.so+0x668a2
+  stack[0x7fffcc5a8c50] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a8c68] = 0x7f0ff2791a4c  libart.so+0x2ba4c
+  stack[0x7fffcc5a8d48] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a8d58] = 0x7f0ff276fa44  libart.so+0x9a44
+  stack[0x7fffcc5a8e58] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a8e68] = 0x7f0ff277023f  libart.so+0xa23f
+  stack[0x7fffcc5a8f48] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a8f58] = 0x7f0ff277023f  libart.so+0xa23f
+  stack[0x7fffcc5a9048] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9058] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a90f8] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9108] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a9198] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a91a8] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a9248] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9258] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a92d8] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a92e8] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a93c8] = 0x7f0ff27784c5  libart.so+0x124c5
+  stack[0x7fffcc5a9428] = 0x7f0ff27c535d  libart.so+0x5f35d
+  stack[0x7fffcc5a9478] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a94b8] = 0x7f0ff296ddd1  libart.so+0x207dd1
+  stack[0x7fffcc5a9508] = 0x7f0ff296d796  libart.so+0x207796
+  stack[0x7fffcc5a9518] = 0x7f0ff2b62e80  libart.so+0x3fce80
+  stack[0x7fffcc5a9568] = 0x7f0ff2960ec7  libart.so+0x1faec7
+  stack[0x7fffcc5a9628] = 0x7f0ff279ae33  libart.so+0x34e33
+  stack[0x7fffcc5a9640] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a96f8] = 0x7f0ff2b62e80  libart.so+0x3fce80
+  stack[0x7fffcc5a9818] = 0x7f0ff27937a6  libart.so+0x2d7a6
+  stack[0x7fffcc5a9828] = 0x7f0ff2966018  libart.so+0x200018
+  stack[0x7fffcc5a9838] = 0x7f12a9a780ea  libc.so+0x70ea
+  stack[0x7fffcc5a98d8] = 0x7f0ff2d1f057  libart.so+0x5b9057
+  stack[0x7fffcc5a9928] = 0x7f0ff2d1ee43  libart.so+0x5b8e43
+  stack[0x7fffcc5a9a20] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9a38] = 0x7f0ff2791bdd  libart.so+0x2bbdd
+  stack[0x7fffcc5a9af8] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9b08] = 0x7f0ff276ec96  libart.so+0x8c96
+  stack[0x7fffcc5a9b88] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9b98] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a9c18] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9c28] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a9cb8] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9cc8] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a9d78] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9d88] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a9e18] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9e28] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a9e38] = 0x7f0ff278dd50  libart.so+0x27d50
+  stack[0x7fffcc5a9e98] = 0x7f0ff2775bca  libart.so+0xfbca
+  stack[0x7fffcc5a9ee8] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9ef8] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5a9f78] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5a9f88] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5aa018] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa028] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5aa048] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa090] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa0f8] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa108] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5aa128] = 0x7f0ff2829d7c  libart.so+0xc3d7c
+  stack[0x7fffcc5aa230] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa248] = 0x7f0ff2775bca  libart.so+0xfbca
+  stack[0x7fffcc5aa298] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa2a8] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5aa328] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa338] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5aa3e8] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa3f8] = 0x7f0ff277023f  libart.so+0xa23f
+  stack[0x7fffcc5aa418] = 0x7f0ff2791a62  libart.so+0x2ba62
+  stack[0x7fffcc5aa4e8] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa570] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa5d8] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa5e8] = 0x7f0ff277023f  libart.so+0xa23f
+  stack[0x7fffcc5aa788] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa798] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5aa7b8] = 0x7f0ff2d310df  libart.so+0x5cb0df
+  stack[0x7fffcc5aa848] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa858] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5aa978] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aa988] = 0x7f0ff277023f  libart.so+0xa23f
+  stack[0x7fffcc5aab28] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aab38] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5aabe8] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aabf8] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5aad18] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aad28] = 0x7f0ff277023f  libart.so+0xa23f
+  stack[0x7fffcc5aad48] = 0x7f0ff276ec96  libart.so+0x8c96
+  stack[0x7fffcc5aae78] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aaea0] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aaf08] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5aaf18] = 0x7f0ff276fa89  libart.so+0x9a89
+  stack[0x7fffcc5aaf38] = 0x7f0ff29649c6  libart.so+0x1fe9c6
+  stack[0x7fffcc5ab030] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5ab098] = 0x7f0ff2766a80  libart.so+0xa80
+  stack[0x7fffcc5ab0a8] = 0x7f0ff276ec29  libart.so+0x8c29
+  stack[0x7fffcc5ab178] = 0x7f0ff2778827  libart.so+0x12827
+  stack[0x7fffcc5ab1d8] = 0x7f0ff27c5390  libart.so+0x5f390
+  stack[0x7fffcc5ab268] = 0x7f0ff2bf12a0  libart.so+0x48b2a0
+  stack[0x7fffcc5ab318] = 0x7f0ff2a3a6dd  libart.so+0x2d46dd
+  stack[0x7fffcc5ab398] = 0x55a11a8ebcd9  dalvikvm64+0x1cd9
+  stack[0x7fffcc5ab3f8] = 0x7f0ff2a02bfc  libart.so+0x29cbfc
+  stack[0x7fffcc5ab478] = 0x55a11a8eb95a  dalvikvm64+0x195a
+  stack[0x7fffcc5ab4f8] = 0x55a11a8eaed0  dalvikvm64+0xed0
+  stack[0x7fffcc5ab528] = 0x55a11a8eaed6  dalvikvm64+0xed6
+  stack[0x7fffcc5ab538] = 0x7f12a9a7f9f0  libc.so+0xe9f0
+  stack[0x7fffcc5ab568] = 0x55a11a8eaeb8  dalvikvm64+0xeb8
+  stack[0x7fffcc5ab588] = 0x55a11a8eae7e  dalvikvm64+0xe7e
+  stack[0x7fffcc5aba48] = 0x55a11a8eae70  dalvikvm64+0xe70

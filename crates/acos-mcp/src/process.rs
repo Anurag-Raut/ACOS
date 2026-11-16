@@ -157,6 +157,12 @@ pub fn run(spec: &ChildSpec<'_>) -> Result<Captured, RunError> {
     let stdout = join_reader(out_handle);
     let stderr = join_reader(err_handle);
 
+    // A child that exits before its reader sees the overflow leaves the loop
+    // through `try_wait`; the readers are joined now, so the flag is final.
+    // Without this re-check a truncated capture is returned as success.
+    if failure.is_none() && overflow.load(Ordering::SeqCst) {
+        failure = Some(RunError::OutputLimit);
+    }
     if let Some(err) = failure {
         return Err(err);
     }

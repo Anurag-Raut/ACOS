@@ -50,6 +50,22 @@ class SmokeError(Exception):
     pass
 
 
+def reply_names_search_field(target, content_desc):
+    """When the reply names a node, it must be the search field (no other field)."""
+    node = target.get("node")
+    return not node or node.get("content_desc") == content_desc
+
+
+def typed_reply_is_honest(target, query):
+    """The reply to `acos_text` either echoes the typed text, or -- when the engine
+    masks the field as a password -- carries `text_masked` and the exact count.
+    Either is honest; a masked reply never proves the query by itself, so the
+    flow's proof is the query in the next tree (checked separately)."""
+    if target.get("text") == query:
+        return True
+    return target.get("text_masked") is True and target.get("chars") == len(query)
+
+
 def emit(obj):
     sys.stdout.write(json.dumps(obj, sort_keys=True) + "\n")
     sys.stdout.flush()
@@ -205,6 +221,38 @@ def named_texts(env: dict) -> list[str]:
     return out
 
 
+def content_desc_nodes(env: dict, needle: str) -> list[dict]:
+    """Every node whose `content_desc` contains `needle` (visible ones first).
+
+    The *name* an agent reads is the platform's accessible name: a node's text,
+    else its content description. A React Native `TextInput` is the awkward case
+    -- its `text` is the placeholder it draws -- so the field is only reachable
+    by its explicit `content_desc` ("Search Japanese dictionary"). This helper
+    reads that field so the smoke can tap by the value the tree reports instead
+    of hard-coding a label.
+    """
+    found: list[dict] = []
+
+    def walk(value):
+        if isinstance(value, dict):
+            if "content_desc" in value or "class" in value:
+                desc = value.get("content_desc") or ""
+                if needle.lower() in desc.lower():
+                    found.append(value)
+                for item in value.get("children") or []:
+                    walk(item)
+                return
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(env.get("result", {}))
+    found.sort(key=lambda node: node.get("visible") is not True)
+    return found
+
+
 def clickable_texts(env: dict) -> list[str]:
     """Texts of nodes the user can actually tap (visible and clickable)."""
     nodes: list[dict] = []
@@ -263,6 +311,147 @@ def node_center(env: dict, text: str):
     return None
 
 
+def png_ihdr(data: bytes):
+    """(width, height) from a PNG's IHDR, or None when the bytes are not a PNG."""
+    if len(data) < 33 or data[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    if data[12:16] != b"IHDR":
+        return None
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    return width, height
+
+
+def check_screenshot(env: dict, result: dict, args):
+    """FB2b: `acos_observe_tree {"screenshot": true}` gives a real, bounded PNG."""
+    import base64
+
+    shot = (env.get("result") or {}).get("screenshot")
+    check(
+        "observe_tree_screenshot_status",
+        env.get("status") == "pass" and isinstance(shot, dict),
+        {"status": env.get("status"), "screenshot": shot, "error": env.get("error")},
+    )
+    raw_path = shot.get("path") or ""
+    path = Path(raw_path)
+    check(
+        "screenshot_path_absolute_and_exists",
+        bool(raw_path) and path.is_absolute() and path.is_file(),
+        {"path": raw_path, "exists": path.is_file()},
+    )
+    size = path.stat().st_size
+    check(
+        "screenshot_bytes_under_1MB",
+        0 < size < 1024 * 1024,
+        {"bytes": size, "reported": shot.get("bytes")},
+    )
+    data = path.read_bytes()
+    ihdr = png_ihdr(data)
+    check(
+        "screenshot_is_a_png",
+        ihdr is not None and shot.get("format") == "png",
+        {"format": shot.get("format"), "ihdr": ihdr, "magic": data[:8].hex()},
+    )
+    display_size = shot.get("display_size") or []
+    origin = shot.get("display_origin")
+    width, height = ihdr
+    check(
+        "screenshot_geometry",
+        display_size == [1080, 2400]
+        and isinstance(origin, list)
+        and len(origin) == 2
+        and all(isinstance(v, int) for v in origin)
+        and width == shot.get("width")
+        and height == shot.get("height")
+        and 0 < width <= 2400
+        and 0 < height <= 2400,
+        {
+            "ihdr": ihdr,
+            "reported": [shot.get("width"), shot.get("height")],
+            "display_size": display_size,
+            "display_origin": origin,
+        },
+    )
+
+    content = result.get("content") or []
+    images = [b for b in content if b.get("type") == "image"]
+    links = [b for b in content if b.get("type") == "resource_link"]
+    # The envelope itself is the first text block; the preview's own line is the
+    # one that names the lossless file.
+    notes = [
+        b.get("text", "")
+        for b in content
+        if b.get("type") == "text" and "lossless file:" in b.get("text", "")
+    ]
+    note = notes[0] if notes else ""
+    check(
+        "screenshot_inline_preview_present",
+        len(images) == 1 and images[0].get("mimeType") == "image/png",
+        {"images": len(images), "mime": [i.get("mimeType") for i in images]},
+    )
+    preview_bytes = base64.b64decode(images[0]["data"])
+    max_bytes = int(os.environ.get("ACOS_MCP_MAX_IMAGE_BYTES", 512 * 1024))
+    max_side = int(os.environ.get("ACOS_MCP_PREVIEW_MAX_SIDE", 1280))
+    preview_ihdr = png_ihdr(preview_bytes)
+    check(
+        "screenshot_inline_preview_bounded",
+        preview_ihdr is not None
+        and len(preview_bytes) <= max_bytes
+        and max(preview_ihdr) <= max_side,
+        {
+            "bytes": len(preview_bytes),
+            "max_bytes": max_bytes,
+            "ihdr": preview_ihdr,
+            "max_side": max_side,
+        },
+    )
+    check(
+        "screenshot_preview_names_the_lossless_file",
+        bool(note)
+        and raw_path in note
+        and (not links or any(raw_path in link.get("uri", "") for link in links)),
+        {"note": note, "links": links},
+    )
+    emit(
+        {
+            "screenshot_evidence": {
+                "path": raw_path,
+                "bytes": size,
+                "ihdr": ihdr,
+                "display_size": display_size,
+                "display_origin": origin,
+                "preview_bytes": len(preview_bytes),
+                "preview_ihdr": preview_ihdr,
+            }
+        }
+    )
+
+
+def destroy_and_check(client: "Mcp", sid: str, args):
+    destroyed = envelope(
+        client.call_tool("acos_destroy", {"session_id": sid}, timeout=args.timeout)
+    )
+    check(
+        "acos_destroy",
+        destroyed.get("status") == "pass"
+        and destroyed.get("result", {}).get("destroyed") is True,
+        {"status": destroyed.get("status"), "result": destroyed.get("result")},
+    )
+    gone = envelope(
+        client.call_tool("acos_status", {"session_id": sid}, timeout=args.timeout)
+    )
+    check(
+        "status_after_destroy",
+        gone.get("status") != "pass"
+        and (gone.get("error") or {}).get("code")
+        in {"SESSION_NOT_FOUND", "UNSUPPORTED_BACKEND"},
+        {
+            "status": gone.get("status"),
+            "code": (gone.get("error") or {}).get("code"),
+        },
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--mcp-bin", required=True, help="the acos-mcp binary or wrapper")
@@ -273,9 +462,27 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=600.0, help="per tool call, seconds")
     ap.add_argument(
         "--mode",
-        choices=["counter", "gaten"],        default="counter",
+        choices=["counter", "gaten", "gaten-search", "gaten-shot"],
+        default="counter",
         help="counter: 0 -> tap Increment -> 1 -> reset -> 0; gaten: launch, read the "
-        "real RN tree, tap a bottom tab and require the tree to change",
+        "real RN tree, tap a bottom tab and require the tree to change; "
+        "gaten-search: focus the search field by its `content_desc`, type with "
+        "`acos_text`, and require the query/results in the next tree; gaten-shot: "
+        "launch and ask acos_observe_tree for {screenshot: true}, then check the PNG "
+        "on disk (exists, < 1 MB, decodes, IHDR size, display_origin) and that the "
+        "reply carries a bounded inline preview",
+    )
+    ap.add_argument(
+        "--search-text",
+        default="kayou",
+        help="gaten-search mode: text to type into the search field",
+    )
+    ap.add_argument(
+        "--search-content-desc",
+        default="Search Japanese dictionary",
+        help="gaten-search mode: the field's content description, as read from "
+        "the tree (the RN TextInput's text is its placeholder, so this is the "
+        "explicit selector)",
     )
     ap.add_argument(
         "--tap-text",
@@ -363,7 +570,8 @@ def main() -> int:
             help_env.get("status") == "pass"
             and 1000 < len(overview) < 6000
             and full_env.get("status") == "pass"
-            and len(guide) > 5000,
+            and len(guide) > 20000
+            and "acos_tap" in guide,
             {"overview_chars": len(overview), "full_chars": len(guide)},
         )
         full_env = envelope(client.call_tool("acos_help", {"topic": "all"}))
@@ -414,14 +622,24 @@ def main() -> int:
             },
         )
 
-        tree0 = envelope(
-            client.call_tool(
-                "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
-            )
+        observe_args: dict = {"session_id": sid}
+        if args.mode == "gaten-shot":
+            # The FB2 item: a screenshot through the observe verb an agent
+            # already calls, not a separate capture tool.
+            observe_args["screenshot"] = True
+        tree0_result = client.call_tool(
+            "acos_observe_tree", observe_args, timeout=args.timeout
         )
+        tree0 = envelope(tree0_result)
         texts0 = tree_texts(tree0)
 
-        if args.mode == "counter":
+        if args.mode == "gaten-shot":
+            check_screenshot(tree0, tree0_result, args)
+
+        if args.mode == "gaten-shot":
+            # Nothing to tap: the PNG + inline preview is the whole assertion.
+            tap_text = None
+        elif args.mode == "counter":
             check(
                 "observe_tree initial",
                 tree0.get("status") == "pass"
@@ -450,10 +668,18 @@ def main() -> int:
                 "Settings": "Screen lookup",
                 "Home": "Recently looked up",
             }
-            for _ in range(6):
+            for _ in range(8):
                 names = named_texts(tree0)
-                if any(tab in names for tab in tab_expect) and any(
-                    hint in names for hint in tab_expect.values()
+                # Home is proven only when no onboarding control is left: an
+                # onboarding page can carry the tab words ("Screen lookup", ...),
+                # so the tab names alone do not mean the app reached Home.
+                onboarding_left = any(
+                    control in names for control in ("Skip", "Set up Gaten", "Open Gaten")
+                )
+                if (
+                    not onboarding_left
+                    and any(tab in names for tab in tab_expect)
+                    and any(hint in names for hint in tab_expect.values())
                 ):
                     break
                 cta = next((c for c in ctas if c in names), None)
@@ -488,35 +714,244 @@ def main() -> int:
                 present[0],
             )
 
-        if tap_text is None:
+        if args.mode == "gaten-shot":
+            destroy_and_check(client, sid, args)
+            emit({"smoke": "ok"})
+            return 0
+        if args.mode == "gaten-search":
+            # FB1: the live channel types. Three claims, each an agent call:
+            #  1. the field is named by its `content_desc` (its `text` is the
+            #     placeholder), and the tap lands on it;
+            #  2. `acos_text` types after that tap -- the same guest `type_text`
+            #     command a scenario `type` step sends;
+            #  3. the next tree carries the query and the result list, so the
+            #     flow is proven by the app's state, never by the call's status.
+            fields = content_desc_nodes(tree0, args.search_content_desc)
+            check(
+                "gaten_search_field_present",
+                tree0.get("status") == "pass" and bool(fields),
+                {
+                    "content_desc": args.search_content_desc,
+                    "matched": [f.get("text") for f in fields[:5]],
+                    "texts": texts0[:40],
+                },
+            )
+            field = fields[0]
+            # Onboarding can end while Home is still settling (the tab bar is
+            # already in the tree). Tap only once the field's bounds hold still
+            # across two consecutive trees, bounded, so the tap lands on the
+            # laid-out field and not on a transition frame.
+            def field_geometry(env):
+                return [
+                    (node.get("bounds"), node.get("text"))
+                    for node in content_desc_nodes(env, args.search_content_desc)
+                ]
+
+            previous = field_geometry(tree0)
+            for _ in range(TAB_WAIT_SECONDS):
+                time.sleep(1)
+                current_env = envelope(
+                    client.call_tool(
+                        "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                    )
+                )
+                current = field_geometry(current_env)
+                if current and current == previous:
+                    break
+                previous = current
+            focused_tap = envelope(
+                client.call_tool(
+                    "acos_tap",
+                    {"session_id": sid, "content_desc": field["content_desc"]},
+                    timeout=args.timeout,
+                )
+            )
+            tap_result = focused_tap.get("result") or {}
+            settle = tap_result.get("settle") or {}
+            # A field tap moves focus and opens the keyboard on the *next* frame,
+            # so `state_changed` (the settled tree/pixel verdict) can be false
+            # while the gesture was delivered and a change was already measured
+            # (`settle.first_change_ms`). The claim here is delivery + change;
+            # the proof that it landed *on this field* is the typed query in the
+            # next tree (`gaten_search_results_after_typing`), never this flag.
+            check(
+                "gaten_search_tap_by_content_desc",
+                focused_tap.get("status") == "pass"
+                and tap_result.get("accepted") is True
+                and (
+                    tap_result.get("state_changed") is True
+                    or settle.get("first_change_ms") is not None
+                    or settle.get("frame_ms") is not None
+                ),
+                {
+                    "content_desc": field["content_desc"],
+                    "status": focused_tap.get("status"),
+                    "accepted": tap_result.get("accepted"),
+                    "state_changed": tap_result.get("state_changed"),
+                    "settle": {
+                        "bound": settle.get("bound"),
+                        "first_change_ms": settle.get("first_change_ms"),
+                        "frame_ms": settle.get("frame_ms"),
+                    },
+                    "error": focused_tap.get("error"),
+                },
+            )
+            # The field must hold focus before typing: the typed text lands in the
+            # focused node, so the tree's own focus flag is the precondition. The
+            # focus flag can arrive a frame after the tap's settle, so poll (bounded).
+            focus_nodes = []
+            for _ in range(10):
+                focus_env = envelope(
+                    client.call_tool(
+                        "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                    )
+                )
+                focus_nodes = content_desc_nodes(focus_env, args.search_content_desc)
+                if any(node.get("focused") is True for node in focus_nodes):
+                    break
+                time.sleep(1)
+            check(
+                "gaten_search_field_focused_after_tap",
+                any(node.get("focused") is True for node in focus_nodes),
+                {
+                    "content_desc": args.search_content_desc,
+                    "nodes": [
+                        {k: n.get(k) for k in ("id", "text", "focused", "password")}
+                        for n in focus_nodes[:3]
+                    ],
+                },
+            )
+            typed = envelope(
+                client.call_tool(
+                    "acos_text",
+                    {"session_id": sid, "text": args.search_text},
+                    timeout=args.timeout,
+                )
+            )
+            check(
+                "acos_text_live",
+                typed.get("status") == "pass"
+                and typed.get("result", {}).get("action") == "text"
+                and typed.get("result", {}).get("accepted") is True
+                and typed_reply_is_honest(
+                    (typed.get("result", {}).get("target") or {}), args.search_text
+                )
+                and reply_names_search_field(
+                    (typed.get("result", {}).get("target") or {}), args.search_content_desc
+                ),
+                {
+                    "text": args.search_text,
+                    "status": typed.get("status"),
+                    "accepted": typed.get("result", {}).get("accepted"),
+                    "target": typed.get("result", {}).get("target"),
+                    "error": typed.get("error"),
+                },
+            )
+            # The query and the result list mount on later frames: poll the tree
+            # (bounded, never forever) for both. A field that never shows the
+            # query, or a list that never arrives, still fails.
+            # The proof of typing is the TREE, never the reply echo: the search
+            # field's own text holds the query, and the results mount later.
+            result_markers = ("results", "通う", "歌謡")
+
+            def field_has_query(env):
+                return any(
+                    args.search_text in (node.get("text") or "")
+                    for node in content_desc_nodes(env, args.search_content_desc)
+                )
+
+            def has_results(env):
+                texts = tree_texts(env)
+                return any(marker in text for text in texts for marker in result_markers)
+
+            typed_env = envelope(
+                client.call_tool(
+                    "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                )
+            )
+            for _ in range(TAB_WAIT_SECONDS):
+                if field_has_query(typed_env) and has_results(typed_env):
+                    break
+                time.sleep(1)
+                typed_env = envelope(
+                    client.call_tool(
+                        "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                    )
+                )
+            typed_texts = tree_texts(typed_env)
+            check(
+                "gaten_search_field_text_in_tree",
+                field_has_query(typed_env),
+                {
+                    "query": args.search_text,
+                    "field": [
+                        {k: n.get(k) for k in ("id", "text", "focused", "password")}
+                        for n in content_desc_nodes(typed_env, args.search_content_desc)[:3]
+                    ],
+                },
+            )
+            check(
+                "gaten_search_results_after_typing",
+                args.search_text in typed_texts and has_results(typed_env),
+                {"query": args.search_text, "texts": typed_texts[:40]},
+            )
+
+        if tap_text is None and args.mode != "gaten-search":
             raise SmokeError("no node text to tap")
+        tap_args = None
         if args.mode == "gaten":
             # Tap by the label read off the tree, never by bounds: this is the
             # claim (an RN tab is reachable by the name an agent reads).
             tap_args = {"session_id": sid, "text": tap_text}
-        else:
+        elif args.mode == "counter":
             tap_args = {"session_id": sid, "text": tap_text}
-        tapped = envelope(
-            client.call_tool("acos_tap", tap_args, timeout=args.timeout)
+        tapped = (
+            envelope(client.call_tool("acos_tap", tap_args, timeout=args.timeout))
+            if tap_args is not None
+            else None
         )
-        check(
-            "acos_tap",
-            tapped.get("status") == "pass"
-            and tapped.get("result", {}).get("accepted") is True,
-            {
-                "text": tap_text,
-                "args": tap_args,
-                "status": tapped.get("status"),
-                "accepted": tapped.get("result", {}).get("accepted"),
-                "state_changed": tapped.get("result", {}).get("state_changed"),
-                "error": tapped.get("error"),
-            },
-        )
-        if args.mode == "gaten":
+        if tapped is not None:
+            check(
+                "acos_tap",
+                tapped.get("status") == "pass"
+                and tapped.get("result", {}).get("accepted") is True,
+                {
+                    "text": tap_text,
+                    "args": tap_args,
+                    "status": tapped.get("status"),
+                    "accepted": tapped.get("result", {}).get("accepted"),
+                    "state_changed": tapped.get("result", {}).get("state_changed"),
+                    "error": tapped.get("error"),
+                },
+            )
+        if args.mode == "gaten" and tapped is not None:
             check(
                 "gaten_tab_tap_state_changed",
                 tapped.get("result", {}).get("state_changed") is True,
                 {"text": tap_text, "result": tapped.get("result", {}).get("settle")},
+            )
+            # FB3: the tab tap's own reply describes the screen change, so an
+            # agent that only needs "did the screen change and how" makes one
+            # call. A whole-screen navigation is additions + removals; a
+            # re-render may also be pure field changes, so require the diff to
+            # be non-empty rather than dictating which list it lands in.
+            changes = (tapped.get("result") or {}).get("changes") or {}
+            counts = changes.get("counts") or {}
+            check(
+                "gaten_tab_tap_changes",
+                changes.get("baseline") == "session"
+                and (
+                    counts.get("added", 0)
+                    + counts.get("removed", 0)
+                    + counts.get("changed", 0)
+                )
+                > 0,
+                {
+                    "counts": counts,
+                    "truncated": changes.get("truncated"),
+                    "activity": changes.get("activity"),
+                    "frames": changes.get("frames"),
+                },
             )
 
         tree1 = envelope(
@@ -531,6 +966,55 @@ def main() -> int:
                 tree1.get("status") == "pass" and "1" in texts1 and "0" not in texts1,
                 {"texts": texts1},
             )
+            # FB3: the tap reply itself says what changed, so the observe above
+            # is confirmation rather than the only way to learn the count moved.
+            changes = (tapped.get("result") or {}).get("changes")
+            check(
+                "acos_tap_changes",
+                isinstance(changes, dict)
+                and changes.get("baseline") == "session"
+                and changes.get("truncated") is False
+                and isinstance(changes.get("activity"), str)
+                and changes.get("activity") != "",
+                changes,
+            )
+            text_changes = [
+                entry
+                for entry in (changes or {}).get("changed", [])
+                if "text" in (entry.get("fields") or {})
+            ]
+            check(
+                "acos_tap_changes_count_text",
+                len(text_changes) == 1
+                and text_changes[0]["fields"]["text"] == {"old": "0", "new": "1"}
+                and (changes or {}).get("added") == []
+                and (changes or {}).get("removed") == []
+                and (changes or {}).get("counts", {}).get("changed", 0) >= 1,
+                {"text_changes": text_changes, "counts": (changes or {}).get("counts")},
+            )
+            # `diff: false` is the pre-FB3 reply: no `changes` key at all.
+            no_diff = envelope(
+                client.call_tool(
+                    "acos_tap",
+                    {"session_id": sid, "text": tap_text, "diff": False},
+                    timeout=args.timeout,
+                )
+            )
+            check(
+                "acos_tap_diff_false",
+                no_diff.get("status") == "pass"
+                and no_diff.get("result", {}).get("accepted") is True
+                and "changes" not in (no_diff.get("result") or {}),
+                {
+                    "status": no_diff.get("status"),
+                    "result_keys": sorted((no_diff.get("result") or {}).keys()),
+                    "error": no_diff.get("error"),
+                },
+            )
+        elif args.mode == "gaten-search":
+            # The search flow already proved its own state (`acos_text_live` +
+            # `gaten_search_results_after_typing`); nothing else is claimed here.
+            pass
         else:
             if tap_text in tab_expect:
                 # A tab press navigates and the new screen mounts on its own

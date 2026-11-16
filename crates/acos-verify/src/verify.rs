@@ -29,7 +29,20 @@ pub fn verify_with_clock(
     let request_id = request.base.request_id.clone();
 
     // 1. Parse and validate the scenario. Every validation problem is returned.
-    let scenario = match Scenario::load(Path::new(&request.scenario)) {
+    //
+    // The source text is read once and kept: the scenario's *declared* `engine:`
+    // spelling (`engine_mismatch_warning`) is only visible in the document, not
+    // in the parsed value, and this is also the one read of the input a run
+    // needs before it starts (PROVENANCE hashes those same bytes).
+    let scenario_text = match std::fs::read_to_string(Path::new(&request.scenario)) {
+        Ok(text) => Some(text),
+        Err(_) => None,
+    };
+    let parsed = match scenario_text.as_deref() {
+        Some(text) => Scenario::from_yaml_str(text),
+        None => Scenario::load(Path::new(&request.scenario)),
+    };
+    let scenario = match parsed {
         Ok(scenario) => scenario,
         Err(validation) => {
             let protocol = ProtocolError::new(
@@ -57,11 +70,23 @@ pub fn verify_with_clock(
     };
 
     // 2. Resolve the APK (flag overrides the scenario).
+    //
+    // PROVENANCE: both paths are made absolute before anything else. A relative
+    // path means a different file to every reader (the caller's cwd, the MCP
+    // server's cwd, `repro.sh`'s cwd), and it was a relative scenario path in
+    // `repro.json` that made an older scenario run against a stale APK look
+    // reproducible.
+    // A relative `app:` resolves against the scenario path **as the caller
+    // spelled it** (its parent directory), which is the documented behaviour; a
+    // canonicalized path would silently re-anchor the app after a symlinked
+    // scenario directory. Only the value written into provenance is canonical.
+    let scenario_path = acos_protocol::provenance::absolute(Path::new(&request.scenario));
+    let declared_app = resolve_relative(&request.scenario, &scenario.app);
     let apk = request
         .apk
-        .clone()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| resolve_relative(&request.scenario, &scenario.app));
+        .as_deref()
+        .map(|path| acos_protocol::provenance::absolute(Path::new(path)))
+        .unwrap_or_else(|| acos_protocol::provenance::absolute(&declared_app));
     if !apk.is_file() {
         let protocol = ProtocolError::new(
             ErrorCode::ApkIo,
@@ -78,10 +103,60 @@ pub fn verify_with_clock(
         );
     }
 
-    let isolation = request
-        .base
-        .isolation
-        .unwrap_or(scenario.isolation);
+    // PROVENANCE: a `pass` says which APK it judged. When `--apk` and the
+    // scenario's own `app:` name different files the run is still valid (the
+    // flag is documented to override), but it is never silent: the warning goes
+    // into `provenance.warnings[]` in the envelope and in `verdict.json`.
+    let mut warnings: Vec<serde_json::Value> = Vec::new();
+    if request.apk.is_some() {
+        let declared = acos_protocol::provenance::absolute(&declared_app);
+        let used = acos_protocol::provenance::absolute(&apk);
+        if declared != used {
+            warnings.push(serde_json::json!({
+                "code": acos_protocol::provenance::WARN_SCENARIO_APP_OVERRIDDEN,
+                "message": format!(
+                    "the scenario's own `app:` names {} but this run used --apk {}; the verdict \
+                     is about the --apk file (provenance.apk.sha256_12 is the digest of the bytes \
+                     that ran). Drop --apk to run the scenario's own app.",
+                    declared.display(),
+                    used.display()
+                ),
+                "scenario_app": declared.display().to_string(),
+                "apk": used.display().to_string(),
+            }));
+        }
+    }
+
+    // PROVENANCE: a scenario that pins one engine while another runs is never
+    // silent. The field does not select the engine (the request's `engine` does)
+    // — the warning states both words and the verdict keeps the engine that ran.
+    if let Some(declared) = scenario_text
+        .as_deref()
+        .and_then(acos_protocol::scenario::declared_engine)
+    {
+        let ran = request.engine.as_str();
+        let canonical = match declared.as_str() {
+            "native-preferred" | "native-only" => "rust-vm",
+            "reference-only" => "art",
+            other => other,
+        };
+        if let Some(warning) = acos_protocol::scenario::engine_mismatch_warning(canonical, ran)
+            .filter(|_| {
+                // A declared engine always produces the mismatch warning; the
+                // legacy-spelling warning already explains the rename.
+                canonical != ran
+            })
+        {
+            warnings.push(serde_json::json!({
+                "code": acos_protocol::provenance::WARN_SCENARIO_ENGINE_MISMATCH,
+                "message": warning.message,
+                "scenario_engine": canonical,
+                "engine": ran,
+            }));
+        }
+    }
+
+    let isolation = request.base.isolation.unwrap_or(scenario.isolation);
     let mut scenario = scenario;
     scenario.isolation = isolation;
     if let Some(display) = request.base.display {
@@ -90,12 +165,14 @@ pub fn verify_with_clock(
 
     let options = RunOptions {
         apk,
-        scenario_path: PathBuf::from(&request.scenario),
+        scenario_path: scenario_path.clone(),
         artifacts_dir: PathBuf::from(&request.artifacts),
         required_fidelity: request.required_fidelity,
         request_id: request_id.clone(),
         flags: request.flags.clone(),
         acos_version: env!("CARGO_PKG_VERSION").to_string(),
+        engine: request.engine.as_str().to_string(),
+        warnings,
     };
 
     // 3. Run.
@@ -147,7 +224,10 @@ pub fn verify_with_clock(
             .unwrap_or_else(|| {
                 ProtocolError::new(
                     ErrorCode::Internal,
-                    format!("verify produced status `{}` without a failure object", verdict.verdict),
+                    format!(
+                        "verify produced status `{}` without a failure object",
+                        verdict.verdict
+                    ),
                 )
                 .with_hint(
                     "Runner invariant violated: a non-pass verdict must carry a failure object. \
@@ -176,11 +256,14 @@ pub fn verify_with_clock(
             response.verdict.request_id.clone(),
             backend.protocol_backend(),
             response.verdict.fidelity,
-            ProtocolError::new(ErrorCode::Internal, format!("cannot serialize verdict: {error}"))
-                .with_hint(
-                    "The verdict type serialized to invalid JSON (a runner type bug). Capture the \
+            ProtocolError::new(
+                ErrorCode::Internal,
+                format!("cannot serialize verdict: {error}"),
+            )
+            .with_hint(
+                "The verdict type serialized to invalid JSON (a runner type bug). Capture the \
                      scenario/artifacts and report it; the run is not a pass.",
-                ),
+            ),
             metrics,
         ),
     }

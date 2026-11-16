@@ -1,0 +1,26 @@
+# REL3B smoke: the smallest real-ART run that shows provenance.
+version: 1
+name: rel3b-provenance
+description: >-
+  Launch the counter fixture, assert the initial count, and prove that the
+  verdict, the envelope result and the summary line name the scenario and the
+  APK with their digests, the engine and the fidelity.
+app: fixtures/build/apps/counter.apk
+engine: art
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch: {activity: dev.acos.fixtures.counter/.MainActivity}
+  - wait_for: {selector: {id: count}, timeout_ms: 10000}
+  - assert_text: {selector: {id: count}, text: {exact: "0"}}
