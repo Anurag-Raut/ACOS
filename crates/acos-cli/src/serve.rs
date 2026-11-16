@@ -763,7 +763,16 @@ pub fn ensure_daemon() -> Result<DaemonClient, String> {
                 warn_mismatch(&mismatch, "build-private daemon");
             }
         }
-        Shared::Absent => {}
+        Shared::Absent => {
+            // No daemon yet: the normal case is one shared `acos serve` for this
+            // user, started here (and replaceable by the next client's build
+            // only when it is idle). A bind race with another build falls back to
+            // a private daemon below: never to that build's daemon.
+            match start_daemon(&daemon::socket_path(), true) {
+                Ok(client) if client.compatible() => return Ok(client),
+                Ok(_) | Err(_) => {}
+            }
+        }
     }
     ensure_private_daemon()
 }

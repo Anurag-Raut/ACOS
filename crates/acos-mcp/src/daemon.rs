@@ -238,6 +238,7 @@ impl DaemonClient {
             next_id: 0,
             daemon: DaemonIdentity::Unknown {
                 reason: "hello was never answered".to_string(),
+                pid: None,
             },
             sessions: None,
         };
@@ -289,10 +290,12 @@ impl DaemonClient {
                     Ok(identity) => DaemonIdentity::Known(identity),
                     Err(e) => DaemonIdentity::Unknown {
                         reason: format!("unreadable identity in hello: {e}"),
+                        pid: None,
                     },
                 },
                 None => DaemonIdentity::Unknown {
                     reason: "hello returned no identity".to_string(),
+                    pid: None,
                 },
             },
             _ => DaemonIdentity::Unknown {
@@ -300,6 +303,11 @@ impl DaemonClient {
                     .error()
                     .map(|error| format!("{}: {}", error.code, error.message))
                     .unwrap_or_else(|| "hello failed".to_string()),
+                // A daemon that predates `hello` still answers `ping`, which
+                // carries its pid: the routing layer needs the pid to decide
+                // whether an idle, orphaned daemon may be replaced (and to name
+                // it in the warning).
+                pid: self.ping_pid(),
             },
         };
         self.sessions = reply
@@ -308,6 +316,16 @@ impl DaemonClient {
             .and_then(Value::as_u64)
             .map(|count| count as usize);
         Ok(())
+    }
+
+    /// The pid an older daemon reports in `ping` (`None` when it does not answer).
+    fn ping_pid(&mut self) -> Option<u32> {
+        let reply = self.request(TOOL_PING, &json!({})).ok()?;
+        reply
+            .result()
+            .and_then(|result| result.get("pid"))
+            .and_then(Value::as_u64)
+            .map(|pid| pid as u32)
     }
 
     /// The identity refusal for this connection, if the daemon is another build.
@@ -320,7 +338,7 @@ impl DaemonClient {
                 client: client.clone(),
                 daemon: self.daemon.clone(),
             }),
-            DaemonIdentity::Unknown { reason } => Some(Mismatch {
+            DaemonIdentity::Unknown { reason, .. } => Some(Mismatch {
                 reason: crate::identity::MismatchReason::Build {
                     client: client.label(),
                     daemon: format!("unknown ({reason})"),

@@ -1,0 +1,63 @@
+
+=== identities (each binary, on its own socket)
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; print(json.load(sys.stdin)["identity"]["build_id"])
+                           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'identity'
+old: <none: pre-identity build>
+new: b2935f0d0b47+dirty.2a2fa473.60f8a22f
+PASS the old build has no identity protocol (it cannot report a build id)
+PASS the new build reports its identity: b2935f0d0b47+dirty.2a2fa473.60f8a22f
+
+=== starting the OLD daemon (rel-030) on the shared socket, auto-started style
+old daemon pid=1850395 ppid=1
+PASS old daemon is listening on the shared socket
+
+=== the same wire request, answered by the OLD daemon (the MODA11Y surface)
+old daemon reply -> status=error error=SESSION_NOT_FOUND identity=no
+PASS the old daemon answers the new build's service with a stale refusal and no identity
+
+=== the OLD client against the same daemon (no check: it just uses it)
+old client status=pass stderr=0 bytes
+PASS the old client used that daemon with no warning: the bug class is real
+
+=== the NEW client finds the old daemon
+new client rc=0 status=pass
+{
+  "backend": "acos-native",
+  "capabilities_used": [],
+  "fidelity": "native-runtime",
+  "metrics": {
+    "wall_ms": 0
+  },
+  "ok": true,
+  "request_id": "req_1c3c47_18e8720d9a0eab05",
+  "result": {
+    "count": 0,
+    "engine": "art",
+    "sessions": []
+  },
+  "status": "pass"
+}
+
+--- stderr:
+{"action":"replaced an idle daemon of another build","client":{"auto_started":false,"build_id":"b2935f0d0b47+dirty.2a2fa473.60f8a22f","exe":"/home/Qui/.t3/worktrees/acos/t3-34d03a9e-e792f5c968a8d77e/.cache/rel3d-target/debug/acos","exe_hash":"60f8a22f563c4f93","exe_len":287398856,"git_sha":"b2935f0d0b47","pid":1850439,"protocol":1,"source_hash":"2a2fa473f499d2a7","version":"0.2.3"},"code":"DAEMON_VERSION_MISMATCH","daemon":{"identity":null,"pid":1850395,"predates_identity_protocol":true,"reason":"SESSION_NOT_FOUND: no live ART session `mcp-1850395-420fd33e6932c780`; hello needs a launched session"},"message":"refusing the running `acos serve` daemon: build (client 0.2.3 b2935f0d0b47 b2935f0d0b47+dirty.2a2fa473.60f8a22f / daemon predates the identity protocol (pid 1850395, SESSION_NOT_FOUND: no live ART session `mcp-1850395-420fd33e6932c780`; hello needs a launched session))","rule":"build","severity":"warning","socket":"/tmp/rel3d-e2e-59qRNn/session.sock"}
+PASS the new client's call passed (on its own build)
+PASS structured DAEMON_VERSION_MISMATCH warning emitted
+PASS the warning names the daemon as pre-identity (both identities present)
+PASS the warning names the new build's id
+
+=== the idle auto-started old daemon was replaced
+PASS old daemon 1850395 is gone
+
+=== who answers on the shared socket now?
+shared daemon -> pid=1850580 build_id=b2935f0d0b47+dirty.2a2fa473.60f8a22f auto_started=True
+PASS the shared socket answers as the NEW build
+
+=== acos doctor: running daemon identity vs the CLI
+session_daemon: ok | pid 1850580 build b2935f0d0b47+dirty.2a2fa473.60f8a22f matches the cli (/tmp/rel3d-e2e-59qRNn/session.sock)
+PASS doctor reports the daemon matches the CLI
+
+RESULT OK
+script exit=0

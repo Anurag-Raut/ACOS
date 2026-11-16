@@ -294,8 +294,13 @@ pub enum DaemonIdentity {
     /// The daemon reported an identity (`hello`).
     Known(Identity),
     /// The daemon has no `hello` tool or refused it: an older build. The reason
-    /// is the transport/daemon error it answered with.
-    Unknown { reason: String },
+    /// is the transport/daemon error it answered with; `pid` comes from its
+    /// `ping` (the one status probe an older daemon still answers), so the
+    /// client can tell whether the process may be replaced.
+    Unknown {
+        reason: String,
+        pid: Option<u32>,
+    },
 }
 
 impl DaemonIdentity {
@@ -308,10 +313,14 @@ impl DaemonIdentity {
         }
     }
 
-    /// The daemon's pid, when it reported one.
+    /// The daemon's pid, when it reported one (`hello`, or `ping` for a daemon
+    /// that predates the identity protocol).
     #[must_use]
     pub fn pid(&self) -> Option<u32> {
-        self.known().map(|identity| identity.pid)
+        match self {
+            DaemonIdentity::Known(identity) => Some(identity.pid),
+            DaemonIdentity::Unknown { pid, .. } => *pid,
+        }
     }
 
     /// As a JSON value for a report/envelope (both arms are structured).
@@ -322,9 +331,10 @@ impl DaemonIdentity {
                 "identity": identity,
                 "predates_identity_protocol": false,
             }),
-            DaemonIdentity::Unknown { reason } => json!({
+            DaemonIdentity::Unknown { reason, pid } => json!({
                 "identity": null,
                 "predates_identity_protocol": true,
+                "pid": pid,
                 "reason": reason,
             }),
         }
@@ -354,7 +364,10 @@ impl Mismatch {
     pub fn message(&self) -> String {
         let daemon = match &self.daemon {
             DaemonIdentity::Known(identity) => identity.label(),
-            DaemonIdentity::Unknown { reason } => format!("predates the identity protocol ({reason})"),
+            DaemonIdentity::Unknown { reason, pid } => format!(
+                "predates the identity protocol (pid {}, {reason})",
+                pid.map(|pid| pid.to_string()).unwrap_or_else(|| "?".to_string())
+            ),
         };
         format!(
             "refusing the running `acos serve` daemon: {} (client {} / daemon {daemon})",
@@ -512,6 +525,7 @@ mod tests {
             client,
             daemon: DaemonIdentity::Unknown {
                 reason: "SESSION_NOT_FOUND: no such tool".into(),
+                pid: Some(4242),
             },
         }
     }
@@ -522,7 +536,22 @@ mod tests {
         let mismatch = mismatch_with_unknown(client.clone());
         assert_eq!(mismatch.code(), "DAEMON_VERSION_MISMATCH");
         assert_eq!(mismatch.client, client);
-        assert_eq!(DaemonIdentity::Unknown { reason: "x".into() }.pid(), None);
+        assert_eq!(
+            DaemonIdentity::Unknown {
+                reason: "x".into(),
+                pid: Some(7)
+            }
+            .pid(),
+            Some(7)
+        );
+        assert_eq!(
+            DaemonIdentity::Unknown {
+                reason: "x".into(),
+                pid: None
+            }
+            .pid(),
+            None
+        );
         assert_eq!(DaemonIdentity::Known(client.clone()).pid(), Some(client.pid));
     }
 }
