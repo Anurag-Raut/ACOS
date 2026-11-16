@@ -35,10 +35,8 @@ fn notification() -> Parcelable {
             Value::Int(2), // TYPE_RESOURCE
             Value::Str(Some("dev.acos.fixtures.notifpermprobe".into())),
             Value::Int(0x7f_01_0001),
-            Value::Bool(false),
-            Value::Float(1.0),
             Value::Cond { present: false, values: vec![] },
-            Value::Int(0),
+            Value::Int(5), // BlendMode.SRC_IN
         ],
     );
     Parcelable::ordered(
@@ -110,7 +108,7 @@ fn notification() -> Parcelable {
             Value::Cond { present: false, values: vec![] }, // mBubbleMetadata
             Value::Bool(false),
             Value::Int(0),
-            Value::Int(-1), // allPendingIntents
+            Value::List(None), // allPendingIntents (null ArraySet)
         ],
     )
 }

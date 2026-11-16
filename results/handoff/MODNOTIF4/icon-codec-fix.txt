@@ -1,0 +1,26 @@
+# MODNOTIF4 evidence: the Icon resource branch was wrong for this image
+
+## The boot DEX (the oracle) — Icon.writeToParcel
+=== android.graphics.drawable.Icon (.cache/boot/android-34/dex/framework/classes.dex) ===
+--- Landroid/graphics/drawable/Icon;->writeToParcel(Landroid/os/Parcel;I)V regs=7
+  0x0002 invoke Landroid/os/Parcel;->writeInt(I)V  regs=[5, 0]
+  0x000c invoke Landroid/graphics/drawable/Icon;->getUriString()Ljava/lang/String;  regs=[4]
+  0x0010 invoke Landroid/os/Parcel;->writeString(Ljava/lang/String;)V  regs=[5, 0]
+  0x0014 invoke Landroid/graphics/drawable/Icon;->getDataLength()I  regs=[4]
+  0x0018 invoke Landroid/os/Parcel;->writeInt(I)V  regs=[5, 0]
+  0x001b invoke Landroid/graphics/drawable/Icon;->getDataBytes()[B  regs=[4]
+  0x001f invoke Landroid/graphics/drawable/Icon;->getDataOffset()I  regs=[4]
+  0x0023 invoke Landroid/graphics/drawable/Icon;->getDataLength()I  regs=[4]
+  0x0027 invoke Landroid/os/Parcel;->writeBlob([BII)V  regs=[5, 0, 2, 3]
+  0x002b invoke Landroid/graphics/drawable/Icon;->getResPackage()Ljava/lang/String;  regs=[4]
+  0x002f invoke Landroid/os/Parcel;->writeString(Ljava/lang/String;)V  regs=[5, 0]
+  0x0032 invoke Landroid/graphics/drawable/Icon;->getResId()I  regs=[4]
+  0x0036 invoke Landroid/os/Parcel;->writeInt(I)V  regs=[5, 0]
+  0x0042 invoke Landroid/graphics/Bitmap;->asShared()Landroid/graphics/Bitmap;  regs=[0]
+  0x004a invoke Landroid/graphics/drawable/Icon;->getBitmap()Landroid/graphics/Bitmap;  regs=[4]
+  0x004e invoke Landroid/graphics/Bitmap;->writeToParcel(Landroid/os/Parcel;I)V  regs=[0, 5, 6]
+  0x0057 invoke Landroid/os/Parcel;->writeInt(I)V  regs=[5, 0]
+  0x005b invoke Landroid/os/Parcel;->writeInt(I)V  regs=[5, 1]
+  0x0060 invoke Landroid/content/res/ColorStateList;->writeToParcel(Landroid/os/Parcel;I)V  regs=[0, 5, 6]
+  0x0065 invoke Landroid/graphics/BlendMode;->toValue(Landroid/graphics/BlendMode;)I  regs=[0]
+  0x0069 invoke Landroid/os/Parcel;->writeInt(I)V  regs=[5, 0]

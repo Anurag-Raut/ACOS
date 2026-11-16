@@ -100,6 +100,11 @@ pub enum FieldOp {
     IgnoredTyped(&'static str),
     /// A dynamic `writeValue`.
     Dynamic,
+    /// `Parcel.writeArraySet`: an `int` count (`-1` for null) followed by that
+    /// many `writeValue` payloads (`Parcel.java:1387-1393`). The one user is
+    /// `Notification.writeToParcel`'s trailing `allPendingIntents`, whose
+    /// elements are `PendingIntent`s (`VAL_PARCELABLE`).
+    ArraySet,
     /// A conditional group: a `writeInt` presence marker, then the nested
     /// fields when the marker is non-zero (API-34 `TaskDescription` writes its
     /// label, icon and icon filename this way). The nested list must be empty
@@ -1660,11 +1665,10 @@ pub static SPECS: &[ParcelableSpec] = &[
     // strong binder (`PendingIntent.java:1500`), so the five intent fields are
     // `Cond(&[Binder])`.
     //
-    // The trailing `writeArraySet` is the one gap: this codec writes the null
-    // encoding (`-1`), which the framework reader accepts
-    // (`Notification(Parcel)` assigns it and nothing dereferences it on the
-    // system side). The set is a marshaling scratch list of the PendingIntents
-    // that were *just written field-by-field above*; it is not extra state.
+    // The trailing `writeArraySet` is modelled as [`FieldOp::ArraySet`]: a
+    // count (`-1` for null) plus one `writeValue` per collected
+    // `PendingIntent`, which is exactly what the framework writes when the
+    // notification carries a `PendingIntent`.
     ParcelableSpec {
         class: "android.app.Notification",
         fields: &[
@@ -1714,7 +1718,7 @@ pub static SPECS: &[ParcelableSpec] = &[
             )]), // mBubbleMetadata
             FieldOp::Bool, // mAllowSystemGeneratedContextualActions
             FieldOp::Int,  // mFgsDeferBehavior
-            FieldOp::Int,  // allPendingIntents (ArraySet: -1 = null, see above)
+            FieldOp::ArraySet, // allPendingIntents (ArraySet<PendingIntent>)
         ],
         verification: Verification::Full,
     },
@@ -2085,6 +2089,36 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
         FieldOp::Cutout => read_cutout(parcel)?,
         FieldOp::Icon => Value::Parcelable(read_icon(parcel)?),
+        FieldOp::ArraySet => {
+            let n = parcel.read_int32()?;
+            if n < 0 {
+                Value::List(None)
+            } else {
+                let n = n as usize;
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut out = Vec::with_capacity(n);
+                for _ in 0..n {
+                    match read_dynamic(parcel)? {
+                        crate::value::DynamicValue::Parcelable(p) => {
+                            out.push(Value::Parcelable(p));
+                        }
+                        crate::value::DynamicValue::Null => out.push(Value::Skipped),
+                        other => {
+                            return Err(bad(format!(
+                                "writeArraySet element {other:?} is not a parcelable"
+                            )))
+                        }
+                    }
+                }
+                Value::List(Some(out))
+            }
+        }
         FieldOp::CountedNested(class) => {
             let n = parcel.read_int32()?;
             if n < 0 {
@@ -2383,6 +2417,22 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             let payload = expect_parcelable(value)?;
             write_icon(parcel, payload)?;
         }
+        FieldOp::ArraySet => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("ArraySet too large"))?,
+                );
+                for item in items {
+                    let p = expect_parcelable(item)?;
+                    write_dynamic(
+                        parcel,
+                        &crate::value::DynamicValue::Parcelable(p.clone()),
+                    )?;
+                }
+            }
+            _ => return Err(bad(format!("expected an ArraySet value, got {value:?}"))),
+        },
         FieldOp::CountedNested(_class) => match value {
             Value::List(None) | Value::Skipped => parcel.write_int32(-1),
             Value::List(Some(items)) => {
@@ -3495,10 +3545,12 @@ fn read_icon(parcel: &mut Parcel) -> Result<Parcelable> {
     let mut values = vec![Value::Int(kind)];
     match kind {
         ICON_TYPE_RESOURCE => {
+            // The image's `Icon.writeToParcel` writes the package and the id and
+            // nothing else for a resource icon (no `useMonochrome`/`insetScale`:
+            // those are newer than android-34's `Icon`; the boot DEX scan is
+            // `writeString`, `writeInt`, then the tint marker).
             values.push(Value::Str(parcel.read_string16()?)); // resPackage
             values.push(Value::Int(parcel.read_int32()?)); // resId
-            values.push(Value::Bool(parcel.read_bool()?)); // useMonochrome
-            values.push(Value::Float(parcel.read_float()?)); // insetScale
         }
         ICON_TYPE_URI | ICON_TYPE_URI_ADAPTIVE_BITMAP => {
             values.push(Value::Str(parcel.read_string16()?)); // uriString
@@ -3529,8 +3581,6 @@ fn write_icon(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
         ICON_TYPE_RESOURCE => {
             parcel.write_string16_opt(expect_str(&values[1])?)?;
             parcel.write_int32(expect_int(&values[2])?);
-            parcel.write_bool(expect_bool(&values[3])?);
-            parcel.write_float(expect_float(&values[4])?);
         }
         ICON_TYPE_URI | ICON_TYPE_URI_ADAPTIVE_BITMAP => {
             parcel.write_string16_opt(expect_str(&values[1])?)?;
@@ -3542,7 +3592,7 @@ fn write_icon(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
         other => return Err(bad(format!("unmodelled Icon type {other}"))),
     }
     let tint_index = match kind {
-        ICON_TYPE_RESOURCE => 5,
+        ICON_TYPE_RESOURCE => 3,
         ICON_TYPE_DATA | ICON_TYPE_URI | ICON_TYPE_URI_ADAPTIVE_BITMAP => 2,
         _ => unreachable!(),
     };
@@ -3758,6 +3808,7 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::Nested(_) => call == "writeParcelable",
         FieldOp::ParcelableList(_) => call == "writeParcelableList",
         FieldOp::Dynamic => call == "writeValue",
+        FieldOp::ArraySet => call == "writeArraySet",
         FieldOp::PersistableBundle => {
             // `Parcel.writePersistableBundle`, or a direct nested
             // `PersistableBundle.writeToParcel` call (which the scanner records
@@ -4090,10 +4141,9 @@ pub mod scan {
         };
         if m.class == "Landroid/os/Parcel;" && m.name == "writeArraySet" {
             // `Parcel.writeArraySet` writes an `int` count (`-1` for null) and
-            // then one `writeValue` per element. Only the count is a linear
-            // `Parcel.write*` call, so a spec models it as one `Int` (the
-            // leading marker), like `writeTypedArray`.
-            out.calls.push("writeInt".to_string());
+            // then one `writeValue` per element (`Parcel.java:1387-1393`). A
+            // spec models the whole shape as one [`FieldOp::ArraySet`].
+            out.calls.push("writeArraySet".to_string());
         } else if m.class == "Landroid/os/Parcel;" && m.name.starts_with("write") {
             if m.name != "writeInterfaceToken"
                 && m.name != "writeNoException"

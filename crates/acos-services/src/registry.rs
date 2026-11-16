@@ -288,6 +288,36 @@ pub fn install_with_handles_and_insets(
     atms_state.runtime_permissions = Some(Arc::clone(&permissions));
     atms_state.ams.runtime_permissions = Some(Arc::clone(&permissions));
     let atms = Arc::new(Mutex::new(atms_state));
+    // MODNOTIF4: the `IIntentSender` node pool. A `PendingIntent` is only a
+    // strong binder to one of these (`PendingIntent.writeToParcel`), so the
+    // binders exist before any app asks for one; `getIntentSender` fills a slot
+    // and answers its binder.
+    let mut sender_nodes = Vec::with_capacity(crate::pending_intent::SENDER_NODES);
+    for slot in 0..crate::pending_intent::SENDER_NODES {
+        let node = host.register_dynamic(
+            crate::pending_intent::DESCRIPTOR,
+            Box::new(crate::pending_intent::IntentSenderService::new(
+                Arc::clone(&atms),
+                slot,
+            )),
+        );
+        sender_nodes.push(node.0);
+    }
+    atms.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .ams
+        .intent_senders
+        .bind_nodes(sender_nodes);
+    // A `notifications` `tap` must really fire the sender, and the delivery is
+    // the AMS's (`send_pending_intent`), so the registry publishes it here.
+    let fire_atms = Arc::clone(&atms);
+    host.set_pending_intent_fire(Arc::new(move |binder: u64, code: i32| {
+        fire_atms
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .ams
+            .send_pending_intent(binder, code)
+    }));
     host.set_permission_store(Arc::clone(&permissions));
     let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
     let display = Arc::new(Mutex::new(crate::display::DisplayState::new(

@@ -101,6 +101,14 @@ fn the_permissions_module_passes_the_conformance_kit() {
     run_in_quiet_process("system.permissions");
 }
 
+/// MODNOTIF4: the notifications module takes the `notification` name over from
+/// `core` and its records are real state, so it owes the same kit as the
+/// permissions module.
+#[test]
+fn the_notifications_module_passes_the_conformance_kit() {
+    run_in_quiet_process("system.notifications");
+}
+
 #[test]
 fn a_gap_name_answers_a_structured_tombstone_naming_the_module_and_the_attach_call() {
     let mut host = ServiceHost::new();

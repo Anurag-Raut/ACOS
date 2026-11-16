@@ -1101,6 +1101,7 @@ impl ModuleRegistry {
         for module in [
             Box::new(crate::core_module::CoreModule::new()) as Box<dyn Module>,
             Box::new(crate::modules::permissions::PermissionsModule::new()),
+            Box::new(crate::modules::notifications::NotificationsModule::new()),
             Box::new(crate::modules::vibrator::VibratorModule::new()),
         ] {
             if let Err(error) = registry.add(module) {

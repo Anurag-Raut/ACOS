@@ -528,10 +528,8 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                             Value::Int(2), // TYPE_RESOURCE
                             Value::Str(Some("dev.acos.fixtures.notif".into())),
                             Value::Int(0x7f_01_0001),
-                            Value::Bool(false), // useMonochrome
-                            Value::Float(1.0),  // insetScale
-                            Value::Cond { present: false, values: vec![] },
-                            Value::Int(0), // BlendMode.SRC_IN
+                            Value::Cond { present: false, values: vec![] }, // no tint
+                            Value::Int(5), // BlendMode.SRC_IN (the image's default)
                         ],
                     ))],
                 },
@@ -601,7 +599,7 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                 Value::Cond { present: false, values: vec![] }, // mBubbleMetadata
                 Value::Bool(false), // mAllowSystemGeneratedContextualActions
                 Value::Int(0),      // mFgsDeferBehavior
-                Value::Int(-1),     // allPendingIntents (null ArraySet)
+                Value::List(None),  // allPendingIntents (null ArraySet)
             ],
         ),
         "android.app.Notification$Action" => Parcelable::ordered(
@@ -628,10 +626,8 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                 Value::Int(2), // TYPE_RESOURCE
                 Value::Str(Some("dev.acos.fixtures.notif".into())),
                 Value::Int(0x7f_01_0001),
-                Value::Bool(false),
-                Value::Float(1.0),
                 Value::Cond { present: false, values: vec![] },
-                Value::Int(0),
+                Value::Int(5), // BlendMode.SRC_IN
             ],
         ),
         "android.view.RoundedCorners" => {
@@ -668,10 +664,8 @@ fn icon_payload_round_trips() {
             Value::Int(2),
             Value::Str(Some("dev.acos.fixtures.notif".into())),
             Value::Int(0x7f_01_0001),
-            Value::Bool(false),
-            Value::Float(1.0),
             Value::Cond { present: false, values: vec![] },
-            Value::Int(0),
+            Value::Int(5), // BlendMode.SRC_IN
         ],
     );
     let mut parcel = acos_parcel::Parcel::new();
@@ -680,4 +674,78 @@ fn icon_payload_round_trips() {
     let decoded = parcelable::read_payload("android.graphics.drawable.Icon", &mut parcel)
         .expect("read icon");
     assert_eq!(decoded, icon);
+}
+
+/// `Notification.writeToParcel` ends with `writeArraySet(allPendingIntents)`
+/// (`Notification.java:3184-3190`): an `int` count (`-1` for null) and one
+/// `writeValue` per `PendingIntent` the marshaling listener collected. The
+/// MODNOTIF3 codec wrote the null encoding only; a notification that carries a
+/// `contentIntent` really produces a one-element set, so the field is modelled
+/// (`FieldOp::ArraySet`) and both shapes round-trip.
+#[test]
+fn notification_all_pending_intents_array_set_round_trips() {
+    let base = sample_for("android.app.Notification").expect("notification sample");
+    // Absent: the framework's `writeInt(-1)`.
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &base).expect("write notification");
+    let null_tail = parcel.marshall();
+    assert_eq!(
+        null_tail[null_tail.len() - 4..],
+        [0xff, 0xff, 0xff, 0xff],
+        "a null allPendingIntents is the -1 count"
+    );
+
+    // Present: the contentIntent is collected into the set, and the set's
+    // element is that same `PendingIntent` written as a `VAL_PARCELABLE`.
+    let intent = Parcelable::ordered(
+        "android.app.PendingIntent",
+        vec![Value::Binder(Some(acos_parcel::binder::BinderId(7)))],
+    );
+    let mut values = base.fields().expect("ordered").to_vec();
+    let last = values.len() - 1;
+    values[last] = Value::List(Some(vec![Value::Parcelable(intent)]));
+    let with_set = Parcelable::ordered("android.app.Notification", values);
+
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &with_set).expect("write notification");
+    let bytes = parcel.marshall();
+    // The tail is the count (1), the `VAL_PARCELABLE` tag of the collected
+    // intent and, at the very end, the strong binder the `PendingIntent` holds.
+    let mut binder_only = acos_parcel::Parcel::new();
+    binder_only.write_strong_binder(acos_parcel::binder::BinderId(7));
+    let binder_bytes = binder_only.marshall();
+    assert!(
+        bytes.ends_with(&binder_bytes),
+        "the collected PendingIntent is written as its strong binder"
+    );
+    // Everything before the trailing set is byte-identical to the null case
+    // (there the `-1` count sits at the end), and the set is
+    // `count=1`, `VAL_PARCELABLE`, the body length, the class name
+    // (`writeString`: u32 length + UTF-16 + NUL) and the strong binder.
+    let count_at = null_tail.len() - 4;
+    assert_eq!(
+        &bytes[..count_at],
+        &null_tail[..count_at],
+        "the fields before allPendingIntents are unchanged"
+    );
+    let tail = &bytes[count_at..];
+    assert_eq!(&tail[..4], &[1, 0, 0, 0], "one collected PendingIntent");
+    assert_eq!(&tail[4..8], &[4, 0, 0, 0], "VAL_PARCELABLE");
+    let name = "android.app.PendingIntent";
+    assert_eq!(&tail[12..16], &(name.len() as u32).to_le_bytes(), "class name length");
+    let mut utf16 = Vec::new();
+    for unit in name.encode_utf16() {
+        utf16.extend_from_slice(&unit.to_le_bytes());
+    }
+    assert_eq!(&tail[16..16 + utf16.len()], &utf16[..], "class name");
+    assert!(
+        tail.ends_with(&binder_bytes),
+        "the collected PendingIntent is written as its strong binder"
+    );
+
+    parcel.set_data_position(0);
+    let decoded =
+        parcelable::read_payload("android.app.Notification", &mut parcel).expect("read payload");
+    assert_eq!(decoded, with_set, "the ArraySet did not round-trip");
+    parcel.enforce_no_data_avail().expect("no trailing bytes");
 }
