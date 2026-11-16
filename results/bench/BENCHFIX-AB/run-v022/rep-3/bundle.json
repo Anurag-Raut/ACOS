@@ -1,0 +1,95 @@
+{
+  "host_after": {
+    "loadavg1": 4.15,
+    "loadavg15": 9.97,
+    "loadavg5": 6.82,
+    "mem_available_gib": 48.36,
+    "mem_available_mib": 49518.2,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-cc08ef25-0c7d3bc6b56dd90e && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && CARGO_",
+        "comm": "bash",
+        "pid": 822992
+      },
+      {
+        "cmd": "timeout 1200 tools/art-runtime/run-exclusive.sh --task INTEG030 -- tools/guarded.sh --mem 12G --time 1000 -- cargo test --offline --no-fail-fast -p acos-vm -p a",
+        "comm": "timeout",
+        "pid": 822993
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task INTEG030 -- tools/guarded.sh --mem 12G --time 1000 -- cargo test --offline --no-fail-fast -p acos-vm -p acos-art",
+        "comm": "bash",
+        "pid": 822994
+      }
+    ],
+    "runnable": "1/2084",
+    "used_mib": 12390.5,
+    "used_pct": 20.01,
+    "utc": "2026-11-16T04:39:04+00:00"
+  },
+  "host_before": {
+    "loadavg1": 10.38,
+    "loadavg15": 11.98,
+    "loadavg5": 11.26,
+    "mem_available_gib": 47.99,
+    "mem_available_mib": 49139.2,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-cc08ef25-0c7d3bc6b56dd90e && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && CARGO_",
+        "comm": "bash",
+        "pid": 822992
+      },
+      {
+        "cmd": "timeout 1200 tools/art-runtime/run-exclusive.sh --task INTEG030 -- tools/guarded.sh --mem 12G --time 1000 -- cargo test --offline --no-fail-fast -p acos-vm -p a",
+        "comm": "timeout",
+        "pid": 822993
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task INTEG030 -- tools/guarded.sh --mem 12G --time 1000 -- cargo test --offline --no-fail-fast -p acos-vm -p acos-art",
+        "comm": "bash",
+        "pid": 822994
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb && env CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_",
+        "comm": "bash",
+        "pid": 924888
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 12G --time 900 -- cargo build --release --offline -p acos-cli -p acos-art",
+        "comm": "bash",
+        "pid": 924889
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 900 cargo build --release --offline -p acos-cli -p acos-art",
+        "comm": "timeout",
+        "pid": 924899
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-cli -p acos-art",
+        "comm": "cargo",
+        "pid": 924900
+      }
+    ],
+    "runnable": "2/2099",
+    "used_mib": 12769.5,
+    "used_pct": 20.63,
+    "utc": "2026-11-16T04:35:21+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "memory": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 222.933
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-16T04:35:21+00:00",
+  "wall_s": 222.933
+}

@@ -1418,8 +1418,11 @@ def phase_memory(args):
             add(samples, "wakeups_idle_n%d_per_s" % n, delta["wakeups_per_s"], True)
         for base in sessions:
             destroy(d, base, teardowns, "memory-n10")
-        checks["mode_wall_s"] = mode_wall
-        checks["reps"] = {"other": reps, "fast": fast_reps}
+        # BENCHFIX: this phase used to end on `checks["mode_wall_s"] = mode_wall`
+        # (and `reps`/`fast_reps`), copy-pasted from phase_latency where those
+        # exist. The NameError came *after* every sample was taken, so the whole
+        # memory phase reported ok=false and its group rc=1 on every run.
+        checks["window_s"] = 60.0
         checks["teardown_verified"] = sum(1 for row in teardowns if row.get("verified"))
     except Exception as exc:  # noqa: BLE001
         errors.append("%s: %s" % (type(exc).__name__, exc))

@@ -1,0 +1,75 @@
+{
+  "host_after": {
+    "loadavg1": 9.7,
+    "loadavg15": 14.73,
+    "loadavg5": 20.96,
+    "mem_available_gib": 48.34,
+    "mem_available_mib": 49503.3,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-cc08ef25-0c7d3bc6b56dd90e && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && CARGO_",
+        "comm": "bash",
+        "pid": 822992
+      },
+      {
+        "cmd": "timeout 1200 tools/art-runtime/run-exclusive.sh --task INTEG030 -- tools/guarded.sh --mem 12G --time 1000 -- cargo test --offline --no-fail-fast -p acos-vm -p a",
+        "comm": "timeout",
+        "pid": 822993
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task INTEG030 -- tools/guarded.sh --mem 12G --time 1000 -- cargo test --offline --no-fail-fast -p acos-vm -p acos-art",
+        "comm": "bash",
+        "pid": 822994
+      }
+    ],
+    "runnable": "2/2147",
+    "used_mib": 12405.4,
+    "used_pct": 20.04,
+    "utc": "2026-11-16T04:29:47+00:00"
+  },
+  "host_before": {
+    "loadavg1": 18.02,
+    "loadavg15": 9.65,
+    "loadavg5": 12.67,
+    "mem_available_gib": 45.86,
+    "mem_available_mib": 46959.9,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-cc08ef25-0c7d3bc6b56dd90e && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && CARGO_",
+        "comm": "bash",
+        "pid": 822992
+      },
+      {
+        "cmd": "timeout 1200 tools/art-runtime/run-exclusive.sh --task INTEG030 -- tools/guarded.sh --mem 12G --time 1000 -- cargo test --offline --no-fail-fast -p acos-vm -p a",
+        "comm": "timeout",
+        "pid": 822993
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task INTEG030 -- tools/guarded.sh --mem 12G --time 1000 -- cargo test --offline --no-fail-fast -p acos-vm -p acos-art",
+        "comm": "bash",
+        "pid": 822994
+      }
+    ],
+    "runnable": "2/2413",
+    "used_mib": 14948.8,
+    "used_pct": 24.15,
+    "utc": "2026-11-16T04:25:42+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "memory": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 245.393
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-16T04:25:42+00:00",
+  "wall_s": 245.393
+}

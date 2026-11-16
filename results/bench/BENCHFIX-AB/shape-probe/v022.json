@@ -1,0 +1,73 @@
+{
+ "acos": ".cache/v022-bin/acos",
+ "launch": {
+  "ok": true,
+  "result_keys": [
+   "activity",
+   "animations",
+   "apk",
+   "boot_image",
+   "boot_ms",
+   "engine",
+   "engine_frozen",
+   "events",
+   "evidence",
+   "evidence_label",
+   "first_frame",
+   "frame",
+   "insets",
+   "isolation",
+   "last_frame_seq",
+   "launched",
+   "ms_basis",
+   "relaunch",
+   "replaced_guest",
+   "session_id",
+   "session_token",
+   "settle",
+   "stage_reached",
+   "stages",
+   "timing",
+   "tree",
+   "tree_max_nodes",
+   "tree_node_count",
+   "tree_truncated",
+   "trust"
+  ],
+  "tree_is_compact": false,
+  "tree_keys": [
+   "max_nodes",
+   "nodes",
+   "truncated"
+  ],
+  "tree_nodes_inline": 1,
+  "tree_path": null,
+  "frame": {
+   "md5": "7218b3ae7e51e4035c89fd96646d72d7",
+   "pixels": null,
+   "frame_seq": 1,
+   "buffered": null
+  }
+ },
+ "full_tree": {
+  "nodes": 14,
+  "count_text": "0",
+  "truncated": false,
+  "counter_problems": []
+ },
+ "old_capture_args": {
+  "ok": false,
+  "error": "INVALID_ARGUMENT",
+  "message": "`screenshot` must be true or a path inside the session's artifacts directory (/home/Qui/.t3/worktrees/acos/t3-0065c42b-364d4668d4838043/.cache/probe-v022/sessions/s_probe); /home/Qui/.t3/worktrees/aco",
+  "has_frame": false,
+  "png_written": false
+ },
+ "frame_only_captures": {
+  "md5s": [
+   "7218b3ae7e51e4035c89fd96646d72d7",
+   "7218b3ae7e51e4035c89fd96646d72d7"
+  ],
+  "identical": true,
+  "launch_md5_matches": true
+ }
+}

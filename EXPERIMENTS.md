@@ -4678,3 +4678,50 @@ nothing in this change is on the tap path).
   peak vs the 256 MiB limit). INT-KG-AB recorded the same `launch_hang` flake on
   `main` and queued it as LHFLAKE.
 
+
+## E14.1 — BENCHFIX: the A/B gate runs again, and it says one thing regressed (M8 form fast +3.6 ms) — MEASURED
+
+- **Date / commit:** 2026-11-16, `benchfix` (base rel-030 `b8c30224`); harness commit `b545b1e4`.
+  Arm A tag `v0.2.2` (`ce14b888`, binary sha256 `50537b60…`), arm B rel-030 HEAD
+  (binary sha256 `7f16d333…`).
+- **Question / goal:** ADR-0028's gate could not run on main or rel-030
+  (`phase_latency`: `two consecutive settled captures differ: [None, None]`;
+  `phase_cold`: `reference tree is not the count-0 screen: count='0' nodes=14`).
+  Fix the harness to read the reply the product documents and produce the v0.2.2 vs rel-030 table.
+- **Method:** 3 interleaved reps, `--reps 20 --fast-reps 40` (ADR-0028 defaults), every
+  acquisition through `run-exclusive.sh --task BENCHFIX --exclusive` + `guarded.sh`
+  (8G/540 s latency+cold, 16G/600 s memory); `ab-compare.py` lattice view. Host: 9950X, 60 GiB,
+  load 1.5–4.5, no phase marked noisy.
+- **Inputs:** `fixtures/build/apps/counter.apk`, `form-validation.apk` (hardlinked from the shared
+  fixture build); sysroot `.cache/art/sysroot`.
+- **Result:** 33 metrics per arm (M1/M2 anon+shmem and Pss N=1/5/10, M3, M4 strict/fast, M5,
+  M6 strict/fast, M7, M8 counter+form strict/fast, ack, GL1 teardown, idle CPU/wakeups).
+  Gate: **one lattice regression — M8 tap→settled form fast +3.64 ms / +11.1 %** (first-slot
+  98 %→85 %, −13 pp), consistent across all three reps (32.4/32.5/32.8 vs 34.4/34.0/36.7 ms);
+  old median gate: +5.8 %, within ±14 % / 2 ms. M4 launch fast −9.8 % (+29 pp first-slot),
+  M6 reset fast −11.3 % (+16 pp), M4 strict −6.0 %, everything else parity (M3 +3.0 %, M5 +1.6 %,
+  M7 flat, memory +2..4 %, CPU/wakeups flat). Evidence:
+  `results/bench/BENCHFIX-AB.md`, raw JSON under `results/bench/BENCHFIX-AB/`.
+- **Root causes (proved with `results/bench/BENCHFIX-AB/shape-probe/*.json`):** (1) the reference
+  asked for `screenshot: <scratch>/ref-N.png`; FB2c confines that destination to the session's
+  artifacts directory, so both captures were `INVALID_ARGUMENT` with **no** `result.frame` — the
+  frame md5 was never lost (launch and both frame-only captures carry the same
+  `frame.md5 = 7218b3ae…` on both arms). (2) P7/P9's reference rule was `len(nodes) == 12`; the
+  same verified count-0 screen is 14 nodes on both arms, and on rel-030 the launch tree is a REL3C
+  compact page (4 visible nodes + `tree_path`) — the bench walked a page. Also found:
+  `phase_memory` ended on a copy-pasted `mode_wall` `NameError` after all samples were taken (so the
+  memory group was rc=1 every run), and the M8 tap check read `settle.state_changed`, which is
+  `null` in strict mode (`None is not False` — the check never checked).
+- **Finding:** the harness now fails loudly instead of scoring `None`: `tools/bench/bench_reply.py`
+  + `tools/bench/test_bench_reply.py` (26 tests) pin both reply shapes (v0.2.2 inline full tree,
+  rel-030 compact page + `tree_path`) and refuse a compact page without a path, an empty frame md5,
+  `[None, None]`, a missing `screenshot.path`, and a wrong/truncated/skeleton reference screen. No
+  product code changed; no check was weakened (the reference rule is now semantic: count text 0,
+  fixture ids laid out, untruncated, more than a skeleton, plus the byte-identical capture pair).
+- **Fidelity / evidence:** measured, release binaries, owned daemons only; `host-pixel` frames.
+- **Regression / false pass:** M8 form fast is a real, reproducible +3.6 ms regression under the
+  lattice gate — reported, not fixed here (product path, out of BENCHFIX scope). One launch of 60
+  failed per arm in one rep (GUEST_EXITED / NO_FRESH_FRAME, the queued flake); recorded as a failed
+  step, never as a sample.
+- **Conclusion / next:** the release gate can run again; the remaining work is the M8 form fast
+  path (REL3C/REL3F reply work on the submit tap) before v0.3.0 is claimed green.
