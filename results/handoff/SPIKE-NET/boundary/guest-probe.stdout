@@ -1,0 +1,16 @@
+probe: uid 10192
+probe: cap-eff 0000000000000000
+probe: userns 4026533637
+probe: netns 4026533572
+probe: connect-public OK
+probe: connect-lan Operation now in progress
+probe: connect-host-loopback Connection refused
+probe: socket-netlink DENIED:EACCES
+probe: socket-inet ALLOWED
+probe: so-mark DENIED:EPERM
+probe: socket-raw-inet DENIED:EPERM
+probe: iptables-binary PRESENT
+probe: iptables-flush exit=1
+probe: iptables-flush-output iptables: Failed to initialize nft: Permission denied
+
+probe: done

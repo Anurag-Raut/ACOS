@@ -75,6 +75,7 @@ fn run_with_reference(scenario_name: &str, app: &str, artifacts_name: &str) -> R
         request_id: format!("req_test_{scenario_name}"),
         flags: vec!["--reference".to_string()],
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome =
@@ -175,6 +176,7 @@ steps:
         request_id: "req_unknown_step".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).unwrap();
@@ -261,6 +263,7 @@ steps:
         request_id: "req_fidelity".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).unwrap();
@@ -320,6 +323,10 @@ enum SliceMode {
     DriftingObserve,
     /// The frame is not meaningful.
     Placeholder,
+    /// NET4: the tree text only becomes `clicks: 1` on the *second* observation —
+    /// the shape of an app whose status line is filled in by a background task
+    /// (measured: `net-check`'s `HTTP 200`).
+    LateText,
 }
 
 struct SliceBackend {
@@ -333,6 +340,8 @@ struct SliceBackend {
     /// SE1: the strict settle's measured pixel fact. `None` = the backend
     /// reports no settle record at all (what a non-pixel backend does today).
     settle_pixels: Option<bool>,
+    /// `observe()` calls so far (`SliceMode::LateText`).
+    observations: u32,
 }
 
 impl SliceBackend {
@@ -346,6 +355,7 @@ impl SliceBackend {
             screenshot_initial: initial,
             screenshot_after: after,
             settle_pixels: None,
+            observations: 0,
         }
     }
 
@@ -368,9 +378,14 @@ impl SliceBackend {
     }
 
     fn current(&self) -> SessionObservation {
+        let tree_version = if self.mode == SliceMode::LateText && self.observations > 1 {
+            1
+        } else {
+            self.tree_version
+        };
         slice_observation(
             self.frame_seq,
-            self.tree_version,
+            tree_version,
             self.screenshot(),
             self.meaningful(),
         )
@@ -463,6 +478,7 @@ impl Backend for SliceBackend {
     }
 
     fn observe(&mut self) -> Result<SessionObservation, BackendError> {
+        self.observations += 1;
         if self.mode == SliceMode::DriftingObserve {
             self.frame_seq += 1;
         }
@@ -543,6 +559,7 @@ fn run_slice_with_settle(
         request_id: "req_advisor_rule".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).expect("run");
@@ -569,6 +586,7 @@ fn run_slice_keep(
         request_id: "req_slice_keep".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).expect("run");
@@ -658,6 +676,66 @@ steps:
   - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
   - tap: {selector: {id: btn}}
 "#;
+
+/// NET4: `assert_text`'s `timeout_ms` is a real, event-driven wait.
+///
+/// The schema documents it ("the runtime waits for a matching frame/tree, never
+/// for a fixed sleep") and `scenarios/net-check.yaml` relies on it for a status
+/// line a background fetch fills in — but the executor evaluated a single
+/// observation and returned, so that step failed whenever the first sample was
+/// still `pending` (measured: 1 run in 18, `net-check` on the relay arm).
+///
+/// Before this change both halves of this test failed: the first scenario failed
+/// on its first sample (the text was not there yet), and the second one — with no
+/// timeout — failed too, because there was no second sample at all.
+#[test]
+fn an_assertion_timeout_waits_for_the_tree_and_a_bare_assertion_does_not() {
+    let waiting = r#"
+version: 1
+name: late-text-with-timeout
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 1"}
+      timeout_ms: 5000
+"#;
+    let outcome = run_slice(
+        waiting,
+        SliceMode::LateText,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "a scenario that asks for 5 s must sample again instead of failing on the first tree: {:?}",
+        outcome.verdict.failure
+    );
+    let assert_step = outcome
+        .verdict
+        .steps
+        .iter()
+        .find(|step| step.step == "assert_text")
+        .expect("assert step");
+    assert_eq!(assert_step.status, Status::Pass);
+
+    // No `timeout_ms`: unchanged behaviour, one sample, an honest failure.
+    let one_shot = waiting.replace("      timeout_ms: 5000\n", "");
+    let outcome = run_slice(
+        &one_shot,
+        SliceMode::LateText,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
+    assert_eq!(outcome.verdict.verdict, Status::Fail, "no timeout = no wait");
+    let failure = outcome.verdict.failure.as_ref().expect("a failure");
+    assert_eq!(failure.error.code, acos_protocol::ErrorCode::AssertionFailed);
+}
 
 fn tap_step(outcome: &RunOutcome) -> &acos_protocol::verdict::StepResult {
     outcome
@@ -1011,6 +1089,7 @@ steps:
         request_id: "req_wait_for_teeth".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).expect("run");
@@ -1220,6 +1299,7 @@ fn run_log_scenario(
         request_id: "req_log_poll".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     run_scenario(scenario, &options, backend, &clock).expect("run_scenario succeeds")

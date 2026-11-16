@@ -106,6 +106,9 @@ pub struct Step {
     /// Assert node state flags.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_state: Option<StateAssertion>,
+    /// Assert the window stack order (bottom to top) and focus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assert_windows: Option<WindowOrderAssertion>,
     /// Assert a log sequence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_log: Option<LogAssertion>,
@@ -150,6 +153,23 @@ pub struct Step {
     /// debuggable/source-owned builds; never for arbitrary third-party APKs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_activity_method: Option<CallActivityMethodStep>,
+    /// ADR-0029 item 4: one service-module operation in the middle of a run.
+    ///
+    /// `op` is either the module-lifecycle word (`attach`/`detach`, with an
+    /// optional `profile`/`config`) or a module's own control op
+    /// (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`, ...) with
+    /// `args`. This is the scenario spelling of the agent API
+    /// (`acos_services` for attach/detach, `acos_service_ctl` for a control op),
+    /// so a scripted module can be driven between assertions instead of only at
+    /// launch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_ctl: Option<ServiceCtlStep>,
+    /// ADR-0029 item 4/5: module ids this step needs attached (`feedback.vibrator`).
+    ///
+    /// A step whose module is `off` is `unsupported`, never `pass`: the executor
+    /// refuses to run an assertion against behaviour the session does not have.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires_services: Vec<String>,
 }
 
 /// A borrowed view of the one populated step kind.
@@ -177,6 +197,8 @@ pub enum StepRef<'a> {
     AssertNotVisible(&'a VisibilityAssertion),
     /// See [`Step::assert_state`].
     AssertState(&'a StateAssertion),
+    /// See [`Step::assert_windows`].
+    AssertWindows(&'a WindowOrderAssertion),
     /// See [`Step::assert_log`].
     AssertLog(&'a LogAssertion),
     /// See [`Step::assert_no_crash`].
@@ -203,6 +225,8 @@ pub enum StepRef<'a> {
     SetTime(&'a TimeSetup),
     /// See [`Step::call_activity_method`].
     CallActivityMethod(&'a CallActivityMethodStep),
+    /// See [`Step::service_ctl`].
+    ServiceCtl(&'a ServiceCtlStep),
 }
 
 impl StepRef<'_> {
@@ -220,6 +244,7 @@ impl StepRef<'_> {
             StepRef::AssertVisible(_) => "assert_visible",
             StepRef::AssertNotVisible(_) => "assert_not_visible",
             StepRef::AssertState(_) => "assert_state",
+            StepRef::AssertWindows(_) => "assert_windows",
             StepRef::AssertLog(_) => "assert_log",
             StepRef::AssertNoCrash(_) => "assert_no_crash",
             StepRef::AssertScreenshot(_) => "assert_screenshot",
@@ -233,6 +258,7 @@ impl StepRef<'_> {
             StepRef::SetTheme(_) => "set_theme",
             StepRef::SetTime(_) => "set_time",
             StepRef::CallActivityMethod(_) => "call_activity_method",
+            StepRef::ServiceCtl(_) => "service_ctl",
         }
     }
 }
@@ -252,6 +278,7 @@ impl Step {
             self.assert_visible.is_some(),
             self.assert_not_visible.is_some(),
             self.assert_state.is_some(),
+            self.assert_windows.is_some(),
             self.assert_log.is_some(),
             self.assert_no_crash.is_some(),
             self.assert_screenshot.is_some(),
@@ -265,6 +292,7 @@ impl Step {
             self.set_theme.is_some(),
             self.set_time.is_some(),
             self.call_activity_method.is_some(),
+            self.service_ctl.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -308,6 +336,9 @@ impl Step {
         }
         if self.assert_state.is_some() {
             return self.assert_state.as_ref().map(StepRef::AssertState);
+        }
+        if self.assert_windows.is_some() {
+            return self.assert_windows.as_ref().map(StepRef::AssertWindows);
         }
         if self.assert_log.is_some() {
             return self.assert_log.as_ref().map(StepRef::AssertLog);
@@ -353,6 +384,9 @@ impl Step {
                 .call_activity_method
                 .as_ref()
                 .map(StepRef::CallActivityMethod);
+        }
+        if self.service_ctl.is_some() {
+            return self.service_ctl.as_ref().map(StepRef::ServiceCtl);
         }
         None
     }
@@ -601,6 +635,32 @@ pub enum PermissionState {
     Reset,
 }
 
+/// `assert_windows`: the window stack in policy z order, bottom first.
+///
+/// This is the LAYER1 assertion: it reads the tree's `windows[]` block (the
+/// host's AOSP layer policy, not insertion order), so an application overlay
+/// that is drawn and tapped above an activity can only pass when the reported
+/// stack actually says so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WindowOrderAssertion {
+    /// Expected window kinds, bottom to top (`application`,
+    /// `application_overlay`, `sub_window`, …). The count must match exactly:
+    /// a missing or extra window is a failure, never silently ignored.
+    pub order: Vec<String>,
+    /// Optional expected kind of the focused window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<String>,
+    /// Optional expected `LayoutParams.TYPE_*` name of the focused window.
+    /// This is the precise form: the activity is `TYPE_BASE_APPLICATION`, a
+    /// dialog is `TYPE_APPLICATION`, and both have kind `application`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus_type: Option<String>,
+    /// Optional expected `LayoutParams.TYPE_*` names, bottom to top. When
+    /// present this must have the same length as `order`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub types: Option<Vec<String>>,
+}
+
 /// `set_permission`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct PermissionSetup {
@@ -653,6 +713,46 @@ pub struct TimeSetup {
     pub timezone: Option<String>,
 }
 
+/// `service_ctl`: one service-module operation between assertions (ADR-0029
+/// item 4).
+///
+/// `op` is `attach` (with `profile`/`config`), `detach`, or one of the module's
+/// own control ops (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`,
+/// ...). The step is the one scenario spelling of the agent API —
+/// `acos_services {op: attach|detach}` for the lifecycle words and
+/// `acos_service_ctl {module, op, args}` for a control op — so a scripted module
+/// can be driven mid-run: set a sensor value, assert the view, play a shake,
+/// detach and assert the honest empty answer. A control op reaches only a module
+/// that is attached in this run; a step naming a detached module is a structured
+/// step failure (never a silent no-op).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceCtlStep {
+    /// Module id (`sensors`, `feedback.vibrator`).
+    pub module: String,
+    /// `attach`, `detach`, or a module control op (`set_value`, `play`, ...).
+    pub op: String,
+    /// Profile for `attach` (`off`/`stub`/`scripted`/`real`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// Module config for `attach`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<Value>,
+    /// Control-op arguments (`{sensor: "accelerometer", values: [0,0,9.81]}`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Value>,
+    /// What the reply must contain, as a JSON **subset**.
+    ///
+    /// Objects match key by key (an expected key the reply lacks is a
+    /// failure), arrays match element by element with the same length, and
+    /// every other value must be equal. Absent = the reply is evidence only.
+    /// This is what makes a control op an *assertion*: `list` can require the
+    /// posted notification's title/channel/actions, `tap` the fired sender's
+    /// `start_result`, `dismiss` an empty `posted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect: Option<Value>,
+}
+
 /// `call_activity_method` (optional; debug/source-owned builds only).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CallActivityMethodStep {
@@ -665,6 +765,7 @@ pub struct CallActivityMethodStep {
     #[serde(default)]
     pub args: Vec<Value>,
 }
+
 
 /// Artifact options.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -767,6 +868,12 @@ pub struct Scenario {
     /// it is never for animation/transition testing. Launch-time only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animations: Option<String>,
+    /// ADR-0029 item 4: the service modules this scenario attaches at launch,
+    /// in order. Shape is the launch-request shape (`{id, profile, config}`);
+    /// the profiles and ids are validated here so a typo is an invalid
+    /// scenario, never a silently defaulted session.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub services: Vec<ServiceRequest>,
     /// SE2b: the exact failure a **negative** scenario must produce.
     ///
     /// `expectation: fail` only says "the run did not pass"; it accepts ANY
@@ -854,6 +961,25 @@ impl Scenario {
         serde_yaml_ng::to_string(self)
     }
 }
+
+/// One `services:` entry (`{id, profile, config}`), the scenario spelling of a
+/// launch request (ADR-0029 item 4).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceRequest {
+    /// Module id (`feedback.vibrator`).
+    pub id: String,
+    /// Requested profile; `None` means the module's default (strongest
+    /// implemented) profile, exactly like the MCP/CLI form.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// Module configuration object (scripted state, launch config).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<Value>,
+}
+
+/// The profiles a service module implements (plus `off`).
+pub const SERVICE_PROFILES: &[&str] = &["off", "stub", "scripted", "real"];
 
 /// One validation error with a stable path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1278,6 +1404,19 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     );
                 }
             }
+            StepRef::AssertWindows(assertion) => {
+                if assertion.order.is_empty() {
+                    v.push(&path, "assert_windows.order must list at least one window");
+                }
+                if let Some(types) = &assertion.types {
+                    if types.len() != assertion.order.len() {
+                        v.push(
+                            &path,
+                            "assert_windows.types must have the same length as order",
+                        );
+                    }
+                }
+            }
             StepRef::AssertRegion(assertion) => {
                 if assertion.w == 0 || assertion.h == 0 {
                     v.push(&path, "assert_region needs non-zero w and h");
@@ -1431,6 +1570,70 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     "optional step: only valid for debuggable/source-owned builds with an injected test hook",
                 );
             }
+            StepRef::ServiceCtl(ctl) => {
+                if ctl.module.trim().is_empty() {
+                    v.push(format!("{path}.module"), "module id must not be empty");
+                }
+                if ctl.op.trim().is_empty() {
+                    v.push(format!("{path}.op"), "op must not be empty");
+                }
+                if let Some(profile) = &ctl.profile {
+                    if !SERVICE_PROFILES.contains(&profile.as_str()) {
+                        v.push(
+                            format!("{path}.profile"),
+                            format!(
+                                "unknown profile {profile:?}; use one of {}",
+                                SERVICE_PROFILES.join(", ")
+                            ),
+                        );
+                    }
+                    if ctl.op != "attach" {
+                        v.push(
+                            format!("{path}.profile"),
+                            "`profile` only applies to op `attach`",
+                        );
+                    }
+                }
+                if let Some(config) = &ctl.config {
+                    if !config.is_object() {
+                        v.push(format!("{path}.config"), "config must be an object");
+                    }
+                    if ctl.op != "attach" {
+                        v.push(
+                            format!("{path}.config"),
+                            "`config` only applies to op `attach`",
+                        );
+                    }
+                }
+                if let Some(args) = &ctl.args {
+                    if !args.is_object() && !args.is_null() {
+                        v.push(format!("{path}.args"), "args must be an object");
+                    }
+                }
+                // A control op drives a module that is attached in *this* run:
+                // the scenario's `services:` block attaches it at launch, or an
+                // earlier `service_ctl {op: attach}` step does. A step that can
+                // only ever be refused is a scenario error, not a runtime one —
+                // but the step that *does* the attaching is never one.
+                if ctl.op != "attach" && !ctl.module.trim().is_empty() {
+                    let attached_at_launch =
+                        scenario.services.iter().any(|service| service.id == ctl.module);
+                    let attached_earlier = scenario.steps[..index].iter().any(|step| {
+                        step.service_ctl.as_ref().is_some_and(|earlier| {
+                            earlier.op == "attach" && earlier.module == ctl.module
+                        })
+                    });
+                    if !attached_at_launch && !attached_earlier {
+                        v.push(
+                            &path,
+                            format!(
+                                "module {:?} is not attached by this scenario (no `services:` entry and no earlier `service_ctl: {{op: attach}}`); a control step can only drive an attached module",
+                                ctl.module
+                            ),
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -1440,6 +1643,35 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 v.warn(
                     format!("steps[{index}]"),
                     "step needs screenshots but output.screenshots is false",
+                );
+            }
+        }
+    }
+
+    // ADR-0029 item 4: a `services:` entry must name a module and a profile
+    // this registry knows; the runtime would refuse it anyway, but a scenario
+    // that can never run must fail at parse time with a stable path.
+    for (index, service) in scenario.services.iter().enumerate() {
+        let path = format!("$.services[{index}]");
+        if service.id.trim().is_empty() {
+            v.push(format!("{path}.id"), "a service module id cannot be empty");
+        }
+        if let Some(profile) = &service.profile {
+            if !SERVICE_PROFILES.contains(&profile.as_str()) {
+                v.push(
+                    format!("{path}.profile"),
+                    format!(
+                        "unknown profile {profile:?}; use one of {}",
+                        SERVICE_PROFILES.join(", ")
+                    ),
+                );
+            }
+        }
+        if let Some(config) = &service.config {
+            if !config.is_object() {
+                v.push(
+                    format!("{path}.config"),
+                    format!("config must be an object, got {config}"),
                 );
             }
         }

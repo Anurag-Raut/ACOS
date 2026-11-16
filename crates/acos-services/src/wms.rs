@@ -362,7 +362,12 @@ impl WmsState {
             requested_height,
             sync_seq,
         )?;
-        self.input.update_frame(window, r.frames.frame);
+        // LAYER0: the routing frame, the layer-stack z and the FLAG_NOT_TOUCHABLE
+        // answer are all refreshed together, so a relayout cannot leave the
+        // dispatcher hit-testing against a stale stack.
+        if let Some(record) = self.wm.windows.get(&window) {
+            self.input.refresh_window(record);
+        }
         Ok(r)
     }
 
@@ -370,6 +375,14 @@ impl WmsState {
     pub fn remove(&mut self, window: WindowId) -> WmResult<()> {
         self.wm.remove(window)?;
         self.input.remove_window(window);
+        // The remaining windows' `z` are relative stack positions and just
+        // shifted; a stale one would route a touch to the wrong window.
+        let ids: Vec<WindowId> = self.wm.windows.keys().copied().collect();
+        for id in ids {
+            if let Some(record) = self.wm.windows.get(&id) {
+                self.input.refresh_window(record);
+            }
+        }
         Ok(())
     }
 

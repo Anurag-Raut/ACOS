@@ -1,0 +1,8 @@
+acos-net: session=2 netns=net:[4026533863] iface=acoss2 addr=10.163.2.2/30 gw=10.163.2.1
+curl: (7) Failed to connect to 10.163.2.1:18081 after 0 ms: Could not connect to server
+acos-net: session=2 netns=net:[4026533635] iface=acoss2 addr=10.163.2.2/30 gw=10.163.2.1
+curl: (7) Failed to connect to 10.163.2.1:18081 after 0 ms: Could not connect to server
+acos-net: session=2 netns=net:[4026533688] iface=acoss2 addr=10.163.2.2/30 gw=10.163.2.1
+curl: (7) Failed to connect to 10.163.2.1:18081 after 0 ms: Could not connect to server
+acos-net: session=2 netns=net:[4026533583] iface=acoss2 addr=10.163.2.2/30 gw=10.163.2.1
+curl: (7) Failed to connect to 10.163.2.1:18081 after 0 ms: Could not connect to server

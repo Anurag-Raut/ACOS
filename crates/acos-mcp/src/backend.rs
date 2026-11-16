@@ -93,6 +93,10 @@ impl Capabilities {
             "probed": self.probed,
             "probe_error": self.probe_error,
             "commands": commands,
+            // ADR-0029 item 6: the module catalog and every gap name are
+            // generated from the service-module registry (the same source the
+            // `acos_help` limits section renders), never hand-written here.
+            "modules": acos_services::module::capabilities_json(),
         })
     }
 }
@@ -1163,6 +1167,37 @@ fn truncate(text: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// ADR-0029 item 6: `acos_capabilities` reports the module catalog and every
+    /// gap name, generated from the registry (not hand-written here).
+    #[test]
+    fn capabilities_are_generated_from_the_service_module_registry() {
+        let json = Capabilities::unprobed().to_json();
+        let modules = &json["modules"];
+        let catalog = modules["modules"].as_array().expect("module catalog");
+        assert!(
+            catalog.iter().any(|module| module["id"] == "core"),
+            "`core` must be in the catalog"
+        );
+        assert_eq!(modules["core_attached"], serde_json::json!(true));
+        assert_eq!(
+            modules["default_session"],
+            serde_json::json!([{"id": "core", "profile": "real"}])
+        );
+        let gaps = modules["gaps"].as_array().expect("gap list");
+        assert_eq!(gaps.len(), acos_services::module::TOMBSTONES.len());
+        let vibrator = gaps
+            .iter()
+            .find(|gap| gap["service"] == "vibrator_manager")
+            .expect("vibrator_manager is a known gap");
+        assert_eq!(vibrator["state"], "tombstone");
+        assert_eq!(vibrator["module"], "feedback.vibrator");
+        let wallpaper = gaps
+            .iter()
+            .find(|gap| gap["service"] == "wallpaper")
+            .expect("wallpaper is a known gap");
+        assert_eq!(wallpaper["state"], "off");
+    }
+
     use super::*;
 
     #[test]

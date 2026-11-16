@@ -1,0 +1,17 @@
+[package]
+name = "acos-netd-ctl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The ACOS network relay's control surface: its line protocol, the client that speaks it, and the `acos_net` action table (closed schema + parser). Split out of `acos-netd` in NET5 so the module that owns the controls (`acos-services`) can depend on it — `acos-netd` (the supervisor binary) depends on `acos-services`, never the reverse."
+
+[lib]
+name = "acos_netd_ctl"
+path = "src/lib.rs"
+
+[dependencies]
+libc = "0.2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

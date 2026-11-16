@@ -1,0 +1,157 @@
+{
+  "engine": {
+    "animations": "on",
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "rotate",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/handoff/MODA11Y/artifacts",
+      "engine_report": "results/handoff/MODA11Y/artifacts/engine.json",
+      "retention": "results/handoff/MODA11Y/artifacts/retention.json",
+      "verdict": "results/handoff/MODA11Y/artifacts/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "insets": "report",
+    "mode": "live",
+    "modules": [
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "details": {
+          "binding": "AOSP binds the service and calls IAccessibilityServiceClient.init; ACOS's ART path has no system-initiated bind yet, so onServiceConnected has not run",
+          "clients": 0,
+          "connections": [],
+          "enabled": true,
+          "enabled_services": [
+            "dev.acos.fixtures.a11yprobe/.A11yProbeService"
+          ],
+          "event_count": 0,
+          "event_types": [],
+          "service_bound": false,
+          "unsupported": []
+        },
+        "fidelity": "real",
+        "id": "accessibility",
+        "profile": "real",
+        "reason": "real: settings, client state, service lists, event and interaction records; the AccessibilityService is NOT bound yet (no system-initiated bind on the ART path), so onServiceConnected, takeScreenshot, dispatchGesture and performGlobalAction are unreachable",
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "feedback.vibrator",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      }
+    ],
+    "session_exit": {
+      "abi": null,
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=71MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1431220-i1455937.scope)",
+      "code": null,
+      "disk_free_bytes": 194312155136,
+      "guest_crash": null,
+      "guest_exit": 0,
+      "guest_signal": null,
+      "native_crash": null,
+      "native_crash_path": null,
+      "outcome": "ok",
+      "panic": null,
+      "path": "results/handoff/MODA11Y/artifacts/art-frames/session-exit.json",
+      "retryable": false,
+      "stage": "teardown-evidence"
+    },
+    "timing": {
+      "attributed_ms": 1141,
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "built",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-d58a26e4eaaadfd1",
+        "input_hash": "d58a26e4eaaadfd1",
+        "mode": "shared-fixed",
+        "prep_ms": 8854,
+        "reason": "no usable manifest at /home/Qui/.cache/acos/art/boot-images/fixed-d58a26e4eaaadfd1/manifest.json: No such file or directory (os error 2)"
+      },
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 12781,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 155
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 986
+        },
+        {
+          "index": 3,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 4,
+          "status": "pass",
+          "step": "assert_log",
+          "wall_ms": 0
+        }
+      ],
+      "unattributed_ms": 3,
+      "unit": "ms",
+      "verdict_wall_ms": 1144
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "request_id": "req_15ce43_18e86fcb918efaf3",
+  "verdict_status": "pass"
+}

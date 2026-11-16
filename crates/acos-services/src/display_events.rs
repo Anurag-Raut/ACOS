@@ -408,6 +408,33 @@ impl BitTube {
         reply.write_file_descriptor(send.as_fd()).map_err(perr)?;
         Ok(())
     }
+
+    /// `gui::BitTube::writeToParcel` for a **hand-written** binder interface: the
+    /// two descriptors and nothing else.
+    ///
+    /// The AIDL `android.gui.IDisplayEventConnection` is served through a
+    /// generated stub, so its reply carries a `binder::Status` and a
+    /// `kNonNullParcelableFlag` before the tube. The sensor service's
+    /// `ISensorEventConnection` is hand-written C++ (`libsensor`): its proxy does
+    /// `new BitTube(reply)`, i.e. `readFileDescriptor` twice with no flag and no
+    /// status word in front. Writing either here would shift the reply by four
+    /// bytes and the client would read the flag as the receive descriptor.
+    ///
+    /// The receive end is taken (stolen, as on the stock path); the send end is
+    /// kept so the server can keep writing events into the tube.
+    pub fn write_to_parcel_raw(&mut self, reply: &mut Parcel) -> SResult<()> {
+        let Some(receive) = self.receive.take() else {
+            return Err(ServiceError::Internal(
+                "BitTube: receive channel already stolen".into(),
+            ));
+        };
+        let send = self.send.as_ref().ok_or_else(|| {
+            ServiceError::Internal("BitTube: send channel is gone".into())
+        })?;
+        reply.write_file_descriptor(receive.as_fd()).map_err(perr)?;
+        reply.write_file_descriptor(send.as_fd()).map_err(perr)?;
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -446,10 +446,38 @@ fn bundle_extras(vm: &mut Vm, bundle: Handle) -> JResult<std::collections::BTree
                             )))
                         }
                     },
+                    "java.lang.String[]" => {
+                        let len = match vm.call_method(h, "length", "()I", &[]).map_err(err)? {
+                            JavaValue::Int(v) => v,
+                            other => {
+                                return Err(err(format!(
+                                    "String[].length returned {}",
+                                    other.kind()
+                                )))
+                            }
+                        };
+                        let mut items = Vec::new();
+                        for index in 0..len.max(0) {
+                            let item = vm
+                                .call_method(h, "get", "(I)Ljava/lang/Object;", &[
+                                    JavaValue::Int(index),
+                                ])
+                                .map_err(err)?;
+                            match item {
+                                JavaValue::Object(item) if item != NULL => {
+                                    items.push(vm.java_string_to_rust(item).map_err(err)?)
+                                }
+                                _ => return Err(err("String[] element is null".to_string())),
+                            }
+                        }
+                        // MODNOTIF2: `EXTRA_REQUEST_PERMISSIONS_NAMES` is the
+                        // only String[] the ATMS request path reads.
+                        Extra::Strings(items)
+                    }
                     other => {
                         return Err(err(format!(
                             "extra `{key}` has unsupported type {other}; AMS the bridge \
-                             only carries String/int/boolean extras"
+                             only carries String/int/boolean/String[] extras"
                         )))
                     }
                 }
@@ -823,6 +851,15 @@ pub fn materialize_intent(vm: &mut Vm, facts: &IntentFacts) -> JResult<Handle> {
                 )
                 .map_err(err)?;
             }
+            Extra::Short(v) => {
+                vm.call_method(
+                    intent,
+                    "putExtra",
+                    "(Ljava/lang/String;S)Landroid/content/Intent;",
+                    &[JavaValue::Object(k), JavaValue::Short(*v)],
+                )
+                .map_err(err)?;
+            }
             Extra::Bool(v) => {
                 vm.call_method(
                     intent,
@@ -832,9 +869,52 @@ pub fn materialize_intent(vm: &mut Vm, facts: &IntentFacts) -> JResult<Handle> {
                 )
                 .map_err(err)?;
             }
-            Extra::Present => {
+            Extra::Bytes(bytes) => {
+                let values: Vec<JavaValue> =
+                    bytes.iter().map(|b| JavaValue::Byte(*b as i8)).collect();
+                let arr = vm.new_array("B", &values).map_err(err)?;
+                vm.call_method(
+                    intent,
+                    "putExtra",
+                    "(Ljava/lang/String;[B)Landroid/content/Intent;",
+                    &[JavaValue::Object(k), JavaValue::Object(arr)],
+                )
+                .map_err(err)?;
+            }
+            Extra::ByteArrays(pdus) => {
+                // `SMS_RECEIVED`'s `pdus` is an `Object[]` of `byte[]`, which
+                // `putExtra(String, Serializable)` stores as a
+                // `Parcel.VAL_OBJECTARRAY` (byte[][] is an Object[]).
+                let mut elements = Vec::with_capacity(pdus.len());
+                for pdu in pdus {
+                    let values: Vec<JavaValue> =
+                        pdu.iter().map(|b| JavaValue::Byte(*b as i8)).collect();
+                    elements.push(JavaValue::Object(
+                        vm.new_array("B", &values).map_err(err)?,
+                    ));
+                }
+                let array = vm.new_array("[B", &elements).map_err(err)?;
+                vm.call_method(
+                    intent,
+                    "putExtra",
+                    "(Ljava/lang/String;Ljava/io/Serializable;)Landroid/content/Intent;",
+                    &[JavaValue::Object(k), JavaValue::Object(array)],
+                )
+                .map_err(err)?;
+            }
+            Extra::Parcelable(_) => {
                 return Err(err(format!(
-                    "cannot re-materialise extra `{key}`: its type was not captured"
+                    "cannot re-materialise extra `{key}`: this value is a parcelable and the VM path has no class-loader construction for it"
+                )))
+            }
+            // MODNOTIF2/MODNOTIF5: the request direction carries a `String[]`
+            // (`EXTRA_REQUEST_PERMISSIONS_NAMES`), which this path does not
+            // materialise back into Java; the `Present` refusal covers both.
+            Extra::Strings(_) | Extra::Present => {
+                return Err(err(format!(
+                    "cannot re-materialise extra `{key}`: its type is not carried back into Java \
+                     (only the framework->system direction needs it, e.g. the permission \
+                     request's EXTRA_REQUEST_PERMISSIONS_NAMES)"
                 )))
             }
         }

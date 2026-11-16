@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use common::{compile_case, run_case_args};
 use acos_services::parcelable;
-use acos_services::value::{Parcelable, Value};
+use acos_services::value::{DynamicValue, Parcelable, Value};
 use acos_services::Bundle;
 
 fn rect(left: i32, top: i32, right: i32, bottom: i32) -> Value {
@@ -291,6 +291,147 @@ fn package_info_arrays_value() -> Parcelable {
             Value::Cond { present: false, values: vec![] }, // signingInfo
             Value::Bool(false), // isApex
             Value::Bool(false), // isActiveApex
+/// A `BluetoothDevice` in the image's `writeToParcel` order: `mAddress`
+/// (`writeString`) then `mAddressType` (`writeInt`), read back by
+/// `BluetoothDevice(Parcel)` (image dex).
+fn bluetooth_device(address: &str) -> DynamicValue {
+    DynamicValue::Parcelable(Parcelable::ordered(
+        "android.bluetooth.BluetoothDevice",
+        vec![Value::Str(Some(address.into())), Value::Int(0)],
+    ))
+}
+
+/// The `SynchronousResultReceiver$Result` payload the Bluetooth module sends:
+/// `writeValue(mObject)` then `writeValue(mException)` (image dex
+/// `SynchronousResultReceiver$Result.writeToParcel`).
+fn encoded_result(object: DynamicValue, exception: DynamicValue) -> Vec<u8> {
+    let mut parcel = acos_parcel::Parcel::new();
+    for value in [object, exception] {
+        parcelable::write_dynamic(&mut parcel, &value).expect("encode writeValue payload");
+    }
+    parcel.marshall()
+}
+
+/// A `Bundle` carrying the `BluetoothDevice.EXTRA_RSSI` short extra: the value
+/// is `VAL_SHORT` (tag 5, 4-byte payload), which `Intent.getShortExtra` casts
+/// to `java.lang.Short`.
+fn short_bundle_value() -> Bundle {
+    let mut bundle = Bundle::new();
+    bundle.put(EXTRA_RSSI_KEY, Value::Short(-40));
+    bundle
+}
+
+const EXTRA_RSSI_KEY: &str = "android.bluetooth.device.extra.RSSI";
+
+fn encoded_bundle(bundle: &Bundle) -> Vec<u8> {
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_bundle(&mut parcel, Some(bundle)).expect("encode bundle");
+    parcel.marshall()
+}
+
+/// A `Notification` in the MODNOTIF3 codec's shape: a resource small icon,
+/// title/text in the extras bundle, a group key, the channel id and an optional
+/// content `PendingIntent`. Field order is `writeToParcelImpl`
+/// (`Notification.java:3193-3360`) plus the trailing `allPendingIntents` set
+/// (`Notification.java:3184-3190`).
+fn notification_value(content_intent: Option<u64>) -> Parcelable {
+    let intent = content_intent.map(|id| {
+        Value::Parcelable(Parcelable::ordered(
+            "android.app.PendingIntent",
+            vec![Value::Binder(Some(acos_parcel::binder::BinderId(id)))],
+        ))
+    });
+    let content = match &intent {
+        Some(p) => Value::Cond {
+            present: true,
+            values: vec![p.clone()],
+        },
+        None => Value::Cond {
+            present: false,
+            values: Vec::new(),
+        },
+    };
+    // `writeArraySet(allPendingIntents)`: the set the marshaling listener
+    // collected, i.e. exactly the intents written above.
+    let all_pending = match &intent {
+        Some(p) => Value::List(Some(vec![p.clone()])),
+        None => Value::List(None),
+    };
+    let absent = || Value::Cond {
+        present: false,
+        values: Vec::new(),
+    };
+    Parcelable::ordered(
+        "android.app.Notification",
+        vec![
+            Value::Int(1),     // version
+            Value::Binder(None), // mAllowlistToken
+            Value::Long(1_700_000_000_000), // when
+            Value::Long(1_700_000_000_000), // creationTime
+            Value::Cond {
+                present: true,
+                values: vec![Value::Parcelable(Parcelable::ordered(
+                    "android.graphics.drawable.Icon",
+                    vec![
+                        Value::Int(2), // TYPE_RESOURCE
+                        Value::Str(Some("dev.acos.fixtures.notif".into())),
+                        Value::Int(0x7f_01_0001),
+                        Value::Cond {
+                            present: false,
+                            values: vec![],
+                        },
+                        Value::Int(5), // BlendMode.SRC_IN (the image's default)
+                    ],
+                ))],
+            },
+            Value::Int(1), // number
+            content,       // contentIntent
+            absent(),      // deleteIntent
+            absent(),      // tickerText
+            absent(),      // tickerView
+            absent(),      // contentView
+            absent(),      // mLargeIcon
+            Value::Int(0),     // defaults
+            Value::Int(0x10),  // flags (FLAG_ONGOING_EVENT)
+            absent(),          // sound
+            Value::Int(0),     // audioStreamType
+            absent(),          // audioAttributes
+            Value::LongArray(None), // vibrate
+            Value::Int(0),     // ledARGB
+            Value::Int(0),     // ledOnMS
+            Value::Int(0),     // ledOffMS
+            Value::Int(0),     // iconLevel
+            absent(),          // fullScreenIntent
+            Value::Int(0),     // priority (PRIORITY_DEFAULT)
+            Value::Str8(None), // category
+            Value::Str8(Some("fixture-group".into())), // mGroupKey
+            Value::Str8(None), // mSortKey
+            Value::Bundle(Some({
+                let mut b = Bundle::new();
+                b.put("android.title", Value::Str(Some("hello".into())));
+                b.put("android.text", Value::Str(Some("world".into())));
+                b
+            })),
+            Value::List(None), // actions (writeTypedArray, null)
+            absent(),          // bigContentView
+            absent(),          // headsUpContentView
+            Value::Int(1),     // visibility
+            absent(),          // publicVersion
+            Value::Int(0),     // color
+            Value::Cond {
+                present: true,
+                values: vec![Value::Str8(Some("fixture-channel".into()))],
+            },
+            Value::Long(0), // mTimeout
+            absent(),       // mShortcutId
+            absent(),       // mLocusId
+            Value::Int(0),  // mBadgeIcon
+            absent(),       // mSettingsText
+            Value::Int(0),  // mGroupAlertBehavior
+            absent(),       // mBubbleMetadata
+            Value::Bool(true), // mAllowSystemGeneratedContextualActions (the image's default)
+            Value::Int(0),  // mFgsDeferBehavior
+            all_pending,    // allPendingIntents
         ],
     )
 }
@@ -389,6 +530,78 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         hex(&bundle_bytes)
     );
 
+    // The Bluetooth result payloads: `Result.writeToParcel` writes
+    // `mObject` then `mException` with `writeValue`. `getBondedDevices` sends a
+    // `List<BluetoothDevice>`, `getState` an `Integer`. These are the two shapes
+    // the `hw.bluetooth` module delivers on a oneway call.
+    let bonded_bytes = encoded_result(
+        DynamicValue::List(Some(vec![
+            bluetooth_device("11:22:33:44:55:66"),
+            bluetooth_device("AA:BB:CC:DD:EE:FF"),
+        ])),
+        DynamicValue::Null,
+    );
+    assert_eq!(
+        writes.get("bluetooth_result").map(String::as_str),
+        Some(hex(&bonded_bytes).as_str()),
+        "Result(List<BluetoothDevice>) real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("bluetooth_result"),
+        hex(&bonded_bytes)
+    );
+    let short_bundle = short_bundle_value();
+    let short_bundle_bytes = encoded_bundle(&short_bundle);
+    assert_eq!(
+        writes.get("bundle_short").map(String::as_str),
+        Some(hex(&short_bundle_bytes).as_str()),
+        "Bundle.putShort (VAL_SHORT) real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("bundle_short"),
+        hex(&short_bundle_bytes)
+    );
+    let state_bytes = encoded_result(DynamicValue::Int(12), DynamicValue::Null);
+    assert_eq!(
+        writes.get("bluetooth_state").map(String::as_str),
+        Some(hex(&state_bytes).as_str()),
+        "Result(Integer) real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("bluetooth_state"),
+        hex(&state_bytes)
+    );
+    // MODNOTIF4: the `android.app.Notification` codec. First without a
+    // `PendingIntent` (all 44 fields + the null `allPendingIntents` set), then
+    // with one. The guest binder layer allocates the strong-binder handle, so
+    // the harness reports the handle it wrote (`intent_sender`) and the Rust
+    // value carries the same id: every other byte is the codec's.
+    let notification = notification_value(None);
+    let notification_bytes = encoded(&notification);
+    assert_eq!(
+        writes.get("notification").map(String::as_str),
+        Some(hex(&notification_bytes).as_str()),
+        "Notification real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("notification"),
+        hex(&notification_bytes)
+    );
+    let sender_id = {
+        let probe = writes
+            .get("intent_sender")
+            .expect("the harness must report the strong binder it wrote");
+        let mut parcel = acos_parcel::Parcel::new();
+        let bytes = hex_bytes(probe);
+        parcel.unmarshall(&bytes);
+        parcel
+            .read_strong_binder()
+            .expect("read the binder probe")
+            .expect("the probe is a non-null binder")
+            .0
+    };
+    let notification_intent = notification_value(Some(sender_id));
+    let notification_intent_bytes = encoded(&notification_intent);
+    assert_eq!(
+        writes.get("notification_intent").map(String::as_str),
+        Some(hex(&notification_intent_bytes).as_str()),
+        "Notification (with a PendingIntent) real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("notification_intent"),
+        hex(&notification_intent_bytes)
+    );
+
     // Differential parcelables built from the parsed manifest/APK values.
     use acos_services::pms::{
         ActivityInfo as PmsActivityInfo, AppInfo, PackageInfo as PmsPackageInfo,
@@ -435,6 +648,10 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
     let args = vec![
         format!("configuration={}", hex(&config_bytes)),
         format!("persistable_bundle={}", hex(&bundle_bytes)),
+        format!("bluetooth_result={}", hex(&bonded_bytes)),
+        format!("bluetooth_state={}", hex(&state_bytes)),
+        format!("bundle_short={}", hex(&short_bundle_bytes)),
+        format!("notification={}", hex(&notification_bytes)),
         format!("application_info={}", hex(&app_bytes)),
         format!("activity_info={}", hex(&act_bytes)),
         format!("package_info={}", hex(&pkg_bytes)),
@@ -457,6 +674,10 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
     for name in [
         "configuration",
         "persistable_bundle",
+        "bluetooth_result",
+        "bluetooth_state",
+        "bundle_short",
+        "notification",
         "application_info",
         "activity_info",
         "package_info",
@@ -478,6 +699,9 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
     for (name, bytes) in [
         ("configuration", &config_bytes),
         ("persistable_bundle", &bundle_bytes),
+        ("bluetooth_result", &bonded_bytes),
+        ("bluetooth_state", &state_bytes),
+        ("bundle_short", &short_bundle_bytes),
         ("application_info", &app_bytes),
         ("activity_info", &act_bytes),
         ("package_info", &pkg_bytes),
@@ -497,6 +721,67 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
             hex(bytes)
         );
     }
+
+    // MODNOTIF4: the `Notification` re-emit is compared with one honest
+    // exception. The image's `Notification(Parcel)` reader *normalizes* the
+    // deprecated audio pair: it keeps `audioAttributes` and drops the
+    // `audioStreamType` word on the way back out, so the re-emitted bytes are
+    // the Rust bytes minus that one word. Everything outside that window must
+    // be byte-identical, and the word that appears there must be the
+    // `AudioAttributes` presence marker (`1`) where the Rust value wrote the
+    // `audioStreamType` (`-1`).
+    let re_emitted = hex_bytes(
+        roundtrips
+            .get("notification")
+            .expect("the harness re-emits the read notification"),
+    );
+    let (prefix, suffix) = common_edges(&re_emitted, &notification_bytes);
+    assert!(
+        suffix >= 100,
+        "the re-emit matches the Rust bytes from the tail on (suffix {suffix})"
+    );
+    // The image's reader rebuilds `audioAttributes` from the notification's
+    // default audio state, so its re-emit carries the `AudioAttributes` window
+    // (`presence = 1` + the 24-byte payload) where the Rust value wrote the
+    // single `null` marker the same framework wrote on the way in: the
+    // `presence = 1` word plus the 28-byte payload = 32 bytes, against the
+    // codec's 4-byte marker.
+    const AUDIO_WINDOW: usize = 32;
+    assert_eq!(
+        re_emitted.len(),
+        notification_bytes.len() + AUDIO_WINDOW - 4,
+        "the re-emit adds the rebuilt audioAttributes window"
+    );
+    assert_eq!(
+        &notification_bytes[prefix..prefix + 4],
+        &[0, 0, 0, 0],
+        "the Rust value writes the null audioAttributes marker"
+    );
+    assert_eq!(
+        &re_emitted[prefix..prefix + 4],
+        &[1, 0, 0, 0],
+        "the frame re-emit writes the audioAttributes presence marker"
+    );
+    assert_eq!(
+        &re_emitted[prefix + AUDIO_WINDOW..],
+        &notification_bytes[prefix + 4..],
+        "everything after the audio window is the codec's bytes"
+    );
+}
+
+/// Length of the common prefix and the common suffix of two byte slices.
+fn common_edges(a: &[u8], b: &[u8]) -> (usize, usize) {
+    let mut prefix = 0;
+    while prefix < a.len().min(b.len()) && a[prefix] == b[prefix] {
+        prefix += 1;
+    }
+    let mut suffix = 0;
+    while suffix < a.len().min(b.len()) - prefix
+        && a[a.len() - 1 - suffix] == b[b.len() - 1 - suffix]
+    {
+        suffix += 1;
+    }
+    (prefix, suffix)
 }
 
 fn hex_bytes(hex: &str) -> Vec<u8> {

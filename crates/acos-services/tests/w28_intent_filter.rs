@@ -484,7 +484,7 @@ fn unregister_receiver_drops_the_registration() {
 }
 
 #[test]
-fn broadcast_intent_is_accepted_and_delivers_nothing() {
+fn broadcast_intent_delivers_to_a_matching_dynamic_receiver() {
     use acos_services::ams::{Extra, IntentFacts};
     use std::collections::BTreeMap;
 
@@ -545,9 +545,32 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
         "the recorded filter matches the broadcast exactly once, got {:?}",
         result.reply
     );
-    assert!(
-        result.deliveries.is_empty(),
-        "the broadcast must not enqueue a delivery"
+    // A matching **dynamic** receiver is delivered to: the ART host
+    // materialises `IIntentReceiver.performReceive` from the queued match (the
+    // old "no receiver scheduler" rule dropped it, which is why a service module
+    // could not raise an event). A one-way delivery carries a well-formed
+    // request parcel and targets the registered binder.
+    assert_eq!(
+        result.deliveries.len(),
+        1,
+        "the matching receiver gets one performReceive delivery: {:?}",
+        result.deliveries
+    );
+    let delivery = &result.deliveries[0];
+    assert_eq!(
+        delivery.interface, "android.content.IIntentReceiver",
+        "the delivery is performReceive"
+    );
+    assert_eq!(delivery.code, 1, "performReceive is the first transaction");
+    assert_eq!(
+        delivery.target.0, RECEIVER,
+        "the delivery targets the registered IIntentReceiver"
+    );
+    let mut data = delivery.data.clone();
+    data.set_data_position(0);
+    assert_eq!(
+        data.peek_interface_token().expect("token").as_deref(),
+        Some("android.content.IIntentReceiver")
     );
 
     // A different action does not match the recorded filter: the count is the
@@ -575,10 +598,14 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
         result.reply
     );
 
-    // Nothing was delivered to the guest binder: the host has no receiver
-    // scheduler, so it says so instead of fabricating a call.
+    // A broadcast nobody matched delivers nothing and fabricates no event.
+    assert!(
+        result.deliveries.is_empty(),
+        "an unmatched broadcast has no delivery: {:?}",
+        result.deliveries
+    );
     let events = host.drain_events();
-    let note: Vec<&str> = events
+    let notes: Vec<&str> = events
         .iter()
         .filter_map(|e| match &e.body {
             acos_protocol::EventBody::Log { tag, message, .. }
@@ -589,8 +616,10 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
             _ => None,
         })
         .collect();
-    assert_eq!(note.len(), 1, "one explicit no-delivery line: {events:?}");
-    assert!(note[0].contains("not delivered"), "{}", note[0]);
+    assert!(
+        notes.is_empty(),
+        "an unmatched broadcast is Android-normal, not a log line: {notes:?}"
+    );
     assert_eq!(
         host.receiver_registrations().len(),
         1,

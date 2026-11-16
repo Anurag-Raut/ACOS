@@ -1091,6 +1091,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         animations: None,
         insets: None,
         extra_apks: None,
+        services: Vec::new(),
     };
     round_trip(&scenario);
     for step in &scenario.steps {

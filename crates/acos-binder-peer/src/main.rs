@@ -67,8 +67,40 @@ fn main() -> ExitCode {
     }
 }
 
+/// How long an idle turn waits for guest traffic before draining `system -> app`
+/// deliveries that a module produced from its own thread.
+///
+/// 20 ms is the coarse ceiling for a scripted location/sensor feed: the peer
+/// wakes 50 times a second while a session is idle, which costs nothing
+/// measurable next to the guest's looper, and an app sees a scripted fix on the
+/// next frame instead of on its next binder call.
+const IDLE_TICK_MS: i32 = 20;
+
 fn serve(peer: &mut Peer, fd: RawFd) -> std::io::Result<()> {
     loop {
+        // `poll` instead of a blocking read: a module's timed delivery must reach
+        // the app while the app is idle (ADR-0029 modules deliver through the
+        // same `PendingDelivery` queue, drained here on every idle tick).
+        let mut pollfd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let ready = unsafe { libc::poll(&mut pollfd, 1, IDLE_TICK_MS) };
+        if ready < 0 {
+            let e = std::io::Error::last_os_error();
+            if e.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(e);
+        }
+        if ready == 0 {
+            for out in peer.tick() {
+                write_frame(fd, &out)?;
+                close_frame_fds(&out);
+            }
+            continue;
+        }
         let frame = match read_frame(fd) {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),

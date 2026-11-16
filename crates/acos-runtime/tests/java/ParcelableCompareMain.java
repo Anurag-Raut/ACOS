@@ -1,3 +1,9 @@
+import android.app.Notification;
+import android.app.PendingIntent;
+import android.content.IIntentReceiver;
+import android.content.IIntentSender;
+import android.content.Intent;
+import android.bluetooth.BluetoothDevice;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.InstrumentationInfo;
@@ -8,12 +14,17 @@ import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.net.LinkProperties;
 import android.net.NetworkCapabilities;
+import android.graphics.drawable.Icon;
+import android.os.Bundle;
+import android.os.IBinder;
 import android.os.LocaleList;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PersistableBundle;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -243,10 +254,78 @@ public final class ParcelableCompareMain {
         lp.setInterfaceName("wlan0");
         lp.setMtu(1500);
         return lp;
+    /**
+     * A `Bundle` carrying the `BluetoothDevice.EXTRA_RSSI` short extra. The
+     * framework writes `putShort` as `VAL_SHORT` (tag 5) with a 4-byte int
+     * payload, and `Intent.getShortExtra` casts the value to `java.lang.Short`.
+     */
+    static Bundle rssiBundle() {
+        Bundle b = new Bundle();
+        b.putShort("android.bluetooth.device.extra.RSSI", (short) -40);
+        return b;
+    }
+
+    /**
+     * A `Notification` in the MODNOTIF3 codec's shape: a resource small icon,
+     * title/text in the extras bundle, a group key and the channel id, with an
+     * optional content `PendingIntent`.
+     */
+    static Notification notification(PendingIntent contentIntent) throws Exception {
+        Notification n = new Notification();
+        n.when = 1700000000000L;
+        set(n, "creationTime", 1700000000000L);
+        set(n, "mSmallIcon",
+                Icon.createWithResource("dev.acos.fixtures.notif", 0x7f010001));
+        // The image's `Notification()` seeds a default `audioAttributes` and
+        // `STREAM_DEFAULT`; the codec models the null/0 pair, so the case pins
+        // them explicitly (every other optional field is null too).
+        set(n, "audioStreamType", 0);
+        set(n, "audioAttributes", null);
+        n.number = 1;
+        n.contentIntent = contentIntent;
+        n.flags = 0x10; // FLAG_ONGOING_EVENT
+        set(n, "mGroupKey", "fixture-group");
+        Bundle extras = new Bundle();
+        extras.putString("android.title", "hello");
+        extras.putString("android.text", "world");
+        n.extras = extras;
+        n.visibility = 1;
+        set(n, "mChannelId", "fixture-channel");
+        set(n, "mTimeout", 0L);
+        return n;
+    }
+
+    /**
+     * The `IIntentSender` a `PendingIntent` wraps. A local `Binder` is enough:
+     * `PendingIntent.writeToParcel` writes it with `writeStrongBinder` and the
+     * system side only ever calls `send` on it.
+     */
+    static final class Sender extends IIntentSender.Stub {
+        @Override
+        public void send(int code, Intent intent, String resolvedType,
+                IBinder whitelistToken, IIntentReceiver finishedReceiver,
+                String requiredPermission, Bundle options) {
+        }
     }
 
     interface Writer {
         void write(Parcel p) throws Exception;
+    }
+
+    /**
+     * The `List<BluetoothDevice>` `IBluetooth.getBondedDevices` answers inside a
+     * `SynchronousResultReceiver.Result`. `BluetoothDevice(String)` is the
+     * `@hide` constructor the framework itself uses (`mAddressType` 0), so the
+     * case builds it reflectively.
+     */
+    static List<BluetoothDevice> bondedDevices() throws Exception {
+        java.lang.reflect.Constructor<BluetoothDevice> ctor =
+                BluetoothDevice.class.getDeclaredConstructor(String.class);
+        ctor.setAccessible(true);
+        List<BluetoothDevice> devices = new ArrayList<>();
+        devices.add(ctor.newInstance("11:22:33:44:55:66"));
+        devices.add(ctor.newInstance("AA:BB:CC:DD:EE:FF"));
+        return devices;
     }
 
     static void emit(String name, Writer writer) throws Exception {
@@ -265,6 +344,35 @@ public final class ParcelableCompareMain {
         emit("package_info_arrays", p -> packageInfoArrays().writeToParcel(p, 0));
         emit("network_capabilities", p -> networkCapabilities().writeToParcel(p, 0));
         emit("link_properties", p -> linkProperties().writeToParcel(p, 0));
+        emit("bundle_short", p -> rssiBundle().writeToParcel(p, 0));
+        // `SynchronousResultReceiver$Result.writeToParcel` (image dex):
+        // `writeValue(mObject)` then `writeValue(mException)`. The Bluetooth
+        // module answers `getBondedDevices` with a `List<BluetoothDevice>` and
+        // `getState` with an `Integer`; both cases are emitted here so the Rust
+        // `Result` codec can be byte-compared against the real writer.
+        emit("bluetooth_result", p -> {
+            p.writeValue(bondedDevices());
+            p.writeValue(null);
+        });
+        emit("bluetooth_state", p -> {
+            p.writeValue(Integer.valueOf(12));
+            p.writeValue(null);
+        });
+        emit("notification", p -> notification(null).writeToParcel(p, 0));
+        // The guest allocates the binder handle, so the harness reports the one
+        // the framework itself wrote; the Rust side builds the same
+        // `PendingIntent` with it and byte-compares the whole notification.
+        final Sender sender = new Sender();
+        emit("intent_sender", p -> p.writeStrongBinder(sender));
+        // `PendingIntent(IIntentSender)` is `@hide`, so the public SDK stub does
+        // not declare it; the runtime class does, and that is the constructor
+        // the framework itself uses to rebuild a PendingIntent from a binder.
+        final Class<?> iis = Class.forName("android.content.IIntentSender");
+        final java.lang.reflect.Constructor<?> ctor =
+                PendingIntent.class.getDeclaredConstructor(iis);
+        ctor.setAccessible(true);
+        final PendingIntent pending = (PendingIntent) ctor.newInstance(sender);
+        emit("notification_intent", p -> notification(pending).writeToParcel(p, 0));
 
         for (String arg : args) {
             int eq = arg.indexOf('=');
@@ -277,8 +385,34 @@ public final class ParcelableCompareMain {
             try {
                 p.unmarshall(bytes, 0, bytes.length);
                 p.setDataPosition(0);
-                Parcelable got;
+                Parcelable got = null;
+                Object dynamicObject = null;
+                Object dynamicException = null;
                 switch (name) {
+                    case "bluetooth_result": {
+                        dynamicObject = p.readValue(null);
+                        dynamicException = p.readValue(null);
+                        check(dynamicException == null, "bluetooth_result exception is null");
+                        check(dynamicObject instanceof List,
+                                "bluetooth_result is a List: " + dynamicObject);
+                        List<?> devices = (List<?>) dynamicObject;
+                        check(devices.size() == 2, "bluetooth_result size " + devices.size());
+                        BluetoothDevice first = (BluetoothDevice) devices.get(0);
+                        check("11:22:33:44:55:66".equals(first.getAddress()),
+                                "bluetooth_result address " + first.getAddress());
+                        BluetoothDevice second = (BluetoothDevice) devices.get(1);
+                        check("AA:BB:CC:DD:EE:FF".equals(second.getAddress()),
+                                "bluetooth_result second address " + second.getAddress());
+                        break;
+                    }
+                    case "bluetooth_state": {
+                        dynamicObject = p.readValue(null);
+                        dynamicException = p.readValue(null);
+                        check(dynamicException == null, "bluetooth_state exception is null");
+                        check(Integer.valueOf(12).equals(dynamicObject),
+                                "bluetooth_state object " + dynamicObject);
+                        break;
+                    }
                     case "configuration":
                         got = Configuration.CREATOR.createFromParcel(p);
                         Configuration c = (Configuration) got;
@@ -308,6 +442,14 @@ public final class ParcelableCompareMain {
                         got = PersistableBundle.CREATOR.createFromParcel(p);
                         check(((PersistableBundle) got).getString("name").equals("helloviews"),
                                 "bundle name");
+                        break;
+                    case "bundle_short":
+                        got = Bundle.CREATOR.createFromParcel(p);
+                        check(((Bundle) got).getShort("android.bluetooth.device.extra.RSSI")
+                                        == (short) -40,
+                                "bundle_short rssi "
+                                        + ((Bundle) got).getShort(
+                                                "android.bluetooth.device.extra.RSSI"));
                         break;
                     case "application_info":
                         got = ApplicationInfo.CREATOR.createFromParcel(p);
@@ -444,6 +586,21 @@ public final class ParcelableCompareMain {
                         check(((ResolveInfo) got).activityInfo != null, "resolve_info activityInfo");
                         check(((ResolveInfo) got).filter == null, "resolve_info filter is null");
                         break;
+                    case "notification":
+                        got = Notification.CREATOR.createFromParcel(p);
+                        Notification n = (Notification) got;
+                        check(n.extras != null, "notification extras");
+                        check("hello".equals(n.extras.getString("android.title")),
+                                "notification title");
+                        check("world".equals(n.extras.getString("android.text")),
+                                "notification text");
+                        check("fixture-channel".equals(get(n, "mChannelId")),
+                                "notification channel");
+                        check(n.contentIntent == null, "notification contentIntent is null");
+                        check(n.number == 1, "notification number");
+                        check(n.flags == 0x10, "notification flags");
+                        check(get(n, "mSmallIcon") != null, "notification small icon");
+                        break;
                     default:
                         throw new AssertionError("unknown case " + name);
                 }
@@ -454,7 +611,12 @@ public final class ParcelableCompareMain {
                 // pure function of the parsed fields (no hidden defaults).
                 Parcel rewritten = Parcel.obtain();
                 try {
-                    got.writeToParcel(rewritten, 0);
+                    if (got != null) {
+                        got.writeToParcel(rewritten, 0);
+                    } else {
+                        rewritten.writeValue(dynamicObject);
+                        rewritten.writeValue(dynamicException);
+                    }
                     System.out.println("roundtrip." + name + "=" + hex(rewritten.marshall()));
                 } finally {
                     rewritten.recycle();

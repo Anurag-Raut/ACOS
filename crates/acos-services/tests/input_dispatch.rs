@@ -34,6 +34,10 @@ fn registered_dispatch() -> (InputDispatch, LoopbackConsumer) {
     let mut d = InputDispatch::new();
     d.register_window(TOKEN, "Surface(name=acos-fixture/counter)/@0x10")
         .expect("register");
+    // LAYER1: focus is published by the window session from the WMS layer
+    // stack's `focus_target()` after the add (a FLAG_NOT_FOCUSABLE overlay must
+    // not take focus); registration only publishes TOUCH_MODE.
+    d.set_focus(Some(TOKEN)).expect("policy focus");
     let fd = d.duplicate_client_fd(TOKEN).expect("client fd");
     (d, LoopbackConsumer::new(fd))
 }
@@ -43,7 +47,7 @@ fn next(consumer: &mut LoopbackConsumer) -> InputMessage {
 }
 
 #[test]
-fn register_publishes_touch_mode_and_focus_is_delivered_by_default() {
+fn registration_publishes_touch_mode_and_the_policy_focus_follows() {
     let (mut d, mut guest) = registered_dispatch();
     match next(&mut guest) {
         InputMessage::TouchMode {
@@ -52,9 +56,10 @@ fn register_publishes_touch_mode_and_focus_is_delivered_by_default() {
         } => {}
         other => panic!("first message is TOUCH_MODE(true), got {other:?}"),
     }
-    // W13: focus is part of registration now. The IME focus reply
+    // W13: FOCUS is delivered for a newly focused window. The IME focus reply
     // (`startInputOrWindowGainedFocus`) is answered by `ime_wire`, so the
-    // guest's main looper survives the framework's stock focus path.
+    // guest's main looper survives the framework's stock focus path. LAYER1:
+    // the token is the WMS `focus_target()`, published after the add.
     match next(&mut guest) {
         InputMessage::Focus {
             has_focus: true, ..
@@ -190,6 +195,7 @@ fn a_closed_channel_is_peer_closed_not_a_silent_success() {
 fn remove_closes_the_guest_end() {
     let mut d = InputDispatch::new();
     d.register_window(TOKEN, "removed").expect("register");
+    d.set_focus(Some(TOKEN)).expect("policy focus");
     let fd = d.duplicate_client_fd(TOKEN).expect("client fd");
     let mut guest = LoopbackConsumer::new(fd);
     let _ = next(&mut guest);

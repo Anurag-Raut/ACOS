@@ -1,0 +1,101 @@
+# MODNOTIF2 seams: the greps behind every claim in README.md
+
+## 1. INotificationManager.enqueueNotificationWithTag carries `in Notification`
+$ sed -n "50,62p" /home/Qui/Projects/acos/.cache/aosp/base/core/java/android/app/INotificationManager.aidl
+    void cancelAllNotifications(String pkg, int userId);
+
+    void clearData(String pkg, int uid, boolean fromApp);
+    void enqueueTextToast(String pkg, IBinder token, CharSequence text, int duration, boolean isUiContext, int displayId, @nullable ITransientNotificationCallback callback);
+    void enqueueToast(String pkg, IBinder token, ITransientNotification callback, int duration, boolean isUiContext, int displayId);
+    void cancelToast(String pkg, IBinder token);
+    void finishToken(String pkg, IBinder token);
+
+    void enqueueNotificationWithTag(String pkg, String opPkg, String tag, int id,
+            in Notification notification, int userId);
+    @UnsupportedAppUsage
+    void cancelNotificationWithTag(String pkg, String opPkg, String tag, int id, int userId);
+
+
+## 2. No parcelable codec for android.app.Notification (so notify() cannot decode)
+$ grep -n "Notification" crates/acos-services/src/parcelable.rs
+109:    /// `NotificationChannel`/`NotificationChannelGroup` write every nullable
+1598:    // Transcribed from the image's `NotificationChannel(Parcel)` constructor
+1602:        class: "android.app.NotificationChannel",
+1634:        class: "android.app.NotificationChannelGroup",
+
+## 3. PendingIntent is only a binder on the wire
+$ grep -n "public void writeToParcel" -A3 /home/Qui/Projects/acos/.cache/aosp/base/core/java/android/app/PendingIntent.java
+    public void writeToParcel(Parcel out, int flags) {
+        out.writeStrongBinder(mTarget.asBinder());
+        final List<OnMarshaledListener> listeners = sOnMarshaledListener.get();
+        final int numListeners = listeners.size();
+        for (int i = 0; i < numListeners; i++) {
+
+## 4. IIntentSender is served by nobody in acos-services
+$ grep -rn "IIntentSender" crates/acos-services/src
+
+## 5. getIntentSender is in the AIDL table (code 62) but has no handler
+$ grep -rn "getIntentSender" crates/acos-services/src/atms.rs crates/acos-services/src/ams.rs
+(nothing: the table entry exists, no dispatch arm)
+
+## 6. The permission flags and their API-34 values
+$ grep -n "FLAG_PERMISSION_USER_SET =\|FLAG_PERMISSION_USER_FIXED =\|FLAG_PERMISSION_GRANTED_BY_DEFAULT =" /home/Qui/Projects/acos/.cache/aosp/base/core/java/android/content/pm/PackageManager.java
+5090:    public static final int FLAG_PERMISSION_USER_SET = 1 << 0;
+5100:    public static final int FLAG_PERMISSION_USER_FIXED =  1 << 1;
+5146:    public static final int FLAG_PERMISSION_GRANTED_BY_DEFAULT =  1 << 5;
+
+## 7. requestPermissions builds the intent it starts for a result
+$ sed -n "5683,5701p" /home/Qui/Projects/acos/.cache/aosp/base/core/java/android/app/Activity.java
+            return;
+        }
+
+        if (!getAttributionSource().getRenouncedPermissions().isEmpty()) {
+            final int permissionCount = permissions.length;
+            for (int i = 0; i < permissionCount; i++) {
+                if (getAttributionSource().getRenouncedPermissions().contains(permissions[i])) {
+                    throw new IllegalArgumentException("Cannot request renounced permission: "
+                            + permissions[i]);
+                }
+            }
+        }
+
+        PackageManager packageManager = getDeviceId() == deviceId ? getPackageManager()
+                : createDeviceContext(deviceId).getPackageManager();
+        final Intent intent = packageManager.buildRequestPermissionsIntent(permissions);
+        startActivityForResult(REQUEST_PERMISSIONS_WHO_PREFIX, intent, requestCode, null);
+        mHasCurrentPermissionsRequest = true;
+    }
+$ sed -n "7049,7058p" /home/Qui/Projects/acos/.cache/aosp/base/core/java/android/content/pm/PackageManager.java
+    public Intent buildRequestPermissionsIntent(@NonNull String[] permissions) {
+        if (ArrayUtils.isEmpty(permissions)) {
+            throw new IllegalArgumentException("permission cannot be null or empty");
+        }
+        Intent intent = new Intent(ACTION_REQUEST_PERMISSIONS);
+        intent.putExtra(EXTRA_REQUEST_PERMISSIONS_NAMES, permissions);
+        intent.setPackage(getPermissionControllerPackageName());
+        return intent;
+    }
+
+
+## 8. The old three tables
+$ git show ee2d2bbf:crates/acos-services/src/pms.rs | grep -n "pub fn check_permission" -A9
+1246:    pub fn check_permission(&self, permission: &str) -> i32 {
+1247-        const GRANTED: i32 = 0;
+1248-        const DENIED: i32 = -1;
+1249-        if self.granted_permissions.iter().any(|p| p == permission) {
+1250-            GRANTED
+1251-        } else {
+1252-            DENIED
+1253-        }
+1254-    }
+1255-
+$ git show ee2d2bbf:crates/acos-services/src/atms.rs | grep -n "pub fn check_permission" -A8
+831:    pub fn check_permission(&self, permission: &str) -> i32 {
+832-        if self.granted_permissions.iter().any(|p| p == permission) {
+833-            0
+834-        } else {
+835-            -1
+836-        }
+837-    }
+838-
+839-    /// The lifecycle state of an activity.

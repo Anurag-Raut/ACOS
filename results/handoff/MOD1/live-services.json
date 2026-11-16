@@ -1,0 +1,305 @@
+{
+  "launch": {
+    "status": "pass",
+    "modules": [
+      {
+        "attach": "at-launch",
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "fidelity": "stub",
+        "id": "feedback.vibrator",
+        "profile": "stub",
+        "reason": "stub profile: fixed answers, no vibration hardware; recorded {\"cancel_calls\":0,\"haptic_calls\":0,\"query_calls\":0,\"unsupported\":[],\"vibrate_calls\":0}",
+        "state": "attached"
+      }
+    ]
+  },
+  "list": {
+    "backend": "acos-native",
+    "capabilities_used": [],
+    "fidelity": "art-reference",
+    "metrics": {
+      "wall_ms": 0
+    },
+    "ok": true,
+    "request_id": "req_mcp",
+    "result": {
+      "animations": "on",
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        },
+        {
+          "id": "feedback.vibrator",
+          "profile": "stub"
+        }
+      ],
+      "cmd": "services",
+      "engine": "art",
+      "engine_frozen": false,
+      "evidence": {
+        "frame": "host-observed",
+        "input_acks": "guest-asserted",
+        "logs": "guest-asserted",
+        "state_change": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "evidence_label": "host-pixel",
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-16T04:50:55.679Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "identity": "C1 buffer metadata (no pixel copy)",
+        "md5": "",
+        "pixels": false
+      },
+      "insets": "report",
+      "last_frame_seq": 1,
+      "modules": [
+        {
+          "attach": "at-launch",
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "stub",
+          "id": "feedback.vibrator",
+          "profile": "stub",
+          "reason": "stub profile: fixed answers, no vibration hardware; recorded {\"cancel_calls\":0,\"haptic_calls\":0,\"query_calls\":0,\"unsupported\":[],\"vibrate_calls\":0}",
+          "state": "attached"
+        }
+      ],
+      "ok": true,
+      "op": "list",
+      "session_id": "s_mod1_live",
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "total_ms": 974
+      },
+      "trust": "trusted"
+    },
+    "session_id": "s_mod1_live",
+    "status": "pass"
+  },
+  "detach_core": {
+    "backend": "acos-native",
+    "capabilities_used": [],
+    "error": {
+      "class": "harness",
+      "code": "INVALID_ARGUMENT",
+      "details": {
+        "art_code": "SERVICE_MODULE_REJECTED",
+        "engine": "art",
+        "engine_frozen": false,
+        "evidence_label": "none",
+        "reply": {
+          "animations": "on",
+          "cmd": "services",
+          "code": "SERVICE_MODULE_REJECTED",
+          "error": "service module core: module is `at-launch` only and cannot be detached from a live session",
+          "ok": false,
+          "op": "detach"
+        },
+        "session_exit_path": "/run/user/1000/acos/art-sessions/s_mod1_live/art-frames/session-exit.json",
+        "trust": "trusted"
+      },
+      "hint": "This service-module operation is refused, never silently ignored: an `at-launch`              module (e.g. `core`) can only be attached at launch, and only `hot` modules change              on a live session. Read the message for the module and the launch call              (`acos_launch {services: [...]}` / `--service id:profile`).",
+      "message": "acos-art: SERVICE_MODULE_REJECTED: service module core: module is `at-launch` only and cannot be detached from a live session",
+      "retryable": false
+    },
+    "fidelity": "art-reference",
+    "metrics": {
+      "wall_ms": 0
+    },
+    "ok": false,
+    "request_id": "req_mcp",
+    "session_id": "s_mod1_live",
+    "status": "error"
+  },
+  "detach_hot": {
+    "backend": "acos-native",
+    "capabilities_used": [],
+    "fidelity": "art-reference",
+    "metrics": {
+      "wall_ms": 0
+    },
+    "ok": true,
+    "request_id": "req_mcp",
+    "result": {
+      "animations": "on",
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        }
+      ],
+      "cmd": "services",
+      "engine": "art",
+      "engine_frozen": false,
+      "evidence": {
+        "frame": "host-observed",
+        "input_acks": "guest-asserted",
+        "logs": "guest-asserted",
+        "state_change": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "evidence_label": "host-pixel",
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-16T04:50:55.679Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "identity": "C1 buffer metadata (no pixel copy)",
+        "md5": "",
+        "pixels": false
+      },
+      "insets": "report",
+      "last_frame_seq": 1,
+      "modules": [
+        {
+          "attach": "at-launch",
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "op": "detach",
+      "session_id": "s_mod1_live",
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "total_ms": 1022
+      },
+      "trust": "trusted"
+    },
+    "session_id": "s_mod1_live",
+    "status": "pass"
+  },
+  "attach_hot": {
+    "backend": "acos-native",
+    "capabilities_used": [],
+    "fidelity": "art-reference",
+    "metrics": {
+      "wall_ms": 0
+    },
+    "ok": true,
+    "request_id": "req_mcp",
+    "result": {
+      "animations": "on",
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        },
+        {
+          "id": "feedback.vibrator",
+          "profile": "stub"
+        }
+      ],
+      "cmd": "services",
+      "engine": "art",
+      "engine_frozen": false,
+      "evidence": {
+        "frame": "host-observed",
+        "input_acks": "guest-asserted",
+        "logs": "guest-asserted",
+        "state_change": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "evidence_label": "host-pixel",
+      "frame": {
+        "buffer_generation": 7,
+        "captured_at": "2026-11-16T04:50:55.679Z",
+        "frame_number": 7,
+        "frame_seq": 1,
+        "identity": "C1 buffer metadata (no pixel copy)",
+        "md5": "",
+        "pixels": false
+      },
+      "insets": "report",
+      "last_frame_seq": 1,
+      "modules": [
+        {
+          "attach": "at-launch",
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "stub",
+          "id": "feedback.vibrator",
+          "profile": "stub",
+          "reason": "stub profile: fixed answers, no vibration hardware; recorded {\"cancel_calls\":0,\"haptic_calls\":0,\"query_calls\":0,\"unsupported\":[],\"vibrate_calls\":0}",
+          "state": "attached"
+        }
+      ],
+      "ok": true,
+      "op": "attach",
+      "session_id": "s_mod1_live",
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "total_ms": 1023
+      },
+      "trust": "trusted"
+    },
+    "session_id": "s_mod1_live",
+    "status": "pass"
+  },
+  "capabilities_session": {
+    "attached": [
+      {
+        "id": "core",
+        "profile": "real"
+      },
+      {
+        "id": "feedback.vibrator",
+        "profile": "stub"
+      }
+    ],
+    "modules": [
+      {
+        "attach": "at-launch",
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "fidelity": "stub",
+        "id": "feedback.vibrator",
+        "profile": "stub",
+        "reason": "stub profile: fixed answers, no vibration hardware; recorded {\"cancel_calls\":0,\"haptic_calls\":0,\"query_calls\":0,\"unsupported\":[],\"vibrate_calls\":0}",
+        "state": "attached"
+      }
+    ],
+    "session_id": "s_mod1_live"
+  },
+  "destroy": "pass"
+}

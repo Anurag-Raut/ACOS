@@ -21,6 +21,11 @@ acos-render = { path = "../acos-render" }
 acos-services = { path = "../acos-services" }
 # WV5b: the lazy WebView gate + the shared broker endpoint contract.
 acos-webview = { path = "../acos-webview" }
+acos-wm = { path = "../acos-wm" }
+acos-parcel = { path = "../acos-parcel" }
+# NET2: the relay client (`spike_net` under ACOS_NET_ARM=relay).
+acos-netd = { path = "../acos-netd" }
+
 # VIEW1a: the live-view frame encoder (jpeg/png only, no default formats).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 libc = "0.2"

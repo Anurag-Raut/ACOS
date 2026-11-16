@@ -106,6 +106,15 @@ pub struct LaunchArgs {
     /// than pretending a second package is installed.
     #[arg(long = "extra-apk", value_name = "APK")]
     pub extra_apk: Vec<PathBuf>,
+    /// ADR-0029 item 4: attach a service module for this session.
+    ///
+    /// Spelling `id[:profile][,config]` (`feedback.vibrator:stub`,
+    /// `feedback.vibrator:scripted,{"x":1}`); repeatable, applied in order,
+    /// `core` is always attached first. Requires a session host, so it needs
+    /// `--keep` or `--engine art` (the in-process Rust VM has no service table
+    /// to attach to and refuses instead of pretending).
+    #[arg(long = "service", value_name = "id[:profile][,config]")]
+    pub service: Vec<String>,
 
     /// P12: framework animation scales for an ART session (`on`/`off`).
     ///
@@ -209,6 +218,49 @@ pub fn run(args: LaunchArgs) -> ExitCode {
     // needs the daemon: the ART guest is its own process, not this one.
     let flutter = !art && (args.flutter || detect_flutter(&args.apk));
     let rn = !art && (args.rn || detect_react_native(&args.apk));
+    // ADR-0029 item 4: validate every `--service` spec before a session exists,
+    // and refuse when this route has no service table to attach to.
+    let mut services = Vec::new();
+    for spec in &args.service {
+        match acos_services::module::ModuleSpec::parse(spec) {
+            Ok(parsed) => services.push(parsed.to_json()),
+            Err(error) => {
+                let envelope = Envelope::failure(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::NativeRuntime,
+                    ProtocolError::new(ErrorCode::InvalidArgument, error.to_string())
+                        .with_hint(
+                            "Use `--service id[:profile][,config]`, e.g.                              `--service feedback.vibrator:stub`.",
+                        )
+                        .with_details(json!({"field": "service", "value": spec})),
+                    Metrics::wall_ms(0),
+                );
+                return finish_daemon(&envelope, args.json);
+            }
+        }
+    }
+    if !services.is_empty() && !(args.keep || flutter || rn || art) {
+        let envelope = Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            ProtocolError::new(
+                ErrorCode::UnsupportedBackend,
+                "--service requires a session host",
+            )
+            .with_hint(
+                "The bare `acos launch` runs the in-process Rust VM, which has no service table.                  Add `--engine art` (or `--keep`) so the module is attached to a real session;                  the reply then reports the attached set and the verdict names its fidelity.",
+            )
+            .with_details(json!({
+                "field": "service",
+                "capability": "service.modules",
+                "requested": services,
+            })),
+            Metrics::wall_ms(0),
+        );
+        return finish_daemon(&envelope, args.json);
+    }
     if let Some(value) = args.animations.as_deref() {
         if !value.eq_ignore_ascii_case("on") && !value.eq_ignore_ascii_case("off") {
             eprintln!("launch: animations must be \"on\" or \"off\" (got {value:?})");
@@ -234,7 +286,7 @@ pub fn run(args: LaunchArgs) -> ExitCode {
                 return reject_native_gate(&request_id, &args, &err);
             }
         }
-        return run_keep(&args, &request_id, flutter, rn, engine);
+        return run_keep(&args, &request_id, flutter, rn, engine, &services);
     }
     if crate::native_launch::native_requested(args.native) {
         if let Err(err) = gate_native(&args.apk) {
@@ -280,6 +332,7 @@ fn run_keep(
     flutter: bool,
     rn: bool,
     engine: Option<Engine>,
+    services: &[serde_json::Value],
 ) -> ExitCode {
     let display = display_override_from_args(args);
     let native = crate::native_launch::native_requested(args.native) || flutter || rn;
@@ -307,6 +360,7 @@ fn run_keep(
             .map(|path| json!(path.display().to_string()))
             .collect::<Vec<_>>(),
         "timeout_ms": args.timeout.saturating_mul(1000),
+        "services": services,
     });
     // The engine is forwarded verbatim: the daemon must answer with the engine
     // that actually ran and must never fall back to another one.

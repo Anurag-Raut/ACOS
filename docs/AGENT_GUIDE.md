@@ -253,6 +253,7 @@ acos doctor --json
 acos inspect fixtures/build/apps/counter.apk --json
 acos launch fixtures/build/apps/counter.apk --engine art --json
 acos launch fixtures/build/apps/counter.apk --engine art --keep --json   # session survives in the daemon
+acos launch fixtures/build/apps/counter.apk --engine art --service feedback.vibrator:stub --json
 acos observe --tree --json                        # the daemon's live session
 acos observe --tree --apk fixtures/build/apps/counter.apk --json         # one-shot: launch then observe
 acos observe --screenshot out/counter.png --json
@@ -289,6 +290,14 @@ Notes that save a run:
   default route is the frozen Rust VM, which verifies far less. The **MCP**
   session tools are not like that: they run real ART by default (see Limits).
   Use `--engine art` on the CLI for anything you intend to trust.
+* `--service id[:profile][,config]` attaches a service module to the session
+  (repeatable; `core` is always attached first at `real`). It needs a session
+  host, so use `--engine art` (or `--keep`); the bare in-process Rust VM has no
+  service table and refuses with `UNSUPPORTED_BACKEND` instead of ignoring the
+  flag. The launch reply's `modules[]` reports what was actually attached and
+  its `fidelity` (`real`/`stub`/`scripted`/`off`); check it before trusting a
+  result that depends on a module. Live sessions change the set with
+  `acos_services` (MCP).
 * `reset` and `destroy` are daemon verbs: `acos session reset|destroy`, or the
   MCP tools `acos_reset` / `acos_destroy`. There is no top-level `acos reset`.
 * `acos run-dex <path> --main Main` executes a DEX `main` on the Rust
@@ -361,10 +370,153 @@ A step is a **one-key map**. Valid keys:
 | `set_network` | `offline`, `rules[]` (`method`,`url`,`status`,`headers`,`body`,`delay_ms`,`times`) |
 | `set_permission` | `permission`, `state: grant\|deny\|revoke\|reset` |
 | `set_locale` / `set_density` / `set_theme` / `set_time` | `locale` / `density_dpi` / `theme` / `timestamp` |
+| `service_ctl` | `module`, `op` (`attach`/`detach`/a module control op), optional `profile`+`config` (attach), `args` (control arguments), `expect` (a JSON subset the reply must contain — this is what makes the op an assertion) |
 | `call_activity_method` | only for debuggable, source-owned builds with an injected hook |
 
 There is no `sleep` step and no polling: `wait_for` and the assertions are
 event-driven.
+
+**Service modules (`services:`).** A scenario attaches modules at launch with the
+same shape as the launch request. A pass that relied on `stub`/`scripted` says so
+in the verdict's `notes`, and `verdict.json` carries `modules[]` with each
+module's profile and fidelity:
+
+```yaml
+services:
+  - id: feedback.vibrator     # see acos_capabilities.modules
+    profile: stub             # off | stub | scripted | real (omit for the default)
+    config: {}                # optional module config
+steps:
+  - launch: {activity: dev.acos.fixtures.counter/.MainActivity}
+  - assert_text: {selector: {id: count}, text: {exact: "0"}}
+    requires_services: [feedback.vibrator]   # off -> the step is `unsupported`, never pass
+```
+
+A step that declares `requires_services` is `unsupported` (with
+`details.module`) when the module is `off`; ACOS never runs an assertion against
+behaviour the session does not have. The scenario `services:` block needs
+`--engine art`; the Rust VM refuses it.
+
+**Driving a scripted module mid-run (`service_ctl`).** `service_ctl` is the
+scenario spelling of `acos_services {op: attach|detach}` and
+`acos_service_ctl {module, op, args}` (MCP): it attaches/detaches a module or
+applies one of its control ops **between** steps, so a scripted feed can be
+changed while the app runs. The reply is the step's evidence (what the module
+actually applied), never a pass claim; `expect` (a JSON subset of that reply)
+is what turns the control op into an assertion.
+
+```yaml
+services:
+  - id: sensors
+    profile: scripted
+steps:
+  - launch: {activity: dev.acos.fixtures.sensorprobe/.MainActivity}
+  - wait_for: {selector: {id: sensor_count}, timeout_ms: 20000}
+  - assert_text: {selector: {id: sensor_count}, text: {exact: "sensors: 7"}}
+  - service_ctl:            # a sensor value, delivered as a real sensor event
+      module: sensors
+      op: set_value
+      args: {sensor: accelerometer, values: [1.5, -2.0, 9.81]}
+  - wait_for: {selector: {id: accel_seen}, timeout_ms: 15000}   # event-driven wait
+  - assert_text: {selector: {id: accel}, text: {exact: "accel: 1.5 -2.0 9.8"}}
+  - service_ctl: {module: sensors, op: shake, args: {count: 12, amplitude: 12}}
+  - service_ctl: {module: sensors, op: detach}
+```
+
+`assert_text` reads **one** tree (it does not poll), so after a `service_ctl`
+that only changes app state, wait for something the app makes appear
+(`wait_for`) before asserting; `timeout_ms` on an assertion is not a retry.
+A `reset` re-applies the scenario's `services:`, by design — to see a module's
+`off` state in the app, run a scenario that never attaches it.
+
+### Sensors (`sensors`)
+
+`sensors` serves Android's **native** sensor stack (`android.gui.ISensorServer`
++ `ISensorEventConnection` + a `BitTube` of `ASensorEvent` records), so
+`SensorManager`, `SensorEventListener`, `flush()` and `onFlushCompleted` work
+exactly as on a phone. Profiles: `off` (the app sees the stock
+device-without-sensors list: empty), `stub` (the seven-sensor table with fixed
+values) and `scripted` (the agent drives the values). There is **no `real`
+profile** — ACOS has no sensor hardware, and a measured accelerometer cannot
+exist; every verdict row for it says `fidelity: scripted`.
+
+| control op | arguments | effect |
+|---|---|---|
+| `status` | — | the sensor table, current values, live connections, counters |
+| `set_value` | `{sensor, values: [..]}` | set a sensor's value and deliver it to every enabled listener now |
+| `play` | `{sensor, samples: [{t_ms, values}], loop}` | schedule a timeline of events at their own offsets |
+| `shake` | `{amplitude?, count?, period_ms?}` | an alternating accelerometer timeline (a shake) |
+| `tilt` | `{angle_deg?, axis?, duration_ms?}` | ramp the gravity vector about x or y |
+| `enable` / `disable` | `{sensor, period_ns?}` | enable/disable a sensor on every open event connection |
+| `events` | `{limit?}` | the delivered events the verdict can cite |
+| `reset` | — | clear values, timelines and the event log |
+
+```
+acos launch fixtures/build/apps/sensor-probe.apk --engine art --service sensors:scripted --json
+acos verify scenarios/sensors-scripted.yaml --engine art --json      # the module's real-app proof
+acos verify scenarios/sensors-off.yaml --engine art --json           # the honest off state
+```
+
+Honest limits (also in every report): values are agent-chosen, never measured;
+delivery is not permission-gated (the table still carries AOSP's
+`requiredPermission`, e.g. `ACTIVITY_RECOGNITION` on the step counter); there is
+no batching/FIFO (`maxBatchReportLatencyNs` is accepted and ignored); and a
+**hot** attach cannot change the sensor list an app already read
+(`SystemSensorManager` caches it per process), so attach at launch when the app
+must see the sensors.
+
+### Location (`location`)
+
+**Feeding a scripted module (`service_ctl`).** A `scripted` module is driven by
+control operations, live, from a scenario step or from `acos_service_ctl`. The
+module's `controls` in `acos_capabilities` lists every op and its arguments:
+
+```yaml
+services:
+  - id: location                    # no GPS in a sandbox: `scripted` is the top profile
+    profile: scripted
+    config: {permissions: fine}      # the launch config grants the permission
+steps:
+  - launch: {activity: dev.acos.fixtures.locationprobe/.MainActivity}
+  - service_ctl:                     # one module control op, applied to the live session
+      module: location
+      op: set_location
+      args: {lat: 37.4220, lng: -122.0841, accuracy: 4.0, provider: gps}
+  - wait_for: {selector: {id: last, text: {contains: "37.4220"}}, timeout_ms: 10000}
+  - service_ctl:
+      module: location
+      op: play_track
+      args: {interval_ms: 250, points: [{lat: 37.423, lng: -122.085},
+                                        {lat: 37.424, lng: -122.086}]}
+  - assert_text: {selector: {id: fix}, text: {contains: "provider=gps"}}
+```
+
+`service_ctl` needs a backend with a module registry (`art`); elsewhere the step
+is `unsupported`, never a pass. A module that is `off` refuses the op with
+`SERVICE_MODULE_REJECTED` naming the attach call. On a live session the same
+call is `acos_service_ctl {"module": "location", "op": "set_location", "args":
+{...}}` (a single control op) and `acos_services {"op": "list"}` /
+`{"op": "attach"|"detach", "id": "location", "profile": "scripted"}` for the
+lifecycle. What a module delivered is recorded in the session: `verdict.json` →
+`modules[].reason` names the delivered fixes, and `ctl_op: "delivered"` returns
+the list itself.
+
+**A live attach/detach is visible through the app's own `LocationManager`.** The
+`location` name is published by `core` (the disabled-device answer) and the
+module fills that same binder (ADR-0029 note MODSENS), so an app that resolved
+`LocationManager` while the module was off still talks to the live module after
+`acos_services {"op": "attach", "id": "location", "profile": "scripted"}`,
+and a detach answers the honest disabled state again on the same handle. Before
+that fix the attach replaced the binder and the cached proxy kept answering the
+old node. Full scenario: `results/handoff/MODLOC3/location-live-attach.yaml`.
+
+**Honest limit: `requestLocationUpdates(PendingIntent)`** (`requestLocationUpdates`
+with a `PendingIntent`) is refused with `UNSUPPORTED_ANDROID_API`. The framework
+delivers the fix as the *fill-in* intent of `IIntentSender.send` (the image's
+`LocationPendingIntentTransport` puts the `Location` under
+`LocationManager.KEY_LOCATION_CHANGED`); merging a fill-in into the stored intent
+is not modelled yet (PIFILLIN), so firing that sender would carry no fix. Use
+the `LocationListener` form.
 
 `launch.activity` takes the same component spellings Android does, expanded
 before the launch gate runs: `com.example.app/.MainActivity` (a real
@@ -611,5 +763,19 @@ Two session-specific hints worth memorising:
   and restarting the server, or (c) writing evidence to the artifacts
   directory. Relative paths resolve against the server's working directory,
   never against the APK's directory.
+
+* **Service modules are opt-in and honest.** A session attaches `core` (the
+  service table every app needs) plus whatever `services:`/`--service` names.
+  Any name a module does not serve is either a tombstone that answers
+  `UNSUPPORTED_ANDROID_API` naming the module and the attach call, or Android's
+  real missing path (`null`) where AOSP builds working behaviour out of it — see
+  the generated table below. A module at `stub`/`scripted` is a documented
+  stand-in, never a real implementation: the launch reply, `acos_services` and
+  `verdict.json` all state its profile and fidelity. Only `hot` modules can be
+  attached/detached on a live session; an `at-launch` module (e.g. `core`) is
+  refused with the launch call in the message.
+  `acos_capabilities {session_id}` shows one session's attached set.
+
+<!-- modules:generated -->
 
 <!-- /topic:limits -->

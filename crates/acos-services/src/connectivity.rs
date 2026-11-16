@@ -72,6 +72,65 @@ use crate::value::{Parcelable, Value};
 /// from 100 on a device).
 pub const NET_ID: i32 = 100;
 
+/// The guest's IPv4 address in the SPIKE-NET namespace (`pasta -a`).
+///
+/// One source of truth: `acos_art::spike_net::pasta_args` builds its `-a`/`-g`/
+/// `-D` flags from these constants and this module reports them through
+/// `LinkProperties`, so the interface description an app reads cannot drift from
+/// the interface the namespace actually has.
+pub const NET_GUEST_ADDRESS: [u8; 4] = [169, 254, 2, 15];
+/// Prefix length of [`NET_GUEST_ADDRESS`] (`pasta -a 169.254.2.15/24`).
+pub const NET_GUEST_PREFIX_LEN: u8 = 24;
+/// pasta's gateway, which is also the DHCP server address the guest is told.
+pub const NET_GUEST_GATEWAY: [u8; 4] = [169, 254, 2, 1];
+/// The DNS server handed to the guest by DHCP (`pasta -D`).
+pub const NET_DNS_SERVER: [u8; 4] = [1, 1, 1, 1];
+
+/// First two octets of the per-session address block (design B2, ADR-0030
+/// amendment 3).
+///
+/// With the shared relay every session keeps its **own** netns and its own
+/// address, so `LinkProperties` is per session: [`session_network`] is the one
+/// function both the transport (`acos_netd::plan`) and this module's
+/// `LinkProperties` read, and the interface an app describes is therefore the
+/// interface the session's netns has, by construction.
+pub const NET_SESSION_BASE: [u8; 2] = [10, 163];
+
+/// Prefix length of one session's block (`10.163.<idx>.0/30`: the relay end
+/// takes `.1`, the guest `.2`).
+pub const NET_SESSION_PREFIX_LEN: u8 = 30;
+
+/// Highest session index a block can be handed out for (`10.163.254.0/30`).
+pub const NET_SESSION_MAX_INDEX: u32 = 254;
+
+/// The address, prefix and gateway of session `idx` (1-based).
+///
+/// `None` for `idx == 0` or `idx > NET_SESSION_MAX_INDEX`: an address block is
+/// never reused silently, so the caller fails with a structured error instead.
+#[must_use]
+pub fn session_network(idx: u32) -> Option<SessionNetwork> {
+    if idx == 0 || idx > NET_SESSION_MAX_INDEX {
+        return None;
+    }
+    let n = u8::try_from(idx).ok()?;
+    Some(SessionNetwork {
+        address: [NET_SESSION_BASE[0], NET_SESSION_BASE[1], n, 2],
+        prefix_len: NET_SESSION_PREFIX_LEN,
+        gateway: [NET_SESSION_BASE[0], NET_SESSION_BASE[1], n, 1],
+    })
+}
+
+/// One session's network, as both `LinkProperties` and the transport see it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SessionNetwork {
+    /// The guest's address in its own netns (`10.163.<idx>.2`).
+    pub address: [u8; 4],
+    /// Prefix length ([`NET_SESSION_PREFIX_LEN`]).
+    pub prefix_len: u8,
+    /// The relay end of the session's veth, the guest's default gateway.
+    pub gateway: [u8; 4],
+}
+
 /// `ConnectivityManager.TYPE_WIFI` (the legacy type of the emulated network).
 pub const LEGACY_TYPE_WIFI: i32 = 1;
 
@@ -120,7 +179,12 @@ pub const IMESSENGER_SEND: u32 = 1;
 #[must_use]
 pub fn default_capabilities_bits() -> i64 {
     let mut bits = 0i64;
-    for cap in [
+    // SPIKE-NET (ADR-0030 gate): with pasta attached the session has a real,
+    // NATed interface, so the network is reported as validated and apps'
+    // `isInternetReachable` / ConnectivityManager checks pass. Off by default:
+    // the sandbox has no sockets at all, and claiming VALIDATED there would be
+    // a lie.
+    let mut caps: Vec<u32> = vec![
         CAP_NOT_METERED,
         CAP_INTERNET,
         CAP_NOT_RESTRICTED,
@@ -131,10 +195,29 @@ pub fn default_capabilities_bits() -> i64 {
         CAP_NOT_CONGESTED,
         CAP_NOT_SUSPENDED,
         CAP_NOT_VCN_MANAGED,
-    ] {
+    ]
+    .into_iter()
+    .collect();
+    if spike_net_enabled() {
+        caps.push(CAP_VALIDATED);
+    }
+    for cap in caps {
         bits |= 1i64 << cap;
     }
     bits
+}
+
+/// Does this session have a real network?
+///
+/// NET5: the `network` module publishes its attached profile in
+/// [`crate::network`] and this is the same gate the launcher's sandbox and the
+/// guest's seccomp program read, so `ConnectivityManager`, the netns and
+/// `AF_INET` cannot disagree. With the module off the answer is the honest
+/// no-network device ACOS has always presented (no address, no DNS, no route,
+/// no `VALIDATED`); the `ACOS_SPIKE_NET` override only remains for the standalone
+/// `acos-art` binary's own spikes.
+fn spike_net_enabled() -> bool {
+    crate::network::session_has_network()
 }
 
 /// `NetworkRequest.Type` ordinals (`ConnectivityManager.sendRequestForNetwork`
@@ -311,10 +394,20 @@ pub fn default_network_capabilities() -> Parcelable {
 
 /// `android.net.LinkProperties` of the emulated default network.
 ///
-/// There is no interface in the sandbox, so the three address lists, the route
-/// list and the stacked-link list are explicit `0`/`null` counts. The interface
-/// name and MTU are the AOSP emulator's wifi defaults, so `getInterfaceName()`
-/// and `getMtu()` answer with a plausible, documented value instead of `null`.
+/// Without the network module there is no interface in the sandbox, so the three
+/// address lists, the route list and the stacked-link list are empty and the
+/// DHCP server address is null. The interface name and MTU are the AOSP
+/// emulator's wifi defaults, so `getInterfaceName()` and `getMtu()` answer with a
+/// plausible, documented value instead of `null`.
+///
+/// SPIKE-NET (ADR-0030 gate, item 5): with pasta attached the session really has
+/// an interface, an address, a DNS server and a default route, so
+/// `getLinkProperties()` describes them instead of lying by omission — the guest
+/// address pasta hands out (`169.254.2.15/24`), its gateway
+/// (`169.254.2.1`, which is also the DHCP server) and the DHCP-answered DNS
+/// server (`1.1.1.1`, `spike_net::pasta_args`' `-D`). Nothing is invented: the
+/// values are the ones the namespace actually has.
+///
 /// The value list follows the framework's writer field for field: the list
 /// counts are [`Value::List`]s consumed by [`crate::parcelable::FieldOp::Counted`]
 /// (or [`Value::List`] for `writeList`), the HTTP proxy is an absent
@@ -322,21 +415,36 @@ pub fn default_network_capabilities() -> Parcelable {
 /// is a [`Value::NamedParcelable`] holding [`Parcelable::Null`].
 #[must_use]
 pub fn default_link_properties() -> Parcelable {
+    let (addrs, dns, dhcp, routes) = if spike_net_enabled() {
+        (
+            Value::List(Some(vec![Value::Parcelable(guest_link_address())])),
+            Value::List(Some(vec![Value::ByteArray(Some(dns_server_bytes()))])),
+            Value::ByteArray(Some(dhcp_server_bytes())),
+            Value::List(Some(vec![Value::Parcelable(default_route())])),
+        )
+    } else {
+        (
+            Value::List(Some(Vec::new())),
+            Value::List(Some(Vec::new())),
+            Value::ByteArray(None),
+            Value::List(Some(Vec::new())),
+        )
+    };
     Parcelable::ordered(
         "android.net.LinkProperties",
         vec![
             Value::Str(Some("wlan0".to_string())),
-            Value::List(Some(Vec::new())), // link addresses
-            Value::List(Some(Vec::new())), // DNS servers
+            addrs,          // link addresses
+            dns,            // DNS servers
             Value::List(Some(Vec::new())), // validated private DNS servers
             Value::Bool(false),            // usePrivateDns
             Value::Str(None),              // privateDnsServerName
             Value::List(Some(Vec::new())), // PCSCF servers
             Value::Str(None),              // domains
-            Value::ByteArray(None),        // dhcp server address
+            dhcp,                          // dhcp server address
             Value::Int(1500),              // mtu
             Value::Str(None),              // tcpBufferSizes
-            Value::List(Some(Vec::new())), // routes
+            routes,                        // routes
             Value::Cond {
                 present: false,
                 values: Vec::new(),
@@ -348,6 +456,52 @@ pub fn default_link_properties() -> Parcelable {
             Value::NamedParcelable(Parcelable::Null), // captivePortalData
         ],
     )
+}
+
+/// The guest's address in the SPIKE-NET namespace (`NET_GUEST_ADDRESS/24`),
+/// as a `LinkAddress`: scope link (`RT_SCOPE_LINK` = 253), no flags, unknown
+/// lifetimes (the namespace has no address lifetime).
+fn guest_link_address() -> Parcelable {
+    Parcelable::ordered(
+        "android.net.LinkAddress",
+        vec![
+            Value::ByteArray(Some(NET_GUEST_ADDRESS.to_vec())),
+            Value::Int(i32::from(NET_GUEST_PREFIX_LEN)),
+            Value::Int(0),   // flags
+            Value::Int(253), // RT_SCOPE_LINK
+            Value::Long(-1), // deprecationTime = LIFETIME_UNKNOWN
+            Value::Long(-1), // expirationTime = LIFETIME_UNKNOWN
+        ],
+    )
+}
+
+/// The default route of the namespace: `0.0.0.0/0` via pasta's gateway
+/// (`NET_GUEST_GATEWAY`), `RTN_UNICAST`, no MTU override.
+fn default_route() -> Parcelable {
+    Parcelable::ordered(
+        "android.net.RouteInfo",
+        vec![
+            Value::Parcelable(Parcelable::ordered(
+                "android.net.IpPrefix",
+                vec![
+                    Value::ByteArray(Some(vec![0, 0, 0, 0])),
+                    Value::Int(0), // /0
+                ],
+            )),
+            Value::ByteArray(Some(NET_GUEST_GATEWAY.to_vec())),
+            Value::Str(Some("wlan0".to_string())),
+            Value::Int(1), // RTN_UNICAST
+            Value::Int(0), // no per-route MTU
+        ],
+    )
+}
+
+fn dns_server_bytes() -> Vec<u8> {
+    NET_DNS_SERVER.to_vec()
+}
+
+fn dhcp_server_bytes() -> Vec<u8> {
+    NET_GUEST_GATEWAY.to_vec()
 }
 
 /// `android.net.NetworkInfo` (the deprecated reply) for the default network.
@@ -814,5 +968,115 @@ fn request_id_of(value: Option<&Value>) -> Option<i32> {
             values.get(2).and_then(Value::as_int)
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod link_properties_tests {
+    use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    /// The flag is process-wide, so these tests take turns.
+    static ENV: Mutex<()> = Mutex::new(());
+
+    fn with_flag<T>(on: bool, f: impl FnOnce() -> T) -> T {
+        let _guard: MutexGuard<'_, ()> = ENV.lock().unwrap_or_else(|e| e.into_inner());
+        // The mutex makes this the only thread of this test binary that touches
+        // the flag; no other test reads it (`grep ACOS_SPIKE_NET`).
+        if on {
+            std::env::set_var("ACOS_SPIKE_NET", "1");
+        } else {
+            std::env::remove_var("ACOS_SPIKE_NET");
+        }
+        let out = f();
+        std::env::remove_var("ACOS_SPIKE_NET");
+        out
+    }
+
+    fn list(value: &Value) -> Vec<Value> {
+        match value {
+            Value::List(Some(items)) => items.clone(),
+            other => panic!("expected a list, got {other:?}"),
+        }
+    }
+
+    /// Item 5 parity: with the network attached, `getLinkProperties()` describes
+    /// the interface the namespace really has — the guest address, the DNS
+    /// server DHCP handed out, and a default route through pasta's gateway.
+    #[test]
+    fn flag_on_reports_the_namespaces_interface_addresses_dns_and_route() {
+        let lp = with_flag(true, default_link_properties);
+        let fields = lp.fields().expect("an ordered LinkProperties payload");
+
+        assert_eq!(
+            fields[0],
+            Value::Str(Some("wlan0".to_string())),
+            "interface name"
+        );
+
+        let addrs = list(&fields[1]);
+        assert_eq!(addrs.len(), 1, "one link address");
+        let Value::Parcelable(Parcelable::Ordered { class, values }) = &addrs[0] else {
+            panic!("a LinkAddress parcelable");
+        };
+        assert_eq!(class, "android.net.LinkAddress");
+        assert_eq!(
+            values[0],
+            Value::ByteArray(Some(NET_GUEST_ADDRESS.to_vec())),
+            "the address pasta configures"
+        );
+        assert_eq!(values[1], Value::Int(i32::from(NET_GUEST_PREFIX_LEN)));
+
+        let dns = list(&fields[2]);
+        assert_eq!(dns.len(), 1, "one DNS server");
+        assert_eq!(dns[0], Value::ByteArray(Some(NET_DNS_SERVER.to_vec())));
+
+        assert_eq!(fields[3], Value::List(Some(Vec::new())), "no private DNS");
+        assert_eq!(
+            fields[8],
+            Value::ByteArray(Some(NET_GUEST_GATEWAY.to_vec())),
+            "the DHCP server is pasta's gateway"
+        );
+
+        let routes = list(&fields[11]);
+        assert_eq!(routes.len(), 1, "one default route");
+        let Value::Parcelable(Parcelable::Ordered { class, values }) = &routes[0] else {
+            panic!("a RouteInfo parcelable");
+        };
+        assert_eq!(class, "android.net.RouteInfo");
+        assert_eq!(
+            values[1],
+            Value::ByteArray(Some(NET_GUEST_GATEWAY.to_vec())),
+            "the route's gateway"
+        );
+        assert_eq!(values[2], Value::Str(Some("wlan0".to_string())));
+    }
+
+    /// The flag-off payload is the one ACOS shipped: nothing to describe, and the
+    /// wire bytes are an explicit zero count per list (the previous `Int(0)`
+    /// fields and an empty `List` are byte-identical).
+    #[test]
+    fn flag_off_keeps_every_list_empty() {
+        let lp = with_flag(false, default_link_properties);
+        let fields = lp.fields().expect("an ordered LinkProperties payload");
+        for index in [1, 2, 3, 6, 11] {
+            assert_eq!(
+                fields[index],
+                Value::List(Some(Vec::new())),
+                "field {index} must stay empty without the network module"
+            );
+        }
+        assert_eq!(fields[8], Value::ByteArray(None), "no DHCP server address");
+    }
+
+    /// The flag adds `NET_CAPABILITY_VALIDATED` and nothing else.
+    #[test]
+    fn validated_capability_follows_the_flag() {
+        let bit = 1i64 << CAP_VALIDATED;
+        let off = with_flag(false, default_capabilities_bits);
+        assert_eq!(off & bit, 0, "flag off must not claim a validated network");
+        let on = with_flag(true, default_capabilities_bits);
+        assert_ne!(on & bit, 0, "flag on reports the network as validated");
+        assert_eq!(on & !bit, off, "no other capability changes");
     }
 }

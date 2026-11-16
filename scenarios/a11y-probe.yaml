@@ -1,0 +1,146 @@
+# ADR-0029 accessibility module: the launch config enables the probe's own
+# service (the equivalent of the user switching it on in Settings), the app's
+# real AccessibilityManager reports enabled + the installed/enabled lists, and
+# a real button click is sent through IAccessibilityManager.sendAccessibilityEvent.
+version: 1
+name: a11y-probe
+description: accessibility module enables a service; isEnabled/list/event path on ART
+app: fixtures/build/apps/a11y-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+services:
+  - id: accessibility
+    profile: real
+    config:
+      enable:
+        - dev.acos.fixtures.a11yprobe/.A11yProbeService
+steps:
+  - launch:
+      activity: dev.acos.fixtures.a11yprobe/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "a11y enabled=true installed=1 enabled_list=1"}
+  - tap:
+      selector: {id: send}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "sent=1"}
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        - "event_sent"
+  # MODA11Y2: the module binds the enabled service (scheduleCreateService +
+  # scheduleBindService -> publishService -> IAccessibilityServiceClient.init),
+  # so the app's own AccessibilityService.onServiceConnected runs with the
+  # AccessibilityServiceInfo the system connected it with.
+  # MODA11Y6 step 2: the capabilities the app's own `AccessibilityServiceInfo`
+  # reports come from the `<accessibility-service>` meta-data block the module
+  # resolved out of the APK (@xml/accessibility_service_config -> resource table
+  # -> zip entry -> binary XML): canRetrieveWindowContent (1) +
+  # canPerformGestures (32) + canTakeScreenshot (128) = 161. The same values
+  # gate `getWindows`/`getRootInActiveWindow`/`find*`, so this line and the
+  # window list below cannot disagree.
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        # One line, because an ordered log assertion advances past each match.
+        - "service_connected id=dev.acos.fixtures.a11yprobe/.A11yProbeService capabilities=161"
+  # MODA11Y4 step 2: the bound service's own interaction surface. `getWindows()`
+  # answers from the LAYER1 stack (one application window, layer 0, active and
+  # focused), `getRootInActiveWindow()` is the app's active window root, a
+  # by-view-id query finds the real button, and ACTION_CLICK runs the app's own
+  # OnClickListener — the status text below proves the click landed in the app.
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        - "windows count=1"
+        - "type=1 layer=0 active=true focused=true"
+        - "root class=android.widget.FrameLayout"
+        - "by_view_id count=1"
+        - "node class=android.widget.Button text=Click target.*clickable=true"
+        - "click handled=true"
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "a11y_click=1"}
+  # MODA11Y5 step 4: the bound service adds a TYPE_ACCESSIBILITY_OVERLAY window
+  # through the WindowManager the framework gave it. The WMS accepts the add
+  # only on the overlay window token `IAccessibilityServiceClient.init` handed
+  # the service (AOSP WindowManagerService.java:1630-1640 / sanitizeWindowType
+  # 9914-9928), so this step fails if the host lets any window claim the
+  # accessibility overlay layer.
+  - assert_log:
+      tag: AcosA11yProbe
+      ordered: false
+      patterns:
+        - "overlay_added type=2032 token=set"
+        - "overlay_probe_done"
+  # MODA11Y6 step 1: the guest re-query is back, and it is the assertion the
+  # service itself can make. `getWindows()` after the add is answered by the
+  # guest's `AccessibilityCache` until a `TYPE_WINDOWS_CHANGED` event clears it
+  # (AccessibilityInteractionClient.java:489-532,
+  # AccessibilityCache.java:276-288), and the module now delivers that event
+  # when a window enters or leaves the stack, the way
+  # `AccessibilityWindowManager` does. So the first query may still be the
+  # cache; the retry inside the probe (25 x 200 ms) must come back with two
+  # windows, the overlay topmost as `TYPE_ACCESSIBILITY_OVERLAY` (type 4) above
+  # the application window (type 1).
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        - "onAccessibilityEvent type=4194304"
+        - "windows2 count=2 attempts=\\d+"
+        - "window2\\[0\\] id=2 type=4 layer=1"
+        - "window2\\[1\\] id=1 type=1 layer=0 active=true focused=true"
+        - "windows2 overlay=true"
+  # The observe tree (the host's own layer policy, not the guest's claim): the
+  # overlay is a real window in the LAYER1 stack, tagged with its kind.
+  - assert_windows:
+      order: [application, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY]
+      focus: application
+      focus_type: TYPE_BASE_APPLICATION
+  # MODA11Y4 step 3: performGlobalAction(GLOBAL_ACTION_BACK) from the bound
+  # service. The module routes it to the session's Back path — a real
+  # KEYCODE_BACK down/up pair on the focused window's InputChannel, the same
+  # publish the control plane's `back` uses — so the app's own window decides.
+  # MODA11Y5: the published pair is a plain, untracked press. `FLAG_TRACKING` is
+  # not on the wire — the app sets it itself: `Activity.onKeyDown(BACK)` calls
+  # `event.startTracking()` and `KeyEvent.dispatch`'s up branch runs
+  # `DispatcherState.handleUpEvent` before `onKeyUp`, so `key_up tracking=true`
+  # below is the app's own dispatcher state, not the host's claim (and
+  # `key_down repeat=0` is what lets it start tracking). "Dialog first, then
+  # activity" is the same rule: the key goes to the focused window, so a dialog
+  # dismisses before the activity sees it.
+  #
+  # What is asserted: the app's own key handlers ran and its Back handler ran
+  # (back_pressed). NOT asserted: the activity's destroy transaction after
+  # finish() — the host's activity manager does not deliver it yet (see
+  # results/handoff/MODA11Y4/README.md, "What is not proven").
+  - tap:
+      selector: {id: a11y_back}
+  - assert_log:
+      tag: AcosA11yProbe
+      # The key is published before `performGlobalAction` returns, so the app's
+      # `key_down` may be logged before or after `global_action back=true`: the
+      # claim is that all of these happened, not their interleaving.
+      ordered: false
+      patterns:
+        - "back_requested"
+        - "global_action back=true"
+        - "key_down code=4 tracking=false repeat=0 flags=0"
+        - "key_up code=4 tracking=true"
+        - "back_pressed"

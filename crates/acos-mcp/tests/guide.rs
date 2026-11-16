@@ -567,3 +567,130 @@ fn meta_tools_report_fidelity_not_applicable() {
         Some("native-runtime")
     );
 }
+
+/// ADR-0029 item 6: `acos_capabilities` and the guide's limits section are
+/// generated from the service-module registry, and the two cannot disagree.
+///
+/// Before the module framework there was no registry at all: the limits section
+/// was hand-written prose (the feedback log's root cause D) and nothing tied it
+/// to what the build actually served.
+#[test]
+fn the_limits_section_is_generated_from_the_module_registry() {
+    use acos_mcp::help::MODULES_MARKER;
+    let registry = acos_services::module::ModuleRegistry::standard();
+    let generated = registry.limits_markdown();
+
+    // The guide carries the marker in its limits topic, not a hand-written copy
+    // of the table.
+    assert!(
+        acos_mcp::help::AGENT_GUIDE.contains(acos_mcp::help::MODULES_MARKER),
+        "docs/AGENT_GUIDE.md must carry the module marker in its limits topic"
+    );
+    assert_eq!(acos_mcp::help::generated_limits(), generated);
+
+    let limits = acos_mcp::help::guide(Some("limits"));
+    assert!(
+        !limits.contains(acos_mcp::help::MODULES_MARKER),
+        "the marker must be replaced by the generated table"
+    );
+    // Verbatim: the rendered section *ends* with the registry's own table.
+    assert!(
+        limits.ends_with(generated.trim_end()),
+        "the limits topic must carry the registry's own table verbatim"
+    );
+
+    // Every module the build ships appears, with its profiles.
+    for manifest in registry.manifests() {
+        assert!(
+            limits.contains(&format!("`{}`", manifest.id)),
+            "module {} is missing from the limits topic",
+            manifest.id
+        );
+        for profile in manifest.profiles_with_off() {
+            assert!(
+                limits.contains(&format!("`{profile}`")),
+                "module {} does not document its {profile} profile",
+                manifest.id
+            );
+        }
+    }
+    // Every gap name appears with its decision.
+    for tombstone in acos_services::module::TOMBSTONES {
+        assert!(
+            limits.contains(&format!("`{}`", tombstone.name)),
+            "gap name {} is missing from the limits topic",
+            tombstone.name
+        );
+    }
+
+    // `topic: "all"` renders the same generated table (one guide, one source).
+    let all = acos_mcp::help::full_guide();
+    assert!(all.contains(generated.trim_end()));
+}
+
+/// ADR-0029 item 4: the session-module tools are advertised with a closed
+/// schema, so a typo in `services:`/`acos_services` is caught by the client's
+/// validator instead of being silently ignored by the server.
+#[test]
+fn the_service_module_tools_advertise_closed_schemas() {
+    let mut client = McpClient::with_real_acos();
+    let list = client.request("tools/list", json!({}));
+    let tools = list
+        .pointer("/result/tools")
+        .and_then(Value::as_array)
+        .expect("tools array");
+    let services = tools
+        .iter()
+        .find(|tool| tool.get("name").and_then(Value::as_str) == Some("acos_services"))
+        .expect("acos_services must be advertised");
+    let schema = services.get("inputSchema").expect("inputSchema");
+    assert_eq!(
+        schema.get("additionalProperties").and_then(Value::as_bool),
+        Some(false),
+        "acos_services must be a closed schema: {schema}"
+    );
+    let ops = schema
+        .pointer("/properties/op/enum")
+        .and_then(Value::as_array)
+        .expect("op enum");
+    let ops: Vec<&str> = ops.iter().filter_map(Value::as_str).collect();
+    // `ctl` is the scripted-module control operation (MODLOC): the enum is
+    // closed, so an agent cannot invent an op and have it silently ignored.
+    assert_eq!(ops, ["list", "status", "attach", "detach", "ctl"]);
+    // `ctl` needs its own op name and argument object, both declared.
+    assert_eq!(
+        schema
+            .pointer("/properties/ctl_op/type")
+            .and_then(Value::as_str),
+        Some("string")
+    );
+    assert_eq!(
+        schema
+            .pointer("/properties/args/type")
+            .and_then(Value::as_str),
+        Some("object")
+    );
+    assert_eq!(
+        schema.pointer("/required/0").and_then(Value::as_str),
+        Some("op")
+    );
+
+    let launch = tools
+        .iter()
+        .find(|tool| tool.get("name").and_then(Value::as_str) == Some("acos_launch"))
+        .expect("acos_launch");
+    let item = launch
+        .pointer("/inputSchema/properties/services/items")
+        .expect("acos_launch.services schema");
+    assert_eq!(
+        item.get("additionalProperties").and_then(Value::as_bool),
+        Some(false),
+        "a services item must be closed: {item}"
+    );
+    assert_eq!(
+        item.pointer("/properties/profile/enum")
+            .and_then(Value::as_array)
+            .map(|v| v.iter().filter_map(Value::as_str).collect::<Vec<_>>()),
+        Some(vec!["off", "stub", "scripted", "real"])
+    );
+}

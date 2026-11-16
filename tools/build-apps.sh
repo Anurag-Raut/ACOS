@@ -18,6 +18,10 @@
 #   fixtures/build/apps/offscreen-pager.apk
 #   fixtures/build/apps/insets-probe.apk
 #   fixtures/build/apps/multi-package-probe.apk
+#   fixtures/build/apps/sensor-probe.apk   (MODSENS: native sensorservice feed)
+#   fixtures/build/apps/notif-perm-probe.apk (MODNOTIF5: notifications + POST_NOTIFICATIONS gate)
+#   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
+#
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -116,8 +120,18 @@ build_apk() {
         --auto-add-overlay
 
     echo "build-apps: [$name] compiling java"
+    # The ACOS guest sources are a *runtime* classpath: `dev.acos.art.*` (the
+    # session's LaunchMain providers, e.g. `SoftwareKeyStore`) is compiled into
+    # the boot dex at launch, never shipped in the APK. A fixture that calls one
+    # (keystore-probe) therefore needs them on the javac sourcepath, exactly as
+    # `tools/keystore-k5b/run.sh` compiles them beside the probe. `-implicit:none`
+    # type-checks against those sources without emitting classes, so the APK's
+    # dex never carries a second copy of a class the guest dex already owns.
+    # Kept generic so the next guest-harness fixture does not rediscover this.
     # shellcheck disable=SC2046
-    javac --release 11 -encoding UTF-8 -cp "$android_jar" -d "$work/classes" \
+    javac --release 11 -encoding UTF-8 -cp "$android_jar" \
+        -sourcepath "$ROOT/crates/acos-art/guest/java" -implicit:none \
+        -d "$work/classes" \
         $(find "$app_dir/src" "$work/gen" -name '*.java')
 
     echo "build-apps: [$name] dexing"
@@ -293,7 +307,7 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
-for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager; do
+for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager sensor-probe notif-perm-probe; do
     build_apk "$app"
 done
 
@@ -314,10 +328,31 @@ build_apk intent-probe
 # framework decoded from the ACOS PMS reply. It is the app-visible check that
 # `PackageInfo.writeToParcel`'s String8 arrays are encoded as String8.
 build_apk pms-parcel
+# a11y-probe is the ADR-0029 accessibility-module fixture: reads the real
+# AccessibilityManager state (enabled + installed/enabled lists) and sends a
+# real event through IAccessibilityManager.sendAccessibilityEvent.
+build_apk a11y-probe
+
+# tail-probe is the long-tail module fixture (ADR-0029): one tab per module
+# (telephony, biometric, bluetooth, vibrator) printing what the framework's own
+# clients answered. Built at targetSdk 34 like the module scenario corpus.
+build_apk tail-probe
+
+# location-probe is the MODLOC fixture: it shows `getLastKnownLocation`, live
+# updates from a scripted track and the geocoder state on screen, so a scenario
+# can assert what the app really received (fixtures/apps/location-probe).
+build_apk location-probe
 
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).
+# --- net-check ---------------------------------------------------------------
+# SPIKE-NET fixture: apps that need the real network. HttpURLConnection GET of
+# https://example.com; the status code (or the exception class) goes into a
+# TextView, plus the ConnectivityManager report.
+build_apk net-check
+
+# --- keystore-probe ----------------------------------------------------------
 build_apk keystore-probe
 
 # SPIKE-WV (ADR-0031 gate, research/spike-wv/): webview-probe creates a real

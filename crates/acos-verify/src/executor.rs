@@ -17,7 +17,9 @@ use acos_protocol::assertion::{
 };
 use acos_protocol::commands::ResetScope;
 use acos_protocol::events::{Event, EventBody};
-use acos_protocol::scenario::{Expectation, ExpectedError, Scenario, Step, StepRef, StepSettle};
+use acos_protocol::scenario::{
+    Expectation, ExpectedError, Scenario, ServiceCtlStep, Step, StepRef, StepSettle,
+};
 use acos_protocol::ui::Bounds;
 use acos_protocol::verdict::{
     AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
@@ -27,11 +29,12 @@ use acos_protocol::{ErrorCode, Fidelity, ProtocolError, Status};
 
 use crate::artifacts;
 use crate::assertions::{
-    self, eval_log, eval_no_crash, eval_not_visible, eval_state, eval_text, eval_visible, Evaluated,
+    self, eval_log, eval_no_crash, eval_not_visible, eval_state, eval_text, eval_visible,
+    eval_windows, Evaluated,
 };
 use crate::backend::{
     Backend, BackendError, Capabilities, Capability, CrashRecord, EnvironmentChange, InputAction,
-    LaunchRequest, LogRecord, SessionObservation,
+    LaunchRequest, LogRecord, ServiceCtlRequest, SessionObservation,
 };
 use crate::clock::Clock;
 use crate::error::VerifyError;
@@ -63,6 +66,10 @@ pub struct RunOptions {
     pub flags: Vec<String>,
     /// `acos` version string.
     pub acos_version: String,
+    /// ADR-0029 item 4: the `services:` the session attached, `(id, profile)`.
+    /// A step that `requires_services` a module not attached here is
+    /// `unsupported`, never run against behaviour the session does not have.
+    pub services: Vec<(String, String)>,
 }
 
 /// The result of a run.
@@ -77,6 +84,16 @@ pub struct RunOutcome {
     /// What artifact retention did (ARTGC); `None` for runs that never reached
     /// the artifacts stage.
     pub retention: Option<crate::retention::RetentionReport>,
+}
+
+/// The first module a step requires that this session has not attached.
+fn missing_service(step: &Step, services: &[(String, String)]) -> Option<String> {
+    step.requires_services.iter().find_map(|id| {
+        let attached = services
+            .iter()
+            .any(|(attached, profile)| attached == id && profile != "off");
+        (!attached).then(|| id.clone())
+    })
 }
 
 /// Internal per-step execution state.
@@ -325,7 +342,39 @@ pub fn run_scenario(
         };
 
         let cause_id = format!("{}:{}:{}", options.request_id, step.kind(), index);
-        let exec = if bound_is_fast && binds_to_bound_frame(step) {
+        // ADR-0029 item 4/5: a step that needs a module this session does not
+        // have is `unsupported`, never executed and never a pass.
+        let exec = if let Some(missing) = missing_service(step, &options.services) {
+            let attach = format!(
+                "acos_launch {{services: [{{id: {:?}, profile: \"real\"}}]}} or the CLI                  `--service {}{{profile}}` flag",
+                missing, missing
+            );
+            let error = ProtocolError::new(
+                ErrorCode::UnsupportedBackend,
+                format!(
+                    "step {} needs service module {:?}, which this session does not have attached (module is off)",
+                    step.kind(),
+                    missing
+                ),
+            )
+            .with_hint(format!(
+                "Attach the module at launch ({attach}); a step whose module is off is unsupported, never a pass."
+            ))
+            .with_details(serde_json::json!({
+                "capability": "service.module",
+                "module": missing,
+                "required_by": step.kind(),
+            }));
+            StepExec {
+                status: Status::Unsupported,
+                error: Some(error),
+                assertions: Vec::new(),
+                observation: None,
+                produced_frame: None,
+                session: None,
+                settle: None,
+            }
+        } else if bound_is_fast && binds_to_bound_frame(step) {
             fast_bound_failure(step.kind())
         } else if let Some(failure) = content_settle_pixel_failure(step, bound_settle.as_ref()) {
             // SE2: content stability says nothing about pixels (they may still
@@ -1127,30 +1176,13 @@ fn execute_step(
                     "the backend cannot observe a UI tree",
                 );
             }
-            match backend.observe() {
-                Ok(observation) => {
-                    if let Some(failure) = observation_binding_error(backend.id(), &observation) {
-                        return failure;
-                    }
-                    if let Some(bound) = bound_frame_seq {
-                        if observation.frame.frame_seq != bound {
-                            return frame_binding_failure(bound, &observation);
-                        }
-                    }
-                    if let Some(failure) = meaningful_error(&observation) {
-                        return failure;
-                    }
-                    let evaluated = eval_text(assertion, &observation);
-                    let mut exec = if evaluated.result.passed {
-                        StepExec::passed_assertion(evaluated)
-                    } else {
-                        StepExec::failed(evaluated)
-                    };
-                    exec.observation = Some(observation);
-                    exec
-                }
-                Err(error) => StepExec::backend_error(&error, backend.id(), "assert_text"),
-            }
+            observation_assertion(
+                backend,
+                |observation| eval_text(assertion, observation),
+                "assert_text",
+                bound_frame_seq,
+                assertion.timeout_ms,
+            )
         }
         StepRef::AssertVisible(assertion) => {
             capabilities_used.insert(Capability::UiTree.as_str().to_string());
@@ -1165,6 +1197,7 @@ fn execute_step(
                 |observation| eval_visible(assertion, observation),
                 "assert_visible",
                 bound_frame_seq,
+                assertion.timeout_ms,
             )
         }
         StepRef::AssertNotVisible(assertion) => {
@@ -1180,6 +1213,7 @@ fn execute_step(
                 |observation| eval_not_visible(assertion, observation),
                 "assert_not_visible",
                 bound_frame_seq,
+                assertion.timeout_ms,
             )
         }
         StepRef::AssertState(assertion) => {
@@ -1195,6 +1229,26 @@ fn execute_step(
                 |observation| eval_state(assertion, observation),
                 "assert_state",
                 bound_frame_seq,
+                assertion.timeout_ms,
+            )
+        }
+        StepRef::AssertWindows(assertion) => {
+            capabilities_used.insert(Capability::UiTree.as_str().to_string());
+            if !caps.ui_tree {
+                return StepExec::unsupported(
+                    Capability::UiTree,
+                    "the backend cannot observe a UI tree, so it cannot report the window stack",
+                );
+            }
+            observation_assertion(
+                backend,
+                |observation| eval_windows(assertion, observation),
+                "assert_windows",
+                bound_frame_seq,
+                // `assert_windows` has no `timeout_ms`: it describes the frame
+                // the previous step left behind. (NET4 gave the text/state
+                // assertions a real wait; this one keeps the single sample.)
+                None,
             )
         }
         StepRef::AssertLog(assertion) => {
@@ -1383,6 +1437,142 @@ fn execute_step(
             Capability::Environment,
             "call_activity_method requires an injected debug hook that this build does not provide",
         ),
+        StepRef::ServiceCtl(ctl) => service_ctl_step(backend, ctl),
+    }
+}
+
+/// ADR-0029 item 4: one `service_ctl` step (attach/detach/control).
+///
+/// A backend without the capability answers `unsupported` (never a pass); a
+/// module that refuses the operation (off module, unknown op, `real` profile it
+/// does not implement) is a **failed** step with the module's own structured
+/// message, because the scenario asked for something the session cannot do.
+fn service_ctl_step(backend: &mut dyn Backend, ctl: &ServiceCtlStep) -> StepExec {
+    let request = ServiceCtlRequest {
+        module: ctl.module.clone(),
+        op: ctl.op.clone(),
+        profile: ctl.profile.clone(),
+        config: ctl.config.clone(),
+        args: ctl.args.clone(),
+    };
+    match backend.service_ctl(&request) {
+        Ok(reply) => {
+            let mut exec = StepExec::pass();
+            let summary = summarize_reply(&reply);
+            // `expect` is the step's assertion over the module's own reply
+            // (subset match, see [`json_subset`]): a control op is only a check
+            // when the scenario says what the reply must contain.
+            let mismatch = ctl
+                .expect
+                .as_ref()
+                .and_then(|expected| json_subset(expected, &reply));
+            if let Some(path) = &mismatch {
+                exec.status = Status::Fail;
+                exec.error = Some(
+                    ProtocolError::new(
+                        acos_protocol::ErrorCode::AssertionFailed,
+                        format!(
+                            "service_ctl {} {}: the reply does not match `expect` at {path}",
+                            request.module,
+                            request.kind()
+                        ),
+                    )
+                    .with_hint(
+                        "The reply is the module's evidence; compare it with `expect` (a JSON subset).",
+                    ),
+                );
+            }
+            // The reply is the step's evidence: a reviewer reads what the module
+            // actually applied (`scheduled=12`, `delivered_to=1`, the attached
+            // set after a detach), not only that the step did not fail.
+            exec.assertions.push(acos_protocol::assertion::AssertionResult {
+                kind: "service_ctl".to_string(),
+                passed: mismatch.is_none(),
+                expected: Some(match &ctl.expect {
+                    Some(expect) => serde_json::json!({
+                        "module": request.module,
+                        "op": request.kind(),
+                        "expect": expect,
+                    }),
+                    None => serde_json::json!({
+                        "module": request.module,
+                        "op": request.kind(),
+                    }),
+                }),
+                actual: Some(reply),
+                diff: mismatch.as_ref().map(|path| acos_protocol::assertion::AssertionDiff {
+                    expected: ctl.expect.clone().unwrap_or(serde_json::Value::Null),
+                    actual: serde_json::Value::Null,
+                    path: Some(path.clone()),
+                    detail: Some("the reply does not contain the expected JSON subset".to_string()),
+                }),
+                matched_node_ids: Vec::new(),
+                message: Some(summary),
+            });
+            exec
+        }
+        Err(error) => StepExec::backend_error(&error, backend.id(), request.kind()),
+    }
+}
+
+/// Match `expected` as a **subset** of `actual`; `Some(path)` names the first
+/// place they differ.
+///
+/// * objects: every expected key must exist and match (extra actual keys are
+///   allowed, so a scenario names only the fields it cares about);
+/// * arrays: same length, element-wise subset (a shorter expectation is a
+///   failure, so `actions: []` really means "no actions");
+/// * everything else: equality.
+fn json_subset(expected: &serde_json::Value, actual: &serde_json::Value) -> Option<String> {
+    match (expected, actual) {
+        (serde_json::Value::Object(expected), serde_json::Value::Object(actual)) => {
+            for (key, value) in expected {
+                let Some(actual) = actual.get(key) else {
+                    return Some(format!("/{key} (missing)"));
+                };
+                if let Some(path) = json_subset(value, actual) {
+                    return Some(format!("/{key}{path}"));
+                }
+            }
+            None
+        }
+        (serde_json::Value::Array(expected), serde_json::Value::Array(actual)) => {
+            if expected.len() != actual.len() {
+                return Some(format!(
+                    " (array length: expected {}, got {})",
+                    expected.len(),
+                    actual.len()
+                ));
+            }
+            for (index, (expected, actual)) in expected.iter().zip(actual).enumerate() {
+                if let Some(path) = json_subset(expected, actual) {
+                    return Some(format!("/{index}{path}"));
+                }
+            }
+            None
+        }
+        (serde_json::Value::Object(_), _) | (serde_json::Value::Array(_), _) => {
+            Some(format!(" (expected {expected}, got {actual})"))
+        }
+        _ if expected == actual => None,
+        _ => Some(format!(" (expected {expected}, got {actual})")),
+    }
+}
+
+/// A one-line summary of a `service_ctl` reply (evidence, never a pass claim).
+fn summarize_reply(reply: &serde_json::Value) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for key in ["attached", "scheduled", "delivered_to", "applied", "delivered", "connections"] {
+        if let Some(value) = reply.get(key) {
+            if !value.is_null() {
+                parts.push(format!("{key}={value}"));
+            }
+        }
+    }
+    if parts.is_empty() {
+        "ok".to_string()
+    } else {
+        parts.join(" ")
     }
 }
 
@@ -1439,36 +1629,105 @@ fn environment_step(
     }
 }
 
+/// Evaluate one assertion against the live tree.
+///
+/// **`timeout_ms` is a real, event-driven wait (NET4).** The scenario schema
+/// documents it as "the runtime waits for a matching frame/tree, never for a
+/// fixed sleep", but this function used to take a single `observe()` and return —
+/// the same defect W17 fixed for `wait_for` (one observation, ~1 ms, even with a
+/// 15 s budget). Measured consequence: `scenarios/net-check.yaml` asserts
+/// `exact "HTTP 200"` with `timeout_ms: 60000` on a status line the app fills in
+/// from a background fetch; roughly 1 run in 18 sampled the tree while it still
+/// read `pending` and failed a scenario that passes on the next sample.
+///
+/// The wait keeps the assertion's own rule: every poll evaluates the *same*
+/// predicate, and only a genuine pass ends the wait early. A poll that fails is
+/// only "not yet" while the deadline is open; when it closes, the last
+/// evaluation (with its diff and observation) is the step's verdict — never a
+/// timeout that claims to have checked something it did not.
 fn observation_assertion(
     backend: &mut dyn Backend,
-    evaluate: impl FnOnce(&SessionObservation) -> Evaluated,
+    evaluate: impl Fn(&SessionObservation) -> Evaluated,
     context: &str,
     bound_frame_seq: Option<u64>,
+    timeout_ms: Option<u64>,
 ) -> StepExec {
-    match backend.observe() {
-        Ok(observation) => {
-            if let Some(failure) = observation_binding_error(backend.id(), &observation) {
-                return failure;
-            }
-            if let Some(bound) = bound_frame_seq {
-                if observation.frame.frame_seq != bound {
-                    return frame_binding_failure(bound, &observation);
+    // A frame-bound assertion describes *that* frame, so a re-sample would
+    // compare against a different one — which is exactly what a `timeout_ms`
+    // asks for: "the live tree, until it says this". Such an assertion cites the
+    // sample that passed and drops the previous step's frame binding (the
+    // verdict still records the frame it read). Without a timeout nothing
+    // changes: one sample, bound to the frame the last step left behind.
+    let wait = match timeout_ms {
+        Some(ms) if ms > 0 => Some(Duration::from_millis(ms)),
+        _ => None,
+    };
+    let bound_frame_seq = if wait.is_some() { None } else { bound_frame_seq };
+    let started = Instant::now();
+    // Each poll is a fresh traversal and, on ART, a stored frame; pace them so a
+    // long budget cannot exhaust the guest's buffer pool (same rule, same
+    // numbers, as `wait_for`).
+    let mut interval = Duration::from_millis(WAIT_FOR_POLL_INTERVAL_MS);
+    let mut polls = 0u64;
+    loop {
+        polls += 1;
+        match backend.observe() {
+            Ok(observation) => {
+                if let Some(failure) = observation_binding_error(backend.id(), &observation) {
+                    return failure;
                 }
+                if let Some(bound) = bound_frame_seq {
+                    if observation.frame.frame_seq != bound {
+                        return frame_binding_failure(bound, &observation);
+                    }
+                }
+                if let Some(failure) = meaningful_error(&observation) {
+                    return failure;
+                }
+                let evaluated = evaluate(&observation);
+                let passed = evaluated.result.passed;
+                let mut exec = if passed {
+                    StepExec::passed_assertion(evaluated)
+                } else {
+                    StepExec::failed(evaluated)
+                };
+                let elapsed = started.elapsed();
+                if passed || wait.is_none() {
+                    if let Some(error) = exec.error.as_mut() {
+                        annotate_assert_wait(error, polls, elapsed);
+                    }
+                    exec.observation = Some(observation);
+                    return exec;
+                }
+                if elapsed >= wait.unwrap_or_default() {
+                    // The budget is spent: the last sample *is* the answer.
+                    if let Some(error) = exec.error.as_mut() {
+                        annotate_assert_wait(error, polls, elapsed);
+                    }
+                    exec.observation = Some(observation);
+                    return exec;
+                }
+                interval = interval.min(
+                    wait.unwrap_or_default().saturating_sub(elapsed).max(Duration::from_millis(1)),
+                );
             }
-            if let Some(failure) = meaningful_error(&observation) {
-                return failure;
-            }
-            let evaluated = evaluate(&observation);
-            let mut exec = if evaluated.result.passed {
-                StepExec::passed_assertion(evaluated)
-            } else {
-                StepExec::failed(evaluated)
-            };
-            exec.observation = Some(observation);
-            exec
+            Err(error) => return StepExec::backend_error(&error, backend.id(), context),
         }
-        Err(error) => StepExec::backend_error(&error, backend.id(), context),
+        std::thread::sleep(interval);
+        interval = (interval * 2).min(Duration::from_millis(WAIT_FOR_MAX_POLL_INTERVAL_MS));
     }
+}
+
+/// Record how an assertion's wait ended (`polls`, `waited_ms`), so a failure
+/// that only appeared after N samples is distinguishable from one that was
+/// already true on the first.
+fn annotate_assert_wait(error: &mut acos_protocol::ProtocolError, polls: u64, elapsed: Duration) {
+    let mut details = error.details.take().unwrap_or_else(|| serde_json::json!({}));
+    if let Some(object) = details.as_object_mut() {
+        object.insert("polls".to_string(), serde_json::json!(polls));
+        object.insert("waited_ms".to_string(), serde_json::json!(elapsed.as_millis() as u64));
+    }
+    error.details = Some(details);
 }
 
 /// Steps that establish (or deliberately wait for) a new completed frame. A pure
@@ -3185,6 +3444,47 @@ mod launch_gate_tests {
 }
 
 #[cfg(test)]
+mod service_module_tests {
+    use super::*;
+
+    fn step_with_requirement(module: &str) -> Step {
+        let mut step = Step::back();
+        step.requires_services = vec![module.to_string()];
+        step
+    }
+
+    /// ADR-0029 item 5: a step that needs an `off` module is unsupported; it is
+    /// never executed against behaviour the session does not have.
+    #[test]
+    fn a_step_that_needs_an_off_module_is_unsupported_never_pass() {
+        let step = step_with_requirement("feedback.vibrator");
+        assert_eq!(
+            missing_service(&step, &[("core".into(), "real".into())]).as_deref(),
+            Some("feedback.vibrator")
+        );
+        assert_eq!(
+            missing_service(&step, &[("feedback.vibrator".into(), "off".into())]).as_deref(),
+            Some("feedback.vibrator")
+        );
+        assert_eq!(
+            missing_service(
+                &step,
+                &[
+                    ("core".into(), "real".into()),
+                    ("feedback.vibrator".into(), "stub".into()),
+                ]
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_step_without_a_requirement_is_never_gated() {
+        assert_eq!(missing_service(&Step::back(), &[]), None);
+    }
+}
+
+#[cfg(test)]
 mod content_settle_tests {
     use super::*;
     use acos_protocol::scenario::Scenario;
@@ -3592,5 +3892,35 @@ mod content_settle_tests {
             parsed.steps[1].tap.as_ref().unwrap().settle,
             Some(StepSettle::Content)
         ));
+    }
+}
+
+#[cfg(test)]
+mod service_ctl_expect {
+    use super::json_subset;
+    use serde_json::json;
+
+    #[test]
+    fn a_subset_names_only_the_fields_the_scenario_cares_about() {
+        let reply = json!({
+            "posted": [{"id": 7, "title": "Probe title", "channel": "probe", "actions": [{"index": 0}]}],
+            "dropped": [],
+        });
+        // A subset matches although the reply has more keys.
+        assert_eq!(
+            json_subset(
+                &json!({"posted": [{"id": 7, "title": "Probe title", "channel": "probe"}]}),
+                &reply
+            ),
+            None
+        );
+        // An empty array means "none", not "anything".
+        assert_eq!(json_subset(&json!({"dropped": []}), &reply), None);
+        // A missing key, a different scalar and a wrong array length all fail,
+        // with the path the reviewer needs.
+        assert!(json_subset(&json!({"posted": [{"id": 8}]}), &reply).is_some());
+        assert!(json_subset(&json!({"missing": true}), &reply).is_some());
+        assert!(json_subset(&json!({"posted": []}), &reply).is_some());
+        assert!(json_subset(&json!({"dropped": [{"id": 1}]}), &reply).is_some());
     }
 }

@@ -12,6 +12,24 @@
 //! constructed service state machine, and writes the exception header plus the
 //! decoded reply layout. Unknown pairs are a structured
 //! `UNSUPPORTED_ANDROID_API`, never a default success.
+//!
+//! ## Intentional deviations from AOSP (keep both; `docs/FINDINGS.md` F-0015)
+//!
+//! The `android.os.IServiceManager` surface follows AOSP's
+//! `frameworks/native/cmds/servicemanager/ServiceManager.cpp` (registered names
+//! answer `Status::ok` with a possibly-null binder; `unregisterForNotifications`
+//! answers `EX_ILLEGAL_STATE` when nothing is pending) with two deliberate
+//! differences:
+//!
+//! * `registerForNotifications` for a name that is **neither registered nor
+//!   declared by a shipped module** is refused with `EX_ILLEGAL_ARGUMENT`
+//!   naming it. AOSP accepts it and never fires the callback; ACOS has no VINTF
+//!   manifest and no lazy service start, so such a name can never appear and
+//!   waiting for it would hang the caller forever.
+//! * `isDeclared` answers from the **loaded module manifests**
+//!   (`ModuleManifest::provided_names`), not a VINTF device manifest, which ACOS
+//!   does not have. This is what gives `waitForDeclaredService`/`waitForService`
+//!   something real to wait on.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -40,6 +58,44 @@ pub struct PendingDelivery {
     pub method: String,
     /// Fully encoded request parcel (interface token already written).
     pub data: Parcel,
+}
+
+/// One `IServiceManager.registerForNotifications` request waiting for its name
+/// to appear (ADR-0029: a module that is not attached yet).
+#[derive(Clone, Debug)]
+struct PendingNotification {
+    /// Service name the client is waiting for.
+    name: String,
+    /// The client's `android.os.IServiceCallback` binder.
+    callback: BinderId,
+}
+
+/// `android.os.IServiceManager` name, for the notification frame.
+const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+/// `android.os.IServiceCallback`, the client's registration callback.
+const SERVICE_CALLBACK_DESCRIPTOR: &str = "android.os.IServiceCallback";
+/// `IServiceCallback.onRegistration(String, IBinder)`.
+const SERVICE_CALLBACK_ON_REGISTRATION: u32 = 1;
+
+/// The `IServiceCallback.onRegistration(@utf8InCpp String, IBinder)` frame.
+///
+/// The AIDL is `oneway interface IServiceCallback { void onRegistration(
+/// @utf8InCpp String name, IBinder binder); }`
+/// (`frameworks/native/libs/binder/aidl/android/os/IServiceCallback.aidl`), so the
+/// name is `Parcel::writeUtf8` (= `writeString8`) and a oneway frame carries no
+/// exception header.
+fn registration_delivery(callback: BinderId, name: &str, binder: BinderId) -> PendingDelivery {
+    let mut data = Parcel::new();
+    let _ = data.write_interface_token(SERVICE_CALLBACK_DESCRIPTOR);
+    let _ = data.write_string8(name);
+    data.write_strong_binder(binder);
+    PendingDelivery {
+        target: callback,
+        interface: SERVICE_CALLBACK_DESCRIPTOR.to_string(),
+        code: SERVICE_CALLBACK_ON_REGISTRATION,
+        method: "onRegistration".to_string(),
+        data,
+    }
 }
 
 /// The result of one service handler call.
@@ -126,6 +182,29 @@ pub trait ServiceObject: Send {
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
         Vec::new()
     }
+
+    /// The next instant at which this object's **own schedule** will have a
+    /// `system -> app` delivery ready (`None` = it has no timed feed).
+    ///
+    /// A timed feed is driven by the peer, not by a timer thread: the peer's
+    /// idle turn asks for this, sleeps until exactly that instant (or until a
+    /// guest frame arrives, whichever is first) and then calls
+    /// [`Self::advance_timed`]. That is what keeps an idle session with no timed
+    /// module at zero wakeups, and it is why a scheduled delivery lands on its
+    /// deadline instead of on the next poll.
+    fn next_delivery_deadline(&self) -> Option<std::time::Instant> {
+        None
+    }
+
+    /// Advance this object's schedule to `now`, queueing every delivery that is
+    /// due (and at most one extra, so a late wakeup never storms the guest).
+    ///
+    /// Called only from [`ServiceHost::take_timed_deliveries`], i.e. from the
+    /// peer's idle turn, for the same locking reason as
+    /// [`Self::drain_raw_deliveries`].
+    fn advance_timed(&mut self, now: std::time::Instant) {
+        let _ = now;
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
@@ -155,6 +234,59 @@ impl Default for Wiring {
 
 type Factory = Arc<dyn Fn(Wiring) -> Box<dyn ServiceObject> + Send + Sync>;
 
+/// `(sender binder, code) -> evidence` for one `IIntentSender.send`.
+///
+/// The delivery is `AmsState::send_pending_intent`, which owns the sender table
+/// and the activity/broadcast/service start paths; publishing a closure keeps
+/// that state out of the module API while still letting `notifications` `tap`
+/// really fire the intent.
+pub type FireSender = Arc<
+    dyn Fn(u64, i32) -> crate::error::Result<crate::pending_intent::SendEvidence> + Send + Sync,
+>;
+
+/// The registration tables as they were at [`ServiceHost::begin_scope`].
+///
+/// ADR-0029 requires that detaching a module leaves **no** registration behind,
+/// including the ones a module registered indirectly (an aux binder, a dynamic
+/// node, an alias). Keeping the pre-attach snapshot is the only way to prove
+/// that by construction instead of trusting each module's `detach` to enumerate
+/// what its `attach` did.
+pub struct RegistrationScope {
+    entries: Vec<&'static str>,
+    names: HashMap<&'static str, &'static str>,
+    aux: HashMap<&'static str, BinderId>,
+    dynamic: Vec<u64>,
+    binder_descriptors: HashMap<u64, &'static str>,
+    notification: Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>>,
+    permission_store: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    pending_intent_fire: Option<FireSender>,
+    /// Index of this scope's overwrite log in [`ServiceHost::overwrites`].
+    ///
+    /// A module that replaces a `core` name registers the same descriptor, so
+    /// deleting what was added cannot describe the rollback: `end_scope` must
+    /// restore the **factory and binder** that descriptor had before. Without
+    /// this a detached module's factory kept answering (MODNOTIF2).
+    depth: usize,
+}
+
+impl core::fmt::Debug for RegistrationScope {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // `FireSender` is a closure, which has no `Debug`; every other field is
+        // sized data a caller may want in a log.
+        f.debug_struct("RegistrationScope")
+            .field("entries", &self.entries.len())
+            .field("names", &self.names.len())
+            .field("aux", &self.aux.len())
+            .field("dynamic", &self.dynamic.len())
+            .field("binder_descriptors", &self.binder_descriptors.len())
+            .field("notification", &self.notification.is_some())
+            .field("permission_store", &self.permission_store.is_some())
+            .field("pending_intent_fire", &self.pending_intent_fire.is_some())
+            .field("depth", &self.depth)
+            .finish()
+    }
+}
+
 struct ServiceEntry {
     binder: BinderId,
     factory: Factory,
@@ -176,15 +308,55 @@ pub struct ServiceHost {
     /// Binders created while answering a transaction (the `IBulkCursor` a
     /// `query` hands back), keyed by binder id.
     dynamic: HashMap<u64, Box<dyn ServiceObject>>,
+    /// `ServiceManager` names a shipped module may provide later: AOSP's VINTF
+    /// declaration (`isDeclared`), which is what lets `waitForService` wait for a
+    /// service that is not running yet.
+    declared: Vec<&'static str>,
+    /// Pending `IServiceManager.registerForNotifications` callbacks (ADR-0029:
+    /// a live module attach is the event they wait for).
+    notifications: Vec<PendingNotification>,
     deliveries: Vec<PendingDelivery>,
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
     constructions: u64,
+    /// Binder handles the guest still holds from a **detached** module, mapped
+    /// to the module id. ADR-0029 item 2: a detach removes the registration, but
+    /// the guest's `BinderProxy` still carries the old handle; a transaction on
+    /// it must answer the structured "module is off, attach it" error naming the
+    /// module, never a bare `unknown binder handle` that no agent can act on.
+    dead: HashMap<u64, &'static str>,
     /// The `INotificationManager` state, kept here so the runtime (which plays
     /// the system-UI role) can surface a toast the app asked for. Android shows
     /// a text toast from `NotificationManagerService` in the system process;
     /// ACOS has one process, so the runtime renders the recorded request.
     notification: Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>>,
+    /// The accessibility module's state, when a session installed it. The
+    /// dispatcher needs it for the two system -> app steps that are not an
+    /// `IAccessibilityManager` call: capturing the app thread from
+    /// `attachApplication` and answering `IActivityManager.publishService`
+    /// (MODA11Y2).
+    /// Held **weakly**: the accessibility state's lifetime must end with the
+    /// registration that owns it (ADR-0029 detach), and a strong handle here
+    /// would keep the settings provider's generation memfd alive after detach
+    /// (the conformance kit's `detach-restores` baseline).
+    a11y: Option<std::sync::Weak<std::sync::Mutex<crate::misc::A11yState>>>,
+    /// The `IAccessibilityServiceConnection` node handed to a bound service.
+    a11y_connection: Option<BinderId>,
+    /// The display's accessibility-overlay window token (`init`'s third
+    /// argument; `getOverlayWindowToken` answers it).
+    a11y_window_token: Option<BinderId>,
+    /// The one runtime-permission table `ActivityManager.checkPermission`,
+    /// `PackageManager.checkPermission` and `IPermissionManager` all read
+    /// (`crate::permissions`). Modules that own the name share it through this
+    /// slot, exactly like the notification state.
+    permission_store: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    /// The one way to *fire* a `PendingIntent` sender (MODNOTIF4). A module
+    /// owns the notification records but the sender table and the activity
+    /// start live in the AMS, so the registry publishes the delivery here
+    /// instead of a module reaching into the ATMS state.
+    pending_intent_fire: Option<FireSender>,
+    /// Overwrite logs, one per open [`RegistrationScope`].
+    overwrites: Vec<Vec<(&'static str, BinderId, Factory)>>,
 }
 
 impl core::fmt::Debug for ServiceHost {
@@ -218,11 +390,20 @@ impl ServiceHost {
             names: HashMap::new(),
             aux: HashMap::new(),
             dynamic: HashMap::new(),
+            declared: Vec::new(),
+            notifications: Vec::new(),
             deliveries: Vec::new(),
+            dead: HashMap::new(),
             trace: None,
             seq: AtomicU64::new(1),
             constructions: 0,
             notification: None,
+            a11y: None,
+            a11y_connection: None,
+            a11y_window_token: None,
+            permission_store: None,
+            pending_intent_fire: None,
+            overwrites: Vec::new(),
         }
     }
 
@@ -236,11 +417,23 @@ impl ServiceHost {
         let binder = self.registry.register_local(descriptor);
         self.binder_descriptors.insert(binder.0, descriptor);
         self.names.insert(name, descriptor);
+        let factory: Factory = Arc::new(factory);
+        // A registration over a name that exists is recorded so the open scope
+        // (if any) can put the old factory back on rollback. Modules replacing a
+        // `core` name do exactly this.
+        if let Some(previous) = self.entries.get(descriptor) {
+            if let Some(log) = self.overwrites.last_mut() {
+                log.push((descriptor, previous.binder, Arc::clone(&previous.factory)));
+            }
+        }
+        // MODTAIL2: a module may depend on a registration appearing later in
+        // the same attach (the bluetooth/wifi nodes). Both hooks run.
+        self.notify_registered(name);
         self.entries.insert(
             descriptor,
             ServiceEntry {
                 binder,
-                factory: Arc::new(factory),
+                factory,
                 object: None,
             },
         );
@@ -283,9 +476,35 @@ impl ServiceHost {
         descriptor: &'static str,
         object: Box<dyn ServiceObject>,
     ) -> BinderId {
+        // One node per descriptor: a module taking over a name `core` serves
+        // (`location`) replaces that node instead of adding a second binder with
+        // the same descriptor, which would make `checkService` ambiguous and
+        // leave a stray binder behind when one of them is removed.
+        if self.dynamic_descriptor(descriptor).is_some() {
+            self.remove_descriptor(descriptor);
+        }
         let binder = self.register_dynamic(descriptor, object);
         self.names.insert(name, descriptor);
+        self.notify_registered(name);
         binder
+    }
+
+    /// Drop any dynamic node registered under `descriptor` (there is at most one
+    /// after [`Self::register_dynamic_named`]'s takeover rule, but a node may
+    /// have been registered by [`Self::register_dynamic`] without a name).
+    fn dynamic_descriptor(&self, descriptor: &str) -> Option<u64> {
+        self.binder_descriptors
+            .iter()
+            .find(|(id, existing)| **existing == descriptor && self.dynamic.contains_key(id))
+            .map(|(id, _)| *id)
+    }
+
+    fn remove_descriptor(&mut self, descriptor: &'static str) -> Option<BinderId> {
+        let id = self.dynamic_descriptor(descriptor)?;
+        self.dynamic.remove(&id);
+        self.binder_descriptors.remove(&id);
+        self.registry.remove(BinderId(id));
+        Some(BinderId(id))
     }
 
     /// Give a descriptor that is already registered a second
@@ -297,6 +516,7 @@ impl ServiceHost {
     /// second `register_dynamic_named` would allocate a second binder.
     pub fn alias_service_name(&mut self, name: &'static str, descriptor: &'static str) {
         self.names.insert(name, descriptor);
+        self.notify_registered(name);
     }
 
     /// Register an auxiliary binder (a binder returned by another service).
@@ -364,6 +584,195 @@ impl ServiceHost {
         }
     }
 
+    /// Remove the `ServiceManager` name `name` and whatever binder it resolved
+    /// to, returning the freed handle.
+    ///
+    /// Used when a module attaches over a tombstone: the tombstone (a dynamic
+    /// node with no factory) must disappear, otherwise the name keeps resolving
+    /// to an object that reports "module not attached" while the module *is*
+    /// attached. Entries registered with [`Self::register`] are removed too.
+    pub fn remove_service(&mut self, name: &str) -> Option<BinderId> {
+        let descriptor = self.names.remove(name)?;
+        if let Some(entry) = self.entries.remove(descriptor) {
+            self.binder_descriptors.remove(&entry.binder.0);
+            self.registry.remove(entry.binder);
+            return Some(entry.binder);
+        }
+        let binder = self.binder_for_descriptor(descriptor)?;
+        self.dynamic.remove(&binder.0);
+        self.aux.remove(descriptor);
+        self.binder_descriptors.remove(&binder.0);
+        self.registry.remove(binder);
+        Some(binder)
+    }
+
+    /// Remember that a detached module used to answer `binder`, so the guest's
+    /// stale proxy gets the structured "module is off" error (see `dead`).
+    pub fn mark_detached_binder(&mut self, binder: BinderId, module: &'static str) {
+        self.dead.insert(binder.0, module);
+    }
+
+    /// Drop every dead-handle record (a module re-attach replaces them).
+    pub fn clear_detached_binders(&mut self, module: &str) {
+        self.dead.retain(|_, owner| *owner != module);
+    }
+
+    /// Snapshot the registration tables so a module's registrations can be
+    /// rolled back as a unit (ADR-0029 detach).
+    #[must_use]
+    pub fn begin_scope(&mut self) -> RegistrationScope {
+        self.overwrites.push(Vec::new());
+        RegistrationScope {
+            entries: self.entries.keys().copied().collect(),
+            names: self.names.clone(),
+            aux: self.aux.clone(),
+            dynamic: self.dynamic.keys().copied().collect(),
+            binder_descriptors: self.binder_descriptors.clone(),
+            notification: self.notification.as_ref().map(std::sync::Arc::clone),
+            permission_store: self.permission_store.as_ref().map(std::sync::Arc::clone),
+            pending_intent_fire: self.pending_intent_fire.as_ref().map(std::sync::Arc::clone),
+            depth: self.overwrites.len() - 1,
+        }
+    }
+
+    /// Remove every registration made since `scope` was taken and return the
+    /// binder handles that were freed.
+    ///
+    /// Names and aux binders that existed before the scope are restored (a
+    /// module may legitimately re-register a name another module owns only if
+    /// the manifest overlap check rejects it, so this is a safety net, not a
+    /// feature). Binders are dropped from the [`BinderRegistry`] as well, so a
+    /// subsequent `checkService` answers `null` exactly as it did before the
+    /// attach.
+    pub fn end_scope(&mut self, scope: RegistrationScope) -> Vec<BinderId> {
+        let mut freed: Vec<BinderId> = Vec::new();
+        let before_entries: std::collections::HashSet<&'static str> =
+            scope.entries.iter().copied().collect();
+        let added_entries: Vec<&'static str> = self
+            .entries
+            .keys()
+            .copied()
+            .filter(|key| !before_entries.contains(key))
+            .collect();
+        for key in added_entries {
+            if let Some(entry) = self.entries.remove(key) {
+                freed.push(entry.binder);
+            }
+        }
+        // Restore every descriptor this scope overwrote: the module's factory
+        // and binder go away (the binder is in `freed` below), core's factory
+        // and binder come back. The object is dropped, not kept, so the
+        // restored factory constructs core's service again with its own shared
+        // state (the state is behind an `Arc`, so this is not a reset).
+        let overwritten: Vec<(&'static str, BinderId, Factory)> = if self.overwrites.len() > scope.depth
+        {
+            self.overwrites.split_off(scope.depth).concat()
+        } else {
+            Vec::new()
+        };
+        for (descriptor, binder, factory) in overwritten {
+            if let Some(entry) = self.entries.get_mut(descriptor) {
+                freed.push(entry.binder);
+                self.registry.remove(entry.binder);
+                self.binder_descriptors.remove(&entry.binder.0);
+            }
+            self.entries.insert(
+                descriptor,
+                ServiceEntry {
+                    binder,
+                    factory,
+                    object: None,
+                },
+            );
+            self.binder_descriptors.insert(binder.0, descriptor);
+        }
+        let added_names: Vec<&'static str> = self
+            .names
+            .keys()
+            .copied()
+            .filter(|key| !scope.names.contains_key(key))
+            .collect();
+        for key in added_names {
+            self.names.remove(key);
+        }
+        // Restore any pre-existing alias the module overwrote.
+        let restored: Vec<&'static str> = scope.names.keys().copied().collect();
+        for (name, descriptor) in &scope.names {
+            self.names.insert(name, descriptor);
+        }
+        for name in restored {
+            self.notify_registered(name);
+        }
+        let added_aux: Vec<&'static str> = self
+            .aux
+            .keys()
+            .copied()
+            .filter(|key| !scope.aux.contains_key(key))
+            .collect();
+        for key in added_aux {
+            if let Some(binder) = self.aux.remove(key) {
+                freed.push(binder);
+            }
+        }
+        for (descriptor, binder) in &scope.aux {
+            self.aux.insert(descriptor, *binder);
+        }
+        let known_dynamic: std::collections::HashSet<u64> = scope.dynamic.iter().copied().collect();
+        let added_dynamic: Vec<u64> = self
+            .dynamic
+            .keys()
+            .copied()
+            .filter(|id| !known_dynamic.contains(id))
+            .collect();
+        for id in added_dynamic {
+            self.dynamic.remove(&id);
+            freed.push(BinderId(id));
+        }
+        let added_descriptors: Vec<u64> = self
+            .binder_descriptors
+            .keys()
+            .copied()
+            .filter(|id| !scope.binder_descriptors.contains_key(id))
+            .collect();
+        for id in added_descriptors {
+            self.binder_descriptors.remove(&id);
+            if !freed.iter().any(|binder| binder.0 == id) {
+                freed.push(BinderId(id));
+            }
+        }
+        self.overwrites.truncate(scope.depth);
+        if !scope.notification.as_ref().is_some_and(|before| {
+            self.notification
+                .as_ref()
+                .is_some_and(|now| std::sync::Arc::ptr_eq(before, now))
+        }) {
+            self.notification = scope.notification.clone();
+        }
+        if !scope.permission_store.as_ref().is_some_and(|before| {
+            self.permission_store
+                .as_ref()
+                .is_some_and(|now| std::sync::Arc::ptr_eq(before, now))
+        }) {
+            self.permission_store = scope.permission_store.clone();
+        }
+        if !scope.pending_intent_fire.as_ref().is_some_and(|before| {
+            self.pending_intent_fire
+                .as_ref()
+                .is_some_and(|now| std::sync::Arc::ptr_eq(before, now))
+        }) {
+            self.pending_intent_fire = scope.pending_intent_fire.clone();
+        }
+        for binder in &freed {
+            self.registry.remove(*binder);
+        }
+        self.deliveries.retain(|delivery| {
+            !freed.iter().any(|binder| binder.0 == delivery.target.0)
+        });
+        freed.sort_unstable_by_key(|binder| binder.0);
+        freed.dedup_by_key(|binder| binder.0);
+        freed
+    }
+
     /// Register the `INotificationManager` state (called by
     /// [`crate::registry::install`]).
     pub fn set_notification_state(
@@ -373,12 +782,92 @@ impl ServiceHost {
         self.notification = Some(state);
     }
 
+    /// Install the accessibility state the dispatcher hooks into (called by
+    /// [`crate::registry::install`]).
+    pub fn set_accessibility_state(
+        &mut self,
+        state: std::sync::Arc<std::sync::Mutex<crate::misc::A11yState>>,
+    ) {
+        self.a11y = Some(std::sync::Arc::downgrade(&state));
+    }
+
+    /// The accessibility state, when the session installed it.
+    #[must_use]
+    pub fn accessibility_state(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<crate::misc::A11yState>>> {
+        self.a11y.as_ref().and_then(std::sync::Weak::upgrade)
+    }
+
+    /// The `IAccessibilityServiceConnection` node a bound service receives.
+    ///
+    /// Registered once, lazily: the node is a dynamic (`raw_transact`-style)
+    /// object, and `IAccessibilityServiceConnection` has no `acos-aidl` table
+    /// (the service-side accessibility AIDL is not in the decoded set), so it
+    /// answers through [`ServiceObject::call`] with the method names it knows
+    /// and a structured refusal otherwise.
+    pub fn accessibility_connection_node(&mut self) -> BinderId {
+        if let Some(binder) = self.a11y_connection {
+            return binder;
+        }
+        let Some(state) = self.a11y.as_ref().and_then(std::sync::Weak::upgrade) else {
+            return BinderId(0);
+        };
+        let binder = self.register_dynamic(
+            crate::a11y_bind::SERVICE_CONNECTION,
+            Box::new(crate::a11y_bind::A11yConnectionNode::new(state)),
+        );
+        self.a11y_connection = Some(binder);
+        binder
+    }
+
+    /// The display's accessibility-overlay window token (`init`'s third
+    /// argument). One per session, like one display.
+    pub fn accessibility_window_token(&mut self) -> BinderId {
+        if let Some(binder) = self.a11y_window_token {
+            return binder;
+        }
+        let binder = self.register_aux("dev.acos.a11y.OverlayWindowToken");
+        self.a11y_window_token = Some(binder);
+        binder
+    }
+
     /// The `INotificationManager` state, when the standard set is installed.
     #[must_use]
     pub fn notification_state(
         &self,
     ) -> Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>> {
         self.notification.as_ref().map(std::sync::Arc::clone)
+    }
+
+    /// Publish the session's `PendingIntent` delivery path (called by
+    /// [`crate::registry::install`]).
+    pub fn set_pending_intent_fire(&mut self, fire: FireSender) {
+        self.pending_intent_fire = Some(fire);
+    }
+
+    /// The delivery path a `notifications` `tap` uses.
+    #[must_use]
+    pub fn pending_intent_fire(&self) -> Option<FireSender> {
+        self.pending_intent_fire.as_ref().map(std::sync::Arc::clone)
+    }
+
+    /// Publish the session's one runtime-permission table (called by
+    /// [`crate::registry::install`]).
+    pub fn set_permission_store(
+        &mut self,
+        store: std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>,
+    ) {
+        self.permission_store = Some(store);
+    }
+
+    /// The runtime-permission table, when a standard set (or the `permissions`
+    /// module) published one.
+    #[must_use]
+    pub fn permission_store(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>> {
+        self.permission_store.as_ref().map(std::sync::Arc::clone)
     }
 
     /// Enable the per-call trace.
@@ -414,10 +903,73 @@ impl ServiceHost {
         v
     }
 
-    /// True when `name` is registered.
+    /// True when `name` is registered **or** declared by a shipped module.
+    ///
+    /// AOSP answers this from the device's VINTF manifest
+    /// (`ServiceManager::isDeclared`, `servicemanager/ServiceManager.cpp:596`):
+    /// true for a service that exists on the device even while it is not
+    /// running. ACOS's equivalent declaration is a module manifest's
+    /// `services` list, registered here by [`Self::declare_service_name`], so
+    /// `ServiceManager.isDeclared`/`waitForDeclaredService` agree with the
+    /// modules the build can attach. **Intentional ACOS deviation** (no VINTF
+    /// manifest exists); see the module docs and `docs/FINDINGS.md` F-0015.
     #[must_use]
     pub fn is_declared(&self, name: &str) -> bool {
-        self.names.contains_key(name)
+        self.names.contains_key(name) || self.declared.iter().any(|declared| *declared == name)
+    }
+
+    /// Declare `name`: a shipped module can provide it even though it is not
+    /// registered now (the module is `off` or not attached yet).
+    pub fn declare_service_name(&mut self, name: &'static str) {
+        if !self.names.contains_key(name) && !self.declared.contains(&name) {
+            self.declared.push(name);
+        }
+    }
+
+    /// The declared-but-not-registered names (the module-provided gaps).
+    #[must_use]
+    pub fn declared_names(&self) -> Vec<&'static str> {
+        let mut names: Vec<&'static str> = self
+            .declared
+            .iter()
+            .copied()
+            .filter(|name| !self.names.contains_key(name))
+            .collect();
+        names.sort_unstable();
+        names
+    }
+
+    /// Fire the pending `registerForNotifications` callbacks for `name`, if it
+    /// resolves now.
+    ///
+    /// Called from every path that gives a descriptor a `ServiceManager` name
+    /// (a live module attach, an alias), so a client blocked in
+    /// `ServiceManager.waitForService` gets `IServiceCallback.onRegistration`
+    /// exactly when the service appears — AOSP's `ServiceManager::addService`
+    /// (`servicemanager/ServiceManager.cpp:480-499`).
+    fn notify_registered(&mut self, name: &str) {
+        if self.notifications.is_empty() {
+            return;
+        }
+        let Ok(Some(binder)) = self.check_service(name) else {
+            return;
+        };
+        let (fire, keep): (Vec<PendingNotification>, Vec<PendingNotification>) = std::mem::take(
+            &mut self.notifications,
+        )
+        .into_iter()
+        .partition(|notification| notification.name == name);
+        self.notifications = keep;
+        for notification in fire {
+            self.deliveries
+                .push(registration_delivery(notification.callback, name, binder));
+        }
+    }
+
+    /// How many registration callbacks are waiting (tests and the report).
+    #[must_use]
+    pub fn pending_notifications(&self) -> usize {
+        self.notifications.len()
     }
 
     /// Resolve a service-manager name to its binder, constructing the service
@@ -532,6 +1084,23 @@ impl ServiceHost {
             .expect("service object was just constructed"))
     }
 
+    /// The service object of a **dynamic** node, for a module that configures a
+    /// node another module (`core`) published.
+    ///
+    /// ADR-0029's `as_any_mut` seam is "the host configures a specific service".
+    /// `ensure` only walks the lazy `entries` table; a `raw_transact`-served node
+    /// (`android.gui.*`, e.g. `sensorservice`) lives in `dynamic`. The `sensors`
+    /// module takes the node `core` published and installs its feed into it, so
+    /// the binder an app already holds keeps working (a hot attach must not
+    /// invalidate a proxy).
+    pub fn dynamic_object_mut(
+        &mut self,
+        descriptor: &str,
+    ) -> Option<&mut (dyn ServiceObject + 'static)> {
+        let binder = self.binder_for_descriptor(descriptor)?;
+        self.dynamic.get_mut(&binder.0).map(Box::as_mut)
+    }
+
     /// The ATMS attach record, if the activity service has one (T-43 re-seed).
     #[must_use]
     pub fn attached_process(&mut self) -> Option<(u64, i64, String)> {
@@ -577,8 +1146,57 @@ impl ServiceHost {
             .unwrap_or_default()
     }
 
-    /// Re-point the in-process package manager at `apk_path`.
+    /// Publish (or withdraw) one `PackageManager.hasSystemFeature` answer.
     ///
+    /// A host with no package manager has no `hasSystemFeature` that could
+    /// disagree with the attached set (the conformance kit attaches a module to
+    /// an otherwise empty host); every real session attaches `core`, which
+    /// registers the package manager, before any other module.
+    pub fn set_system_feature(&mut self, name: &str, enabled: bool) -> Result<()> {
+        if !self.entries.contains_key("android.content.pm.IPackageManager") {
+            return Ok(());
+        }
+        let object = self.ensure("android.content.pm.IPackageManager")?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())
+            .ok_or_else(|| {
+                ServiceError::Internal("package service is not a PmsService".into())
+            })?;
+        service.set_system_feature(name, enabled)
+    }
+
+    /// Queue a `system -> app` delivery a module produced outside a binder
+    /// transaction (a scripted call-state event, an authentication result).
+    ///
+    /// The peer thread drains [`ServiceHost::take_deliveries`] after a control
+    /// request, so a module's `control` can reach the app without waiting for
+    /// the app to call back in.
+    pub fn queue_delivery(&mut self, delivery: PendingDelivery) {
+        self.deliveries.push(delivery);
+    }
+
+    /// Deliver a broadcast the **host** originates (a module's control op).
+    ///
+    /// Goes through the session's own `IActivityManager` state, so the same
+    /// dynamic receivers a guest broadcast reaches get it, and queues the
+    /// resulting `IIntentReceiver.performReceive` deliveries. A broadcast the
+    /// app registered no receiver for is not an error (Android's own rule); the
+    /// matched count says what happened.
+    pub fn broadcast_intent(&mut self, intent: &crate::ams::IntentFacts) -> Result<i32> {
+        let object = self.ensure("android.app.IActivityManager")?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .ok_or_else(|| {
+                ServiceError::Internal("activity service is not an AtmsService".into())
+            })?;
+        let (matched, deliveries) = service.inject_broadcast(intent)?;
+        self.deliveries.extend(deliveries);
+        Ok(matched)
+    }
+
+    /// Re-point the in-process package manager at `apk_path`.    ///
     /// `ServiceHost::standard()` seeds the PMS with the `hello-views` fixture;
     /// the runtime calls this before boot so the framework's
     /// `getApplicationInfo(<launched package>)` resolves the real APK instead
@@ -689,11 +1307,30 @@ impl ServiceHost {
         reply: &mut Parcel,
         oneway: bool,
     ) -> Result<CallInfo> {
+        if !self.binder_descriptors.contains_key(&binder.0) {
+            if let Some(module) = self.dead.get(&binder.0).copied() {
+                let interface = data
+                    .peek_interface_token()
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                return Err(ServiceError::ModuleUnavailable {
+                    service: format!("binder {:#x}", binder.0),
+                    interface,
+                    module,
+                    attach: crate::module::attach_call(
+                        module,
+                        crate::module::Profile::Scripted,
+                    ),
+                });
+            }
+            return Err(ServiceError::UnknownBinder { handle: binder.0 });
+        }
         let binder_descriptor = self
             .binder_descriptors
             .get(&binder.0)
             .copied()
-            .ok_or(ServiceError::UnknownBinder { handle: binder.0 })?
+            .unwrap_or("<unknown>")
             .to_string();
 
         // The interface token is authoritative (it is what `enforceInterface`
@@ -784,6 +1421,41 @@ impl ServiceHost {
         // Advance past the interface token now that dispatch is chosen.
         data.enforce_interface(&descriptor)?;
 
+        // MODA11Y2: `publishService` is the reply to a **system-initiated**
+        // bind. The answer is the accessibility module's (it owns the bind
+        // token and the service's connection), not the activity service's, so
+        // it is answered here before the decoded dispatch. Every other
+        // `IActivityManager` call keeps going to `AtmsService`.
+        if descriptor == "android.app.IActivityManager"
+            && method.name == "publishService"
+            && self.a11y.is_some()
+        {
+            let args = codec::read_args(data, &method.args, &descriptor, &method.name)?;
+            let connection = self.accessibility_connection_node();
+            let window_token = self.accessibility_window_token();
+            let a11y = self.a11y.as_ref().and_then(std::sync::Weak::upgrade).expect("checked above");
+            let mut state = a11y
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let delivery =
+                crate::a11y_bind::on_publish_service(&mut state, connection, window_token, &args)?;
+            drop(state);
+            if let Some(delivery) = delivery {
+                self.deliveries.push(delivery);
+            }
+            if !oneway {
+                reply.reset();
+                write_no_exception(reply);
+                codec::write_reply(reply, &method.reply, &[], &descriptor, &method.name)?;
+            }
+            return Ok(CallInfo {
+                interface: descriptor,
+                method: method.name.clone(),
+                args: "<publishService>".into(),
+                reply: "<accessibility bind>".into(),
+            });
+        }
+
         // `IContentProvider.query` is the one decoded reply the generic codec
         // cannot express: `ContentProviderNative` writes a hand-rolled
         // `BulkCursorDescriptor` + `CursorWindow`, and the proxy writes the
@@ -838,6 +1510,31 @@ impl ServiceHost {
         let mut call = object.call(&descriptor, method, &args)?;
         self.deliveries.append(&mut call.deliveries);
 
+        // MODA11Y2: two system services are wired here rather than inside a
+        // `ServiceObject`, because the state they need is cross-service:
+        //
+        // * `attachApplication` names the app's `IApplicationThread`, which is
+        //   the target of every `system -> app` delivery (the accessibility
+        //   bind has no target before it);
+        // * `publishService` is the reply to a system-initiated bind: the app
+        //   reports the binder its `Service.onBind` returned arm, and the
+        //   accessibility module answers with `IAccessibilityServiceClient.init`.
+        if let Some(a11y) = self.a11y.as_ref().and_then(std::sync::Weak::upgrade) {
+            if descriptor == "android.app.IActivityManager" {
+                match method.name.as_str() {
+                    "attachApplication" => {
+                        if let Some(thread) = args.first().and_then(crate::value::Value::as_binder)
+                        {
+                            a11y.lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                .set_app_thread(thread.0);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         if oneway {
             return Ok(CallInfo {
                 interface: descriptor,
@@ -859,8 +1556,7 @@ impl ServiceHost {
         })
     }
 
-    fn ensure_for_binder(
-        &mut self,
+    fn ensure_for_binder(        &mut self,
         binder: BinderId,
         _descriptor: &str,
     ) -> Result<&mut dyn ServiceObject> {
@@ -907,6 +1603,78 @@ impl ServiceHost {
                 let name = args.first().and_then(|v| v.as_str()).unwrap_or_default();
                 reply_values.push(crate::value::Value::Bool(self.is_declared(name)));
             }
+            // `registerForNotifications(String, IServiceCallback)`: AOSP stores
+            // the callback and calls it at once when the service already exists
+            // (`servicemanager/ServiceManager.cpp:527-570`, including the
+            // `mNameToService.find(name) != end` immediate `onRegistration`).
+            // **Intentional ACOS deviation** (keep it; `docs/FINDINGS.md`
+            // F-0015): a name that is neither registered nor declared by a
+            // shipped module can never appear here
+            // (there is no VINTF manifest and no lazy service start), so the
+            // registration is refused with `EX_ILLEGAL_ARGUMENT` and the reason.
+            // AOSP would accept it and never fire, which is exactly the endless
+            // `waitForService` sleep an agent hit on a module name (the
+            // guest-side complaint travels back as the exception message, which
+            // libbinder logs as "Failed to registerForNotifications ...").
+            "registerForNotifications" => {
+                let name = args
+                    .first()
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let Some(callback) = args.get(1).and_then(crate::value::Value::as_binder) else {
+                    return Err(ServiceError::BadRequest {
+                        interface: descriptor,
+                        method: method.name.clone(),
+                        detail: "registerForNotifications needs an IServiceCallback binder"
+                            .to_string(),
+                    });
+                };
+                if name.trim().is_empty() {
+                    return Err(ServiceError::BadRequest {
+                        interface: descriptor,
+                        method: method.name.clone(),
+                        detail: "registerForNotifications needs a non-empty service name"
+                            .to_string(),
+                    });
+                }
+                if !self.is_declared(&name) {
+                    return Err(ServiceError::BadRequest {
+                        interface: descriptor,
+                        method: method.name.clone(),
+                        detail: format!(
+                            "no service {name:?} is registered or declared by any module; it can never appear, so waiting for it would never return (AOSP's servicemanager would accept this registration and never fire it)"
+                        ),
+                    });
+                }
+                self.notifications.push(PendingNotification {
+                    name: name.clone(),
+                    callback,
+                });
+                // AOSP fires immediately for an already-registered name.
+                self.notify_registered(&name);
+            }
+            "unregisterForNotifications" => {
+                let name = args
+                    .first()
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let callback = args.get(1).and_then(crate::value::Value::as_binder);
+                let before = self.notifications.len();
+                self.notifications.retain(|notification| {
+                    !(notification.name == name && Some(notification.callback) == callback)
+                });
+                if self.notifications.len() == before {
+                    // AOSP: EX_ILLEGAL_STATE, "Nothing to unregister."
+                    return Err(ServiceError::IllegalState {
+                        component: "servicemanager",
+                        detail: format!(
+                            "Trying to unregister callback, but none exists for {name:?} (AOSP: \"Nothing to unregister\")"
+                        ),
+                    });
+                }
+            }
             "addService" => {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: descriptor,
@@ -934,6 +1702,40 @@ impl ServiceHost {
     /// Drain `system -> app` deliveries queued by service handlers.
     pub fn take_deliveries(&mut self) -> Vec<PendingDelivery> {
         std::mem::take(&mut self.deliveries)
+    }
+
+    /// Drain the deliveries a **dynamic** object produced from its own thread
+    /// (a module's timed feed: `location`'s `play_track`, a sensor or camera
+    /// stream).
+    ///
+    /// Only the peer's idle tick calls this (`Peer::tick`), because a dynamic
+    /// object's `drain_raw_deliveries` may take its own state lock: a caller
+    /// that already holds that lock (a test scoring the compositor state, an
+    /// action handler) would deadlock, which is exactly why this is not folded
+    /// into [`Self::take_deliveries`].
+    pub fn take_timed_deliveries(&mut self) -> Vec<PendingDelivery> {
+        let now = std::time::Instant::now();
+        for object in self.dynamic.values_mut() {
+            object.advance_timed(now);
+        }
+        let mut out = std::mem::take(&mut self.deliveries);
+        for object in self.dynamic.values_mut() {
+            out.append(&mut object.drain_raw_deliveries());
+        }
+        out
+    }
+
+    /// The earliest instant at which a dynamic object's own schedule has a
+    /// delivery ready (`None` = nothing scheduled, so the peer may sleep until
+    /// a guest frame arrives).
+    ///
+    /// Read-only, and saturating: an object that is due *now* answers `now`.
+    #[must_use]
+    pub fn next_timed_deadline(&self) -> Option<std::time::Instant> {
+        self.dynamic
+            .values()
+            .filter_map(|object| object.next_delivery_deadline())
+            .min()
     }
 
     /// Drain lifecycle/log events from every constructed service.

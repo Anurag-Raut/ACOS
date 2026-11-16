@@ -62,10 +62,34 @@ pub fn is_topic(topic: &str) -> bool {
     topic == ALL_TOPIC || topic_list().contains(&topic)
 }
 
-/// The whole guide, trimmed.
+/// The marker `docs/AGENT_GUIDE.md` carries where the generated module table
+/// belongs.
+///
+/// The guide is hand-written prose; the module table is not. Every module, its
+/// profiles and every gap name come from the service-module registry
+/// (ADR-0029 item 6), so a module that exists but is missing from the docs is
+/// impossible by construction, and a doc that promises a module the build does
+/// not ship is impossible too.
+pub const MODULES_MARKER: &str = "<!-- modules:generated -->";
+
+/// The generated limits appendix: every module and every gap name, from the
+/// registry.
+#[must_use]
+pub fn generated_limits() -> String {
+    acos_services::module::ModuleRegistry::standard().limits_markdown()
+}
+
+/// Render the guide, replacing [`MODULES_MARKER`] with the generated module
+/// table.
+#[must_use]
+pub fn render_guide(text: &str) -> String {
+    text.replace(MODULES_MARKER, &generated_limits())
+}
+
+/// The whole guide, trimmed, with the generated module table spliced in.
 #[must_use]
 pub fn full_guide() -> String {
-    AGENT_GUIDE.trim().to_string()
+    render_guide(AGENT_GUIDE.trim())
 }
 
 /// The skeleton `acos_help` returns with **no topic**: the guide's own front
@@ -324,8 +348,10 @@ fn tool_returns(tool: &ToolInfo) -> &'static str {
         "acos_swipe" => "`accepted`, `state_changed`, the injected gesture seqs",
         "acos_logs" => "`logs[]` (priority, tag, message, line, repeat_count), `total`/`count`, `filter`, `stage_reached`, `crash`",
         "acos_status" => "`launched`, `stage_reached`, `published_frames`, `package`/`activity`, `capabilities`",
-        "acos_doctor" => "`checks[]` with pass/fail and a concrete `fix` per failing check",
-        "acos_capabilities" => "the implemented command list, the resolved `acos` binary/version and the server limits",
+        "acos_services" => "`attached[]` (`id`, `profile`) and `modules[]` (`id`, `profile`, `attach`, `state`, `fidelity`, `reason`); attach/detach answer with the set they produced",
+        "acos_service_ctl" => "`id`, `op`, `value` (the module's own answer) and the honest `modules[]` rows after the control; a detached module is a structured refusal",
+        "acos_capabilities" => "the implemented command list, the resolved `acos` binary/version, the server limits and — with `session_id` — that session's attached modules",
+        "acos_net" => "`action`, the relay state (`up`, `pasta_version`, `host_ports`) and this \n                       session's own row (`networked`, `offline`, `delay_ms`, `loss_pct`); \n                       `hostport` also returns the relay's `host_ports` list",        "acos_doctor" => "`checks[]` with pass/fail and a concrete `fix` per failing check",
         "acos_help" => "`guide` (the requested section), `guide_topics`, `fidelity_rules`, `supported`/`unsupported`",
         "acos_inspect" => "package, version, min/target SDK, launcher, permissions, components, DEX/native/asset inventory, signature schemes",
         "acos_observe" => "the reference session's tree and/or text, plus frame metadata (frame_seq, cause_id, content_hash, meaningful)",
@@ -362,7 +388,8 @@ fn section(topic: &str) -> Option<String> {
     let end = format!("<!-- /topic:{topic} -->");
     match (AGENT_GUIDE.find(&start), AGENT_GUIDE.find(&end)) {
         (Some(from), Some(to)) if to > from => {
-            Some(AGENT_GUIDE[from + start.len()..to].trim().to_string())
+            let raw = AGENT_GUIDE[from + start.len()..to].trim();
+            Some(render_guide(raw).trim().to_string())
         }
         _ => None,
     }

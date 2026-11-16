@@ -256,6 +256,7 @@ pub fn run_template(root: &ArtRoot, plan_dir: &Path, shims: SessionShims) -> Res
                 extra_apks: std::env::var_os(crate::launch::ENV_EXTRA_APKS)
                     .map(|value| std::env::split_paths(&value).collect())
                     .unwrap_or_default(),
+                services: Vec::new(),
             };
             let host = prebuilt.take();
             let code = match crate::launch::launch_session(root, &child_opts, host, &shims) {

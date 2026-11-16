@@ -307,6 +307,11 @@ pub struct PersistentZygote {
     /// The last child this keeper handed out per tag (so `previous_child_pid`
     /// survives a kill even after `<tag>/pid` was removed).
     last_child: HashMap<u32, u32>,
+    /// NET2: the netd `dnsproxyd` responder for this keeper's current session,
+    /// served on `<plan>/<tag>/sock` — the directory the zygote child mounts as
+    /// `/dev/socket`. This is the fourth producer (`prepare_session`); the
+    /// launcher's own dir is not the one a zygote child sees.
+    dns: Option<crate::spike_net::DnsProxy>,
 }
 
 impl PersistentZygote {
@@ -395,6 +400,7 @@ impl PersistentZygote {
             ack_timeout: ack_timeout_from_env(),
             log_path,
             last_child: HashMap::new(),
+            dns: None,
         };
         // O_RDWR: neither side blocks on open, and the FIFO never signals EOF
         // when one writer restarts (the keeper never sees a spurious `cmd eof`).
@@ -497,6 +503,9 @@ impl PersistentZygote {
     /// no contract or ack from the previous child (§4.2: "nothing the old child
     /// wrote survives").
     pub fn prepare_session(&mut self, tag: u32) -> ZygoteResult<PathBuf> {
+        // The previous session's resolver stops with its socket directory: a
+        // responder left on the old inode would leak a thread and serve nobody.
+        self.dns = None;
         let dir = self.session_dir(tag);
         fs::create_dir_all(&dir)?;
         for sub in ["run", "sock"] {
@@ -520,6 +529,12 @@ impl PersistentZygote {
         ] {
             fs::create_dir_all(dir.join(sub))?;
         }
+        // NET2: `<plan>/<tag>/sock` is bound at `/dev/socket` in the zygote child,
+        // so the resolver proxy has to be served there (not in the launcher's
+        // directory, which the child never sees). Held until the next session.
+        self.dns = crate::spike_net::serve_dnsproxyd_if_enabled(&dir.join("sock")).map_err(|e| {
+            ZygoteError::Io(format!("dnsproxyd in {}: {e}", dir.join("sock").display()))
+        })?;
         Ok(dir)
     }
 
@@ -899,6 +914,7 @@ mod tests {
             ack_timeout: Duration::from_millis(100),
             log_path: dir.join("keeper.log"),
             last_child: HashMap::new(),
+            dns: None,
         };
         let tag_dir = dir.join("7");
         fs::create_dir_all(tag_dir.join("run/app-data")).unwrap();
@@ -933,6 +949,7 @@ mod tests {
             ack_timeout: Duration::from_millis(100),
             log_path: dir.join("keeper.log"),
             last_child: HashMap::new(),
+            dns: None,
         };
         keeper.prepare_session(3).unwrap();
         keeper.publish_binds(3).unwrap();
@@ -1069,6 +1086,7 @@ done < "$plan/cmd"
             ack_timeout: Duration::from_millis(50),
             log_path: dir.join("keeper.log"),
             last_child: HashMap::new(),
+            dns: None,
         };
         assert!(!keeper.alive(), "no keeper process and no ready file");
         let error = keeper.spawn(0).unwrap_err();

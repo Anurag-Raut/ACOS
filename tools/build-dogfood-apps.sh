@@ -39,7 +39,7 @@ KEYSTORE="$BUILD_DIR/debug.keystore"
 KEY_ALIAS="androiddebugkey"
 KEY_PASS="android"
 
-ALL_APPS=(sqlite-crud canvas-shapes service-provider two-activity list-scroll text-input dialog-menu todo-dogfood dialogs-menus list-adapter fragments-nav)
+ALL_APPS=(sqlite-crud canvas-shapes service-provider two-activity list-scroll text-input dialog-menu todo-dogfood dialogs-menus list-adapter fragments-nav overlay-stack)
 
 die() { echo "build-dogfood-apps: error: $*" >&2; exit 1; }
 

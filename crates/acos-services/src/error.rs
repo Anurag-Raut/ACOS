@@ -37,6 +37,22 @@ pub mod codes {
     /// sees a remote exception, and the peer records this code, so an overflow is
     /// an observable outcome and never a silent drop.
     pub const ART_RESOURCE_LIMIT: &str = "ART_RESOURCE_LIMIT";
+    /// A service module the request needs is not attached to the session
+    /// (ADR-0029 tombstone: never a silent null, never a fake success).
+    pub const SERVICE_MODULE_UNAVAILABLE: &str = "UNSUPPORTED_ANDROID_API";
+    /// A service-module operation was refused (bad profile, unknown control op,
+    /// live attach of an `at-launch` module).
+    pub const SERVICE_MODULE_REJECTED: &str = "SERVICE_MODULE_REJECTED";
+    /// A permission dialog would be shown here, but ACOS has no permission
+    /// controller system app yet (MODNOTIF2, ADR-0029 amendment).
+    pub const PERMISSION_UI_UNAVAILABLE: &str = "PERMISSION_UI_UNAVAILABLE";
+    /// The session's network is not there (the relay is down, the session has no
+    /// netns, the `network` module is not attached). Fail closed: a caller must
+    /// never read this as "offline, keep going" (NET5).
+    pub const NETWORK_UNAVAILABLE: &str = "NETWORK_UNAVAILABLE";
+    /// The relay is up but has no session under this name (the module is
+    /// attached and its relay session is gone: a real, addressable gap).
+    pub const NETWORK_NO_SUCH_SESSION: &str = "NETWORK_NO_SUCH_SESSION";
 }
 
 /// Errors returned by [`crate::ServiceHost`] and the service state machines.
@@ -61,6 +77,35 @@ pub enum ServiceError {
         code: u32,
         /// Best-effort method name (`code N` when not decodable).
         method: String,
+    },
+    /// An interface this call needs belongs to a service module that is **not
+    /// attached** to the session (ADR-0029 item 3).
+    ///
+    /// This is the tombstone answer: the `ServiceManager` name resolves to a
+    /// binder that always reports this error, so the app (and the agent) see a
+    /// structured gap naming the module and the exact attach call instead of a
+    /// silent `null` that looks like a working phone, or a fake success.
+    #[error(
+        "{service:?} is provided by service module {module:?}, which is not attached — attach it: {attach}"
+    )]
+    ModuleUnavailable {
+        /// `ServiceManager` name that was asked for (`wifi`, `vibrator_manager`).
+        service: String,
+        /// AIDL interface descriptor the caller transacted on.
+        interface: String,
+        /// Module id that owns the name.
+        module: &'static str,
+        /// The call that attaches it.
+        attach: String,
+    },
+    /// A module refused an operation (unknown control op, unsupported profile,
+    /// live attach of an `at-launch` module, unmet requirement).
+    #[error("service module {module}: {detail}")]
+    ModuleRejected {
+        /// Module id.
+        module: &'static str,
+        /// What was refused and, where possible, the allowed alternative.
+        detail: String,
     },
     /// The interface exists but is deliberately implemented elsewhere.
     #[error("interface {interface}::{method} is owned by {owner}")]
@@ -129,6 +174,40 @@ pub enum ServiceError {
         /// Message for `EX_SERVICE_SPECIFIC`.
         message: String,
     },
+    /// `Activity.requestPermissions` needs the permission dialog, which is an
+    /// Activity in the permission controller package
+    /// (`PackageManager.buildRequestPermissionsIntent` +
+    /// `Activity.requestPermissions`, `Activity.java:5673`). ACOS installs no
+    /// system app for it yet (ADR-0029 amendment: system apps in the guest,
+    /// multi-process work), so the request is refused with this structured
+    /// error. It is never a silent grant and never a fake dialog.
+    #[error(
+        "permission UI unavailable: {detail} (system app needed: {needs}; configure the answer with the `system.permissions` control ops)"
+    )]
+    PermissionUiUnavailable {
+        /// The permissions the app asked for.
+        permissions: Vec<String>,
+        /// The configured state's answer for them (`granted`/`denied`).
+        state: String,
+        /// The work that would make the dialog real.
+        needs: String,
+        /// One line an agent can act on.
+        detail: String,
+    },
+    /// The session has no network: the relay is down, the session has no netns,
+    /// or the `network` module is not attached (NET5, ADR-0030). Fail closed: a
+    /// caller must never read this as "offline, keep going".
+    #[error("network unavailable: {detail}")]
+    NetworkUnavailable {
+        /// What is missing, and the call that would fix it.
+        detail: String,
+    },
+    /// The relay is up but this session has no row: its netns is gone.
+    #[error("no such network session: {detail}")]
+    NetworkNoSuchSession {
+        /// The relay's answer, with the relay session name.
+        detail: String,
+    },
     /// Internal failure.
     #[error("internal service error: {0}")]
     Internal(String),
@@ -142,6 +221,8 @@ impl ServiceError {
             Self::UnsupportedAndroidApi { .. } | Self::NotOwned { .. } => {
                 codes::UNSUPPORTED_ANDROID_API
             }
+            Self::ModuleUnavailable { .. } => codes::SERVICE_MODULE_UNAVAILABLE,
+            Self::ModuleRejected { .. } => codes::SERVICE_MODULE_REJECTED,
             Self::UnknownBinder { .. } => codes::SERVICE_UNKNOWN_BINDER,
             Self::UnknownService { .. } => codes::SERVICE_UNKNOWN_NAME,
             Self::BadRequest { .. } | Self::BadReply { .. } => codes::SERVICE_BAD_REQUEST,
@@ -152,6 +233,9 @@ impl ServiceError {
                 let _ = e.code();
                 codes::SERVICE_PARCEL
             }
+            Self::PermissionUiUnavailable { .. } => codes::PERMISSION_UI_UNAVAILABLE,
+            Self::NetworkUnavailable { .. } => codes::NETWORK_UNAVAILABLE,
+            Self::NetworkNoSuchSession { .. } => codes::NETWORK_NO_SUCH_SESSION,
             Self::Internal(_) => codes::SERVICE_INTERNAL,
             Self::ResourceLimit { .. } => codes::ART_RESOURCE_LIMIT,
         }
@@ -168,7 +252,12 @@ impl ServiceError {
         match self {
             Self::UnsupportedAndroidApi { .. }
             | Self::NotOwned { .. }
-            | Self::UnsupportedParcelable { .. } => EX_UNSUPPORTED_OPERATION,
+            | Self::ModuleUnavailable { .. }
+            | Self::UnsupportedParcelable { .. }
+            | Self::PermissionUiUnavailable { .. }
+            | Self::NetworkUnavailable { .. }
+            | Self::NetworkNoSuchSession { .. } => EX_UNSUPPORTED_OPERATION,
+            Self::ModuleRejected { .. } => EX_ILLEGAL_ARGUMENT,
             Self::UnknownBinder { .. } | Self::UnknownService { .. } => EX_ILLEGAL_ARGUMENT,
             Self::BadRequest { .. } | Self::BadReply { .. } => EX_ILLEGAL_ARGUMENT,
             Self::ResourceLimit { .. } => EX_UNSUPPORTED_OPERATION,

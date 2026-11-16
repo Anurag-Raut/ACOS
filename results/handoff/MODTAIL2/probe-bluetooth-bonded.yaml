@@ -1,0 +1,46 @@
+# MODTAIL2 diagnostic: is `getBondedDevices` answered while the adapter is on?
+# The module is attached ON from launch, so the app's very first bonded query
+# runs with a non-empty scripted list; the `state` step reports whether the
+# module ever saw the call (`bonded_calls`) and what it answered.
+version: 1
+name: probe-bluetooth-bonded
+description: >-
+  hw.bluetooth scripted with the adapter on: tap Bluetooth, then report the
+  module's own bonded-call counter.
+app: ../../../fixtures/build/apps/tail-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+services:
+  - id: hw.bluetooth
+    profile: scripted
+    config:
+      on: true
+steps:
+  - launch:
+      activity: dev.acos.fixtures.tailprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Bluetooth"}}
+      settle_timeout_ms: 30000
+  - wait_for:
+      selector: {text: {contains: "BONDED"}}
+      timeout_ms: 30000
+  - service_ctl:
+      module: hw.bluetooth
+      op: state

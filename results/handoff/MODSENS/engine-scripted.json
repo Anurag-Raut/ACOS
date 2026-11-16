@@ -1,0 +1,208 @@
+{
+  "engine": {
+    "animations": "on",
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "rotate",
+        "reset",
+        "close",
+        "logs",
+        "service_ctl",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "out/sensors-scripted",
+      "engine_report": "out/sensors-scripted/engine.json",
+      "pruned_session_captures": 4,
+      "retention": "out/sensors-scripted/retention.json",
+      "verdict": "out/sensors-scripted/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "insets": "report",
+    "mode": "live",
+    "modules": [
+      {
+        "attach": "at-launch",
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "fidelity": "scripted",
+        "id": "sensors",
+        "profile": "scripted",
+        "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 0 events delivered, 0 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "fidelity": "off",
+        "id": "feedback.vibrator",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      }
+    ],
+    "session_exit": {
+      "abi": null,
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=75MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1425761-i1455701.scope)",
+      "code": null,
+      "disk_free_bytes": 195489337344,
+      "guest_crash": null,
+      "guest_exit": 0,
+      "guest_signal": null,
+      "native_crash": null,
+      "native_crash_path": null,
+      "outcome": "ok",
+      "panic": null,
+      "path": "out/sensors-scripted/art-frames/session-exit.json",
+      "retryable": false,
+      "stage": "teardown-evidence"
+    },
+    "timing": {
+      "attributed_ms": 6148,
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "hit",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-9689c68caaea509d",
+        "input_hash": "9689c68caaea509d",
+        "mode": "shared-fixed"
+      },
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 207,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 395
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 289
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 2
+        },
+        {
+          "index": 3,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 2
+        },
+        {
+          "index": 4,
+          "status": "pass",
+          "step": "service_ctl",
+          "wall_ms": 418
+        },
+        {
+          "index": 5,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 294
+        },
+        {
+          "index": 6,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        },
+        {
+          "index": 7,
+          "status": "pass",
+          "step": "service_ctl",
+          "wall_ms": 726
+        },
+        {
+          "index": 8,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 328
+        },
+        {
+          "index": 9,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 2
+        },
+        {
+          "index": 10,
+          "status": "pass",
+          "step": "service_ctl",
+          "wall_ms": 689
+        },
+        {
+          "index": 11,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 1254
+        },
+        {
+          "index": 12,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 2
+        },
+        {
+          "index": 13,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 2
+        },
+        {
+          "index": 14,
+          "status": "pass",
+          "step": "service_ctl",
+          "wall_ms": 722
+        },
+        {
+          "index": 15,
+          "status": "pass",
+          "step": "service_ctl",
+          "wall_ms": 1022
+        }
+      ],
+      "unattributed_ms": 16,
+      "unit": "ms",
+      "verdict_wall_ms": 6164
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "request_id": "req_15c155_18e86fc46b111501",
+  "verdict_status": "pass"
+}

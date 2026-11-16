@@ -1077,6 +1077,65 @@
       },
       "type": "object"
     },
+    "ServiceCtlStep": {
+      "additionalProperties": false,
+      "description": "`service_ctl`: one service-module operation between assertions (ADR-0029 item 4).\n\n`op` is `attach` (with `profile`/`config`), `detach`, or one of the module's own control ops (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`, ...). The step is the one scenario spelling of the agent API — `acos_services {op: attach|detach}` for the lifecycle words and `acos_service_ctl {module, op, args}` for a control op — so a scripted module can be driven mid-run: set a sensor value, assert the view, play a shake, detach and assert the honest empty answer. A control op reaches only a module that is attached in this run; a step naming a detached module is a structured step failure (never a silent no-op).",
+      "properties": {
+        "args": {
+          "description": "Control-op arguments (`{sensor: \"accelerometer\", values: [0,0,9.81]}`)."
+        },
+        "config": {
+          "description": "Module config for `attach`."
+        },
+        "expect": {
+          "description": "What the reply must contain, as a JSON **subset**.\n\nObjects match key by key (an expected key the reply lacks is a failure), arrays match element by element with the same length, and every other value must be equal. Absent = the reply is evidence only. This is what makes a control op an *assertion*: `list` can require the posted notification's title/channel/actions, `tap` the fired sender's `start_result`, `dismiss` an empty `posted`."
+        },
+        "module": {
+          "description": "Module id (`sensors`, `feedback.vibrator`).",
+          "type": "string"
+        },
+        "op": {
+          "description": "`attach`, `detach`, or a module control op (`set_value`, `play`, ...).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Profile for `attach` (`off`/`stub`/`scripted`/`real`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "module",
+        "op"
+      ],
+      "type": "object"
+    },
+    "ServiceRequest": {
+      "additionalProperties": false,
+      "description": "One `services:` entry (`{id, profile, config}`), the scenario spelling of a launch request (ADR-0029 item 4).",
+      "properties": {
+        "config": {
+          "description": "Module configuration object (scripted state, launch config)."
+        },
+        "id": {
+          "description": "Module id (`feedback.vibrator`).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Requested profile; `None` means the module's default (strongest implemented) profile, exactly like the MCP/CLI form.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
     "StateAssertion": {
       "description": "Assert node state flags.",
       "properties": {
@@ -1243,6 +1302,17 @@
           ],
           "description": "Assert node visibility."
         },
+        "assert_windows": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WindowOrderAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert the window stack order (bottom to top) and focus."
+        },
         "back": {
           "anyOf": [
             {
@@ -1298,6 +1368,13 @@
           ],
           "description": "Launch the app."
         },
+        "requires_services": {
+          "description": "ADR-0029 item 4/5: module ids this step needs attached (`feedback.vibrator`).\n\nA step whose module is `off` is `unsupported`, never `pass`: the executor refuses to run an assertion against behaviour the session does not have.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "reset": {
           "anyOf": [
             {
@@ -1319,6 +1396,17 @@
             }
           ],
           "description": "Rotate the display."
+        },
+        "service_ctl": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ServiceCtlStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ADR-0029 item 4: one service-module operation in the middle of a run.\n\n`op` is either the module-lifecycle word (`attach`/`detach`, with an optional `profile`/`config`) or a module's own control op (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`, ...) with `args`. This is the scenario spelling of the agent API (`acos_services` for attach/detach, `acos_service_ctl` for a control op), so a scripted module can be driven between assertions instead of only at launch."
         },
         "set_density": {
           "anyOf": [
@@ -1768,6 +1856,46 @@
         "selector"
       ],
       "type": "object"
+    },
+    "WindowOrderAssertion": {
+      "description": "`assert_windows`: the window stack in policy z order, bottom first.\n\nThis is the LAYER1 assertion: it reads the tree's `windows[]` block (the host's AOSP layer policy, not insertion order), so an application overlay that is drawn and tapped above an activity can only pass when the reported stack actually says so.",
+      "properties": {
+        "focus": {
+          "description": "Optional expected kind of the focused window.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "focus_type": {
+          "description": "Optional expected `LayoutParams.TYPE_*` name of the focused window. This is the precise form: the activity is `TYPE_BASE_APPLICATION`, a dialog is `TYPE_APPLICATION`, and both have kind `application`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "order": {
+          "description": "Expected window kinds, bottom to top (`application`, `application_overlay`, `sub_window`, …). The count must match exactly: a missing or extra window is a failure, never silently ignored.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "types": {
+          "description": "Optional expected `LayoutParams.TYPE_*` names, bottom to top. When present this must have the same length as `order`.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "order"
+      ],
+      "type": "object"
     }
   },
   "description": "A complete scenario.",
@@ -1907,6 +2035,13 @@
         "ui_tree": true
       },
       "description": "Artifact options."
+    },
+    "services": {
+      "description": "ADR-0029 item 4: the service modules this scenario attaches at launch, in order. Shape is the launch-request shape (`{id, profile, config}`); the profiles and ids are validated here so a typo is an invalid scenario, never a silently defaulted session.",
+      "items": {
+        "$ref": "#/definitions/ServiceRequest"
+      },
+      "type": "array"
     },
     "steps": {
       "description": "Ordered steps.",

@@ -1253,6 +1253,10 @@ pub struct PmsState {
     pub primary: usize,
     /// Feature answers.
     pub features: FeatureTable,
+    /// The one runtime-permission table, shared with the ATMS and the
+    /// `permissions` module (MODNOTIF2).
+    pub runtime_permissions:
+        Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
     /// uid -> package.
     pub uid_packages: Vec<(i32, String)>,
     /// dex-load notifications (oneway, recorded) as
@@ -1321,6 +1325,7 @@ impl PmsState {
             }],
             primary: 0,
             features: FeatureTable::default(),
+            runtime_permissions: None,
             uid_packages,
             dex_loads: Vec::new(),
             component_settings: Vec::new(),
@@ -1346,6 +1351,7 @@ impl PmsState {
             packages: vec![record],
             primary: 0,
             features: FeatureTable::default(),
+            runtime_permissions: None,
             uid_packages,
             dex_loads: Vec::new(),
             component_settings: Vec::new(),
@@ -1519,9 +1525,18 @@ impl PmsState {
         Self::from_apk(&path).unwrap_or_else(|_| Self::new())
     }
 
-    /// `PackageManager.checkPermission` for the package under test.
+    /// `PackageManager.checkPermission` policy: the shared runtime table first,
+    /// then the manifest's install-time grants.
     #[must_use]
     pub fn check_permission(&self, permission: &str) -> i32 {
+        if let Some(store) = self.runtime_permissions.as_ref() {
+            let store = store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if store.entry(permission).is_some() {
+                return store.check(permission);
+            }
+        }
         const GRANTED: i32 = 0;
         const DENIED: i32 = -1;
         if self
@@ -1650,6 +1665,17 @@ impl PmsService {
     #[must_use]
     pub fn new(state: Arc<Mutex<PmsState>>, wiring: crate::host::Wiring) -> Self {
         Self { state, wiring }
+    }
+
+    /// Publish (or withdraw) one `hasSystemFeature` answer.
+    ///
+    /// A service module that makes a system feature real turns it on at attach
+    /// and off at detach, so `hasSystemFeature` cannot disagree with the
+    /// attached module set.
+    pub fn set_system_feature(&mut self, name: &str, enabled: bool) -> crate::error::Result<()> {
+        let mut state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.features.set(name, enabled);
+        Ok(())
     }
 
     /// Replace the installed package with the APK being launched.

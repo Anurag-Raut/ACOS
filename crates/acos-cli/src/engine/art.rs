@@ -111,6 +111,15 @@ pub struct ArtSession {
     width: u32,
     height: u32,
     density: u32,
+    /// ADR-0029 item 4: the `services:` specs this session was launched with,
+    /// kept so a `reset`/relaunch attaches the same modules.
+    services: Vec<serde_json::Value>,
+    /// The modules the guest's ready line reported as attached (verdict rows).
+    modules: Vec<serde_json::Value>,
+    /// The same rows, shared with `EngineBackend` so the verdict can cite the
+    /// session's **final** module state (delivered fixes included) instead of the
+    /// launch snapshot.
+    module_rows: Arc<Mutex<Vec<serde_json::Value>>>,
     /// H13b: the boot image this session's ready line reported —
     /// `{mode, cache: hit|built|fallback|external|none, reason}` — so a serve's
     /// launch reply and session list can say whether the shared-image cache hit.
@@ -193,6 +202,12 @@ pub struct ArtSession {
     /// Guest boot time: `acos-art` spawn to its ready line. Charged to the
     /// session, not to the `launch` step (the executor's clock starts later).
     session_start_ms: u64,
+    /// NET4: the id this session is addressed by — the `acos serve` session id,
+    /// or the run's own id for a one-shot `verify`. It is published to the
+    /// launcher (`ACOS_ART_SESSION_ID`) and names the relay session
+    /// (`acos-<id>`), the same rule `acos_net` resolves, so **every** session's
+    /// network is reachable, including a one-shot run's.
+    session_id: String,
     /// Guest-side input settle window the engine asked for (seconds).
     frame_wait_secs: u64,
     /// Engine settle budget after a refused input frame.
@@ -891,6 +906,10 @@ fn probe_input_offset(tree: &serde_json::Value) -> Option<(i32, i32)> {
 /// The offset to subtract for one window. An unknown or empty label falls back
 /// to the first window's measured offset (a single-window tree, or an explicit
 /// screen point on a pre-multi-window probe).
+// LAYER1: taps now carry display coordinates and the guest picks the window by
+// policy, so this helper is only used by the probe-offset tests. Keep it: it is
+// the documented mapping for a future node -> window conversion.
+#[allow(dead_code)]
 fn offset_for_window(
     offsets: &HashMap<String, (i32, i32)>,
     fallback: (i32, i32),
@@ -1504,7 +1523,7 @@ impl ArtSession {
         animations: &str,
         insets: &str,
     ) -> Result<ArtSession, BackendError> {
-        Self::start_inner(apk, extra_apks, artifacts, animations, insets, None)
+        Self::start_inner(apk, extra_apks, artifacts, animations, insets, None, None, &[])
     }
 
     /// ZPROD3: start a session that must run on a persistent zygote child
@@ -1525,14 +1544,38 @@ impl ArtSession {
         animations: &str,
         insets: &str,
         zygote: Option<Arc<ZygoteHost>>,
+        session_id: Option<&str>,
     ) -> Result<ArtSession, BackendError> {
-        Self::start_with_zygote_and_apks(apk, &[], artifacts, animations, insets, zygote)
+        Self::start_with_session(apk, artifacts, animations, insets, zygote, session_id, &[])
+    }
+
+    /// ADR-0029 item 4: [`Self::start_with_zygote`] plus the `services:` specs
+    /// the session attaches at launch. The specs are forwarded to `acos-art` in
+    /// its environment and echoed in the launch reply from the ready line, so a
+    /// reply reports what was attached, never what was requested.
+    ///
+    /// NET3/NET5: `session_id` is the addressable id of the session (the serve
+    /// daemon's own id, or `verify-<pid>` for a one-shot run): the module's
+    /// relay session is `acos-<id>`, the same rule `acos_net` resolves, so a
+    /// client can address the network of the session it holds.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_with_session(
+        apk: &Path,
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        zygote: Option<Arc<ZygoteHost>>,
+        session_id: Option<&str>,
+        services: &[serde_json::Value],
+    ) -> Result<ArtSession, BackendError> {
+        Self::start_with_zygote_and_apks(apk, &[], artifacts, animations, insets, zygote, session_id, services)
     }
 
     /// MPROC1: [`ArtSession::start_with_zygote`] plus a list of extra APKs.
     /// The extras are part of the zygote key: a keeper child's pre-fork heap is
     /// only valid for the package set it was started for, so a session with
     /// different extras never reuses another session's child.
+    #[allow(clippy::too_many_arguments)]
     pub fn start_with_zygote_and_apks(
         apk: &Path,
         extra_apks: &[PathBuf],
@@ -1540,13 +1583,15 @@ impl ArtSession {
         animations: &str,
         insets: &str,
         zygote: Option<Arc<ZygoteHost>>,
+        session_id: Option<&str>,
+        services: &[serde_json::Value],
     ) -> Result<ArtSession, BackendError> {
         let start = zygote.map(|host| ZygoteStart {
             key: zygote_key_of(apk, insets, animations, extra_apks),
             host,
             reuse_tag: None,
         });
-        Self::start_inner(apk, extra_apks, artifacts, animations, insets, start)
+        Self::start_inner(apk, extra_apks, artifacts, animations, insets, start, session_id, services)
     }
 
     fn start_inner(
@@ -1556,7 +1601,17 @@ impl ArtSession {
         animations: &str,
         insets: &str,
         zygote: Option<ZygoteStart>,
+        session_id: Option<&str>,
+        services: &[serde_json::Value],
     ) -> Result<ArtSession, BackendError> {
+        // NET4: every session has an id. `acos serve` supplies its own (the id
+        // a client addresses); a one-shot run gets one from this process, which
+        // is what makes its network addressable at all (`art-<pid>` was a name
+        // no client could ever hold).
+        let session_id = match session_id {
+            Some(id) if !id.is_empty() => id.to_string(),
+            _ => format!("verify-{}", std::process::id()),
+        };
         let insets: &'static str = match acos_services::wms::parse_insets_mode(insets) {
             Some(acos_services::wms::InsetsMode::Carve) => "carve",
             Some(acos_services::wms::InsetsMode::Report) => "report",
@@ -1653,11 +1708,22 @@ impl ArtSession {
             .arg(animations)
             .arg("--insets")
             .arg(insets)
+            // ADR-0029 item 4: the module specs. The launcher attaches them
+            // before the guest boots; an invalid spec is refused there with a
+            // structured error instead of a silently defaulted session.
+            .env(
+                "ACOS_ART_SERVICES",
+                serde_json::to_string(&services).unwrap_or_else(|_| "[]".to_string()),
+            )
             // The launcher reads this seam (no `acos-art` CLI flag change): a
             // live session instead of a one-shot launch. The guest publishes
             // the read-only view-tree probe the `tree`/`tap` replies carry.
             .env("ACOSLAUNCH_INTERACTIVE", "1")
-            .env("ACOSLAUNCH_LIVE_PROBE", "1");
+            .env("ACOSLAUNCH_LIVE_PROBE", "1")
+            // The relay session is named `acos-<id>` from this id (`acos_net`
+            // resolves the same rule). Always set: a one-shot run publishes its
+            // own id, so no session's network is unreachable by construction.
+            .env(acos_art::spike_net::SESSION_ID_ENV, &session_id);
         // MPROC1: the extra packages this session installs. Both spellings name
         // the same list: the repeatable flags the launcher parses, and the
         // `ACOSLAUNCH_EXTRA_APKS` env a frozen host-template child reads.
@@ -1801,11 +1867,22 @@ impl ArtSession {
             std::thread::spawn(move || {
                 let mut reader = BufReader::new(stderr);
                 let mut line = String::new();
+                // NET3 left a hole here: `acos-art` writes its `stage()` markers to
+                // stderr and this drain swallowed them, so the documented
+                // `ACOS_ART_STAGE_TIMING=1` stage table never appeared in a
+                // `verify`/`launch` transcript (the NET3 report concluded "none
+                // fire on this path"). Forward the markers to this process's
+                // stderr when the caller asked for them; the tail keeps every
+                // line either way.
+                let forward_stages = std::env::var_os("ACOS_ART_STAGE_TIMING").is_some();
                 loop {
                     line.clear();
                     match reader.read_line(&mut line) {
                         Ok(0) | Err(_) => break,
                         Ok(_) => {
+                            if forward_stages && line.contains(": stage ") {
+                                eprint!("{line}");
+                            }
                             let mut tail = tail.lock().unwrap_or_else(|e| e.into_inner());
                             tail.extend(line.bytes());
                             while tail.len() > 8192 {
@@ -1925,6 +2002,9 @@ impl ArtSession {
             width: 1080,
             height: 2400,
             density: 420,
+            services: services.to_vec(),
+            modules: Vec::new(),
+            module_rows: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             boot_image: None,
             stream_socket: None,
             cached: None,
@@ -1945,6 +2025,7 @@ impl ArtSession {
             input_offset: (0, 0),
             window_offsets: HashMap::new(),
             session_start_ms: 0,
+            session_id,
             frame_wait_secs,
             settle_budget,
             settle_polls,
@@ -2064,6 +2145,9 @@ impl ArtSession {
         if let Some(boot) = ready.get("boot_image") {
             session.boot_image = Some(boot.clone());
         }
+        if let Some(modules) = ready.get("modules").and_then(|v| v.as_array()) {
+            session.modules = modules.clone();
+        }
         if let Some(package) = ready.get("package").and_then(|v| v.as_str()) {
             session.package = package.to_string();
         }
@@ -2088,6 +2172,13 @@ impl ArtSession {
     /// step clock starts, so no step could be charged with it.
     pub const fn session_start_ms(&self) -> u64 {
         self.session_start_ms
+    }
+
+    /// NET4: the id this session is addressed by (the `acos serve` id, or the
+    /// one-shot run's own id). The relay session is `acos-<id>`, which is what
+    /// `acos_net` resolves, so a client can control this session's network.
+    pub fn session_id(&self) -> &str {
+        &self.session_id
     }
 
     /// The guest's own pid: the process group `acos-art` started for it
@@ -2129,6 +2220,47 @@ impl ArtSession {
     #[must_use]
     pub fn boot_image(&self) -> Option<&serde_json::Value> {
         self.boot_image.as_ref()
+    }
+
+    /// ADR-0029 item 4: the modules the guest's ready line reported attached.
+    #[must_use]
+    pub fn modules(&self) -> &[serde_json::Value] {
+        &self.modules
+    }
+
+    /// ADR-0029 item 4: the `services:` specs this session was launched with.
+    #[must_use]
+    pub fn services(&self) -> &[serde_json::Value] {
+        &self.services
+    }
+
+    /// ADR-0029 item 4: one `acos_services` operation (list/status/attach/
+    /// detach) on this live guest. The launcher's peer thread owns the service
+    /// table, so this is a command, not a local mutation.
+    pub fn service_op(
+        &mut self,
+        request: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        let mut request = request;
+        request["cmd"] = serde_json::json!("services");
+        let reply = self.command(request)?;
+        if let Some(modules) = reply.get("modules").and_then(|v| v.as_array()) {
+            self.modules = modules.clone();
+            self.publish_module_rows();
+        }
+        Ok(reply)
+    }
+
+    /// The live module rows (the verdict cites these after the run).
+    #[must_use]
+    pub fn module_rows(&self) -> std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>> {
+        std::sync::Arc::clone(&self.module_rows)
+    }
+
+    fn publish_module_rows(&self) {
+        if let Ok(mut rows) = self.module_rows.lock() {
+            *rows = self.modules.clone();
+        }
     }
 
     /// The bound frame's identity: `(frame_seq, md5, captured_at)`.
@@ -4692,6 +4824,35 @@ impl SessionBackend for ArtSession {
         Engine::Art
     }
 
+    fn modules(&self) -> Vec<serde_json::Value> {
+        self.modules.clone()
+    }
+
+    /// ADR-0029 item 4: the `acos_services`/`acos_service_ctl` command, forwarded
+    /// to the launcher's peer thread that owns the module registry. Without this
+    /// forward every `service_ctl` step is `unsupported` (the trait default),
+    /// which would read as "this engine cannot" instead of the module's answer.
+    ///
+    /// The forwarded reply is the launcher's own: `{op, id, ctl_op, value, ...}`
+    /// for a control op, `{attached, modules}` for attach/detach/list/status. The
+    /// inherent [`ArtSession::service_op`] refreshes this adapter's `modules`
+    /// rows from it, so a live attach/detach is visible to the next launch
+    /// reply without a second query.
+    fn service_op(
+        &mut self,
+        request: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        ArtSession::service_op(self, request)
+    }
+
+    /// The live module rows, so a verdict cites the session's final module
+    /// state (a detached module's honest row) instead of the launch snapshot.
+    fn module_rows_handle(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        Some(self.module_rows())
+    }
+
     fn mode(&self) -> Mode {
         // This engine launches a real Activity; `render-app` (offline preview)
         // is a different command and never reaches this adapter.
@@ -4725,6 +4886,10 @@ impl SessionBackend for ArtSession {
             // Fatal guest log entries (ART LOG(FATAL)/CHECK/abort_message and
             // the JVM's `FATAL EXCEPTION` line) are a real crash signature.
             crash_reports: true,
+            // ADR-0029 item 4: the launcher's peer thread owns the module
+            // registry, so `service_ctl` is a command to it (attach/detach and
+            // a module's own control ops).
+            services: true,
         }
     }
 
@@ -4985,25 +5150,21 @@ impl SessionBackend for ArtSession {
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
-        // No window label: subtract the first window's measured origin. This is
-        // the pre-multi-window behaviour and is right for a single-window tree.
-        let (dx, dy) = self.input_offset;
-        self.input_command(
-            serde_json::json!({"cmd":"tap","x":x - dx,"y":y - dy}),
-            "input.tap",
-        )
+        // LAYER1: send display coordinates. The guest hit-tests them against the
+        // WMS layer stack and converts to the target window's own input space,
+        // so a tap beside an overlay reaches the activity below it and a
+        // `FLAG_NOT_TOUCHABLE` overlay passes the touch through. The CLI must
+        // not pre-subtract a window origin: it does not know which window the
+        // policy will pick.
+        self.input_command(serde_json::json!({"cmd":"tap","x":x,"y":y}), "input.tap")
     }
 
-    fn tap_in_window(&mut self, window: &str, x: i32, y: i32) -> Result<(), BackendError> {
-        // The engine's tap coordinates are display/screen coordinates (resolved
-        // from the probe's `bounds_on_screen`). The interactive input channel's
-        // transform is window-local (W10/I2), so subtract the origin of the
-        // window that contains the node, measured from the same probe tree.
-        let (dx, dy) = offset_for_window(&self.window_offsets, self.input_offset, window);
-        self.input_command(
-            serde_json::json!({"cmd":"tap","x":x - dx,"y":y - dy}),
-            "input.tap",
-        )
+    fn tap_in_window(&mut self, _window: &str, x: i32, y: i32) -> Result<(), BackendError> {
+        // The node's window label selects the *node*; the tap still carries
+        // display coordinates and the guest routes it by the layer stack (a
+        // point the policy sends to another window is a real disagreement, not
+        // something this layer hides).
+        self.tap(x, y)
     }
 
     fn tap_text(&mut self, text: &str) -> Result<(), BackendError> {
@@ -5197,6 +5358,10 @@ impl SessionBackend for ArtSession {
                 self.animations,
                 self.insets(),
                 zygote_start.clone(),
+                // A relaunch is the same session: it keeps the id (and therefore
+                // the relay session name) the client already holds.
+                Some(&self.session_id),
+                &self.services,
             ) {
                 Ok(session) => {
                     fresh = Some(session);
@@ -5296,6 +5461,12 @@ impl SessionBackend for ArtSession {
             return Ok(());
         }
         self.closed = true;
+        // ADR-0029: the verdict cites the session's final module rows, so ask
+        // the launcher for them once before the process goes away (the rows
+        // carry the delivered-fix record, which grows while the app runs).
+        if !self.modules.is_empty() {
+            let _ = self.service_op(serde_json::json!({"op": "list"}));
+        }
         let stopped = self.shutdown();
         // ZPROD3: a zygote session's app child lives inside the keeper's
         // sandbox, so closing the session must end *that child* too (by its
@@ -6115,6 +6286,9 @@ mod tests {
             // Fatal guest log entries (ART LOG(FATAL)/CHECK/abort_message and
             // the JVM's `FATAL EXCEPTION` line) are a real crash signature.
             crash_reports: true,
+            // ADR-0029 item 4: the launcher's peer thread owns the module
+            // registry, so `service_ctl` is a command.
+            services: true,
         };
         assert_eq!(caps.missing(), vec!["environment"]);
         // The executor sees the same two gaps through its capability names.

@@ -1,0 +1,90 @@
+# IAccessibilityServiceConnection transaction map, read out of the image dex
+# (.cache/boot/android-34/dex/framework/classes.dex) — the $Stub's
+# getDefaultTransactionName packed-switch payload, key -> case target -> const-string.
+# The payload (ident 0x0100, size 54, first_key 1) is at code_off+16+0xc4*2 of
+# L...$Stub;->getDefaultTransactionName. Verified against getMaxTransactionId.
+
+# IAccessibilityServiceConnection (guest -> host)
+# IAccessibilityServiceClient (host -> guest), same method
+1 setServiceInfo
+2 setAttributionTag
+3 findAccessibilityNodeInfoByAccessibilityId
+4 findAccessibilityNodeInfosByText
+5 findAccessibilityNodeInfosByViewId
+6 findFocus
+7 focusSearch
+8 performAccessibilityAction
+9 getWindow
+10 getWindows
+11 getServiceInfo
+12 performGlobalAction
+13 getSystemActions
+14 disableSelf
+15 setOnKeyEventResult
+16 getMagnificationConfig
+17 getMagnificationScale
+18 getMagnificationCenterX
+19 getMagnificationCenterY
+20 getMagnificationRegion
+21 getCurrentMagnificationRegion
+22 resetMagnification
+23 resetCurrentMagnification
+24 setMagnificationConfig
+25 setMagnificationCallbackEnabled
+26 setSoftKeyboardShowMode
+27 getSoftKeyboardShowMode
+28 setSoftKeyboardCallbackEnabled
+29 switchToInputMethod
+30 setInputMethodEnabled
+31 isAccessibilityButtonAvailable
+32 sendGesture
+33 dispatchGesture
+34 isFingerprintGestureDetectionAvailable
+35 getOverlayWindowToken
+36 getWindowIdForLeashToken
+37 takeScreenshot
+38 takeScreenshotOfWindow
+39 setGestureDetectionPassthroughRegion
+40 setTouchExplorationPassthroughRegion
+41 setFocusAppearance
+42 setCacheEnabled
+43 logTrace
+44 setServiceDetectsGesturesEnabled
+45 requestTouchExploration
+46 requestDragging
+47 requestDelegating
+48 onDoubleTap
+49 onDoubleTapAndHold
+50 setAnimationScale
+51 setInstalledAndEnabledServices
+52 getInstalledAndEnabledServices
+53 attachAccessibilityOverlayToDisplay
+54 attachAccessibilityOverlayToWindow
+
+# IAccessibilityServiceConnection code 32/33/37 argument shapes (image dex):
+#   32 sendGesture(int sequence, in ParceledListSlice gestureSteps)
+#   33 dispatchGesture(int sequence, in ParceledListSlice gestureSteps, int displayId)
+#   37 takeScreenshot(int displayId, in RemoteCallback callback)
+
+# IAccessibilityServiceClient (host -> guest)
+1 init
+2 onAccessibilityEvent
+3 onInterrupt
+4 onGesture
+5 clearAccessibilityCache
+6 onKeyEvent
+7 onMagnificationChanged
+8 onMotionEvent
+9 onTouchStateChanged
+10 onSoftKeyboardShowModeChanged
+11 onPerformGestureResult
+12 onFingerprintCapturingGesturesChanged
+13 onFingerprintGesture
+14 onAccessibilityButtonClicked
+15 onAccessibilityButtonAvailabilityChanged
+16 onSystemActionsChanged
+17 createImeSession
+18 setImeSessionEnabled
+19 bindInput
+20 unbindInput
+21 startInput

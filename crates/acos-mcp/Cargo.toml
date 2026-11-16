@@ -16,9 +16,16 @@ path = "src/lib.rs"
 
 [dependencies]
 acos-jni = { path = "../acos-jni" }
+# NET4: the `acos_net` tool's argument schema is defined once, in the network
+# module, and advertised verbatim here (no second copy to drift from).
+acos-netd = { path = "../acos-netd" }
 acos-protocol = { path = "../acos-protocol" }
 acos-runtime = { path = "../acos-runtime" }
 acos-sandbox = { path = "../acos-sandbox" }
+# ADR-0029 item 6: `acos_capabilities` and the help limits section are generated
+# from the service-module registry, so a module cannot exist without appearing in
+# the docs.
+acos-services = { path = "../acos-services" }
 libc = "0.2"
 # SHOTZ: decode + downscale an image for a bounded MCP image reply.
 png = "0.17"

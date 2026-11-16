@@ -96,6 +96,21 @@ pub fn verify_with_clock(
         request_id: request_id.clone(),
         flags: request.flags.clone(),
         acos_version: env!("CARGO_PKG_VERSION").to_string(),
+        // ADR-0029 item 4: the scenario's requested `services:` (a requested
+        // `off` is attached-off, so a step that needs it is unsupported).
+        services: scenario
+            .services
+            .iter()
+            .map(|service| {
+                (
+                    service.id.clone(),
+                    service
+                        .profile
+                        .clone()
+                        .unwrap_or_else(|| "real".to_string()),
+                )
+            })
+            .collect(),
     };
 
     // 3. Run.

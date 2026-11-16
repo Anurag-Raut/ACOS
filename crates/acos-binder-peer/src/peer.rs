@@ -31,7 +31,9 @@
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::os::unix::io::RawFd;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use acos_parcel::binder::BINDER_TYPE_FD;
 use acos_parcel::{BinderId, BinderKind, FlatObject, Parcel};
@@ -244,6 +246,13 @@ impl Peer {
         &self.host
     }
 
+    /// The host, mutably: a live session's module attach/detach is a service
+    /// table mutation and the peer thread is the table's owner.
+    #[must_use]
+    pub fn host_mut(&mut self) -> &mut ServiceHost {
+        &mut self.host
+    }
+
     /// Path of the JSON-lines unsupported log, when enabled.
     #[must_use]
     pub fn log_path(&self) -> Option<&Path> {
@@ -356,6 +365,19 @@ impl Peer {
                         frame.data.len(),
                         text
                     );
+                    // A `system -> app` delivery the app's `onTransact` rejected
+                    // (a non-empty reply body is a binder exception parcel) is
+                    // evidence, not a log line: record it next to the
+                    // unsupported-transaction records so a verdict can see that
+                    // the callback never ran.
+                    let record = serde_json::json!({
+                        "kind": "REVERSE_DELIVERY_EXCEPTION",
+                        "seq": frame.seq,
+                        "bytes": frame.data.len(),
+                        "text": text,
+                    })
+                    .to_string();
+                    self.log_line(&record);
                 }
             }
             other => {
@@ -696,6 +718,12 @@ impl Peer {
         self.log_unsupported(&record);
     }
 
+    fn log_line(&mut self, line: &str) {
+        if let Some(log) = self.log.as_mut() {
+            let _ = writeln!(log, "{line}");
+        }
+    }
+
     fn log_unsupported(&mut self, record: &UnsupportedRecord) {
         // Keep the *first* records (they are the diagnosis of what the launch
         // needed), bound the in-memory copy and the JSONL file, and count what
@@ -882,9 +910,52 @@ impl Peer {
         seq
     }
 
-    fn take_delivery_frames(&mut self) -> Vec<Frame> {
+    /// The `system -> app` frames queued by anything that ran on the host (a
+    /// binder transaction, or a module's live `control` op).
+    ///
+    /// [`Self::tick`] is what the launcher calls after a control request and on
+    /// the idle turn: a control op can park a delivery in the module's **own**
+    /// object (that is where a scripted feed lives), and only the timed drain
+    /// reaches it. This plain drain stays for the transaction path.
+    pub fn take_delivery_frames(&mut self) -> Vec<Frame> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());
+        self.frames_for_deliveries(pending)
+    }
+
+    /// Deliveries that became ready while the guest was idle.
+    ///
+    /// A scripted/timed module (`location`'s `play_track`, a sensor or camera
+    /// feed) queues a `system -> app` delivery from its own thread. Without a
+    /// tick the peer only drains deliveries after a guest transaction, so the
+    /// app would see the feed only when it happened to call something. The peer
+    /// loop asks [`Self::next_timed_deadline`] how long it may sleep and calls
+    /// this when that deadline (or a guest frame) arrives.
+    pub fn tick(&mut self) -> Vec<Frame> {
+        // `take_timed_deliveries` (not the plain queue): a module's feed lives in
+        // the module's own object, which only this idle turn may lock, and it
+        // advances a timed schedule (`Module::advance_timed`) to the instant the
+        // peer slept until.
+        let mut pending = std::mem::take(&mut self.local_deliveries);
+        pending.extend(self.host.take_timed_deliveries());
+        self.frames_for_deliveries(pending)
+    }
+
+    /// The instant the earliest **module** delivery is due.
+    ///
+    /// `None` means no attached module has a timed feed, so the peer may sleep
+    /// until the guest speaks: an idle session with no timed module has zero
+    /// wakeups (the fixed 20 ms poll this replaces woke it 50 times a second).
+    /// A delivery that is already queued answers `now`.
+    #[must_use]
+    pub fn next_timed_deadline(&self) -> Option<Instant> {
+        if !self.local_deliveries.is_empty() {
+            return Some(Instant::now());
+        }
+        self.host.next_timed_deadline()
+    }
+
+    fn frames_for_deliveries(&mut self, mut pending: Vec<acos_services::PendingDelivery>) -> Vec<Frame> {
         // Defence in depth: even the frames produced in one turn are bounded, so a
         // single transaction that fans out into thousands of reverse deliveries
         // cannot grow this turn's `out` without limit.
@@ -897,6 +968,17 @@ impl Peer {
                  (cap {MAX_PENDING_DELIVERIES} per turn)"
             );
             pending.truncate(MAX_PENDING_DELIVERIES);
+        }
+        if std::env::var_os("ACOS_SERVICE_CTL_LOG").is_some() && !pending.is_empty() {
+            let path = std::env::var("ACOS_SERVICE_CTL_LOG").unwrap_or_default();
+            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                let _ = writeln!(
+                    file,
+                    "deliveries={} targets={:?}",
+                    pending.len(),
+                    pending.iter().map(|d| (d.interface.clone(), d.code, d.target.0)).collect::<Vec<_>>()
+                );
+            }
         }
         let mut out = Vec::new();
         for d in pending {
@@ -975,8 +1057,13 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     // rebase the object offsets. Without this every binder reads as null and
     // the following argument is misaligned.
     let mut out = Vec::with_capacity(frame.data.len());
+    let mut object_offsets: Vec<usize> = Vec::new();
     let mut cursor = 0usize;
     let mut fds = frame.fds.iter().copied();
+    // Offsets of the rewritten flat objects in `out`: the imported parcel has no
+    // object table (`unmarshall` does not rebuild one), and both the reply
+    // marshaller and the `writeValue` length accounting need it.
+    let mut objects: Vec<usize> = Vec::new();
     for off in frame.object_offsets() {
         if off < cursor || off + 24 > frame.data.len() {
             continue;
@@ -1010,6 +1097,14 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
         let mut obj = [0u8; 24];
         obj.copy_from_slice(&frame.data[off..off + 24]);
         obj[8..16].copy_from_slice(&new_id.to_le_bytes());
+        // The object table travels out of band in the frame, so the imported
+        // parcel must be told where each rewritten object landed: a handler that
+        // looks for a client binder in the request (`result_receiver` in the
+        // bluetooth module) walks `Parcel::objects()`. Before this the imported
+        // parcel answered zero objects for every guest request. MODNOTIF5 also
+        // needs them for `writeValue` length accounting (a framework length
+        // prefix still counts the 4-byte stability records import strips).
+        object_offsets.push(out.len());
         out.extend_from_slice(&obj);
         let mut next = off + 24;
         let binder = matches!(
@@ -1027,6 +1122,9 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     out.extend_from_slice(&frame.data[cursor..]);
     let mut parcel = Parcel::new();
     parcel.unmarshall(&out);
+    for offset in object_offsets {
+        parcel.register_object(offset);
+    }
     parcel.set_data_position(0);
     // The guest's libbinder wrote this parcel: a null binder carries the 4-byte
     // stability record but no object-table entry (L1 §3.6).
@@ -1151,5 +1249,74 @@ pub fn host_binder_kind(id: BinderId) -> BinderKind {
         BinderKind::Proxy
     } else {
         BinderKind::Local
+    }
+}
+
+/// What an idle wait produced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdleWake {
+    /// The guest wrote something: read a frame.
+    Frame,
+    /// A module's scheduled delivery is due: call [`Peer::tick`].
+    Deadline,
+    /// The launcher woke the peer (`stop` pipe): it is stopping the session, or
+    /// it queued a module request (attach/detach/control) that the idle turn
+    /// must pick up.
+    Wake,
+}
+
+/// Sleep until the guest has a frame to read (`fd`), the module `deadline`
+/// elapses, or the launcher's wake pipe (`stop_fd`) fires.
+///
+/// `deadline` is the **remaining** time (see [`Peer::next_timed_deadline`]);
+/// `None` sleeps until a frame or the stop wake, i.e. forever when neither
+/// happens. That is the whole idle policy: no fixed poll interval, no wakeup a
+/// caller did not ask for.
+///
+/// # Errors
+///
+/// The `poll(2)` error, so a broken socket is reported instead of spun on.
+pub fn wait_for_idle(
+    fd: RawFd,
+    stop_fd: RawFd,
+    deadline: Option<Duration>,
+) -> std::io::Result<IdleWake> {
+    let timeout_ms: libc::c_int = match deadline {
+        None => -1,
+        Some(remaining) => {
+            let micros = remaining.as_micros().min(i64::MAX as u128) as i64;
+            // Round **up**: waking 1 ms early would tick before the deadline and
+            // then sleep again, which is exactly the poll the deadline replaces.
+            libc::c_int::try_from((micros + 999) / 1000).unwrap_or(libc::c_int::MAX)
+        }
+    };
+    let mut fds = [
+        libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        },
+        libc::pollfd {
+            fd: stop_fd,
+            events: libc::POLLIN,
+            revents: 0,
+        },
+    ];
+    loop {
+        let ready = unsafe { libc::poll(fds.as_mut_ptr(), 2, timeout_ms) };
+        if ready < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+        if fds[1].revents != 0 {
+            return Ok(IdleWake::Wake);
+        }
+        if fds[0].revents != 0 {
+            return Ok(IdleWake::Frame);
+        }
+        return Ok(IdleWake::Deadline);
     }
 }

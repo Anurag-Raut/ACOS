@@ -39,10 +39,13 @@ name = "acos-art"
 version = "0.2.2"
 dependencies = [
  "acos-binder-peer",
+ "acos-netd",
+ "acos-parcel",
  "acos-render",
  "acos-sandbox",
  "acos-services",
  "acos-webview",
+ "acos-wm",
  "fdeflate",
  "image",
  "libc",
@@ -73,6 +76,7 @@ dependencies = [
  "acos-jni",
  "acos-mcp",
  "acos-native-loader",
+ "acos-netd",
  "acos-protocol",
  "acos-render",
  "acos-runtime",
@@ -81,6 +85,7 @@ dependencies = [
  "acos-test-support",
  "acos-verify",
  "acos-vm",
+ "acos-wm",
  "assert_cmd",
  "clap",
  "libc",
@@ -143,9 +148,11 @@ name = "acos-mcp"
 version = "0.2.2"
 dependencies = [
  "acos-jni",
+ "acos-netd",
  "acos-protocol",
  "acos-runtime",
  "acos-sandbox",
+ "acos-services",
  "acos-test-support",
  "libc",
  "png 0.17.16",
@@ -166,6 +173,28 @@ dependencies = [
  "serde_json",
  "thiserror",
  "zip",
+]
+
+[[package]]
+name = "acos-netd"
+version = "0.2.2"
+dependencies = [
+ "acos-netd-ctl",
+ "acos-services",
+ "libc",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "acos-netd-ctl"
+version = "0.2.2"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -260,6 +289,7 @@ dependencies = [
  "acos-aidl",
  "acos-apk",
  "acos-dex",
+ "acos-netd-ctl",
  "acos-parcel",
  "acos-protocol",
  "acos-sfgeom",

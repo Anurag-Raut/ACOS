@@ -1,0 +1,12 @@
+     Running tests/module_kit.rs (.cache/mt2-target/debug/deps/module_kit-579e0d5daf7e6822)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/process_initializers.rs (.cache/mt2-target/debug/deps/process_initializers-1be738732e11c319)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/sensors_module.rs (.cache/mt2-target/debug/deps/sensors_module-67a6345350c1fed5)
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+     Running tests/service_manager_notifications.rs (.cache/mt2-target/debug/deps/service_manager_notifications-70e6ab673774161c)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/tail_modules.rs (.cache/mt2-target/debug/deps/tail_modules-5a1b9c1d2080f208)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/telephony_module.rs (.cache/mt2-target/debug/deps/telephony_module-022efad668219538)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

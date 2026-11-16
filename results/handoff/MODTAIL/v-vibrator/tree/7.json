@@ -1,0 +1,608 @@
+{
+  "frame": {
+    "frame_seq": 7,
+    "produced_at": "2026-11-16T05:46:21.650Z",
+    "cause_id": "art",
+    "width": 1080,
+    "height": 2400,
+    "density": 420,
+    "content_hash": "dcfe70f1e49ef657daa7e8dd9472a89f",
+    "meaningful": true,
+    "display_origin": [
+      0,
+      0
+    ],
+    "display_size": [
+      1080,
+      2400
+    ]
+  },
+  "package": "dev.acos.fixtures.tailprobe",
+  "nodes": [
+    {
+      "id": "n0_",
+      "class": "com.android.internal.policy.DecorView",
+      "resource_id": "",
+      "text": "",
+      "hint": "",
+      "content_desc": "",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visible_bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visible": true,
+      "enabled": true,
+      "focused": false,
+      "clickable": false,
+      "scrollable": false,
+      "checked": false,
+      "selected": false,
+      "password": false,
+      "children": [
+        {
+          "id": "n1_android:id/decor_content_parent",
+          "class": "com.android.internal.widget.ActionBarOverlayLayout",
+          "resource_id": "android:id/decor_content_parent",
+          "text": "",
+          "hint": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            0,
+            1080,
+            2337
+          ],
+          "visible_bounds": [
+            0,
+            0,
+            1080,
+            2337
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "selected": false,
+          "password": false,
+          "children": [
+            {
+              "id": "n2_android:id/content",
+              "class": "android.widget.FrameLayout",
+              "resource_id": "android:id/content",
+              "text": "",
+              "hint": "",
+              "content_desc": "",
+              "bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "visible_bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "visible": true,
+              "enabled": true,
+              "focused": false,
+              "clickable": false,
+              "scrollable": false,
+              "checked": false,
+              "selected": false,
+              "password": false,
+              "children": [
+                {
+                  "id": "n3_",
+                  "class": "android.widget.LinearLayout",
+                  "resource_id": "",
+                  "text": "",
+                  "hint": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    275,
+                    1080,
+                    2337
+                  ],
+                  "visible_bounds": [
+                    0,
+                    275,
+                    1080,
+                    2337
+                  ],
+                  "visible": true,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "selected": false,
+                  "password": false,
+                  "children": [
+                    {
+                      "id": "n4_dev.acos.fixtures.tailprobe:id/title",
+                      "class": "android.widget.TextView",
+                      "resource_id": "dev.acos.fixtures.tailprobe:id/title",
+                      "text": "VIBRATOR",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        299,
+                        1056,
+                        370
+                      ],
+                      "visible_bounds": [
+                        24,
+                        299,
+                        1056,
+                        370
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.Button",
+                      "resource_id": "",
+                      "text": "Telephony",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        370,
+                        1056,
+                        496
+                      ],
+                      "visible_bounds": [
+                        24,
+                        370,
+                        1056,
+                        496
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.Button",
+                      "resource_id": "",
+                      "text": "Biometric",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        496,
+                        1056,
+                        622
+                      ],
+                      "visible_bounds": [
+                        24,
+                        496,
+                        1056,
+                        622
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.Button",
+                      "resource_id": "",
+                      "text": "Bluetooth",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        622,
+                        1056,
+                        748
+                      ],
+                      "visible_bounds": [
+                        24,
+                        622,
+                        1056,
+                        748
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.Button",
+                      "resource_id": "",
+                      "text": "Vibrator",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        748,
+                        1056,
+                        874
+                      ],
+                      "visible_bounds": [
+                        24,
+                        748,
+                        1056,
+                        874
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.Button",
+                      "resource_id": "",
+                      "text": "Vibrate",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        874,
+                        1056,
+                        1000
+                      ],
+                      "visible_bounds": [
+                        24,
+                        874,
+                        1056,
+                        1000
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.Button",
+                      "resource_id": "",
+                      "text": "Vibrate2",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        1000,
+                        1056,
+                        1126
+                      ],
+                      "visible_bounds": [
+                        24,
+                        1000,
+                        1056,
+                        1126
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_dev.acos.fixtures.tailprobe:id/status",
+                      "class": "android.widget.TextView",
+                      "resource_id": "dev.acos.fixtures.tailprobe:id/status",
+                      "text": "CALL unavailable=NullPointerException\nREADY\nTELEPHONY unavailable=NullPointerException\nVIBRATOR hasVibrator=true\nVIBRATED one-shot-250-128\nVIBRATED one-shot-250-255\n",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        1126,
+                        1056,
+                        1435
+                      ],
+                      "visible_bounds": [
+                        24,
+                        1126,
+                        1056,
+                        1435
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    }
+                  ],
+                  "package": "",
+                  "window": "main"
+                }
+              ],
+              "package": "",
+              "window": "main"
+            },
+            {
+              "id": "n2_android:id/action_bar_container",
+              "class": "com.android.internal.widget.ActionBarContainer",
+              "resource_id": "android:id/action_bar_container",
+              "text": "",
+              "hint": "",
+              "content_desc": "",
+              "bounds": [
+                0,
+                128,
+                1080,
+                275
+              ],
+              "visible_bounds": [
+                0,
+                128,
+                1080,
+                275
+              ],
+              "visible": true,
+              "enabled": true,
+              "focused": false,
+              "clickable": false,
+              "scrollable": false,
+              "checked": false,
+              "selected": false,
+              "password": false,
+              "children": [
+                {
+                  "id": "n3_android:id/action_bar",
+                  "class": "android.widget.Toolbar",
+                  "resource_id": "android:id/action_bar",
+                  "text": "",
+                  "hint": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    128,
+                    1080,
+                    275
+                  ],
+                  "visible_bounds": [
+                    0,
+                    128,
+                    1080,
+                    275
+                  ],
+                  "visible": true,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "selected": false,
+                  "password": false,
+                  "children": [
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.TextView",
+                      "resource_id": "",
+                      "text": "Tail Probe",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        166,
+                        281,
+                        237
+                      ],
+                      "visible_bounds": [
+                        42,
+                        166,
+                        281,
+                        237
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.ActionMenuView",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        1080,
+                        128,
+                        1080,
+                        275
+                      ],
+                      "visible": false,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    }
+                  ],
+                  "package": "",
+                  "window": "main"
+                },
+                {
+                  "id": "n3_android:id/action_context_bar",
+                  "class": "com.android.internal.widget.ActionBarContextView",
+                  "resource_id": "android:id/action_context_bar",
+                  "text": "",
+                  "hint": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    128,
+                    0,
+                    128
+                  ],
+                  "visible": false,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "selected": false,
+                  "password": false,
+                  "children": [],
+                  "package": "",
+                  "window": "main"
+                }
+              ],
+              "package": "",
+              "window": "main"
+            }
+          ],
+          "package": "",
+          "window": "main"
+        },
+        {
+          "id": "n1_android:id/navigationBarBackground",
+          "class": "android.view.View",
+          "resource_id": "android:id/navigationBarBackground",
+          "text": "",
+          "hint": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            2337,
+            1080,
+            2400
+          ],
+          "visible_bounds": [
+            0,
+            2337,
+            1080,
+            2400
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "selected": false,
+          "password": false,
+          "children": [],
+          "package": "",
+          "window": "main"
+        },
+        {
+          "id": "n1_android:id/statusBarBackground",
+          "class": "android.view.View",
+          "resource_id": "android:id/statusBarBackground",
+          "text": "",
+          "hint": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            0,
+            1080,
+            128
+          ],
+          "visible_bounds": [
+            0,
+            0,
+            1080,
+            128
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "selected": false,
+          "password": false,
+          "children": [],
+          "package": "",
+          "window": "main"
+        }
+      ],
+      "package": "",
+      "window": "main"
+    }
+  ],
+  "truncated": false,
+  "text_available": true
+}

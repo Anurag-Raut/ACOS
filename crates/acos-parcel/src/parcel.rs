@@ -245,6 +245,27 @@ impl Parcel {
         self.write_int32(i32::from(v));
     }
 
+    /// Append `bytes` verbatim, **without** a length word and without padding.
+    ///
+    /// This is what a native `Flattenable` payload needs: `Parcel::write(const
+    /// Flattenable&)` is `writeInt32(flattenedSize)` followed by exactly
+    /// `flattenedSize` bytes, and the native `unflatten` walks those bytes field
+    /// by field — so the size must be exact (padding would desynchronise the
+    /// next object in the parcel). The sensor `Sensor` flatten is the case that
+    /// forced this: `libs/sensor/Sensor.cpp:534-559` mixes `String8` (4-byte
+    /// aligned) fields with a one-byte `bool`, so its payload only happens to be
+    /// 4-aligned.
+    ///
+    /// The bytes must not contain flat objects (no binder, no descriptor). It is
+    /// the caller's job to write the leading size when its own wire format needs
+    /// one.
+    pub fn write_raw_bytes(&mut self, bytes: &[u8]) {
+        let end = self.pos + bytes.len();
+        self.reserve(end);
+        self.data[self.pos..end].copy_from_slice(bytes);
+        self.pos = end;
+    }
+
     // ------------------------------------------------------------------
     // scalar readers
     // ------------------------------------------------------------------
@@ -352,6 +373,14 @@ impl Parcel {
     /// Strict `readChar` (UTF-16 code unit).
     pub fn read_char(&mut self) -> Result<u16> {
         Ok(self.read_int32()? as u16)
+    }
+
+    /// Read `len` bytes verbatim (the counterpart of [`Self::write_raw_bytes`]).
+    pub fn read_raw_bytes(&mut self, len: usize) -> Result<Vec<u8>> {
+        self.check(len)?;
+        let bytes = self.data[self.pos..self.pos + len].to_vec();
+        self.pos += len;
+        Ok(bytes)
     }
 
     // ------------------------------------------------------------------
@@ -1221,6 +1250,32 @@ impl Parcel {
     pub fn unmarshall(&mut self, bytes: &[u8]) {
         self.reset();
         self.data.extend_from_slice(bytes);
+    }
+
+    /// Record `offset` as an object-table entry of an **imported** parcel.
+    ///
+    /// [`Parcel::unmarshall`] copies bytes only, because a parcel that came from
+    /// the binder driver keeps its object table out of band (the driver's
+    /// `offsets` array, not part of `data`). The importer
+    /// (`acos_binder_peer::import_parcel`) walks those offsets, rewrites each
+    /// `flat_binder_object` into the in-process form and registers its position
+    /// here, so [`Parcel::objects`] answers what the sender wrote. Without it
+    /// every incoming request looks object-free, and a handler that must find a
+    /// client binder in the request — an `ISynchronousResultReceiver`, an
+    /// `IIntentReceiver` — never sees it.
+    ///
+    /// `unmarshall` copies bytes without rebuilding the object table, so a
+    /// caller that imports a wire parcel (and rewrites its binder objects)
+    /// records them here. The table is what `marshall`/`frame_from_parcel` walk
+    /// to re-emit the wire stability records, and what `acos-services`'
+    /// `writeValue` length check uses to account for the stripped records.
+    pub fn register_object(&mut self, offset: usize) {
+        match self.objects.binary_search(&offset) {
+            // Offsets arrive in ascending order; keep the table sorted so the
+            // marshaller can walk it with a single cursor.
+            Ok(_) => {}
+            Err(index) => self.objects.insert(index, offset),
+        }
     }
 
     /// `nativeFreeBuffer` / `Parcel.recycle`: drop data, objects and fds.

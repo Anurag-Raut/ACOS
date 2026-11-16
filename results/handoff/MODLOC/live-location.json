@@ -1,0 +1,87 @@
+{
+  "launch": {
+    "status": "pass",
+    "modules": [
+      {
+        "attach": "at-launch",
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "fidelity": "off",
+        "id": "feedback.vibrator",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "fidelity": "scripted",
+        "id": "location",
+        "profile": "scripted",
+        "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 0 register(s), 0 fix(es) delivered to the app (no fix delivered yet); geocoder not present (framework no-geocoder path)",
+        "state": "attached"
+      }
+    ]
+  },
+  "after_launch": {
+    "state": "state=ready providers=fused,gps,network,passive enabled=true gps=true",
+    "last": "last=none",
+    "fix": "fix=none"
+  },
+  "ctl_set_location": {
+    "status": "pass",
+    "result": {
+      "accuracy": 4.0,
+      "delivered": 2,
+      "lat": 37.422,
+      "lng": -122.0841,
+      "location_enabled": true,
+      "provider": "gps",
+      "provider_enabled": true,
+      "stored": true
+    }
+  },
+  "tap_recheck": {
+    "status": "pass"
+  },
+  "after_set_location": {
+    "state": "state=ready providers=fused,gps,network,passive enabled=true gps=true",
+    "last": "last=37.4220,-122.0841 accuracy=4.0",
+    "fix": "fix=37.4220,-122.0841 provider=gps count=1"
+  },
+  "detach": {
+    "status": "pass",
+    "modules": [
+      {
+        "attach": "hot",
+        "fidelity": "off",
+        "id": "location",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      }
+    ]
+  },
+  "tap_recheck_after_detach": {
+    "status": "pass"
+  },
+  "after_detach": {
+    "state": "state=unavailable: UnsupportedOperationException: \"binder 0x4c\" is provided by service module \"location\", which is not attached \u2014 attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+    "last": "last=none",
+    "fix": "fix=none"
+  },
+  "destroy": "pass",
+  "checks": {
+    "launch_shows_ready": true,
+    "fix_reaches_the_app": true,
+    "detach_leaves_no_fix": true,
+    "detach_shows_the_disabled_path": true,
+    "detach_reports_off": true
+  },
+  "pass": true
+}

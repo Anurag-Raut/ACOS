@@ -62,7 +62,7 @@ pub fn capture_component() -> String {
 pub const MAX_CAPTURES: usize = 32;
 
 /// One captured intent: what the app asked for, verbatim.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CapturedIntent {
     /// Monotonic capture sequence (1-based, per session).
     pub seq: u64,
@@ -144,6 +144,16 @@ impl CapturedIntent {
                     Extra::String(text) => serde_json::json!(text),
                     Extra::Int(number) => serde_json::json!(number),
                     Extra::Bool(flag) => serde_json::json!(flag),
+                    // MODNOTIF3/MODBLUETOOTH: the extra kinds the modules added
+                    // are rendered in the shape the Android API returns them in,
+                    // never dropped from the capture.
+                    Extra::Short(short) => serde_json::json!(short),
+                    Extra::Strings(items) => serde_json::json!(items),
+                    Extra::Bytes(bytes) => serde_json::json!(bytes),
+                    Extra::ByteArrays(items) => serde_json::json!(items),
+                    Extra::Parcelable(parcelable) => {
+                        serde_json::json!({"parcelable": format!("{parcelable:?}")})
+                    }
                     Extra::Present => serde_json::json!({"present": true}),
                 };
                 (key.clone(), value)

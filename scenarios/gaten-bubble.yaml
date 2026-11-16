@@ -1,0 +1,42 @@
+# gaten-bubble: Gaten's floating bubble — the TYPE_ACCESSIBILITY_OVERLAY window
+# its own `AccessibilityService` owns (the 2026-11-15 agent-feedback case that
+# ACOS could not verify at all: "the service is simply never started").
+#
+# The accessibility module binds the service the launch config enables
+# (`scheduleCreateService` + `scheduleBindService` -> `publishService` ->
+# `IAccessibilityServiceClient.init`), hands it the display's overlay window
+# token, and the WMS accepts a `TYPE_ACCESSIBILITY_OVERLAY` add only on that
+# token (MODA11Y4/MODA11Y5). So the bubble is the app's own window, drawn by the
+# app's own view code, over the app's own activity.
+version: 1
+name: gaten-bubble
+description: >-
+  Gaten with its real AccessibilityService bound: the floating bubble appears as
+  a TYPE_ACCESSIBILITY_OVERLAY window above the activity, its content is in the
+  tree, and taps on it land on the overlay.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+services:
+  - id: accessibility
+    profile: real
+    config:
+      enable:
+        - com.gaten/com.gaten.app.GatenAccessibilityService
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - wait_for: {selector: {text: {contains: "Set up Gaten"}}, timeout_ms: 30000}
+  # The bubble is added by the service after `onServiceConnected`, which runs
+  # inside the same process as the activity. Give it a bounded window to post
+  # its first frame, then capture: the frame's tree carries the window stack.
+  - wait_for: {selector: {text: {contains: "Skip"}}, timeout_ms: 30000}
+  - capture: {name: gaten-bubble, format: png, fresh: true}
+  - assert_windows:
+      order: [application, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY]

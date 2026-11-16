@@ -761,6 +761,25 @@ impl ServeEngine {
             );
         }
         let artifacts = self.artifacts_root.join(sanitize_session_id(id));
+        // ADR-0029 item 4: `acos_launch {services: [...]}`. The shapes are
+        // validated here so a bad spec is INVALID_ARGUMENT before a guest
+        // exists, and the launcher refuses an unknown module/profile itself.
+        let services = match args.get("services") {
+            None => Vec::new(),
+            Some(value) => match acos_services::module::ModuleSpec::parse_list(value) {
+                Ok(specs) => specs.iter().map(acos_services::module::ModuleSpec::to_json).collect(),
+                Err(error) => {
+                    return art_failure(
+                        request_id,
+                        Some(id),
+                        trust,
+                        ErrorCode::InvalidArgument,
+                        error.to_string(),
+                        json!({"field": "services", "value": value}),
+                    )
+                }
+            },
+        };
         match ArtSession::start_with_zygote_and_apks(
             &apk,
             &extra_apks,
@@ -768,6 +787,10 @@ impl ServeEngine {
             animations,
             insets,
             Some(Arc::clone(&self.zygote)),
+            // NET3: the relay session takes this session's id, so `acos_net`
+            // addresses the network of the session the caller holds.
+            Some(id),
+            &services,
         ) {
             Ok(mut session) => {
                 session.set_settle_timeout(settle_timeout_ms);
@@ -1011,6 +1034,11 @@ impl ServeEngine {
             "acos_assert" => assert(&mut session, args, trust),
             "acos_logs" => logs(&mut session, args),
             "acos_status" => Ok(status_value(&session)),
+            // ADR-0029 item 4: list/status/attach/detach on the live guest.
+            // The launcher's peer thread owns the service table, so this is a
+            // command; an `at-launch` module is refused by the launcher with
+            // the launch call in the message.
+            "acos_services" => service_control(&mut session, args),
             // MPROC1: session control ops (`acos_service_ctl`). The module and
             // op are the session's own vocabulary; nothing is translated here.
             "acos_service_ctl" => service_ctl(&mut session, args),
@@ -1020,6 +1048,12 @@ impl ServeEngine {
                 "the ART session engine has no swipe command (tap/key/type_text only)",
             )),
             "acos_action" => action(&mut session, args),
+            // NET2/NET4: the session's own network controls (the module wraps
+            // this). Host-side only: the relay supervisor owns the rules, the
+            // guest is never asked and nothing in it participates. The arm is
+            // the module's own verb name, the same constant `acos-mcp`
+            // advertises, so the CLI and MCP surfaces cannot drift.
+            acos_netd::net_ctl::NET_CTL_TOOL => net_ctl(&mut session, args),
             other => {
                 return art_failure(
                     request_id,
@@ -1046,6 +1080,7 @@ impl ServeEngine {
                     object.insert("animations".into(), json!(session.animations()));
                     object.insert("insets".into(), json!(session.insets()));
                     object.insert("extra_apks".into(), extra_apks_json(session.extra_apks()));
+                    object.insert("modules".into(), json!(session.modules()));
                 }
                 label_frame(&mut result, &session);
                 label_timing(&mut result, &session, tool, started);
@@ -1389,6 +1424,77 @@ fn label_timing(result: &mut Value, session: &ArtSession, tool: &str, started: s
 
 // -- verb implementations --------------------------------------------------- //
 
+/// `acos_net`: the session's network controls, on the live session API.
+///
+/// **NET5: this verb is the module's control path, not a second implementation.**
+/// The `network` service module owns the relay and its five ops; `acos_net` is
+/// the documented convenience spelling of exactly those ops, so this function
+/// parses the arguments (the closed [`acos_netd::net_ctl::net_ctl_schema`] that
+/// `acos-mcp` also advertises) and forwards them as one module control request
+/// `{op: "ctl", id: "network", ctl_op: <action>}`. `acos_service_ctl {module:
+/// "network", op: <action>}` and `acos_net {action: <action>}` therefore run the
+/// same code in the launcher, and `crates/acos-mcp/tests/net_ctl_parity.rs`
+/// pins that neither surface can grow a private copy.
+///
+/// A session without the module answers `NETWORK_UNAVAILABLE` naming the attach
+/// call; a relay that is down does the same (fail closed), never a silent
+/// offline.
+fn net_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    use acos_netd::net_ctl::{action_keys, NetAction};
+    let action = NetAction::from_args(args).map_err(|e| BackendError::Error {
+        code: ErrorCode::InvalidArgument,
+        detail: e.message,
+    })?;
+    // The module's control op is the action name; its arguments are the keys that
+    // action owns (the parser above already refused every other key).
+    let mut ctl_args = serde_json::Map::new();
+    for key in action_keys(action.name()) {
+        if let Some(value) = args.get(*key) {
+            ctl_args.insert((*key).to_string(), value.clone());
+        }
+    }
+    let reply = session.service_op(json!({
+        "op": "ctl",
+        "id": acos_services::modules::network::MODULE_ID,
+        "ctl_op": action.name(),
+        "args": Value::Object(ctl_args),
+    }))?;
+    if reply.get("ok").and_then(Value::as_bool) == Some(false) {
+        // The module's structured refusal, mapped onto the transport's codes: a
+        // missing network is `NETWORK_UNAVAILABLE`, never a silent offline.
+        let code = match reply.get("code").and_then(Value::as_str) {
+            Some(acos_services::error::codes::NETWORK_UNAVAILABLE) => {
+                ErrorCode::NetworkUnavailable
+            }
+            Some(acos_services::error::codes::NETWORK_NO_SUCH_SESSION) => {
+                ErrorCode::SessionNotFound
+            }
+            Some(acos_services::error::codes::SERVICE_MODULE_REJECTED) => {
+                ErrorCode::InvalidArgument
+            }
+            Some(acos_services::error::codes::SERVICE_MODULE_UNAVAILABLE) => {
+                ErrorCode::NetworkUnavailable
+            }
+            _ => ErrorCode::Internal,
+        };
+        return Err(BackendError::Error {
+            code,
+            detail: reply
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("the network module refused the control")
+                .to_string(),
+        });
+    }
+    let mut value = reply.get("value").cloned().unwrap_or(Value::Null);
+    value["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(value)
+}
+
 fn launch_reply(
     request_id: &str,
     id: &str,
@@ -1440,6 +1546,9 @@ fn launch_reply(
     result["animations"] = json!(session.animations());
     result["insets"] = json!(session.insets());
     result["extra_apks"] = extra_apks_json(session.extra_apks());
+    // ADR-0029 item 4: the attached modules and their fidelity, as the
+    // launcher's ready line reported them.
+    result["modules"] = json!(session.modules());
     // H13b: which boot image this session booted and whether its cache hit.
     result["boot_image"] = session
         .boot_image()
@@ -1973,6 +2082,11 @@ fn observe_tree(
     // FB2: the screenshot is of *this* bound frame, and its `display_origin`
     // says how a PNG pixel maps to a tree bound.
     attach_screenshot(session, artifacts, screenshot, "acos_observe_tree", &mut result)?;
+    // LAYER1: the screenshot names the same window stack as the tree it is
+    // bound to, so a frame and a tree from one reply cannot disagree.
+    if let (Some(shot), false) = (result.get_mut("screenshot"), tree.windows.is_empty()) {
+        shot["windows"] = json!(tree.windows.len());
+    }
     Ok(result)
 }
 
@@ -2017,6 +2131,9 @@ fn observe(
         // agent got a tree, no file, no error). It is honoured here on the same
         // bound frame.
         attach_screenshot(session, artifacts, screenshot, "acos_observe", &mut result)?;
+        if let (Some(shot), false) = (result.get_mut("screenshot"), tree.windows.is_empty()) {
+            shot["windows"] = json!(tree.windows.len());
+        }
         return Ok(result);
     }
     // A frame-only observe is a real, fresh host capture.
@@ -2576,11 +2693,12 @@ fn regex_lite_matches(pattern: &str, text: &str) -> Result<bool, String> {
 /// verify run is still the full log), `"all": true` or `min_priority: "V"`
 /// returns every record, and an explicit `tag` narrows further.
 /// MPROC1: `acos_service_ctl {module, op, args}` — one session service control
-/// op. `intents` is the capture target: `op:"last"`/`"list"` read what the app
+/// op on a **core** session service (not an ADR-0029 module). `intents` is the
+/// capture target: `op:"last"`/`"list"` read what the app
 /// shared/picked, `op:"result"` scripts the answer a picker returns (and the
 /// session delivers it as the framework's own `ActivityResultItem`), `op:"clear"`
 /// empties the record. Every capture says `handled_by:"captured"`.
-fn service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+fn core_service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let module = args
         .get("module")
         .and_then(Value::as_str)
@@ -2820,6 +2938,128 @@ fn status_value(session: &ArtSession) -> Value {
     });
     merge_zygote_fields(&mut status, session);
     status
+}
+
+/// `acos_service_ctl {module, op, args?}` — the one control spelling, routed to
+/// the owner of `module`.
+///
+/// ADR-0029 gives the **module framework** the single control path, so an id the
+/// session's module registry knows (`network`, `notifications`, …) goes through
+/// [`module_service_ctl`]. MPROC1's intent capture target is a core session
+/// service, not a module, so its id (`intents`) goes to the session's own ctl
+/// path ([`core_service_ctl`]); an id neither side knows is answered by the core
+/// path's structured refusal, which names the module. The choice is made from
+/// the registry's own rows, never from a failed call (no fallback that would
+/// mask a typo as success).
+fn service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let module = args.get("module").and_then(Value::as_str).unwrap_or("");
+    let known = session
+        .modules()
+        .iter()
+        .any(|row| row.get("id").and_then(Value::as_str) == Some(module));
+    if known {
+        module_service_ctl(session, args)
+    } else {
+        core_service_ctl(session, args)
+    }
+}
+
+/// ADR-0029 item 4: `acos_service_ctl {module, op, args?}` on a live session.
+///
+/// This is the **only** agent spelling of a module control op; it becomes the
+/// one engine request `{op: "ctl", id, ctl_op, args}` (the module's own op name
+/// travels as `ctl_op` so it cannot collide with the `acos_services` action
+/// word). The module's answer is the peer's own value, never a fabricated
+/// success.
+fn module_service_ctl(
+    session: &mut ArtSession,
+    args: &Value,
+) -> Result<Value, BackendError> {
+    let (Some(module), Some(ctl_op)) = (
+        args.get("module").and_then(Value::as_str),
+        args.get("op").and_then(Value::as_str),
+    ) else {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_service_ctl needs a string `module` and a string `op`".into(),
+        });
+    };
+    let mut request = json!({
+        "op": "ctl",
+        "id": module,
+        "ctl_op": ctl_op,
+    });
+    if let Some(module_args) = args.get("args") {
+        request["args"] = module_args.clone();
+    }
+    let mut reply = session.service_op(request)?;
+    reply["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(reply)
+}
+
+/// ADR-0029 item 4: `acos_services {op, id?, profile?, config?}`.
+///
+/// `op` is closed (`list`, `status`, `attach`, `detach`); an unknown op, a
+/// missing id for attach/detach and a bad profile are `InvalidArgument`, never a
+/// silent no-op. The launcher performs the mutation and reports the attached
+/// set it actually has. A module's own control op is **not** spelled here: it is
+/// `acos_service_ctl {module, op, args}`, which both routes turn into the one
+/// engine request `{op: "ctl", id, ctl_op, args}`.
+fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let op = args.get("op").and_then(Value::as_str).unwrap_or("");
+    if !matches!(op, "list" | "status" | "attach" | "detach" | "ctl") {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: format!(
+                "unknown op {op:?}; use list, status, attach or detach (a module control op is \
+                 `acos_service_ctl {{module, op, args}}`)"
+            ),
+        });
+    }
+    let mut request = json!({"op": op});
+    if matches!(op, "attach" | "detach" | "ctl") {
+        let Some(id) = args.get("id").and_then(Value::as_str) else {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: format!("{op} needs a string `id` (the module id)"),
+            });
+        };
+        request["id"] = json!(id);
+    }
+    if op == "attach" {
+        if let Some(profile) = args.get("profile").and_then(Value::as_str) {
+            request["profile"] = json!(profile);
+        }
+        if let Some(config) = args.get("config") {
+            request["config"] = config.clone();
+        }
+    }
+    if op == "ctl" {
+        // The MCP/CLI spelling carries the module control op in `ctl_op` (a
+        // scenario `service_ctl` step). `op` is already taken by the outer
+        // operation, so the inner one is never inferred.
+        let Some(ctl_op) = args.get("ctl_op").and_then(Value::as_str) else {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "ctl needs a string `ctl_op` (the module control operation)".into(),
+            });
+        };
+        request["ctl_op"] = json!(ctl_op);
+        if let Some(ctl_args) = args.get("args") {
+            request["args"] = ctl_args.clone();
+        }
+    }
+    let mut reply = session.service_op(request)?;
+    reply["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(reply)
 }
 
 fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
@@ -3249,6 +3489,9 @@ fn tree_json(tree: &UiTree, max_nodes: usize) -> (usize, usize, bool, Value) {
         json!({
             "max_nodes": max_nodes,
             "truncated": truncated,
+            // LAYER1: the windows in policy z order (bottom first). Short
+            // per-window rows only; nodes carry the same z as `window_z`.
+            "windows": tree.windows,
             "nodes": roots,
         }),
     )
@@ -3291,12 +3534,23 @@ fn node_json(
         "selected": node.selected,
         "password": node.password,
         "window": node.window,
+        // LAYER1 window tag (short strings; omitted when the probe has none).
+        "window_id": node.window_id,
+        "window_type": node.window_type,
+        "window_kind": node.window_kind,
+        "window_z": node.window_z,
         "package": node.package,
         "children": children,
     }))
 }
 
 fn distinct_windows(tree: &UiTree) -> usize {
+    // LAYER1: the probe's window block is authoritative (it includes a window
+    // with no visible node). Fall back to the per-node labels for an older
+    // probe that has no block.
+    if !tree.windows.is_empty() {
+        return tree.windows.len();
+    }
     fn collect(node: &UiNode, seen: &mut Vec<String>) {
         if !node.window.is_empty() && !seen.contains(&node.window) {
             seen.push(node.window.clone());

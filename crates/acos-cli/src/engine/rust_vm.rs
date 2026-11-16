@@ -112,6 +112,9 @@ impl SessionBackend for RustVmSession {
             logs: caps.logs,
             environment: caps.environment,
             crash_reports: caps.crash_reports,
+            // The frozen Rust VM has no service table: `service_ctl` stays a
+            // structured refusal on that route.
+            services: false,
         }
     }
 

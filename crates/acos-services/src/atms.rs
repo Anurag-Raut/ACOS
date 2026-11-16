@@ -374,8 +374,13 @@ pub struct AtmsState {
     pub transactions: Vec<ClientTransaction>,
     /// Pending `system -> app` calls as `(method, args)`.
     pub pending_app_thread_calls: Vec<(String, Vec<Value>)>,
-    /// Granted permissions.
+    /// Granted permissions (install-time manifest grants; the runtime table in
+    /// [`crate::permissions`] wins for a permission it has an answer for).
     pub granted_permissions: Vec<String>,
+    /// The one runtime-permission table, shared with the PMS and the
+    /// `permissions` module (MODNOTIF2). `None` in a bare unit-test state, in
+    /// which case a granted permission answers from `granted_permissions`.
+    pub runtime_permissions: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
     /// Logical clock (ms) advanced per event; the VM supplies the real clock.
     clock_ms: u64,
     /// Next event seq.
@@ -406,6 +411,7 @@ impl AtmsState {
             transactions: Vec::new(),
             pending_app_thread_calls: Vec::new(),
             granted_permissions: vec!["android.permission.INTERNET".into()],
+            runtime_permissions: None,
             clock_ms: 1,
             next_seq: 1,
             controller_binder: 0,
@@ -826,9 +832,17 @@ impl AtmsState {
         Ok(())
     }
 
-    /// `checkPermission` from the manifest/grant policy.
+    /// `checkPermission`: the shared runtime table first, then install-time.
     #[must_use]
     pub fn check_permission(&self, permission: &str) -> i32 {
+        if let Some(store) = self.runtime_permissions.as_ref() {
+            let store = store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if store.entry(permission).is_some() {
+                return store.check(permission);
+            }
+        }
         if self.granted_permissions.iter().any(|p| p == permission) {
             0
         } else {
@@ -1021,6 +1035,44 @@ impl AtmsService {
             .lock()
             .map(|state| state.receiver_registrations.clone())
             .unwrap_or_default()
+    }
+
+    /// Deliver a broadcast the **host** originates (a service module's control
+    /// op: an incoming SMS, an adapter state change).
+    ///
+    /// The intent goes through the same `AmsState::broadcast` matching a guest
+    /// broadcast uses, so only registered, matching receivers are reached. Every
+    /// queued match becomes an `IIntentReceiver.performReceive` delivery (a
+    /// manifest receiver is reported, not fabricated). Returns the match count
+    /// and the deliveries the caller must enqueue.
+    pub fn inject_broadcast(
+        &mut self,
+        intent: &crate::ams::IntentFacts,
+    ) -> Result<(i32, Vec<crate::host::PendingDelivery>)> {
+        let mut state = self.state.lock().unwrap();
+        let matched = state.ams.broadcast(intent, 0, 0, None)?;
+        let queued = state.ams.take_pending_receivers();
+        let mut deliveries = Vec::new();
+        for receiver in queued {
+            if receiver.is_manifest() {
+                state.log_event(
+                    "ActivityManagerBroadcast",
+                    acos_protocol::LogLevel::Debug,
+                    "manifest receiver not delivered: an ACOS session has no separate process to instantiate it"
+                        .to_string(),
+                );
+                continue;
+            }
+            match receiver.receiver_delivery() {
+                Ok(delivery) => deliveries.push(delivery),
+                Err(error) => state.log_event(
+                    "ActivityManagerBroadcast",
+                    acos_protocol::LogLevel::Warn,
+                    format!("receiver delivery not encodable: {error}"),
+                ),
+            }
+        }
+        Ok((matched, deliveries))
     }
 }
 
@@ -1308,24 +1360,43 @@ impl ServiceObject for AtmsService {
                         method: method.name.clone(),
                     });
                 };
-                // `broadcastIntent` is accepted (it returns the stock match
-                // count) but the ART host has no scheduler that can call the
-                // guest's `IIntentReceiver` binder, so the queued matches are
-                // dropped explicitly rather than left behind or fabricated as
-                // a delivery. `unregisterReceiver`/`broadcastIntent` remain
-                // side-effect free with respect to the guest (W28).
+                // `broadcastIntent` reaches the app's dynamic receivers: the
+                // host materialises each `IIntentReceiver.performReceive` from
+                // the queued match (ADR-0029 late modules need this for
+                // `SMS_RECEIVED`). A *manifest* receiver has no receiver binder
+                // in an ACOS session (there is no process to instantiate), so
+                // it is reported, never fabricated.
                 let undelivered = state.ams.take_pending_receivers();
-                if !undelivered.is_empty() {
-                    state.log_event(
-                        "ActivityManagerBroadcast",
-                        acos_protocol::LogLevel::Debug,
-                        format!(
-                            "{} matching receiver(s) not delivered: the ART host has no receiver scheduler",
-                            undelivered.len()
+                for receiver in undelivered {
+                    if receiver.is_manifest() {
+                        state.log_event(
+                            "ActivityManagerBroadcast",
+                            acos_protocol::LogLevel::Debug,
+                            format!(
+                                "manifest receiver for {} not delivered: an ACOS session has no separate process to instantiate it",
+                                receiver
+                                    .intent
+                                    .component
+                                    .as_ref()
+                                    .map(|(p, c)| format!("{p}/{c}"))
+                                    .unwrap_or_else(|| "(implicit)".to_string())
+                            ),
+                        );
+                        continue;
+                    }
+                    match receiver.receiver_delivery() {
+                        Ok(delivery) => deliveries.push(delivery),
+                        Err(error) => state.log_event(
+                            "ActivityManagerBroadcast",
+                            acos_protocol::LogLevel::Warn,
+                            format!("receiver delivery not encodable: {error}"),
                         ),
-                    );
+                    }
                 }
-                return Ok(result);
+                return Ok(CallResult {
+                    reply: result.reply,
+                    deliveries,
+                });
             }
         };
 

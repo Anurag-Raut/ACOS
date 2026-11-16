@@ -29,7 +29,9 @@ use crate::launcher::Outcome;
 use crate::logd::Logd;
 use crate::watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 use crate::{ArtRoot, Error, Result};
-use acos_binder_peer::{accept, close_frame_fds, listen, read_frame, write_frame, Frame, Peer};
+use acos_binder_peer::{
+    accept, close_frame_fds, listen, read_frame, wait_for_idle, write_frame, Frame, IdleWake, Peer,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
@@ -37,9 +39,9 @@ use std::os::fd::RawFd;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 /// The guest class that performs the framework startup.
@@ -123,6 +125,10 @@ pub struct LaunchOpts {
     /// manifest table, exactly as the launched APK is. Empty (and then free)
     /// for every single-package launch: nothing is staged, bound or installed.
     pub extra_apks: Vec<PathBuf>,
+    /// ADR-0029 item 4: the `services:` specs this session attaches
+    /// (`[{id, profile, config}]`). Empty means `core` only (today's service
+    /// table plus tombstones).
+    pub services: Vec<serde_json::Value>,
 }
 
 impl Default for LaunchOpts {
@@ -140,6 +146,7 @@ impl Default for LaunchOpts {
             insets: acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string(),
             animations: Animations::On,
             extra_apks: Vec::new(),
+            services: Vec::new(),
         }
     }
 }
@@ -883,24 +890,67 @@ pub(crate) fn launch_session(
     let peer_stop = Arc::clone(&stop);
     let unsupported_log = staging.join("unsupported.jsonl");
     let (tx, rx) = mpsc::channel::<PeerSummary>();
+    // The peer sleeps in `poll(2)` until a guest frame or the earliest module
+    // deadline; this pipe is how the launcher's stop reaches that sleep.
+    let peer_wakeup = PeerWakeup::new().map_err(Error::Io)?;
+    let peer_wake_fd = peer_wakeup.read;
     let peer_log = unsupported_log.clone();
     let apk_for_peer = opts.apk.clone();
     // W10: the live session drives the same `InputHost` the window session
     // uses and captures C1's stored buffer, so the standard install hands both
     // back. Building the host here (instead of inside the peer thread) keeps
     // those handles in the launcher without a second install.
+    let mut module_specs: Vec<acos_services::module::ModuleSpec> =
+        acos_services::module::ModuleSpec::parse_list(&serde_json::Value::Array(
+            opts.services.clone(),
+        ))
+        .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    if module_specs.is_empty() {
+        if let Ok(raw) = std::env::var("ACOS_ART_SERVICES") {
+            let value: serde_json::Value = serde_json::from_str(&raw)
+                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES is not JSON: {error}")))?;
+            module_specs = acos_services::module::ModuleSpec::parse_list(&value)
+                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
+        }
+    }
+    let mut session_modules = match prebuilt {
+        Some((host, handles)) => acos_services::module::SessionModules::from_installed(host, handles),
+        None => acos_services::module::SessionModules::new(),
+    };
+    session_modules
+        .attach(&module_specs)
+        .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    // NET5: the resolver proxy is served *after* the modules attach, because the
+    // `network` module is what decides whether this session has one (ADR-0030
+    // item 4). `sockets.0` is what the sandbox binds at `/dev/socket` (below), so
+    // it must be served here. With a session directory (ZPROD) this is exactly
+    // `<plan>/<tag>/sock`, the directory the zygote child mounts; without one it
+    // is this run's short socket dir. Serving any other directory leaves
+    // `/dev/socket/dnsproxyd` invisible to the app and `getaddrinfo` answers
+    // `EAI_NODATA` (measured).
+    let _dns = crate::spike_net::serve_dnsproxyd_if_enabled(&sockets.0).map_err(Error::Io)?;
+    // ADR-0029 item 4: the attached set is published on the ready line and in
+    // every `acos_services` reply, so the agent sees what the session actually
+    // attached (never what it asked for).
+    let session_module_rows = session_modules.verdict_modules();
+    // ADR-0029 item 1: what those attached modules need this guest *process* to
+    // install before any app code runs (collected before the host moves to the
+    // peer thread, which owns the registry).
+    let session_process_initializers = session_modules.process_initializers();
     let live_handles = {
         // ZM2 prototype C: a host-template child starts from the template's
         // empty (fully installed) service graph, which is CoW-shared until the
         // child writes it. The APK install below is per session either way.
-        let (mut host, handles) = match prebuilt {
-            Some(pair) => pair,
-            None => {
-                let mut host = acos_services::ServiceHost::new();
-                let handles = acos_services::registry::install_with_handles(&mut host);
-                (host, handles)
-            }
-        };
+        //
+        // ADR-0029 item 4: the modules were attached above, before the guest
+        // boots; the host and the registry now move to the peer thread, which
+        // is the only thread that mutates the service table (live attach/detach
+        // is a request to it, never a second mutation path).
+        let handles = session_modules
+            .take_session_handles()
+            .expect("core publishes the session handles at attach");
+        let (host, registry) = session_modules.into_parts();
+        let mut host = host;
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`
@@ -962,9 +1012,13 @@ pub(crate) fn launch_session(
                 }
             }
         }
-        (host, handles)
+        (host, handles, registry)
     };
-    let (peer_host, live) = live_handles;
+    let (peer_host, live, peer_registry) = live_handles;
+    let service_control = Arc::new(ServiceControl::default());
+    // A live module request wakes the peer's idle wait (see `ServiceControl`).
+    service_control.set_wake(peer_wakeup.write);
+    let peer_control = Arc::clone(&service_control);
     let interactive = std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some();
     crate::stage("peer-setup");
     let peer_thread = std::thread::spawn(move || {
@@ -991,10 +1045,12 @@ pub(crate) fn launch_session(
             };
             unsafe {
                 libc::close(listener);
-                // H4: the receive timeout only exists to notice `stop` after a
-                // guest death. Process exit closes this socket, which is the
-                // real wake; a 1 s bound keeps a wedged peer from parking the
-                // launcher forever without a 10/s idle timer.
+                // H4: a guest death closes this socket, which is the real wake;
+                // the timeout only bounds a stall *inside* a frame, so it is
+                // generous. ADR-0029's timed module deliveries are not polled
+                // for: the peer sleeps in `poll(2)` until the earliest module
+                // deadline (or until the guest speaks, or the stop pipe fires),
+                // so an idle session with no timed module has zero wakeups.
                 let tv = libc::timeval {
                     tv_sec: 1,
                     tv_usec: 0,
@@ -1012,7 +1068,15 @@ pub(crate) fn launch_session(
             // `getApplicationInfo` and must get the real package, not the
             // hello-views fixture (and never a fabricated null).
             let mut peer = Peer::with_host(peer_host, Some(peer_log));
-            let rc = serve(&mut peer, client, &peer_stop);
+            let mut peer_registry = peer_registry;
+            let rc = serve(
+                &mut peer,
+                &mut peer_registry,
+                client,
+                &peer_stop,
+                &peer_control,
+                peer_wake_fd,
+            );
             unsafe {
                 libc::close(client);
             }
@@ -1254,6 +1318,15 @@ pub(crate) fn launch_session(
         sb.with_image(Some(image.dir.clone()));
     }
     sb.run_root(run.path());
+    // NET3/NET4: the relay session is named after the session id the engine
+    // published (`ACOS_ART_SESSION_ID`) — for an `acos serve` session and for a
+    // one-shot `verify` run alike — so the live session API's `acos_net` controls
+    // address the session by the id its own client holds.
+    if let Ok(id) = std::env::var(crate::spike_net::SESSION_ID_ENV) {
+        if !id.is_empty() {
+            sb.net_session(Some(&id));
+        }
+    }
     // Z4: a foreign-guest session does not spawn ART itself, so the guest
     // seccomp/Landlock guard is applied per forked child (the child loads the
     // same `libacos_seccomp_guest.so` after its bind mounts, exactly AOSP's
@@ -1346,6 +1419,20 @@ pub(crate) fn launch_session(
     sb.env("ACOSART_LOAD", "libandroid_runtime.so");
     sb.env("E3G_SOCK", "/data/acos-launch.sock");
     sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
+    // ADR-0029 item 1: the framework initializers the attached modules declare
+    // (`ModuleManifest::process_initializers`). On a device the mainline
+    // module's own process installs them before any app starts; ACOS has no such
+    // process, so the guest runs the same call once, before the app boots. The
+    // list is the attached set's own promise (never a guess, never a per-module
+    // switch here): `class#method#manager`, ';'-separated.
+    if !session_process_initializers.is_empty() {
+        let wire = session_process_initializers
+            .iter()
+            .map(acos_services::module::ProcessInitializer::wire)
+            .collect::<Vec<_>>()
+            .join(";");
+        sb.env("ACOSLAUNCH_INITIALIZERS", &wire);
+    }
     // Display geometry the guest boots at. Forwarded only when the caller set
     // it (`acos-art launch --width …`, or the engine's `ACOS_ART_*`), so the
     // default guest is unchanged and the reference-device baselines keep
@@ -1811,6 +1898,9 @@ pub(crate) fn launch_session(
             // VIEW1a: where the live-view stream socket is bound (VIEW1c: its
             // own host-only directory, never mounted into the guest).
             &view_dir.0,
+            // ADR-0029 item 4: the attached set and the live-op channel.
+            &session_module_rows,
+            &service_control,
         );
         match dead {
             Ok(end) => {
@@ -1858,6 +1948,9 @@ pub(crate) fn launch_session(
     // inside its scope. Both actions are idempotent and happen before any
     // capture/join, which is what bounds teardown after a guest death.
     stop.store(true, Ordering::Release);
+    // Wake the peer's idle wait: an idle session may be asleep until a deadline
+    // that will never come.
+    peer_wakeup.wake();
     cgroup.sample();
     if status.is_some() {
         cgroup.kill();
@@ -4836,6 +4929,10 @@ fn interactive_serve(
     // bind-mounted into the guest, unlike the session's `/dev/socket`
     // directory); the live-view stream socket `view.sock` is bound there.
     sockets: &Path,
+    // ADR-0029 item 4: the attached modules at launch (ready line), and the
+    // channel to the peer thread for live attach/detach.
+    modules: &[serde_json::Value],
+    control: &ServiceControl,
 ) -> std::io::Result<SessionEnd> {
     let mut evidence: Vec<serde_json::Value> = Vec::new();
     let mut captures = 0u64;
@@ -5027,6 +5124,7 @@ fn interactive_serve(
     let ready = serde_json::json!({
         "ok": true,
         "cmd": "ready",
+        "modules": modules,
         "package": package,
         "activity": activity.unwrap_or(""),
         // VIEW1a: the live-view stream socket (`docs/LIVE_VIEW.md`), null when
@@ -5719,6 +5817,21 @@ fn interactive_serve(
                     }
                 }
             }
+            "services" => {
+                // ADR-0029 item 4: list/status/attach/detach on the live
+                // session. The peer thread owns the host, so the request is
+                // handed to it and its answer is forwarded verbatim (a refusal
+                // for an `at-launch` module is the peer's structured error).
+                let reply = match control.submit(request.clone(), Duration::from_secs(10)) {
+                    Some(reply) => reply,
+                    None => serde_json::json!({
+                        "ok": false, "cmd": "services", "code": "SERVICE_CONTROL_TIMEOUT",
+                        "error": "the peer thread did not answer the module request within 10 s",
+                    }),
+                };
+                protocol_write(&reply);
+                evidence.push(reply);
+            }
             "tap" | "key" | "type_text" => {
                 let text_arg = request
                     .get("text")
@@ -5799,7 +5912,45 @@ fn interactive_serve(
                     ),
                 );
                 let injected = match (cmd, key_code) {
-                    ("tap", _) => live.input.tap(x, y, ack_wait),
+                    ("tap", _) => {
+                        // LAYER1: the ART/`verify` path routes a tap through the
+                        // WMS layer stack, not `WindowManagerGlobal` insertion
+                        // order. The request carries **display** coordinates
+                        // (the same space the UI tree reports); the target is
+                        // the topmost touchable window at that point, and the
+                        // published point is that window's own local space
+                        // (the `InputChannel` transform).
+                        let point = acos_wm::geom::PointI::new(x as i32, y as i32);
+                        let (target, origin) = {
+                            let wm = live
+                                .wms
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            match wm.wm.hit_test(point) {
+                                Some(window) => (
+                                    Some(window),
+                                    wm.wm.windows
+                                        .get(&window)
+                                        .map(|record| (record.frame.left, record.frame.top))
+                                        .unwrap_or((0, 0)),
+                                ),
+                                None => (None, (0, 0)),
+                            }
+                        };
+                        match target {
+                            Some(window) => live.input.tap_window(
+                                acos_parcel::binder::BinderId(window),
+                                x - origin.0 as f32,
+                                y - origin.1 as f32,
+                                ack_wait,
+                            ),
+                            None => Err(
+                                acos_services::input_channel::ChannelError::Malformed(
+                                    "no touchable window at the tap point (the layer-stack hit test found none)",
+                                ),
+                            ),
+                        }
+                    }
                     ("type_text", _) => live
                         .input
                         .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
@@ -6698,6 +6849,82 @@ fn meta_spec(entries: &[acos_services::pms::MetaDataEntry]) -> String {
         .join(";")
 }
 
+/// ADR-0029 item 4: live module attach/detach crosses from the interactive
+/// command loop (the thread that answers the caller) to the peer thread (the
+/// only owner of the `ServiceHost`). One request/reply pair per call, bounded
+/// by a deadline; a peer that cannot answer in time is a structured error, never
+/// a silent success.
+#[derive(Default)]
+struct ServiceControl {
+    requests: Mutex<Vec<(u64, serde_json::Value)>>,
+    replies: Mutex<HashMap<u64, serde_json::Value>>,
+    next_id: AtomicU64,
+    reply_cv: Condvar,
+    /// The peer's wake-pipe write end (`-1` until the launcher installs it). A
+    /// request must wake the peer's idle `poll(2)`: with no timed module the peer
+    /// sleeps until the guest speaks, so a queued request would otherwise wait
+    /// for a frame that never comes.
+    wake: std::sync::atomic::AtomicI32,
+}
+
+impl ServiceControl {
+    fn set_wake(&self, fd: RawFd) {
+        self.wake.store(fd, Ordering::Release);
+    }
+}
+
+impl ServiceControl {
+    fn submit(&self, request: serde_json::Value, timeout: Duration) -> Option<serde_json::Value> {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        self.requests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((id, request));
+        let wake = self.wake.load(Ordering::Acquire);
+        if wake >= 0 {
+            let byte = 1u8;
+            unsafe {
+                libc::write(wake, (&byte as *const u8).cast::<libc::c_void>(), 1);
+            }
+        }
+        let deadline = Instant::now() + timeout;
+        let mut replies = self.replies.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some(reply) = replies.remove(&id) {
+                return Some(reply);
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return None;
+            }
+            let (guard, _) = self
+                .reply_cv
+                .wait_timeout(replies, deadline - now)
+                .unwrap_or_else(|e| e.into_inner());
+            replies = guard;
+        }
+    }
+
+    /// Peer-thread side: the oldest pending request, if any.
+    fn take(&self) -> Option<(u64, serde_json::Value)> {
+        let mut requests = self.requests.lock().unwrap_or_else(|e| e.into_inner());
+        if requests.is_empty() {
+            None
+        } else {
+            Some(requests.remove(0))
+        }
+    }
+
+    /// Peer-thread side: publish the answer and wake the caller.
+    fn reply(&self, id: u64, value: serde_json::Value) {
+        self.replies
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, value);
+        self.reply_cv.notify_all();
+    }
+}
+
 #[derive(Default)]
 struct PeerSummary {
     calls: Vec<ServiceCall>,
@@ -6712,25 +6939,298 @@ struct PeerSummary {
     resource_limits: u64,
 }
 
-fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
+/// One `{"cmd":"services", ...}` operation against the peer thread's host.
+///
+/// `list`/`status` are read-only. `attach`/`detach` go through
+/// `attach_live`/`detach_live`, which refuse an `at-launch` module with the
+/// launch call in the message; a refusal is never turned into a success.
+fn service_request(
+    peer: &mut Peer,
+    modules: &mut acos_services::module::ModuleRegistry,
+    request: &serde_json::Value,
+) -> serde_json::Value {
+    let op = request.get("op").and_then(|v| v.as_str()).unwrap_or("");
+    let result = match op {
+        "list" | "status" => Ok(serde_json::json!({
+            "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                "id": id,
+                "profile": profile.as_str(),
+            })).collect::<Vec<_>>(),
+            "modules": modules.verdict_modules(),
+        })),
+        "attach" => {
+            let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                    "error": "attach needs a string `id`",
+                });
+            };
+            let profile = match request.get("profile").and_then(|v| v.as_str()) {
+                None => acos_services::module::Profile::Real,
+                Some(name) => match acos_services::module::Profile::parse(name) {
+                    Some(profile) => profile,
+                    None => {
+                        return serde_json::json!({
+                            "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                            "error": format!("unknown profile {name:?}"),
+                        })
+                    }
+                },
+            };
+            let config = match request.get("config") {
+                None => acos_services::module::ModuleConfig::default(),
+                Some(value) => {
+                    match acos_services::module::ModuleConfig::from_json("<live>", value) {
+                    Ok(config) => config,
+                        Err(error) => {
+                            return serde_json::json!({
+                                "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                                "error": error.to_string(),
+                            })
+                        }
+                    }
+                }
+            };
+            modules
+                .attach_live(peer.host_mut(), id, profile, &config)
+                .map(|()| serde_json::json!({
+                    "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                        "id": id,
+                        "profile": profile.as_str(),
+                    })).collect::<Vec<_>>(),
+                    "modules": modules.verdict_modules(),
+                }))
+        }
+        "detach" => {
+            let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                    "error": "detach needs a string `id`",
+                });
+            };
+            modules.detach_live(peer.host_mut(), id).map(|()| serde_json::json!({
+                "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                    "id": id,
+                    "profile": profile.as_str(),
+                })).collect::<Vec<_>>(),
+                "modules": modules.verdict_modules(),
+            }))
+        }
+        "ctl" => {
+            // `acos_service_ctl` (MCP) / a scenario `service_ctl` step: a
+            // module's own control op (`sensors.set_value`, `telephony.sms`, ...).
+            // The module gets the session's host ([`Module::control`]) so a
+            // control that changes what the app observes can deliver it through
+            // the same path the framework uses; the peer thread flushes those
+            // deliveries after the control returns. The registry refuses a
+            // detached module, so a control can never look applied when the
+            // module is off.
+            let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "op": "ctl", "code": "BAD_REQUEST",
+                    "error": "ctl needs a string `id`",
+                });
+            };
+            let Some(ctl_op) = request.get("ctl_op").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "op": "ctl", "code": "BAD_REQUEST",
+                    "error": "ctl needs a string `ctl_op` (the module's control op)",
+                });
+            };
+            let args = request
+                .get("args")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            modules.control(peer.host_mut(), id, ctl_op, &args).map(|value| {
+                serde_json::json!({
+                    "id": id,
+                    "op": ctl_op,
+                    "value": value,
+                    "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                        "id": id,
+                        "profile": profile.as_str(),
+                    })).collect::<Vec<_>>(),
+                    "modules": modules.verdict_modules(),
+                })
+            })
+        }
+        other => {
+            return serde_json::json!({
+                "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                "error": format!("unknown op {other:?}; use list, status, attach, detach or ctl"),
+            })
+        }
+    };
+    match result {
+        Ok(value) => {
+            let mut reply = serde_json::json!({"ok": true, "cmd": "services", "op": op});
+            if let (Some(target), Some(object)) = (reply.as_object_mut(), Some(())) {
+                let _ = object;
+                if let Some(source) = value.as_object() {
+                    for (key, item) in source {
+                        target.insert(key.clone(), item.clone());
+                    }
+                }
+            }
+            reply
+        }
+        Err(error) => serde_json::json!({
+            "ok": false, "cmd": "services", "op": op,
+            "code": error.code(),
+            "error": error.to_string(),
+        }),
+    }
+}
+
+/// The launcher's half of the peer's idle wait: a self-pipe it writes to when it
+/// stops the session, so the peer can sleep in `poll(2)` until a guest frame or
+/// the earliest module deadline instead of pollong a socket on a timer.
+struct PeerWakeup {
+    read: RawFd,
+    write: RawFd,
+}
+
+impl PeerWakeup {
+    fn new() -> std::io::Result<Self> {
+        let mut fds = [0 as RawFd; 2];
+        let rc = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC | libc::O_NONBLOCK) };
+        if rc < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(Self {
+            read: fds[0],
+            write: fds[1],
+        })
+    }
+
+    /// Wake the peer's idle wait. Idempotent: the pipe is only a wakeup, the
+    /// `stop` flag carries the decision.
+    fn wake(&self) {
+        let byte = 1u8;
+        unsafe {
+            libc::write(
+                self.write,
+                (&byte as *const u8).cast::<libc::c_void>(),
+                1,
+            );
+        }
+    }
+}
+
+impl Drop for PeerWakeup {
+    fn drop(&mut self) {
+        unsafe {
+            libc::close(self.read);
+            libc::close(self.write);
+        }
+    }
+}
+
+/// Write `outs` to the guest and close their fds, reporting the first failure.
+fn write_out(fd: RawFd, outs: Vec<Frame>, context: &str) -> std::io::Result<()> {
+    for out in outs {
+        if let Err(error) = write_frame(fd, &out) {
+            eprintln!(
+                "peer-trace: write_frame FAILED {context}: {error} (ty={} seq={} code={} data={})",
+                out.ty, out.seq, out.code, out.data.len()
+            );
+            close_frame_fds(&out);
+            return Err(error);
+        }
+        close_frame_fds(&out);
+    }
+    Ok(())
+}
+
+fn serve(
+    peer: &mut Peer,
+    modules: &mut acos_services::module::ModuleRegistry,
+    fd: RawFd,
+    stop: &AtomicBool,
+    control: &ServiceControl,
+    wake: RawFd,
+) -> std::io::Result<()> {
     loop {
+        // ADR-0029 item 4: drain live module requests between frames. The call
+        // loops (the socket has a 1 s receive timeout), so a live `attach` is
+        // applied within at most one idle second and before the next binder
+        // transaction is served.
+        while let Some((id, request)) = control.take() {
+            let reply = service_request(peer, modules, &request);
+            let debug_reply = reply.to_string();
+            control.reply(id, reply);
+            // A live `ctl` op can queue `system -> app` deliveries (an SMS, a
+            // call-state event, a location fix, an authentication result). No
+            // binder transaction follows to flush them, so do it here — with the
+            // **timed** drain, because a module parks its own deliveries in its
+            // own object (`ServiceObject::drain_raw_deliveries`), which the plain
+            // transaction drain does not see. The control op has returned, so no
+            // module lock is held here.
+            let flushed = peer.tick();
+            if let Ok(path) = std::env::var("ACOS_SERVICE_CTL_LOG") {
+                use std::io::Write as _;
+                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                    let _ = writeln!(
+                        file,
+                        "ctl reply={debug_reply} flushed={} targets={:?}",
+                        flushed.len(),
+                        flushed.iter().map(|f| (f.ty, f.code, f.target)).collect::<Vec<_>>()
+                    );
+                }
+            }
+            for out in flushed {
+                if let Err(e) = write_frame(fd, &out) {
+                    eprintln!(
+                        "peer-trace: write_frame FAILED after control op: {e} (ty={} seq={} code={} data={})",
+                        out.ty, out.seq, out.code, out.data.len()
+                    );
+                    close_frame_fds(&out);
+                    return Err(e);
+                }
+                close_frame_fds(&out);
+            }
+        }
+        // ADR-0029: the idle turn waits for whichever comes first — a guest
+        // frame, the earliest **module** delivery deadline, or the launcher's
+        // stop wake. With no timed module the wait is unbounded, so an idle
+        // session costs no wakeups at all (the fixed 20 ms poll it replaces cost
+        // 50/s and still delivered a scripted fix up to 20 ms late).
+        let deadline = peer
+            .next_timed_deadline()
+            .map(|due| due.saturating_duration_since(Instant::now()));
+        match wait_for_idle(fd, wake, deadline)? {
+            IdleWake::Wake => {
+                // Drain the wakeup byte; `stop` is the decision, and a queued
+                // module request is served at the top of the next turn.
+                let mut byte = 0u8;
+                unsafe {
+                    libc::read(wake, (&mut byte as *mut u8).cast::<libc::c_void>(), 1);
+                }
+                if stop.load(Ordering::Acquire) {
+                    return Ok(());
+                }
+                continue;
+            }
+            IdleWake::Deadline => {
+                write_out(fd, peer.tick(), "after a module deadline")?;
+                let _ = std::io::stderr().flush();
+                continue;
+            }
+            IdleWake::Frame => {}
+        }
         let frame: Frame = match read_frame(fd) {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            Err(e)
-                if (e.kind() == std::io::ErrorKind::WouldBlock
-                    || e.kind() == std::io::ErrorKind::TimedOut)
-                    && stop.load(Ordering::Acquire) =>
-            {
-                return Ok(())
-            }
-            // A live guest may be idle; the timeout only exists to observe
-            // `stop`, not to end the session.
+            // poll(2) said readable but the frame is not (a short write from a
+            // dying guest): end the session, never spin.
             Err(e)
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     || e.kind() == std::io::ErrorKind::TimedOut =>
             {
-                continue
+                if stop.load(Ordering::Acquire) {
+                    return Ok(());
+                }
+                continue;
             }
             Err(e) => return Err(e),
         };
@@ -7489,6 +7989,53 @@ mod skipped_traversal_tests {
         );
         assert!(error.contains("c1_generation=0"), "{error}");
         assert!(error.contains("c1_layers=1"), "{error}");
+    }
+
+    /// ADR-0029 item 1: the guest's process initializers come from the attached
+    /// modules' manifests, never from a per-module branch.
+    ///
+    /// Before this, the launcher keyed `ACOSLAUNCH_TELEPHONY` /
+    /// `ACOSLAUNCH_BLUETOOTH` off two module ids and the guest had one
+    /// hand-written installer per id, so a new module could not declare what its
+    /// process needs and two of them could not share a manager. The guard keeps a
+    /// later edit from reintroducing the switch.
+    #[test]
+    fn the_process_initializer_install_is_driven_by_the_manifest() {
+        let guest = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        for forbidden in [
+            "ACOSLAUNCH_TELEPHONY",
+            "ACOSLAUNCH_BLUETOOTH",
+            "TelephonyFrameworkInitializer\"",
+            "BluetoothFrameworkInitializer\"",
+        ] {
+            assert!(
+                !guest.contains(forbidden),
+                "the guest must not name a module's initializer (`{forbidden}`); it reads \
+                 ACOSLAUNCH_INITIALIZERS (ModuleManifest::process_initializers)"
+            );
+        }
+        assert!(
+            guest.contains("ACOSLAUNCH_INITIALIZERS"),
+            "the guest must read the launcher's initializer list"
+        );
+        assert!(
+            guest.contains("process-initializer installed"),
+            "the guest must log what it installed, so a verdict can cite it"
+        );
+
+        let launcher = include_str!("launch.rs");
+        assert!(
+            launcher.contains("ACOSLAUNCH_INITIALIZERS")
+                && launcher.contains("session_process_initializers"),
+            "the launcher must forward the attached manifests' initializers"
+        );
+        // The launcher half is checked by what it forwards, not by what it must
+        // not contain: this test lives in the same file it would grep, so its
+        // own forbidden-word list would match itself.
+        assert!(
+            !launcher.contains("attached(\"net.telephony\")"),
+            "the launcher must not key an initializer off a module id"
+        );
     }
 
     /// The guest's ready path must stay main's: no forced traversal, no

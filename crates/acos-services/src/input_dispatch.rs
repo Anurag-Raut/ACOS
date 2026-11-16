@@ -108,6 +108,9 @@ enum Injection {
 pub struct InputDispatch {
     registry: InputChannelRegistry,
     tokens: BTreeSet<u64>,
+    /// The window the dispatcher last sent `FOCUS(true)` to. Only a change
+    /// publishes, so a repeated `set_focus` is free.
+    focused: Option<u64>,
     relayouts: usize,
     events: Vec<InputEvent>,
     plan: Option<Injection>,
@@ -122,16 +125,16 @@ impl InputDispatch {
         Self::default()
     }
 
-    /// Create a pair for `token`, publish `TOUCH_MODE(true)` and
-    /// `FOCUS(true)` (the state the real dispatcher sends to a newly focused
-    /// window), and keep the server end. The client end is written into the add
-    /// reply by [`InputDispatch::write_and_forget`].
+    /// Create a pair for `token`, publish `TOUCH_MODE(true)`, and keep the
+    /// server end. The client end is written into the add reply by
+    /// [`InputDispatch::write_and_forget`].
     ///
-    /// W13: `FOCUS` is now delivered by default. The image's focus path runs
-    /// `IInputMethodManager.startInputOrWindowGainedFocus`, whose `EditorInfo`
-    /// request and `InputBindResult` reply are marshalled by
-    /// [`crate::ime_wire`], so focus no longer kills the guest's main looper.
-    /// Setting `ACOS_INPUT_NO_FOCUS=1` suppresses it for diagnostics only.
+    /// LAYER1: `FOCUS` is **not** published here any more. The window that gets
+    /// focus is the WMS layer stack's `focus_target()` (topmost focusable
+    /// window), so the session calls [`InputDispatch::set_focus`] after the add
+    /// and after every remove/relayout. Publishing `FOCUS(true)` to whatever
+    /// window happened to be registered made a `FLAG_NOT_FOCUSABLE` overlay
+    /// steal the activity's focus.
     pub fn register_window(&mut self, token: BinderId, name: &str) -> Result<()> {
         self.registry.register(token, name)?;
         self.tokens.insert(token.0);
@@ -145,10 +148,39 @@ impl InputDispatch {
             kind: "touch_mode",
             detail: "inTouchMode=true".into(),
         });
-        if std::env::var_os("ACOS_INPUT_NO_FOCUS").is_none() {
-            self.publish_focus(token, true)?;
+        Ok(())
+    }
+
+    /// Publish the policy focus state: `FOCUS(false)` to the window that loses
+    /// focus, `FOCUS(true)` to the one that gains it. No message when the
+    /// target did not change. `ACOS_INPUT_NO_FOCUS=1` suppresses the messages
+    /// for diagnostics only (the recorded focus state still moves).
+    pub fn set_focus(&mut self, focus: Option<BinderId>) -> Result<()> {
+        let next = focus.map(|t| t.0);
+        if self.focused == next {
+            return Ok(());
+        }
+        let previous = self.focused;
+        self.focused = next;
+        if std::env::var_os("ACOS_INPUT_NO_FOCUS").is_some() {
+            return Ok(());
+        }
+        if let Some(old) = previous {
+            let token = BinderId(old);
+            if self.tokens.contains(&old) {
+                self.publish_focus(token, false)?;
+            }
+        }
+        if let Some(new) = next {
+            self.publish_focus(BinderId(new), true)?;
         }
         Ok(())
+    }
+
+    /// The window the dispatcher currently believes has focus.
+    #[must_use]
+    pub fn focused(&self) -> Option<BinderId> {
+        self.focused.map(BinderId)
     }
 
     /// Publish the real `FOCUS(hasFocus)` message. This is what
@@ -405,6 +437,9 @@ impl InputDispatch {
     pub fn remove(&mut self, token: BinderId) -> bool {
         let was = self.registry.remove(token);
         self.tokens.remove(&token.0);
+        if self.focused == Some(token.0) {
+            self.focused = None;
+        }
         if was {
             self.events.push(InputEvent::Closed { token });
         }
@@ -519,6 +554,18 @@ impl InputHost {
         default_token(&lock(&self.state))
     }
 
+    /// The token of the window input focus is on.
+    ///
+    /// Keys go to the **focused** window (`InputDispatcher::dispatchKeyLocked`
+    /// only dispatches a key to `getFocusedWindowHandle`), not to the most
+    /// recently added one: a `FLAG_NOT_FOCUSABLE` accessibility overlay added
+    /// after the activity must not receive Back. `None` when no window holds
+    /// focus, which for a key is a refusal, not a guess.
+    #[must_use]
+    pub fn focused_token(&self) -> Option<BinderId> {
+        lock(&self.state).focused()
+    }
+
     /// Publish one tap on the newest live window and collect the guest's
     /// `FINISHED` replies for a bounded window.
     ///
@@ -530,6 +577,20 @@ impl InputHost {
         let token = self
             .newest_token()
             .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
+        self.tap_window(token, x, y, ack_wait)
+    }
+
+    /// Publish one tap on an explicit window token. The point is **window
+    /// local** (the `InputChannel` transform's space); the caller chooses the
+    /// token from the WMS layer stack's hit test (LAYER1), not from registration
+    /// order.
+    pub fn tap_window(
+        &self,
+        token: BinderId,
+        x: f32,
+        y: f32,
+        ack_wait: Duration,
+    ) -> Result<InjectedGesture> {
         let gesture = lock(&self.state).inject_tap(token, x, y)?;
         self.collect(&token, &gesture, ack_wait)
     }
@@ -567,6 +628,15 @@ impl InputHost {
         ack_wait: Duration,
     ) -> Result<InjectedGesture> {
         let seqs: Vec<u32> = gesture.dispatches.iter().map(|d| d.seq).collect();
+        let traced = std::env::var_os("ACOS_TRACE_FILE").is_some()
+            || std::env::var_os("ACOS_INPUT_TRACE").is_some();
+        if traced {
+            crate::trace::line(format!(
+                "ACOSINPUT collect-wait token={:#x} seqs={seqs:?} budget_ms={}",
+                token.0,
+                ack_wait.as_millis()
+            ));
+        }
         let mut acks: Vec<InjectedAck> = Vec::new();
         let deadline = Instant::now() + ack_wait;
         while Instant::now() < deadline && acks.len() < seqs.len() {
@@ -832,12 +902,47 @@ mod ack_accounting_tests {
     /// discarded, and the tap must report its *own* publish -> `FINISHED`
     /// latency; counting the stale pair made the first tap look instantaneous
     /// and the next gesture pay for it.
+    /// LAYER1: focus is published by policy, not by registration. A newly
+    /// added window only gets `FOCUS(true)` when it becomes the target; the
+    /// window it took focus from gets `FOCUS(false)` first.
+    #[test]
+    fn focus_messages_follow_the_policy_target_and_only_on_change() {
+        const OTHER: BinderId = BinderId(0x7702);
+        let mut dispatch = InputDispatch::new();
+        dispatch.register_window(TOKEN, "activity").expect("register");
+        dispatch.register_window(OTHER, "overlay").expect("register");
+        dispatch.set_focus(Some(TOKEN)).expect("focus activity");
+        assert_eq!(dispatch.focused(), Some(TOKEN));
+
+        let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
+        let mut guest = LoopbackConsumer::new(fd);
+        // Registration publishes TOUCH_MODE; focus is the next message.
+        match guest.recv().expect("recv").expect("message") {
+            InputMessage::TouchMode { .. } => {}
+            other => panic!("expected TOUCH_MODE, got {other:?}"),
+        }
+        match guest.recv().expect("recv").expect("message") {
+            InputMessage::Focus { has_focus, .. } => assert!(has_focus),
+            other => panic!("expected FOCUS(true), got {other:?}"),
+        }
+        // Same target again: nothing is published.
+        dispatch.set_focus(Some(TOKEN)).expect("same focus");
+        assert_eq!(dispatch.events().iter().filter(|e| matches!(e, InputEvent::Published { kind: "focus", .. })).count(), 1);
+
+        // A not-focusable overlay never becomes the target; `set_focus` is only
+        // ever called with the WMS `focus_target()`, so the activity stays.
+        dispatch.remove(OTHER);
+        assert_eq!(dispatch.focused(), Some(TOKEN));
+    }
+
     #[test]
     fn stale_focus_and_touch_mode_acks_are_never_counted_as_the_taps() {
         let mut dispatch = InputDispatch::new();
         dispatch
             .register_window(TOKEN, "Surface(name=acos-fixture/counter)/@0x10")
             .expect("register");
+        // LAYER1: the window session publishes policy focus after the add.
+        dispatch.set_focus(Some(TOKEN)).expect("focus");
         let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
         let mut guest = LoopbackConsumer::new(fd);
 

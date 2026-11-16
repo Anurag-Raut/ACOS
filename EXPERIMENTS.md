@@ -4678,3 +4678,280 @@ nothing in this change is on the tap path).
   peak vs the 256 MiB limit). INT-KG-AB recorded the same `launch_hang` flake on
   `main` and queued it as LHFLAKE.
 
+
+## E13.17 — LAYER1: the window layer table from AOSP source, policy-routed taps, window-tagged trees — PASS (overlay stack, dialog gates; A/B prepared, not run)
+
+- **Date / commit:** 2026-11-16 `layer1` (from `layer0` `6b00f943`)
+- **Question / goal:** finish the v0.4.0 window layer stack: replace LAYER0's
+  derived system-band order with the image's own numeric table, make the
+  ART/`verify` path use that stack (tree order, focus, tap routing), and tag the
+  tree/screenshot with the window (id, type, kind, z).
+- **Method:** added `frameworks/base/services/core/java/com/android/server/policy`
+  (+ `/wm`) to the AOSP sparse cache and transcribed
+  `WindowManagerPolicy.getWindowLayerFromTypeLw()` (android-14.0.0_r75,
+  `WindowManagerPolicy.java:525-630`); generated `docs/WINDOW_LAYERS.md` from
+  the cache; wired `WindowRecord.seq` + `WmsState::publish_focus_transition()`
+  and `InputDispatch::set_focus()`; moved ART tap routing to the WMS hit test
+  with the CLI sending display coordinates; added `windows[]` + per-node window
+  tags to the probe/protocol/replies; new fixture `overlay-stack` and gate
+  `scenarios/layer0-overlay-stack.yaml` (with a new `assert_windows` step).
+- **Inputs:** `fixtures/build/apps/overlay-stack.apk`
+  sha256 `b7be8c13487850fc370706c496fbb0d4eb3e6daf84dbe39647caf9516febe582`;
+  `dialog-menu.apk` / `form-validation.apk` unchanged from the fixture cache;
+  offscreen 1080x2400@420, API 34, `--engine art`.
+- **Result:** `layer0-overlay-stack` 18/18 steps pass
+  (`results/handoff/LAYER1/overlay-run4.json`). The tree reports
+  `TYPE_BASE_APPLICATION(z0, focus) < TYPE_APPLICATION(dialog, z1, focus after
+  show) < TYPE_APPLICATION_OVERLAY(z2) < TYPE_APPLICATION_OVERLAY(z3,
+  touchable:false)`; PNG region hashes match the overlay red `85ad4aaa…`, the
+  activity background `f8e6fa0f…` and overlay B blue `e8556fd7…`; tap on A logs
+  `overlay_tapped`, beside it and through B log `activity_tapped`.
+  `w27-dialog-window` pass, `w54-dialog-pixels` pass (all three region hashes
+  unchanged). `policy_layers_match_the_aosp_table` pins 35 policy rows + 5
+  sub-window offsets. `cargo test --release -p acos-wm -p acos-protocol
+  -p acos-verify` and `-p acos-cli --bins` green except two pre-existing
+  `view` tests that panic binding a Unix socket under the long worktree path
+  (`SUN_LEN`), unrelated to this change.
+- **Finding:** C1 already took z as an input, so the whole feature is the policy
+  above it; the source table corrected four LAYER0 relations (accessibility
+  overlay 31 is above the shade, status bar 15 is below the shade 17, a normal
+  app's system alert 9 is below the app overlay 11, IME 13 is below the bar).
+  Sub-window order now also models the negative media sub-layers.
+- **Fidelity / evidence:** real ART / AOSP policy, host-observed frames +
+  guest-asserted tree/logs. `results/handoff/LAYER1/HANDOFF.md` and the three
+  verdict directories under `results/handoff/LAYER1/artifacts/`.
+- **Regression / false pass:** no. The new `assert_windows` fails closed on a
+  tree without `windows[]`; the overlay gate's three tap steps each require a
+  fresh log line since the previous step.
+- **Conclusion / next:** the single-window latency A/B is prepared in
+  `tools/bench/layer0-single-window-ab.sh` (RUNBOOK in `results/handoff/LAYER1/`)
+  and must be run by the bench owner; the Gaten disclosure-dialog gate named in
+  the design does not exist in this worktree.
+## E67 — `sensors` module: the native sensor service over a real `BitTube` — MEASURED
+
+- **Date / commit:** 2026-11-16, branch `modsens` (from `modules`).
+- **Question / goal:** can ACOS serve Android's **native** sensor stack (not a
+  Java system service) from a scripted feed, so `SensorManager`,
+  `SensorEventListener` and `flush()` work unchanged, and can a scenario drive it
+  mid-run?
+- **Method:** read the AOSP protocol (`libs/sensor/ISensorServer.cpp`,
+  `ISensorEventConnection.cpp`, `Sensor.cpp`, `SensorManager.cpp`,
+  `core/jni/android_hardware_SensorManager.cpp`) and pinned the image's
+  `sizeof(ASensorEvent) = 0x68` in `libsensor.so` (`SensorEventQueue::read`,
+  0x11dbd). Added `crates/acos-services/src/sensors.rs` (the node, the event
+  connection, the `BitTube` writer thread, the scripted hub), the `sensors`
+  module (`off`/`stub`/`scripted`, no `real`), a `service_ctl` scenario step and
+  the `ctl` op on the launcher's `services` command, plus the `sensor-probe`
+  fixture. ART runs under `run-exclusive` + `guarded` (12 GiB).
+- **Inputs:** `fixtures/build/apps/sensor-probe.apk` (built by
+  `tools/build-apps.sh`), `scenarios/sensors-scripted.yaml`,
+  `scenarios/sensors-off.yaml`; API-34 image.
+- **Result:** run 1 (before the padding fix) — the framework sensor list was
+  empty even with seven sensors served: the guest logged `Failed to read reply
+  from getSensorList`, because each flattened `Sensor` (145 B) must be padded to
+  `pad_size` (148 B). Run 2 — every step green: `sensors: 7`, the decoded
+  `Sensor` object in logcat, `accel: 1.5 -2.0 9.8`, `light: 1234`, `shake: 11`
+  (12 scripted samples → 11 sign flips), 317 recorded events, detach →
+  `attached = [core]`; `sensors-off.yaml` → `sensors: 0`.
+- **Finding:** the whole chain works: list → `createSensorEventConnection` →
+  `getSensorChannel` (two fds) → `enableDisable` → 104-byte `ASensorEvent`
+  packets at the requested period, on the same binder an app resolved before a
+  hot attach. Proven: byte layouts, delivery rate, on-change suppression, flush
+  meta event. Hypothesis left open: nothing.
+- **Fidelity / evidence:** `scripted` (never `real`; there is no sensor
+  hardware). `results/handoff/MODSENS/` (`verify.json`, `verify-off.json`,
+  `verdict-*.json`, `engine-*.json`, `logcat-*.txt`, `sensors-module-tests.log`,
+  `README.md`, `AOSP_DECISIONS.md`).
+- **Regression / false pass:** the W26 placeholder's reply carried an exception
+  word the client read as the count (harmless while empty); fixed, W26's test
+  updated with the reason. No false pass: the module has no `real` profile, the
+  report and verdict say `scripted`, and a detached module's control ops are
+  refused.
+- **Conclusion / next:** ships as `sensors` (`stub`/`scripted`). Next: a
+  dedicated `acos_service_ctl` MCP descriptor (the op exists today as
+  `acos_services {op: "ctl"}`), and a permission-gated delivery mode if the
+  permission module wants one.
+## E13.17 — NETSHARE: one shared relay instead of one pasta per session — MEASURED (design note, no product code)
+
+- **Date / commit:** 2026-11-16, branch `netshare` from `t3/spike-net-session-2-gate` (bf0420b1)
+- **Question / goal:** ADR-0030 amendment 2 (owner) asks for ONE network relay for every
+  session instead of one `pasta` per session (~28 MiB each). Which shape keeps per-session
+  online/offline + latency controls, keeps the host-loopback/LAN boundary, and costs ~0
+  per session — and what does it actually cost?
+- **Method:** four prototype arms in `.cache/netshare/proto` (kept: `results/handoff/NETSHARE/proto`),
+  each driven as `unshare --user --map-root-user` (no sudo, no kernel change): BASE = one
+  `pasta` per session (the spike shape, boundary shim included); B1 = one relay netns + one
+  `pasta`, sessions join it; B2 = one relay netns + one `pasta` with a per-session netns
+  joined by a veth pair; A = one Python userspace NAT owning one TAP fd per session
+  (ARP/ICMP/UDP only, no TCP). Guests are real `bwrap` sandboxes (production namespace and
+  cap flags, no `--unshare-net`) running `dig` (UDP proof) and `curl` of a 20 MB Cloudflare
+  file (TCP/TLS). PSS from `smaps_rollup` of the network processes only. Cells: 1/5/20
+  sessions, interleaved, every cell under `run-exclusive.sh --exclusive` +
+  `guarded.sh --mem 8G`; host RAM < 25 %, disk < 80 %.
+- **Inputs:** `pasta 2026_10_02.cba3570` (built from the pinned tag, sha256
+  `314c37e8…36c0edf60`, same record as `research/spike-net/artifacts/passt-build.txt`),
+  kernel/iptables of the host, `bubblewrap 0.13.1`.
+- **Result:** BASE 23.9–24.7 MiB PSS per session, attach 11.6–17.2 ms (N≤5) and **887 ms**
+  (N=20), 20 processes, 30.6 MB/s aggregate at N=20. B1 and B2: **flat 24–27 MiB total**
+  from 1 to 20 sessions (pasta 23.6 + relay 0.5), attach 2.3–4.3 ms (B1) / 27–40 ms (B2,
+  of which ~25 ms is prototype glue; the same four netlink operations measure 2 ms), 2
+  processes. B2 per-session controls measured on live sessions: dropping `-i v1` gave
+  `curl` `rc=28` timeouts for session 1 only (session 2 kept 200 at 84 ms);
+  `tc netem delay 400ms` on `v2` gave 1275 ms vs 72 ms for session 2 only (session 1
+  unchanged at 67 ms). A: one process, 7.0 MiB at N=1 → 3.5 MiB at N=20 (Python
+  interpreter; +0.17 MiB/session), attach 0.5–3.8 ms, and a real UDP NAT proven
+  (`dig @1.1.1.1` → 162.159.140.220 through the single relay); TCP not implemented.
+- **Finding:** B1 (the literal "all sessions join one netns" shape) cannot implement
+  per-session controls: inside one netns all sessions share addresses, interfaces and uid
+  (unprivileged userns mappings collapse to the owner's host uid, so `-m owner` cannot
+  separate them), and giving the guest a per-session source address needs `CAP_NET_ADMIN`
+  in that netns. B2 = B1 + per-session netns + veth fixes that at the same measured cost
+  and moves the boundary into a netns the guest holds no capability over. One `pasta` is a
+  single epoll loop: ~15–18 MB/s aggregate at N=20 vs ~30 MB/s with 20 pastas — the one
+  measured regression of sharing.
+- **Fidelity / evidence:** MEASURED. `results/handoff/NETSHARE/DESIGN.md`,
+  `results/handoff/NETSHARE/raw/measurements.jsonl`,
+  `results/handoff/NETSHARE/raw/controls-summary.json` (+ the two request logs),
+  `results/handoff/NETSHARE/proto/`. One BASE row measured before a harness fix
+  (`--unshare-net` still in that arm's bwrap) was deleted from the JSONL after the fix.
+- **Regression / false pass:** no product code changed, nothing to regress. Not measured:
+  B2 with a real ART session and the production `dnsproxyd` path at N=20, pasta's memory
+  at 20 × concurrent flows, option C (seccomp user-notify) end to end.
+- **Conclusion / next:** recommend B2 (one `acos-netd`: userns + relay netns + pinned
+  `pasta`, per-session veth, boundary once, control API for offline/delay/loss/HAR);
+  default stays `off` per ADR-0030 item 6. Option A is the upgrade path with identical
+  plumbing and a 4–8 week TCP stack. Owner decisions listed in DESIGN.md §"Open questions".
+
+## E13.18 — NET1: the shared network relay (design B2) as a real supervisor, transport proven end to end — MEASURED (transport; ART wiring and host-port path open)
+
+- **Date / commit:** 2026-11-16, branch `net1` (from `netshare` `1249d7d6`).
+- **Question / goal:** does B2 (one relay netns + one `pasta` per host, one netns +
+  veth per session, ADR-0030 amendment 3) work as a product-shaped supervisor — real
+  relay netns, real `pasta`, real per-session netns — with the LAN/host-loopback
+  boundary, per-session online/offline and latency/loss, fail-closed when the relay
+  dies, and flat memory? (NETSHARE measured a Python prototype; this measures the Rust
+  implementation the module will wrap.)
+- **Method:** new `crates/acos-netd` (supervisor lib + CLI); `pasta`
+  2026_10_02.cba3570 rebuilt static from the pinned tag (sha256
+  `314c37e878bd6ffe43200735800d5efd4859d81d46b0450358a103c36c0edf60`, identical to the
+  spike's recorded binary). `results/handoff/NET1/proof.sh` starts the supervisor,
+  spawns sessions that each run `curl` **inside** their own netns (guest privilege: no
+  capability in the relay netns), and measures. Host loopback and LAN listeners were
+  real `python3 -m http.server` on `127.0.0.1:18080` and `192.168.31.2:18081`. No sudo,
+  no kernel change, `unshare --user --map-root-user` like the spike.
+- **Result:** 10/10 checks PASS —
+  HTTP 200 at N=1 and N=20 (1/1, 20/20; attach 17.1 ms / 43.4 ms); offline on session 1
+  produced failures on session 1 only (session 2: 43 × 200); `netem delay 400ms` on
+  session 2 moved its median fetch 96 → 1301 ms while session 1 was unchanged (125 → 82
+  ms); host loopback and LAN both unreachable (`000`); `kill-pasta --hold` →
+  `status.up=false`, attach → `network-unavailable` (fail closed), relay restart →
+  HTTP 200 again; 50 attach/detach cycles left `relay_veths=0`, `ACOS-SESS rules=0`,
+  `sessions=0`. Memory PSS of the network machinery (pasta + fabric) 16.9 MiB at N=1,
+  16.9 at N=5, 16.9 at N=20 — flat (pasta's own PSS varies 12.6–28.3 MiB across runs
+  with traffic, so read *flat*, not the absolute value).
+- **Finding:** the veth move needs the relay netns and the session netns to belong to
+  the **same** user namespace (capability flows downward only), so the supervisor must
+  spawn the session — which is exactly the spike's model (`pasta` spawned the guest in
+  the netns it created). The exec-based session shim costs 15–49 ms attach, i.e. **not**
+  the design's 2 ms rtnetlink floor; that needs `rtnetlink` in the supervisor.
+- **Fidelity / evidence:** MEASURED (transport). `results/handoff/NET1/REPORT.md`,
+  `results/handoff/NET1/run/proof.log`, `run/measurements.jsonl`, `crates/acos-netd/
+  tests/plan_rules.rs` (10 tests). Honest limits: no `acos-art` path calls the relay yet
+  (`ACOS_NET_ARM=base` is still the live arm, unchanged), the host-port opt-in is
+  implemented but not proven end to end, and the fourth `dnsproxyd` producer
+  (`zygote_prod::prepare_session`) is not wired.
+- **Regression / false pass:** nothing in the default path changed (everything is behind
+  `ACOS_SPIKE_NET=1`, default off; `ACOS_NET_ARM` unset = `relay` for the netd CLI only).
+  The A/B driver refuses to run until the ART wiring lands, precisely so an `off`-vs-`off`
+  comparison cannot be reported as a pass.
+- **Conclusion / next:** the transport is ready to be wrapped by the module framework.
+  Smallest next action: replace `acos_art::spike_net::wrap` with `Request::Spawn`
+  (stdio by fd or per-session log files) behind `ACOS_NET_ARM`, re-run `proof.sh` with a
+  `net-check` ART session, then hand `ab-driver.sh` to the bench owner.
+
+## E13.19 — NET2: the relay wired into real ART sessions (`ACOS_NET_ARM=relay`) — PASS on the network half, PARTIAL overall
+
+- **What:** behind `ACOS_SPIKE_NET=1` (default off) `ACOS_NET_ARM=relay` now routes
+  the guest through `acos_netd::client`: `acos-netd run <name> -- bwrap …` passes its
+  own stdin/stdout/stderr to the supervisor with `SCM_RIGHTS`, so logcat and the
+  interaction protocol are the launcher's own pipes; `owner_pid` binds the session's
+  lifetime to that proxy. The 4th `dnsproxyd` producer
+  (`zygote_prod::prepare_session`, `<plan>/<tag>/sock`) is served. `acos_net` serve
+  verb: `status`/`offline`/`online`/`delay`/`hostport`. `ErrorCode::NetworkUnavailable`
+  is the fail-closed answer while the relay is down.
+- **Measured (real ART, shared slots, no exclusive run):** `net-check` N=1 →
+  `pass`, 10 steps, `HTTP 200` + `internet=true validated=true iface=wlan0 addrs=1
+  dns=1 dnsList=1.1.1.1 routes=1`. N=5 concurrent → all five sessions on their own
+  address blocks (idx 1..5, 25–34 ms attach), all five logcat files carry
+  `fetch result=HTTP 200` and the validated-`LinkProperties` line; 2/5 completed the
+  full scenario, 3/5 exited 1 *while binding the tree* after the 200 (open, §4.3).
+  Controls on the wired proxy: offline isolation (6 failures on the dropped session,
+  12× 200 on its peer), host-loopback blocked, relay kill → `network-unavailable` →
+  restart → 200, zero leak (`relay_veths: []`, `session_rules: 0`).
+- **Finding:** `pasta -t` is *host → guest*, `-T` is *guest → host* (`--help` of the
+  pinned tag). NET1 used `-t`; NET2 switched to `-T`, and a duplicate `-T none` made
+  `pasta` refuse to start at all. With `-T 18081` the guest is still refused, so the
+  host-port opt-in needs the addressing spec form or the ADR's REDIRECT — the one
+  blocking item for METRO1.
+- **Regression / false pass:** `off` and `base` are unchanged; `acos-netd` unit tests
+  10/10. No bench was run (bench owner). `acos_net` was not driven through a live
+  `acos serve` daemon in this increment.
+- **Conclusion / next:** the network half of the relay is proven on real ART. Smallest
+  next actions: (1) triage the tree-binding failure at N=5, (2) the host-port path,
+  (3) `Status` carrying the supervisor's own binary identity so a rebuild cannot wedge
+  the relay, (4) pass the cgroup scope to `Request::Spawn` so the guest stays bounded.
+  Evidence: `results/handoff/NET2/REPORT.md`, `run/`.
+
+## NET3 — shared relay finished: host ports, the N=5 flake, supervisor identity, guest cgroup (2026-11-16)
+
+- **What:** `ACOS_SPIKE_NET=1 ACOS_NET_ARM=relay` keeps its shape; four things changed.
+  (1) Host ports: the relay's `pasta` has **no** port forward at all and one
+  `--map-host-loopback <relay gateway>`; every session gets a default-deny
+  `REJECT --reject-with tcp-reset` for that address at attach and a named port is
+  opened per session with a single `ACCEPT` inserted above it. A per-session
+  **loopback forwarder** (`acos-netd forward`, `setns` into the session netns by the
+  supervisor) binds `127.0.0.1:<port>` inside the session so an app's
+  `localhost` (Metro `ws://localhost:8081`, an `adb reverse` target) works, and exists
+  only for opted-in ports. (2) `Status`/`Identity` carry the supervisor's binary path
+  and a content build id; a client whose `acos-netd` differs (or whose supervisor's
+  binary is gone) shuts that supervisor down — escalating to SIGTERM/SIGKILL only for
+  a pre-NET3 build that does not know "shutdown exits" — and starts the current one;
+  `shutdown` now ends the process instead of leaving a live socket. (3)
+  `Request::Spawn` takes the run's cgroup scope and the supervisor moves the guest into
+  it and verifies the move, so `--mem` bounds the guest on the relay arm. (4) The
+  relay proxy (`acos-netd run`) never reports its own control-plane failure as the
+  guest's exit: it reconnects and retries, and 136 when the status is unknowable.
+- **Measured — host-port, live (no ART, real session netns):** opted-in session
+  `localhost_opted=200 map_opted=200`; the same fetch on a session without the opt-in
+  `000`; another host-loopback port (`18080`) `000` for the opted-in session too; a
+  `hostport del` flips `before=200 after=000` and the forwarder disappears; leak after
+  every detach `relay_veths: [] session_rules: 0 forwarders=0`.
+  `results/handoff/NET3/run/proof.log`.
+- **Measured — why not pasta `-T`** (`exp-pasta-T.sh`, relay topology without the
+  supervisor): `-T 18081` answers `200` *inside the target namespace* and `000` from a
+  session netns joined by a veth; `-T 169.254.2.15/18081` and `-T 10.163.1.1/18081` are
+  rejected by pasta itself (`Listening address not allowed for -T`). A `-T` rule is
+  served by a listening socket pasta binds in its own target namespace and only for
+  loopback → loopback flows (`fwd_nat_from_splice` → `PIF_NONE` otherwise), so it cannot
+  open a host port for a relay session. Control: a plain listener in the relay netns is
+  `200` from the relay netns and `000` from the session.
+- **Measured — N=5 on real ART, relay arm, 3 consecutive reps:** 5/5 scenarios pass all
+  10 steps in every rep (`run/n5x3`). Before the proxy fix, the same shape failed 3/5
+  with `GUEST_EXITED … status 1` whose session stderr carried
+  `acos-netd: {"error":{"code":"io","message":"Broken pipe (os error 32)"}}` — the
+  relay proxy's own EPIPE, reported as the guest's exit. Control: the same 5 runs with
+  the network module **off** reach step 4 and fail the expected `HTTP 200` assertion
+  (honest `SecurityException`), i.e. tree binding at N=5 is fine without the relay
+  (`run/n5-netoff`).
+- **Open (perf, not correctness):** the relay arm's session boot is much slower than the
+  direct arm — `session_start_ms` 4.7–12.6 s (N=1/N=5) vs 0.17–2.2 s with the network
+  module off; the attach itself is 25–65 ms and a trivial `/bin/sh` guest through the
+  same proxy is 96–135 ms, so the cost is in the ART guest's boot inside the session
+  netns, not in the relay. One run in 18 also bound a stale tree (`assert_text` read
+  `pending` 1 ms after the fetch logged `HTTP 200`). Not fixed here; NET2's N=5 runs
+  reported 254–354 ms, so this is a regression to chase before Metro.
+- **Regression / false pass:** `off`/`base` untouched; `acos-netd` tests 11/11; no bench
+  (bench owner); `acos_net` driven through a live `acos serve` daemon
+  (status/offline/online/delay/hostport, 6/6 checks) and through MCP, where the verb is
+  still **not advertised** (`unknown tool acos_net`) — the descriptor surface is MOD1's.
+  Evidence: `results/handoff/NET3/REPORT.md`, `run/`.
