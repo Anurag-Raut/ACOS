@@ -18,7 +18,7 @@ SELF_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd -- "$SELF_DIR/../.." && pwd)
 
 PREFIX=${ACOS_PREFIX:-$HOME/.local}
-VERSION=0.2.3
+VERSION=0.3.0
 FROM_TARGET=
 FORCE=0
 REGISTER_MCP=0
