@@ -20,6 +20,11 @@ applies (see §5: the parsers exist, the resource-resolution glue does not).
 `scenarios/a11y-probe.yaml` passes 12/12 steps on ART
 (`results/handoff/MODA11Y5/a11y-verdict.json`, `status=pass`).
 
+Commits: `3bd552b4` (the `modules` merge — it also carries the step-2 codec
+fix, because the two touched the same file and were staged together),
+`317dcfae` (steps 3-4: the focused-window Back fix, overlay windows,
+probe/scenario, tests).
+
 ## 1. Merge `modules` (`cfed3eea`)
 
 Three content conflicts, all resolved by keeping both sides:
