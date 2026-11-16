@@ -1227,6 +1227,15 @@ gated `--map-host-loopback` address plus a per-session `ACCEPT` for an opted-in 
 tcp-reset (that is what "refused" means), not a `DROP` (a DROP stalled guest boot ~4.5 s). Evidence:
 `results/handoff/NET3.md`, branch `net3`.
 
+ADR-0031 note (WVB, orchestrator): the broker is one shared chrome-headless-shell 157.0.8103.78 per
+host (sha256-verified into `.cache/webview/engine`), DevTools over `--remote-debugging-pipe` only, one
+browser context per session. Engine sandbox: bwrap with the host root read-only and `/home`, `/root`,
+`/run/user` masked by tmpfs (profile + engine re-bound); an empty-root layout makes the engine die
+with SIGTRAP before logging, and full root minimisation is not pursued (security takes a back seat for
+this tool). Chromium's own namespace sandbox stays on. Measured: fixed 130 MiB PSS, +3.9 MiB per extra
+session context, frame p95 15.6 ms at 1080x2400. Activation is lazy (no Chromium for sessions that
+never create a WebView); the per-session socket lives in a short per-session dir mounted at `/run/acos`.
+
 ADR-0029 amendment (owner, 2026-11-16, after MPROC4): **the host builds launch transactions.** A
 launch into an already-running process (and every later launch flavour: extras, results, flags,
 singleTop/onNewIntent) is a `ClientTransaction` with `LaunchActivityItem` (+ lifecycle items) encoded by
