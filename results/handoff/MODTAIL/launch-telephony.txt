@@ -1,4 +1,0 @@
-launch: reached unknown (classes=0, wall=0ms)
-  [         ok] process
-  [         ok] activity_resumed
-  [         ok] first_frame
