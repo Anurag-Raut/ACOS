@@ -7727,6 +7727,7 @@ mod probe_line_tests {
             4096,
             Arc::clone(&state),
             None,
+            0,
         );
         let out = state.lock().unwrap().clone_for_test();
         out
@@ -7736,6 +7737,8 @@ mod probe_line_tests {
         fn clone_for_test(&self) -> ProbeState {
             ProbeState {
                 latest: self.latest.clone(),
+                by_process: self.by_process.clone(),
+                top_process: Arc::clone(&self.top_process),
                 unsupported: self.unsupported.clone(),
                 unsupported_seq: self.unsupported_seq,
                 probe_error: self.probe_error.clone(),

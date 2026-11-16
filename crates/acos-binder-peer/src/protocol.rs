@@ -50,6 +50,16 @@ pub const F_HELLO: u32 = 5;
 /// event a real kernel driver produces when a remote process dies.
 pub const F_DEATH: u32 = 6;
 
+/// `F_RSP` flag: the refusal means "the target process is dead".
+///
+/// The driver turns a status reply into `BR_FAILED_REPLY`; a dead target must
+/// instead reach the caller as `BR_DEAD_REPLY`, which libbinder maps to
+/// `DeadObjectException` (`IPCThreadState::executeCommand`). MPROC5b: a
+/// transaction forwarded to a process that has died (or one already waiting on
+/// it) is exactly that case, so the peer marks the reply with this bit and
+/// carries no payload.
+pub const RSP_DEAD: u32 = 0x8000_0000;
+
 /// Size of the fixed frame header (`struct fhdr`).
 pub const HEADER_SIZE: usize = 48;
 /// Largest parcel data/offset block accepted in one frame.

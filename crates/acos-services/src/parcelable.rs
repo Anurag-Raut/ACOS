@@ -110,13 +110,13 @@ pub enum FieldOp {
     /// field as `writeByte(0|1)` and only then the payload. Same body rule as
     /// [`FieldOp::Cond`].
     ByteCond(&'static [FieldOp]),
-    /// A conditional group with a **boolean** presence marker (`writeBoolean`
-    /// then the payload only when true). This image's
-    /// `ClientTransaction.writeToParcel` writes both `mActivityToken` and
-    /// `mActivityCallbacks` that way: `writeBoolean(token != null)` before the
-    /// strong binder, and `writeBoolean(callbacks != null)` before the
-    /// parcelable list — so a null member writes **one** byte-marker int and no
-    /// payload at all. Same body rule as [`FieldOp::Cond`].
+    /// A conditional group whose presence marker is `writeBoolean` — the same
+    /// four-byte `0`/`1` int on the wire as [`FieldOp::Cond`], but a distinct
+    /// dex call, so the image scan tells them apart. The image's
+    /// `ClientTransaction.writeToParcel` guards its binder and its callback
+    /// list this way (MPROC6); a `false` marker writes **no** payload at all,
+    /// which MPROC5b measured on real ART (`proc-a-paused-or-stopped-under-b`
+    /// failed while the encoder wrote a binder and a `-1` list behind `false`).
     BoolCond(&'static [FieldOp]),
     /// `Parcel.writePersistableBundle`: the same wire shape as [`FieldOp::Bundle`]
     /// (an int length, `-1` for null, then the `BaseBundle` map).
@@ -994,25 +994,33 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int, FieldOp::Str16],
         verification: Verification::Curated,
     },
-    // `android.app.servertransaction.ClientTransaction.writeToParcel` (the
-    // **image's** own dex, `classes.dex`, API 34 UE1A — it predates
-    // `mTransactionItems`):
-    //   writeBoolean(mActivityToken != null)
-    //   if (mActivityToken != null) writeStrongBinder(mActivityToken)
-    //   writeParcelable(mLifecycleStateRequest)
-    //   writeBoolean(mActivityCallbacks != null)
-    //   if (mActivityCallbacks != null) writeParcelableList(mActivityCallbacks)
-    // The first boolean is NOT `mIsGlobal`; it is the token's presence marker
-    // (the reader skips the binder when false), and an absent callbacks list
-    // writes only its `false` marker — no list count at all.
+    // `android.app.servertransaction.ClientTransaction.writeToParcel`, from the
+    // **image's** bytecode (MPROC6, `dexdump -d` of
+    // `.cache/boot/android-34/dex/framework/classes.dex`):
+    //
+    // ```text
+    //   0x0000 iget-object v0, mActivityToken
+    //   0x0009 writeBoolean(v0 != null)              // writeActivityToken
+    //   0x000c if (v0 != null) writeStrongBinder(mActivityToken)
+    //   0x0015 writeParcelable(mLifecycleStateRequest, flags)
+    //   0x0018 iget-object v3, mActivityCallbacks
+    //   0x001e writeBoolean(v3 != null)              // writeActivityCallbacks
+    //   0x0021 if (v3 != null) writeParcelableList(mActivityCallbacks, flags)
+    // ```
+    //
+    // Both booleans are **presence flags**: this build has no `mIsGlobal` and no
+    // `mIsReady` field at all, and a null `mActivityCallbacks` (what the
+    // framework's own `obtain` leaves, and what ATMS sends for a
+    // lifecycle-only transaction) writes the `false` and then *nothing* — not a
+    // null list and not an empty one.
     ParcelableSpec {
         class: "android.app.servertransaction.ClientTransaction",
         fields: &[
-            FieldOp::BoolCond(&[FieldOp::Binder]),
+            FieldOp::BoolCond(&[FieldOp::Binder]), // mActivityToken != null
             FieldOp::Named("android.app.servertransaction.ActivityLifecycleItem"),
-            FieldOp::BoolCond(&[FieldOp::ParcelableList(
-                "android.app.servertransaction.ClientTransactionItem",
-            )]),
+            FieldOp::BoolCond(&[
+                FieldOp::ParcelableList("android.app.servertransaction.ClientTransactionItem"),
+            ]), // mActivityCallbacks != null
         ],
         verification: Verification::Full,
     },
@@ -1220,12 +1228,52 @@ pub static SPECS: &[ParcelableSpec] = &[
         class: "android.app.servertransaction.ActivityRelaunchItem",
         fields: &[
             FieldOp::TypedList("android.app.ResultInfo"),
-            FieldOp::TypedList("android.content.Intent"),
+            FieldOp::TypedList("com.android.internal.content.ReferrerIntent"),
             FieldOp::Int, // mConfigChanges
             FieldOp::Typed("android.util.MergedConfiguration"),
             FieldOp::Bool, // mPreserveWindow
         ],
         verification: Verification::Full,
+    },
+    // MPROC6: the rest of the `ClientTransactionItem` / `ActivityLifecycleItem`
+    // family, in the image's `writeToParcel` order (the scanner's call list for
+    // each class is in `results/handoff/MPROC6/`). `PauseActivityItem` and
+    // `StopActivityItem` are above (MPROC5 added them; one spec per class).
+    //   DestroyActivityItem: mFinished, mConfigChanges.
+    ParcelableSpec {
+        class: "android.app.servertransaction.DestroyActivityItem",
+        fields: &[FieldOp::Bool, FieldOp::Int],
+        verification: Verification::Full,
+    },
+    //   ActivityResultItem: writeTypedList(mResultInfoList).
+    ParcelableSpec {
+        class: "android.app.servertransaction.ActivityResultItem",
+        fields: &[FieldOp::TypedList("android.app.ResultInfo")],
+        verification: Verification::Full,
+    },
+    //   NewIntentItem: mResume, writeTypedList(mIntents) — the elements are
+    //   `ReferrerIntent`s, not plain `Intent`s.
+    ParcelableSpec {
+        class: "android.app.servertransaction.NewIntentItem",
+        fields: &[
+            FieldOp::Bool,
+            FieldOp::TypedList("com.android.internal.content.ReferrerIntent"),
+        ],
+        verification: Verification::Full,
+    },
+    // `com.android.internal.content.ReferrerIntent.writeToParcel`: the
+    // `Splice`/`Intent` payload (no presence marker), then the referrer
+    // string. Curated rather than Full: the scanner's linear walk of a
+    // subclass that calls `Intent.writeToParcel` on itself records only the
+    // trailing `writeString`, so the order is pinned by the real-Java
+    // differential (`tests/client_transaction_java.rs`) instead.
+    ParcelableSpec {
+        class: "com.android.internal.content.ReferrerIntent",
+        fields: &[
+            FieldOp::Nested("android.content.Intent"),
+            FieldOp::Str16, // mReferrer
+        ],
+        verification: Verification::Curated,
     },
     // `android.window.ClientWindowFrames.writeToParcel`.
     ParcelableSpec {
@@ -1927,6 +1975,16 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
             }
             Value::Cond { present, values }
         }
+        FieldOp::BoolCond(fields) => {
+            let present = parcel.read_bool()?;
+            let mut values = Vec::new();
+            if present {
+                for field in fields {
+                    values.push(read_field(*field, parcel)?);
+                }
+            }
+            Value::Cond { present, values }
+        }
         FieldOp::ByteCond(fields) => {
             let present = parcel.read_byte()? != 0;
             let mut values = Vec::new();
@@ -2211,6 +2269,25 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             _ => return Err(bad(format!("expected parcelable list, got {value:?}"))),
         },
         FieldOp::Dynamic => write_dynamic(parcel, expect_dynamic(value)?)?,
+        FieldOp::BoolCond(fields) => {
+            let Value::Cond { present, values } = value else {
+                return Err(bad(format!("expected boolean conditional, got {value:?}")));
+            };
+            parcel.write_bool(*present);
+            if *present {
+                if values.len() != fields.len() {
+                    return Err(bad(format!(
+                        "boolean conditional expects {} fields, got {}",
+                        fields.len(),
+                        values.len()
+                    )));
+                }
+                for (field, value) in fields.iter().zip(values) {
+                    write_field(*field, parcel, value)?;
+                }
+            }
+            return Ok(());
+        }
         FieldOp::ByteCond(fields) => {
             let Value::Cond { present, values } = value else {
                 return Err(bad(format!("expected byte conditional, got {value:?}")));
@@ -3655,6 +3732,7 @@ pub fn verify_prefix(spec: &ParcelableSpec, scanned: &ScannedWrite) -> (usize, u
 
 fn field_matches(field: FieldOp, call: &str) -> bool {
     match field {
+        FieldOp::BoolCond(_) => call == "writeBoolean",
         FieldOp::Int => call == "writeInt",
         FieldOp::Long => call == "writeLong",
         FieldOp::Float => call == "writeFloat",
@@ -3736,6 +3814,20 @@ fn field_consumes(field: FieldOp, calls: &[String]) -> usize {
         return 0;
     };
     match field {
+        FieldOp::BoolCond(inner) => {
+            if first != "writeBoolean" {
+                return 0;
+            }
+            let mut n = 1;
+            for f in inner {
+                let c = field_consumes(*f, &calls[n..]);
+                if c == 0 {
+                    return n;
+                }
+                n += c;
+            }
+            n
+        }
         FieldOp::Cond(inner) => {
             if first != "writeInt" {
                 return 0;

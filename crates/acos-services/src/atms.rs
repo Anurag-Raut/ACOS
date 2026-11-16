@@ -143,49 +143,35 @@ impl ClientTransactionItem {
 
     /// The framework parcelable one lifecycle item is written as.
     ///
-    /// The field lists come from the **image's** own `writeToParcel` (scanned
-    /// from `.cache/boot/android-34/dex/framework`), not from the AOSP source:
-    /// this image's `StopActivityItem` has no `showWindow` on the wire. `None`
-    /// means ACOS has no decoded shape for the item, and nothing is written for
-    /// it (the item is never invented).
+    /// The item encodings live in [`crate::client_transaction`] (MPROC6): the
+    /// host builds launch transactions and lifecycle transactions with the
+    /// **same** item constructors, from the image's own `writeToParcel` order
+    /// (this image's `StopActivityItem` has no `showWindow` on the wire, and its
+    /// `PauseActivityItem` carries `mAutoEnteringPip`). `None` means ACOS has no
+    /// decoded shape for the item on this path (a launch is built from the
+    /// resolved intent + `ActivityInfo`, which only the launch encoder has), and
+    /// nothing is written for it — the item is never invented.
     #[must_use]
     pub fn to_parcelable(&self) -> Option<Parcelable> {
         match self {
-            // `PauseActivityItem(finished, userLeaving, configChanges,
-            // dontReport, autoEnteringPip)`.
-            Self::PauseActivity { finished } => Some(Parcelable::ordered(
-                "android.app.servertransaction.PauseActivityItem",
-                vec![
-                    Value::Bool(*finished),
-                    Value::Bool(false),
-                    Value::Int(0),
-                    Value::Bool(false),
-                    Value::Bool(false),
-                ],
-            )),
+            // `PauseActivityItem(mFinished, mUserLeaving, mConfigChanges,
+            // mDontReport, mAutoEnteringPip)`.
+            Self::PauseActivity { finished } => {
+                Some(crate::client_transaction::pause_item(*finished, false, 0, false, false))
+            }
             // `StopActivityItem(configChanges)`.
-            Self::StopActivity { .. } => Some(Parcelable::ordered(
-                "android.app.servertransaction.StopActivityItem",
-                vec![Value::Int(0)],
-            )),
+            Self::StopActivity { .. } => Some(crate::client_transaction::stop_item(0)),
             // `ResumeActivityItem(procState, updateProcState, isForward,
             // shouldSendCompatFakeFocus)`; `PROCESS_STATE_TOP` is 2
             // (`ProcessList`), and the process state is genuinely re-evaluated.
-            Self::ResumeActivity => Some(Parcelable::ordered(
-                "android.app.servertransaction.ResumeActivityItem",
-                vec![
-                    Value::Int(2),
-                    Value::Bool(true),
-                    Value::Bool(false),
-                    Value::Bool(false),
-                ],
-            )),
-            // `LaunchActivityItem` carries the app's own intent/`ActivityInfo`
-            // (guest-marshalled) and the destroy/relaunch items are not needed
-            // for the top-of-task rule; they stay unencoded rather than guessed.
-            Self::LaunchActivity { .. }
-            | Self::DestroyActivity { .. }
-            | Self::RelaunchActivity { .. } => None,
+            Self::ResumeActivity => {
+                Some(crate::client_transaction::resume_item(2, true, false, false))
+            }
+            // `DestroyActivityItem(mFinished, mConfigChanges)`.
+            Self::DestroyActivity { finished } => {
+                Some(crate::client_transaction::destroy_item(*finished, 0))
+            }
+            Self::LaunchActivity { .. } | Self::RelaunchActivity { .. } => None,
         }
     }
 
@@ -229,39 +215,29 @@ impl ClientTransaction {
 
     /// The **framework wire shape** of a one-item lifecycle transaction.
     ///
-    /// `ClientTransaction.writeToParcel` in the **image's** own dex
-    /// (`.cache/boot/android-34/dex/framework/classes.dex`, API 34 UE1A) is
-    /// `writeBoolean(mActivityToken != null)`, `writeStrongBinder(mActivityToken)`
-    /// when present, `writeParcelable(mLifecycleStateRequest)`,
-    /// `writeBoolean(mActivityCallbacks != null)`, then the callbacks list only
-    /// when present. The two booleans are **presence markers**, not fields: a
-    /// `false` marker writes no payload at all (the previous encoding wrote a
-    /// binder after a `false` token marker and a `-1` list count after a `false`
-    /// callbacks marker, which the guest's reader never consumes — the token
-    /// came back null and the item was misparsed). The framework's own
-    /// `obtain` leaves the callbacks list null, so a real AMS writes exactly
-    /// that.
+    /// `ClientTransaction.writeToParcel` (image dex) writes the activity-token
+    /// presence flag + binder, the named lifecycle request, and the
+    /// **callbacks-presence** flag. A lifecycle-only transaction has no
+    /// callbacks, so the framework writes `false` and then no list at all
+    /// (`mActivityCallbacks` stays null in `ClientTransaction.obtain`; MPROC6
+    /// answered MPROC5's open question with the image's bytecode and the
+    /// real-Java differential, and MPROC5b measured the failure it caused: the
+    /// old encoding wrote a binder behind a `false` token marker and a `-1`
+    /// list count behind a `false` callbacks marker, so the guest read a null
+    /// token — `proc-a-paused-or-stopped-under-b` FAIL in run0/run1). The item
+    /// is the transaction's lifecycle request, which is exactly what
+    /// `TransactionExecutor` runs on the app's main thread. The encoding itself
+    /// is the one [`crate::client_transaction`] encoder (MPROC6), shared with
+    /// the launch path.
     ///
     /// `None` when the item has no decoded shape (nothing is fabricated).
     #[must_use]
     pub fn lifecycle_parcelable(item: &ClientTransactionItem, token: u64) -> Option<Parcelable> {
         let item = item.to_parcelable()?;
-        Some(Parcelable::ordered(
-            "android.app.servertransaction.ClientTransaction",
-            vec![
-                // `mActivityToken` presence marker + strong binder when present.
-                Value::Cond {
-                    present: true,
-                    values: vec![Value::Binder(Some(acos_parcel::BinderId(token)))],
-                },
-                Value::NamedParcelable(item), // mLifecycleStateRequest
-                // `mActivityCallbacks` presence marker only; the real AMS leaves
-                // the callbacks list null on a lifecycle-only transaction.
-                Value::Cond {
-                    present: false,
-                    values: Vec::new(),
-                },
-            ],
+        Some(crate::client_transaction::client_transaction(
+            Some(acos_parcel::BinderId(token)),
+            Some(item),
+            Vec::new(),
         ))
     }
 }

@@ -973,10 +973,9 @@ impl Peer {
                 ),
             };
             self.log_unsupported(&record);
-            return (
-                tag,
-                self.error_reply(frame, &ServiceError::UnknownBinder { handle: node }),
-            );
+            let mut reply = self.error_reply(frame, &ServiceError::UnknownBinder { handle: node });
+            reply.flags |= crate::protocol::RSP_DEAD;
+            return (tag, reply);
         }
         let data = import_parcel_for(tag, frame);
         let exported = self.export_for_process(owner, &data);
@@ -1080,8 +1079,10 @@ impl Peer {
                 self.foreign_dead = self.foreign_dead.saturating_add(1);
                 if self.process(caller).is_some_and(ProcessConn::connected) {
                     let base = Frame::plain(F_RSP, caller_seq, 0, 0, 0, Vec::new());
-                    let reply =
+                    let mut reply =
                         self.error_reply(&base, &ServiceError::UnknownBinder { handle: node });
+                    // The owner is dead: the caller must see BR_DEAD_REPLY.
+                    reply.flags |= crate::protocol::RSP_DEAD;
                     self.pending_deaths.push((caller, reply));
                 }
             }

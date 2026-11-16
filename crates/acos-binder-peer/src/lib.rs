@@ -35,6 +35,6 @@ pub use peer::{
 pub use serve::{serve, refuse_frame, ServeOutcome};
 pub use protocol::{
     accept, close_frame_fds, listen, read_frame, write_frame, Frame, F_DEATH, F_HELLO, F_REP, F_REQ,
-    F_RSP, F_TXN, MAX_PROCESSES, MAX_PROCESS_TAG, PING_TRANSACTION, TAG_PRIMARY, TF_ONE_WAY,
+    F_RSP, F_TXN, RSP_DEAD, MAX_PROCESSES, MAX_PROCESS_TAG, PING_TRANSACTION, TAG_PRIMARY, TF_ONE_WAY,
     TF_STATUS_CODE,
 };
