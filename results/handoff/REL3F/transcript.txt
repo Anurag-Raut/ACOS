@@ -1,0 +1,101 @@
+REL3F manual transcript, 2026-11-16T02:29:03Z
+worktree: /home/Qui/.t3/worktrees/acos/t3-48c0277c-17091293f13df740
+
+$ env -u ACOS_HOME /home/Qui/.t3/worktrees/acos/t3-48c0277c-17091293f13df740/.cache/rel3f-target/debug/acos guide workflow | head -20
+## Recipes (answer these first)
+
+**Take a screenshot.** There is no capture tool on the MCP surface yet. Two
+routes work today: (a) a `capture: {name: shot, format: png, fresh: true}` step
+in an `acos_verify` scenario — the PNG lands as `frames/<seq>.png` under the
+artifacts directory and the step JSON names it; (b) with the CLI on a live
+daemon session, `acos observe --screenshot out/shot.png --json`. Coming:
+`screenshot: true` on `acos_observe_tree`, which returns the PNG path in the
+reply (and `NO_FRESH_FRAME` instead of a silent no-op when the frame carries no
+pixels).
+
+**Type into a field.** Observe the tree, tap the field (`acos_tap {"id": ...}`
+or `{"text": ...}`), type with `acos_text {"text": "Ada"}`, then observe again to
+read the value. Text goes to the *focused* editor through the real
+`InputConnection`; `ELEMENT_NOT_FOUND` with `details.kind = NoFocusedEditor`
+means the tap did not land on an editable field. If `acos_text` answers
+`UNSUPPORTED_BACKEND` on a live session, the same interaction as a scenario
+`type:` step runs through `acos_verify` and does work.
+
+**Find a control by `content_desc`.** `acos_observe_tree` returns `text` **and**
+
+[full text: guide-workflow.txt; $ acos guide workflow]
+
+guide workflow: 11659 bytes, 179 lines, stderr 0 bytes
+
+$ env -u ACOS_HOME /home/Qui/.t3/worktrees/acos/t3-48c0277c-17091293f13df740/.cache/rel3f-target/debug/acos help | tail -4
+  -h, --help     Print help
+  -V, --version  Print version
+
+Run `acos guide [topic]` for the agent guide — the same text as the MCP `acos_help` tool (`workflow`, `cli`, `scenarios`, `errors`, `limits`, `mcp`, or `all`).
+
+$ env -u ACOS_HOME /home/Qui/.t3/worktrees/acos/t3-48c0277c-17091293f13df740/.cache/rel3f-target/debug/acos session list
+request req_26151_18e8659572ff2b5b: ok=true status=pass
+0 sessions (art)
+[rc 0]
+
+$ env -u ACOS_HOME /home/Qui/.t3/worktrees/acos/t3-48c0277c-17091293f13df740/.cache/rel3f-target/debug/acos launch fixtures/build/apps/counter.apk --engine art --keep --label demo --json
+[rc 0] {   "request_id": "req_26153_18e865957342141e",   "ok": true,   "status": "pass",   "backend": "acos-native",   "fidelity": "art-reference",   "session_id": "s_cli",   "capabilities_used": [     "apk.inspect",     "lifecycle",     "ui.frame",     "ui.tree"   ],   "result": {     "activity": "dev.acos.fixtures.counter.MainActivity",     "animations": "on",     "apk": "/home/Qui/.t3/worktrees/acos/t
+
+$ env -u ACOS_HOME /home/Qui/.t3/worktrees/acos/t3-48c0277c-17091293f13df740/.cache/rel3f-target/debug/acos session list
+request req_2673a_18e86597aad7d00e: ok=true status=pass
+1 session (art)
+  s_cli  label=demo  age=0s  rss=2352 kB
+[rc 0]
+
+$ env -u ACOS_HOME /home/Qui/.t3/worktrees/acos/t3-48c0277c-17091293f13df740/.cache/rel3f-target/debug/acos session destroy s_cli --json
+{
+  "request_id": "req_2673c_18e86597ab0d6f61",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_cli",
+  "capabilities_used": [],
+  "result": {
+    "already_absent": false,
+    "destroyed": true,
+    "engine": "art",
+    "engine_frozen": false,
+    "evidence": {
+      "frame": "host-observed",
+      "input_acks": "guest-asserted",
+      "logs": "guest-asserted",
+      "state_change": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "evidence_label": "none",
+    "session_id": "s_cli",
+    "teardown": {
+      "lifecycle": "lifecycle",
+      "process_group": 155990,
+      "session_leftovers": [],
+      "session_leftovers_reaped": true,
+      "survivors": [],
+      "teardown_ms": 23,
+      "verified": true
+    },
+    "trust": "trusted"
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}
+[rc 0]
+
+$ env -u ACOS_HOME /home/Qui/.t3/worktrees/acos/t3-48c0277c-17091293f13df740/.cache/rel3f-target/debug/acos session list
+request req_26748_18e86597ac9f03c6: ok=true status=pass
+0 sessions (art)
+[rc 0]
+
+$ env -u ACOS_HOME /home/Qui/.t3/worktrees/acos/t3-48c0277c-17091293f13df740/.cache/rel3f-target/debug/acos verify wait-for-human-selector.yaml --apk fixtures/build/apps/hello-views.apk --reference fixtures/reference/hello-views/art-api34-x86_64 --artifacts <scratch> --json
+[rc 1]
+stdout error.message: wait_for timed out after 50 ms: selector text=="Nonexistent" did not satisfy the condition (require_visible=true)
+stderr (human summary):
+verify: TIMEOUT (infra_timeout): wait_for timed out after 50 ms: selector text=="Nonexistent" did not satisfy the condition (require_visible=true) [class=infra_timeout, retryable=true]
+
+CHECK selector human form: PASS
