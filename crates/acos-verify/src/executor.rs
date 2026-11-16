@@ -3231,6 +3231,47 @@ mod launch_gate_tests {
 }
 
 #[cfg(test)]
+mod service_module_tests {
+    use super::*;
+
+    fn step_with_requirement(module: &str) -> Step {
+        let mut step = Step::back();
+        step.requires_services = vec![module.to_string()];
+        step
+    }
+
+    /// ADR-0029 item 5: a step that needs an `off` module is unsupported; it is
+    /// never executed against behaviour the session does not have.
+    #[test]
+    fn a_step_that_needs_an_off_module_is_unsupported_never_pass() {
+        let step = step_with_requirement("feedback.vibrator");
+        assert_eq!(
+            missing_service(&step, &[("core".into(), "real".into())]).as_deref(),
+            Some("feedback.vibrator")
+        );
+        assert_eq!(
+            missing_service(&step, &[("feedback.vibrator".into(), "off".into())]).as_deref(),
+            Some("feedback.vibrator")
+        );
+        assert_eq!(
+            missing_service(
+                &step,
+                &[
+                    ("core".into(), "real".into()),
+                    ("feedback.vibrator".into(), "stub".into()),
+                ]
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_step_without_a_requirement_is_never_gated() {
+        assert_eq!(missing_service(&Step::back(), &[]), None);
+    }
+}
+
+#[cfg(test)]
 mod content_settle_tests {
     use super::*;
     use acos_protocol::scenario::Scenario;

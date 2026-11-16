@@ -375,6 +375,7 @@ server.
 | `acos_logs` | server | - | `native-runtime` | - |
 | `acos_status` | server | - | `native-runtime` | - |
 | `acos_doctor` | server | - | `n/a` | - |
+| `acos_services` | server | - | `native-runtime` | `op` |
 <!-- ACOS_TOOLS_END -->
 
 Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
@@ -425,6 +426,28 @@ and above plus anything that names the app's own package, with `filter` naming
 the defaults that were applied. The guest buffer is untouched —
 `logs/logcat.txt` in a verify run is still the full log — and `{"all": true}`
 (or `min_priority: "V"`) returns every record.
+
+### Service modules (ADR-0029)
+
+`acos_launch {"services": [{"id": "feedback.vibrator", "profile": "stub"}]}`
+attaches modules before the guest boots (`core` is always attached first at
+`real`). The launch reply carries `modules[]` — `id`, `profile`, `attach`
+(`hot`/`at-launch`), `state` and `fidelity` — and that is what was **actually
+attached**, not what was requested. `acos_services {"op": "list",
+"base": {"session_id": …}}` returns the same rows for a live session;
+`{"op": "attach"|"detach", "id": …}` changes the set and answers with the new
+one. Only `hot` modules can change live: an `at-launch` module (e.g. `core`) is
+refused with a structured error naming the launch call, never silently ignored.
+`acos_capabilities {"session_id": …}` includes `session.attached` and
+`session.modules` for that session (the catalog alone when no session is named).
+
+A module at `stub` or `scripted` is a documented stand-in, not a real
+implementation. Its fidelity is reported in the launch reply, `acos_services`
+and every `verdict.json` that used it (plus a `notes` line saying the pass
+relied on it). A scenario step that declares `requires_services` is
+`unsupported` when the module is `off`, never a pass. The generated module
+catalog and the gap table are in `docs/AGENT_GUIDE.md` (`topic: "limits"`) and
+`acos_capabilities.modules`.
 
 The three **meta** tools (`acos_help`, `acos_capabilities`, `acos_doctor`)
 report `fidelity: "n/a"`: they say nothing about the app under test, so

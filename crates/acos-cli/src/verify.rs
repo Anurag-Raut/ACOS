@@ -749,11 +749,11 @@ pub(crate) fn annotate(
             let state = module.get("state").and_then(|v| v.as_str()).unwrap_or("off");
             if state == "attached" && matches!(profile, "stub" | "scripted") {
                 Some(format!(
-                    "fidelity: module `{id}` is attached at `{profile}` (not `real`); every                      result that depends on it is that fidelity, not a real implementation"
+                    "fidelity: module `{id}` is attached at `{profile}` (not `real`); every result that depends on it is that fidelity, not a real implementation"
                 ))
             } else if state != "attached" {
                 Some(format!(
-                    "fidelity: module `{id}` is off ({}); behaviour that needs it is                      unsupported, never a pass",
+                    "fidelity: module `{id}` is off ({}); behaviour that needs it is unsupported, never a pass",
                     module
                         .get("reason")
                         .and_then(|v| v.as_str())

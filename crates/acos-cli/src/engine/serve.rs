@@ -1390,6 +1390,9 @@ fn launch_reply(
     merge_zygote_fields(&mut result, session);
     result["animations"] = json!(session.animations());
     result["insets"] = json!(session.insets());
+    // ADR-0029 item 4: the attached modules and their fidelity, as the
+    // launcher's ready line reported them.
+    result["modules"] = json!(session.modules());
     // H13b: which boot image this session booted and whether its cache hit.
     result["boot_image"] = session
         .boot_image()

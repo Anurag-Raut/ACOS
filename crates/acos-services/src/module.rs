@@ -346,7 +346,14 @@ impl ModuleManifest {
             },
             "requires": self.requires,
             "requires_host_tools": self.requires_host_tools,
-            "budget": {"ram_mib": self.budget.ram_mib, "startup_ms": self.budget.startup_ms},
+            "budget": {
+                "ram_mib": self.budget.ram_mib,
+                "startup_ms": self.budget.startup_ms,
+                // ADR-0029 item 7: the manifest's budget is an estimate until
+                // the batched ART memory run measures it. The reply must not
+                // present an estimate as a measurement.
+                "basis": "estimated",
+            },
             "security": self.security.as_str(),
             "controls": self.controls.iter().map(|op| json!({
                 "op": op.name,
@@ -647,7 +654,14 @@ impl ModuleReport {
             "services": self.services,
             "requires": self.requires,
             "controls": self.controls,
-            "budget": {"ram_mib": self.budget.ram_mib, "startup_ms": self.budget.startup_ms},
+            "budget": {
+                "ram_mib": self.budget.ram_mib,
+                "startup_ms": self.budget.startup_ms,
+                // ADR-0029 item 7: the manifest's budget is an estimate until
+                // the batched ART memory run measures it. The reply must not
+                // present an estimate as a measurement.
+                "basis": "estimated",
+            },
         })
     }
 }
@@ -1595,7 +1609,7 @@ impl ModuleRegistry {
                 )
                 .collect();
             out.push_str(&format!(
-                "| `{}` | {} | {} | \u{2264}{} MiB | {} |\n",
+                "| `{}` | {} | {} | \u{2264}{} MiB (estimated) | {} |\n",
                 manifest.id,
                 manifest
                     .profiles_with_off()

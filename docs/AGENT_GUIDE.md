@@ -253,6 +253,7 @@ acos doctor --json
 acos inspect fixtures/build/apps/counter.apk --json
 acos launch fixtures/build/apps/counter.apk --engine art --json
 acos launch fixtures/build/apps/counter.apk --engine art --keep --json   # session survives in the daemon
+acos launch fixtures/build/apps/counter.apk --engine art --service feedback.vibrator:stub --json
 acos observe --tree --json                        # the daemon's live session
 acos observe --tree --apk fixtures/build/apps/counter.apk --json         # one-shot: launch then observe
 acos observe --screenshot out/counter.png --json
@@ -289,6 +290,14 @@ Notes that save a run:
   default route is the frozen Rust VM, which verifies far less. The **MCP**
   session tools are not like that: they run real ART by default (see Limits).
   Use `--engine art` on the CLI for anything you intend to trust.
+* `--service id[:profile][,config]` attaches a service module to the session
+  (repeatable; `core` is always attached first at `real`). It needs a session
+  host, so use `--engine art` (or `--keep`); the bare in-process Rust VM has no
+  service table and refuses with `UNSUPPORTED_BACKEND` instead of ignoring the
+  flag. The launch reply's `modules[]` reports what was actually attached and
+  its `fidelity` (`real`/`stub`/`scripted`/`off`); check it before trusting a
+  result that depends on a module. Live sessions change the set with
+  `acos_services` (MCP).
 * `reset` and `destroy` are daemon verbs: `acos session reset|destroy`, or the
   MCP tools `acos_reset` / `acos_destroy`. There is no top-level `acos reset`.
 * `acos run-dex <path> --main Main` executes a DEX `main` on the Rust
@@ -365,6 +374,27 @@ A step is a **one-key map**. Valid keys:
 
 There is no `sleep` step and no polling: `wait_for` and the assertions are
 event-driven.
+
+**Service modules (`services:`).** A scenario attaches modules at launch with the
+same shape as the launch request. A pass that relied on `stub`/`scripted` says so
+in the verdict's `notes`, and `verdict.json` carries `modules[]` with each
+module's profile and fidelity:
+
+```yaml
+services:
+  - id: feedback.vibrator     # see acos_capabilities.modules
+    profile: stub             # off | stub | scripted | real (omit for the default)
+    config: {}                # optional module config
+steps:
+  - launch: {activity: dev.acos.fixtures.counter/.MainActivity}
+  - assert_text: {selector: {id: count}, text: {exact: "0"}}
+    requires_services: [feedback.vibrator]   # off -> the step is `unsupported`, never pass
+```
+
+A step that declares `requires_services` is `unsupported` (with
+`details.module`) when the module is `off`; ACOS never runs an assertion against
+behaviour the session does not have. The scenario `services:` block needs
+`--engine art`; the Rust VM refuses it.
 
 `launch.activity` takes the same component spellings Android does, expanded
 before the launch gate runs: `com.example.app/.MainActivity` (a real
@@ -611,6 +641,18 @@ Two session-specific hints worth memorising:
   and restarting the server, or (c) writing evidence to the artifacts
   directory. Relative paths resolve against the server's working directory,
   never against the APK's directory.
+
+* **Service modules are opt-in and honest.** A session attaches `core` (the
+  service table every app needs) plus whatever `services:`/`--service` names.
+  Any name a module does not serve is either a tombstone that answers
+  `UNSUPPORTED_ANDROID_API` naming the module and the attach call, or Android's
+  real missing path (`null`) where AOSP builds working behaviour out of it — see
+  the generated table below. A module at `stub`/`scripted` is a documented
+  stand-in, never a real implementation: the launch reply, `acos_services` and
+  `verdict.json` all state its profile and fidelity. Only `hot` modules can be
+  attached/detached on a live session; an `at-launch` module (e.g. `core`) is
+  refused with the launch call in the message.
+  `acos_capabilities {session_id}` shows one session's attached set.
 
 <!-- modules:generated -->
 

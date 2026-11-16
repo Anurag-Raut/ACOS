@@ -60,6 +60,13 @@ pub fn map_art_code(code: &str) -> ErrorCode {
         "RESOURCE_LIMIT" => ErrorCode::ResourceLimit,
         // Bad request shape (caller bug).
         "BAD_REQUEST" => ErrorCode::InvalidArgument,
+        // ADR-0029 item 4: a module operation the session refuses (attach of an
+        // `at-launch` module, unknown profile, unmet `requires`). The message
+        // names the refused module and the allowed alternative; the caller
+        // asked for something the session cannot do, so it is INVALID_ARGUMENT.
+        "SERVICE_MODULE_REJECTED" => ErrorCode::InvalidArgument,
+        // A tombstoned name: the interface exists but its module is off.
+        "SERVICE_MODULE_UNAVAILABLE" => ErrorCode::UnsupportedAndroidApi,
         // Genuine harness/protocol defects: the session could not form or
         // deliver the binder transaction, or reported an explicit INTERNAL.
         "NO_BIND_REQUEST"
@@ -337,6 +344,11 @@ pub fn art_error(code: &str, message: &str, artifacts: &Path) -> ProtocolError {
     // calls `startActivity` with an ACTION/CATEGORY-only Intent (Settings, a
     // browser, a share sheet, `Intent.ACTION_VIEW`) wants a *different app* from
     // the guest, and the guest only ever contains the APK under test.
+    if mapped == ErrorCode::InvalidArgument && code == "SERVICE_MODULE_REJECTED" {
+        error = error.with_hint(
+            "This service-module operation is refused, never silently ignored: an `at-launch`              module (e.g. `core`) can only be attached at launch, and only `hot` modules change              on a live session. Read the message for the module and the launch call              (`acos_launch {services: [...]}` / `--service id:profile`).",
+        );
+    }
     if mapped == ErrorCode::UnsupportedAndroidApi && message.contains("no explicit component") {
         error = error.with_hint(
             "The app started an activity through an IMPLICIT intent (action/category/data, no              component), and no other apps exist in this guest: there is no Settings, browser,              share sheet, file picker or dialer to resolve it against. Such screens are              untestable here, and that is a capability gap, not an app bug. Do not stub the              Activity: assert up to the intent instead — prove the app issued it (`assert_log` on              the app's own log line, or `assert_state` on the control that triggered it) and              report the screen beyond it as unsupported.",

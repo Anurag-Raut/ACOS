@@ -10,5 +10,11 @@ Use them to understand behaviour and wire formats BEFORE guessing or disassembli
 | `art/` | runtime, libartbase, libnativeloader, libnativebridge | boot image/classpath logic (e.g. mainline CHECK), linker namespaces, runtime flags |
 | `bionic/` | linker, libc/bionic, libc/include | linker namespaces, property area, sysconf |
 | `libbase/`, `core/` | libbase, libutils, libcutils, liblog, property_service | RefBase, logging, properties |
+| `connectivity/`, `wifi/`, `bluetooth/`, `permission/` | `framework/src/android/net`, `framework/java/android/net/wifi`, `framework/java/android/bluetooth`, `framework-s/java/android/app/role` | the mainline service-client classes behind the ADR-0029 tombstone table (feature gates, lazy proxies) |
 
-Sparse checkouts: add more paths with `git -C <dir> sparse-checkout add <path>` (blobs are fetched on demand, partial clone).
+`base/` also carries the client paths the tombstone table cites:
+`core/java/android/{app,content,net,os,view,webkit}`, `media/java/android/media`
+(+ `session/`), `nfc/java/android/nfc`, `telephony/java/android/telephony`,
+`hardware/java/android/hardware`.
+
+Sparse checkouts: add more paths with `git -C <dir> sparse-checkout add <path>` (blobs are fetched on demand, partial clone). Cone mode only accepts directories; a single file path needs `--skip-checks` (which is what `tools/fetch-aosp-reference.sh` uses for `MediaRouter.java`).

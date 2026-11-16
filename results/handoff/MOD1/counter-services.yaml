@@ -1,0 +1,40 @@
+# MOD1 evidence: the counter APK on ART with a service module attached at launch.
+# Trimmed from scenarios/counter.yaml to the ART engine's command surface (the
+# full scenario asserts log order, which the ART engine reports unsupported).
+version: 1
+name: counter-services
+description: counter launches on ART with feedback.vibrator at stub; the verdict lists the module set.
+app: fixtures/build/apps/counter.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+services:
+  - id: feedback.vibrator
+    profile: stub
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 10000
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+  - tap:
+      selector: {id: inc}
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}

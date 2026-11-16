@@ -627,3 +627,55 @@ fn the_limits_section_is_generated_from_the_module_registry() {
     let all = acos_mcp::help::full_guide();
     assert!(all.contains(generated.trim_end()));
 }
+
+/// ADR-0029 item 4: the session-module tools are advertised with a closed
+/// schema, so a typo in `services:`/`acos_services` is caught by the client's
+/// validator instead of being silently ignored by the server.
+#[test]
+fn the_service_module_tools_advertise_closed_schemas() {
+    let mut client = McpClient::with_real_acos();
+    let list = client.request("tools/list", json!({}));
+    let tools = list
+        .pointer("/result/tools")
+        .and_then(Value::as_array)
+        .expect("tools array");
+    let services = tools
+        .iter()
+        .find(|tool| tool.get("name").and_then(Value::as_str) == Some("acos_services"))
+        .expect("acos_services must be advertised");
+    let schema = services.get("inputSchema").expect("inputSchema");
+    assert_eq!(
+        schema.get("additionalProperties").and_then(Value::as_bool),
+        Some(false),
+        "acos_services must be a closed schema: {schema}"
+    );
+    let ops = schema
+        .pointer("/properties/op/enum")
+        .and_then(Value::as_array)
+        .expect("op enum");
+    let ops: Vec<&str> = ops.iter().filter_map(Value::as_str).collect();
+    assert_eq!(ops, ["list", "status", "attach", "detach"]);
+    assert_eq!(
+        schema.pointer("/required/0").and_then(Value::as_str),
+        Some("op")
+    );
+
+    let launch = tools
+        .iter()
+        .find(|tool| tool.get("name").and_then(Value::as_str) == Some("acos_launch"))
+        .expect("acos_launch");
+    let item = launch
+        .pointer("/inputSchema/properties/services/items")
+        .expect("acos_launch.services schema");
+    assert_eq!(
+        item.get("additionalProperties").and_then(Value::as_bool),
+        Some(false),
+        "a services item must be closed: {item}"
+    );
+    assert_eq!(
+        item.pointer("/properties/profile/enum")
+            .and_then(Value::as_array)
+            .map(|v| v.iter().filter_map(Value::as_str).collect::<Vec<_>>()),
+        Some(vec!["off", "stub", "scripted", "real"])
+    );
+}
