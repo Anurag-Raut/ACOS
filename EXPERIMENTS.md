@@ -4809,3 +4809,57 @@ nothing in this change is on the tap path).
   (3) `Status` carrying the supervisor's own binary identity so a rebuild cannot wedge
   the relay, (4) pass the cgroup scope to `Request::Spawn` so the guest stays bounded.
   Evidence: `results/handoff/NET2/REPORT.md`, `run/`.
+
+## NET3 — shared relay finished: host ports, the N=5 flake, supervisor identity, guest cgroup (2026-11-16)
+
+- **What:** `ACOS_SPIKE_NET=1 ACOS_NET_ARM=relay` keeps its shape; four things changed.
+  (1) Host ports: the relay's `pasta` has **no** port forward at all and one
+  `--map-host-loopback <relay gateway>`; every session gets a default-deny
+  `REJECT --reject-with tcp-reset` for that address at attach and a named port is
+  opened per session with a single `ACCEPT` inserted above it. A per-session
+  **loopback forwarder** (`acos-netd forward`, `setns` into the session netns by the
+  supervisor) binds `127.0.0.1:<port>` inside the session so an app's
+  `localhost` (Metro `ws://localhost:8081`, an `adb reverse` target) works, and exists
+  only for opted-in ports. (2) `Status`/`Identity` carry the supervisor's binary path
+  and a content build id; a client whose `acos-netd` differs (or whose supervisor's
+  binary is gone) shuts that supervisor down — escalating to SIGTERM/SIGKILL only for
+  a pre-NET3 build that does not know "shutdown exits" — and starts the current one;
+  `shutdown` now ends the process instead of leaving a live socket. (3)
+  `Request::Spawn` takes the run's cgroup scope and the supervisor moves the guest into
+  it and verifies the move, so `--mem` bounds the guest on the relay arm. (4) The
+  relay proxy (`acos-netd run`) never reports its own control-plane failure as the
+  guest's exit: it reconnects and retries, and 136 when the status is unknowable.
+- **Measured — host-port, live (no ART, real session netns):** opted-in session
+  `localhost_opted=200 map_opted=200`; the same fetch on a session without the opt-in
+  `000`; another host-loopback port (`18080`) `000` for the opted-in session too; a
+  `hostport del` flips `before=200 after=000` and the forwarder disappears; leak after
+  every detach `relay_veths: [] session_rules: 0 forwarders=0`.
+  `results/handoff/NET3/run/proof.log`.
+- **Measured — why not pasta `-T`** (`exp-pasta-T.sh`, relay topology without the
+  supervisor): `-T 18081` answers `200` *inside the target namespace* and `000` from a
+  session netns joined by a veth; `-T 169.254.2.15/18081` and `-T 10.163.1.1/18081` are
+  rejected by pasta itself (`Listening address not allowed for -T`). A `-T` rule is
+  served by a listening socket pasta binds in its own target namespace and only for
+  loopback → loopback flows (`fwd_nat_from_splice` → `PIF_NONE` otherwise), so it cannot
+  open a host port for a relay session. Control: a plain listener in the relay netns is
+  `200` from the relay netns and `000` from the session.
+- **Measured — N=5 on real ART, relay arm, 3 consecutive reps:** 5/5 scenarios pass all
+  10 steps in every rep (`run/n5x3`). Before the proxy fix, the same shape failed 3/5
+  with `GUEST_EXITED … status 1` whose session stderr carried
+  `acos-netd: {"error":{"code":"io","message":"Broken pipe (os error 32)"}}` — the
+  relay proxy's own EPIPE, reported as the guest's exit. Control: the same 5 runs with
+  the network module **off** reach step 4 and fail the expected `HTTP 200` assertion
+  (honest `SecurityException`), i.e. tree binding at N=5 is fine without the relay
+  (`run/n5-netoff`).
+- **Open (perf, not correctness):** the relay arm's session boot is much slower than the
+  direct arm — `session_start_ms` 4.7–12.6 s (N=1/N=5) vs 0.17–2.2 s with the network
+  module off; the attach itself is 25–65 ms and a trivial `/bin/sh` guest through the
+  same proxy is 96–135 ms, so the cost is in the ART guest's boot inside the session
+  netns, not in the relay. One run in 18 also bound a stale tree (`assert_text` read
+  `pending` 1 ms after the fetch logged `HTTP 200`). Not fixed here; NET2's N=5 runs
+  reported 254–354 ms, so this is a regression to chase before Metro.
+- **Regression / false pass:** `off`/`base` untouched; `acos-netd` tests 11/11; no bench
+  (bench owner); `acos_net` driven through a live `acos serve` daemon
+  (status/offline/online/delay/hostport, 6/6 checks) and through MCP, where the verb is
+  still **not advertised** (`unknown tool acos_net`) — the descriptor surface is MOD1's.
+  Evidence: `results/handoff/NET3/REPORT.md`, `run/`.

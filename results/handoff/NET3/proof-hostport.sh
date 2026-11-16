@@ -188,8 +188,13 @@ hog_ev=$(sed -n 's/^memory_events=//p' "$OUT/memhog.log" | head -1)
 # The guest's own cgroup really is the scope guarded.sh created, its ceiling is
 # the guard's, and the 1.5 GiB allocation inside it was OOM-killed by that
 # ceiling (not by luck): python exits 137 and the scope counts an oom_kill.
+# Two independent witnesses of the same kill: the guest's own python exits 137
+# (SIGKILL from the cgroup OOM killer) and/or the host-side watcher reads
+# `oom_kill > 0` from the scope's memory.events before systemd removes it.
+oom_witness=no
+{ [ "${hog_py:-0}" = 137 ] || [ -s "$OUT/oom.txt" ]; } && oom_witness=yes
 if [ -n "$hog_cgroup" ] && [ "$hog_cgroup" != "/" ] && [ "${hog_mem:-0}" = 1073741824 ] \
-   && [ -s "$OUT/oom.txt" ] && [ "${hog_exit:-0}" != 0 ]; then
+   && [ "$oom_witness" = yes ] && [ "${hog_exit:-0}" != 0 ]; then
   say "check=guest_cgroup_enforced PASS cgroup=$hog_cgroup memory.max=$hog_mem oom_killed=$(head -1 "$OUT/oom.txt") run_exit=$hog_exit python_exit=${hog_py:-killed-with-the-unit} [$hog_ev]"
 else
   say "check=guest_cgroup_enforced FAIL cgroup=${hog_cgroup:-none} memory.max=${hog_mem:-none} oom=[$(cat "$OUT/oom.txt" 2>/dev/null)] run_exit=$hog_exit python_exit=${hog_py:-none} $(tail -2 "$OUT/memhog.err")"
