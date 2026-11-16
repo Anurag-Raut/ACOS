@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/counter.apk",
+  "apk_sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-0293800a-c011ab7a54eee486/results/handoff/REL3B/provenance-smoke.yaml",
+  "scenario_sha256": "4ac610c4ce06337befaaed7cb1c32da94f2ec1985ebd1fe05522887898f577ae",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

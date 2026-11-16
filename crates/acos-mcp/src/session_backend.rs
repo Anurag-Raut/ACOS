@@ -1017,6 +1017,13 @@ impl SessionBackend {
             } else {
                 Value::Null
             },
+            // PROVENANCE: which APK booted on the Flutter product path.
+            "provenance": acos_protocol::provenance::block(
+                apk,
+                None,
+                acos_protocol::commands::VerifyEngine::RustVm.as_str(),
+                Fidelity::NativeRuntime,
+            ),
         });
         let envelope = if first_frame_ok {
             Envelope::pass(
@@ -1291,6 +1298,13 @@ impl SessionBackend {
             "natives": natives,
             "real_boot": real_boot,
             "frame": Value::Null,
+            // PROVENANCE: which APK booted on the React Native product path.
+            "provenance": acos_protocol::provenance::block(
+                apk,
+                None,
+                acos_protocol::commands::VerifyEngine::RustVm.as_str(),
+                Fidelity::NativeRuntime,
+            ),
         });
         let envelope = if tree_ok {
             Envelope::pass(
@@ -1554,7 +1568,7 @@ impl SessionBackend {
                     let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
                     sessions.insert(id.clone(), session);
                 }
-                launch_envelope(request_id, &id, &report)
+                launch_envelope(request_id, &id, &report, &apk)
             }
             Err(err) => {
                 session.close();
@@ -1583,10 +1597,28 @@ impl SessionBackend {
         // The stateless CLI builds this argument; honouring it here is what
         // makes `acos observe --frame --screenshot` work against a live
         // daemon session (the Flutter backend already did this).
-        let screenshot = args
-            .get("screenshot")
+        let screenshot_arg = args.get("screenshot");
+        let screenshot = screenshot_arg
             .and_then(Value::as_str)
             .map(std::path::PathBuf::from);
+        // `png: true` / `screenshot: true` ask for the frame's pixels (see
+        // `ObserveRequest::png`). This in-process reference session can only
+        // write them to a caller-named path — it keeps no artifacts directory —
+        // so the destination-less form is a structured `UNSUPPORTED_BACKEND`
+        // here, never a reply that silently carries no PNG. (The ART daemon and
+        // Flutter routes do honour both forms.)
+        let wants_png = args.get("png").and_then(Value::as_bool).unwrap_or(false)
+            || screenshot_arg.is_some_and(|value| value.as_bool() == Some(true));
+        if wants_png && screenshot.is_none() {
+            return unsupported(
+                request_id,
+                "ui.screenshot",
+                "the in-process reference session writes frame pixels only to a path: pass \
+                 `screenshot: \"/abs/out.png\"` (or launch with the ART engine, where `png: true` \
+                 writes under the session's artifacts)",
+            )
+            .with_session_id(id.clone());
+        }
         self.with_session(&id, |session| {
             let status = session.status().ok();
             match session.observe(screenshot) {
@@ -3071,8 +3103,21 @@ fn input_envelope(
     }
 }
 
-fn launch_envelope(request_id: &str, session_id: &str, report: &LaunchReport) -> Envelope {
-    let result = ladder_json(report);
+fn launch_envelope(
+    request_id: &str,
+    session_id: &str,
+    report: &LaunchReport,
+    apk: &std::path::Path,
+) -> Envelope {
+    let mut result = ladder_json(report);
+    // PROVENANCE: the same block the CLI writes: absolute APK path + digest,
+    // engine, fidelity. This in-process route is the frozen Rust VM.
+    result["provenance"] = acos_protocol::provenance::block(
+        apk,
+        None,
+        acos_protocol::commands::VerifyEngine::RustVm.as_str(),
+        Fidelity::NativeRuntime,
+    );
     let mut metrics = Metrics::wall_ms(report.wall_ms);
     if report.peak_rss_bytes > 0 {
         metrics = metrics.with_peak_rss_bytes(report.peak_rss_bytes);

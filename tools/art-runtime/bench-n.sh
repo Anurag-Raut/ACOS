@@ -10,7 +10,7 @@
 #        .cache/art/data, sockets excluded) so concurrent runs do not share /data.
 #        Verified = render outcome "ok" AND tools/art-render-app-compare.py exit 0
 #        (full-frame SSIM >= 0.99 and every structural node exact).
-#   vm   Rust VM route: `acos verify --scenario scenarios/v1-counter.yaml`
+#   vm   Rust VM route: `acos verify --engine rust-vm --scenario scenarios/v1-counter.yaml`
 #        (counter.apk, 13 scenario steps). Each agent gets its own ACOS_SESSION_ROOT.
 #        Verified = verdict "pass" in the --json envelope.
 #
@@ -183,7 +183,7 @@ except Exception:
     else
         ACOS_SESSION_ROOT="$a/session-root" tools/guarded.sh --mem 4G --time 300 -- \
             "$VM_BIN" verify --scenario "$VM_SCENARIO" --apk "$ART_APK" \
-            --artifacts "$a/artifacts" --json \
+            --engine rust-vm --artifacts "$a/artifacts" --json \
             >"$a/stdout.json" 2>"$a/stderr.txt"
         rc=$?
         local verdict

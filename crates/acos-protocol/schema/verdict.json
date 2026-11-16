@@ -1519,6 +1519,9 @@
       },
       "type": "array"
     },
+    "provenance": {
+      "description": "PROVENANCE: the exact inputs this verdict judged — absolute scenario and APK paths, their SHA-256 (full and the 12-character display form), the engine that ran and the fidelity it reached, plus structured `warnings[]` (for example `SCENARIO_APP_OVERRIDDEN` when `--apk` and the scenario's own `app:` disagree). See [`crate::provenance`].\n\nWritten by the verifier; the CLI re-states the same block in the envelope `result` and in the human summary line, so a reader never has to open a second file to find out which scenario and APK produced a `pass`."
+    },
     "reproducer": {
       "allOf": [
         {

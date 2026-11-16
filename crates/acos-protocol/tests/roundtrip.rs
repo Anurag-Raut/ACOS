@@ -603,6 +603,8 @@ fn command_requests_and_responses_round_trip() {
             text: true,
             include_frame: true,
             max_nodes: Some(60),
+            screenshot: Some(serde_json::json!(true)),
+            png: true,
         }),
         CommandRequest::Capture(CaptureRequest {
             base: base(),
@@ -1077,7 +1079,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         name: "round-trip".to_string(),
         description: Some("all steps".to_string()),
         app: "a.apk".to_string(),
-        engine: Engine::NativePreferred,
+        engine: Engine::RustVm,
         fallback: FallbackPolicy::ReportAndEscalate,
         api_level: Some(34),
         isolation: IsolationLevel::Sandbox,

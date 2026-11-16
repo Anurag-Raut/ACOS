@@ -1425,6 +1425,15 @@ fn launch_reply(
             {"stage": "first_frame", "ok": true, "status": "ok", "ms": session.session_start_ms()}
         ],
     });
+    // PROVENANCE: which APK this guest booted, with its digest, the engine and
+    // the fidelity. The digest is what makes "the launch passed" checkable
+    // against the build under test (feedback 2026-11-14: a stale APK passed).
+    result["provenance"] = acos_protocol::provenance::block(
+        &held.apk,
+        None,
+        ENGINE_ART,
+        Fidelity::ArtReference,
+    );
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
     // ZPROD3: a session that really runs a zygote child says so, with the facts
     // the keeper acked. With the flag off `merge_zygote_fields` changes nothing,
@@ -1682,6 +1691,19 @@ fn screenshot_request(args: &Value) -> Result<ScreenshotRequest, BackendError> {
                  path) or a file path (got {other})"
             ),
         }),
+    }
+}
+
+/// `png: true` is the documented shorthand for "write this frame's PNG"
+/// (docs/AGENT_API.md, `tools/art-runtime/agent_loop.py`, the MCP
+/// `acos_observe` schema). It means `screenshot: true` — write under the
+/// session's artifacts and report the path — unless the caller named a
+/// destination. Silently ignoring it (the old behaviour) made a documented
+/// argument a no-op.
+fn png_shorthand(request: ScreenshotRequest, args: &Value) -> ScreenshotRequest {
+    match (request, args.get("png").and_then(Value::as_bool)) {
+        (ScreenshotRequest::None, Some(true)) => ScreenshotRequest::Default,
+        (request, _) => request,
     }
 }
 
@@ -1979,7 +2001,7 @@ fn observe(
     let want_tree = args.get("tree").and_then(Value::as_bool).unwrap_or(false);
     let want_text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
     let settle = requested_settle(args)?;
-    let screenshot = screenshot_request(args)?;
+    let screenshot = png_shorthand(screenshot_request(args)?, args);
     let path = match &screenshot {
         ScreenshotRequest::Path(path) => Some(path.clone()),
         _ => None,
@@ -4272,6 +4294,34 @@ mod tests {
         assert!(!dir.join("escape.png").exists());
         assert!(!dir.join("outside.png").exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `png: true` — the documented shorthand (MCP `acos_observe {png: true}`,
+    /// docs/AGENT_API.md, `tools/art-runtime/agent_loop.py`) — asks for this
+    /// frame's PNG. On the ART daemon it means `screenshot: true` unless a
+    /// destination is named; before this it was read by nobody on this route, so
+    /// a documented, accepted argument quietly produced no file.
+    #[test]
+    fn png_true_writes_the_frame_and_a_named_destination_wins() {
+        assert_eq!(
+            png_shorthand(ScreenshotRequest::None, &json!({"png": true})),
+            ScreenshotRequest::Default
+        );
+        assert_eq!(
+            png_shorthand(
+                ScreenshotRequest::Path(PathBuf::from("out/x.png")),
+                &json!({"png": true, "screenshot": "out/x.png"})
+            ),
+            ScreenshotRequest::Path(PathBuf::from("out/x.png"))
+        );
+        assert_eq!(
+            png_shorthand(ScreenshotRequest::None, &json!({"png": false})),
+            ScreenshotRequest::None
+        );
+        assert_eq!(
+            png_shorthand(ScreenshotRequest::None, &json!({})),
+            ScreenshotRequest::None
+        );
     }
 
     #[test]

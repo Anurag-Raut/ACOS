@@ -325,7 +325,7 @@ A scenario is YAML with `version: 1`. Minimal, runnable shape:
 version: 1
 name: counter-increment
 app: fixtures/build/apps/counter.apk
-engine: native-preferred        # native-preferred | native-only | reference-only (see note)
+engine: rust-vm                 # art | rust-vm (the same names --engine takes)
 fallback: report-and-escalate   # report-and-escalate | report-only | forbid
 api_level: 34
 isolation: process              # shared-task | process | sandbox | core | vm
@@ -342,11 +342,16 @@ steps:
   - assert_no_crash: {}
 ```
 
-`engine:` and `fallback:` above are the legacy **native-vs-reference** preference
-(`native-preferred` | `native-only` | `reference-only`) and are **not** the
-execution engine. The execution engine is `acos verify --engine art|rust-vm`
-(CLI) or the `engine` argument of the `acos_verify` tool (default: `art`, real
-ART). ART verification does not read the YAML field.
+`engine:` and `fallback:` are **metadata** about what the scenario was written
+for; the execution engine is chosen by `acos verify --engine art|rust-vm` (CLI)
+or the `engine` argument of `acos_verify` (MCP). Both use the **same two words**:
+`art` (real ART) and `rust-vm` (the frozen Rust VM). The default is `art` in
+both front doors, from one constant, so `--help` cannot disagree with behaviour.
+
+The pre-v0.3 YAML spellings still parse and are reported as a warning that names
+the current word: `native-preferred` and `native-only` mean `rust-vm`,
+`reference-only` means `art`. `engine: art` is accepted, not
+`INVALID_SCENARIO: unknown variant 'art'`.
 
 A step is a **one-key map**. Valid keys:
 

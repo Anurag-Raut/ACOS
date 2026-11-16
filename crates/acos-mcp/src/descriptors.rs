@@ -225,11 +225,17 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
                 ),
                 None => (false, Some("unrecognised protocol command".to_string())),
             };
+            let input_schema =
+                if SESSION_ADDRESSED_PROTOCOL_TOOLS.contains(&descriptor.name.as_str()) {
+                    with_session_id(descriptor.input_schema)
+                } else {
+                    descriptor.input_schema
+                };
             ToolInfo {
                 tool_name: descriptor.name,
                 command,
                 description: descriptor.description,
-                input_schema: descriptor.input_schema,
+                input_schema,
                 available,
                 fidelity: command
                     .map(command_fidelity)
@@ -242,6 +248,40 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
     tools.push(help_tool());
     tools.extend(session_tools());
     tools
+}
+
+/// Protocol tools the session backend addresses by session id.
+///
+/// `SessionBackend` resolves the session from `base.session_id` **or** a
+/// top-level `session_id` (`session_backend::session_id`, and
+/// `forward_session_tool` copies the top-level form into `base` before any
+/// daemon sees it). The typed protocol request structs carry the id in `base`
+/// only, so the published schema is extended here — one helper used by both the
+/// tool list and the dispatcher's argument check, so the two cannot drift and a
+/// documented call (`tools/release/mcp_smoke.py`'s
+/// `acos_destroy {"session_id": sid}`) is not rejected by our own schema.
+pub const SESSION_ADDRESSED_PROTOCOL_TOOLS: &[&str] =
+    &["acos_observe", "acos_reset", "acos_destroy", "acos_run"];
+
+/// The `session_id` property every session-addressed tool publishes.
+fn session_id_property() -> Value {
+    json!({
+        "type": "string",
+        "description": "Session to address, the same value as `base.session_id` (the \
+                        documented short form: `acos_observe_tree {\"session_id\": \
+                        \"mcp-1234\", \"screenshot\": true}`). Omit it for this server \
+                        process's default session."
+    })
+}
+
+/// Add the top-level `session_id` to a closed schema (idempotent).
+fn with_session_id(mut schema: Value) -> Value {
+    if let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) {
+        properties
+            .entry("session_id".to_string())
+            .or_insert_with(session_id_property);
+    }
+    schema
 }
 
 /// The tools `tools/list` advertises: every tool this build can actually run.
@@ -292,6 +332,56 @@ pub fn session_tools() -> Vec<ToolInfo> {
     out
 }
 
+/// The published argument schema of one tool, for the dispatcher's
+/// unknown-argument check.
+///
+/// It is the same schema `tools/list` publishes (protocol command, session tool,
+/// `acos_capabilities`, `acos_help`), so the rule a client validates against and
+/// the rule the server enforces cannot drift.
+#[must_use]
+pub fn tool_schema(tool_name: &str) -> Option<Value> {
+    if tool_name == CAPABILITIES_TOOL {
+        return Some(capabilities_tool().input_schema);
+    }
+    if tool_name == HELP_TOOL {
+        return Some(help_tool().input_schema);
+    }
+    if SESSION_TOOL_NAMES.contains(&tool_name) {
+        return Some(session_tool_spec(tool_name).1);
+    }
+    // ARGS: the protocol descriptors already close their object
+    // (`McpToolDescriptor::new`), so the schema a client validates and the
+    // schema this check enforces are the same document — including the
+    // top-level `session_id` the session backend accepts (see
+    // [`SESSION_ADDRESSED_PROTOCOL_TOOLS`]).
+    acos_protocol::mcp_tools()
+        .tools
+        .into_iter()
+        .find(|tool| tool.name == tool_name)
+        .map(|tool| {
+            if SESSION_ADDRESSED_PROTOCOL_TOOLS.contains(&tool_name) {
+                with_session_id(tool.input_schema)
+            } else {
+                tool.input_schema
+            }
+        })
+}
+
+/// The tool names `tools/list` may advertise: protocol commands plus
+/// `acos_capabilities`, `acos_help` and the session tools.
+#[must_use]
+pub fn known_tool_names() -> Vec<String> {
+    let mut names: Vec<String> = acos_protocol::mcp_tools()
+        .tools
+        .into_iter()
+        .map(|tool| tool.name)
+        .collect();
+    names.push(CAPABILITIES_TOOL.to_string());
+    names.push(HELP_TOOL.to_string());
+    names.extend(SESSION_TOOL_NAMES.iter().map(|name| (*name).to_string()));
+    names
+}
+
 fn session_tool_spec(name: &str) -> (&'static str, Value) {
     let base = json!({
         "type": "object",
@@ -301,15 +391,37 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             "session_id": {"type": "string"}
         }
     });
-    let with_base = |properties: Value| {
+    // ARGS: a closed object. An unknown argument is a caller error, not a flag
+    // to ignore: `acos_observe_tree {"screenshot": true}` on a build without it
+    // read as a success (feedback 2026-11-15). The server enforces the same rule
+    // in `crate::args::check`, so a client that does not validate still cannot
+    // get a silent no-op.
+    //
+    // The published schema names **every** argument the session backend reads.
+    // The backend accepts `session_id` at the top level as well as in `base`
+    // (older clients and `tools/release/mcp_smoke.py` send it there), and a
+    // closed schema that rejected it would be lying about what works — the
+    // exact failure this module was created to stop, from the other side. The
+    // test `tests/documentation_args.rs` walks every documented call in
+    // `docs/*.md`, `tools/**/*mcp*.py` and `tests/` and fails when a documented
+    // argument is not in the schema.
+    let closed = |properties: Value| {
         let mut schema = json!({
             "type": "object",
             "properties": properties,
-            "additionalProperties": true
+            "additionalProperties": false
         });
         schema["properties"]["base"] = base.clone();
         schema
     };
+    let with_base = |properties: Value| {
+        let mut schema = closed(properties);
+        schema["properties"]["session_id"] = session_id_property();
+        schema
+    };
+    // `acos_doctor` is a host preflight, not a session operation: it has no
+    // session to address, so it does not publish `session_id`.
+    let host_only = closed;
     match name {
         "acos_launch" => (
             "Call this FIRST for an app you want to drive: it boots the APK in an in-process \
@@ -335,6 +447,13 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                     "description": "Compact-screen page cursor from a previous reply's `tree_next_cursor`."
                 },
                 "timeout_ms": {"type": "integer", "minimum": 1, "description": "Wall-clock ceiling for the launch (defaults to the server call budget)."},
+                "display": {
+                    "type": "string",
+                    "description": "Display override for the in-process session, `WIDTHxHEIGHT@DPI` (for \
+                                    example `1080x2400@400`). This argument is accepted by the \
+                                    in-process engine; the ART daemon route reports the display it \
+                                    used instead of overriding it."
+                },
                 "settle": {
                     "type": "string", "enum": ["fast", "strict", "content"],
                     "description": "How the launch reply binds its tree. `strict` (default) keeps the \
@@ -375,6 +494,23 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     single-threaded child session process that enters the \
                                     sandbox before launching; later observe/action calls are \
                                     proxied to that confined child."
+                },
+                "flutter": {
+                    "type": "boolean",
+                    "description": "Declare this APK a Flutter app: forces the native \
+                                    (confined child) route even before the structural check \
+                                    sees libflutter.so/flutter_assets, and picks the Flutter \
+                                    engine session when the APK really is Flutter. Detection \
+                                    is otherwise structural, never a manifest guess; the \
+                                    reply's `engine` says which engine actually ran."
+                },
+                "rn": {
+                    "type": "boolean",
+                    "description": "Declare this APK a React Native app: forces the native \
+                                    (confined child) route and picks the React Native bridge \
+                                    session when the APK really is RN. Detection is otherwise \
+                                    structural (libreactnativejni.so / index.android.bundle); \
+                                    the reply's `engine` says which engine actually ran."
                 },
                 "label": {
                     "type": "string",
@@ -651,7 +787,7 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              keystore, the boot-classpath cache, and host memory. Each failing check carries a \
              concrete `fix` string. The tool returns `fail` with `ASSERTION_FAILED` when any \
              required check fails, with the full report under `result.checks`.",
-            with_base(json!({})),
+            host_only(json!({})),
         ),
         _ => ("In-process session tool.", with_base(json!({}))),
     }

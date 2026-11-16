@@ -278,6 +278,17 @@ pub struct Verdict {
     pub resources: ResourceReport,
     /// Deterministic reproducer.
     pub reproducer: Reproducer,
+    /// PROVENANCE: the exact inputs this verdict judged — absolute scenario and
+    /// APK paths, their SHA-256 (full and the 12-character display form), the
+    /// engine that ran and the fidelity it reached, plus structured
+    /// `warnings[]` (for example `SCENARIO_APP_OVERRIDDEN` when `--apk` and the
+    /// scenario's own `app:` disagree). See [`crate::provenance`].
+    ///
+    /// Written by the verifier; the CLI re-states the same block in the
+    /// envelope `result` and in the human summary line, so a reader never has to
+    /// open a second file to find out which scenario and APK produced a `pass`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<serde_json::Value>,
     /// Additional human notes (warnings, reconciliation items).
     #[serde(default)]
     pub notes: Vec<String>,
@@ -317,6 +328,7 @@ impl Verdict {
             failure: None,
             resources: ResourceReport::default(),
             reproducer,
+            provenance: None,
             notes: Vec::new(),
         }
     }

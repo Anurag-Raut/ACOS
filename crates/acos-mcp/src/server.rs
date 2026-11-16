@@ -345,6 +345,20 @@ impl<B: Backend> Server<B> {
             );
         };
 
+        // ARGS: reject an unknown argument before any work starts. The schema
+        // `tools/list` publishes says `additionalProperties: false`, but a
+        // schema is advice and this server is the authority: an argument the
+        // tool does not have must never be silently dropped, because the caller
+        // then believes work happened that did not (feedback 2026-11-15:
+        // `acos_observe_tree {"screenshot": true}` "succeeded" without a PNG).
+        let valid_arguments = match crate::descriptors::tool_schema(name) {
+            Some(schema) => crate::args::check(name, &args, &schema),
+            None => None,
+        };
+        if let Some(envelope) = valid_arguments {
+            return tool_result(id, &envelope, &self.negotiated_version(), &self.config);
+        }
+
         let permit = match self.gate.acquire(self.config.queue_timeout, token) {
             Ok(permit) => permit,
             Err(GateError::Cancelled) => {

@@ -546,7 +546,13 @@ impl CliBackend {
         // the CLI default.
         let engine = match args.get("engine").and_then(Value::as_str) {
             Some(value) => Some(value.to_string()),
-            None if args.get("reference").is_none() => Some("art".to_string()),
+            // The **one** default engine (`acos_protocol::commands`), the same
+            // constant the schema advertises and `acos verify --help` prints.
+            // Hard-coding "art" here is how help text and behaviour drifted
+            // apart in the first place (feedback 2026-11-14).
+            None if args.get("reference").is_none() => Some(
+                acos_protocol::commands::DEFAULT_VERIFY_ENGINE_NAME.to_string(),
+            ),
             None => None,
         };
         if let Some(engine) = engine {
