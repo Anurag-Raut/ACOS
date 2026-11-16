@@ -88,7 +88,7 @@ results/handoff/A11YNATIVE/gestures/logs/logcat.txt
   AcosA11yProbe: gesture_target_pressed count=1
   AcosA11yProbe: gesture_result kind=tap completed=true
   AcosA11yProbe: gesture_result kind=swipe completed=true
-.cache/a11ynative-run/trace.log (ACOS_TRACE_FILE)
+results/handoff/A11YNATIVE/trace.log (the host's ACOS_TRACE_FILE of the same run)
   ACOSA11Y dispatchGesture decoded seq=1 events=2 display=0
   ACOSA11Y dispatchGesture decoded seq=2 events=2 display=0
 ```
@@ -131,7 +131,7 @@ multi-MOVE stroke).
 Evidence that the host side really produces the frame:
 
 ```
-.cache/a11ynative-run/trace.log
+results/handoff/A11YNATIVE/trace.log
   ACOSA11Y takeScreenshot enter
   ACOSA11Y takeScreenshot success display=0 1080x2400 stride=1080
   ACOSA11Y takeScreenshot enter      (the immediate second call: interval path)
