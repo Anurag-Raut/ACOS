@@ -858,6 +858,11 @@ pub fn materialize_intent(vm: &mut Vm, facts: &IntentFacts) -> JResult<Handle> {
                 )
                 .map_err(err)?;
             }
+            Extra::Parcelable(_) => {
+                return Err(err(format!(
+                    "cannot re-materialise extra `{key}`: this value is a parcelable and the VM path has no class-loader construction for it"
+                )))
+            }
             Extra::Present => {
                 return Err(err(format!(
                     "cannot re-materialise extra `{key}`: its type was not captured"

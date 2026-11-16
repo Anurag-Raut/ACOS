@@ -187,6 +187,9 @@ pub enum DynamicValue {
     /// `writeValue` payload per element. Android's `SMS_RECEIVED` broadcast
     /// carries its PDUs this way (`Object[]` of `byte[]`).
     ObjectArray(Option<Vec<DynamicValue>>),
+    /// `VAL_LIST`: `Parcel.writeList(List)` — the Bluetooth bonded-device
+    /// result (a `List<BluetoothDevice>`) is written as one.
+    List(Option<Vec<DynamicValue>>),
     /// A value this crate does not model; its bytes were skipped.
     Skipped {
         /// `Parcel.VAL_*` tag.

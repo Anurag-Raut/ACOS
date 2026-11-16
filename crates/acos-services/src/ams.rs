@@ -97,6 +97,9 @@ pub enum Extra {
     /// `putExtra(String, Serializable)` of an `Object[]` of `byte[]`: the shape
     /// `SMS_RECEIVED` uses for its `pdus` extra (`Parcel.VAL_OBJECTARRAY`).
     ByteArrays(Vec<Vec<u8>>),
+    /// A parcelable extra (a `BluetoothDevice` on `ACTION_FOUND`). The payload
+    /// is written with its class name, exactly like `Intent.putExtra(Parcelable)`.
+    Parcelable(crate::value::Parcelable),
     /// A value of a type ACOS records but does not interpret.
     Present,
 }
@@ -229,6 +232,7 @@ fn reduce_extras(bundle: &Bundle) -> BTreeMap<String, Extra> {
             Value::Int(i) => Extra::Int(*i),
             Value::Bool(b) => Extra::Bool(*b),
             Value::ByteArray(Some(bytes)) => Extra::Bytes(bytes.clone()),
+            Value::Parcelable(parcelable) => Extra::Parcelable(parcelable.clone()),
             Value::ObjectArray(Some(items))
                 if items.iter().all(|item| matches!(item, Value::ByteArray(Some(_)))) =>
             {
@@ -257,6 +261,9 @@ fn encode_extras(extras: &BTreeMap<String, Extra>) -> Bundle {
             Extra::Int(i) => bundle.put(key, Value::Int(*i)),
             Extra::Bool(b) => bundle.put(key, Value::Bool(*b)),
             Extra::Bytes(bytes) => bundle.put(key, Value::ByteArray(Some(bytes.clone()))),
+            Extra::Parcelable(parcelable) => {
+                bundle.put(key, Value::Parcelable(parcelable.clone()))
+            }
             Extra::ByteArrays(pdus) => bundle.put(
                 key,
                 Value::ObjectArray(Some(

@@ -1417,12 +1417,12 @@ mod tests {
         let pdu = encode_sms_deliver("+15551234567", "Hi", 1_795_000_000).expect("encode");
         assert_eq!(pdu[0], 0x00, "no SMSC address");
         assert_eq!(pdu[1] & 0x03, 0x00, "TP-MTI: SMS-DELIVER");
-        assert_eq!(pdu[2], 12, "address length in semi-octets");
+        assert_eq!(pdu[2], 11, "address length in semi-octets");
         assert_eq!(pdu[3], 0x91, "international type of address");
-        assert_eq!(&pdu[4..10], &[0x51, 0x15, 0x21, 0x43, 0x65, 0xF7]);
+        assert_eq!(&pdu[4..10], &[0x51, 0x55, 0x21, 0x43, 0x65, 0xF7]);
         assert_eq!(pdu[10], 0x00, "TP-PID");
         assert_eq!(pdu[11], 0x00, "TP-DCS: GSM 7-bit");
-        assert_eq!(&pdu[12..19], &[0x62, 0x11, 0x61, 0x21, 0x21, 0x00, 0x00]);
+        assert_eq!(&pdu[12..19], &[0x62, 0x11, 0x81, 0x11, 0x60, 0x04, 0x00]);
         assert_eq!(pdu[19], 2, "TP-UDL: two septets");
         // 'H' = 0x48, 'i' = 0x69 -> 0x48 | 0x69 << 7 = 0x34C8 -> c8 34.
         assert_eq!(&pdu[20..], &[0xC8, 0x34]);
@@ -1455,8 +1455,8 @@ mod tests {
 
     #[test]
     fn a_hex_pdu_override_round_trips() {
-        let pdu = from_hex("0004 0B9151 1512 34 56 F7 0000 62116121210000 02 C834".replace(' ', "").as_str())
-            .expect("hex");
-        assert_eq!(to_hex(&pdu), "00040b915115123456f700006211612121000002c834");
+        let hex = "00040B915155214365F700006211811160040002C834".to_lowercase();
+        let pdu = from_hex(&hex).expect("hex");
+        assert_eq!(to_hex(&pdu), hex);
     }
 }

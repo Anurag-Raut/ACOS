@@ -839,7 +839,10 @@ pub const TOMBSTONES: &[Tombstone] = &[
     },
     Tombstone {
         name: "dropbox",
-        descriptor: "android.os.IDropBoxManagerService",
+        // The image's DropBoxManager imports
+        // `com.android.internal.os.IDropBoxManagerService`; the AIDL token the
+        // client writes carries that package, so the tombstone must too.
+        descriptor: "com.android.internal.os.IDropBoxManagerService",
         module: "system.dropbox",
         reason: "no DropBox service",
         reaction: AospReaction::Tombstone,
@@ -1090,7 +1093,12 @@ impl ModuleRegistry {
             Box::new(crate::core_module::CoreModule::new()) as Box<dyn Module>,
             Box::new(crate::modules::vibrator::VibratorModule::new()),
             Box::new(crate::modules::telephony::TelephonyModule::new()),
-        ] {
+            Box::new(crate::modules::bluetooth::BluetoothModule::new()),
+            Box::new(crate::modules::biometric::BiometricModule::new()),
+        ]
+        .into_iter()
+        .chain(crate::modules::tail_stubs::modules())
+        {
             if let Err(error) = registry.add(module) {
                 panic!("standard module set is invalid: {error}");
             }
