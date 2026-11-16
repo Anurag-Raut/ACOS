@@ -8,7 +8,7 @@ probe was re-run on the merged tree — that run is the evidence below.
 ## Status
 
 **DONE for the four briefed items.** `scenarios/a11y-probe.yaml` **passes on ART
-end to end (15/15 steps)**, on the merged tree **at branch HEAD `d233c135`**, and
+end to end (15/15 steps)**, on the merged tree **at branch HEAD `d0571ab0` (the same code as `d233c135`; the only commit after it is this evidence)**, and
 `cargo test -p acos-services -p acos-wm` is green. One item is closed **with a wall** (`takeScreenshot`'s
 app-side *pixel* read, §4): everything the framework can hand an app is asserted
 in the guest, and the missing piece is a GPU, not a wire format.
@@ -21,7 +21,7 @@ in the guest, and the missing piece is a GPU, not a wire format.
 | 4. merge `modules`, re-run | **DONE** — merged (`bcc5f8db`), probe passes on the merged tree |
 
 Evidence: `results/handoff/A11YNATIVE2/head-run/` — the ART run on the exact
-branch HEAD (`d233c135`, after `modules` @ `bcc5f8db` was merged), using the
+branch HEAD (`d0571ab0`, same code as `d233c135`, after `modules` @ `bcc5f8db` was merged), using the
 **shared** sysroot (no private shim needed by the probe any more) — and
 `results/handoff/A11YNATIVE2/host-trace.log`, the host's `ACOS_TRACE_FILE` of
 the same run.
