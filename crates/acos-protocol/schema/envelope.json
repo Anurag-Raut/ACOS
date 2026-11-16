@@ -785,6 +785,13 @@
           "type": "string"
         },
         {
+          "description": "The session daemon answered (or refused to identify itself) from a **different build** than the caller: crate version, build id (git sha + source digest) or the binary at the same path differ. The client never mixes builds — it replaces an idle auto-started daemon or runs its own private one; `error.details` carries both identities. Never retry against the same daemon; never read its answer as this build's behaviour.",
+          "enum": [
+            "DAEMON_VERSION_MISMATCH"
+          ],
+          "type": "string"
+        },
+        {
           "description": "ACOS itself failed (distinct from an app crash).",
           "enum": [
             "INTERNAL"

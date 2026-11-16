@@ -29,10 +29,21 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
+mod common;
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// Scenario/runtime scratch under the worktree.
+///
+/// The `serve.sock` in here used to be a plain child of it:
+/// `<worktree>/.cache/fb1-test-<tag>-<pid>/serve.sock` is 108+ bytes in an
+/// agent worktree (the checkout path alone is ~70), so `acos serve` could not
+/// bind it and the test failed with "serve socket never appeared" for a reason
+/// that had nothing to do with what it asserts. The socket now lives in
+/// `common::ShortSocketDir` (short, checkout-independent, `sun_path`-checked);
+/// everything that is not a socket stays under the worktree.
 fn scratch(tag: &str) -> PathBuf {
     // The daemon's `serve.sock` lives in here, so the directory name is part of
     // a unix-socket path and must fit `sun_path` (108 bytes) even from a long
@@ -176,6 +187,8 @@ struct Daemon {
     dir: PathBuf,
     socket: PathBuf,
     art_home: PathBuf,
+    // Kept alive for the daemon's lifetime: the socket's parent directory.
+    socket_dir: common::ShortSocketDir,
 }
 
 impl Daemon {
@@ -183,7 +196,8 @@ impl Daemon {
         let dir = scratch(tag);
         let art_home = dir.join("art-home");
         let fake = fake_art(&art_home);
-        let socket = dir.join("serve.sock");
+        let socket_dir = common::ShortSocketDir::new(tag);
+        let socket = socket_dir.socket("serve.sock");
         let child = Command::new(env!("CARGO_BIN_EXE_acos"))
             .arg("serve")
             .arg("--socket")
@@ -208,6 +222,7 @@ impl Daemon {
             dir,
             socket,
             art_home,
+            socket_dir,
         }
     }
 

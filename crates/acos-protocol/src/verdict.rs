@@ -38,6 +38,46 @@ impl ArtifactRef {
     }
 }
 
+/// One attempt at a step the engine may perform more than once.
+///
+/// A step is one entry in `verdict.json` and in the reply's `result.verdict`;
+/// an attempt is never a second entry. `StepResult.status` is the *final*
+/// outcome and `StepResult.attempts` is the history that produced it, so a
+/// passing step can never look failing because an earlier attempt was retried.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StepAttempt {
+    /// 1-based attempt number (`1` is the first real gesture/traversal).
+    pub attempt: usize,
+    /// The attempt's own outcome.
+    pub status: Status,
+    /// Why it ended that way, in one line (the miss reason, the error).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// The settled traversal this attempt judged, when it took one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_seq: Option<u64>,
+}
+
+impl StepAttempt {
+    /// Build one attempt record.
+    #[must_use]
+    pub fn new(attempt: usize, status: Status, reason: impl Into<String>) -> Self {
+        StepAttempt {
+            attempt,
+            status,
+            reason: Some(reason.into()),
+            frame_seq: None,
+        }
+    }
+
+    /// Attach the settled frame this attempt judged.
+    #[must_use]
+    pub fn with_frame(mut self, frame_seq: u64) -> Self {
+        self.frame_seq = Some(frame_seq);
+        self
+    }
+}
+
 /// One step in a scenario run.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct StepResult {
@@ -45,7 +85,8 @@ pub struct StepResult {
     pub index: usize,
     /// Step kind (`launch`, `assert_text`, ...).
     pub step: String,
-    /// Step outcome.
+    /// Step outcome. The **final** one: a retried attempt never changes this
+    /// into a second entry.
     pub status: Status,
     /// Wall time for this step.
     pub duration_ms: u64,
@@ -79,6 +120,16 @@ pub struct StepResult {
     /// Error, when the step did not pass.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<ProtocolError>,
+    /// Every attempt the step took, in order, when it took more than one (a
+    /// `scroll_until` search performs one real gesture + fresh traversal per
+    /// attempt). `status` above is the last attempt's outcome; this array says
+    /// how it got there. Absent when the step succeeded on its first attempt.
+    ///
+    /// One entry per step is the rule that keeps `verdict.json` and the inline
+    /// reply's `result.verdict` the same document: both are built from this
+    /// struct, so neither can carry a "retried non-pass" step in a passing run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attempts: Vec<StepAttempt>,
 }
 
 impl StepResult {
@@ -96,6 +147,7 @@ impl StepResult {
             input: None,
             evidence: Vec::new(),
             error: None,
+            attempts: Vec::new(),
         }
     }
 

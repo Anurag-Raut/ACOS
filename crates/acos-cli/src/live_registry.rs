@@ -462,22 +462,87 @@ fn sanitize(session_id: &str) -> String {
     }
 }
 
+/// Root for the small files (and Unix sockets) the viewer tests create.
+///
+/// The root has to stay **short**: a `sun_path` is 108 bytes including the
+/// terminating NUL, and a test that binds `registry/v.sock` under
+/// `<worktree>/crates/acos-cli/.cache/...` failed with "path must be shorter
+/// than SUN_LEN" in every long checkout (agent worktrees, CI job dirs) instead
+/// of testing the viewer. So the root is short by construction:
+///
+/// 1. `ACOS_VIEW_TEST_DIR` when set - honoured only if it fits the budget, so a
+///    caller gets a clear error rather than a `bind` failure deep in a test;
+/// 2. `<cwd>/.cache/lv` when the checkout is short enough for it (the normal
+///    case; the scratch stays inside the workspace);
+/// 3. `/dev/shm/acos-lv-tests`, a fixed short RAM-backed path, otherwise (these
+///    tests write a handful of bytes each, never real artifacts);
+/// 4. the system temp dir as the last resort.
+#[cfg(test)]
+pub(crate) fn test_scratch_root() -> PathBuf {
+    /// Leaves room for `/<pid>-<tag>` and a socket name below that.
+    const BUDGET: usize = 72;
+
+    if let Some(dir) = std::env::var_os("ACOS_VIEW_TEST_DIR") {
+        let dir = PathBuf::from(dir);
+        let len = dir.as_os_str().as_encoded_bytes().len();
+        assert!(
+            len <= BUDGET,
+            "ACOS_VIEW_TEST_DIR is {len} bytes, which leaves no room for a Unix \
+             socket path (sun_path is 108 bytes with the NUL); use at most \
+             {BUDGET} bytes: {}",
+            dir.display()
+        );
+        return dir;
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        let workspace_root = cwd.join(".cache/lv");
+        if workspace_root.as_os_str().as_encoded_bytes().len() <= BUDGET {
+            return workspace_root;
+        }
+    }
+    let shm = Path::new("/dev/shm");
+    if shm.is_dir() {
+        return shm.join("acos-lv-tests");
+    }
+    std::env::temp_dir().join("acos-lv-tests")
+}
+
+/// A fresh per-process subdirectory of `root`, named `<pid>-<tag>`.
+#[cfg(test)]
+pub(crate) fn short_scratch(root: PathBuf, tag: &str) -> PathBuf {
+    let dir = root.join(format!("{}-{tag}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    dir
+}
+
+#[cfg(test)]
+mod scratch_tests {
+    use super::*;
+
+    #[test]
+    fn the_test_scratch_root_leaves_room_for_a_unix_socket() {
+        // The class of bug this fixes: the root plus a deep socket name must fit
+        // `sun_path` (108 bytes with the NUL) in any checkout, however long.
+        let deepest = test_scratch_root()
+            .join(format!("{}-frames-and-events-stream", std::process::id()))
+            .join("producer.sock");
+        let len = deepest.as_os_str().as_encoded_bytes().len();
+        assert!(
+            len < 108,
+            "{} is {len} bytes, too long for sun_path",
+            deepest.display()
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn scratch(tag: &str) -> PathBuf {
-        let root = std::env::var_os("ACOS_VIEW_TEST_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(".cache/live-registry-test")
-            });
-        let dir = root.join(format!("{}-{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("scratch dir");
-        dir
+        short_scratch(test_scratch_root(), tag)
     }
 
     fn entry(session: &str) -> LiveEntry {

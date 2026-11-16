@@ -23,7 +23,7 @@ use acos_protocol::scenario::{
 use acos_protocol::ui::Bounds;
 use acos_protocol::verdict::{
     AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
-    StepResult, Verdict,
+    StepAttempt, StepResult, Verdict,
 };
 use acos_protocol::{ErrorCode, Fidelity, ProtocolError, Status};
 
@@ -457,6 +457,11 @@ pub fn run_scenario(
         // when the scenario never asked for it. REL3S2: a swipe/scroll step adds
         // how far the gesture got (`until`).
         step_result.input = step_input(step, exec.delivery.as_ref(), exec.until.as_ref());
+        // REL3S/one-entry rule: a search that needed more than one real gesture
+        // records its attempts here, not as extra step entries, so a passing run
+        // can never show a non-pass step and `verdict.json` and the inline
+        // `result.verdict` stay the same document.
+        step_result.attempts = step_attempts(exec.until.as_ref());
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -1826,6 +1831,55 @@ fn scroll_until_step(
             exec
         }
     }
+}
+
+/// The attempts a step took, when it performed more than one.
+///
+/// Today the only multi-attempt step is `scroll_until`: the backend contract is
+/// one real gesture **plus** a fresh settled traversal per attempt, and its
+/// report's `attempts` is the attempt that found the selector (1-based) - or the
+/// number of attempts when the search missed. So attempts `1..n-1` did not find
+/// it and attempt `n` is the step's own outcome: the same facts whether the step
+/// passed or missed, and never a second step entry.
+fn step_attempts(until: Option<&serde_json::Value>) -> Vec<StepAttempt> {
+    let Some(until) = until else {
+        return Vec::new();
+    };
+    let Some(taken) = until.get("attempts").and_then(serde_json::Value::as_u64) else {
+        return Vec::new();
+    };
+    // One attempt is the step's own outcome; there is no retry to report.
+    if taken <= 1 {
+        return Vec::new();
+    }
+    let taken = usize::try_from(taken).unwrap_or(usize::MAX);
+    let found = until
+        .get("found")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let frame_seq = until.get("frame_seq").and_then(serde_json::Value::as_u64);
+    let mut out = Vec::with_capacity(taken);
+    for attempt in 1..=taken {
+        let last = attempt == taken;
+        let matched = last && found;
+        let status = if matched { Status::Pass } else { Status::Fail };
+        let reason = if matched {
+            "selector visible in this attempt's settled traversal".to_string()
+        } else if last {
+            "selector not visible after this attempt's settled traversal (search exhausted)"
+                .to_string()
+        } else {
+            "selector not visible in this attempt's settled traversal".to_string()
+        };
+        let mut record = StepAttempt::new(attempt, status, reason);
+        if last {
+            if let Some(frame_seq) = frame_seq {
+                record = record.with_frame(frame_seq);
+            }
+        }
+        out.push(record);
+    }
+    out
 }
 
 fn environment_step(

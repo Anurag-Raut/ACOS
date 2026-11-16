@@ -80,6 +80,26 @@ while True:
         log({"kind": "call", "tool": request.get("tool"),
              "session_id": session_id, "engine": engine,
              "args": args, "socket": socket_path})
+        if request.get("tool") == "hello":
+            # REL3D: the daemon identity handshake. This fake *is* a daemon of
+            # the caller's build, so it reports the caller's own identity (the
+            # one it was sent), with its own pid and this daemon's engine. A
+            # fake that answered no identity would be refused as another
+            # build's daemon, which is the rule under test elsewhere
+            # (crates/acos-cli/tests/rel3d_daemon_identity.rs).
+            identity = dict(args.get("client") or {})
+            identity["pid"] = os.getpid()
+            identity["engine"] = engine
+            identity["auto_started"] = True
+            envelope = {
+                "request_id": "req_fake_hello", "ok": True, "status": "pass",
+                "backend": "acos-native", "fidelity": "art-reference",
+                "session_id": session_id, "metrics": {"wall_ms": 0},
+                "result": {"identity": identity, "engine": engine, "sessions": 0},
+            }
+            stream.write((json.dumps({"id": request["id"], "envelope": envelope}) + "\n").encode())
+            stream.flush()
+            continue
         # REL3E: an input reply's `handled` is the guest window's own
         # `finishInputEvent(handled)` bit, relayed verbatim by the daemon.
         envelope = {

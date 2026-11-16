@@ -1,0 +1,97 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected text containing \"Weekly streak\", got text \"Daily streak\" / hint \"\"",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 252559360,
+    "wall_ms": 7636
+  },
+  "ok": false,
+  "request_id": "req_1ca6e7_18e8723956713509",
+  "result": {
+    "artifacts_dir": "results/handoff/INTEG030/gaten/gaten-home-wrong",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "index": 7,
+      "kind": "assert_text",
+      "message": "expected text containing \"Weekly streak\", got text \"Daily streak\" / hint \"\"",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ASSERTION_FAILED",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text containing \"Weekly streak\", got text \"Daily streak\" / hint \"\"",
+        "retryable": false
+      },
+      "step_index": 7,
+      "summary": "step 7 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794503846699559546,
+        "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+        "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+        "sha256_12": "e04c7ffcf012",
+        "size_bytes": 114751344
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794802301710844324,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-cc08ef25-0c7d3bc6b56dd90e/scenarios/negative/gaten-home-wrong.yaml",
+        "sha256": "2728e9a8d67ea087afbf8e560fc9342c81908d529472de0b195ba8f25e0ef63b",
+        "sha256_12": "2728e9a8d67e",
+        "size_bytes": 3308
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        }
+      ]
+    },
+    "reply_capped": true,
+    "verdict_path": "results/handoff/INTEG030/gaten/gaten-home-wrong/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_gaten-dev-f344272-x86_64-release-unsigned",
+  "status": "fail"
+}

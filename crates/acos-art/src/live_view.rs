@@ -1866,15 +1866,48 @@ mod tests {
             .collect()
     }
 
+    /// Root for the small files and Unix sockets these tests create.
+    ///
+    /// It must stay **short**: a `sun_path` is 108 bytes including the NUL, and
+    /// `<worktree>/.cache/live-view-test/<pid>-<tag>/stream.sock` is over that in
+    /// an agent worktree (the checkout path alone is ~70 bytes), so six of these
+    /// tests failed with "stream socket path ... is too long for a unix socket"
+    /// before reaching an assertion. `ACOS_VIEW_TEST_DIR` is honoured only when
+    /// it fits the budget (so a caller gets a clear error instead of a `bind`
+    /// failure), else the checkout path when that is short enough, else a fixed
+    /// short RAM-backed directory - these tests write a few KB, never artifacts.
+    fn scratch_root() -> PathBuf {
+        /// Leaves room for `/<pid>-<tag>` and a socket name below that.
+        const BUDGET: usize = 72;
+        let fits = |dir: &Path| dir.as_os_str().as_encoded_bytes().len() <= BUDGET;
+
+        if let Some(dir) = std::env::var_os("ACOS_VIEW_TEST_DIR") {
+            let dir = PathBuf::from(dir);
+            let len = dir.as_os_str().as_encoded_bytes().len();
+            assert!(
+                fits(&dir),
+                "ACOS_VIEW_TEST_DIR is {len} bytes, which leaves no room for a Unix \
+                 socket path (sun_path is 108 bytes with the NUL); use at most \
+                 {BUDGET} bytes: {}",
+                dir.display()
+            );
+            return dir;
+        }
+        if let Ok(root) = crate::repo_root() {
+            let workspace_root = root.join(".cache/live-view-test");
+            if fits(&workspace_root) {
+                return workspace_root;
+            }
+        }
+        let shm = Path::new("/dev/shm");
+        if shm.is_dir() {
+            return shm.join("acos-live-view-tests");
+        }
+        std::env::temp_dir().join("acos-live-view-tests")
+    }
+
     fn scratch_dir(tag: &str) -> PathBuf {
-        let root = std::env::var_os("ACOS_VIEW_TEST_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                crate::repo_root()
-                    .unwrap_or_else(|_| std::env::temp_dir())
-                    .join(".cache/live-view-test")
-            });
-        let dir = root.join(format!("{}-{tag}", std::process::id()));
+        let dir = scratch_root().join(format!("{}-{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("scratch dir");
         dir
