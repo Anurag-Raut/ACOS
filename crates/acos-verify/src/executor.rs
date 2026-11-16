@@ -219,6 +219,12 @@ pub fn run_scenario(
     backend: &mut dyn Backend,
     clock: &dyn Clock,
 ) -> Result<RunOutcome, VerifyError> {
+    // PROVENANCE: both inputs are identified **before** anything runs, so the
+    // digest in the verdict is the digest of the bytes the run read. Hashing
+    // them afterwards would describe whatever is on disk at the end, which is
+    // how a verdict can name a file the run never saw. The capture also keeps
+    // size/mtime for the post-run `INPUT_CHANGED_DURING_RUN` check below.
+    let inputs = acos_protocol::provenance::Inputs::capture(&options.apk, Some(&options.scenario_path));
     let caps = backend.capabilities();
     let manifest = backend.manifest(&options.apk)?;
     artifacts::prepare(&options.artifacts_dir)?;
@@ -608,7 +614,12 @@ pub fn run_scenario(
     let finished_at = clock.now_rfc3339();
     let finished_ms = clock.now_unix_ms();
     let apk_sha256 = manifest.sha256.clone();
-    let scenario_sha256 = sha256_file(&options.scenario_path)?;
+    // The pre-run capture, not a second read: the reproducer must replay the
+    // scenario the run used.
+    let scenario_sha256 = match inputs.scenario.as_ref().and_then(|s| s.sha256.clone()) {
+        Some(sha) => sha,
+        None => sha256_file(&options.scenario_path)?,
+    };
     let isolation = scenario.isolation;
     let display = scenario.display;
 
@@ -659,12 +670,7 @@ pub fn run_scenario(
     // engine, the achieved fidelity and structured warnings. A relative path
     // or a missing digest is exactly how an older scenario ran against a stale
     // APK and returned `pass` without saying so (feedback 2026-11-14).
-    let mut provenance = acos_protocol::provenance::block(
-        &options.apk,
-        Some(&options.scenario_path),
-        &options.engine,
-        achieved,
-    );
+    let mut provenance = inputs.block(&options.engine, achieved);
     if let Some(object) = provenance.as_object_mut() {
         object.insert(
             "scenario_engine".to_string(),
@@ -673,6 +679,13 @@ pub fn run_scenario(
     }
     for warning in &options.warnings {
         acos_protocol::provenance::push_warning(&mut provenance, warning.clone());
+    }
+    // LOW review finding: an input rewritten while the run was in flight is
+    // never silent. The status stays exactly as measured (the warning is a
+    // fact, not a failure), but the envelope, `verdict.json` and the summary
+    // line all say the file on disk is no longer the bytes that were judged.
+    for warning in inputs.changed_warnings() {
+        acos_protocol::provenance::push_warning(&mut provenance, warning);
     }
     verdict.provenance = Some(provenance);
 

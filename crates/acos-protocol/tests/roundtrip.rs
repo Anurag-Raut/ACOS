@@ -603,6 +603,8 @@ fn command_requests_and_responses_round_trip() {
             text: true,
             include_frame: true,
             max_nodes: Some(60),
+            screenshot: Some(serde_json::json!(true)),
+            png: true,
         }),
         CommandRequest::Capture(CaptureRequest {
             base: base(),

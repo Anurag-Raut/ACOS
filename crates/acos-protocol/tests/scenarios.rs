@@ -890,3 +890,71 @@ fn a_legacy_engine_value_warns_with_the_canonical_name() {
     );
     let _ = std::fs::remove_file(&path);
 }
+
+/// The declared `engine:` spelling is read through the YAML parser, not by
+/// trimming text: an inline comment (`engine: native-only # pinned`), a quoted
+/// scalar and extra spacing all mean the same value, and a nested `engine:`
+/// (inside `observe:`) is not the top-level one.
+///
+/// Before this, `legacy_engine_warning` stripped the line by hand, so
+/// `engine: native-only # pinned` produced no rename warning at all — the value
+/// it compared was the whole `native-only # pinned` string.
+#[test]
+fn the_declared_engine_is_the_parsed_yaml_value_not_a_trimmed_line() {
+    assert_eq!(declared_engine("engine: art\n"), Some("art".to_string()));
+    assert_eq!(
+        declared_engine("engine: native-only # pinned for v0.2\n"),
+        Some("native-only".to_string()),
+        "a trailing YAML comment is a comment, not part of the value"
+    );
+    assert_eq!(
+        declared_engine("engine: 'reference-only'\n"),
+        Some("reference-only".to_string())
+    );
+    assert_eq!(
+        declared_engine("engine: \"rust-vm\" # quoted\n"),
+        Some("rust-vm".to_string())
+    );
+    assert_eq!(declared_engine("name: no-engine\n"), None);
+    assert_eq!(
+        declared_engine("name: nested\nobserve:\n  engine: rust-vm\n"),
+        None,
+        "a nested engine is not the scenario's engine field"
+    );
+}
+
+/// A legacy spelling with a trailing comment still warns with the current name.
+#[test]
+fn a_legacy_engine_with_a_trailing_comment_still_warns() {
+    let commented = VALID.replace(
+        "engine: native-preferred",
+        "engine: native-only # pinned for v0.2",
+    );
+    let scenario = Scenario::from_yaml_str(&commented).expect("commented engine parses");
+    assert_eq!(scenario.engine, Engine::RustVm);
+    // Warnings travel with an invalid document, so make it invalid on purpose.
+    let invalid = commented.replace("name: valid", "name: ' '");
+    let validation = Scenario::from_yaml_str(&invalid).expect_err("blank name is invalid");
+    assert!(
+        validation
+            .warnings
+            .iter()
+            .any(|warning| warning.path == "engine"
+                && warning.message.contains("`engine: rust-vm`")
+                && warning.message.contains("native-only")),
+        "{:?}",
+        validation.warnings
+    );
+}
+
+/// A declared engine that disagrees with the engine that ran is a warning the
+/// caller can turn into `SCENARIO_ENGINE_MISMATCH`, and it never selects an
+/// engine itself.
+#[test]
+fn an_engine_mismatch_names_both_engines() {
+    let warning = engine_mismatch_warning("rust-vm", "art").expect("mismatch");
+    assert_eq!(warning.path, "engine");
+    assert!(warning.message.contains("`engine: rust-vm`"), "{warning:?}");
+    assert!(warning.message.contains("used `art`"), "{warning:?}");
+    assert!(engine_mismatch_warning("art", "art").is_none());
+}

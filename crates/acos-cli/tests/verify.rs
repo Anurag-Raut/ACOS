@@ -427,3 +427,63 @@ fn the_engine_default_in_help_is_the_one_constant() {
         "help must not claim a default the code does not use: {help}"
     );
 }
+
+/// `--reference` without `--engine` implies the replay engine; the run is then
+/// **not** an explicit engine choice, and `engine.json` must say so.
+///
+/// The old `explicit` test compared the engine name with the build default, so
+/// `--reference` (which selects `rust-vm` by implication) looked as if the caller
+/// had asked for it. An explicit `--engine rust-vm` on the same command is
+/// explicit, and the two runs must differ in exactly that field.
+#[test]
+fn reference_without_engine_is_not_an_explicit_engine_choice() {
+    let apk = require_hello_views_apk();
+    let reference = workspace().join("fixtures/reference/hello-views/art-api34-x86_64");
+    let run = |artifacts: &Path, engine: Option<&str>| {
+        let mut command = Command::cargo_bin("acos").unwrap();
+        command
+            .current_dir(workspace())
+            .arg("verify")
+            .arg("scenarios/negative/wrong-text.yaml")
+            .arg("--apk")
+            .arg(&apk)
+            .arg("--reference")
+            .arg(&reference)
+            .arg("--artifacts")
+            .arg(artifacts)
+            .arg("--json");
+        if let Some(engine) = engine {
+            command.arg("--engine").arg(engine);
+        }
+        let output = command.output().expect("run acos verify");
+        let engine_json: Value = serde_json::from_slice(
+            &std::fs::read(artifacts.join("engine.json"))
+                .unwrap_or_else(|error| panic!("engine.json: {error}")),
+        )
+        .expect("engine.json parses");
+        (output, engine_json)
+    };
+
+    let implied_dir = scratch("engine-implied");
+    let (output, engine_json) = run(&implied_dir, None);
+    assert!(
+        !output.status.success(),
+        "the negative scenario fails by design"
+    );
+    assert_eq!(engine_json["engine"]["engine"], "rust-vm", "{engine_json}");
+    assert_eq!(
+        engine_json["engine"]["explicit"], false,
+        "--reference implies the replay engine; the caller did not choose it: {engine_json}"
+    );
+
+    let explicit_dir = scratch("engine-explicit");
+    let (_, engine_json) = run(&explicit_dir, Some("rust-vm"));
+    assert_eq!(engine_json["engine"]["engine"], "rust-vm", "{engine_json}");
+    assert_eq!(
+        engine_json["engine"]["explicit"], true,
+        "an explicit --engine is explicit: {engine_json}"
+    );
+
+    let _ = std::fs::remove_dir_all(&implied_dir);
+    let _ = std::fs::remove_dir_all(&explicit_dir);
+}

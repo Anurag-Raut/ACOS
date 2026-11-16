@@ -1933,7 +1933,7 @@ mod engine_tests {
             required_fidelity: None,
             flags: Vec::new(),
             native: false,
-            engine: engine.to_string(),
+            engine: Some(engine.to_string()),
             animations: None,
             insets: None,
             untrusted: false,

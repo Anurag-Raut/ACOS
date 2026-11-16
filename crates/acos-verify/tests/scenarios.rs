@@ -1626,3 +1626,326 @@ steps:
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A scenario whose `engine:` names one engine while the request runs another is
+/// **warned**, never silently accepted and never a status change.
+///
+/// The scenario field records the engine the scenario was written for; the
+/// request's `engine` (`--engine` / MCP `engine`) selects the engine that runs.
+/// A reader of the verdict must be able to see the disagreement.
+#[test]
+fn a_scenario_engine_that_differs_from_the_run_is_a_structured_warning() {
+    let dir = scratch("provenance-engine-mismatch");
+    std::fs::create_dir_all(&dir).unwrap();
+    let declared = workspace().join("fixtures/build/apps/hello-views.apk");
+    let scenario_file = dir.join("s.yaml");
+    std::fs::write(
+        &scenario_file,
+        format!(
+            r#"version: 1
+name: engine-mismatch
+# the scenario was written for the frozen VM:
+engine: rust-vm
+app: {}
+isolation: process
+display: {{mode: offscreen, width: 1080, height: 2400, density_dpi: 420}}
+steps:
+  - launch: {{activity: dev.acos.fixtures.helloviews/.MainActivity}}
+"#,
+            declared.display()
+        ),
+    )
+    .unwrap();
+
+    let request = VerifyRequest {
+        base: acos_protocol::RequestBase::new("req_engine_mismatch"),
+        apk: None,
+        scenario: scenario_file.display().to_string(),
+        artifacts: dir.join("artifacts").display().to_string(),
+        overwrite: false,
+        reference: Some(reference_dir("hello-views").display().to_string()),
+        required_fidelity: None,
+        // The engine that runs; the scenario does not select it.
+        engine: acos_protocol::VerifyEngine::Art,
+        flags: Vec::new(),
+    };
+    let mut backend = ReferenceBackend::new(reference_dir("hello-views"));
+    let clock = FixedClock::new(1_794_318_674_000);
+    let envelope = verify_with_clock(&request, &mut backend, &clock);
+    let result = envelope
+        .result()
+        .unwrap_or_else(|| panic!("a result: {:?}", envelope.error()));
+    let provenance = &result["verdict"]["provenance"];
+    let warnings = provenance["warnings"].as_array().expect("warnings");
+    let mismatch = warnings
+        .iter()
+        .find(|warning| warning["code"] == acos_protocol::provenance::WARN_SCENARIO_ENGINE_MISMATCH)
+        .unwrap_or_else(|| panic!("SCENARIO_ENGINE_MISMATCH missing: {provenance}"));
+    assert_eq!(mismatch["scenario_engine"], "rust-vm", "{mismatch}");
+    assert_eq!(mismatch["engine"], "art", "{mismatch}");
+    assert!(
+        mismatch["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("this run used `art`"),
+        "{mismatch}"
+    );
+    // The engine that ran is the one the request asked for.
+    assert_eq!(provenance["engine"], "art");
+    assert_eq!(provenance["scenario_engine"], "rust-vm");
+    // …and the summary line a text-only reader sees names the warning.
+    let line = acos_protocol::provenance::summary_line(provenance);
+    assert!(
+        line.contains(acos_protocol::provenance::WARN_SCENARIO_ENGINE_MISMATCH),
+        "{line}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A scenario that does **not** declare `engine:` gets no mismatch warning, even
+/// when the request runs an engine other than the scenario default: nothing was
+/// declared, so nothing disagrees.
+#[test]
+fn an_omitted_engine_is_not_a_mismatch() {
+    let dir = scratch("provenance-engine-omitted");
+    std::fs::create_dir_all(&dir).unwrap();
+    let declared = workspace().join("fixtures/build/apps/hello-views.apk");
+    let scenario_file = dir.join("s.yaml");
+    std::fs::write(
+        &scenario_file,
+        format!(
+            r#"version: 1
+name: engine-omitted
+app: {}
+isolation: process
+display: {{mode: offscreen, width: 1080, height: 2400, density_dpi: 420}}
+steps:
+  - launch: {{activity: dev.acos.fixtures.helloviews/.MainActivity}}
+"#,
+            declared.display()
+        ),
+    )
+    .unwrap();
+    let request = VerifyRequest {
+        base: acos_protocol::RequestBase::new("req_engine_omitted"),
+        apk: None,
+        scenario: scenario_file.display().to_string(),
+        artifacts: dir.join("artifacts").display().to_string(),
+        overwrite: false,
+        reference: Some(reference_dir("hello-views").display().to_string()),
+        required_fidelity: None,
+        engine: acos_protocol::VerifyEngine::Art,
+        flags: Vec::new(),
+    };
+    let mut backend = ReferenceBackend::new(reference_dir("hello-views"));
+    let clock = FixedClock::new(1_794_318_674_000);
+    let envelope = verify_with_clock(&request, &mut backend, &clock);
+    let result = envelope.result().expect("a result");
+    let warnings = result["verdict"]["provenance"]["warnings"]
+        .as_array()
+        .expect("warnings");
+    assert!(
+        warnings.iter().all(|warning| {
+            warning["code"] != acos_protocol::provenance::WARN_SCENARIO_ENGINE_MISMATCH
+        }),
+        "{warnings:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A backend that rewrites one input file during the run, then answers exactly
+/// like the reference backend.
+///
+/// It is how the `INPUT_CHANGED_DURING_RUN` wiring is tested for real: the file
+/// the run hashed must be the file it read, and if something else rewrote it
+/// mid-run the verdict has to say so.
+struct RewritingApk {
+    inner: ReferenceBackend,
+    apk: PathBuf,
+    rewrite: Option<Vec<u8>>,
+}
+
+impl Backend for RewritingApk {
+    fn id(&self) -> &'static str {
+        self.inner.id()
+    }
+    fn protocol_backend(&self) -> ProtocolBackend {
+        self.inner.protocol_backend()
+    }
+    fn fidelity(&self) -> Fidelity {
+        self.inner.fidelity()
+    }
+    fn capabilities(&self) -> Capabilities {
+        self.inner.capabilities()
+    }
+    fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
+        let manifest = self.inner.manifest(apk)?;
+        if let Some(bytes) = self.rewrite.take() {
+            // Same size, different bytes, newer mtime: the run is now judging a
+            // file that no longer matches its own provenance digest.
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            std::fs::write(&self.apk, bytes).expect("rewrite apk");
+        }
+        Ok(manifest)
+    }
+    fn launch(&mut self, request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
+        self.inner.launch(request)
+    }
+    fn observe(&mut self) -> Result<SessionObservation, BackendError> {
+        self.inner.observe()
+    }
+    fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+        self.inner.refresh()
+    }
+    fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
+        self.inner.logs_since(since)
+    }
+    fn input(&mut self, action: &InputAction) -> Result<SessionObservation, BackendError> {
+        self.inner.input(action)
+    }
+}
+
+#[test]
+fn an_input_rewritten_during_the_run_is_a_warning_in_the_verdict() {
+    let dir = scratch("input-changed");
+    std::fs::create_dir_all(&dir).unwrap();
+    let source = workspace().join("fixtures/build/apps/hello-views.apk");
+    let apk = dir.join("app.apk");
+    std::fs::copy(&source, &apk).unwrap();
+    let bytes = std::fs::read(&apk).unwrap();
+    let scenario_file = dir.join("s.yaml");
+    std::fs::write(
+        &scenario_file,
+        format!(
+            r#"version: 1
+name: input-changed
+app: app.apk
+isolation: process
+display: {{mode: offscreen, width: 1080, height: 2400, density_dpi: 420}}
+steps:
+  - launch: {{activity: dev.acos.fixtures.helloviews/.MainActivity}}
+"#,
+        ),
+    )
+    .unwrap();
+
+    let request = VerifyRequest {
+        base: acos_protocol::RequestBase::new("req_input_changed"),
+        apk: None,
+        scenario: scenario_file.display().to_string(),
+        artifacts: dir.join("artifacts").display().to_string(),
+        overwrite: false,
+        reference: Some(reference_dir("hello-views").display().to_string()),
+        required_fidelity: None,
+        engine: acos_protocol::VerifyEngine::Art,
+        flags: Vec::new(),
+    };
+    let backend = RewritingApk {
+        inner: ReferenceBackend::new(reference_dir("hello-views")),
+        apk: std::fs::canonicalize(&apk).unwrap_or(apk.clone()),
+        rewrite: Some(bytes),
+    };
+    let mut backend = backend;
+    let clock = FixedClock::new(1_794_318_674_000);
+    let envelope = verify_with_clock(&request, &mut backend, &clock);
+    let result = envelope.result().expect("a result");
+    let provenance = &result["verdict"]["provenance"];
+    let warnings = provenance["warnings"].as_array().expect("warnings");
+    let changed = warnings
+        .iter()
+        .find(|warning| warning["code"] == acos_protocol::provenance::WARN_INPUT_CHANGED)
+        .unwrap_or_else(|| panic!("INPUT_CHANGED_DURING_RUN missing: {provenance}"));
+    assert_eq!(changed["input"], "apk", "{changed}");
+    assert_eq!(
+        changed["sha256_12"], provenance["apk"]["sha256_12"],
+        "the warning names the bytes the run hashed: {changed}"
+    );
+    // The status stays exactly as measured: a changed input is a fact about the
+    // evidence, not a rewritten verdict. The envelope's status still matches the
+    // verdict's own status.
+    assert_eq!(
+        envelope.status().as_str(),
+        result["verdict"]["verdict"].as_str().unwrap_or("?"),
+        "a warning never rewrites the measured status: {provenance}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A relative `app:` resolves against the scenario path **as written**, while
+/// provenance keeps the canonical path.
+///
+/// The regression: a scenario file symlinked into a workspace
+/// (`out/s.yaml -> ../design/actual.yaml`) with `app: app.apk` sitting next to
+/// the *link* used to break, because the app was resolved from the canonicalized
+/// scenario directory instead of the caller's path. Resolution uses the path the
+/// caller named (as it always did); only the value written into provenance is
+/// canonical.
+#[cfg(unix)]
+#[test]
+fn a_relative_app_resolves_against_the_scenario_path_as_written() {
+    let dir = scratch("relative-app");
+    let real = dir.join("real");
+    let work = dir.join("work");
+    std::fs::create_dir_all(&real).unwrap();
+    std::fs::create_dir_all(&work).unwrap();
+    let apk = work.join("app.apk");
+    std::fs::copy(
+        workspace().join("fixtures/build/apps/hello-views.apk"),
+        &apk,
+    )
+    .unwrap();
+    let actual = real.join("actual.yaml");
+    std::fs::write(
+        &actual,
+        r#"version: 1
+name: relative-app
+app: app.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+"#,
+    )
+    .unwrap();
+    // The scenario the caller names is a symlink in a *different* directory from
+    // the file it points at; `app.apk` exists only next to the link.
+    let linked = work.join("s.yaml");
+    std::os::unix::fs::symlink(&actual, &linked).unwrap();
+
+    let request = VerifyRequest {
+        base: acos_protocol::RequestBase::new("req_relative_app"),
+        apk: None,
+        scenario: linked.display().to_string(),
+        artifacts: dir.join("artifacts").display().to_string(),
+        overwrite: false,
+        reference: Some(reference_dir("hello-views").display().to_string()),
+        required_fidelity: None,
+        engine: acos_protocol::VerifyEngine::Art,
+        flags: Vec::new(),
+    };
+    let mut backend = ReferenceBackend::new(reference_dir("hello-views"));
+    let clock = FixedClock::new(1_794_318_674_000);
+    let envelope = verify_with_clock(&request, &mut backend, &clock);
+    let result = envelope.result().unwrap_or_else(|| {
+        panic!(
+            "a relative app next to the named scenario must resolve: {:?}",
+            envelope.error()
+        )
+    });
+    let provenance = &result["verdict"]["provenance"];
+    // Provenance is canonical: the real scenario file and the APK it resolved.
+    assert_eq!(
+        provenance["scenario"]["path"],
+        serde_json::json!(std::fs::canonicalize(&actual)
+            .unwrap()
+            .display()
+            .to_string()),
+        "{provenance}"
+    );
+    assert_eq!(
+        provenance["apk"]["path"],
+        serde_json::json!(std::fs::canonicalize(&apk).unwrap().display().to_string()),
+        "{provenance}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

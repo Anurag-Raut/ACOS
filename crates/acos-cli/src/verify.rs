@@ -22,6 +22,35 @@ use acos_verify::Backend;
 
 use crate::engine::{Engine, EngineBackend, Mode};
 
+impl VerifyArgs {
+    /// The engine this invocation runs: `--engine` when given, else the engine
+    /// the rest of the invocation implies (`--reference` replays recorded ART
+    /// evidence with the `rust-vm` side; everything else takes the build
+    /// default).
+    ///
+    /// One place answers this, so `--help`, the `engine.json` `explicit` field
+    /// and the engine that actually runs cannot disagree.
+    #[must_use]
+    pub fn engine_name(&self) -> &str {
+        match self.engine.as_deref() {
+            Some(name) => name,
+            None if self.reference.is_some() => {
+                acos_protocol::commands::VerifyEngine::RustVm.as_str()
+            }
+            None => acos_protocol::commands::DEFAULT_VERIFY_ENGINE_NAME,
+        }
+    }
+
+    /// Whether the caller chose the engine (rather than it being implied).
+    ///
+    /// `--reference` without `--engine` implies the replay engine; the run is
+    /// then **not** explicit, which is what `engine.json` reports.
+    #[must_use]
+    pub fn engine_explicit(&self) -> bool {
+        self.engine.is_some()
+    }
+}
+
 /// Arguments for `acos verify`.
 #[derive(Debug, clap::Args)]
 pub struct VerifyArgs {
@@ -70,22 +99,15 @@ pub struct VerifyArgs {
     /// instead.
     ///
     /// The default comes from one constant
-    /// (`acos_protocol::commands::DEFAULT_VERIFY_ENGINE`), the same one the MCP
-    /// `engine` schema advertises, so `--help` can never disagree with
-    /// behaviour. `--reference` replays recorded ART evidence rather than
+    /// (`acos_protocol::commands::DEFAULT_VERIFY_ENGINE`) — the same one the MCP
+    /// `engine` schema advertises — so `--help` can never disagree with
+    /// behaviour: `--reference` replays recorded ART evidence rather than
     /// running live ART, so it selects the `rust-vm` side when `--engine` is
     /// omitted (an explicit `--engine art --reference` is still refused).
-    #[arg(
-        long,
-        value_name = "ENGINE",
-        default_value = acos_protocol::commands::DEFAULT_VERIFY_ENGINE_NAME,
-        default_value_if(
-            "reference",
-            clap::builder::ArgPredicate::IsPresent,
-            Some("rust-vm")
-        )
-    )]
-    pub engine: String,
+    ///
+    /// [default: art]
+    #[arg(long, value_name = "ENGINE")]
+    pub engine: Option<String>,
 
     /// P12: framework animation scales for the ART session (`on`/`off`).
     ///
@@ -283,21 +305,23 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         }
     }
 
-    let Some(engine) = Engine::parse(&args.engine) else {
+    let Some(engine) = Engine::parse(args.engine_name()) else {
         let envelope = Envelope::failure(
             request_id,
             ProtocolBackend::AcosNative,
             Fidelity::StaticAnalysis,
             ProtocolError::new(
                 ErrorCode::InvalidArgument,
-                format!("unknown --engine value {:?}", args.engine),
+                format!("unknown --engine value {:?}", args.engine_name()),
             )
             .with_hint(format!(
                 "Use `--engine {}` (default) or `--engine {}`. There is no silent fallback between engines.",
                 acos_protocol::commands::DEFAULT_VERIFY_ENGINE_NAME,
                 acos_protocol::commands::VerifyEngine::RustVm.as_str(),
             ))
-            .with_details(serde_json::json!({"field": "engine", "value": args.engine})),
+            .with_details(
+                serde_json::json!({"field": "engine", "value": args.engine_name()}),
+            ),
             Metrics::wall_ms(0),
         );
         return finish_run(&envelope, &args, &artifacts, Some(trust));
@@ -675,8 +699,10 @@ pub(crate) fn annotate(
             "supported": caps.names(),
             "missing": caps.missing(),
         })),
-        "explicit": args.engine != acos_protocol::commands::DEFAULT_VERIFY_ENGINE_NAME
-            || mode == Mode::Preview,
+        // `explicit` means "the caller picked the engine", not "the engine is
+        // not the build default": `--reference` without `--engine` selects the
+        // replay engine by implication, so that run is not explicit.
+        "explicit": args.engine_explicit() || mode == Mode::Preview,
         "animations": session_animations.unwrap_or("on"),
         "insets": session_insets
             .unwrap_or(acos_services::wms::DEFAULT_INSETS_MODE.as_str()),

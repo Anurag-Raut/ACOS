@@ -1582,10 +1582,28 @@ impl SessionBackend {
         // The stateless CLI builds this argument; honouring it here is what
         // makes `acos observe --frame --screenshot` work against a live
         // daemon session (the Flutter backend already did this).
-        let screenshot = args
-            .get("screenshot")
+        let screenshot_arg = args.get("screenshot");
+        let screenshot = screenshot_arg
             .and_then(Value::as_str)
             .map(std::path::PathBuf::from);
+        // `png: true` / `screenshot: true` ask for the frame's pixels (see
+        // `ObserveRequest::png`). This in-process reference session can only
+        // write them to a caller-named path — it keeps no artifacts directory —
+        // so the destination-less form is a structured `UNSUPPORTED_BACKEND`
+        // here, never a reply that silently carries no PNG. (The ART daemon and
+        // Flutter routes do honour both forms.)
+        let wants_png = args.get("png").and_then(Value::as_bool).unwrap_or(false)
+            || screenshot_arg.is_some_and(|value| value.as_bool() == Some(true));
+        if wants_png && screenshot.is_none() {
+            return unsupported(
+                request_id,
+                "ui.screenshot",
+                "the in-process reference session writes frame pixels only to a path: pass \
+                 `screenshot: \"/abs/out.png\"` (or launch with the ART engine, where `png: true` \
+                 writes under the session's artifacts)",
+            )
+            .with_session_id(id.clone());
+        }
         self.with_session(&id, |session| {
             let status = session.status().ok();
             match session.observe(screenshot) {

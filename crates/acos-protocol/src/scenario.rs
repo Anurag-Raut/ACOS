@@ -1049,20 +1049,38 @@ fn validate_action_like(
     );
 }
 
-/// The scenario's legacy `engine:` spelling, when it used one.
+/// The top-level `engine:` value a scenario document actually declares.
 ///
-/// The three pre-v0.3 names are serde aliases of the canonical `art` /
-/// `rust-vm` values, so a parsed [`Scenario`] cannot tell which spelling it
-/// came from. This reads the top-level `engine:` line of the source instead and
-/// returns the warning that names the current word (feedback 2026-11-14:
-/// `INVALID_SCENARIO: unknown variant 'art'` from two vocabularies for one
-/// concept).
+/// The parsed [`Scenario`] cannot answer this: `#[serde(default)]` gives `art`
+/// to a document that says nothing, and the legacy names are serde aliases, so
+/// an explicit `engine: native-only` is indistinguishable from an omitted one.
+/// This deserializes the raw spelling through the same YAML parser the scenario
+/// itself uses — not a text scan — so an inline comment (`engine: native-only #
+/// pinned`), quotes, and a nested `observe: {engine: ...}` all read exactly as
+/// serde reads them.
+///
+/// `None` means "the document has no top-level `engine:` key" (an omitted key,
+/// not a default).
+#[must_use]
+pub fn declared_engine(yaml: &str) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct TopLevel {
+        #[serde(default)]
+        engine: Option<String>,
+    }
+    let top: TopLevel = serde_yaml_ng::from_str(yaml).ok()?;
+    top.engine
+}
+
+/// The warning for a scenario whose declared `engine:` is a pre-v0.3 spelling.
+///
+/// The three legacy names are serde aliases of the canonical `art` / `rust-vm`
+/// values, so a parsed [`Scenario`] cannot tell which spelling it came from;
+/// [`declared_engine`] reads the source spelling and this names the current word
+/// (feedback 2026-11-14: `INVALID_SCENARIO: unknown variant 'art'` from two
+/// vocabularies for one concept).
 fn legacy_engine_warning(yaml: &str) -> Option<ScenarioWarning> {
-    let value = yaml.lines().find_map(|line| {
-        let rest = line.strip_prefix("engine:")?;
-        // Only the top-level key: a nested `engine:` never starts at column 0.
-        Some(rest.trim().trim_matches('"').trim_matches('\'').to_string())
-    })?;
+    let value = declared_engine(yaml)?;
     let canonical = match value.as_str() {
         "native-preferred" => "rust-vm",
         "native-only" => "rust-vm",
@@ -1075,6 +1093,29 @@ fn legacy_engine_warning(yaml: &str) -> Option<ScenarioWarning> {
             "`engine: {value}` is the legacy name for `engine: {canonical}`; the scenario \
              format and the `--engine` flag use one vocabulary: `art` (real ART / recorded ART \
              evidence) or `rust-vm` (the frozen Rust VM). The run is unaffected."
+        ),
+    })
+}
+
+/// The warning for a scenario that pins one engine while another one ran.
+///
+/// The scenario's `engine:` never selects the engine — the CLI `--engine` flag /
+/// the MCP `engine` argument do, and they stay authoritative. But a document
+/// written for `rust-vm` that silently ran on `art` is a fact the reader of the
+/// verdict must see, so the mismatch is a structured warning (never a status
+/// change, never a silent engine switch).
+#[must_use]
+pub fn engine_mismatch_warning(declared: &str, ran: &str) -> Option<ScenarioWarning> {
+    if declared == ran {
+        return None;
+    }
+    Some(ScenarioWarning {
+        path: "engine".to_string(),
+        message: format!(
+            "the scenario declares `engine: {declared}` but this run used `{ran}`: the \
+             scenario field records the engine the scenario was written for, it does not select \
+             one (`--engine {ran}` / the MCP `engine` argument do). The verdict is about the \
+             `{ran}` run; pass `--engine {declared}` to run the engine the scenario names."
         ),
     })
 }
@@ -1155,8 +1196,15 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
         if expected.code.trim().is_empty() {
             v.push("$.expect_error.code", "expect_error.code must not be empty");
         }
-        if expected.reason.as_deref().is_some_and(|r| r.trim().is_empty()) {
-            v.push("$.expect_error.reason", "expect_error.reason must not be empty");
+        if expected
+            .reason
+            .as_deref()
+            .is_some_and(|r| r.trim().is_empty())
+        {
+            v.push(
+                "$.expect_error.reason",
+                "expect_error.reason must not be empty",
+            );
         }
         if scenario.expectation == Expectation::Pass {
             v.push(
@@ -1227,7 +1275,9 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 }
                 validate_expect_change(&mut v, &path, ty.expect_change, ty.settle);
             }
-            StepRef::Key(key) => validate_expect_change(&mut v, &path, key.expect_change, key.settle),
+            StepRef::Key(key) => {
+                validate_expect_change(&mut v, &path, key.expect_change, key.settle)
+            }
             StepRef::Back(_) | StepRef::Rotate(_) => {}
             StepRef::AssertText(assertion) => {
                 validate_selector(&mut v, &path, &assertion.selector, "selector");
@@ -1590,7 +1640,10 @@ steps:
             let error = Scenario::from_yaml_str(&yaml)
                 .err()
                 .unwrap_or_else(|| panic!("expect_change: {value} must not parse"));
-            assert!(error.errors.iter().all(|e| e.code == ErrorCode::InvalidScenario));
+            assert!(error
+                .errors
+                .iter()
+                .all(|e| e.code == ErrorCode::InvalidScenario));
         }
     }
 
@@ -1600,7 +1653,10 @@ steps:
     #[test]
     fn expect_change_with_fast_settle_is_invalid() {
         for (kind, body) in [
-            ("tap", "{selector: {id: inc}, settle: fast, expect_change: true}"),
+            (
+                "tap",
+                "{selector: {id: inc}, settle: fast, expect_change: true}",
+            ),
             ("type", "{text: hi, settle: fast, expect_change: true}"),
             ("key", "{key: back, settle: fast, expect_change: true}"),
         ] {
