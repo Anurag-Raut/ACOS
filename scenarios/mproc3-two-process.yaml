@@ -1,0 +1,116 @@
+# MPROC5c: two guest processes in one session — the cross-process top of task
+# (step 1) and the idle kill (step 2), on the real ART engine.
+#
+# STEP 1 (top of task, cross-process). proc-a starts proc-b's Activity
+# (`startActivityForResult`). The host resolves a component of an installed
+# package with no live process, the launcher spawns that guest lazily, and the
+# window on top becomes proc-b's — so the tree served to the agent is proc-b's
+# ("Finish B") — while proc-a's own `IApplicationThread` receives the framework's
+# `PauseActivityItem` + `StopActivityItem` (the app logs `paused`/`stopped`).
+# Finishing B returns to proc-a, and proc-a's window is the served one again.
+#
+# STEP 2 (idle kill). After B finishes it holds nothing — no started activity,
+# no started/bound service, no visible window — so the launcher's idle kill takes
+# its process after `ACOSLAUNCH_IDLE_KILL_SECS` (the run must set it small; the
+# scenario cannot set environment, and `acos-art launch --idle-kill-seconds` /
+# the plan's per-slot env are the documented spellings). The activity manager's
+# `ProcessRecord` and the process's `IWindowSession` go with it, and the next
+# "Start B" is a **spawn**: a new pid, and B's own probe logs `created` a second
+# time (the line can only come from a new process instance).
+#
+# What the scenario deliberately does not claim:
+#   * `ACOSPROBE a result` (proc-a's `onActivityResult`) is the MPROC7 hold — the
+#     result transaction is not part of this gate and is not asserted here;
+#   * the kill record itself (`reason=idle`, `idle_ms`, the closed session id) is
+#     a launcher/peer fact with no scenario step kind: it is proved by
+#     `tools/mproc5c-idle-kill-drive.py`, whose stdout is the evidence under
+#     `results/handoff/MPROC5c/`.
+version: 1
+name: mproc3-two-process
+description: >-
+  One session, two guest processes: proc-a starts proc-b, proc-b's window comes
+  on top (proc-a paused and stopped underneath), finishing it returns to proc-a,
+  the idle kill takes the idle process (record and window session included), and
+  the next intent spawns it again.
+app: fixtures/build/apps/proc-a.apk
+extra_apks:
+  - fixtures/build/apps/proc-b.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.proca/.ProcAActivity
+      clear_state: true
+
+  # Step 1: the lazy spawn. proc-a's own window is the served tree first.
+  - assert_text:
+      selector: {id: start_b}
+      text: {exact: "Start B"}
+      timeout_ms: 10000
+
+  - tap:
+      selector: {id: start_b}
+      settle: fast
+
+  # proc-b's window is what is on top now: its "Finish B" button is in the
+  # served tree, which is proc-b's own process's tree.
+  - assert_text:
+      selector: {id: finish}
+      text: {exact: "Finish B"}
+      timeout_ms: 30000
+
+  # The lifecycle of both processes, in order: B resumed (in its own process),
+  # A paused and then stopped (its own `IApplicationThread` received the items).
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^ACOSPROBE b created pkg=dev\.acos\.fixtures\.procb\b'
+        - '^ACOSPROBE b resumed pkg=dev\.acos\.fixtures\.procb$'
+        - '^ACOSPROBE a paused$'
+        - '^ACOSPROBE a stopped$'
+
+  # Back from B returns to A.
+  - tap:
+      selector: {id: finish}
+      settle: fast
+
+  - assert_text:
+      selector: {id: start_b}
+      text: {exact: "Start B"}
+      timeout_ms: 30000
+
+  # Step 2: B is idle now, so the launcher kills it. The next Start B is a
+  # fresh process — B's `created` line appears a second time (and the run's
+  # idle-kill record is the driver evidence above).
+  - tap:
+      selector: {id: start_b}
+      settle: fast
+
+  - assert_text:
+      selector: {id: finish}
+      text: {exact: "Finish B"}
+      timeout_ms: 30000
+
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: false
+      min_matches: 2
+      patterns:
+        - '^ACOSPROBE b created pkg=dev\.acos\.fixtures\.procb\b'

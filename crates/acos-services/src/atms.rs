@@ -349,6 +349,9 @@ pub struct ProcessRecord {
     pub attached: bool,
     /// Render thread tid.
     pub render_thread_tid: Option<i32>,
+    /// MPROC5c: when this process last held the foreground (its spawn time for a
+    /// process that never resumed). The idle kill measures from here.
+    pub last_active: std::time::Instant,
 }
 
 /// One `PatternMatcher` element of an `IntentFilter` (scheme-specific part or
@@ -450,6 +453,11 @@ pub struct AtmsState {
     /// encodes them into `PendingDelivery`s; the peer routes each to the
     /// process that owns the target binder.
     pub pending_lifecycle_calls: Vec<(u32, String, Vec<Value>)>,
+    /// MPROC5: the activity that was the session's top **before** the current
+    /// one (`tag`, token). When the top finishes, stock resumes the activity
+    /// below it in the task stack; ACOS keeps one task per process, so the
+    /// record that just lost the top is the one below.
+    pub previous_top: Option<(u32, u64)>,
     /// MPROC5: the session's foreground process tag, published to the launcher
     /// (`LiveHandles::top_process`) so the served probe tree/screenshot come
     /// from the process whose window is on top.
@@ -486,6 +494,7 @@ impl AtmsState {
             transactions: Vec::new(),
             pending_app_thread_calls: Vec::new(),
             tops: std::collections::BTreeMap::new(),
+            previous_top: None,
             pending_lifecycle_calls: Vec::new(),
             top_process: None,
             granted_permissions: vec!["android.permission.INTERNET".into()],
@@ -610,8 +619,94 @@ impl AtmsState {
             attach_seq: 0,
             attached: false,
             render_thread_tid: None,
+            last_active: std::time::Instant::now(),
         });
         self.emit(LifecycleState::ProcessStarted, None);
+    }
+
+    /// MPROC5c: a process is gone (idle kill, crash, disconnect).
+    ///
+    /// Stock `ActivityManagerService.removeProcessLocked` drops the
+    /// `ProcessRecord`; the tag's records (top-of-task, its activities) go with
+    /// it, so the process list stops reporting it and a later `startActivity`
+    /// for its package is a spawn again.
+    pub fn process_died(&mut self, tag: u32) {
+        let before = self.processes.len();
+        self.processes.retain(|p| p.tag != tag);
+        self.tops.remove(&tag);
+        self.activities
+            .retain(|a| process_tag_of(a.token) != tag);
+        if self.processes.len() != before {
+            self.emit(LifecycleState::ProcessKilled, None);
+        }
+    }
+
+    /// MPROC5c: mark `tag` as having just held the foreground.
+    pub fn mark_process_active(&mut self, tag: u32) {
+        if let Some(record) = self.processes.iter_mut().find(|p| p.tag == tag) {
+            record.last_active = std::time::Instant::now();
+        }
+    }
+
+    /// MPROC5c: whether `tag` has anything that keeps its process alive: a
+    /// started/resumed/paused activity of its own, a started or bound service
+    /// of its package, or (measured by the launcher) a visible window.
+    #[must_use]
+    pub fn process_has_work(&self, tag: u32) -> bool {
+        let running = self.activities.iter().any(|a| {
+            process_tag_of(a.token) == tag
+                && !a.finished
+                // Only a *started* activity keeps a process alive (stock: a
+                // paused/stopped one is a cached process candidate).
+                && matches!(a.lifecycle, ActivityLifecycle::Started | ActivityLifecycle::Resumed)
+        });
+        if running {
+            return true;
+        }
+        let package = self
+            .processes
+            .iter()
+            .find(|p| p.tag == tag)
+            .map(|p| p.package_name.as_str())
+            .unwrap_or_default();
+        self.ams
+            .services
+            .values()
+            .any(|s| s.package == package && (s.started || s.bind_count > 0))
+    }
+
+    /// MPROC5c: the processes the idle kill may take, with how long each has
+    /// been idle.
+    ///
+    /// Only **lazily spawned** secondaries are candidates (`tag != 0`: the
+    /// launched primary is the session's own process), and only while they hold
+    /// nothing that needs a process — no started activity, no started/bound
+    /// service. A process that has been idle for `idle` is returned.
+    #[must_use]
+    pub fn idle_processes(&self, idle: std::time::Duration) -> Vec<(u32, String, u64)> {
+        let now = std::time::Instant::now();
+        self.processes
+            .iter()
+            .filter(|p| p.tag != 0)
+            .filter(|p| !self.process_has_work(p.tag))
+            .filter_map(|p| {
+                let idle_ms = now.duration_since(p.last_active).as_millis() as u64;
+                (idle_ms >= idle.as_millis() as u64)
+                    .then(|| (p.tag, p.package_name.clone(), idle_ms))
+            })
+            .collect()
+    }
+
+    /// MPROC5c: when the next idle process reaches `idle`, so the launcher's
+    /// event loop can wake exactly then instead of polling.
+    #[must_use]
+    pub fn next_idle_deadline(&self, idle: std::time::Duration) -> Option<std::time::Instant> {
+        self.processes
+            .iter()
+            .filter(|p| p.tag != 0)
+            .filter(|p| !self.process_has_work(p.tag))
+            .map(|p| p.last_active + idle)
+            .min()
     }
 
     /// The process list a reply/verdict reports: one entry per process, in tag
@@ -663,6 +758,7 @@ impl AtmsState {
             attach_seq: seq,
             attached: false,
             render_thread_tid: None,
+            last_active: std::time::Instant::now(),
         });
         self.emit(LifecycleState::ProcessStarted, None);
     }
@@ -1034,9 +1130,16 @@ impl AtmsState {
                 );
             }
             self.tops.remove(&other_tag);
+            // The displaced top is the activity below the new one: the record a
+            // finish of the new top returns to.
+            self.previous_top = Some((other_tag, other_token));
         }
         self.tops.insert(tag, token);
         self.publish_top(tag);
+        // MPROC5c: the foreground transition is what starts (and restarts) every
+        // process's idle clock: the winner is active now, and the losers became
+        // background now.
+        self.mark_process_active(tag);
     }
 
     /// The process tag an activity token belongs to (peer binder id bits).
@@ -1084,7 +1187,16 @@ impl AtmsState {
             .tasks
             .iter()
             .filter_map(|t| t.activities.last().copied())
-            .find(|t| *t != finished);
+            .find(|t| *t != finished)
+            // MPROC5: the primary launched Activity is not created by a
+            // `startActivity` the host recorded, so it is not in `ams.tasks`;
+            // the process that lost the top (and was just paused) is the
+            // activity below, exactly what stock resumes.
+            .or_else(|| {
+                self.previous_top
+                    .filter(|(tag, _)| *tag != finished_tag)
+                    .map(|(_, token)| token)
+            });
         let Some(next) = next else { return };
         let next_tag = self.activity_tag(next);
         if next_tag == finished_tag {
@@ -1100,6 +1212,10 @@ impl AtmsState {
         self.queue_lifecycle(next_tag, next, ClientTransactionItem::ResumeActivity);
         self.tops.insert(next_tag, next);
         self.publish_top(next_tag);
+        // MPROC5c: the finished process just went to the background, so its idle
+        // clock starts now (the resumed one is active).
+        self.mark_process_active(next_tag);
+        self.mark_process_active(finished_tag);
     }
 
     /// Report `activityIdle` (launch complete).
@@ -1323,6 +1439,33 @@ impl AtmsService {
             .map(|p| p.uid)
             .unwrap_or(0);
         state.process_started(tag, package, uid);
+    }
+
+    /// MPROC5c: record that process `tag` is gone (idle kill, crash, transport
+    /// disconnect): its `ProcessRecord` and per-process records go with it.
+    pub fn note_process_died(&mut self, tag: u32) {
+        if let Ok(mut state) = self.state.lock() {
+            state.process_died(tag);
+        }
+    }
+
+    /// MPROC5c: the processes the idle kill may take
+    /// (`tag`, package, idle milliseconds).
+    #[must_use]
+    pub fn idle_processes(&self, idle: std::time::Duration) -> Vec<(u32, String, u64)> {
+        self.state
+            .lock()
+            .map(|state| state.idle_processes(idle))
+            .unwrap_or_default()
+    }
+
+    /// MPROC5c: when the next idle process reaches `idle` (the launcher's wake).
+    #[must_use]
+    pub fn next_idle_deadline(&self, idle: std::time::Duration) -> Option<std::time::Instant> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|state| state.next_idle_deadline(idle))
     }
 
     /// MPROC4 step 3b: the processes this session has (one `ProcessRecord` per

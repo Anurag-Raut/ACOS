@@ -112,25 +112,51 @@ pub struct SurfaceLayerBinding {
     pub layer_id: u64,
 }
 
-/// The window-manager state machine plus the session a single app process uses.
+/// One `IWindowSession` of this host (stock `com.android.server.wm.Session`,
+/// `WindowManagerService.openSession`).
+///
+/// Stock creates a **new** session object inside `openSession` and answers with
+/// its `IWindowSession` binder, so every app process talks to its own node and
+/// every window operation is validated against the session the call arrived on.
+/// MPROC5b measured what a single shared node does: proc-b's `openSession`
+/// overwrote the one session id and proc-a's next `relayout` was refused
+/// (`unknown session 2`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionEntry {
+    /// The `acos-wm` session id this node serves.
+    pub id: SessionId,
+    /// The `ServiceHost` node the `openSession` reply carried.
+    pub binder: BinderId,
+    /// The app process the session's `IWindow` binders belong to.
+    ///
+    /// Stock stores `Session.mClientPid` from `Binder.getCallingPid()` at
+    /// `openSession`. ACOS has no caller identity on the host yet (the queued
+    /// BINDERPID track), so this is the process the host recorded as the owner
+    /// of the `IWindow` binder the session added — the same process by
+    /// construction, and never a guess. `None` until the first window is added.
+    pub process: Option<u32>,
+}
+
+/// The window-manager state machine plus every open `IWindowSession`.
 #[derive(Debug)]
 pub struct WmsState {
     /// The `acos-wm` state machine.
     pub wm: WindowManager,
     /// Device facts not owned by `acos-wm`.
     pub facts: DisplayFacts,
-    /// Session created for the app's `IWindowSession`.
-    pub session: SessionId,
-    /// The synthetic `IWindowSession` binder returned by `openSession`.
+    /// Every open session, by `acos-wm` session id.
+    pub sessions: std::collections::HashMap<SessionId, SessionEntry>,
+    /// The **VM transport's** current session.
     ///
-    /// `acos-wm` allocates this id for its own state machine; it is **not** a
-    /// `ServiceHost` binder. The binder the wire carries is
-    /// [`WmsState::host_session`](Self::host_session).
-    pub session_binder: BinderId,
-    /// The `ServiceHost` node `IWindowManager.openSession` answers with
-    /// (`registry` registers `android.view.IWindowSession` dynamically and
-    /// stores its id here; `0` until then).
-    pub host_session: BinderId,
+    /// `acos-runtime`'s `wms_java` routes `IWindowSession` transactions by
+    /// descriptor (one guest per VM, no per-session binder identity on that
+    /// transport), so it needs one name for "the session the app is using".
+    /// The persistent host never reads this field: each session node passes its
+    /// own id to every operation (MPROC5c).
+    pub current: SessionId,
+    /// The compositor registry, when one is installed. A session death destroys
+    /// its windows' layers through it (W42: the layer *is* the window's pixels).
+    pub compositor: Option<Arc<Mutex<crate::surface_client::SurfaceState>>>,
     /// Number of `finishDrawing` calls recorded.
     pub finish_drawing_count: u64,
     /// Number of real buffer submissions published through the compositor
@@ -177,17 +203,218 @@ impl WmsState {
         };
         let mut wm = WindowManager::new(display);
         let (session, session_binder) = wm.open_session(None);
+        let mut sessions = std::collections::HashMap::new();
+        sessions.insert(
+            session,
+            SessionEntry {
+                id: session,
+                binder: session_binder,
+                process: None,
+            },
+        );
         Self {
             wm,
             facts: DisplayFacts::reference(),
-            session,
-            session_binder,
-            host_session: BinderId(0),
+            sessions,
+            current: session,
+            compositor: None,
             finish_drawing_count: 0,
             frames_published: 0,
             input: crate::input::InputDispatcher::new(),
             surface_layers: std::collections::HashMap::new(),
         }
+    }
+
+    /// Install the compositor registry so a session death can destroy its
+    /// windows' layers (the `registry` install path does this).
+    pub fn set_compositor(
+        &mut self,
+        compositor: Arc<Mutex<crate::surface_client::SurfaceState>>,
+    ) {
+        self.compositor = Some(compositor);
+    }
+
+    /// The VM transport's current session (see [`WmsState::current`]).
+    #[must_use]
+    pub fn current_session(&self) -> SessionId {
+        self.current
+    }
+
+    /// The `IWindowSession` binder of the VM transport's current session.
+    #[must_use]
+    pub fn session_binder(&self) -> BinderId {
+        self.sessions
+            .get(&self.current)
+            .map(|entry| entry.binder)
+            .unwrap_or(BinderId(0))
+    }
+
+    /// Open a session for the **VM transport** and return its synthetic binder.
+    pub fn open_session(&mut self) -> BinderId {
+        let (session, binder) = self.wm.open_session(None);
+        self.sessions.insert(
+            session,
+            SessionEntry {
+                id: session,
+                binder,
+                process: None,
+            },
+        );
+        self.current = session;
+        binder
+    }
+
+    /// Allocate a session without a host node yet (the persistent host's
+    /// `IWindowManager.openSession` registers one per call).
+    pub fn allocate_session(&mut self) -> SessionId {
+        let (session, binder) = self.wm.open_session(None);
+        self.sessions.insert(
+            session,
+            SessionEntry {
+                id: session,
+                binder,
+                process: None,
+            },
+        );
+        session
+    }
+
+    /// Record the host node that serves `session` (the binder the `openSession`
+    /// reply carries).
+    pub fn attach_host_node(&mut self, session: SessionId, binder: BinderId) {
+        if let Some(entry) = self.sessions.get_mut(&session) {
+            entry.binder = binder;
+        }
+    }
+
+    /// Record which app process `session` belongs to (the owner of its first
+    /// `IWindow`). Ignored for an unknown session.
+    pub fn record_session_process(&mut self, session: SessionId, process: u32) {
+        if let Some(entry) = self.sessions.get_mut(&session) {
+            entry.process.get_or_insert(process);
+        }
+    }
+
+    /// The session that owns `window`, from the window records.
+    #[must_use]
+    pub fn session_of_window(&self, window: WindowId) -> Option<SessionId> {
+        self.wm.window_session(window)
+    }
+
+    /// Refuse an operation whose window belongs to **another** session.
+    ///
+    /// This is the stock check (`WindowManagerService.windowForClientLocked`
+    /// resolves the window through the calling `Session`): a `relayout` that
+    /// arrives on proc-b's session node for proc-a's window is
+    /// `unknown session`, exactly like the image's `IllegalArgumentException`.
+    fn check_session_window(&self, session: SessionId, window: WindowId) -> WmResult<()> {
+        match self.wm.window_session(window) {
+            Some(owner) if owner == session => Ok(()),
+            Some(_) => Err(WmError::UnknownSession(session)),
+            None => Err(WmError::UnknownWindow(window)),
+        }
+    }
+
+    /// The windows one session owns, in creation order.
+    #[must_use]
+    pub fn session_windows(&self, session: SessionId) -> Vec<WindowId> {
+        self.wm
+            .sessions
+            .get(&session)
+            .map(|record| record.windows.clone())
+            .unwrap_or_default()
+    }
+
+    /// Session death (stock `Session.kill`): drop the session, its windows, and
+    /// their compositor layers.
+    ///
+    /// Returns the host node that must be unregistered and the windows dropped.
+    /// Unknown session: `None` (a second death report is not an error).
+    pub fn close_session(&mut self, session: SessionId) -> Option<(BinderId, Vec<WindowId>)> {
+        let entry = self.sessions.remove(&session)?;
+        for window in self.session_windows(session) {
+            if let Some(compositor) = self.compositor.clone() {
+                self.destroy_surface_layer(window, &compositor);
+            }
+            self.input.remove_window(window);
+        }
+        let windows = self.wm.close_session(session);
+        if self.current == session {
+            // The VM transport lost its session: fall back to any other open
+            // session so a later call is refused per-window, not by id.
+            self.current = self
+                .sessions
+                .keys()
+                .copied()
+                .next()
+                .unwrap_or(u64::MAX);
+        }
+        Some((entry.binder, windows))
+    }
+
+    /// Every session recorded as belonging to process `tag`.
+    #[must_use]
+    pub fn sessions_of_process(&self, tag: u32) -> Vec<SessionId> {
+        let mut ids: Vec<SessionId> = self
+            .sessions
+            .values()
+            .filter(|entry| entry.process == Some(tag))
+            .map(|entry| entry.id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// Whether process `tag` owns a **visible** window.
+    ///
+    /// MPROC5c's idle kill reads this: a process whose window is on screen is
+    /// not idle, whatever its activity records say (the window is the surface
+    /// the user can see).
+    #[must_use]
+    pub fn process_has_visible_window(&self, tag: u32) -> bool {
+        self.sessions.values().any(|entry| {
+            entry.process == Some(tag)
+                && self
+                    .session_windows(entry.id)
+                    .iter()
+                    .any(|w| self.wm.windows.get(w).is_some_and(|record| record.visible))
+        })
+    }
+
+    /// Session death for a process: every session whose window binders the
+    /// process owned, plus every session whose recorded process tag is `tag`
+    /// (a session that never added a window is still the process's).
+    ///
+    /// Returns the host nodes to unregister, one per closed session.
+    pub fn close_process_sessions(
+        &mut self,
+        tag: u32,
+        window_binders: &[BinderId],
+        registrar_owners: impl Fn(BinderId) -> Option<u32>,
+    ) -> Vec<(SessionId, BinderId, Vec<WindowId>)> {
+        let mut victims: Vec<(SessionId, Option<u32>)> = Vec::new();
+        for entry in self.sessions.values() {
+            let owns_window = self
+                .session_windows(entry.id)
+                .iter()
+                .any(|w| window_binders.contains(&BinderId(*w)));
+            let process = entry.process.or_else(|| {
+                self.session_windows(entry.id)
+                    .first()
+                    .and_then(|w| registrar_owners(BinderId(*w)))
+            });
+            if (process == Some(tag) || owns_window) && process.is_some() {
+                victims.push((entry.id, process));
+            }
+        }
+        victims.sort_unstable();
+        let mut closed = Vec::new();
+        for (session, _) in victims {
+            if let Some((binder, windows)) = self.close_session(session) {
+                closed.push((session, binder, windows));
+            }
+        }
+        closed
     }
 
     /// ROT3: rotate the display to `rotation` (0..3, a target rotation).
@@ -203,15 +430,6 @@ impl WmsState {
         self.facts.width = display.frame.width();
         self.facts.height = display.frame.height();
         display
-    }
-
-    /// `IWindowManager.openSession`: allocate a fresh session and return its
-    /// `IWindowSession` binder.
-    pub fn open_session(&mut self) -> BinderId {
-        let (session, binder) = self.wm.open_session(None);
-        self.session = session;
-        self.session_binder = binder;
-        binder
     }
 
     /// Bind `surface` to a real layer in the compositor-client registry and
@@ -320,25 +538,47 @@ impl WmsState {
         state.set_layer_placement(binding.handle, placement)
     }
 
-    /// `IWindowSession.addToDisplayAsUser`.
+    /// `IWindowSession.addToDisplayAsUser` on `session`.
+    pub fn add_to_display_as_user_for(
+        &mut self,
+        session: SessionId,
+        window: BinderId,
+        params: LayoutParams,
+        requested_visible_types: i32,
+    ) -> WmResult<AddWindowResult> {
+        self.wm
+            .add_to_display_as_user(session, window, params, requested_visible_types)
+    }
+
+    /// `IWindowSession.addToDisplayAsUser` (VM transport's current session).
     pub fn add_to_display_as_user(
         &mut self,
         window: BinderId,
         params: LayoutParams,
         requested_visible_types: i32,
     ) -> WmResult<AddWindowResult> {
-        self.wm
-            .add_to_display_as_user(self.session, window, params, requested_visible_types)
+        self.add_to_display_as_user_for(self.current, window, params, requested_visible_types)
     }
 
-    /// `IWindowSession.relayout` without a client-measured size.
+    /// `IWindowSession.relayout` on `session`, without a client-measured size.
+    pub fn relayout_for(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+        params: LayoutParams,
+        sync_seq: i32,
+    ) -> WmResult<RelayoutResult> {
+        self.relayout_with_requested_for(session, window, params, -1, -1, sync_seq)
+    }
+
+    /// `IWindowSession.relayout` without a client-measured size (VM transport).
     pub fn relayout(
         &mut self,
         window: WindowId,
         params: LayoutParams,
         sync_seq: i32,
     ) -> WmResult<RelayoutResult> {
-        self.relayout_with_requested(window, params, -1, -1, sync_seq)
+        self.relayout_for(self.current, window, params, sync_seq)
     }
 
     /// `IWindowSession.relayout` with the client-reported measured size.
@@ -354,8 +594,30 @@ impl WmsState {
         requested_height: i32,
         sync_seq: i32,
     ) -> WmResult<RelayoutResult> {
+        self.relayout_with_requested_for(
+            self.current,
+            window,
+            params,
+            requested_width,
+            requested_height,
+            sync_seq,
+        )
+    }
+
+    /// [`Self::relayout_with_requested`] on an explicit session: the call is
+    /// validated against the session node it arrived on (MPROC5c).
+    pub fn relayout_with_requested_for(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+        params: LayoutParams,
+        requested_width: i32,
+        requested_height: i32,
+        sync_seq: i32,
+    ) -> WmResult<RelayoutResult> {
+        self.check_session_window(session, window)?;
         let r = self.wm.relayout_with_requested(
-            self.session,
+            session,
             window,
             params,
             requested_width,
@@ -366,8 +628,14 @@ impl WmsState {
         Ok(r)
     }
 
-    /// `IWindowSession.remove`.
+    /// `IWindowSession.remove` (VM transport's current session).
     pub fn remove(&mut self, window: WindowId) -> WmResult<()> {
+        self.remove_for(self.current, window)
+    }
+
+    /// `IWindowSession.remove` on `session`.
+    pub fn remove_for(&mut self, session: SessionId, window: WindowId) -> WmResult<()> {
+        self.check_session_window(session, window)?;
         self.wm.remove(window)?;
         self.input.remove_window(window);
         Ok(())
@@ -434,6 +702,17 @@ impl WmsState {
     /// **not** publish a frame; only a real compositor buffer submission does
     /// (see `acos-runtime`'s `WmSurfaceBackend`).
     pub fn finish_drawing(&mut self, window: WindowId, seq: i32) -> WmResult<()> {
+        self.finish_drawing_for(self.current, window, seq)
+    }
+
+    /// `IWindowSession.finishDrawing` on `session`.
+    pub fn finish_drawing_for(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+        seq: i32,
+    ) -> WmResult<()> {
+        self.check_session_window(session, window)?;
         self.wm.finish_drawing(window, seq)?;
         self.finish_drawing_count += 1;
         Ok(())
@@ -451,6 +730,18 @@ impl WmsState {
         touchable_region: Option<acos_wm::geom::RectI>,
         content_insets: Option<acos_wm::geom::RectI>,
     ) -> WmResult<()> {
+        self.set_insets_for(self.current, window, touchable_region, content_insets)
+    }
+
+    /// `IWindowSession.setInsets` on `session`.
+    pub fn set_insets_for(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+        touchable_region: Option<acos_wm::geom::RectI>,
+        content_insets: Option<acos_wm::geom::RectI>,
+    ) -> WmResult<()> {
+        self.check_session_window(session, window)?;
         self.wm.set_insets(window, touchable_region, content_insets)
     }
 
@@ -460,26 +751,43 @@ impl WmsState {
         window: WindowId,
         types: i32,
     ) -> WmResult<()> {
+        self.update_requested_visible_types_for(self.current, window, types)
+    }
+
+    /// `IWindowSession.updateRequestedVisibleTypes` on `session`.
+    pub fn update_requested_visible_types_for(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+        types: i32,
+    ) -> WmResult<()> {
+        self.check_session_window(session, window)?;
         self.wm.update_requested_visible_types(window, types)
     }
 
     /// `IWindowSession.reportSystemGestureExclusionChanged` (oneway; recorded by
     /// validating that the window exists).
     pub fn report_system_gesture_exclusion_changed(&mut self, window: WindowId) -> WmResult<()> {
-        self.wm
-            .windows
-            .get_mut(&window)
-            .ok_or(WmError::UnknownWindow(window))
-            .map(|_| ())
+        self.report_system_gesture_exclusion_changed_for(self.current, window)
+    }
+
+    /// `IWindowSession.reportSystemGestureExclusionChanged` on `session`.
+    pub fn report_system_gesture_exclusion_changed_for(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+    ) -> WmResult<()> {
+        self.check_session_window(session, window)
     }
 
     /// `IWindowSession.pokeDrawLock` (oneway at the Java level; recorded).
     pub fn poke_draw_lock(&mut self, window: WindowId) -> WmResult<()> {
-        self.wm
-            .windows
-            .get_mut(&window)
-            .ok_or(WmError::UnknownWindow(window))
-            .map(|_| ())
+        self.poke_draw_lock_for(self.current, window)
+    }
+
+    /// `IWindowSession.pokeDrawLock` on `session`.
+    pub fn poke_draw_lock_for(&mut self, session: SessionId, window: WindowId) -> WmResult<()> {
+        self.check_session_window(session, window)
     }
 
     /// `IWindowSession.onRectangleOnScreenRequested` (oneway).
@@ -488,6 +796,17 @@ impl WmsState {
         window: WindowId,
         rect: Option<acos_wm::geom::RectI>,
     ) -> WmResult<()> {
+        self.on_rectangle_on_screen_requested_for(self.current, window, rect)
+    }
+
+    /// `IWindowSession.onRectangleOnScreenRequested` on `session`.
+    pub fn on_rectangle_on_screen_requested_for(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+        rect: Option<acos_wm::geom::RectI>,
+    ) -> WmResult<()> {
+        self.check_session_window(session, window)?;
         self.wm.on_rectangle_on_screen_requested(window, rect)
     }
 
@@ -534,6 +853,12 @@ impl WmsState {
 pub struct WmsService {
     state: Arc<Mutex<WmsState>>,
     _binder: BinderId,
+    /// The per-call session factory (`openSession` → a new session **and** a
+    /// new host node). `None` before `registry` has finished installing the
+    /// pieces a session needs (window-id node, compositor, input producer): an
+    /// `openSession` then fails structurally instead of answering a binder the
+    /// host cannot route.
+    sessions: Arc<Mutex<Option<crate::window_session::SessionFactory>>>,
 }
 
 impl std::fmt::Debug for WmsService {
@@ -547,10 +872,15 @@ impl std::fmt::Debug for WmsService {
 impl WmsService {
     /// Build the service around shared state.
     #[must_use]
-    pub fn new(state: Arc<Mutex<WmsState>>, wiring: Wiring) -> Self {
+    pub fn new(
+        state: Arc<Mutex<WmsState>>,
+        wiring: Wiring,
+        sessions: Arc<Mutex<Option<crate::window_session::SessionFactory>>>,
+    ) -> Self {
         Self {
             state,
             _binder: wiring.self_binder,
+            sessions,
         }
     }
 
@@ -604,19 +934,32 @@ impl ServiceObject for WmsService {
                 state.set_in_touch_mode(on, display);
                 vec![]
             }
-            // `IWindowManager.openSession(IWindowSessionCallback)` answers the
-            // host's `IWindowSession` node, so `ViewRootImpl`'s next call
-            // (`addToDisplayAsUser`) is routable (W1). A new session record is
-            // allocated on every call, exactly like the real WMS.
+            // `IWindowManager.openSession(IWindowSessionCallback)` creates a
+            // **new** session and answers **that session's** `IWindowSession`
+            // binder, exactly like stock `WindowManagerService.openSession`
+            // (`new Session(this, callback)`). MPROC5b measured why one shared
+            // node cannot work for two processes: the second `openSession`
+            // overwrote the first session id and the first process's next
+            // `relayout` was refused (`unknown session 2`).
             "openSession" => {
-                state.open_session();
-                let binder = state.host_session;
-                if binder.0 == 0 {
-                    return Err(crate::error::ServiceError::Internal(
-                        "android.view.IWindowSession is not registered on the host".into(),
-                    ));
-                }
-                vec![Value::Binder(Some(binder))]
+                let factory = self
+                    .sessions
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone()
+                    .ok_or_else(|| {
+                        crate::error::ServiceError::Internal(
+                            "android.view.IWindowSession cannot be opened: the session factory                              is not installed on the host"
+                                .into(),
+                        )
+                    })?;
+                // The factory takes the state lock itself; drop ours first.
+                drop(state);
+                let binder = factory.open();
+                return Ok(CallResult {
+                    reply: vec![Value::Binder(Some(binder))],
+                    deliveries: Vec::new(),
+                });
             }
             // The parcelable-bearing methods are served by `wms_java`.
             _ => return Err(Self::unsupported(method)),
@@ -633,7 +976,18 @@ impl ServiceObject for WmsService {
 /// Kept in this module so `registry` only needs the one-line call; the shared
 /// state is returned so the runtime's transport can drive the same object.
 pub fn install(host: &mut crate::host::ServiceHost) -> Arc<Mutex<WmsState>> {
-    install_with_insets(host, None)
+    install_with_insets(host, None).state
+}
+
+/// What [`install_with_insets`] hands the registry: the shared state and the
+/// slot the per-call session factory goes into once the pieces a session needs
+/// (the `IWindowId` node, the compositor, the input producer) are installed.
+#[derive(Clone, Debug)]
+pub struct WmsInstall {
+    /// The state machine every `IWindowSession` node serves.
+    pub state: Arc<Mutex<WmsState>>,
+    /// The session-factory slot (`registry` fills it).
+    pub sessions: Arc<Mutex<Option<crate::window_session::SessionFactory>>>,
 }
 
 /// W7b: [`install`] with an explicitly chosen app-window inset model.
@@ -644,18 +998,27 @@ pub fn install(host: &mut crate::host::ServiceHost) -> Arc<Mutex<WmsState>> {
 pub fn install_with_insets(
     host: &mut crate::host::ServiceHost,
     insets: Option<InsetsMode>,
-) -> Arc<Mutex<WmsState>> {
+) -> WmsInstall {
     let state = Arc::new(Mutex::new(match insets {
         Some(mode) => WmsState::new_with_insets(mode),
         None => WmsState::new(),
     }));
+    let sessions: Arc<Mutex<Option<crate::window_session::SessionFactory>>> =
+        Arc::new(Mutex::new(None));
     let factory_state = Arc::clone(&state);
+    let factory_sessions = Arc::clone(&sessions);
     host.register(
         "window",
         "android.view.IWindowManager",
-        move |w| Box::new(WmsService::new(Arc::clone(&factory_state), w)) as Box<dyn ServiceObject>,
+        move |w| {
+            Box::new(WmsService::new(
+                Arc::clone(&factory_state),
+                w,
+                Arc::clone(&factory_sessions),
+            )) as Box<dyn ServiceObject>
+        },
     );
-    state
+    WmsInstall { state, sessions }
 }
 
 #[cfg(test)]
@@ -737,10 +1100,70 @@ mod tests {
     #[test]
     fn open_session_returns_a_fresh_session_binder() {
         let mut st = WmsState::new();
-        let a = st.session_binder;
+        let a = st.session_binder();
         let b = st.open_session();
         assert_ne!(a, b);
-        assert_eq!(st.session_binder, b);
+        assert_eq!(st.session_binder(), b);
+        assert_eq!(st.sessions.len(), 2, "both sessions stay open");
+    }
+
+    /// MPROC5c, the MPROC5b failure as a test: with one session per
+    /// `openSession`, a window belongs to the session that added it, so a
+    /// `relayout` that arrives on **another** session is refused instead of
+    /// being validated against a shared "last session".
+    #[test]
+    fn a_second_session_cannot_relayout_the_first_ones_window() {
+        let mut st = WmsState::new();
+        let first = st.current;
+        let add = st
+            .add_to_display_as_user_for(first, BinderId(0x21), app_params(), 0)
+            .unwrap();
+        assert_eq!(add.result, ADD_OKAY);
+        let second = st.allocate_session();
+        assert!(
+            matches!(
+                st.relayout_with_requested_for(second, add.window, app_params(), -1, -1, 0),
+                Err(WmError::UnknownSession(s)) if s == second
+            ),
+            "proc-b's relayout of proc-a's window must be refused (MPROC5b: unknown session 2)"
+        );
+        // ... while the owning session's own relayout is served.
+        st.relayout_with_requested_for(first, add.window, app_params(), -1, -1, 0)
+            .expect("the owning session relayouts its own window");
+        // Every other window operation is validated the same way.
+        assert!(matches!(
+            st.remove_for(second, add.window),
+            Err(WmError::UnknownSession(s)) if s == second
+        ));
+        assert!(matches!(
+            st.finish_drawing_for(second, add.window, 0),
+            Err(WmError::UnknownSession(s)) if s == second
+        ));
+    }
+
+    /// MPROC5c: a session death drops that session's windows — and only those.
+    #[test]
+    fn closing_a_session_drops_its_windows_and_keeps_the_others() {
+        let mut st = WmsState::new();
+        let first = st.current;
+        let a = st
+            .add_to_display_as_user_for(first, BinderId(0x31), app_params(), 0)
+            .unwrap();
+        let second = st.allocate_session();
+        let b = st
+            .add_to_display_as_user_for(second, BinderId(0x32), app_params(), 0)
+            .unwrap();
+        st.record_session_process(second, 1);
+        assert_eq!(st.sessions_of_process(1), vec![second]);
+        let closed = st
+            .close_session(second)
+            .expect("the session existed");
+        assert_eq!(closed.1, vec![b.window]);
+        assert!(st.wm.windows.contains_key(&a.window), "the other session's window stays");
+        assert!(matches!(
+            st.relayout_for(second, b.window, app_params(), 0),
+            Err(WmError::UnknownWindow(w)) if w == b.window
+        ));
     }
 
     #[test]

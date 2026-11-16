@@ -197,6 +197,11 @@ pub struct LiveHandles {
     /// moves. The launcher serves the top process's probe sample (tree, and the
     /// frame evidence a screenshot reply names) from it.
     pub top_process: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    /// MPROC5c: the activity manager's state. The launcher's idle kill reads the
+    /// process table from it (a process with no started activity and no
+    /// started/bound service is a candidate) and the peer removes the record
+    /// when the process dies.
+    pub atms: std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>,
 }
 
 /// Install the standard ACOS service set on `host`.
@@ -228,7 +233,8 @@ pub fn install_with_handles_and_insets(
     host.register_aux("android.content.pm.IPackageInstaller");
 
     // WMS state machine (T-29); the runtime transport owns the wire codecs.
-    let wms_state = crate::wms::install_with_insets(host, insets);
+    let wms_install = crate::wms::install_with_insets(host, insets);
+    let wms_state = Arc::clone(&wms_install.state);
 
     // W-R T2: the frame clock. `android.gui.ISurfaceComposer` is served under
     // the `ServiceManager` name `SurfaceFlinger` (that is how
@@ -245,10 +251,12 @@ pub fn install_with_handles_and_insets(
         crate::compositor_client::DisplayDescriptor::reference(),
     );
 
-    // W1: the `IWindowSession` node. `IWindowManager.openSession` answers this
-    // binder; every `ViewRootImpl` window call lands here, byte-exact (see
-    // `window_session.rs`). `IWindowId` is an aux binder so `getWindowId`
-    // returns a routable handle instead of a fabricated id.
+    // W1/MPROC5c: the `IWindowSession` node is created **per openSession call**
+    // (stock `WindowManagerService.openSession` → `new Session(this, callback)`),
+    // so every app process has its own session id and its own node; a caller
+    // that addresses another process's window arrives on the wrong node and is
+    // refused. `IWindowId` is an aux binder so `getWindowId` returns a routable
+    // handle instead of a fabricated id.
     let window_id = host.register_aux("android.view.IWindowId");
     let session_state = Arc::clone(&wms_state);
     let input_host = crate::window_session::input_dispatch::InputHost::from_env();
@@ -268,27 +276,36 @@ pub fn install_with_handles_and_insets(
         wms: Arc::clone(&wms_state),
         intents: Arc::clone(&intents),
         top_process: Arc::clone(&top_process),
+        atms: Arc::new(Mutex::new(crate::atms::AtmsState::new())),
     };
-    let session_binder = host.register_dynamic(
-        "android.view.IWindowSession",
-        Box::new(
-            crate::window_session::WindowSessionService::new(session_state, window_id)
-                .with_compositor(Arc::clone(&compositor))
-                // I2: the one authoritative InputChannel producer. It publishes
-                // real FOCUS/TOUCH_MODE messages on `addToDisplayAsUser` and,
-                // when `ACOS_INPUT_TAP`/`ACOS_INPUT_KEY` is set, injects after
-                // the first relayout and logs the FINISHED/TIMELINE replies.
-                .with_input(input_host),
-        ),
-    );
+    // The per-call session factory: `openSession` asks it for a new session and
+    // gets that session's own host node (registered through the host's
+    // `NodeRegistrar`, which installs it before the reply reaches the guest).
+    let sessions = crate::window_session::SessionFactory::new(
+        Arc::clone(&session_state),
+        window_id,
+        host.node_registrar(),
+    )
+    .with_compositor(Arc::clone(&compositor))
+    // I2: the one authoritative InputChannel producer. It publishes real
+    // FOCUS/TOUCH_MODE messages on `addToDisplayAsUser` and, when
+    // `ACOS_INPUT_TAP`/`ACOS_INPUT_KEY` is set, injects after the first
+    // relayout and logs the FINISHED/TIMELINE replies.
+    .with_input(input_host);
+    *wms_install
+        .sessions
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(sessions);
+    // A session death destroys its windows' layers; give the state the
+    // compositor registry it needs for that (W42).
     wms_state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .host_session = session_binder;
+        .set_compositor(Arc::clone(&compositor));
 
     // Shared state. The PMS parses the APK lazily inside its factory so
     // installing the host touches no package data.
-    let atms = Arc::new(Mutex::new(crate::atms::AtmsState::new()));
+    let atms = Arc::clone(&live.atms);
     // MPROC5: ATMS publishes the foreground process tag here (`top_process`).
     atms.lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)

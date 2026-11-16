@@ -37,6 +37,13 @@ pub enum Engine {
     NativeOnly,
     /// Only the reference backend.
     ReferenceOnly,
+    /// Real Google ART, driven through `acos-art session` (MPROC5c).
+    ///
+    /// The scenario only means something on the real framework: a second guest
+    /// process, its own `IWindowSession`, and the host's process/window teardown
+    /// have no Rust-VM equivalent. The runner must execute it with
+    /// `--engine art`; there is no silent fallback to another engine.
+    Art,
 }
 
 /// What to do when the preferred engine cannot run a step.

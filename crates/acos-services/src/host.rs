@@ -14,6 +14,7 @@
 //! `UNSUPPORTED_ANDROID_API`, never a default success.
 
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -135,8 +136,74 @@ pub trait ServiceObject: Send {
     }
 }
 
+/// A node a service created while answering a transaction, waiting for the
+/// host to install it (see [`NodeRegistrar`]).
+pub struct PendingNode {
+    binder: BinderId,
+    descriptor: &'static str,
+    object: Box<dyn ServiceObject>,
+}
+
+/// The handle a service uses to create a **new host node mid-transaction**.
+///
+/// Stock Android does exactly this inside `IWindowManager.openSession`: the
+/// system process runs `new Session(this, callback)` and answers the caller
+/// with that new `IWindowSession` binder, so every app process talks to its own
+/// session object. ACOS's `ServiceHost` owns its dispatch table (`&mut self`
+/// during `transact`), so a service cannot insert an entry itself; it allocates
+/// the binder and parks the object here, and the host installs it when the
+/// transaction that created it returns — before the caller can use the handle.
+#[derive(Clone)]
+pub struct NodeRegistrar {
+    registry: Arc<BinderRegistry>,
+    owners: Arc<Mutex<std::collections::HashMap<u64, u32>>>,
+    pending: Arc<Mutex<Vec<PendingNode>>>,
+}
+
+impl std::fmt::Debug for NodeRegistrar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NodeRegistrar")
+            .field("pending", &self.pending.lock().map(|p| p.len()).unwrap_or(0))
+            .finish()
+    }
+}
+
+impl NodeRegistrar {
+    /// Allocate a binder and park `object` for installation under it.
+    pub fn register(&self, descriptor: &'static str, object: Box<dyn ServiceObject>) -> BinderId {
+        let binder = self.registry.register_local(descriptor);
+        self.pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(PendingNode {
+                binder,
+                descriptor,
+                object,
+            });
+        binder
+    }
+
+    /// The app process that owns `binder`, when the host recorded it.
+    ///
+    /// This is the same record the host keeps: a binder an app process handed
+    /// over in a request parcel is owned by that process. A window session uses
+    /// it to learn which process its `IWindow` belongs to (stock
+    /// `Session.mClientPid`, which AOSP reads from `Binder.getCallingPid`).
+    #[must_use]
+    pub fn binder_owner(&self, binder: BinderId) -> Option<u32> {
+        if binder.is_null() {
+            return None;
+        }
+        self.owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&binder.0)
+            .copied()
+    }
+}
+
 /// Wiring handed to a lazily-constructed service.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Wiring {
     /// This service's own binder handle.
     pub self_binder: BinderId,
@@ -147,6 +214,9 @@ pub struct Wiring {
     /// The `IPackageInstaller` binder (`IPackageManager.getPackageInstaller`).
     /// It is an aux node: a package query names it, but ACOS never installs.
     pub package_installer: BinderId,
+    /// MPROC5c: how a service creates a new host node while answering a
+    /// transaction (AOSP's `IWindowManager.openSession` → `new Session(...)`).
+    pub nodes: NodeRegistrar,
 }
 
 impl Default for Wiring {
@@ -156,6 +226,11 @@ impl Default for Wiring {
             controller: BinderId(0),
             content_provider: BinderId(0),
             package_installer: BinderId(0),
+            nodes: NodeRegistrar {
+                registry: Arc::new(BinderRegistry::new()),
+                owners: Arc::new(Mutex::new(std::collections::HashMap::new())),
+                pending: Arc::new(Mutex::new(Vec::new())),
+            },
         }
     }
 }
@@ -170,7 +245,7 @@ struct ServiceEntry {
 
 /// The dispatcher.
 pub struct ServiceHost {
-    registry: BinderRegistry,
+    registry: Arc<BinderRegistry>,
     /// One entry per registered descriptor.
     entries: HashMap<&'static str, ServiceEntry>,
     /// Descriptor for every binder handle (including secondary binders).
@@ -187,9 +262,13 @@ pub struct ServiceHost {
     /// (MPROC2 step 3a). A host service node has no entry; an app binder is
     /// recorded the first time its process hands it to the service layer
     /// (`addService`, `attachApplication`, any request parcel).
-    binder_owners: HashMap<u64, u32>,
+    binder_owners: Arc<Mutex<HashMap<u64, u32>>>,
     /// Binder records refused because the table was full (never a silent drop).
     binder_owner_drops: u64,
+    /// Nodes services parked during a transaction ([`NodeRegistrar`]).
+    pending_nodes: Arc<Mutex<Vec<PendingNode>>>,
+    /// The registrar handed to every lazily-constructed service.
+    nodes: NodeRegistrar,
     deliveries: Vec<PendingDelivery>,
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
@@ -225,14 +304,23 @@ impl ServiceHost {
     /// ACOS service set.
     #[must_use]
     pub fn new() -> Self {
+        let registry = Arc::new(BinderRegistry::new());
+        let binder_owners = Arc::new(Mutex::new(HashMap::new()));
+        let pending_nodes: Arc<Mutex<Vec<PendingNode>>> = Arc::new(Mutex::new(Vec::new()));
         Self {
-            registry: BinderRegistry::new(),
+            registry: Arc::clone(&registry),
+            binder_owners: Arc::clone(&binder_owners),
+            pending_nodes: Arc::clone(&pending_nodes),
+            nodes: NodeRegistrar {
+                registry,
+                owners: binder_owners,
+                pending: pending_nodes,
+            },
             entries: HashMap::new(),
             binder_descriptors: HashMap::new(),
             names: HashMap::new(),
             aux: HashMap::new(),
             dynamic: HashMap::new(),
-            binder_owners: HashMap::new(),
             binder_owner_drops: 0,
             deliveries: Vec::new(),
             trace: None,
@@ -240,6 +328,46 @@ impl ServiceHost {
             constructions: 0,
             notification: None,
         }
+    }
+
+    /// MPROC5c: the handle a service uses to create a new host node while
+    /// answering a transaction.
+    #[must_use]
+    pub fn node_registrar(&self) -> NodeRegistrar {
+        self.nodes.clone()
+    }
+
+    /// Install every node a service parked during the transaction that just
+    /// ran.
+    ///
+    /// Called by [`ServiceHost::transact`] before the reply is handed back, so
+    /// the binder a reply names (a fresh `IWindowSession`) is routable the
+    /// moment the caller can use it. The peer's `direct_dispatch` path (a
+    /// registered service reached around the ownership marker) runs the object
+    /// itself, so it calls this too.
+    pub fn install_pending_nodes(&mut self) -> usize {
+        let pending: Vec<PendingNode> = {
+            let mut queue = self
+                .pending_nodes
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            std::mem::take(&mut *queue)
+        };
+        let count = pending.len();
+        for node in pending {
+            self.binder_descriptors.insert(node.binder.0, node.descriptor);
+            self.dynamic.insert(node.binder.0, node.object);
+        }
+        count
+    }
+
+    /// Drop a dynamically registered node (the object that owned it is gone:
+    /// a window session's process died). A later transaction on the handle
+    /// fails structurally instead of reaching a stale object.
+    pub fn drop_dynamic_node(&mut self, binder: BinderId) -> bool {
+        self.binder_descriptors.remove(&binder.0);
+        self.registry.remove(binder);
+        self.dynamic.remove(&binder.0).is_some()
     }
 
     /// Register a service name and descriptor.
@@ -341,11 +469,16 @@ impl ServiceHost {
         if binder.is_null() {
             return false;
         }
-        if let Some(existing) = self.binder_owners.get(&binder.0) {
+        let mut owners = self
+            .binder_owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(existing) = owners.get(&binder.0) {
             if *existing == tag {
                 return true;
             }
-        } else if self.binder_owners.len() >= MAX_BINDER_OWNERS {
+        } else if owners.len() >= MAX_BINDER_OWNERS {
+            drop(owners);
             self.binder_owner_drops = self.binder_owner_drops.saturating_add(1);
             eprintln!(
                 "acos-services: ART_RESOURCE_LIMIT: binder owner table is full 
@@ -354,21 +487,28 @@ impl ServiceHost {
             );
             return false;
         }
-        self.binder_owners.insert(binder.0, tag);
+        owners.insert(binder.0, tag);
         true
     }
 
     /// The app process that owns `binder`, when it is an app binder.
     #[must_use]
     pub fn binder_owner(&self, binder: BinderId) -> Option<u32> {
-        self.binder_owners.get(&binder.0).copied()
+        self.binder_owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&binder.0)
+            .copied()
     }
 
     /// Every binder recorded as owned by process `tag`, ascending.
     #[must_use]
     pub fn binders_of_process(&self, tag: u32) -> Vec<BinderId> {
-        let mut v: Vec<BinderId> = self
+        let owners = self
             .binder_owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut v: Vec<BinderId> = owners
             .iter()
             .filter(|(_, owner)| **owner == tag)
             .map(|(id, _)| BinderId(*id))
@@ -382,9 +522,13 @@ impl ServiceHost {
     /// Returns how many records were dropped. A later delivery to one of those
     /// ids fails structurally instead of reaching a stale handle.
     pub fn drop_process_binders(&mut self, tag: u32) -> usize {
-        let before = self.binder_owners.len();
-        self.binder_owners.retain(|_, owner| *owner != tag);
-        before - self.binder_owners.len()
+        let mut owners = self
+            .binder_owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let before = owners.len();
+        owners.retain(|_, owner| *owner != tag);
+        before - owners.len()
     }
 
     /// Binder owner records refused because the table was full.
@@ -604,6 +748,7 @@ impl ServiceHost {
                     .get("android.content.pm.IPackageInstaller")
                     .copied()
                     .unwrap_or(BinderId(0)),
+                nodes: self.nodes.clone(),
             };
             let object = factory(wiring);
             self.constructions += 1;
@@ -727,6 +872,9 @@ impl ServiceHost {
         let oneway = flags & 1 != 0;
         let started = trace::start();
         let result = self.transact_inner(binder, code, data, reply, oneway);
+        if result.is_ok() {
+            self.install_pending_nodes();
+        }
         let wall_ns = trace::elapsed_ns(started);
 
         if let Some(sink) = self.trace.as_mut() {

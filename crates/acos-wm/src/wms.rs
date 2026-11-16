@@ -541,6 +541,28 @@ impl WindowManager {
         })
     }
 
+    /// Session death (stock `Session.kill` / process death): drop the session
+    /// and every window it owns, returning the window ids that went with it.
+    ///
+    /// An unknown session is not an error here: the caller is a teardown path
+    /// that races nothing (a second death report must not fail).
+    pub fn close_session(&mut self, session: SessionId) -> Vec<WindowId> {
+        let Some(record) = self.sessions.remove(&session) else {
+            return Vec::new();
+        };
+        let windows = record.windows.clone();
+        for window in &windows {
+            let _ = self.remove(*window);
+        }
+        windows
+    }
+
+    /// The session that owns `window`, when the window is known.
+    #[must_use]
+    pub fn window_session(&self, window: WindowId) -> Option<SessionId> {
+        self.windows.get(&window).map(|record| record.session)
+    }
+
     /// `IWindowSession.remove`.
     pub fn remove(&mut self, window: WindowId) -> Result<()> {
         let record = self

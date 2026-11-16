@@ -636,6 +636,55 @@ impl Peer {
         }
     }
 
+    /// MPROC5c: close every window session a dead process owned.
+    ///
+    /// A session is closed when its recorded process tag is `tag` or when one
+    /// of its windows is a binder the process owned. Returns
+    /// `(sessions closed, windows dropped)`.
+    fn close_process_window_sessions(&mut self, tag: u32, window_binders: &[BinderId]) -> (usize, usize) {
+        let Ok(object) = self.host.ensure("android.view.IWindowManager") else {
+            return (0, 0);
+        };
+        let Some(wms) = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::wms::WmsService>())
+            .map(|wms| wms.shared_state())
+        else {
+            return (0, 0);
+        };
+        let owners = self.host.node_registrar();
+        let closed = wms
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .close_process_sessions(tag, window_binders, |binder| owners.binder_owner(binder));
+        for (session, binder, windows) in &closed {
+            self.host.drop_dynamic_node(*binder);
+            eprintln!(
+                "acos-binder-peer: process tag {tag} disconnected: window session {session} \
+                 closed ({binder:#x}, {} window(s): {windows:?})",
+                windows.len(),
+                binder = binder.0
+            );
+        }
+        (
+            closed.len(),
+            closed.iter().map(|(_, _, windows)| windows.len()).sum(),
+        )
+    }
+
+    /// MPROC5c: tell the activity manager a process is gone.
+    fn record_process_died(&mut self, tag: u32) {
+        let Ok(object) = self.host.ensure("android.app.IActivityTaskManager") else {
+            return;
+        };
+        if let Some(atms) = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+        {
+            atms.note_process_died(tag);
+        }
+    }
+
     /// MPROC4 step 3b: drain the spawn requests the activity manager recorded
     /// while handling frames (`startActivity`, `startService`, `bindService` to a
     /// package with no process).
@@ -683,7 +732,18 @@ impl Peer {
                 );
             }
         }
+        // MPROC5c: the process's window sessions die with it (stock
+        // `Session.kill` when the client dies): their windows, their compositor
+        // layers and their host nodes go, and a later call on a stale session
+        // binder fails structurally. The window binders are read before the
+        // owner records are dropped.
+        let window_binders = self.host.binders_of_process(tag);
         let owners = self.host.drop_process_binders(tag);
+        self.close_process_window_sessions(tag, &window_binders);
+        // MPROC5c: the activity manager's `ProcessRecord` for the tag goes too
+        // (stock `ActivityManagerService.removeProcessLocked`), so an idle-killed
+        // process is not reported as running and the next intent respawns it.
+        self.record_process_died(tag);
         // MPROC3 step 3c: the process's binders that other processes hold as
         // synthetic nodes are dead now. Release them and queue one
         // `F_DEATH` per holder (plus a structured refusal for every forwarded
@@ -1382,6 +1442,10 @@ impl Peer {
         };
         match result {
             Ok(()) => {
+                // MPROC5c: a node a service created while answering (the fresh
+                // `IWindowSession` of `openSession`) must be routable before the
+                // reply reaches the guest.
+                self.host.install_pending_nodes();
                 if let Some(wire) = attach_thread {
                     // The process told the system which binder answers its
                     // deliveries: record it as owned by this process, so the

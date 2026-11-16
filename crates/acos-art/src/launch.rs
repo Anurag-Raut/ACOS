@@ -122,6 +122,13 @@ pub struct LaunchOpts {
     /// manifest table, exactly as the launched APK is. Empty (and then free)
     /// for every single-package launch: nothing is staged, bound or installed.
     pub extra_apks: Vec<PathBuf>,
+    /// MPROC5c: idle kill. A **lazily spawned** secondary process that has held
+    /// nothing for this long — no started activity, no started/bound service,
+    /// no visible window — is killed (stock
+    /// `ActivityManagerConstants.MAX_CACHED_PROCESSES` / `CachedAppOptimizer`),
+    /// its `ProcessRecord` and window sessions go, and the next intent spawns it
+    /// again. `0` disables it. `--idle-kill-seconds`, default 30.
+    pub idle_kill_secs: u64,
 }
 
 impl Default for LaunchOpts {
@@ -139,6 +146,7 @@ impl Default for LaunchOpts {
             insets: acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string(),
             animations: Animations::On,
             extra_apks: Vec::new(),
+            idle_kill_secs: 30,
         }
     }
 }
@@ -806,6 +814,8 @@ struct SecondaryPool {
     uninstalled: Vec<serde_json::Value>,
     /// Spawns that failed (`package`, `error`), never a silent drop.
     failures: Vec<serde_json::Value>,
+    /// MPROC5c: processes the idle kill took (`tag`, package, pid, idle_ms).
+    kills: Vec<serde_json::Value>,
     started: Instant,
 }
 
@@ -818,6 +828,7 @@ impl SecondaryPool {
             records: Vec::new(),
             uninstalled: Vec::new(),
             failures: Vec::new(),
+            kills: Vec::new(),
             started: Instant::now(),
         }
     }
@@ -927,6 +938,72 @@ impl SecondaryPool {
         }
     }
 
+    /// MPROC5c: kill every lazily spawned process that has held nothing for
+    /// `idle`.
+    ///
+    /// The activity manager owns the rule (no started activity, no started or
+    /// bound service — [`acos_services::atms::AtmsState::idle_processes`]); the
+    /// window manager owns "no visible window" ([`WmsState::process_has_visible_window`]);
+    /// the launcher owns the process, so it is the one that kills it. The
+    /// process group goes (never one pid), the pool forgets it (so the next
+    /// intent's spawn is a real spawn again), and the guest's socket close makes
+    /// the peer drop its binder records, queue `F_DEATH` to its holders (MPROC5b's
+    /// death half) and close its window sessions.
+    fn idle_kill(
+        &mut self,
+        idle: Duration,
+        atms: &Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+        wms: &Arc<std::sync::Mutex<acos_services::wms::WmsState>>,
+    ) -> Vec<serde_json::Value> {
+        if idle.is_zero() {
+            return Vec::new();
+        }
+        let candidates = atms
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .idle_processes(idle);
+        let mut killed = Vec::new();
+        for (tag, package, idle_ms) in candidates {
+            let visible = wms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .process_has_visible_window(tag);
+            if visible {
+                continue;
+            }
+            let Some(mut guest) = self.guests.remove(&tag) else {
+                continue;
+            };
+            let sessions = wms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .sessions_of_process(tag)
+                .len();
+            let pid = guest.pid;
+            guest.cgroup.kill();
+            let _ = guest.child.kill();
+            let _ = guest.child.wait();
+            let record = serde_json::json!({
+                "tag": tag,
+                "package": package,
+                "pid": pid,
+                "reason": "idle",
+                "idle_ms": idle_ms,
+                "idle_kill_secs": idle.as_secs(),
+                "window_sessions": sessions,
+            });
+            eprintln!(
+                "acos-art: launch: idle kill tag={tag} ({package}, pid {pid}) after {idle_ms}ms \
+                 idle ({} window session(s))",
+                record["window_sessions"]
+            );
+            self.records.push(record.clone());
+            self.kills.push(record.clone());
+            killed.push(record);
+        }
+        killed
+    }
+
     /// Reap a process that ended by itself and record why (a secondary guest
     /// that crashed must be visible, never mistaken for a running one).
     fn reap(&mut self) -> Vec<serde_json::Value> {
@@ -978,6 +1055,8 @@ impl SecondaryPool {
             "requests": self.records,
             "uninstalled": self.uninstalled,
             "failures": self.failures,
+            // MPROC5c: what the idle kill took, and the rule it applied.
+            "killed": self.kills,
         })
     }
 
@@ -2424,6 +2503,8 @@ pub(crate) fn launch_session(
             // MPROC4 step 3b: the session's secondary processes.
             &mut secondary_pool,
             spawn_rx,
+            // MPROC5c: the idle kill's timeout (`0` disables it).
+            Duration::from_secs(opts.idle_kill_secs),
         );
         match dead {
             Ok(end) => {
@@ -5506,6 +5587,9 @@ fn interactive_serve(
     // the peer thread hands over.
     secondary: &mut SecondaryPool,
     spawn_rx: mpsc::Receiver<acos_services::ams::ProcessSpawnRequest>,
+    // MPROC5c: how long a lazily spawned process may hold nothing before it is
+    // killed (stock cached-process policy); `0` disables the kill.
+    idle_kill: Duration,
 ) -> std::io::Result<SessionEnd> {
     let mut evidence: Vec<serde_json::Value> = Vec::new();
     let mut captures = 0u64;
@@ -5806,7 +5890,24 @@ fn interactive_serve(
         for record in secondary.reap() {
             evidence.push(record);
         }
-        let line = match crx.recv_timeout(deadline_left) {
+        // MPROC5c: the idle kill runs before every wait, and the wait itself is
+        // bounded by the next idle deadline, so an idle process is killed on
+        // time without a polling timer.
+        for record in secondary.idle_kill(idle_kill, &live.atms, &live.wms) {
+            evidence.push(record);
+        }
+        let mut wait = deadline_left;
+        if !idle_kill.is_zero() {
+            let next_idle = live
+                .atms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .next_idle_deadline(idle_kill);
+            if let Some(deadline) = next_idle {
+                wait = wait.min(deadline.saturating_duration_since(Instant::now()));
+            }
+        }
+        let line = match crx.recv_timeout(wait) {
             Ok(ServeEvent::Spawn(request)) => {
                 secondary.spawn(
                     &request,
@@ -5851,6 +5952,11 @@ fn interactive_serve(
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => None,
             Err(mpsc::RecvTimeoutError::Timeout) => {
+                // An idle-kill wake is not the session cap: sweep (the next
+                // iteration does that) and keep serving.
+                if Instant::now() < session_deadline {
+                    continue;
+                }
                 // The only periodic bound left is the 900 s session cap.
                 kill_guest(child, cgroup);
                 let reply = serde_json::json!({

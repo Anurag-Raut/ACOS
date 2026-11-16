@@ -123,6 +123,12 @@ fn real_main() -> Result<ExitCode> {
     let mut until = "application-created".to_string();
     let mut animations = acos_art::launch::Animations::On;
     let mut extra_apks: Vec<PathBuf> = Vec::new();
+    // MPROC5c: the idle kill's timeout. `ACOSLAUNCH_IDLE_KILL_SECS` is the
+    // plan/env spelling the zygote path already uses; the flag overrides it.
+    let mut idle_kill_secs = std::env::var("ACOSLAUNCH_IDLE_KILL_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(30u64);
     let mut package: Option<String> = None;
     let mut layout: Option<String> = None;
     let mut size: (u32, u32, u32) = (1080, 2062, 420);
@@ -191,6 +197,8 @@ fn real_main() -> Result<ExitCode> {
             // MPROC1: repeatable; each APK is installed into the session beside
             // the launched one, at its own uid, with its own guest paths.
             "--extra-apk" => extra_apks.push(PathBuf::from(next(&mut i)?)),
+            // MPROC5c: the idle kill's timeout (0 disables it; tests set small).
+            "--idle-kill-seconds" => idle_kill_secs = next(&mut i)?.parse().unwrap_or(30),
             "--package" => package = Some(next(&mut i)?),
             "--activity" => activity = Some(next(&mut i)?),
             "--session-id" => session_id = Some(next(&mut i)?),
@@ -392,6 +400,7 @@ fn real_main() -> Result<ExitCode> {
                 insets,
                 animations,
                 extra_apks,
+                idle_kill_secs,
             };
             let res = acos_art::launch::launch(&root, &opts)?;
             println!("{}", serde_json::to_string_pretty(&res).unwrap());

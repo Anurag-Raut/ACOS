@@ -187,6 +187,13 @@
             "reference-only"
           ],
           "type": "string"
+        },
+        {
+          "description": "Real Google ART, driven through `acos-art session` (MPROC5c).\n\nThe scenario only means something on the real framework: a second guest process, its own `IWindowSession`, and the host's process/window teardown have no Rust-VM equivalent. The runner must execute it with `--engine art`; there is no silent fallback to another engine.",
+          "enum": [
+            "art"
+          ],
+          "type": "string"
         }
       ]
     },
