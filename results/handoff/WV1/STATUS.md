@@ -109,6 +109,17 @@ Two more measured facts (second run, `ACOS_PMS_TRACE`):
   typed arrays before it (`getPackageInfo(primary, 0x100024c0)` now decodes, so
   the head is right for that record).
 
+Checked and cleared while narrowing: the nested `ApplicationInfo` **does** carry a
+squash marker int on the wire
+(`ApplicationInfo.CREATOR.createFromParcel` = `source.readSquashed(ApplicationInfo::new)`,
+`.cache/aosp/base/core/java/android/content/pm/ApplicationInfo.java:2132`), and the
+Rust `ApplicationInfo` spec already writes it
+(`crates/acos-services/src/parcelable.rs:240`, `FieldOp::Int // maybeWriteSquashed marker`),
+so the *shape* of the `PackageInfo` encoding matches AOSP `writeToParcel` field
+for field. The defect is therefore in a **value** or in which writer answers
+(this reply vs the Java materialiser that answers the primary package), which is
+exactly what one byte-level dump decides.
+
 That is the hypothesis to test first (and it would be a root-cause fix, not a
 WebView patch): dump the bytes of `getPackageInfo(<provider>, 0x100024c0)` and of
 `getPackageInfo(<primary>, 0x100024c0)` with an `ACOS_PARCEL_DUMP=<path>` hook
