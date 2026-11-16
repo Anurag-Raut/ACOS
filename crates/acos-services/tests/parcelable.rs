@@ -513,6 +513,127 @@ fn sample_for(class: &str) -> Option<Parcelable> {
             class,
             vec![Value::List(None)],
         ),
+        "android.app.Notification" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Int(1),           // version
+                Value::Binder(None),     // mAllowlistToken
+                Value::Long(1_700_000_000_000), // when
+                Value::Long(1_700_000_000_000), // creationTime
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::Parcelable(Parcelable::ordered(
+                        "android.graphics.drawable.Icon",
+                        vec![
+                            Value::Int(2), // TYPE_RESOURCE
+                            Value::Str(Some("dev.acos.fixtures.notif".into())),
+                            Value::Int(0x7f_01_0001),
+                            Value::Bool(false), // useMonochrome
+                            Value::Float(1.0),  // insetScale
+                            Value::Cond { present: false, values: vec![] },
+                            Value::Int(0), // BlendMode.SRC_IN
+                        ],
+                    ))],
+                },
+                Value::Int(1), // number
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::Parcelable(Parcelable::ordered(
+                        "android.app.PendingIntent",
+                        vec![Value::Binder(Some(acos_parcel::binder::BinderId(7)))],
+                    ))],
+                },
+                Value::Cond { present: false, values: vec![] }, // deleteIntent
+                Value::Cond { present: false, values: vec![] }, // tickerText
+                Value::Cond { present: false, values: vec![] }, // tickerView
+                Value::Cond { present: false, values: vec![] }, // contentView
+                Value::Cond { present: false, values: vec![] }, // mLargeIcon
+                Value::Int(0), // defaults
+                Value::Int(0x10), // flags (FLAG_ONGOING_EVENT)
+                Value::Cond { present: false, values: vec![] }, // sound
+                Value::Int(0), // audioStreamType
+                Value::Cond { present: false, values: vec![] }, // audioAttributes
+                Value::LongArray(None), // vibrate
+                Value::Int(0), // ledARGB
+                Value::Int(0), // ledOnMS
+                Value::Int(0), // ledOffMS
+                Value::Int(0), // iconLevel
+                Value::Cond { present: false, values: vec![] }, // fullScreenIntent
+                Value::Int(0), // priority
+                Value::Str8(None), // category
+                Value::Str8(Some("fixture-group".into())), // mGroupKey
+                Value::Str8(None), // mSortKey
+                Value::Bundle(Some({
+                    let mut b = Bundle::new();
+                    b.put("android.title", Value::Str(Some("hello".into())));
+                    b.put("android.text", Value::Str(Some("world".into())));
+                    b
+                })),
+                Value::List(Some(vec![Value::Parcelable(Parcelable::ordered(
+                    "android.app.Notification$Action",
+                    vec![
+                        Value::Cond { present: false, values: vec![] }, // icon
+                        Value::Str(Some("Reply".into())),               // title
+                        Value::Cond { present: false, values: vec![] }, // actionIntent
+                        Value::Bundle(None),                            // mExtras
+                        Value::List(None),                              // mRemoteInputs
+                        Value::Int(1), // mAllowGeneratedReplies
+                        Value::Int(0), // mSemanticAction
+                        Value::Int(0), // mIsContextual
+                        Value::Int(0), // mAuthenticationRequired
+                    ],
+                ))])),
+                Value::Cond { present: false, values: vec![] }, // bigContentView
+                Value::Cond { present: false, values: vec![] }, // headsUpContentView
+                Value::Int(1), // visibility
+                Value::Cond { present: false, values: vec![] }, // publicVersion
+                Value::Int(0), // color
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::Str8(Some("fixture-channel".into()))],
+                },
+                Value::Long(0), // mTimeout
+                Value::Cond { present: false, values: vec![] }, // mShortcutId
+                Value::Cond { present: false, values: vec![] }, // mLocusId
+                Value::Int(0), // mBadgeIcon
+                Value::Cond { present: false, values: vec![] }, // mSettingsText
+                Value::Int(0), // mGroupAlertBehavior
+                Value::Cond { present: false, values: vec![] }, // mBubbleMetadata
+                Value::Bool(false), // mAllowSystemGeneratedContextualActions
+                Value::Int(0),      // mFgsDeferBehavior
+                Value::Int(-1),     // allPendingIntents (null ArraySet)
+            ],
+        ),
+        "android.app.Notification$Action" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Cond { present: false, values: vec![] },
+                Value::Str(Some("Reply".into())),
+                Value::Cond { present: false, values: vec![] },
+                Value::Bundle(None),
+                Value::List(None),
+                Value::Int(1),
+                Value::Int(0),
+                Value::Int(0),
+                Value::Int(0),
+            ],
+        ),
+        "android.app.PendingIntent" => Parcelable::ordered(
+            class,
+            vec![Value::Binder(Some(acos_parcel::binder::BinderId(7)))],
+        ),
+        "android.graphics.drawable.Icon" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Int(2), // TYPE_RESOURCE
+                Value::Str(Some("dev.acos.fixtures.notif".into())),
+                Value::Int(0x7f_01_0001),
+                Value::Bool(false),
+                Value::Float(1.0),
+                Value::Cond { present: false, values: vec![] },
+                Value::Int(0),
+            ],
+        ),
         "android.view.RoundedCorners" => {
             Parcelable::ordered(class, vec![Value::Cond { present: false, values: vec![] }])
         }
@@ -535,4 +656,28 @@ fn sample_for(class: &str) -> Option<Parcelable> {
         ),
         _ => return None,
     })
+}
+
+/// The `Icon` branch logic: a resource icon round-trips, and a bitmap icon is a
+/// structured `UnsupportedParcelable` rather than a mis-read payload.
+#[test]
+fn icon_payload_round_trips() {
+    let icon = Parcelable::ordered(
+        "android.graphics.drawable.Icon",
+        vec![
+            Value::Int(2),
+            Value::Str(Some("dev.acos.fixtures.notif".into())),
+            Value::Int(0x7f_01_0001),
+            Value::Bool(false),
+            Value::Float(1.0),
+            Value::Cond { present: false, values: vec![] },
+            Value::Int(0),
+        ],
+    );
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &icon).expect("write icon");
+    parcel.set_data_position(0);
+    let decoded = parcelable::read_payload("android.graphics.drawable.Icon", &mut parcel)
+        .expect("read icon");
+    assert_eq!(decoded, icon);
 }

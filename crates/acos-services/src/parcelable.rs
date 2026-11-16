@@ -135,6 +135,11 @@ pub enum FieldOp {
     /// A payload ACOS cannot model. Reading or writing it raises a structured
     /// `UnsupportedParcelable` rather than silently desynchronising the parcel.
     Unsupported(&'static str),
+    /// `android.graphics.drawable.Icon`: an `int` type tag and then the fields
+    /// of that branch (`Icon.writeToParcel` switches on `mType`), followed by
+    /// the nullable `ColorStateList` tint and the `BlendMode` value. See
+    /// [`read_icon`]/[`write_icon`].
+    Icon,
 }
 
 /// How faithfully a spec covers the real method.
@@ -1644,6 +1649,111 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Prefix,
     },
+    // ---- MODNOTIF3: the posted notification and its action -----------------
+    //
+    // `Notification.writeToParcel` installs a `PendingIntent` marshaling
+    // listener, calls `writeToParcelImpl` and then writes the collected
+    // `allPendingIntents` ArraySet **last**
+    // (`base/core/java/android/app/Notification.java:3156-3190`). Every
+    // nullable member of `writeToParcelImpl` (`:3193-3360`) is an `int`
+    // presence marker followed by the payload; a `PendingIntent` writes only a
+    // strong binder (`PendingIntent.java:1500`), so the five intent fields are
+    // `Cond(&[Binder])`.
+    //
+    // The trailing `writeArraySet` is the one gap: this codec writes the null
+    // encoding (`-1`), which the framework reader accepts
+    // (`Notification(Parcel)` assigns it and nothing dereferences it on the
+    // system side). The set is a marshaling scratch list of the PendingIntents
+    // that were *just written field-by-field above*; it is not extra state.
+    ParcelableSpec {
+        class: "android.app.Notification",
+        fields: &[
+            FieldOp::Int,    // version (1)
+            FieldOp::Binder, // mAllowlistToken
+            FieldOp::Long,   // when
+            FieldOp::Long,   // creationTime
+            FieldOp::Cond(&[FieldOp::Icon]), // mSmallIcon
+            FieldOp::Int,    // number
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // contentIntent
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // deleteIntent
+            FieldOp::Cond(&[FieldOp::CharSequence]), // tickerText
+            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // tickerView
+            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // contentView
+            FieldOp::Cond(&[FieldOp::Icon]), // mLargeIcon
+            FieldOp::Int,    // defaults
+            FieldOp::Int,    // flags
+            FieldOp::Cond(&[FieldOp::Nested("android.net.Uri")]), // sound
+            FieldOp::Int,    // audioStreamType
+            FieldOp::Cond(&[FieldOp::Nested("android.media.AudioAttributes")]), // audioAttributes
+            FieldOp::LongArray, // vibrate
+            FieldOp::Int,       // ledARGB
+            FieldOp::Int,       // ledOnMS
+            FieldOp::Int,       // ledOffMS
+            FieldOp::Int,       // iconLevel
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // fullScreenIntent
+            FieldOp::Int,       // priority
+            FieldOp::Str8,      // category
+            FieldOp::Str8,      // mGroupKey
+            FieldOp::Str8,      // mSortKey
+            FieldOp::Bundle,    // extras (android.title / android.text / ...)
+            FieldOp::TypedArray("android.app.Notification$Action"), // actions
+            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // bigContentView
+            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // headsUpContentView
+            FieldOp::Int, // visibility
+            FieldOp::Cond(&[FieldOp::Nested("android.app.Notification")]), // publicVersion
+            FieldOp::Int, // color
+            FieldOp::Cond(&[FieldOp::Str8]), // mChannelId
+            FieldOp::Long, // mTimeout
+            FieldOp::Cond(&[FieldOp::Str8]), // mShortcutId
+            FieldOp::Cond(&[FieldOp::Nested("android.os.LocusId")]), // mLocusId
+            FieldOp::Int, // mBadgeIcon
+            FieldOp::Cond(&[FieldOp::CharSequence]), // mSettingsText
+            FieldOp::Int, // mGroupAlertBehavior
+            FieldOp::Cond(&[FieldOp::Nested(
+                "android.app.Notification$BubbleMetadata",
+            )]), // mBubbleMetadata
+            FieldOp::Bool, // mAllowSystemGeneratedContextualActions
+            FieldOp::Int,  // mFgsDeferBehavior
+            FieldOp::Int,  // allPendingIntents (ArraySet: -1 = null, see above)
+        ],
+        verification: Verification::Full,
+    },
+    // `Notification$Action.writeToParcel` (`Notification.java:2444-2466`): the
+    // optional icon, the title (TextUtils), the optional `actionIntent`, the
+    // extras bundle, the typed `RemoteInput` array and four flags.
+    ParcelableSpec {
+        class: "android.app.Notification$Action",
+        fields: &[
+            FieldOp::Cond(&[FieldOp::Icon]), // icon
+            FieldOp::CharSequence,           // title
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // actionIntent
+            FieldOp::Bundle,                 // mExtras
+            FieldOp::TypedArray("android.app.RemoteInput"), // mRemoteInputs
+            FieldOp::Int,                    // mAllowGeneratedReplies
+            FieldOp::Int,                    // mSemanticAction
+            FieldOp::Int,                    // mIsContextual
+            FieldOp::Int,                    // mAuthenticationRequired
+        ],
+        verification: Verification::Full,
+    },
+    // `PendingIntent.writeToParcel` writes **only** a strong binder
+    // (`PendingIntent.java:1500`): the `IIntentSender` the system service
+    // returned from `getIntentSender`. It is the codec `Cond[Nested(..)]`
+    // needs for the notification's intent fields.
+    ParcelableSpec {
+        class: "android.app.PendingIntent",
+        fields: &[FieldOp::Binder],
+        verification: Verification::Full,
+    },
+    // `Icon.writeToParcel` switches on `mType`, so it has no single field list:
+    // the type tag selects the branch. [`read_icon`]/[`write_icon`] cover the
+    // resource, URI and data branches; a bitmap icon is a structured
+    // `UnsupportedParcelable` (a `Bitmap` payload is not modelled).
+    ParcelableSpec {
+        class: "android.graphics.drawable.Icon",
+        fields: &[],
+        verification: Verification::Curated,
+    },
     // ---- K2/R1: the single-user emulated volume ----------------------------
     //
     // `StorageVolume.writeToParcel` (image `classes3.dex`): four string8s, five
@@ -1731,6 +1841,9 @@ pub fn read_payload(class: &str, parcel: &mut Parcel) -> Result<Parcelable> {
     if class == PARCELED_LIST_SLICE {
         return read_parceled_list_slice(parcel);
     }
+    if class == ICON_CLASS {
+        return read_icon(parcel);
+    }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     let mut values = Vec::with_capacity(spec.fields.len());
     for field in spec.fields {
@@ -1756,6 +1869,9 @@ pub fn write_payload(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
     }
     if class == PARCELED_LIST_SLICE {
         return write_parceled_list_slice(parcel, value);
+    }
+    if class == ICON_CLASS {
+        return write_icon(parcel, value);
     }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     if values.len() != spec.fields.len() {
@@ -1852,7 +1968,17 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
                 }
                 let mut out = Vec::with_capacity(n);
                 for _ in 0..n {
-                    out.push(Value::Parcelable(read_payload(class, parcel)?));
+                    // `Parcel.writeTypedArray` writes each element through
+                    // `writeTypedObject`: an `int` presence marker (0 = null)
+                    // and then the payload. The writer in this module has
+                    // always emitted that marker; the reader must consume it,
+                    // or every following field is misaligned (found by the
+                    // notification's non-empty `actions` array).
+                    if parcel.read_int32()? == 0 {
+                        out.push(Value::Parcelable(Parcelable::Null));
+                    } else {
+                        out.push(Value::Parcelable(read_payload(class, parcel)?));
+                    }
                 }
                 Value::List(Some(out))
             }
@@ -1958,6 +2084,7 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
         }
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
         FieldOp::Cutout => read_cutout(parcel)?,
+        FieldOp::Icon => Value::Parcelable(read_icon(parcel)?),
         FieldOp::CountedNested(class) => {
             let n = parcel.read_int32()?;
             if n < 0 {
@@ -2252,6 +2379,10 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
         },
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
         FieldOp::Cutout => write_cutout(parcel, value)?,
+        FieldOp::Icon => {
+            let payload = expect_parcelable(value)?;
+            write_icon(parcel, payload)?;
+        }
         FieldOp::CountedNested(_class) => match value {
             Value::List(None) | Value::Skipped => parcel.write_int32(-1),
             Value::List(Some(items)) => {
@@ -2484,6 +2615,9 @@ pub fn read_bundle(parcel: &mut Parcel) -> Result<Option<Bundle>> {
 
 /// The codec key for `android.content.Intent`.
 pub const INTENT_CLASS: &str = "android.content.Intent";
+
+/// The codec key for `android.graphics.drawable.Icon`.
+pub const ICON_CLASS: &str = "android.graphics.drawable.Icon";
 
 /// `ParceledListSlice<T>` has a variable payload (count, element class name,
 /// then each element's `writeTypedObject` presence marker + payload) that no
@@ -3326,6 +3460,103 @@ fn write_typed_value(parcel: &mut Parcel, value: &Value) -> Result<()> {
     }
 }
 
+/// `Icon.TYPE_*` tags (`base/graphics/java/android/graphics/drawable/Icon.java:88-114`).
+const ICON_TYPE_BITMAP: i32 = 1;
+const ICON_TYPE_RESOURCE: i32 = 2;
+const ICON_TYPE_DATA: i32 = 3;
+const ICON_TYPE_URI: i32 = 4;
+const ICON_TYPE_ADAPTIVE_BITMAP: i32 = 5;
+const ICON_TYPE_URI_ADAPTIVE_BITMAP: i32 = 6;
+
+/// The trailing tint/`BlendMode` fields every `Icon` writes.
+fn read_icon_tail(parcel: &mut Parcel, values: &mut Vec<Value>) -> Result<()> {
+    let present = parcel.read_int32()? != 0;
+    // `ColorStateList.writeToParcel` is not modelled; a tinted icon is refused
+    // rather than mis-read.
+    if present {
+        return Err(unsupported("android.content.res.ColorStateList"));
+    }
+    values.push(Value::Cond {
+        present: false,
+        values: Vec::new(),
+    });
+    values.push(Value::Int(parcel.read_int32()?)); // BlendMode.toValue
+    Ok(())
+}
+
+/// `android.graphics.drawable.Icon.writeToParcel` (`Icon.java:1224-1260`).
+///
+/// The type tag selects the branch; the resource, URI and data branches are
+/// modelled (a notification's `setSmallIcon(resId)` becomes a resource icon),
+/// a bitmap icon is a structured `UnsupportedParcelable`. The value keeps the
+/// read order so `write_icon` re-emits the same bytes.
+fn read_icon(parcel: &mut Parcel) -> Result<Parcelable> {
+    let kind = parcel.read_int32()?;
+    let mut values = vec![Value::Int(kind)];
+    match kind {
+        ICON_TYPE_RESOURCE => {
+            values.push(Value::Str(parcel.read_string16()?)); // resPackage
+            values.push(Value::Int(parcel.read_int32()?)); // resId
+            values.push(Value::Bool(parcel.read_bool()?)); // useMonochrome
+            values.push(Value::Float(parcel.read_float()?)); // insetScale
+        }
+        ICON_TYPE_URI | ICON_TYPE_URI_ADAPTIVE_BITMAP => {
+            values.push(Value::Str(parcel.read_string16()?)); // uriString
+        }
+        ICON_TYPE_DATA => {
+            values.push(Value::ByteArray(parcel.read_byte_array()?));
+        }
+        ICON_TYPE_BITMAP | ICON_TYPE_ADAPTIVE_BITMAP => {
+            return Err(unsupported("android.graphics.Bitmap"));
+        }
+        other => return Err(bad(format!("unmodelled Icon type {other}"))),
+    }
+    read_icon_tail(parcel, &mut values)?;
+    Ok(Parcelable::ordered(ICON_CLASS, values))
+}
+
+/// The writer for [`read_icon`]'s value shape.
+fn write_icon(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
+    let Parcelable::Ordered { class, values } = value else {
+        return Err(bad("Icon payload is not an ordered parcelable"));
+    };
+    if class != ICON_CLASS {
+        return Err(bad(format!("expected {ICON_CLASS}, got {class}")));
+    }
+    let kind = expect_int(values.first().ok_or_else(|| bad("Icon without a type"))?)?;
+    parcel.write_int32(kind);
+    match kind {
+        ICON_TYPE_RESOURCE => {
+            parcel.write_string16_opt(expect_str(&values[1])?)?;
+            parcel.write_int32(expect_int(&values[2])?);
+            parcel.write_bool(expect_bool(&values[3])?);
+            parcel.write_float(expect_float(&values[4])?);
+        }
+        ICON_TYPE_URI | ICON_TYPE_URI_ADAPTIVE_BITMAP => {
+            parcel.write_string16_opt(expect_str(&values[1])?)?;
+        }
+        ICON_TYPE_DATA => parcel.write_byte_array(expect_byte_array(&values[1])?)?,
+        ICON_TYPE_BITMAP | ICON_TYPE_ADAPTIVE_BITMAP => {
+            return Err(unsupported("android.graphics.Bitmap"));
+        }
+        other => return Err(bad(format!("unmodelled Icon type {other}"))),
+    }
+    let tint_index = match kind {
+        ICON_TYPE_RESOURCE => 5,
+        ICON_TYPE_DATA | ICON_TYPE_URI | ICON_TYPE_URI_ADAPTIVE_BITMAP => 2,
+        _ => unreachable!(),
+    };
+    match values.get(tint_index) {
+        Some(Value::Cond { present: false, .. }) => parcel.write_int32(0),
+        _ => return Err(unsupported("android.content.res.ColorStateList")),
+    }
+    let blend = values
+        .get(tint_index + 1)
+        .ok_or_else(|| bad("Icon without a BlendMode value"))?;
+    parcel.write_int32(expect_int(blend)?);
+    Ok(())
+}
+
 fn read_cutout(parcel: &mut Parcel) -> Result<Value> {
     let variant = parcel.read_int32()?;
     let mut values = vec![Value::Int(variant)];
@@ -3543,6 +3774,8 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         // `DisplayCutout$ParcelableWrapper.writeCutoutToParcel` is a static
         // helper, which the scanner records as a nested `writeToParcel` call.
         FieldOp::Cutout => call == "writeParcelable",
+        // The Icon payload is a direct `Icon.writeToParcel` nested call.
+        FieldOp::Icon => call == "writeParcelable",
         FieldOp::CountedNested(_) => call == "writeInt",
         // No Java `writeToParcel` call emits these bytes (the peer's native
         // reader consumes them), so a DEX scan cannot verify them.
@@ -3855,7 +4088,13 @@ pub mod scan {
         let Ok(m) = dex.method_ref(index) else {
             return Ok(());
         };
-        if m.class == "Landroid/os/Parcel;" && m.name.starts_with("write") {
+        if m.class == "Landroid/os/Parcel;" && m.name == "writeArraySet" {
+            // `Parcel.writeArraySet` writes an `int` count (`-1` for null) and
+            // then one `writeValue` per element. Only the count is a linear
+            // `Parcel.write*` call, so a spec models it as one `Int` (the
+            // leading marker), like `writeTypedArray`.
+            out.calls.push("writeInt".to_string());
+        } else if m.class == "Landroid/os/Parcel;" && m.name.starts_with("write") {
             if m.name != "writeInterfaceToken"
                 && m.name != "writeNoException"
                 && m.name != "writeStackTrace"
@@ -3876,6 +4115,13 @@ pub mod scan {
         } else if m.name == "writeToParcel" && opcode == 0x6f {
             // `invoke-super`: inline the inherited field order.
             scan_method(dex, m.class, "writeToParcel", visited, out)?;
+        } else if m.name == "writeToParcelImpl" {
+            // The AOSP convention (`Notification.writeToParcel` and friends):
+            // `writeToParcel` wraps marshaling listeners around a private
+            // `writeToParcelImpl`, which does the actual field-by-field write.
+            // Inline it so the spec list follows the real field order instead
+            // of stopping at the delegation.
+            scan_method(dex, m.class, "writeToParcelImpl", visited, out)?;
         } else if m.name == "writeToParcel" || m.name == "writeCutoutToParcel" {
             // A nested Parcelable written through its own `writeToParcel`
             // (not `Parcel.writeParcelable`). Record it as a `writeParcelable`
