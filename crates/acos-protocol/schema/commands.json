@@ -364,6 +364,17 @@
               ],
               "description": "Which node to inspect."
             },
+            "settle": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/StepSettle"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "REL3A: settle rule for the observation that backs this assertion. Absent = auto (strict, then content when strict never settles); `content` = content-stable only; `strict` = event settle only. `fast` is rejected at validation time."
+            },
             "text": {
               "allOf": [
                 {
@@ -373,7 +384,7 @@
               "description": "Expected text matcher."
             },
             "timeout_ms": {
-              "description": "Event-driven timeout; the runtime waits for a matching frame/tree, never for a fixed sleep.",
+              "description": "Event-driven timeout; the runtime waits for a matching frame/tree, never for a fixed sleep. REL3A: honoured by `acos verify` (it polls fresh settled observations until the deadline).",
               "format": "uint64",
               "minimum": 0.0,
               "type": [
@@ -416,6 +427,17 @@
                 }
               ],
               "description": "Which node to inspect."
+            },
+            "settle": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/StepSettle"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "REL3A: settle rule for the backing observation (see [`TextAssertion`])."
             },
             "timeout_ms": {
               "description": "Event-driven timeout.",
@@ -460,6 +482,17 @@
                 }
               ],
               "description": "Which node to inspect."
+            },
+            "settle": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/StepSettle"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "REL3A: settle rule for the backing observation (see [`TextAssertion`])."
             },
             "timeout_ms": {
               "description": "Event-driven timeout.",
@@ -535,6 +568,17 @@
                 }
               ],
               "description": "Which node to inspect."
+            },
+            "settle": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/StepSettle"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "REL3A: settle rule for the backing observation (see [`TextAssertion`])."
             },
             "timeout_ms": {
               "description": "Event-driven timeout.",
@@ -1726,6 +1770,32 @@
       },
       "type": "object"
     },
+    "StepSettle": {
+      "description": "The settle rule an input step asks for. `strict` is the default and evidence for every assertion; `fast` is the navigation rule for a screen that never settles (a JS auto-advance timer, an endless animation) and never backs a pass; `content` (SE2, ADR-0026 decision 3) is the content-stable rule for a screen that animates forever in pixels: it is settled when the UI tree content signature is unchanged for a bounded window. Content settle backs UI/text assertions only; a pixel/frame assertion bound to it fails closed.",
+      "oneOf": [
+        {
+          "description": "Strict event settle (default).",
+          "enum": [
+            "strict"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Fast navigation settle (never assertion evidence).",
+          "enum": [
+            "fast"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Content-stable settle: the UI tree content signature is unchanged for the bounded window even if pixels keep animating (SE2). Backs UI/text assertions; never a pixel/frame assertion.",
+          "enum": [
+            "content"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "TextMatch": {
       "description": "A text matching rule: exactly one of `exact`, `contains`, `regex`.\n\nA struct rather than an enum so the agent-facing YAML/JSON form is a plain map (`text: {exact: \"Greet\"}`) and not a YAML `!tag`.",
       "properties": {
@@ -1775,6 +1845,13 @@
     "VerifyRequest": {
       "description": "`verify`: run an APK + scenario and produce artifacts.",
       "properties": {
+        "animations": {
+          "description": "REL3A: framework animation scales for the ART session (`on`/`off`).\n\nThe same option `acos verify --animations` has. `off` sets Android's three animation scales to 0 for functional checks; it is never for animation/transition testing, and it cannot make an app that animates in its own code (React Native `Animated`, a custom `ValueAnimator`) stop - use a `settle: content` step for that. Overrides a scenario's top-level `animations`. Launch-time only; the Rust VM has no framework animators and refuses `off`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "apk": {
           "description": "APK path (overrides the scenario `app` when set).",
           "type": [
@@ -1810,6 +1887,11 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "native": {
+          "default": false,
+          "description": "REL3A: enable the APK's `lib/<abi>/` natives under confinement (the same option `acos verify --native` has). The confinement is entered before the session worker (and therefore before guest code) starts.",
+          "type": "boolean"
         },
         "overwrite": {
           "default": false,

@@ -685,6 +685,7 @@ mod tests {
                 text: TextMatch::exact("clicks: 0"),
                 bounds: Some(Bounds::new(42, 612, 175, 663)),
                 timeout_ms: None,
+                settle: None,
             },
             &observation(),
         );
@@ -700,6 +701,7 @@ mod tests {
                 text: TextMatch::exact("clicks: 9"),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             },
             &observation(),
         );
@@ -718,6 +720,7 @@ mod tests {
                 text: TextMatch::exact("clicks: 0"),
                 bounds: Some(Bounds::new(42, 612, 175, 663)),
                 timeout_ms: None,
+                settle: None,
             },
             &observation(),
         );
@@ -749,6 +752,7 @@ mod tests {
                 checked: None,
                 selected: None,
                 timeout_ms: None,
+                settle: None,
             },
             &observation(),
         );
@@ -770,6 +774,7 @@ mod tests {
                 selector: Selector::by_text("Hidden"),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             },
             &offscreen_observation(),
         );
@@ -812,6 +817,7 @@ mod tests {
                 text: TextMatch::exact("clicks: 0"),
                 bounds: Some(Bounds::new(0, 0, 1, 1)),
                 timeout_ms: None,
+                settle: None,
             },
             &observation(),
         );
@@ -858,6 +864,7 @@ mod tests {
                 selector: Selector::by_text("Hidden"),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             },
             &observation,
         );
@@ -880,6 +887,7 @@ mod tests {
                 selector: Selector::by_text("Hidden"),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             },
             &offscreen_observation(),
         );
@@ -899,6 +907,7 @@ mod tests {
                 text: TextMatch::exact("Hidden"),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             },
             &offscreen_observation(),
         );
@@ -930,6 +939,7 @@ mod tests {
             selector: selector.clone(),
             bounds: None,
             timeout_ms: None,
+            settle: None,
         };
         // Same missing selector, same tree shape: only `truncated` differs.
         let plain = eval_visible(&assertion, &observation());
@@ -972,6 +982,7 @@ mod tests {
                 selector: Selector::by_id("does_not_exist"),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             },
             &observation(),
         );

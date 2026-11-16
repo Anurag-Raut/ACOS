@@ -286,6 +286,8 @@ fn verify_envelope_satisfies_protocol_invariants() {
         required_fidelity: None,
         engine: acos_protocol::VerifyEngine::RustVm,
         flags: vec!["--reference".to_string()],
+        animations: None,
+        native: false,
     };
     let mut backend = ReferenceBackend::new(reference_dir("hello-views"));
     let clock = FixedClock::new(1_794_318_674_000);

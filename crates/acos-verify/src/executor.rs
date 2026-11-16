@@ -36,6 +36,7 @@ use crate::backend::{
 use crate::clock::Clock;
 use crate::error::VerifyError;
 use crate::manifest::sha256_file;
+use crate::settle::ObservationSettle;
 use crate::screenshot;
 use sha2::{Digest, Sha256};
 
@@ -411,7 +412,11 @@ pub fn run_scenario(
         // session's sticky bound record and can describe an earlier traversal or
         // an earlier action's rule; the input's own record is the one this step
         // actually applied.
-        step_result.settle = step_settle(exec.observation.as_ref(), exec.settle.as_ref());
+        step_result.settle = step_settle(
+            exec.observation.as_ref(),
+            exec.settle.as_ref(),
+            duration_ms,
+        );
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -493,7 +498,9 @@ pub fn run_scenario(
         if exec.status == Status::Pass {
             if let Some(observation) = &exec.observation {
                 last_frame_seq = Some(observation.frame.frame_seq);
-                if frame_advancing_step(step) {
+                if frame_advancing_step(step)
+                    || rebinds_bound_frame(step, bound_frame_seq, observation.frame.frame_seq)
+                {
                     bound_frame_seq = Some(observation.frame.frame_seq);
                     bound_is_fast = fast_input_step(step);
                     bound_settle = observation.settle.clone().or_else(|| {
@@ -959,6 +966,12 @@ fn execute_step(
             // 15 s wait makes ~19 observations, not 600.
             let mut interval = Duration::from_millis(WAIT_FOR_POLL_INTERVAL_MS);
             let mut polls = 0u64;
+            // REL3A: the settle rule this wait asks each poll for. `None` is the
+            // documented default for a wait (auto): strict first, then the
+            // content-stable rule once strict has proven it cannot settle.
+            let requested = ObservationSettle::from_step(wait.settle);
+            let mut fell_back_from: Option<&'static str> = None;
+            let mut settle_wait_ms = 0u64;
             // Assigned on every successful poll before it can be read; the
             // initialiser only exists so the timeout branch can move it.
             #[allow(unused_assignments)]
@@ -973,14 +986,47 @@ fn execute_step(
             let mut unsettled: Option<BackendError> = None;
             loop {
                 polls += 1;
+                let mode = match requested {
+                    Some(mode) => mode,
+                    None if fell_back_from.is_some() => ObservationSettle::Content,
+                    None => ObservationSettle::Strict,
+                };
+                // P12b: the step's own settle budget, applied (and reset) for
+                // this observation. A previous step's budget must never leak.
+                backend.set_settle_timeout(wait.settle_timeout_ms);
+                backend.set_observation_settle(mode);
+                let attempt_started = Instant::now();
                 match backend.refresh() {
                     Err(error) if is_settle_timeout(&error) => {
+                        settle_wait_ms += attempt_started.elapsed().as_millis() as u64;
+                        if requested.is_none() && mode == ObservationSettle::Strict {
+                            // REL3A: strict settle cannot settle this screen (an
+                            // endless animation). The tree content may still be
+                            // stable, which is exactly what the content rule
+                            // measures; try it at once instead of burning the
+                            // rest of the deadline on a rule that cannot win.
+                            fell_back_from = Some(ObservationSettle::Strict.as_str());
+                            continue;
+                        }
                         unsettled = Some(error);
                     }
                     Ok(observation) => {
                         unsettled = None;
                         if let Some(failure) = observation_binding_error(backend.id(), &observation)
                         {
+                            return failure;
+                        }
+                        // Only an *explicit* `settle: content` is checked against the
+                        // record: an auto fallback reports whatever the backend
+                        // proved (a backend that reports no records still returns a
+                        // settled observation or an error, which is its contract),
+                        // while a step that named the rule must see it applied.
+                        if let Some(failure) = settled_observation_error(
+                            "wait_for",
+                            &observation,
+                            mode,
+                            requested.is_some(),
+                        ) {
                             return failure;
                         }
                         if let Some(failure) = meaningful_error(&observation) {
@@ -990,10 +1036,17 @@ fn execute_step(
                         let satisfied = matched
                             .as_ref()
                             .is_some_and(|node| !wait.require_visible || node.visible);
+                        let settle_record = settle_record_of(
+                            &observation,
+                            mode,
+                            settle_wait_ms + attempt_started.elapsed().as_millis() as u64,
+                            fell_back_from,
+                        );
                         last = Some(observation);
                         if satisfied {
                             let mut exec = StepExec::pass();
                             exec.observation = last;
+                            exec.settle = settle_record;
                             return exec;
                         }
                     }
@@ -1026,6 +1079,12 @@ fn execute_step(
                     let mut exec =
                         StepExec::failed(assertions::element_missing("wait_for", &wait.selector, last.as_ref()));
                     exec.status = Status::Timeout;
+                    exec.settle = Some(crate::settle::observation_settle_record(
+                        requested.unwrap_or(ObservationSettle::Content),
+                        false,
+                        settle_wait_ms,
+                        crate::settle::SETTLE_REASON_UNSETTLED,
+                    ));
                     exec.error = Some(
                         ProtocolError::new(
                             ErrorCode::Timeout,
@@ -1040,7 +1099,10 @@ fn execute_step(
                             ),
                         )
                         .with_hint(
-                            "The live tree kept being re-traversed until the deadline. Increase                              `timeout_ms` if the app is genuinely slow, or fix the selector/state;                              a timeout is a structured failure, never a pass.",
+                            "The live tree kept being re-traversed until the deadline. Increase \
+                             `timeout_ms` if the app is genuinely slow, or fix the selector/state; \
+                             a timeout is a structured failure, never a pass. The step's `settle` \
+                             record names the rule(s) it asked for and why each observation failed.",
                         )
                         .with_details(serde_json::json!({
                             "timeout_ms": wait.timeout_ms,
@@ -1049,6 +1111,7 @@ fn execute_step(
                             "require_visible": wait.require_visible,
                             "selector": wait.selector,
                             "offscreen_match": offscreen,
+                            "settle": exec.settle,
                             "last_frame_seq": last.as_ref().map(|observation| observation.frame.frame_seq),
                         })),
                     );
@@ -1141,30 +1204,21 @@ fn execute_step(
                     "the backend cannot observe a UI tree",
                 );
             }
-            match backend.observe() {
-                Ok(observation) => {
-                    if let Some(failure) = observation_binding_error(backend.id(), &observation) {
-                        return failure;
-                    }
-                    if let Some(bound) = bound_frame_seq {
-                        if observation.frame.frame_seq != bound {
-                            return frame_binding_failure(bound, &observation);
-                        }
-                    }
-                    if let Some(failure) = meaningful_error(&observation) {
-                        return failure;
-                    }
-                    let evaluated = eval_text(assertion, &observation);
-                    let mut exec = if evaluated.result.passed {
-                        StepExec::passed_assertion(evaluated)
-                    } else {
-                        StepExec::failed(evaluated)
-                    };
-                    exec.observation = Some(observation);
-                    exec
-                }
-                Err(error) => StepExec::backend_error(&error, backend.id(), "assert_text"),
-            }
+            // REL3A: `assert_text` honours `timeout_ms` and `settle` like every
+            // other observation step (before this it read the bound frame once
+            // and returned ~1 ms after an action whose effect was still loading).
+            // An assertion has no separate settle budget: it resets the previous
+            // step's `settle_timeout_ms` so a tap's budget can never leak in, and
+            // its own `timeout_ms` bounds the whole wait.
+            backend.set_settle_timeout(None);
+            observation_assertion(
+                backend,
+                |observation| eval_text(assertion, observation),
+                "assert_text",
+                bound_frame_seq,
+                assertion.timeout_ms,
+                assertion.settle,
+            )
         }
         StepRef::AssertVisible(assertion) => {
             capabilities_used.insert(Capability::UiTree.as_str().to_string());
@@ -1174,11 +1228,14 @@ fn execute_step(
                     "the backend cannot observe a UI tree",
                 );
             }
+            backend.set_settle_timeout(None);
             observation_assertion(
                 backend,
                 |observation| eval_visible(assertion, observation),
                 "assert_visible",
                 bound_frame_seq,
+                assertion.timeout_ms,
+                assertion.settle,
             )
         }
         StepRef::AssertNotVisible(assertion) => {
@@ -1189,11 +1246,14 @@ fn execute_step(
                     "the backend cannot observe a UI tree",
                 );
             }
+            backend.set_settle_timeout(None);
             observation_assertion(
                 backend,
                 |observation| eval_not_visible(assertion, observation),
                 "assert_not_visible",
                 bound_frame_seq,
+                assertion.timeout_ms,
+                assertion.settle,
             )
         }
         StepRef::AssertState(assertion) => {
@@ -1204,11 +1264,14 @@ fn execute_step(
                     "the backend cannot observe a UI tree",
                 );
             }
+            backend.set_settle_timeout(None);
             observation_assertion(
                 backend,
                 |observation| eval_state(assertion, observation),
                 "assert_state",
                 bound_frame_seq,
+                assertion.timeout_ms,
+                assertion.settle,
             )
         }
         StepRef::AssertLog(assertion) => {
@@ -1455,11 +1518,23 @@ fn environment_step(
 
 fn observation_assertion(
     backend: &mut dyn Backend,
-    evaluate: impl FnOnce(&SessionObservation) -> Evaluated,
+    evaluate: impl Fn(&SessionObservation) -> Evaluated,
     context: &str,
     bound_frame_seq: Option<u64>,
+    timeout_ms: Option<u64>,
+    settle: Option<StepSettle>,
 ) -> StepExec {
-    match backend.observe() {
+    // REL3A: `settle: content` (and the auto fallback) is a rule about a
+    // *fresh* observation; an assertion that only reads the frame a previous
+    // step bound cannot apply it retroactively. Remember which rule the
+    // assertion asked for so the record it publishes is the rule actually used.
+    let requested = ObservationSettle::from_step(settle);
+    let mut waited_ms = 0u64;
+    let mut fell_back_from: Option<&'static str> = None;
+
+    // 1) The bound frame first: an assertion that already holds costs no
+    //    traversal, exactly as before REL3A. Its mode is the mode that bound it.
+    let first = match backend.observe() {
         Ok(observation) => {
             if let Some(failure) = observation_binding_error(backend.id(), &observation) {
                 return failure;
@@ -1473,16 +1548,235 @@ fn observation_assertion(
                 return failure;
             }
             let evaluated = evaluate(&observation);
-            let mut exec = if evaluated.result.passed {
-                StepExec::passed_assertion(evaluated)
-            } else {
-                StepExec::failed(evaluated)
-            };
-            exec.observation = Some(observation);
-            exec
+            if evaluated.result.passed {
+                let mut exec = StepExec::passed_assertion(evaluated);
+                exec.settle = settle_record_of(&observation, requested.unwrap_or(ObservationSettle::Strict), 0, None);
+                exec.observation = Some(observation);
+                return exec;
+            }
+            Some((observation, evaluated))
         }
-        Err(error) => StepExec::backend_error(&error, backend.id(), context),
+        Err(error) => return StepExec::backend_error(&error, backend.id(), context),
+    };
+
+    // 2) REL3A: `timeout_ms` is a real wait. Poll *fresh* settled observations
+    //    until the condition holds or the deadline passes. A poll is a new
+    //    traversal, so the assertion no longer describes the previous step's
+    //    frame - it describes the frame it actually judged, and the executor's
+    //    ledger rebinds to it (`rebinds_bound_frame`).
+    let Some(timeout_ms) = timeout_ms else {
+        let (observation, evaluated) = first.expect("a failed evaluation is present");
+        let mut exec = StepExec::failed(evaluated);
+        exec.settle = settle_record_of(&observation, requested.unwrap_or(ObservationSettle::Strict), 0, None);
+        exec.observation = Some(observation);
+        return exec;
+    };
+    let started = Instant::now();
+    let deadline = Duration::from_millis(timeout_ms);
+    let mut interval = Duration::from_millis(WAIT_FOR_POLL_INTERVAL_MS);
+    let mut attempts = 0u64;
+    let mut last_evaluated: Option<(SessionObservation, Evaluated)> = first;
+    let mut unsettled: Option<BackendError> = None;
+    loop {
+        attempts += 1;
+        let mode = match requested {
+            Some(mode) => mode,
+            None if fell_back_from.is_some() => ObservationSettle::Content,
+            None => ObservationSettle::Strict,
+        };
+        backend.set_observation_settle(mode);
+        let attempt_started = Instant::now();
+        match backend.refresh() {
+            Err(error) if is_settle_timeout(&error) => {
+                waited_ms += attempt_started.elapsed().as_millis() as u64;
+                if requested.is_none() && mode == ObservationSettle::Strict {
+                    // The same auto rule as `wait_for`: the event settle cannot
+                    // settle this screen, so try the content-stable rule instead
+                    // of spending the whole budget on a rule that cannot win.
+                    fell_back_from = Some(ObservationSettle::Strict.as_str());
+                    continue;
+                }
+                unsettled = Some(error);
+            }
+            Ok(observation) => {
+                unsettled = None;
+                if let Some(failure) = observation_binding_error(backend.id(), &observation) {
+                    return failure;
+                }
+                if let Some(failure) = settled_observation_error(
+                    context,
+                    &observation,
+                    mode,
+                    requested.is_some(),
+                ) {
+                    return failure;
+                }
+                if let Some(failure) = meaningful_error(&observation) {
+                    return failure;
+                }
+                let evaluated = evaluate(&observation);
+                let settled = settle_record_of(
+                    &observation,
+                    mode,
+                    waited_ms + attempt_started.elapsed().as_millis() as u64,
+                    fell_back_from,
+                );
+                let passed = evaluated.result.passed;
+                last_evaluated = Some((observation.clone(), evaluated));
+                if passed {
+                    let mut exec = StepExec::passed_assertion(last_evaluated.take().expect("just set").1);
+                    exec.settle = settled;
+                    exec.observation = Some(observation);
+                    return exec;
+                }
+            }
+            Err(error) => return StepExec::backend_error(&error, backend.id(), context),
+        }
+        let elapsed = started.elapsed();
+        if elapsed >= deadline {
+            // REL3A §3: a step that could not obtain a *settled* observation
+            // fails as an infra timeout, never as an app assertion failure and
+            // never as a pass. A settled observation that simply did not match
+            // is an ordinary assertion failure, and says when it gave up.
+            if let Some(error) = unsettled.take() {
+                let mut failure = StepExec::backend_error(&error, backend.id(), context);
+                failure.settle = Some(crate::settle::observation_settle_record(
+                    requested.unwrap_or(ObservationSettle::Content),
+                    false,
+                    waited_ms,
+                    crate::settle::SETTLE_REASON_UNSETTLED,
+                ));
+                return failure;
+            }
+            let Some((observation, evaluated)) = last_evaluated.take() else {
+                return StepExec::failed_backend(&BackendError::Protocol {
+                    code: ErrorCode::Timeout,
+                    detail: format!(
+                        "{context}: no settled observation within {timeout_ms} ms"
+                    ),
+                    hint: Some(
+                        "An assertion needs a settled observation of the rule it reports. \
+                         Nothing it judged was settled, so this is an infra timeout and never a \
+                         pass."
+                            .to_string(),
+                    ),
+                    details: Some(serde_json::json!({
+                        "reason": "settle-timeout",
+                        "timeout_ms": timeout_ms,
+                        "attempts": attempts,
+                    })),
+                });
+            };
+            let mut exec = StepExec::failed(evaluated);
+            exec.settle = settle_record_of(&observation, requested.unwrap_or(ObservationSettle::Strict), waited_ms, fell_back_from);
+            exec.observation = Some(observation);
+            if let Some(error) = exec.error.as_mut() {
+                let mut details = error
+                    .details
+                    .take()
+                    .unwrap_or_else(|| serde_json::json!({}));
+                if let Some(object) = details.as_object_mut() {
+                    object.insert("timeout_ms".into(), serde_json::json!(timeout_ms));
+                    object.insert("waited_ms".into(), serde_json::json!(elapsed.as_millis() as u64));
+                    object.insert("attempts".into(), serde_json::json!(attempts));
+                }
+                error.details = Some(details);
+            }
+            return exec;
+        }
+        let remaining = deadline.saturating_sub(elapsed);
+        if remaining.is_zero() {
+            continue;
+        }
+        std::thread::sleep(interval.min(remaining));
+        interval = (interval * 2).min(Duration::from_millis(WAIT_FOR_MAX_POLL_INTERVAL_MS));
     }
+}
+
+/// REL3A §2: the settle record an observation publishes.
+///
+/// The backend's own record wins (it names what it measured: `bound`,
+/// `window_ms`, `traversals`, `signature`, ...); it is normalised to always
+/// carry `mode`, `settled`, `waited_ms` and `reason`. A backend that reported no
+/// record gets an executor record that says so, never a made-up measurement.
+fn settle_record_of(
+    observation: &SessionObservation,
+    mode: ObservationSettle,
+    waited_ms: u64,
+    fell_back_from: Option<&'static str>,
+) -> Option<serde_json::Value> {
+    let record = observation.settle.as_ref().map(|record| {
+        let mut normalised = crate::settle::settle_record(record, waited_ms);
+        if let Some(object) = normalised.as_object_mut() {
+            if let Some(from) = fell_back_from {
+                object.insert("fallback_from".into(), serde_json::json!(from));
+                object.insert(
+                    "fallback_reason".into(),
+                    serde_json::json!(crate::settle::SETTLE_REASON_STRICT_FELL_BACK),
+                );
+            }
+        }
+        normalised
+    });
+    match record {
+        Some(record) => Some(record),
+        // No backend record: the observation exists, so say which rule the
+        // executor asked for, and that the backend did not name its own.
+        None => Some({
+            let mut record = crate::settle::observation_settle_record(
+                mode,
+                true,
+                waited_ms,
+                crate::settle::SETTLE_REASON_SETTLED,
+            );
+            if let (Some(from), Some(object)) = (fell_back_from, record.as_object_mut()) {
+                object.insert("fallback_from".into(), serde_json::json!(from));
+            }
+            record
+        }),
+    }
+}
+
+/// REL3A §1: a step that explicitly asked for `settle: content` must receive a
+/// content-settled observation of the frame it binds; otherwise the rule was not
+/// applied and the step fails closed instead of letting a strict or fast
+/// observation stand in for it.
+fn settled_observation_error(
+    context: &str,
+    observation: &SessionObservation,
+    mode: ObservationSettle,
+    explicit: bool,
+) -> Option<StepExec> {
+    if mode != ObservationSettle::Content || !explicit {
+        return None;
+    }
+    let settled = observation.settle.as_ref().is_some_and(|settle| {
+        settle.get("mode").and_then(serde_json::Value::as_str) == Some("content")
+            && settle.get("settled").and_then(serde_json::Value::as_bool) == Some(true)
+            && settle.get("frame_seq").and_then(serde_json::Value::as_u64)
+                == Some(observation.frame.frame_seq)
+    });
+    if settled {
+        return None;
+    }
+    Some(StepExec::failed_backend(&BackendError::Protocol {
+        code: ErrorCode::UnsupportedAssertion,
+        detail: format!(
+            "{context}: `settle: content` was requested but this observation carries no settled \
+             content record for its own frame, so the content-stable rule was not applied",
+        ),
+        hint: Some(
+            "An unapplied settle rule never passes. Run the step on the ART engine (which \
+             implements `settle: content`), or drop the option and say what rule actually backs \
+             the observation."
+                .to_string(),
+        ),
+        details: Some(serde_json::json!({
+            "reason": "content_settle_unhonored",
+            "observation_frame_seq": observation.frame.frame_seq,
+            "settle": observation.settle,
+        })),
+    }))
 }
 
 /// Steps that establish (or deliberately wait for) a new completed frame. A pure
@@ -1746,6 +2040,28 @@ fn tree_node_count(tree: &acos_protocol::UiTree) -> usize {
     tree.nodes.iter().map(count).sum()
 }
 
+/// REL3A: a tree/text assertion that **waited** (`timeout_ms`) judged a frame it
+/// took itself, not the previous step's. That frame becomes the bound frame, so
+/// a later strict capture/pixel assertion describes the freshest observation
+/// instead of failing on a stale binding.
+///
+/// An assertion that did not wait keeps the existing rule: it describes the
+/// frame the previous frame-advancing step left behind (its `frame_seq` must
+/// equal `bound`).
+fn rebinds_bound_frame(step: &Step, bound: Option<u64>, observed: u64) -> bool {
+    if bound == Some(observed) {
+        return false;
+    }
+    match step.as_step() {
+        Some(StepRef::AssertText(assertion)) => assertion.timeout_ms.is_some(),
+        Some(StepRef::AssertVisible(assertion) | StepRef::AssertNotVisible(assertion)) => {
+            assertion.timeout_ms.is_some()
+        }
+        Some(StepRef::AssertState(assertion)) => assertion.timeout_ms.is_some(),
+        _ => false,
+    }
+}
+
 /// Steps that evaluate the bound frame itself (UI-tree assertions, a non-fresh
 /// capture). After a `settle: fast` input these must fail closed.
 /// `assert_screenshot`/`assert_region` take their own fresh strict capture, so
@@ -1799,16 +2115,29 @@ fn fast_bound_failure(kind: &str) -> StepExec {
 fn step_settle(
     observation: Option<&SessionObservation>,
     exec_settle: Option<&serde_json::Value>,
+    step_ms: u64,
 ) -> Option<serde_json::Value> {
-    observation
-        .and_then(|observation| {
-            observation
-                .input
-                .as_ref()
-                .and_then(|input| input.settle.clone())
-                .or_else(|| observation.settle.clone())
+    // REL3A §2: the record a step's evidence publishes is always normalised to
+    // `{mode, settled, waited_ms, reason}` so a caller can branch on the outcome
+    // without knowing which engine produced it. `step_ms` is the fallback
+    // `waited_ms` when the backend did not separate the settle from the action.
+    // Order: the record the step itself produced (a wait/assert that applied a
+    // rule of its own, a launch's content record), then the action's own record,
+    // then the session's sticky bound record. REL3A: the first position matters
+    // for `wait_for`/assertions, whose record names the rule that actually backed
+    // *this* observation (including an auto fallback from strict).
+    exec_settle
+        .cloned()
+        .or_else(|| {
+            observation.and_then(|observation| {
+                observation
+                    .input
+                    .as_ref()
+                    .and_then(|input| input.settle.clone())
+                    .or_else(|| observation.settle.clone())
+            })
         })
-        .or_else(|| exec_settle.cloned())
+        .map(|record| crate::settle::settle_record(&record, step_ms))
 }
 
 /// SE2: did a step request `settle: content` without receiving a content
@@ -3507,14 +3836,14 @@ mod content_settle_tests {
             acks: Vec::new(),
             settle: Some(content_record_for(6)),
         });
-        let settle = step_settle(Some(&observation), None).expect("a record");
+        let settle = step_settle(Some(&observation), None, 1).expect("a record");
         assert_eq!(settle["mode"], "content");
         // Only the sticky record: it is used, but it is the sticky one.
         observation.input = None;
-        let settle = step_settle(Some(&observation), None).expect("a record");
+        let settle = step_settle(Some(&observation), None, 1).expect("a record");
         assert_eq!(settle["mode"], "strict");
         // No observation at all: the step's own record still travels.
-        let settle = step_settle(None, Some(&content_record_for(6))).expect("a record");
+        let settle = step_settle(None, Some(&content_record_for(6)), 1).expect("a record");
         assert_eq!(settle["mode"], "content");
     }
 
@@ -3614,5 +3943,492 @@ mod content_settle_tests {
             parsed.steps[1].tap.as_ref().unwrap().settle,
             Some(StepSettle::Content)
         ));
+    }
+}
+
+/// REL3A: content stability as a first-class settle mode for **every** wait,
+/// assertion and action, and the "a settle that timed out is never a pass" rule.
+///
+/// These tests drive `run_scenario` through a scripted backend that can be in the
+/// one state the v0.3.0 feedback kept hitting: a screen whose pixels never settle
+/// (an endless animation) while its tree content is stable. Before REL3A a
+/// `wait_for`/`assert_text` on that screen could only time out (F-07) and an
+/// `assert_text` with `timeout_ms` returned ~1 ms later (F-13).
+#[cfg(test)]
+mod rel3a_settle_tests {
+    use super::*;
+    use acos_protocol::scenario::Scenario;
+    use acos_protocol::ui::{Bounds, UiNode, UiTree};
+    use acos_protocol::{Backend as ProtocolBackend, FrameMeta};
+
+    /// A screen that animates forever in pixels, with a stable tree.
+    struct AnimatingBackend {
+        /// `true` = the pixels never stop (strict settle can never succeed).
+        animating: bool,
+        /// Requested observation settle modes, in call order.
+        modes: Vec<&'static str>,
+        /// The mode requested for the *next* observation.
+        next_mode: ObservationSettle,
+        /// Refreshes served before the awaited text appears (F-13's race).
+        text_missing_polls: usize,
+        /// How many refreshes have run.
+        polls: usize,
+        frame_seq: u64,
+        cached: Option<SessionObservation>,
+    }
+
+    impl AnimatingBackend {
+        fn new(animating: bool) -> Self {
+            let mut backend = Self {
+                animating,
+                modes: Vec::new(),
+                next_mode: ObservationSettle::Strict,
+                text_missing_polls: 0,
+                polls: 0,
+                frame_seq: 1,
+                cached: None,
+            };
+            backend.cached = Some(backend.observation(false, None));
+            backend
+        }
+
+        fn tree(&self, text_ready: bool) -> UiTree {
+            let mut id = UiNode::new(
+                "n1",
+                "android.widget.TextView",
+                Bounds::new(0, 0, 100, 40),
+            )
+            .with_text("Welcome to Gaten");
+            id.resource_id = "dev.acos.fixtures:id/title".to_string();
+            let mut children = vec![id];
+            if text_ready {
+                let mut results = UiNode::new(
+                    "n2",
+                    "android.widget.TextView",
+                    Bounds::new(0, 40, 100, 80),
+                )
+                .with_text("19 results");
+                results.resource_id = "dev.acos.fixtures:id/results".to_string();
+                children.push(results);
+            }
+            let mut tree = UiTree::new(
+                FrameMeta::new(
+                    self.frame_seq,
+                    "2026-01-01T00:00:00Z",
+                    "test",
+                    100,
+                    100,
+                    420,
+                    "h",
+                    true,
+                ),
+                "dev.acos.fixtures.counter",
+                children,
+            );
+            tree.frame.frame_seq = self.frame_seq;
+            tree
+        }
+
+        fn observation(&self, text_ready: bool, settle: Option<serde_json::Value>) -> SessionObservation {
+            let tree = self.tree(text_ready);
+            SessionObservation {
+                session_id: "s_rel3a".to_string(),
+                package: "dev.acos.fixtures.counter".to_string(),
+                frame: tree.frame.clone(),
+                tree,
+                screenshot_png: None,
+                crashed: None,
+                input: None,
+                settle,
+            }
+        }
+
+        fn strict_timeout() -> BackendError {
+            BackendError::Protocol {
+                code: ErrorCode::Timeout,
+                detail: "strict settle timed out (animating)".to_string(),
+                hint: Some("use settle: content".to_string()),
+                details: Some(serde_json::json!({
+                    "settle": {
+                        "mode": "strict",
+                        "settled": false,
+                        "bound": "timeout",
+                        "reason": "animating",
+                    }
+                })),
+            }
+        }
+    }
+
+    impl Backend for AnimatingBackend {
+        fn id(&self) -> &'static str {
+            "rel3a-scripted"
+        }
+
+        fn protocol_backend(&self) -> ProtocolBackend {
+            ProtocolBackend::AcosNative
+        }
+
+        fn fidelity(&self) -> Fidelity {
+            Fidelity::NativeRuntime
+        }
+
+        fn capabilities(&self) -> Capabilities {
+            Capabilities {
+                static_manifest: true,
+                launch: true,
+                ui_tree: true,
+                logs: false,
+                screenshot: true,
+                input: true,
+                reset: false,
+                environment: false,
+                crash_reports: false,
+            }
+        }
+
+        fn manifest(&mut self, apk: &Path) -> Result<crate::backend::ManifestInfo, BackendError> {
+            Ok(crate::backend::ManifestInfo {
+                path: apk.display().to_string(),
+                sha256: "0".repeat(64),
+                package: "dev.acos.fixtures.counter".to_string(),
+                version_code: 1,
+                version_name: "1.0".to_string(),
+                min_sdk: 26,
+                target_sdk: 34,
+                label: None,
+                launcher_activity: Some("dev.acos.fixtures.counter.MainActivity".to_string()),
+                activities: vec!["dev.acos.fixtures.counter.MainActivity".to_string()],
+                native_abis: Vec::new(),
+                debuggable: true,
+            })
+        }
+
+        fn launch(&mut self, _request: &LaunchRequest) -> Result<crate::backend::LaunchOutcome, BackendError> {
+            self.frame_seq += 1;
+            let observation = self.observation(false, None);
+            Ok(crate::backend::LaunchOutcome {
+                session_id: "s_rel3a".to_string(),
+                package: "dev.acos.fixtures.counter".to_string(),
+                frame: Some(observation.frame.clone()),
+                screenshot_png: None,
+                crashed: None,
+                detail: serde_json::json!({}),
+            })
+        }
+
+        fn observe(&mut self) -> Result<SessionObservation, BackendError> {
+            self.cached
+                .clone()
+                .ok_or_else(|| BackendError::Timeout {
+                    detail: "no observation yet".to_string(),
+                })
+        }
+
+        fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+            self.polls += 1;
+            let mode = self.next_mode;
+            self.modes.push(mode.as_str());
+            self.frame_seq += 1;
+            let text_ready = self.polls > self.text_missing_polls;
+            let observation = match mode {
+                ObservationSettle::Strict => {
+                    if self.animating {
+                        return Err(Self::strict_timeout());
+                    }
+                    self.observation(
+                        text_ready,
+                        Some(serde_json::json!({
+                            "mode": "strict",
+                            "settled": true,
+                            "bound": "strict-event",
+                            "tree_age_ms": 7,
+                        })),
+                    )
+                }
+                ObservationSettle::Content => self.observation(
+                    text_ready,
+                    Some(serde_json::json!({
+                        "mode": "content",
+                        "settled": true,
+                        "bound": "content-stable",
+                        "window_ms": 300,
+                        "traversals": 3,
+                        "elapsed_ms": 320,
+                        "frame_seq": self.frame_seq,
+                        "pixel_evidence": false,
+                    })),
+                ),
+            };
+            self.cached = Some(observation.clone());
+            Ok(observation)
+        }
+
+        fn capture(&mut self) -> Result<SessionObservation, BackendError> {
+            self.refresh()
+        }
+
+        fn set_observation_settle(&mut self, mode: ObservationSettle) {
+            self.next_mode = mode;
+        }
+    }
+
+    fn scenario(yaml: &str) -> Scenario {
+        Scenario::from_yaml_str(yaml).expect("scenario parses")
+    }
+
+    fn run(scenario_yaml: &str, mut backend: AnimatingBackend) -> RunOutcome {
+        let temp = std::env::temp_dir().join(format!(
+            "acos-rel3a-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(&temp).expect("scratch dir");
+        // `run_scenario` hashes the scenario file for the reproducer, so the path
+        // must name real bytes (the backend never reads it).
+        let scenario_path = temp.join("rel3a.yaml");
+        std::fs::write(&scenario_path, scenario_yaml).expect("scenario file");
+        let options = RunOptions {
+            apk: PathBuf::from("fixtures/build/apps/counter.apk"),
+            scenario_path,
+            artifacts_dir: temp.clone(),
+            required_fidelity: None,
+            request_id: "req_rel3a".to_string(),
+            flags: Vec::new(),
+            acos_version: "0.3.0".to_string(),
+        };
+        let parsed = scenario(scenario_yaml);
+        let outcome = run_scenario(&parsed, &options, &mut backend, &crate::clock::FixedClock::new(1_794_318_674_000))
+            .expect("run_scenario succeeds");
+        let _ = std::fs::remove_dir_all(&temp);
+        outcome
+    }
+
+    const HEADER: &str = "version: 1\nname: rel3a\napp: dev.acos.fixtures.counter\nisolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, density_dpi: 420}\n";
+
+    /// REL3A §1/§2: a `wait_for` on a forever-animating screen passes on the
+    /// content-stable rule by default and says so in its step JSON.
+    ///
+    /// Before REL3A, `wait_for` had no settle option and every poll used the
+    /// strict rule, so this step could only time out (the v0.3.0 P1 report: 31 s
+    /// TIMEOUT on the RN onboarding screen, `animations: off` did not help).
+    #[test]
+    fn wait_for_falls_back_to_content_and_reports_it() {
+        let outcome = run(
+            &format!("{HEADER}steps:\n  - wait_for: {{selector: {{id: title}}, timeout_ms: 4000}}\n"),
+            AnimatingBackend::new(true),
+        );
+        let step = &outcome.verdict.steps[0];
+        assert_eq!(step.status, Status::Pass, "content stability backs a text wait");
+        let settle = step.settle.as_ref().expect("a settle record");
+        assert_eq!(settle["mode"], "content");
+        assert_eq!(settle["settled"], true);
+        assert_eq!(settle["fallback_from"], "strict");
+        assert!(settle["waited_ms"].as_u64().is_some(), "waited_ms is present");
+        assert!(settle["reason"].as_str().is_some(), "reason is present");
+    }
+
+    /// REL3A §1/§3: `wait_for {settle: strict}` never silently falls back, and a
+    /// strict settle that never succeeds is a TIMEOUT, never a pass.
+    #[test]
+    fn wait_for_strict_on_an_animating_screen_is_a_timeout() {
+        let outcome = run(
+            &format!("{HEADER}steps:\n  - wait_for: {{selector: {{id: title}}, timeout_ms: 300, settle: strict}}\n"),
+            AnimatingBackend::new(true),
+        );
+        let step = &outcome.verdict.steps[0];
+        assert_eq!(step.status, Status::Timeout);
+        assert!(!step.status.is_pass());
+        let error = step.error.as_ref().expect("structured error");
+        assert_eq!(error.code, ErrorCode::Timeout);
+        assert_eq!(error.code.class().as_str(), "infra_timeout");
+    }
+
+    /// REL3A §4: `assert_text` honours `timeout_ms`. Before the fix the assertion
+    /// read the bound frame once (1 ms after the action) and failed even though
+    /// the text arrived moments later (F-13). With `timeout_ms` absent it still
+    /// evaluates exactly one observation, so the old cheap path is unchanged.
+    #[test]
+    fn assert_text_honours_timeout_ms() {
+        let mut backend = AnimatingBackend::new(false);
+        backend.text_missing_polls = 2;
+        let outcome = run(
+            &format!(
+                "{HEADER}steps:\n  - wait_for: {{selector: {{id: title}}, timeout_ms: 2000, settle: strict}}\n  - assert_text: {{selector: {{id: results}}, text: {{exact: 19 results}}, timeout_ms: 4000}}\n"
+            ),
+            backend,
+        );
+        assert_eq!(outcome.verdict.steps[0].status, Status::Pass);
+        let step = &outcome.verdict.steps[1];
+        assert_eq!(
+            step.status,
+            Status::Pass,
+            "the assertion waited for the async text instead of racing it"
+        );
+        let settle = step.settle.as_ref().expect("a settle record");
+        assert_eq!(settle["settled"], true);
+        assert!(settle["waited_ms"].as_u64().is_some());
+
+        // Without `timeout_ms` the assertion is the single-observation check it
+        // always was: the same screen fails.
+        let mut backend = AnimatingBackend::new(false);
+        backend.text_missing_polls = 2;
+        let outcome = run(
+            &format!(
+                "{HEADER}steps:\n  - wait_for: {{selector: {{id: title}}, timeout_ms: 2000, settle: strict}}\n  - assert_text: {{selector: {{id: results}}, text: {{exact: 19 results}}}}\n"
+            ),
+            backend,
+        );
+        assert_eq!(outcome.verdict.steps[1].status, Status::Fail);
+    }
+
+    /// REL3A §1/§4: assertions use the content-stable fallback too, so a text
+    /// assertion on an animating screen does not need `settle: content` spelled
+    /// out.
+    #[test]
+    fn assert_text_waits_under_content_settle_on_an_animating_screen() {
+        let mut backend = AnimatingBackend::new(true);
+        backend.text_missing_polls = 1;
+        let outcome = run(
+            &format!(
+                "{HEADER}steps:\n  - assert_text: {{selector: {{id: results}}, text: {{exact: 19 results}}, timeout_ms: 4000}}\n"
+            ),
+            backend,
+        );
+        let step = &outcome.verdict.steps[0];
+        assert_eq!(step.status, Status::Pass);
+        let settle = step.settle.as_ref().expect("a settle record");
+        assert_eq!(settle["mode"], "content");
+        assert_eq!(settle["settled"], true);
+        assert_eq!(settle["fallback_from"], "strict");
+    }
+
+    /// REL3A §3: an assertion that never obtains a settled observation fails as
+    /// an infra timeout (error class `infra_timeout`), never as a pass and never
+    /// as an app assertion failure.
+    #[test]
+    fn an_assertion_without_a_settled_observation_is_an_infra_timeout() {
+        // Content is requested explicitly, and the backend reports a content
+        // record for a different frame (so nothing it says can be trusted).
+        struct NeverSettles(AnimatingBackend);
+        impl Backend for NeverSettles {
+            fn id(&self) -> &'static str {
+                "rel3a-never"
+            }
+            fn protocol_backend(&self) -> ProtocolBackend {
+                ProtocolBackend::AcosNative
+            }
+            fn fidelity(&self) -> Fidelity {
+                Fidelity::NativeRuntime
+            }
+            fn capabilities(&self) -> Capabilities {
+                self.0.capabilities()
+            }
+            fn manifest(
+                &mut self,
+                apk: &Path,
+            ) -> Result<crate::backend::ManifestInfo, BackendError> {
+                self.0.manifest(apk)
+            }
+            fn launch(
+                &mut self,
+                request: &LaunchRequest,
+            ) -> Result<crate::backend::LaunchOutcome, BackendError> {
+                self.0.launch(request)
+            }
+            fn observe(&mut self) -> Result<SessionObservation, BackendError> {
+                self.0.observe()
+            }
+            fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+                Err(AnimatingBackend::strict_timeout())
+            }
+            fn set_observation_settle(&mut self, mode: ObservationSettle) {
+                self.0.set_observation_settle(mode);
+            }
+        }
+        let temp = std::env::temp_dir().join(format!(
+            "acos-rel3a-never-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(&temp).expect("scratch dir");
+        // `run_scenario` hashes the scenario file for the reproducer, so the path
+        // must name real bytes (the backend never reads it).
+        let yaml = format!(
+            "{HEADER}steps:\n  - assert_text: {{selector: {{id: results}}, text: {{exact: 19 results}}, timeout_ms: 300}}\n"
+        );
+        let scenario_path = temp.join("rel3a.yaml");
+        std::fs::write(&scenario_path, &yaml).expect("scenario file");
+        let options = RunOptions {
+            apk: PathBuf::from("fixtures/build/apps/counter.apk"),
+            scenario_path,
+            artifacts_dir: temp.clone(),
+            required_fidelity: None,
+            request_id: "req_rel3a_never".to_string(),
+            flags: Vec::new(),
+            acos_version: "0.3.0".to_string(),
+        };
+        let parsed = scenario(&yaml);
+        let mut backend = NeverSettles(AnimatingBackend::new(true));
+        let outcome = run_scenario(
+            &parsed,
+            &options,
+            &mut backend,
+            &crate::clock::FixedClock::new(1_794_318_674_000),
+        )
+        .expect("run_scenario succeeds");
+        let _ = std::fs::remove_dir_all(&temp);
+        let step = &outcome.verdict.steps[0];
+        assert_eq!(step.status, Status::Timeout);
+        let error = step.error.as_ref().expect("structured error");
+        assert_eq!(error.code.class().as_str(), "infra_timeout");
+        let settle = step.settle.as_ref().expect("a settle record");
+        assert_eq!(settle["settled"], false);
+    }
+
+    /// REL3A §1: content stability still never backs a pixel claim. The pixel
+    /// assertion that follows a content-settled wait fails closed.
+    #[test]
+    fn a_pixel_assertion_after_a_content_settled_wait_fails_closed() {
+        let outcome = run(
+            &format!(
+                "{HEADER}steps:\n  - wait_for: {{selector: {{id: title}}, timeout_ms: 4000}}\n  - assert_region: {{x: 0, y: 0, w: 10, h: 10, min_distinct_colors: 1}}\n"
+            ),
+            AnimatingBackend::new(true),
+        );
+        assert_eq!(outcome.verdict.steps[0].status, Status::Pass);
+        let step = &outcome.verdict.steps[1];
+        assert!(!step.status.is_pass(), "a pixel claim needs pixel evidence");
+        let error = step.error.as_ref().expect("structured error");
+        let details = error.details.as_ref().expect("details");
+        assert_eq!(details["reason"], "content_settle_pixel");
+    }
+
+    /// REL3A §1: `settle: fast` is rejected on waits and assertions at
+    /// validation time, with the options that do work named.
+    #[test]
+    fn fast_is_rejected_on_observation_steps() {
+        for yaml in [
+            "  - wait_for: {selector: {id: title}, timeout_ms: 1000, settle: fast}\n",
+            "  - assert_text: {selector: {id: title}, text: {contains: Welcome}, settle: fast}\n",
+            "  - assert_visible: {selector: {id: title}, settle: fast}\n",
+            "  - assert_state: {selector: {id: title}, visible: true, settle: fast}\n",
+        ] {
+            let error = Scenario::from_yaml_str(&format!("{HEADER}steps:\n{yaml}"))
+                .expect_err("settle: fast must be INVALID_SCENARIO");
+            assert!(
+                error.errors.iter().any(|error| error.path.ends_with(".settle")),
+                "settle: fast must be rejected at the step's `settle` path for {yaml}: {error:?}"
+            );
+        }
+        // And the modes that do work parse cleanly.
+        let parsed = scenario(&format!(
+            "{HEADER}steps:\n  - wait_for: {{selector: {{id: title}}, timeout_ms: 1000, settle: content}}\n  - assert_text: {{selector: {{id: title}}, text: {{contains: Welcome}}, settle: content, timeout_ms: 2000}}\n"
+        ));
+        assert_eq!(parsed.validate().errors, Vec::new());
     }
 }

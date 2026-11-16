@@ -430,6 +430,8 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             Engine::RustVm => acos_protocol::VerifyEngine::RustVm,
         },
         flags: args.flags.clone(),
+        animations: args.animations.clone(),
+        native: args.native,
     };
 
     let native = args.reference.is_none() && crate::native_launch::native_requested(args.native);

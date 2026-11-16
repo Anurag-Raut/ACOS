@@ -224,6 +224,11 @@ pub struct ArtSession {
     /// P1: `"fast"` or `"strict"` for the next input command. Serve sets it per
     /// verb; the default is strict.
     settle_mode: &'static str,
+    /// REL3A: the settle rule the next **observation** (`frame()`) binds with.
+    /// `"strict"` (default) or `"content"` (ADR-0026 decision 3). The verifier
+    /// sets it per step (`set_observation_settle`); serve's own verbs set it per
+    /// call and reset it afterwards.
+    observation_settle: &'static str,
     /// P3b: the guest's `settle` block for the most recent tree request
     /// (`mode`, `settled`, `probe_seq`, `tree_age_ms`, `bound`). Copied into
     /// the `acos_observe_tree` result; never synthesised.
@@ -1901,6 +1906,7 @@ impl ArtSession {
             last_phase: None,
             last_input_settle: None,
             settle_mode: "strict",
+            observation_settle: "strict",
             last_tree_settle: None,
             last_tree_json: None,
             first_frame_report: None,
@@ -2233,6 +2239,24 @@ impl ArtSession {
     /// SE2: the settle rule the bound frame was proven by, as reported.
     pub fn bound_settle(&self) -> Option<&serde_json::Value> {
         self.bound_settle.as_ref()
+    }
+
+    /// REL3A: the settle rule the next observation binds with
+    /// (`"strict"` default, `"content"` for a screen that animates forever).
+    ///
+    /// It is deliberately separate from [`Self::settle_mode`]: an input's rule
+    /// (`strict`/`fast`/`content`) and an observation's rule are chosen per step
+    /// by the caller, and a `settle: content` tap must not silently make every
+    /// later `frame()` content-settled (or the reverse). Only `strict` and
+    /// `content` are observation rules; `fast` is navigation-only and never
+    /// backs an observation, so anything else falls back to `strict`.
+    pub fn set_observation_settle(&mut self, mode: &str) {
+        self.observation_settle = if mode == "content" { "content" } else { "strict" };
+    }
+
+    /// The observation settle rule in force (`"strict"`/`"content"`).
+    pub fn observation_settle(&self) -> &'static str {
+        self.observation_settle
     }
 
     /// SE2: ask the next input action for the content-stable rule instead of
@@ -4749,6 +4773,10 @@ impl SessionBackend for ArtSession {
         self.settle_mode = mode;
     }
 
+    fn set_observation_settle(&mut self, mode: acos_verify::settle::ObservationSettle) {
+        ArtSession::set_observation_settle(self, mode.as_str());
+    }
+
     fn bound_settle(&self) -> Option<&serde_json::Value> {
         self.bound_settle.as_ref()
     }
@@ -4758,8 +4786,18 @@ impl SessionBackend for ArtSession {
         // the tree and the PNG of that frame. The PNG bytes are loaded from the
         // artifact now (and hash-verified); the session retains only the
         // descriptor between calls.
+        //
+        // REL3A: an observation asked for the content-stable rule binds the
+        // content window's own pixel-bound traversal (a strict capture of the
+        // frame the stable content was proven on), so `refresh()`/`capture()`
+        // report the rule they actually applied. A content settle that cannot
+        // prove stability is a structured TIMEOUT, never an observation.
         let previous = self.seen_seq;
-        self.request_tree()?;
+        if self.observation_settle == "content" {
+            self.content_settle()?;
+        } else {
+            self.request_tree()?;
+        }
         let cached = self.require_cached_frame()?;
         let observed = cached.observed(previous)?;
         if observed.png().is_empty() {

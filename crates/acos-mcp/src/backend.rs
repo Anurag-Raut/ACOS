@@ -536,6 +536,22 @@ impl CliBackend {
             argv.push("--required-fidelity".to_string());
             argv.push(fidelity.to_string());
         }
+        // REL3A: `animations` and `native` are the `acos verify` options of the
+        // same name. The tool schema did not expose them, so an agent that read
+        // the engine's own hint ("use `animations:off` for a functional check")
+        // had to leave MCP and run the CLI in a shell. Relayed verbatim; the CLI
+        // validates the values and refuses `off` on the Rust VM.
+        if let Some(animations) = args.get("animations").and_then(Value::as_str) {
+            argv.push("--animations".to_string());
+            argv.push(animations.to_string());
+        }
+        if args
+            .get("native")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            argv.push("--native".to_string());
+        }
         // Engine selection: **real ART by default**, exactly like every other
         // MCP session tool. `acos verify`'s own CLI default is the frozen Rust
         // VM, which cannot honour an ART-only scenario (for example

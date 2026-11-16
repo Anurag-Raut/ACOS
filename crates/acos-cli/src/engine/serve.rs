@@ -1041,6 +1041,16 @@ impl ServeEngine {
                 // VIEW1a: keep the registry's `activity` in step with the
                 // session's own state (a no-op when it has not changed).
                 self.refresh_live_activity(id, &session);
+                // REL3A §3: an action whose own settle timed out is never a plain
+                // pass. The input was delivered (the reply keeps `state_changed`,
+                // the tree and the frame identity so an agent can still see the
+                // screen), but the frame it produced is not a settled one and no
+                // assertion may be built on `status: pass`.
+                if matches!(tool, "acos_tap" | "acos_text" | "acos_key" | "acos_action") {
+                    if let Some(settle) = session.input_settle_timeout() {
+                        return settle_timeout_envelope(request_id, id, trust, &settle, result);
+                    }
+                }
                 let envelope = Envelope::pass(
                     request_id,
                     ProtocolBackend::AcosNative,
@@ -3519,6 +3529,50 @@ fn art_error_with_launch_evidence(
         Some(id) => envelope.with_session_id(id.to_string()),
         None => envelope,
     }
+}
+
+/// REL3A §3: the reply for an action whose own settle timed out.
+///
+/// The action *was* delivered, so the caller keeps the measured delivery facts
+/// (`state_changed`, the bound tree, the frame identity, the settle record), but
+/// the envelope status is `timeout` with `error.code: TIMEOUT` (error class
+/// `infra_timeout`) and `details.reason: "settle_timeout"`. Before this the same
+/// reply was `status: pass` with `settle.settled:false`, i.e. a false green for
+/// an agent that reads only `status` (F-06 in the v0.3.0 feedback).
+fn settle_timeout_envelope(
+    request_id: &str,
+    id: &str,
+    trust: Trust,
+    settle: &Value,
+    delivered: Value,
+) -> Envelope {
+    let reason = settle
+        .get("reason")
+        .and_then(Value::as_str)
+        .unwrap_or("the guest still reported pending UI work")
+        .to_string();
+    let record = acos_verify::settle::settle_record(settle, 0);
+    let error = BackendError::Protocol {
+        code: ErrorCode::Timeout,
+        detail: format!(
+            "the action was delivered but its settle timed out ({reason}); the bound tree/frame \
+             is the latest observed state, not a settled one"
+        ),
+        hint: Some(
+            "Not a pass: `status: timeout` means the action landed but the screen did not settle \
+             within the deadline. Read `settle.reason`; for a screen that animates forever use \
+             `settle: \"content\"` (content-stable) instead of waiting for the pixels to stop, or \
+             raise `settle_timeout_ms`. The delivered facts are kept in `details.delivery`."
+                .to_string(),
+        ),
+        details: Some(json!({
+            "reason": "settle_timeout",
+            "settle": record,
+            "delivery": delivered,
+        })),
+    };
+    let envelope = art_error(request_id, Some(id), trust, &error);
+    envelope.with_value_result(delivered)
 }
 
 fn art_error(

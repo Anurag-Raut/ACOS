@@ -93,6 +93,7 @@ fn assertion() -> Assertion {
         text: TextMatch::exact("clicks: 0"),
         bounds: Some(bounds()),
         timeout_ms: Some(5000),
+        settle: None,
     })
 }
 
@@ -402,11 +403,13 @@ fn assertion_round_trips() {
         text: TextMatch::exact("clicks: 0"),
         bounds: Some(bounds()),
         timeout_ms: Some(5000),
+        settle: None,
     });
     round_trip(&VisibilityAssertion {
         selector: Selector::by_id("result"),
         bounds: Some(bounds()),
         timeout_ms: Some(5000),
+        settle: None,
     });
     round_trip(&StateAssertion {
         selector: Selector::by_id("input"),
@@ -418,6 +421,7 @@ fn assertion_round_trips() {
         checked: Some(false),
         selected: Some(false),
         timeout_ms: Some(5000),
+        settle: None,
     });
     round_trip(&LogAssertion {
         tag: Some("AcosFixture".to_string()),
@@ -434,16 +438,19 @@ fn assertion_round_trips() {
             text: TextMatch::exact("clicks: 0"),
             bounds: None,
             timeout_ms: None,
+            settle: None,
         }),
         Assertion::Visible(VisibilityAssertion {
             selector: Selector::by_id("result"),
             bounds: None,
             timeout_ms: None,
+            settle: None,
         }),
         Assertion::NotVisible(VisibilityAssertion {
             selector: Selector::by_id("result"),
             bounds: None,
             timeout_ms: None,
+            settle: None,
         }),
         Assertion::State(StateAssertion {
             selector: Selector::by_id("input"),
@@ -455,6 +462,7 @@ fn assertion_round_trips() {
             checked: None,
             selected: None,
             timeout_ms: None,
+            settle: None,
         }),
         Assertion::Log(LogAssertion {
             tag: None,
@@ -654,6 +662,8 @@ fn command_requests_and_responses_round_trip() {
             required_fidelity: Some(Fidelity::NativeRuntime),
             engine: VerifyEngine::RustVm,
             flags: vec!["--x".to_string()],
+            animations: Some("off".to_string()),
+            native: true,
         }),
         CommandRequest::CapabilityReport(CapabilityReportRequest {
             base: base(),
@@ -890,14 +900,16 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         data: None,
         extras: BTreeMap::new(),
         clear_state: true,
-        settle_timeout_ms: None,
         settle: None,
+        settle_timeout_ms: None,
     }));
     steps.push(Step {
         wait_for: Some(WaitForStep {
             selector: Selector::by_id("result"),
             timeout_ms: 5000,
             require_visible: true,
+            settle: None,
+            settle_timeout_ms: None,
         }),
         ..Step::default()
     });
@@ -946,6 +958,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             text: TextMatch::exact("clicks: 0"),
             bounds: Some(bounds()),
             timeout_ms: None,
+            settle: None,
         }),
         ..Step::default()
     });
@@ -954,6 +967,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             selector: Selector::by_id("result"),
             bounds: None,
             timeout_ms: None,
+            settle: None,
         }),
         ..Step::default()
     });
@@ -962,6 +976,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             selector: Selector::by_id("result"),
             bounds: None,
             timeout_ms: None,
+            settle: None,
         }),
         ..Step::default()
     });
@@ -976,6 +991,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             checked: Some(false),
             selected: Some(false),
             timeout_ms: None,
+            settle: None,
         }),
         ..Step::default()
     });

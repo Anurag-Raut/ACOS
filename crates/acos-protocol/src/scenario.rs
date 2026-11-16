@@ -420,6 +420,12 @@ pub struct LaunchStep {
 }
 
 /// `wait_for`.
+///
+/// REL3A: `wait_for` accepts a settle rule like every other observation step.
+/// Its default (no `settle`) is *auto*: strict first, then the content-stable
+/// rule when strict never settles but the tree is stable (the always-animating
+/// RN/Gaten screen). A `wait_for` that passed on a content-settled tree says so
+/// in its `settle` record.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct WaitForStep {
     /// Selector to wait for.
@@ -430,6 +436,15 @@ pub struct WaitForStep {
     /// Require the matched node to be visible.
     #[serde(default = "default_true")]
     pub require_visible: bool,
+    /// Settle rule for the observation this wait binds (REL3A). Absent = auto
+    /// (strict, then content); `content` = content-stable only; `strict` =
+    /// event settle only. `fast` is rejected: it is navigation-only and can
+    /// never back a wait or an assertion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
+    /// P12b: settle deadline for each observation attempt (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
 }
 
 /// The settle rule an input step asks for. `strict` is the default and
@@ -949,6 +964,28 @@ fn validate_timeout(validation: &mut ScenarioValidation, path: &str, timeout: Op
     }
 }
 
+/// REL3A: `settle` on a wait or an assertion is `strict`, `content` or absent.
+///
+/// `fast` is a navigation rule and is never assertion/wait evidence (ADR-0026
+/// decision 5), so it is rejected at parse time with a stable path instead of
+/// producing a frame an assertion may not describe. Absent means *auto*: strict
+/// first, then the content-stable rule when strict never settles.
+fn validate_observation_settle(
+    validation: &mut ScenarioValidation,
+    path: &str,
+    settle: Option<StepSettle>,
+) {
+    if matches!(settle, Some(StepSettle::Fast)) {
+        validation.push(
+            path,
+            "`settle: fast` is navigation-only and can never back a wait or an assertion: use \
+             `settle: strict` (event settle), `settle: content` (content-stable, for a screen that \
+             animates forever in pixels), or omit it (auto: strict, then content when strict never \
+             settles)",
+        );
+    }
+}
+
 fn validate_regex(validation: &mut ScenarioValidation, path: &str, pattern: &str) {
     if let Err(e) = regex::Regex::new(pattern) {
         validation.push(path, format!("invalid regex: {e}"));
@@ -1144,6 +1181,12 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 if wait.timeout_ms == 0 {
                     v.push(format!("{path}.timeout_ms"), "timeout_ms must be > 0");
                 }
+                validate_observation_settle(&mut v, &format!("{path}.settle"), wait.settle);
+                validate_timeout(
+                    &mut v,
+                    &format!("{path}.settle_timeout_ms"),
+                    wait.settle_timeout_ms,
+                );
             }
             StepRef::Tap(tap) => {
                 validate_action_like(&mut v, &format!("steps[{index}]"), tap, "tap");
@@ -1175,6 +1218,11 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     validate_bounds(&mut v, &format!("{path}.bounds"), bounds);
                 }
                 validate_timeout(&mut v, &format!("{path}.timeout_ms"), assertion.timeout_ms);
+                validate_observation_settle(
+                    &mut v,
+                    &format!("{path}.settle"),
+                    assertion.settle,
+                );
             }
             StepRef::AssertVisible(assertion) | StepRef::AssertNotVisible(assertion) => {
                 validate_selector(&mut v, &path, &assertion.selector, "selector");
@@ -1182,6 +1230,11 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     validate_bounds(&mut v, &format!("{path}.bounds"), bounds);
                 }
                 validate_timeout(&mut v, &format!("{path}.timeout_ms"), assertion.timeout_ms);
+                validate_observation_settle(
+                    &mut v,
+                    &format!("{path}.settle"),
+                    assertion.settle,
+                );
             }
             StepRef::AssertState(assertion) => {
                 validate_selector(&mut v, &path, &assertion.selector, "selector");
@@ -1198,6 +1251,11 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     );
                 }
                 validate_timeout(&mut v, &format!("{path}.timeout_ms"), assertion.timeout_ms);
+                validate_observation_settle(
+                    &mut v,
+                    &format!("{path}.settle"),
+                    assertion.settle,
+                );
             }
             StepRef::AssertLog(assertion) => {
                 if assertion.patterns.is_empty() {

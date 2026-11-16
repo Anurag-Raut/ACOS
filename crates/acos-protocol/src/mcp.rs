@@ -163,7 +163,9 @@ pub fn mcp_tools() -> McpToolsList {
                     "This is the primary verification loop: inspect -> verify -> read verdict.json -> fix -> rerun. ",
                     "A pass is valid only if its evidence exists; `unsupported` is never a pass. Set required_fidelity when the task needs ART/device evidence. ",
                     "A run owns its artifacts directory: a non-empty `artifacts` directory written by another run is refused with INVALID_ARGUMENT naming that run (details.previous_run_id) unless `overwrite: true`. ",
-                    "Common errors: INVALID_ARGUMENT, INVALID_SCENARIO, ARTIFACTS_INVALID, ASSERTION_FAILED, APP_CRASHED, UNSUPPORTED_*, UNVERIFIED_FIDELITY."
+                    "Settle semantics (REL3A): every step JSON states the settle rule it used and its outcome (`settle: {mode, settled, waited_ms, reason}`). `wait_for` and the tree/text assertions default to auto (strict, then the content-stable rule when the screen animates forever in pixels) and honour `timeout_ms`; a step whose settle timed out is never a pass (`status: timeout`, error class infra_timeout). ",
+                    "`animations` (on/off) and `native` are the same options `acos verify` has. ",
+                    "Common errors: INVALID_ARGUMENT, INVALID_SCENARIO, ARTIFACTS_INVALID, ASSERTION_FAILED, APP_CRASHED, TIMEOUT, UNSUPPORTED_*, UNVERIFIED_FIDELITY."
                 ),
             ),
             McpToolDescriptor::new::<CapabilityReportRequest>(
