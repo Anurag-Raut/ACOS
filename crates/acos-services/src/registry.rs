@@ -216,6 +216,13 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
         let mut ime = ime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         ime.attach_session(session);
         ime.attach_wms(std::sync::Arc::clone(&handles.wms));
+        // REL3I2: every `InputBindResult` channel needs its **own** token
+        // binder (`InputChannel::openInputChannelPair` makes a fresh `BBinder`
+        // per pair). Minting it from the session's registry keeps the handle
+        // real (allocated, releasable) and unique, which is what makes the
+        // framework replace `mCurChannel` on the next `startInput` instead of
+        // keeping the stale one.
+        ime.attach_binder_registry(host.binder_registry_arc());
     }
     handles
 }

@@ -163,7 +163,12 @@ struct ServiceEntry {
 
 /// The dispatcher.
 pub struct ServiceHost {
-    registry: BinderRegistry,
+    /// `Arc` because a service that must mint a **fresh** binder handle while
+    /// answering a transaction cannot reach `&mut ServiceHost`: the IME's
+    /// `InputBindResult` channel token is one `openInputChannelPair`'s own
+    /// `BBinder` (see [`crate::ime::ImeState::start_input`]), so the IME state
+    /// holds an `Arc` of the same registry the host allocates from.
+    registry: Arc<BinderRegistry>,
     /// One entry per registered descriptor.
     entries: HashMap<&'static str, ServiceEntry>,
     /// Descriptor for every binder handle (including secondary binders).
@@ -212,7 +217,7 @@ impl ServiceHost {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            registry: BinderRegistry::new(),
+            registry: Arc::new(BinderRegistry::new()),
             entries: HashMap::new(),
             binder_descriptors: HashMap::new(),
             names: HashMap::new(),
@@ -316,6 +321,13 @@ impl ServiceHost {
     #[must_use]
     pub fn binder_registry(&self) -> &BinderRegistry {
         &self.registry
+    }
+
+    /// The binder registry, shareable with a service that must mint a new
+    /// handle per object (the IME's per-pair `InputChannel` token).
+    #[must_use]
+    pub fn binder_registry_arc(&self) -> Arc<BinderRegistry> {
+        Arc::clone(&self.registry)
     }
 
     /// Every binder handle this host knows, as `(id, descriptor, kind)` sorted

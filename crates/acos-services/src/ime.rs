@@ -30,6 +30,7 @@ use std::os::fd::OwnedFd;
 use std::sync::{Arc, Mutex};
 
 use acos_parcel::binder::BinderId;
+use acos_parcel::BinderRegistry;
 
 use crate::error::{ServiceError, Result};
 use crate::host::{CallResult, ServiceObject};
@@ -68,6 +69,14 @@ fn trace(line: &str) {
     }
 }
 
+/// The binder descriptor of the fresh token every `InputChannel` pair carries.
+///
+/// `InputChannel::openInputChannelPair` (`frameworks/base/libs/input/
+/// InputTransport.cpp`) creates `sp<IBinder> token = new BBinder();` **per
+/// pair**; the token is the channel's identity, not the connection's. Nothing
+/// ever transacts on it: the framework only compares it
+/// (`InputMethodManager.areSameInputChannel`).
+pub const CHANNEL_TOKEN_DESCRIPTOR: &str = "android.os.IBinder";
 /// `KeyEvent.KEYCODE_BACK`.
 pub const KEYCODE_BACK: i32 = 4;
 
@@ -172,6 +181,12 @@ pub struct ImeState {
     wms: Option<Arc<Mutex<crate::wms::WmsState>>>,
     /// The next synthetic session binder (never handed out by the null IME).
     next_session: u64,
+    /// The registry the per-pair `InputChannel` token is allocated from. The
+    /// ART transport attaches the session's own registry
+    /// ([`ImeState::attach_binder_registry`]); a unit-test state allocates from
+    /// a registry of its own. `BinderRegistry` is internally synchronised, so a
+    /// shared `Arc` is all a token needs.
+    tokens: Arc<BinderRegistry>,
 }
 
 impl ImeState {
@@ -198,6 +213,7 @@ impl ImeState {
             back_tracking: false,
             wms: None,
             next_session: 0x1_3e00,
+            tokens: Arc::new(BinderRegistry::new()),
         }
     }
 
@@ -220,6 +236,27 @@ impl ImeState {
     /// insets source on the focused window (the change the app sees).
     pub fn attach_wms(&mut self, wms: Arc<Mutex<crate::wms::WmsState>>) {
         self.wms = Some(wms);
+    }
+
+    /// Allocate the per-pair `InputChannel` tokens from `registry`.
+    ///
+    /// AOSP's `openInputChannelPair` gives **every** pair its own fresh
+    /// `BBinder` token. The token is what the framework compares in
+    /// `InputMethodManager.areSameInputChannel`: with a token shared between
+    /// pairs, a second `startInput` looks like "the same connection" and the
+    /// framework keeps the *old* `mCurChannel` while this manager keeps the
+    /// *new* pair's server end — the app then writes keys into a socket whose
+    /// peer was dropped (`sendInputEvent` returns false and the key silently
+    /// falls through to the view tree). Allocating from the session's own
+    /// registry keeps the written handle a real, releasable binder.
+    pub fn attach_binder_registry(&mut self, registry: Arc<BinderRegistry>) {
+        self.tokens = registry;
+    }
+
+    /// The token of one new channel pair: a fresh local binder handle, exactly
+    /// like `openInputChannelPair`'s `new BBinder()`.
+    fn next_channel_token(&mut self) -> BinderId {
+        self.tokens.register_local(CHANNEL_TOKEN_DESCRIPTOR)
     }
 
     /// Pop the `IWindow` insets callbacks this manager's IME show/hide queued.
@@ -307,7 +344,9 @@ impl ImeState {
         // disposed `mCurChannel` for the old sequence before it asked again).
         match open_channel_fds() {
             Ok((server, client_fd)) => {
-                let token = session;
+                // AOSP: a fresh token per pair (never the session binder, which
+                // is shared by every bind from the same session).
+                let token = self.next_channel_token();
                 let name = format!("{id} (client)");
                 self.channel = Some(ImeChannel {
                     consumer: LoopbackConsumer::new(server),

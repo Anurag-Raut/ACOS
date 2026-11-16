@@ -125,10 +125,17 @@ fn the_captured_live_start_input_request_is_answered_with_a_bound_ime_and_channe
     assert_eq!(reply.read_int32().expect("accessibility sessions"), -1);
     assert_eq!(reply.read_int32().expect("channel presence"), 1);
     assert_eq!(reply.read_int32().expect("isInitialized"), 1);
-    assert_eq!(
-        reply.read_strong_binder().expect("channel token"),
+    let channel_token = reply.read_strong_binder().expect("channel token");
+    assert!(
+        channel_token.is_some(),
+        "the InputChannel carries a token binder"
+    );
+    assert_ne!(
+        channel_token,
         Some(session),
-        "the InputChannel token is the session binder"
+        "the channel token is one pair's own fresh binder, never the session \
+         binder (`InputChannel::openInputChannelPair` creates a new `BBinder` \
+         per pair, and the framework's `areSameInputChannel` compares these)"
     );
     let name = reply.read_string16().expect("channel name").expect("name");
     assert!(name.ends_with("(client)"), "channel name {name}");
@@ -145,6 +152,41 @@ fn the_captured_live_start_input_request_is_answered_with_a_bound_ime_and_channe
     let recorded = state.lock().unwrap();
     assert_eq!(recorded.start_inputs.last().map(|e| e.2), Some(BIND_SUCCESS));
     assert!(recorded.ime_visible == false, "startInput does not show the IME");
+}
+
+/// REL3I2: every bound `InputChannel` pair carries its **own** token, exactly
+/// as `InputChannel::openInputChannelPair` does (`sp<IBinder> token = new
+/// BBinder()` per pair). The token is the channel's identity: the framework's
+/// `InputMethodManager.areSameInputChannel` compares it, and a token shared by
+/// two binds makes it treat the second bind as "the same connection" and keep
+/// the *stale* `mCurChannel` — the app then writes into a socket whose server
+/// end this manager already dropped, `sendInputEvent` returns false, and the
+/// key falls through to the view tree instead of hiding the soft input.
+#[test]
+fn each_bound_channel_carries_its_own_token() {
+    let _guard = state_lock();
+    let state = fresh_ime(true);
+    let (first, _, _) = state.lock().unwrap().start_input(None, 1, None);
+    assert_eq!(first, BIND_SUCCESS);
+    let first_token = state
+        .lock()
+        .unwrap()
+        .take_bind_channel()
+        .expect("the first bind result carries a channel")
+        .0;
+    let (second, _, _) = state.lock().unwrap().start_input(None, 5, None);
+    assert_eq!(second, BIND_SUCCESS);
+    let second_token = state
+        .lock()
+        .unwrap()
+        .take_bind_channel()
+        .expect("the second bind result carries a channel")
+        .0;
+    assert_ne!(
+        first_token, second_token,
+        "two binds must not share a channel token (`areSameInputChannel` would \
+         keep the first pair and drop the key path)"
+    );
 }
 
 #[test]
