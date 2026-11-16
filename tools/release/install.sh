@@ -18,7 +18,8 @@ SELF_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd -- "$SELF_DIR/../.." && pwd)
 
 PREFIX=${ACOS_PREFIX:-$HOME/.local}
-VERSION=0.3.0
+# The default version is the workspace version (Cargo.toml), so the two cannot drift.
+VERSION=$(awk -F'"' '/^\[workspace\.package\]/{w=1} w && /^version *=/{print $2; exit}' "$REPO/Cargo.toml")
 FROM_TARGET=
 FORCE=0
 REGISTER_MCP=0
