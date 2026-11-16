@@ -193,6 +193,10 @@ pub struct LiveHandles {
     /// control op reads and scripts it; the activity manager writes to it when
     /// an implicit intent has no installed target.
     pub intents: std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>,
+    /// MPROC5: the foreground process tag ATMS publishes when the top-of-task
+    /// moves. The launcher serves the top process's probe sample (tree, and the
+    /// frame evidence a screenshot reply names) from it.
+    pub top_process: std::sync::Arc<std::sync::atomic::AtomicU32>,
 }
 
 /// Install the standard ACOS service set on `host`.
@@ -252,12 +256,18 @@ pub fn install_with_handles_and_insets(
     // activity manager (which captures an unresolvable share/pick/view) and
     // the broker service (which the session control op reads and scripts).
     let intents = Arc::new(Mutex::new(crate::intents::IntentState::new()));
+    // MPROC5: the **foreground process tag**. ATMS publishes it whenever the
+    // top-of-task moves; the launcher reads it so the tree/screenshot it serves
+    // come from the process whose window is actually on top, not from whichever
+    // guest printed the last probe sample.
+    let top_process = Arc::new(std::sync::atomic::AtomicU32::new(0));
 
     let live = LiveHandles {
         input: input_host.clone(),
         compositor: Arc::clone(&compositor),
         wms: Arc::clone(&wms_state),
         intents: Arc::clone(&intents),
+        top_process: Arc::clone(&top_process),
     };
     let session_binder = host.register_dynamic(
         "android.view.IWindowSession",
@@ -279,6 +289,10 @@ pub fn install_with_handles_and_insets(
     // Shared state. The PMS parses the APK lazily inside its factory so
     // installing the host touches no package data.
     let atms = Arc::new(Mutex::new(crate::atms::AtmsState::new()));
+    // MPROC5: ATMS publishes the foreground process tag here (`top_process`).
+    atms.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .top_process = Some(Arc::clone(&top_process));
     // MPROC1: the activity manager captures an unresolvable share/pick/view into
     // the same state the broker service (and the session control op) reads.
     atms.lock()

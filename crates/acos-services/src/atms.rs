@@ -141,6 +141,54 @@ impl ClientTransactionItem {
         }
     }
 
+    /// The framework parcelable one lifecycle item is written as.
+    ///
+    /// The field lists come from the **image's** own `writeToParcel` (scanned
+    /// from `.cache/boot/android-34/dex/framework`), not from the AOSP source:
+    /// this image's `StopActivityItem` has no `showWindow` on the wire. `None`
+    /// means ACOS has no decoded shape for the item, and nothing is written for
+    /// it (the item is never invented).
+    #[must_use]
+    pub fn to_parcelable(&self) -> Option<Parcelable> {
+        match self {
+            // `PauseActivityItem(finished, userLeaving, configChanges,
+            // dontReport, autoEnteringPip)`.
+            Self::PauseActivity { finished } => Some(Parcelable::ordered(
+                "android.app.servertransaction.PauseActivityItem",
+                vec![
+                    Value::Bool(*finished),
+                    Value::Bool(false),
+                    Value::Int(0),
+                    Value::Bool(false),
+                    Value::Bool(false),
+                ],
+            )),
+            // `StopActivityItem(configChanges)`.
+            Self::StopActivity { .. } => Some(Parcelable::ordered(
+                "android.app.servertransaction.StopActivityItem",
+                vec![Value::Int(0)],
+            )),
+            // `ResumeActivityItem(procState, updateProcState, isForward,
+            // shouldSendCompatFakeFocus)`; `PROCESS_STATE_TOP` is 2
+            // (`ProcessList`), and the process state is genuinely re-evaluated.
+            Self::ResumeActivity => Some(Parcelable::ordered(
+                "android.app.servertransaction.ResumeActivityItem",
+                vec![
+                    Value::Int(2),
+                    Value::Bool(true),
+                    Value::Bool(false),
+                    Value::Bool(false),
+                ],
+            )),
+            // `LaunchActivityItem` carries the app's own intent/`ActivityInfo`
+            // (guest-marshalled) and the destroy/relaunch items are not needed
+            // for the top-of-task rule; they stay unencoded rather than guessed.
+            Self::LaunchActivity { .. }
+            | Self::DestroyActivity { .. }
+            | Self::RelaunchActivity { .. } => None,
+        }
+    }
+
     /// The lifecycle events this item executes in the app.
     #[must_use]
     pub fn events(&self) -> Vec<LifecycleState> {
@@ -177,6 +225,32 @@ impl ClientTransaction {
                 self.items.iter().map(ClientTransactionItem::code).collect(),
             ))],
         )
+    }
+
+    /// The **framework wire shape** of a one-item lifecycle transaction.
+    ///
+    /// `ClientTransaction.writeToParcel` (image dex) is
+    /// `writeBoolean(mIsGlobal)`, `writeStrongBinder(mActivityToken)`,
+    /// `writeParcelable(mLifecycleStateRequest)`, `writeBoolean(mIsReady)`,
+    /// `writeParcelableList(mActivityCallbacks)`; the framework's own `obtain`
+    /// leaves the callbacks list null, so a null list is what a real AMS
+    /// writes here too. The item is the transaction's lifecycle request, which
+    /// is exactly what `TransactionExecutor` runs on the app's main thread.
+    ///
+    /// `None` when the item has no decoded shape (nothing is fabricated).
+    #[must_use]
+    pub fn lifecycle_parcelable(item: &ClientTransactionItem, token: u64) -> Option<Parcelable> {
+        let item = item.to_parcelable()?;
+        Some(Parcelable::ordered(
+            "android.app.servertransaction.ClientTransaction",
+            vec![
+                Value::Bool(false),           // mIsGlobal
+                Value::Binder(Some(acos_parcel::BinderId(token))), // mActivityToken
+                Value::NamedParcelable(item), // mLifecycleStateRequest
+                Value::Bool(false),           // mIsReady
+                Value::List(None),            // mActivityCallbacks
+            ],
+        ))
     }
 }
 
@@ -377,6 +451,21 @@ pub struct AtmsState {
     pub transactions: Vec<ClientTransaction>,
     /// Pending `system -> app` calls as `(method, args)`.
     pub pending_app_thread_calls: Vec<(String, Vec<Value>)>,
+    /// MPROC5: the top-of-task activity token of each process (`tag -> token`).
+    ///
+    /// A device keeps this in the task record (`Task.topRunningActivity`); one
+    /// record per process is enough here because ACOS schedules one task per
+    /// process, and it is what the cross-process pause/stop/resume rule reads.
+    pub tops: std::collections::BTreeMap<u32, u64>,
+    /// MPROC5: lifecycle `ClientTransaction`s queued for a **specific**
+    /// process's `IApplicationThread` (`tag`, method, args). `AtmsService::call`
+    /// encodes them into `PendingDelivery`s; the peer routes each to the
+    /// process that owns the target binder.
+    pub pending_lifecycle_calls: Vec<(u32, String, Vec<Value>)>,
+    /// MPROC5: the session's foreground process tag, published to the launcher
+    /// (`LiveHandles::top_process`) so the served probe tree/screenshot come
+    /// from the process whose window is on top.
+    pub top_process: Option<Arc<std::sync::atomic::AtomicU32>>,
     /// Granted permissions.
     pub granted_permissions: Vec<String>,
     /// Logical clock (ms) advanced per event; the VM supplies the real clock.
@@ -408,6 +497,9 @@ impl AtmsState {
             protocol_events: Vec::new(),
             transactions: Vec::new(),
             pending_app_thread_calls: Vec::new(),
+            tops: std::collections::BTreeMap::new(),
+            pending_lifecycle_calls: Vec::new(),
+            top_process: None,
             granted_permissions: vec!["android.permission.INTERNET".into()],
             clock_ms: 1,
             next_seq: 1,
@@ -860,7 +952,140 @@ impl AtmsState {
     pub fn activity_resumed(&mut self, token: u64, resumed: bool) -> Result<()> {
         let index = self.ensure_known(token)?;
         self.activities[index].resumed = resumed;
+        if resumed {
+            self.top_of_task(token);
+        }
         Ok(())
+    }
+
+    /// Publish a process tag as the session's foreground process.
+    fn publish_top(&mut self, tag: u32) {
+        if let Some(top) = &self.top_process {
+            top.store(tag, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// MPROC5: ATMS's **per-process** top-of-task rule.
+    ///
+    /// `token` just became the resumed activity of its process, so it is that
+    /// process's top. On a device `ActivityTaskSupervisor` then sends the
+    /// previous top's `PauseActivityItem` followed by its
+    /// `StopActivityItem` to **that activity's own** `IApplicationThread`; here
+    /// the same two framework items are queued for the process that lost the
+    /// top (encoded from the image's `writeToParcel` shapes, delivered by the
+    /// existing `PendingDelivery` transport). No state transition is applied
+    /// locally: stock AMS also waits for `activityPaused`/`activityStopped`
+    /// before the record moves, and the app's callbacks are the evidence.
+    fn top_of_task(&mut self, token: u64) {
+        let tag = self.activity_tag(token);
+        let losers: Vec<(u32, u64)> = self
+            .tops
+            .iter()
+            .filter(|(other, _)| **other != tag)
+            .map(|(other, top)| (*other, *top))
+            .collect();
+        for (other_tag, other_token) in losers {
+            let record = self
+                .activities
+                .iter()
+                .find(|a| a.token == other_token)
+                .cloned();
+            let Some(record) = record else {
+                self.tops.remove(&other_tag);
+                continue;
+            };
+            if record.finished {
+                self.tops.remove(&other_tag);
+                continue;
+            }
+            // `resumed` is the flag the app's own `activityResumed` set; a
+            // record can be `Started` in this model while the app has already
+            // reported the resume, and stock ATMS pauses exactly the activity
+            // that is resumed on screen.
+            if record.resumed || matches!(record.lifecycle, ActivityLifecycle::Resumed) {
+                self.queue_lifecycle(
+                    other_tag,
+                    other_token,
+                    ClientTransactionItem::PauseActivity { finished: false },
+                );
+            }
+            if matches!(
+                record.lifecycle,
+                ActivityLifecycle::Resumed | ActivityLifecycle::Started | ActivityLifecycle::Paused
+            ) {
+                self.queue_lifecycle(
+                    other_tag,
+                    other_token,
+                    ClientTransactionItem::StopActivity { show_window: false },
+                );
+            }
+            self.tops.remove(&other_tag);
+        }
+        self.tops.insert(tag, token);
+        self.publish_top(tag);
+    }
+
+    /// The process tag an activity token belongs to (peer binder id bits).
+    fn activity_tag(&self, token: u64) -> u32 {
+        self.activities
+            .iter()
+            .find(|a| a.token == token)
+            .map(|_| process_tag_of(token))
+            .unwrap_or_else(|| process_tag_of(token))
+    }
+
+    /// Queue one lifecycle item for process `tag`'s `IApplicationThread`.
+    fn queue_lifecycle(&mut self, tag: u32, token: u64, item: ClientTransactionItem) {
+        let Some(transaction) = ClientTransaction::lifecycle_parcelable(&item, token) else {
+            self.log_event(
+                "ActivityManagerLifecycle",
+                acos_protocol::LogLevel::Warn,
+                format!("tag={tag} token={token:#x} item={item:?} has no decoded wire shape"),
+            );
+            return;
+        };
+        self.pending_lifecycle_calls.push((
+            tag,
+            "scheduleTransaction".into(),
+            vec![Value::TypedObject(transaction)],
+        ));
+        self.log_event(
+            "ActivityManagerLifecycle",
+            acos_protocol::LogLevel::Debug,
+            format!("tag={tag} token={token:#x} item={item:?}"),
+        );
+    }
+
+    /// MPROC5: the activity under a finished one resumes, across processes.
+    ///
+    /// Same-process resumes stay the app's own job (the framework's W38/ROT6
+    /// watchers schedule `DestroyActivityItem` + `ResumeActivityItem`); when the
+    /// activity below the finished one belongs to **another** process, the host
+    /// is the only one that can reach it, so it queues one
+    /// `ResumeActivityItem` for that process — the item stock ATMS sends.
+    fn resume_below_after_finish(&mut self, finished: u64) {
+        let finished_tag = self.activity_tag(finished);
+        let next = self
+            .ams
+            .tasks
+            .iter()
+            .filter_map(|t| t.activities.last().copied())
+            .find(|t| *t != finished);
+        let Some(next) = next else { return };
+        let next_tag = self.activity_tag(next);
+        if next_tag == finished_tag {
+            return;
+        }
+        let alive = self
+            .activities
+            .iter()
+            .any(|a| a.token == next && !a.finished);
+        if !alive {
+            return;
+        }
+        self.queue_lifecycle(next_tag, next, ClientTransactionItem::ResumeActivity);
+        self.tops.insert(next_tag, next);
+        self.publish_top(next_tag);
     }
 
     /// Report `activityIdle` (launch complete).
@@ -922,6 +1147,9 @@ impl AtmsState {
         // task, so the record below it is the new top (what the guest's
         // destroy+resume transactions return to).
         self.ams.finish_activity(token);
+        // MPROC5: when the activity below belongs to another process, the host
+        // resumes it (the guest can only resume its own process's records).
+        self.resume_below_after_finish(token);
         Ok(())
     }
 
@@ -1479,6 +1707,50 @@ impl ServiceObject for AtmsService {
         };
 
         // Encode any queued `IApplicationThread` transaction deliveries.
+        //
+        // MPROC5: the per-process top-of-task items (pause/stop/resume) are
+        // queued with the tag they belong to, because on a device every one of
+        // them goes to **that** activity's own app thread, never to "the"
+        // attached process.
+        let lifecycle = std::mem::take(&mut state.pending_lifecycle_calls);
+        for (tag, name, values) in lifecycle {
+            let Some(app_thread) = state
+                .processes
+                .iter()
+                .find(|p| p.tag == tag)
+                .and_then(|p| p.app_thread)
+            else {
+                state.log_event(
+                    "ActivityManagerLifecycle",
+                    acos_protocol::LogLevel::Warn,
+                    format!("tag={tag} has no IApplicationThread; {name} not delivered"),
+                );
+                continue;
+            };
+            let Some(info) = acos_aidl::lookup_by_name("android.app.IApplicationThread", &name)
+            else {
+                continue;
+            };
+            let Ok(data) = crate::codec::build_request(
+                "android.app.IApplicationThread",
+                info,
+                &values,
+            ) else {
+                state.log_event(
+                    "ActivityManagerLifecycle",
+                    acos_protocol::LogLevel::Warn,
+                    format!("tag={tag} {name} could not be encoded"),
+                );
+                continue;
+            };
+            deliveries.push(PendingDelivery {
+                target: acos_parcel::BinderId(app_thread),
+                interface: "android.app.IApplicationThread".into(),
+                code: info.code,
+                method: name,
+                data,
+            });
+        }
         if let Some(app_thread) = state
             .processes
             .iter()

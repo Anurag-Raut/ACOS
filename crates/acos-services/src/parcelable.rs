@@ -1176,6 +1176,24 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // `PauseActivityItem.writeToParcel` (scanned from the **image's** framework
+    // dex, `.cache/boot/android-34/dex/framework`): mFinished, mUserLeaving,
+    // mConfigChanges, mDontReport, mAutoEnteringPip. `super.writeToParcel`
+    // (`ActivityLifecycleItem`/`ClientTransactionItem`) writes nothing.
+    ParcelableSpec {
+        class: "android.app.servertransaction.PauseActivityItem",
+        fields: &[FieldOp::Bool, FieldOp::Bool, FieldOp::Int, FieldOp::Bool, FieldOp::Bool],
+        verification: Verification::Full,
+    },
+    // `StopActivityItem.writeToParcel`: one `writeInt(mConfigChanges)`. Textual
+    // the android-14.0.0_r75 source is identical, and the image scan agrees: the
+    // item has no `showWindow` on the wire (it is not a field of this image's
+    // build), so the host must not write one.
+    ParcelableSpec {
+        class: "android.app.servertransaction.StopActivityItem",
+        fields: &[FieldOp::Int],
+        verification: Verification::Full,
+    },
     // `ResumeActivityItem.writeToParcel`: mProcState, mUpdateProcState,
     // mIsForward, mShouldSendCompatFakeFocus.
     ParcelableSpec {

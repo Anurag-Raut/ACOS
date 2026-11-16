@@ -760,8 +760,9 @@ fn spawn_secondary(
         let probe = Arc::clone(probe_state);
         let comp = compositor;
         let log = spec.out_dir.join("stdout.log");
+        let tag = spec.tag;
         std::thread::spawn(move || {
-            let _ = drain_tee_lines(out, cap, &log, probe, Some(comp));
+            let _ = drain_tee_lines(out, cap, &log, probe, Some(comp), tag);
         });
     }
     if let Some(err) = child.stderr.take() {
@@ -2304,7 +2305,10 @@ pub(crate) fn launch_session(
     // Bounded capture (R1): a guest that loops on printf costs at most the cap.
     let cap = stream_cap_from_env();
     let (otx, orx) = mpsc::channel::<(u8, TailBuffer)>();
-    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState {
+        top_process: Arc::clone(&live.top_process),
+        ..ProbeState::default()
+    }));
     // W59: one trace sink for the whole interactive session. The guest's looper
     // lines and the host's tap markers share `started`, so the two clocks are
     // directly comparable (both are the same CLOCK_MONOTONIC on this host).
@@ -2349,10 +2353,15 @@ pub(crate) fn launch_session(
                     &path,
                     probe_for_out,
                     Some(compositor_for_probe),
+                    0,
                 ),
-                None => {
-                    drain_stdout_lines(out_pipe, cap, probe_for_out, Some(compositor_for_probe))
-                }
+                None => drain_stdout_lines(
+                    out_pipe,
+                    cap,
+                    probe_for_out,
+                    Some(compositor_for_probe),
+                    0,
+                ),
             }
         } else {
             // Diagnostic: keep the whole stream on disk (`ACOSLAUNCH_GUEST_STDOUT_FILE`)
@@ -2963,6 +2972,15 @@ impl ProbeWake {
 #[derive(Default)]
 struct ProbeState {
     latest: Option<ProbeSample>,
+    /// MPROC5: one sample per app process tag. A session can run several
+    /// guests, each printing its own probe lines with its own sequence counter,
+    /// so a single `latest` would serve whichever process printed last — a tree
+    /// from a window that is not on top. The served sample is the one from the
+    /// process ATMS publishes as foreground (`top_process`).
+    by_process: std::collections::BTreeMap<u32, ProbeSample>,
+    /// MPROC5: the foreground process tag (`LiveHandles::top_process`), written
+    /// by ATMS whenever the top-of-task moves.
+    top_process: Arc<std::sync::atomic::AtomicU32>,
     /// H15: the last `anim_callbacks` set traced, so the trace names each
     /// distinct animation callback once instead of once per sample.
     anim_traced: String,
@@ -3542,11 +3560,17 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
 }
 
 fn latest_probe(state: &Arc<std::sync::Mutex<ProbeState>>) -> Option<ProbeSample> {
+    let state = state.lock().unwrap_or_else(|e| e.into_inner());
+    let top = state
+        .top_process
+        .load(std::sync::atomic::Ordering::Relaxed);
     state
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .latest
-        .clone()
+        .by_process
+        .get(&top)
+        .cloned()
+        // Before ATMS has a top (startup), the newest sample of any process is
+        // the only one there is; tag 0 is the launched app.
+        .or_else(|| state.latest.clone())
 }
 
 /// The newest guest `ACOSUNSUPPORTED` marker and its ordinal.
@@ -3597,8 +3621,9 @@ fn drain_stdout_lines<R: std::io::Read>(
     cap: usize,
     state: Arc<std::sync::Mutex<ProbeState>>,
     compositor: Option<Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>>,
+    tag: u32,
 ) -> TailBuffer {
-    drain_tee_lines(reader, cap, &PathBuf::new(), state, compositor)
+    drain_tee_lines(reader, cap, &PathBuf::new(), state, compositor, tag)
 }
 
 /// Read one `\n`-terminated line, bounding the bytes held in memory.
@@ -3647,6 +3672,7 @@ fn drain_tee_lines<R: std::io::Read>(
     tee: &Path,
     state: Arc<std::sync::Mutex<ProbeState>>,
     compositor: Option<Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>>,
+    tag: u32,
 ) -> TailBuffer {
     use std::io::Write;
     let mut tee_file = if tee.as_os_str().is_empty() {
@@ -3818,9 +3844,13 @@ fn drain_tee_lines<R: std::io::Read>(
                         set_animations_state(on);
                     }
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
-                    let newer = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
+                    let newer = state
+                        .by_process
+                        .get(&tag)
+                        .map(|p| p.seq < seq)
+                        .unwrap_or(true);
                     if newer {
-                        state.latest = Some(ProbeSample {
+                        let sample = ProbeSample {
                             seq,
                             tree,
                             at_ms: host_ms(),
@@ -3830,7 +3860,15 @@ fn drain_tee_lines<R: std::io::Read>(
                             settled,
                             pending,
                             animations_on,
-                        });
+                        };
+                        state.by_process.insert(tag, sample.clone());
+                        // `latest` stays the newest sample of **any** process; it
+                        // is the pre-ATMS fallback and the startup loop's input.
+                        let newer_any =
+                            state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
+                        if newer_any {
+                            state.latest = Some(sample);
+                        }
                     }
                     // P9: wake the startup loop (and anyone else waiting on a
                     // fresh sample) instead of making it poll for this.
