@@ -1,0 +1,34 @@
+# REL3H2: `expect_handled: true` on a press nothing consumed is a failed claim.
+#
+# The same non-clickable `title` label as `rel3h-unhandled-input.yaml`, but the
+# scenario claims the app must consume the gesture. The window answers
+# `finishInputEvent(handled) = false`, so the step fails with
+# `INPUT_NOT_HANDLED` (error class `assertion`) and `details.reason:
+# "expect_handled"` plus the injected target and the settle record - instead of
+# passing as a settled no-op.
+#
+# This is the false-pass the claim exists to catch: before REL3H2 a scenario whose
+# tap missed the control could pass, because "the app did not handle it" was only
+# reported as `input.handled: false` in the evidence.
+version: 1
+name: rel3h2-expect-handled-true
+description: >-
+  A tap on a non-clickable label with expect_handled: true fails with
+  INPUT_NOT_HANDLED instead of passing as a settled unhandled input.
+app: fixtures/build/apps/tap-targets.apk
+engine: art
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+animations: off
+expectation: fail
+expect_error: {code: INPUT_NOT_HANDLED, reason: expect_handled}
+steps:
+  - launch:
+      activity: dev.acos.fixtures.taptargets/.MainActivity
+  - tap:
+      selector: {id: title}
+      expect_handled: true

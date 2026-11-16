@@ -396,11 +396,13 @@ fn swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row() {
         "the failure names what the last tree actually showed: {missing:#?}"
     );
 
-    // ---- REL3H: a swipe that moves nothing ends the search -----------------
+    // ---- REL3H/REL3H2: the end of the list ends the search ------------------
     // Row 9999 does not exist. With enough attempts the list reaches its end;
     // the next gesture then moves nothing, and the search must stop there with
     // END_OF_LIST - in *fewer* attempts than `max_attempts`, not by burning
-    // every remaining gesture and reporting ELEMENT_NOT_FOUND.
+    // every remaining gesture and reporting ELEMENT_NOT_FOUND. REL3H2: one
+    // unchanged gesture is not enough (a loading list is unchanged too), so the
+    // end needs two *consumed* gestures that each moved nothing.
     let end = conn.call(
         "acos_swipe",
         json!({
@@ -420,9 +422,19 @@ fn swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row() {
     );
     let details = &end["error"]["details"];
     assert_eq!(details["end_of_list"], json!(true), "{end:#?}");
+    assert_eq!(
+        details["unchanged_gestures"],
+        json!(2),
+        "the end is two unchanged consumed gestures (REL3H2): {end:#?}"
+    );
+    assert_eq!(
+        details["gesture_consumed"],
+        json!(true),
+        "the boundaries of the list really consumed the swipes: {end:#?}"
+    );
     let attempts = details["attempts"].as_u64().unwrap_or(0);
     assert!(
-        attempts >= 1 && attempts < 12,
+        attempts >= 2 && attempts < 12,
         "the search stops at the end instead of spending every attempt: {end:#?}"
     );
     assert_eq!(details["max_attempts"], json!(12), "{end:#?}");

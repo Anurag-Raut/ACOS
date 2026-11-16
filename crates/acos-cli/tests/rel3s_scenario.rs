@@ -86,13 +86,19 @@ fn run_scenario(tag: &str, steps: &str) -> (PathBuf, Value) {
 /// Run a complete scenario document (a negative twin needs its own top-level
 /// `expectation`, which the shared prelude does not carry).
 fn run_scenario_yaml(tag: &str, yaml: &str) -> (PathBuf, Value) {
+    run_scenario_for_apk(tag, yaml, "scroll-list")
+}
+
+/// The same, against another fixture (`--apk` overrides the scenario's own
+/// `app:`, so a test that needs a different app names it here).
+fn run_scenario_for_apk(tag: &str, yaml: &str, app: &str) -> (PathBuf, Value) {
     let dir = scratch(tag);
     let scenario = dir.join("scenario.yaml");
     std::fs::write(&scenario, yaml).expect("write scenario");
-    let apk = repo_root().join("fixtures/build/apps/scroll-list.apk");
+    let apk = repo_root().join(format!("fixtures/build/apps/{app}.apk"));
     assert!(
         apk.is_file(),
-        "build the fixture first: `ACOS_APP_ONLY=scroll-list tools/build-apps.sh` "
+        "build the fixture first: `ACOS_APP_ONLY={app} tools/build-apps.sh` "
     );
     let artifacts = dir.join("artifacts");
     let output = std::process::Command::new(acos())
@@ -368,9 +374,19 @@ steps:
         Value::from(true),
         "the step JSON says the list ended: {until}"
     );
+    assert_eq!(
+        until["unchanged_gestures"],
+        Value::from(2),
+        "REL3H2: the end is two consumed gestures that moved nothing: {until}"
+    );
+    assert_eq!(
+        until["gesture_consumed"],
+        Value::from(true),
+        "the list's own boundaries consumed the swipes: {until}"
+    );
     let attempts = until["attempts"].as_u64().unwrap_or(0);
     assert!(
-        (1..12).contains(&attempts),
+        (2..12).contains(&attempts),
         "the search stops at the end instead of spending every attempt: {until}"
     );
     assert_eq!(until["max_attempts"], Value::from(12), "{until}");
@@ -380,4 +396,78 @@ steps:
             .is_some_and(|texts| texts.iter().any(|text| text == "Row 99")),
         "the last settled tree is the end of the list: {until}"
     );
+}
+
+/// REL3H2: a `scroll_until` whose swipe the app never consumed is a **miss**,
+/// not the end of the list.
+///
+/// The `tap-targets` fixture is a non-scrollable screen: a swipe across it is
+/// delivered and the window answers `finishInputEvent(handled) = false`, so the
+/// settled tree never changes - exactly the shape REL3H read as "the list
+/// ended". Reporting `END_OF_LIST` there would tell an agent "there is no more
+/// content in this direction" when the truth is "your gesture went nowhere", so
+/// the step must fail with `ELEMENT_NOT_FOUND`, `input.until.end_of_list:
+/// false`, `gesture_consumed: false` and the hint naming the scroller.
+#[test]
+#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+fn scroll_until_whose_swipe_was_not_consumed_is_a_miss() {
+    let (_, verdict) = run_scenario_for_apk(
+        "unconsumed-swipe",
+        r#"
+version: 1
+name: rel3h2-unconsumed-swipe
+app: fixtures/build/apps/tap-targets.apk
+expectation: non_pass
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+animations: off
+steps:
+  - launch: {activity: .MainActivity}
+  - scroll_until: {selector: {text: {exact: "Row 9999"}}, direction: up, max_attempts: 6}
+"#,
+        "tap-targets",
+    );
+    assert_ne!(
+        verdict["verdict"],
+        Value::from("pass"),
+        "a search whose gesture was not consumed is never a pass: {}",
+        verdict_string(&verdict)
+    );
+    let search = step(&verdict, 1);
+    assert_eq!(search["step"], Value::from("scroll_until"));
+    assert_eq!(
+        search["status"],
+        Value::from("fail"),
+        "the step failed: {}",
+        verdict_string(&verdict)
+    );
+    assert_eq!(
+        search["error"]["code"],
+        Value::from("ELEMENT_NOT_FOUND"),
+        "an unconsumed swipe is a miss, never END_OF_LIST: {}",
+        verdict_string(&verdict)
+    );
+    let hint = search["error"]["hint"].as_str().unwrap_or_default();
+    assert!(
+        hint.contains("gesture not consumed (swipe missed the scroller?)"),
+        "the hint names the real cause: {hint:?}"
+    );
+    let until = &search["input"]["until"];
+    assert_eq!(until["found"], Value::from(false), "{until}");
+    assert_eq!(
+        until["end_of_list"],
+        Value::from(false),
+        "nothing was learned about the end of a list: {until}"
+    );
+    assert_eq!(
+        until["gesture_consumed"],
+        Value::from(false),
+        "the app window did not consume the swipe: {until}"
+    );
+    assert_eq!(
+        until["attempts"],
+        Value::from(1),
+        "repeating the same missed gesture cannot help: {until}"
+    );
+    assert_eq!(until["max_attempts"], Value::from(6), "{until}");
 }
