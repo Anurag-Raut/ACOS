@@ -2104,12 +2104,16 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
         // explicit `content_desc` selector names that field exactly instead.
         // Either way several user-visible matches are refused, never silently
         // picked.
-        let target = resolve_input_node(session, &selector, &describe)?;
+        let tree = session.ensure_bound_tree()?;
+        let target = resolve_input_node_in(&tree, &selector, &describe)?;
         session.set_settle_mode(settle);
         session.begin_input();
         let (x, y) = target.tap_point();
         session.tap_in_window(&target.window, x, y)?;
-        input_result(session, "tap", describe)
+        // REL3E: the hit-test uses the tree the selector resolved against, i.e.
+        // the same geometry `tap_point` came from; no extra traversal.
+        let target = acos_protocol::ui::tap_target_json(Some(&describe), Some(&target), Some(&tree), x, y);
+        input_result(session, "tap", target)
     } else {
         let (Some(x), Some(y)) = (
             args.get("x").and_then(Value::as_i64),
@@ -2121,10 +2125,14 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
                     .to_string(),
             });
         };
+        // A coordinate tap has no selector; its hit-test still comes from the
+        // already-bound tree (never a new traversal).
+        let tree = session.bound_tree();
         session.set_settle_mode(settle);
         session.begin_input();
         session.tap(x as i32, y as i32)?;
-        input_result(session, "tap", json!({"x": x, "y": y}))
+        let target = acos_protocol::ui::tap_target_json(None, None, tree.as_ref(), x as i32, y as i32);
+        input_result(session, "tap", target)
     };
     check_expect_change(args, session, &result)?;
     Ok(result)
@@ -2177,12 +2185,11 @@ fn args_selector(args: &Value) -> Option<(Selector, Value)> {
 /// established ladder: a node that exists but is not visible is
 /// `ELEMENT_OFFSCREEN` (with its bounds), a complete tree with nothing is
 /// `ELEMENT_NOT_FOUND`, a truncated tree is `TREE_TRUNCATED`.
-fn resolve_input_node(
-    session: &mut ArtSession,
+fn resolve_input_node_in(
+    tree: &UiTree,
     selector: &Selector,
     describe: &Value,
 ) -> Result<UiNode, BackendError> {
-    let tree = session.ensure_bound_tree()?;
     let candidates = tree.find_input_candidates(selector);
     match candidates.len() {
         1 => return Ok(candidates[0].clone()),
@@ -2312,16 +2319,13 @@ fn echo_decision(tree: &UiTree, forced: bool) -> EchoDecision<'_> {
     EchoDecision { node, mask_reason }
 }
 
-/// The node as the reply describes it. A password node's own text is withheld
-/// too: it is the secret the field holds, not the agent's typing.
+/// The node as the reply describes it: identity, its accessible name, its
+/// geometry and the input flags an agent has to reason about.
+///
+/// A password node's own text is withheld too: it is the secret the field holds,
+/// not the agent's typing.
 fn node_summary(node: &UiNode, withhold_text: bool) -> Value {
-    json!({
-        "id": node.id,
-        "class": node.class,
-        "content_desc": node.content_desc,
-        "text": if withhold_text { Value::Null } else { json!(node.text) },
-        "password": node.password,
-    })
+    acos_protocol::ui::node_input_json(node, withhold_text)
 }
 
 /// `mask: true` on `acos_text`: the caller knows the field is a secret even when
@@ -3021,10 +3025,14 @@ fn diff_requested(args: &Value) -> Result<bool, BackendError> {
     }
 }
 
-fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
+fn input_result(session: &mut ArtSession, kind: &str, target: Value) -> Value {
+    // REL3E: the resolved target and its hit-test are the action's own evidence,
+    // so they travel with the delivery the verifier reads (a scenario step's JSON
+    // carries the same block the MCP reply does).
+    session.attach_input_target(target.clone());
     let delivery = session.last_input_delivery();
     let settle = session.last_input_settle().cloned();
-    let (delivered, state_changed, acks) = match delivery {
+    let (delivered, state_changed, acks) = match &delivery {
         Some(delivery) => (
             delivery.delivered,
             delivery.visual_change,
@@ -3040,7 +3048,27 @@ fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
         ),
         None => (true, false, json!([])),
     };
-    let mut result = input_reply(kind, delivered, state_changed, acks, target, settle);
+    let handled = delivery.as_ref().and_then(|delivery| delivery.handled);
+    let mut result = input_reply(
+        kind,
+        delivered,
+        state_changed,
+        handled,
+        handled_evidence(&delivery),
+        acks,
+        target,
+        settle,
+    );
+    // REL3E: the reply must answer "did the app handle it", not just "did we
+    // send it". The hint is written against the *same* target block, so the
+    // agent reads one object: what was resolved, what the point hit, what the
+    // framework did with it.
+    if let Some(object) = result.as_object_mut() {
+        let hint = acos_protocol::ui::handling_hint(object.get("target"), handled, state_changed);
+        if let Some(hint) = hint {
+            object.insert("handled_hint".into(), json!(hint));
+        }
+    }
     // FB3: what the action changed, from the two trees the session already
     // holds (the pre-action tree and the tree this action's settle bound). Only
     // present when asked for: `diff:false` is the pre-FB3 reply, byte for byte.
@@ -3050,13 +3078,34 @@ fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
     result
 }
 
-/// The action reply every backend has always produced (FB3 adds `changes` to it,
-/// and nothing else): kept as its own function so "`diff:false` is byte for
-/// byte today's reply" is checkable without a live guest.
+/// REL3E: the delivery evidence behind `handled`, never a boolean on its own.
+fn handled_evidence(delivery: &Option<acos_verify::backend::InputDelivery>) -> Value {
+    let Some(delivery) = delivery else {
+        return json!({"source": "none", "published": 0, "acked": 0});
+    };
+    let unhandled: Vec<u64> = delivery
+        .acks
+        .iter()
+        .filter(|ack| !ack.handled)
+        .map(|ack| ack.seq)
+        .collect();
+    json!({
+        "source": "finishInputEvent",
+        "published": delivery.published,
+        "acked": delivery.acks.len(),
+        "unhandled": unhandled,
+    })
+}
+
+/// The action reply every backend has always produced. REL3E adds `handled` and
+/// `handled_evidence` after `state_changed`, and nothing else: `target` keeps
+/// its position and `diff:false` keeps every pre-REL3E key.
 fn input_reply(
     kind: &str,
     delivered: bool,
     state_changed: bool,
+    handled: Option<bool>,
+    handled_evidence: Value,
     acks: Value,
     target: Value,
     settle: Option<Value>,
@@ -3065,10 +3114,12 @@ fn input_reply(
         "action": kind,
         "accepted": delivered,
         "state_changed": state_changed,
+        "handled": handled,
+        "handled_evidence": handled_evidence,
         "acks": acks,
         "target": target,
         "settle": settle,
-        "input_evidence": "guest-asserted acks; state_changed is the host's own pixel+tree comparison in strict mode; in fast mode it is the guest's tree-change verdict and a fast frame may be mid-animation",
+        "input_evidence": "`handled` is the app window's own finishInputEvent(handled) answer (guest-asserted, one ack per InputMessage); state_changed is the host's own pixel+tree comparison in strict mode; in fast mode it is the guest's tree-change verdict and a fast frame may be mid-animation",
     })
 }
 
@@ -4023,22 +4074,28 @@ mod tests {
     }
 
     /// FB3: `diff:false` must be the pre-FB3 reply, byte for byte; the diff is
-    /// only ever an *added* key after the existing ones.
+    /// only ever an *added* key after the existing ones. REL3E adds `handled`
+    /// and `handled_evidence`, and the byte-exact expectation carries them.
     #[test]
     fn fb3_diff_false_reply_is_byte_identical_and_changes_are_appended() {
         let base = input_reply(
             "tap",
             true,
             true,
+            Some(true),
+            handled_evidence(&None),
             json!([{"seq": 3, "handled": true, "latency_us": 1200}]),
             json!({"id": "inc"}),
             Some(json!({"mode": "strict", "settled": true})),
         );
         let expected = concat!(
             "{\"accepted\":true,\"acks\":[{\"handled\":true,\"latency_us\":1200,\"seq\":3}],",
-            "\"action\":\"tap\",\"input_evidence\":\"guest-asserted acks; state_changed is ",
-            "the host's own pixel+tree comparison in strict mode; in fast mode it is the ",
-            "guest's tree-change verdict and a fast frame may be mid-animation\",",
+            "\"action\":\"tap\",\"handled\":true,",
+            "\"handled_evidence\":{\"acked\":0,\"published\":0,\"source\":\"none\"},",
+            "\"input_evidence\":\"`handled` is the app window's own ",
+            "finishInputEvent(handled) answer (guest-asserted, one ack per InputMessage); ",
+            "state_changed is the host's own pixel+tree comparison in strict mode; in fast ",
+            "mode it is the guest's tree-change verdict and a fast frame may be mid-animation\",",
             "\"settle\":{\"mode\":\"strict\",\"settled\":true},\"state_changed\":true,",
             "\"target\":{\"id\":\"inc\"}}"
         );
@@ -4063,6 +4120,123 @@ mod tests {
             expected,
             "removing `changes` must give back the pre-FB3 reply exactly"
         );
+    }
+
+    /// REL3E: a tap reply answers "did the app handle it", and the target block
+    /// names what the point hit plus the clickable node to tap instead.
+    #[test]
+    fn rel3e_tap_target_names_the_hit_and_the_clickable_sibling() {
+        // The Gaten settings row: a non-clickable label whose clickable switch
+        // sits beside it, inside a row that is not clickable either.
+        let mut label = UiNode::new("n1", "android.widget.TextView", Bounds::new(40, 300, 460, 360))
+            .with_resource_id("title")
+            .with_text("Floating button");
+        label.window = "main".into();
+        let mut switch = UiNode::new("n2", "android.widget.Switch", Bounds::new(900, 300, 1040, 360))
+            .with_resource_id("toggle")
+            .with_text("Floating button");
+        switch.clickable = true;
+        switch.checked = false;
+        switch.window = "main".into();
+        let mut row = UiNode::new("n0", "android.widget.LinearLayout", Bounds::new(0, 296, 1080, 364));
+        row.window = "main".into();
+        row.children = vec![label, switch];
+        let screen = tree(vec![row]);
+
+        let target = acos_protocol::ui::tap_target_json(
+            Some(&json!({"text": "Floating button"})),
+            None,
+            Some(&screen),
+            250,
+            330,
+        );
+        assert_eq!(target["selector"], json!({"text": "Floating button"}));
+        assert_eq!(target["point"], json!({"x": 250, "y": 330}));
+        assert_eq!(target["hit"]["method"], json!("tree-geometry"));
+        assert_eq!(target["hit"]["node"]["resource_id"], json!("title"));
+        assert_eq!(target["hit"]["node"]["class"], json!("android.widget.TextView"));
+        assert_eq!(target["hit"]["node"]["bounds"], json!("[40,300][460,360]"));
+        assert_eq!(target["hit"]["clickable"], json!(false));
+        assert_eq!(target["hit"]["consumer"], Value::Null, "no ancestor is clickable");
+        assert_eq!(target["hit"]["suggest"]["resource_id"], json!("toggle"));
+        assert_eq!(target["hit"]["suggest"]["clickable"], json!(true));
+
+        let hint = acos_protocol::ui::handling_hint(Some(&target), Some(false), false).expect("a hint");
+        assert!(hint.contains("nothing tappable there"), "{hint}");
+        assert!(hint.contains("Floating button"), "{hint}");
+        assert!(hint.contains("android.widget.Switch"), "{hint}");
+        assert!(hint.contains("nearest clickable"), "{hint}");
+        assert!(hint.contains("finishInputEvent(handled) = false"), "{hint}");
+    }
+
+    /// REL3E: a hit on a clickable control needs no suggestion, and a handled
+    /// input with no visible change explains itself.
+    #[test]
+    fn rel3e_handled_true_with_or_without_a_change() {
+        let mut button = UiNode::new("n1", "android.widget.Button", Bounds::new(0, 0, 100, 60))
+            .with_resource_id("inc")
+            .with_text("Increment");
+        button.clickable = true;
+        let screen = tree(vec![button]);
+        let target = acos_protocol::ui::tap_target_json(None, None, Some(&screen), 50, 30);
+        assert_eq!(target["hit"]["node"]["resource_id"], json!("inc"));
+        assert_eq!(target["hit"]["clickable"], json!(true));
+        assert_eq!(target["hit"]["consumer"]["resource_id"], json!("inc"));
+        assert_eq!(target["hit"]["suggest"], Value::Null);
+        assert_eq!(acos_protocol::ui::handling_hint(Some(&target), Some(true), true), None);
+        let hint = acos_protocol::ui::handling_hint(Some(&target), Some(true), false).expect("a hint");
+        assert!(hint.contains("consumed the input"), "{hint}");
+        assert!(hint.contains("no change"), "{hint}");
+    }
+
+    /// REL3E: a missing ack is "unknown", never "not handled"; a point with no
+    /// node and no tree is described as such.
+    #[test]
+    fn rel3e_unknown_handling_is_reported_as_unknown() {
+        let hint = acos_protocol::ui::handling_hint(None, None, false).expect("a hint");
+        assert!(hint.contains("unknown"), "{hint}");
+        assert!(!hint.contains("did NOT consume"), "{hint}");
+
+        let empty = tree(vec![UiNode::new("n0", "android.view.View", Bounds::new(0, 0, 10, 10))]);
+        let target = acos_protocol::ui::tap_target_json(None, None, Some(&empty), 5, 5);
+        assert_eq!(target["hit"]["node"]["class"], json!("android.view.View"));
+        let hint = acos_protocol::ui::handling_hint(Some(&target), Some(false), false).expect("a hint");
+        assert!(hint.contains("nothing tappable there"), "{hint}");
+        assert!(hint.contains("no clickable node"), "{hint}");
+
+        let no_tree = acos_protocol::ui::tap_target_json(None, None, None, 5, 5);
+        assert_eq!(no_tree["hit"]["node"], Value::Null);
+        assert_eq!(no_tree["hit"]["clickable"], Value::Null);
+        assert!(no_tree["hit"]["note"].as_str().unwrap().contains("no bound tree"));
+        let hint = acos_protocol::ui::handling_hint(Some(&no_tree), Some(false), false).expect("a hint");
+        assert!(hint.contains("no node there"), "{hint}");
+    }
+
+    /// REL3E: `target` for a resolved tap carries the node's input fields, and
+    /// the delivery evidence counts published vs acked events.
+    #[test]
+    fn rel3e_reply_carries_handled_and_evidence() {
+        let mut button = UiNode::new("n1", "android.widget.Button", Bounds::new(0, 0, 100, 60))
+            .with_resource_id("inc")
+            .with_text("Increment");
+        button.clickable = true;
+        button.focused = true;
+        button.enabled = false;
+        let target = acos_protocol::ui::tap_target_json(Some(&json!({"id": "inc"})), Some(&button), None, 50, 30);
+        let node = &target["node"];
+        assert_eq!(node["id"], json!("n1"));
+        assert_eq!(node["class"], json!("android.widget.Button"));
+        assert_eq!(node["text"], json!("Increment"));
+        assert_eq!(node["content_desc"], json!(""));
+        assert_eq!(node["bounds"], json!("[0,0][100,60]"));
+        assert_eq!(node["clickable"], json!(true));
+        assert_eq!(node["enabled"], json!(false));
+        assert_eq!(node["focused"], json!(true));
+
+        let evidence = handled_evidence(&None);
+        assert_eq!(evidence["source"], json!("none"));
+        assert_eq!(evidence["published"], json!(0));
+        assert_eq!(evidence["acked"], json!(0));
     }
 
     /// FB3: `diff` defaults on and a non-boolean is a typed argument error.

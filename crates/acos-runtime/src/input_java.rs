@@ -133,8 +133,10 @@ impl std::fmt::Debug for RuntimeInputHost {
 
 impl InputHost for RuntimeInputHost {
     fn finish_event(&self, seq: i32, handled: bool) {
-        let _ = handled;
-        let _ = with_wms(|s| s.input.finish_event(seq as u32));
+        // REL3E: the app window's own answer travels with the ack. Throwing it
+        // away is what made "the input was sent" indistinguishable from "the app
+        // handled it".
+        let _ = with_wms(|s| s.input.finish_event(seq as u32, handled));
     }
 
     fn send_frame(&self, _frame: &InputFrame) {

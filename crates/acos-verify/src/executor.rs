@@ -98,6 +98,11 @@ struct StepExec {
     /// SE2: the settle record the step bound its frame with, when the backend
     /// reported one (a `launch` carries it in its detail).
     settle: Option<serde_json::Value>,
+    /// REL3E: the action's own delivery record (`handled`, acks, target), kept
+    /// even when the step failed. A tap the app never consumed usually produces
+    /// no new frame and times out its settle; the agent still needs to be told
+    /// *that nothing consumed it*, so the delivery travels with the failure.
+    delivery: Option<crate::backend::InputDelivery>,
 }
 
 impl StepExec {
@@ -110,6 +115,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 
@@ -132,6 +138,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 
@@ -151,6 +158,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 
@@ -181,6 +189,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 
@@ -196,6 +205,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 
@@ -208,6 +218,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 }
@@ -426,6 +437,11 @@ pub fn run_scenario(
         // an earlier action's rule; the input's own record is the one this step
         // actually applied.
         step_result.settle = step_settle(exec.observation.as_ref(), exec.settle.as_ref());
+        // REL3E: an input step says what the app did with it (`handled`) and what
+        // the injected point resolved to, plus whether a change was required -
+        // `"auto"` for a tap, whose own state-change rule runs on every step even
+        // when the scenario never asked for it.
+        step_result.input = step_input(step, exec.delivery.as_ref());
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -1474,10 +1490,19 @@ fn input_step(
             } else {
                 StepExec::pass()
             };
+            exec.delivery = observation.input.clone();
             exec.observation = Some(observation);
             exec
         }
-        Err(error) => StepExec::backend_error(&error, backend.id(), action.kind()),
+        Err(error) => {
+            // REL3E: a failed/timed-out settle still has the delivery evidence.
+            // A tap nothing consumed produces no new frame and *will* time out;
+            // the step must still say `handled: false` and name what it hit, or
+            // the agent is back to guessing from `state_changed`.
+            let mut exec = StepExec::backend_error(&error, backend.id(), action.kind());
+            exec.delivery = backend.last_input_delivery();
+            exec
+        }
     }
 }
 
@@ -1577,6 +1602,7 @@ fn observation_binding_error(backend: &str, observation: &SessionObservation) ->
         produced_frame: None,
         session: None,
         settle: None,
+        delivery: None,
     })
 }
 
@@ -1619,6 +1645,7 @@ fn meaningful_error(observation: &SessionObservation) -> Option<StepExec> {
         produced_frame: None,
         session: None,
         settle: None,
+        delivery: None,
     })
 }
 
@@ -1645,6 +1672,67 @@ fn expect_change_requested(step: &Step) -> bool {
         Some(StepRef::Back(back)) => back.expect_change,
         _ => false,
     }
+}
+
+/// REL3E: the `input` block of a step JSON.
+///
+/// `handled` is the app window's own `finishInputEvent(handled)` answer (`null`
+/// when the guest did not ack every event), `target` is the resolved node plus
+/// the hit-test at the injected point, and `expect_change` is `"auto"` for a tap
+/// (whose `state_change` assertion is the step's own, not the scenario's) or the
+/// scenario's explicit flag for `type`/`key`/`back`.
+fn step_input(
+    step: &Step,
+    delivery: Option<&crate::backend::InputDelivery>,
+) -> Option<serde_json::Value> {
+    let expect_change = match step.as_step() {
+        // A tap's state-change rule runs on every step, so an unflagged tap says
+        // `"auto"` - never a silent `false` that hides the rule.
+        Some(StepRef::Tap(tap)) => {
+            if tap.expect_change {
+                serde_json::json!(true)
+            } else {
+                serde_json::json!("auto")
+            }
+        }
+        Some(StepRef::Type(ty)) => serde_json::json!(ty.expect_change),
+        Some(StepRef::Key(key)) => serde_json::json!(key.expect_change),
+        Some(StepRef::Back(back)) => serde_json::json!(back.expect_change),
+        _ => return None,
+    };
+    let Some(delivery) = delivery else {
+        return Some(serde_json::json!({
+            "handled": serde_json::Value::Null,
+            "handled_evidence": {"source": "none", "published": 0, "acked": 0},
+            "target": serde_json::Value::Null,
+            "expect_change": expect_change,
+        }));
+    };
+    let unhandled: Vec<u64> = delivery
+        .acks
+        .iter()
+        .filter(|ack| !ack.handled)
+        .map(|ack| ack.seq)
+        .collect();
+    let target = delivery.target.clone();
+    let mut input = serde_json::json!({
+        "handled": delivery.handled,
+        "handled_evidence": {
+            "source": if delivery.published > 0 { "finishInputEvent" } else { "none" },
+            "published": delivery.published,
+            "acked": delivery.acks.len(),
+            "unhandled": unhandled,
+        },
+        "target": target.clone().unwrap_or(serde_json::Value::Null),
+        "expect_change": expect_change,
+    });
+    // The same one-line explanation an MCP reply carries, from the same facts.
+    if let Some(hint) =
+        acos_protocol::ui::handling_hint(target.as_ref(), delivery.handled, delivery.visual_change)
+    {
+        input["handled_hint"] = serde_json::json!(hint);
+    }
+    Some(input)
 }
 
 /// The artifact reference for one observation's frame, when it was captured.
@@ -2178,18 +2266,45 @@ fn eval_tap_change(
     // observed the injection, the guest accepted it, and the action's frame is
     // fresh. It is also not a state change, so nothing visual is claimed.
     if let Some(delivery) = &current.input {
-        if delivery.delivered && !delivery.visual_change {
+        // REL3E: the app window's own answer comes first. `handled: false` is the
+        // framework saying *nothing consumed the press* (a label with no handler,
+        // a disabled control), which is a different situation from "the app
+        // handled it and nothing changed" - and the agent must be able to tell
+        // them apart from this step's own evidence.
+        if delivery.handled == Some(false) {
             let acks = delivery.acks.len();
             return Evaluated::pass(
                 "input_delivery",
                 Vec::new(),
                 Some(format!(
-                    "host-observed input delivery ({acks} guest ack(s)); no visual change; \
-                     no state change claimed"
+                    "the app's window did not consume this tap (`finishInputEvent(handled) = \
+                     false`, {acks} guest ack(s)); nothing was handled, so no state change is \
+                     expected or claimed - the target/hit-test in the input evidence names what \
+                     the point hit and, when the tree shows one, the clickable node to tap"
+                )),
+                serde_json::json!({"delivered": true, "handled": false}),
+                serde_json::json!({
+                    "delivered": delivery.delivered,
+                    "handled": false,
+                    "acks": acks,
+                    "visual_change": delivery.visual_change,
+                }),
+            );
+        }
+        if delivery.delivered && !delivery.visual_change {
+            let acks = delivery.acks.len();
+            let handled = delivery.handled;
+            return Evaluated::pass(
+                "input_delivery",
+                Vec::new(),
+                Some(format!(
+                    "host-observed input delivery ({acks} guest ack(s), handled: {handled:?}); \
+                     no visual change; no state change claimed"
                 )),
                 serde_json::json!({"delivered": true}),
                 serde_json::json!({
                     "delivered": delivery.delivered,
+                    "handled": handled,
                     "acks": acks,
                     "visual_change": delivery.visual_change,
                 }),
@@ -2305,6 +2420,7 @@ fn no_fresh_frame_failure(
         produced_frame: None,
         session: None,
         settle: None,
+        delivery: None,
     }
 }
 
@@ -2751,6 +2867,7 @@ fn static_launch_assertion(
                 produced_frame: None,
                 session: None,
                 settle: None,
+                delivery: None,
             });
         }
     } else if launch.intent_action.is_none() && manifest.launcher_activity.is_none() {
@@ -2771,6 +2888,7 @@ fn static_launch_assertion(
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         });
     }
     None
@@ -3113,6 +3231,91 @@ mod region_tests {
         assert_eq!(evaluated.error.unwrap().code(), ErrorCode::AssertionFailed);
     }
 
+    /// REL3E: a tap step's JSON says `expect_change: "auto"` explicitly (the
+    /// step's own state-change rule runs whether or not the scenario asked), it
+    /// carries the app window's `handled` answer and the target block, and a tap
+    /// the app never handled passes with that fact instead of a claim.
+    #[test]
+    fn rel3e_tap_step_reports_handled_target_and_expect_change_auto() {
+        const HEAD: &str = "version: 1\nname: rel3e\napp: dev.acos.fixtures.taptargets\n\
+             isolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, \
+             density_dpi: 420}\n";
+        let scenario = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - tap:\n      selector: {{id: title}}\n"
+        ))
+        .expect("a one-tap scenario");
+        let step = scenario.steps.first().expect("the tap step");
+        assert!(matches!(step.as_step(), Some(StepRef::Tap(_))));
+
+        let previous = observation(&[[0, 0, 0, 255]], 1, 1);
+        let mut current = observation(&[[0, 0, 0, 255]], 1, 1);
+        current.input = Some(InputDelivery {
+            delivered: true,
+            visual_change: false,
+            handled: Some(false),
+            published: 2,
+            acks: vec![
+                crate::backend::InputAck {
+                    seq: 1,
+                    handled: false,
+                    latency_us: Some(900),
+                },
+                crate::backend::InputAck {
+                    seq: 2,
+                    handled: false,
+                    latency_us: Some(950),
+                },
+            ],
+            target: Some(serde_json::json!({
+                "selector": {"id": "title"},
+                "hit": {"node": {"class": "android.widget.TextView"}, "suggest": {"class": "android.widget.Switch"}},
+            })),
+            settle: None,
+        });
+        let input =
+            step_input(step, current.input.as_ref()).expect("a tap step always has input evidence");
+        assert_eq!(input["handled"], serde_json::json!(false));
+        assert_eq!(input["expect_change"], serde_json::json!("auto"));
+        assert_eq!(input["handled_evidence"]["source"], serde_json::json!("finishInputEvent"));
+        assert_eq!(input["handled_evidence"]["published"], serde_json::json!(2));
+        assert_eq!(input["handled_evidence"]["acked"], serde_json::json!(2));
+        assert_eq!(
+            input["handled_evidence"]["unhandled"],
+            serde_json::json!([1, 2]),
+            "the unhandled event seqs are named"
+        );
+        assert_eq!(input["target"]["selector"]["id"], serde_json::json!("title"));
+
+        // The finding must not turn "nothing consumed it" into a failure, and it
+        // must not claim a state change either.
+        let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default());
+        assert!(evaluated.result.passed, "{:?}", evaluated.result);
+        assert_eq!(evaluated.result.kind, "input_delivery");
+        let message = evaluated.result.message.unwrap_or_default();
+        assert!(message.contains("did not consume"), "{message}");
+        let actual = evaluated.result.actual.expect("the measured facts");
+        assert_eq!(actual["delivered"], serde_json::json!(true));
+        assert_eq!(actual["handled"], serde_json::json!(false));
+        assert_eq!(actual["visual_change"], serde_json::json!(false));
+        assert_eq!(actual["acks"], serde_json::json!(2));
+
+        // A step that explicitly asked for a change says `true`, not "auto".
+        let flagged = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - tap:\n      selector: {{id: title}}\n      \
+             expect_change: true\n"
+        ))
+        .expect("a flagged tap scenario");
+        let input = step_input(flagged.steps.first().expect("the tap step"), current.input.as_ref())
+            .expect("input evidence");
+        assert_eq!(input["expect_change"], serde_json::json!(true));
+
+        // No delivery at all is "unknown", never "not handled".
+        current.input = None;
+        let input = step_input(step, current.input.as_ref()).expect("input evidence");
+        assert_eq!(input["handled"], serde_json::Value::Null);
+        assert_eq!(input["handled_evidence"]["source"], serde_json::json!("none"));
+    }
+
     #[test]
     fn delivered_but_visually_unchanged_input_is_not_a_state_change() {
         let previous = observation(&[[0, 0, 0, 255]], 1, 1);
@@ -3120,7 +3323,10 @@ mod region_tests {
         current.input = Some(InputDelivery {
             delivered: true,
             visual_change: false,
+            handled: None,
+            published: 0,
             acks: Vec::new(),
+            target: None,
             settle: None,
         });
         let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default());
@@ -3549,7 +3755,10 @@ mod content_settle_tests {
         observation.input = Some(InputDelivery {
             delivered: true,
             visual_change: true,
+            handled: None,
+            published: 0,
             acks: Vec::new(),
+            target: None,
             settle: Some(content_record_for(6)),
         });
         let settle = step_settle(Some(&observation), None).expect("a record");

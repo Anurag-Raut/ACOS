@@ -120,10 +120,12 @@ pub fn mcp_tools() -> McpToolsList {
                 concat!(
                     "NOT THE CANONICAL TOOL — prefer the one-purpose session tools on a live ART session: ",
                     "`acos_tap` (id/text/testID or a point), `acos_text` (focused editor), `acos_key` and ",
-                    "`acos_swipe`. They report the action's own ack and settle evidence. This tool keeps the ",
+                    "`acos_swipe`. They report the action's own ack and settle evidence, including ",
+                    "`handled` (the app window's own `finishInputEvent` answer) and `target` (the resolved ",
+                    "node and the hit-test at the injected point). This tool keeps the ",
                     "generic multi-action path (tap, long_press, swipe, type, key, back, rotate, wait) and is ",
                     "kept for compatibility. ",
-                    "Deliver one input action. Prefer selectors over coordinates. Returns accepted/state_changed, an input-ack event seq and optionally a fresh frame. ",
+                    "Deliver one input action. Prefer selectors over coordinates. Returns accepted/state_changed/handled, an input-ack event seq and optionally a fresh frame. ",
                     "Common errors: ELEMENT_NOT_FOUND, SESSION_NOT_FOUND, TIMEOUT, APP_NOT_RESPONDING, NO_DISPLAY."
                 ),
             ),

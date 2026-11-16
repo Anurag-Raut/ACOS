@@ -322,12 +322,73 @@ Rules (they are part of the contract, not implementation detail):
   `counts` always carries the true totals and `truncated: true` says a list was
   cut, so a whole-screen navigation still fits the MCP reply bound (REL3b) and
   a capped list can never be read as "that was everything".
-* **`diff: false`** returns the pre-FB3 reply **byte for byte** (no `changes`
-  key). A non-boolean `diff` is `INVALID_ARGUMENT`. The same reply is what a
+* **`diff: false`** returns the reply with **no `changes` key**, byte for byte
+  otherwise. A non-boolean `diff` is `INVALID_ARGUMENT`. The same reply is what a
   CLI `acos tap`/`acos key`/`acos text` prints through the session daemon
   (`acos serve`), since both share one engine.
 
-## 1d. Watching a session (live view)
+## 1d. `handled` and `target`: did the app consume it, and what was there
+
+`state_changed: false` used to be ambiguous: it could mean *"nothing tappable
+there / no handler consumed the press"* or *"the app handled it and nothing
+changed"*. Every `acos_tap`/`acos_key`/`acos_text` (and `acos_swipe`, where the
+engine delivers the gesture) reply now separates the two:
+
+```json
+"handled": false,
+"handled_evidence": {"source": "finishInputEvent", "published": 2, "acked": 2,
+                     "unhandled": [11, 12]},
+"target": {
+  "selector": {"text": "Floating button"},
+  "node":   {"id": "n5_…:id/title", "class": "android.widget.TextView",
+             "text": "Floating button", "content_desc": "", "bounds": "[42,342][669,405]",
+             "clickable": false, "scrollable": false, "enabled": true,
+             "focused": false, "window": "main"},
+  "point":  {"x": 355, "y": 373},
+  "hit": {"method": "tree-geometry",
+          "node":    {"class": "android.widget.TextView", "clickable": false, …},
+          "clickable": false,
+          "consumer": null,
+          "suggest": {"id": "…:id/toggle", "class": "android.widget.Switch",
+                      "text": "Floating button", "bounds": "[669,338][1038,409]",
+                      "clickable": true, …}}
+},
+"handled_hint": "nothing tappable there: the node at this point is android.widget.TextView «Floating button» at [42,342][669,405], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` …; tap the nearest clickable android.widget.Switch … instead"
+```
+
+* **`handled` is the framework's answer, never a heuristic.** It is the bit the
+  app window passes to Android's `InputEventReceiver.finishInputEvent(handled)`
+  (AOSP `ViewRootImpl` sets it from `FLAG_FINISHED_HANDLED`, and a dropped event
+  finishes with `false`). It arrives on the real `InputChannel` `FINISHED`
+  message, one ack per published `InputMessage`.
+  * any unhandled ack → `false` (nothing consumed that event);
+  * every published event acked handled → `true`;
+  * a short or missing ack list → `null` **unknown**, never "not handled".
+  `handled_evidence` always travels with it: `source` (always
+  `finishInputEvent` for a real delivery), `published`, `acked` and the
+  `unhandled` sequence numbers.
+* **`target` says what was there.** `node` is the node the selector resolved to
+  (for a coordinate tap there is none); `hit` is the tree-geometry hit-test at
+  the injected point from the same tree — the deepest visible node whose rect
+  contains it (`node`), whether it is itself `clickable`, the nearest clickable
+  ancestor-or-self (`consumer`), and, when nothing on that branch is clickable,
+  the nearest clickable **sibling** (`suggest`; a switch beside a row's label
+  wins over a nearer button in the next row). `hit.clickable: false` +
+  `hit.consumer: null` is the "nothing tappable there" case.
+* **`handled_hint`** explains the combination in one line, and only ever quotes
+  the evidence above: nothing tappable + the node to tap instead; a clickable
+  control that still refused the press (disabled or intercepted); a consumed
+  input with no visible change (asynchronous handler or unchanged state); or an
+  unknown answer.
+* **`state_changed` is about the screen, `handled` is about the app.** Read
+  `handled` first: with `handled: false` a `state_changed: false` is the correct
+  outcome, not a broken tap.
+* **Scenario steps** publish the same facts: every `tap`/`type`/`key`/`back`
+  step JSON has an `input` block with `handled`, `handled_evidence`, `target`
+  and `expect_change` — which is `"auto"` for a tap (its own state-change rule
+  always runs) or the scenario's explicit `true`/`false`.
+
+## 1e. Watching a session (live view)
 
 Every live ART session publishes one small file
 (`$XDG_RUNTIME_DIR/acos/live/<session_id>-<daemon_pid>.json`: client, project

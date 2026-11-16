@@ -83,9 +83,34 @@ fn injected_tap_reaches_the_real_window_channel() {
 
     // Ack accounting: one unacked event remains until both are finished.
     assert_eq!(input_java::pending_count(), 2);
-    wms_java::with_wms(|s| s.input.finish_event(1)).unwrap();
-    wms_java::with_wms(|s| s.input.finish_event(2)).unwrap();
+    // REL3E: the app window's `finishInputEvent(handled)` bit is recorded, not
+    // thrown away - an unhandled press must stay visible to the reply.
+    let ack = wms_java::with_wms(|s| s.input.finish_event(1, false)).unwrap();
+    assert_eq!((ack.seq, ack.handled), (1, false));
+    let ack = wms_java::with_wms(|s| s.input.finish_event(2, true)).unwrap();
+    assert_eq!((ack.seq, ack.handled), (2, true));
     assert_eq!(input_java::pending_count(), 0);
+    let handling = session_handling(&[1, 2]);
+    assert_eq!(handling, Some(false), "one unhandled event proves non-consumption");
+}
+
+/// The app window's answers folded the way the dispatcher reads them.
+fn session_handling(seqs: &[u32]) -> Option<bool> {
+    let acks = wms_java::with_wms(|s| {
+        s.input
+            .acks()
+            .iter()
+            .filter(|ack| seqs.contains(&ack.seq))
+            .map(|ack| ack.handled)
+            .collect::<Vec<_>>()
+    });
+    if acks.iter().any(|handled| !*handled) {
+        Some(false)
+    } else if !acks.is_empty() && acks.len() == seqs.len() {
+        Some(true)
+    } else {
+        None
+    }
 }
 
 #[test]

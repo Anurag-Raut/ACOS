@@ -505,7 +505,10 @@ impl Backend for SliceBackend {
             observation.input = Some(InputDelivery {
                 delivered: true,
                 visual_change: pixels_changed,
+                handled: None,
+                published: 0,
                 acks: Vec::new(),
+                target: None,
                 settle: Some(serde_json::json!({
                     "mode": "strict",
                     "settled": true,
