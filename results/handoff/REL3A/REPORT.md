@@ -1,6 +1,12 @@
 # REL3A — "settle is defined by pixels" (ACOS v0.3.0, root cause A)
 
-Branch `rel3a` (base `rel-030`, HEAD `c3f36b11` + REL3C/REL3F). Evidence in this directory.
+Branch `rel3a` (base `rel-030` at `c3f36b11` = merge of REL3C + REL3F). Evidence in this
+directory.
+
+**Merge note:** `rel-030` has advanced since this branch was cut (`b8c30224`, REL3P parcel/PMS work).
+`git diff rel-030..HEAD` therefore also shows REL3P's files as removals; the REL3A delta is
+`git diff c3f36b11..HEAD` (95 files, +15699/−82 including the refreshed JSON schemas). REL3A does not
+touch any parcel, PMS or signer code, so the merge is textually independent.
 
 ## What was wrong (v0.3.0 agent feedback)
 
