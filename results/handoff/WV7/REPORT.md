@@ -93,7 +93,7 @@ path honours `deviceScaleFactor`.
 | page text pixels inside the WebView bounds in the ACOS capture | **PASS** — both pages' text as pixels, 257 colours, no black rectangle | `evidence/pixels.json`, `evidence/capture-tapped-pagetext.png`, `evidence/webview-region-tapped-crop.png` |
 | before/after tap differ in that region | **PASS** — 55 851 of 1 009 120 region pixels change | `evidence/pixels.json` (with the caveat in (c)3) |
 | `webview` module (manifest, budget, kit row, `modules[webview]`) | **NOT DONE** | — |
-| no-engine arm honest | **PASS** (WV6 arm still valid; unchanged wire error path) | `results/handoff/WV6/webview-probe-no-engine.yaml` |
+| no-engine arm honest | **PASS** — `ACOS_WEBVIEW_GATE=0`: `WebView FAILED: IllegalStateException: … ENGINE_UNAVAILABLE … /run/acos/webview.sock: No such file or directory`, the run fails at "WebView created:" (expected fail) | `evidence/verdict-no-engine.json`, `evidence/logcat-no-engine.txt` |
 
 ## 4. What remains, smallest next action each
 
