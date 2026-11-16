@@ -24,7 +24,7 @@ Engine identity reported to the guest and in verdicts:
 `HeadlessChrome/157.0.8103.78`, revision `@4b3d0dabb8250b6f152d2d85d79e7706e309d087`,
 protocol `1.3` (`fidelity_note()` says host Blink, not the phone's WebView build).
 
-## 2. Gate (real engine, real wire, `results/handoff/WVB/evidence/gate.json`)
+## 2. Gate (real engine, real wire, `results/handoff/WVB/evidence/gate.json` + the raw console log `evidence/gate-run.log`)
 
 Run: `cargo test -p acos-webview --test engine_gate -- --nocapture --test-threads=1`
 under `run-exclusive.sh --task WVB --exclusive` + `guarded.sh --mem 8G --time 600`
