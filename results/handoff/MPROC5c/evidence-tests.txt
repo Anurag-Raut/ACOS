@@ -198,3 +198,14 @@ running 0 tests
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 running 0 tests
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+# ---------------------------------------------------------------------------
+# Pre-existing failure check (NOT a MPROC5c regression). The only failing test
+# in the acceptance set is launch_hang's ordinary-launch promptness test; the
+# same test on the BASE commit f229ae3f (mproc5b), same worktree/env:
+#   git checkout f229ae3f
+#   cargo test -p acos-art --test launch_hang ordinary_launch
+running 1 test
+test ordinary_launch_to_application_created_stays_fast ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 4.69s
+# => it fails on the base too (the guest exits 1 on a plain application-created
+#    launch in this environment); nothing in this branch runs on that path.

@@ -155,6 +155,7 @@ the exact commands. New/updated tests:
   session; they do not block steps 1–2 but they are the next fidelity item for
   the cross-process lifecycle.
 * `acos-art`'s `tests/launch_hang.rs::ordinary_launch_to_application_created_stays_fast`
-  is red in this worktree (guest exit 1 on a plain `application-created`
-  launch); it is unrelated to the window session (nothing in this branch runs on
-  that path) and is being checked against the base commit.
+  is red in this worktree — **and equally red on the base commit `f229ae3f`**
+  (guest exit 1 on a plain `application-created` launch; proof appended to
+  `evidence-tests.txt`). Nothing in this branch runs on that path, so it is an
+  environment/base failure, not a MPROC5c regression.
