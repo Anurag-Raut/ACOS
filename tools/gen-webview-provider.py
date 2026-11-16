@@ -242,6 +242,18 @@ def main() -> int:
             if listed.startswith(binary + "$"):
                 nested_of[listed.split("$", 1)[1]] = lmethods
         src = stub_source(binary, kind, methods.get(binary, []), nested)
+        if binary == "android/webkit/WebView":
+            # WV2: the provider's View side calls `getWidth`/`getHeight`/
+            # `getResources`/`postInvalidateOnAnimation`, which the stub did not
+            # declare. On the device `WebView` **is** an `AbsoluteLayout` (a
+            # `View`), so the compile-time stub extends `View`: the same
+            # members the framework provides, never a fabricated API.
+            src = src.replace(
+                "public class WebView {",
+                "public class WebView extends android.view.View {\n"
+                "    public WebView(android.content.Context context) { super(context); }",
+                1,
+            )
         if nested_of:
             # Fill the nested interfaces with their real method list.
             for nname, nmethods in nested_of.items():
@@ -260,7 +272,21 @@ def main() -> int:
         "WebViewChromiumViewDelegate",
         "WebViewProvider.ViewDelegate",
         methods["android/webkit/WebViewProvider$ViewDelegate"],
-        {},
+        {
+            # WV2: the View side of the provider. Geometry, painting and input
+            # are the guest's, so every hook forwards to the core (which owns the
+            # broker transport): the engine never guesses the View's size.
+            "onDraw(Landroid/graphics/Canvas;)":
+                "        mProvider.core().onDraw(p0);",
+            "onSizeChanged(IIII)":
+                "        mProvider.core().onSizeChanged(p0, p1, p2, p3);",
+            "onTouchEvent(Landroid/view/MotionEvent;)":
+                "        return mProvider.core().onTouchEvent(p0);",
+            "onAttachedToWindow()":
+                "        mProvider.core().attachToWindow();",
+            "onDetachedFromWindow()":
+                "        mProvider.core().detachFromWindow();",
+        },
         members=(
             "    private final WebViewChromium mProvider;\n\n"
             "    WebViewChromiumViewDelegate(WebViewChromium provider) {\n"
@@ -285,13 +311,37 @@ def main() -> int:
         {
             "getViewDelegate()": "        return mViewDelegate;",
             "getScrollDelegate()": "        return mScrollDelegate;",
+            "loadUrl(Ljava/lang/String;)": "        mCore.loadUrl(p0);",
+            "loadUrl(Ljava/lang/String;Ljava/util/Map;)":
+                "        mCore.loadUrl(p0);",
+            "loadData(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)":
+                "        mCore.loadData(p0, p1, p2);",
+            "loadDataWithBaseURL(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)":
+                "        mCore.loadDataWithBaseUrl(p0, p1, p2, p3, p4);",
+            "evaluateJavaScript(Ljava/lang/String;Landroid/webkit/ValueCallback;)":
+                "        mCore.evaluateJavascript(p0, p1);",
+            "addJavascriptInterface(Ljava/lang/Object;Ljava/lang/String;)":
+                "        mCore.addJavascriptInterface(p0, p1);",
+            "removeJavascriptInterface(Ljava/lang/String;)":
+                "        mCore.removeJavascriptInterface(p0);",
+            "reload()": "        mCore.reload();",
+            "stopLoading()": "        mCore.stopLoading();",
+            "destroy()": "        mCore.destroy();",
+            "setWebViewClient(Landroid/webkit/WebViewClient;)":
+                "        mCore.setWebViewClient(p0);",
+            "getWebViewClient()": "        return mCore.client();",
+            "getUrl()": "        return mCore.currentUrl();",
+            "setNetworkAvailable(Z)": "        mCore.setNetworkAvailable(p0);",
         },
         members=(
             "    private final WebViewChromiumViewDelegate mViewDelegate =\n"
             "            new WebViewChromiumViewDelegate(this);\n"
             "    private final WebViewChromiumScrollDelegate mScrollDelegate =\n"
-            "            new WebViewChromiumScrollDelegate(this);\n\n"
-            "    WebViewChromium() {\n    }\n"
+            "            new WebViewChromiumScrollDelegate(this);\n"
+            "    private final WebViewChromiumCore mCore;\n\n"
+            "    WebViewChromium(WebViewChromiumCore core) {\n"
+            "        mCore = core;\n    }\n\n"
+            "    WebViewChromiumCore core() {\n        return mCore;\n    }\n"
         ),
     )
     factory = provider_source(
@@ -300,13 +350,30 @@ def main() -> int:
         methods["android/webkit/WebViewFactoryProvider"],
         {
             "createWebView(Landroid/webkit/WebView;Landroid/webkit/WebView$PrivateAccess;)":
-                "        return new WebViewChromium();",
+                "        WebViewChromiumCore core = new WebViewChromiumCore(transport(p0));\n"
+                "        core.attach(p0);\n"
+                "        return new WebViewChromium(core);",
         },
         members=(
             "    static final String TAG = \"ACOSWvProvider\";\n"
-            "    private final android.webkit.WebViewDelegate mDelegate;\n\n"
+            "    /** WIRE.md §0: the session socket ACOS bind-mounts into the guest. */\n"
+            "    static final String SOCKET_PATH = \"/run/acos/webview.sock\";\n"
+            "    private final android.webkit.WebViewDelegate mDelegate;\n"
+            "    private AcosWebViewTransport.Transport mTransport;\n\n"
             "    WebViewChromiumFactoryProvider(android.webkit.WebViewDelegate delegate) {\n"
-            "        mDelegate = delegate;\n    }\n"
+            "        mDelegate = delegate;\n    }\n\n"
+            "    /**\n"
+            "     * The session transport, created once. The stand-in is a connected\n"
+            "     * stream pair over `SOCKET_PATH`; the broker client satisfies the same\n"
+            "     * interface (`AcosWebViewTransport.Transport`), so wiring it in does\n"
+            "     * not touch the provider.\n"
+            "     */\n"
+            "    synchronized AcosWebViewTransport.Transport transport(android.webkit.WebView view) {\n"
+            "        if (mTransport == null) {\n"
+            "            mTransport = AcosSessionSocket.open(SOCKET_PATH);\n"
+            "        }\n"
+            "        return mTransport;\n"
+            "    }\n"
         ),
     )
     for name, src in (

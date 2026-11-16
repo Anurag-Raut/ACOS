@@ -517,3 +517,93 @@ fn parse_roundtrips(stdout: &str) -> HashMap<String, String> {
         })
         .collect()
 }
+
+/// WV2 wall 4: the `webviewupdate` peer's `waitForAndGetProvider` reply must
+/// decode with the **framework's** `PackageInfo.<init>`, not with ACOS's own
+/// reader.
+///
+/// This reply is the one parcel in the provider-load path that has no Java
+/// materialiser: `WebViewUpdateService` writes the installed provider record
+/// with the Rust codec (`acos_services::parcelable`), so a field-order or
+/// encoding difference between the codec and the image's
+/// `PackageInfo.writeToParcel` desynchronises `PackageInfo.<init>` — the image
+/// reported `OutOfMemoryError: Failed to allocate a 7676737936 byte allocation
+/// at Parcel.createString8Array` (`PackageInfo.<init>`), which is a garbage
+/// array count read out of the wrong offset, not a memory problem.
+///
+/// The value is built exactly as the peer builds it (the installed provider
+/// record, flags 0) and handed to the real `PackageInfo.CREATOR`, which checks
+/// `packageName`, `versionCode`, the nested `ApplicationInfo` (`packageName`,
+/// `sourceDir`, `uid`), `requestedPermissions` and `splitNames`, and then
+/// `enforceNoDataAvail()` — so a missing or extra field anywhere in the payload
+/// fails here, with or without an OOM.
+#[test]
+fn webview_provider_package_info_reads_back_in_the_framework_order() {
+    use acos_services::pms::{AppInfo, PackageInfo as PmsPackageInfo};
+
+    let Some(dex) = compile_case(&["ParcelableCompareMain"]) else {
+        eprintln!("SKIP webview_provider_package_info_reads_back_in_the_framework_order: toolchain unavailable");
+        return;
+    };
+
+    // The provider record: parsed from the real provider APK when the fixture
+    // is built, otherwise the same values the install path produces (the codec
+    // is what is under test, and both paths go through
+    // `PackageInfo::to_parcelable_with_flags`).
+    let apk = common::repo_root().join("fixtures/build/apps/webview-provider.apk");
+    let (app, package) = match acos_services::pms::PmsState::from_apk(&apk) {
+        Ok(state) => {
+            let record = state
+                .lookup(Some("com.android.webview"))
+                .expect("the provider APK declares com.android.webview");
+            (record.app.clone(), record.package.clone())
+        }
+        Err(_) => {
+            eprintln!(
+                "note: {} is not built; using the install path's values",
+                apk.display()
+            );
+            let mut app =
+                AppInfo::hello_views_fallback(std::path::Path::new("/data/app/com.android.webview.apk"));
+            app.package_name = "com.android.webview".into();
+            app.name = "com.android.webview".into();
+            app.process_name = "com.android.webview".into();
+            app.class_name = String::new();
+            app.source_dir = "/data/app/com.android.webview.apk".into();
+            app.public_source_dir = "/data/app/com.android.webview.apk".into();
+            app.data_dir = "/data/data/com.android.webview".into();
+            app.uid = 10193;
+            let package = PmsPackageInfo {
+                package_name: "com.android.webview".into(),
+                version_code: 1,
+                version_name: "1.0".into(),
+                application: app.clone(),
+                activities: Vec::new(),
+                requested_permissions: vec!["android.permission.INTERNET".into()],
+                first_install_time: 0,
+                last_update_time: 0,
+                signatures: Vec::new(),
+            };
+            (app, package)
+        }
+    };
+    let _ = &app;
+    let bytes = encoded(&package.to_parcelable_with_flags(0));
+
+    let args = vec![format!("package_info_provider={}", hex(&bytes))];
+    let (_rt, outcome) = run_case_args(&dex, "ParcelableCompareMain", &args);
+    assert!(
+        outcome.vm_error.is_none() && outcome.exit_code == 0,
+        "the real framework could not read the webviewupdate reply ({} bytes): \
+         vm_error={:?}\nstdout:\n{}\nstderr:\n{}",
+        bytes.len(),
+        outcome.vm_error,
+        outcome.stdout,
+        outcome.stderr
+    );
+    assert!(
+        outcome.stdout.contains("read.package_info_provider=ok"),
+        "the framework reader did not accept the reply:\n{}",
+        outcome.stdout
+    );
+}

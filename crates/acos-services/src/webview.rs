@@ -127,14 +127,14 @@ impl ServiceObject for WebViewUpdateService {
             return Ok(false);
         }
         let provider = self.provider();
-        match code {
+        let handled = match code {
             TRANSACTION_NOTIFY_RELRO_CREATION_COMPLETED => {
                 // `void notifyRelroCreationCompleted()`: no payload. The device
                 // records that the relro files are ready; ACOS has no relro
                 // step, so completing it is the honest answer (the caller gets
                 // no data back either way).
                 crate::exception::write_no_exception(reply);
-                Ok(true)
+                true
             }
             TRANSACTION_GET_CURRENT_WEBVIEW_PACKAGE => {
                 // `PackageInfo getCurrentWebViewPackage()`: `readTypedObject
@@ -149,14 +149,14 @@ impl ServiceObject for WebViewUpdateService {
                     }
                     None => reply.write_int32(0),
                 }
-                Ok(true)
+                true
             }
             TRANSACTION_IS_MULTIPROCESS_ENABLED => {
                 // "Is the provider running multiple processes?" ACOS's provider
                 // is in-process, so `false` is the true answer, not a stub.
                 crate::exception::write_no_exception(reply);
                 reply.write_int32(0);
-                Ok(true)
+                true
             }
             TRANSACTION_GET_CURRENT_WEBVIEW_PACKAGE_NAME => {
                 // `String` reply: `Parcel.readString()` after `readException()`.
@@ -165,31 +165,57 @@ impl ServiceObject for WebViewUpdateService {
                     true => reply.write_string16(PROVIDER_PACKAGE)?,
                     false => reply.write_string16_opt(None)?,
                 }
-                Ok(true)
+                true
             }
             TRANSACTION_WAIT_FOR_AND_GET_PROVIDER => {
-                // `WebViewProviderResponse.writeToParcel`:
-                //   writeTypedObject(packageInfo, flags) -> presence int + payload
-                //   writeInt(status)
+                // The method returns a **parcelable**, so the wire is
+                // `writeTypedObject(response, flags)` — a presence marker for
+                // the response — and `WebViewProviderResponse.writeToParcel`
+                // then writes `writeTypedObject(packageInfo, flags)` (a second
+                // presence marker), the payload, and `writeInt(status)`.
+                //
+                // WV2 wall 4: writing only the inner marker shifted the reply
+                // by 4 bytes; the image's reader took `packageName`'s length
+                // for the `packageInfo` presence, then read `splitNames`'s
+                // count out of the string bytes and threw
+                // `OutOfMemoryError: Failed to allocate a 7676737936 byte
+                // allocation at Parcel.createString8Array`
+                // (`PackageInfo.<init>(PackageInfo.java:570)`, the `splitNames`
+                // read). The proxy's reader is in the image's
+                // `classes4.dex:Landroid/webkit/IWebViewUpdateService$Stub$Proxy;->waitForAndGetProvider`
+                // (`readException`, `readTypedObject(WebViewProviderResponse.CREATOR)`),
+                // and the response's own reader is
+                // `WebViewProviderResponse.<init>(Parcel)`
+                // (`readTypedObject(PackageInfo.CREATOR)` then `readInt`).
+                //
                 // `STATUS_MISSING_ZYGOTE` is what a phone with no provider
                 // reports; the framework turns any non-OK status into
                 // `MissingWebViewPackageException`, which is the honest answer.
                 crate::exception::write_no_exception(reply);
+                reply.write_int32(1); // readTypedObject(WebViewProviderResponse.CREATOR)
                 match &provider {
                     Some(info) => {
-                        reply.write_int32(1);
+                        reply.write_int32(1); // writeTypedObject(packageInfo)
                         crate::parcelable::write_payload(reply, info)?;
                         reply.write_int32(STATUS_OK);
                     }
                     None => {
-                        reply.write_int32(0);
+                        reply.write_int32(0); // packageInfo = null: honest "no provider"
                         reply.write_int32(STATUS_MISSING_ZYGOTE);
                     }
                 }
-                Ok(true)
+                true
             }
-            _ => Ok(false),
+            _ => false,
+        };
+        if handled {
+            // WV2: `ACOS_PARCEL_DUMP` records the exact reply bytes the guest
+            // reads. This reply is written by the Rust codec (no Java
+            // materialiser), which is why it was the first place a codec/spec
+            // mismatch surfaced as a framework-side `PackageInfo` desync.
+            crate::parcel_dump::dump(&format!("webviewupdate.{code}"), reply);
         }
+        Ok(handled)
     }
 }
 
@@ -233,9 +259,18 @@ mod tests {
             .expect("raw_transact is infallible for this code"));
 
         let end = rewind(&mut reply);
-        // `WebViewProviderResponse.writeToParcel`: presence, payload, status.
+        // The framework's reader order, from the image's own dex:
+        //   readException
+        //   readTypedObject(WebViewProviderResponse.CREATOR) -> presence
+        //   WebViewProviderResponse.<init>(Parcel):
+        //       readTypedObject(PackageInfo.CREATOR) -> presence
+        //       PackageInfo payload
+        //       readInt(status)
+        // Two presence words, not one: the method returns a parcelable *and*
+        // that parcelable writes a nested one (WV2 wall 4).
         assert_eq!(reply.read_int32().unwrap(), NO_EXCEPTION);
-        assert_eq!(reply.read_int32().unwrap(), PRESENT);
+        assert_eq!(reply.read_int32().unwrap(), PRESENT, "WebViewProviderResponse presence");
+        assert_eq!(reply.read_int32().unwrap(), PRESENT, "packageInfo presence");
         // The payload is a `PackageInfo`, whose first field is `packageName`
         // (`Parcel.writeString8` = byte length + UTF-8 + pad).
         assert_eq!(
@@ -321,8 +356,11 @@ mod tests {
             .unwrap());
         let end = rewind(&mut reply);
         assert_eq!(reply.read_int32().unwrap(), NO_EXCEPTION);
-        // `writeTypedObject(null)` = presence 0, no payload, then the status.
-        assert_eq!(reply.read_int32().unwrap(), 0);
+        // The response itself is present (the framework would NPE on a null
+        // one); its `packageInfo` is `writeTypedObject(null)` = presence 0 and
+        // no payload, then the honest non-OK status.
+        assert_eq!(reply.read_int32().unwrap(), PRESENT, "WebViewProviderResponse presence");
+        assert_eq!(reply.read_int32().unwrap(), 0, "packageInfo presence");
         assert_eq!(reply.read_int32().unwrap(), STATUS_MISSING_ZYGOTE);
         assert_eq!(reply.data_position(), end, "a null record writes no payload");
 

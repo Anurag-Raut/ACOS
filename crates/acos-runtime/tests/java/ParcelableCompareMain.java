@@ -318,6 +318,43 @@ public final class ParcelableCompareMain {
                     case "package_info":
                         got = PackageInfo.CREATOR.createFromParcel(p);
                         break;
+                    case "package_info_provider": {
+                        // WV2: the `webviewupdate` reply's `PackageInfo` — the
+                        // exact value `WebViewUpdateService` writes from the
+                        // installed `com.android.webview` record. The nested
+                        // `ApplicationInfo` is the part the Java materialiser
+                        // writes for `PackageManager` but the Rust codec writes
+                        // for this peer; a field-order difference shows up here
+                        // as a desynchronised `requestedPermissions` (the image
+                        // OOMs allocating the bogus `String[]`) or as
+                        // `enforceNoDataAvail()` seeing leftover bytes.
+                        got = PackageInfo.CREATOR.createFromParcel(p);
+                        PackageInfo pi = (PackageInfo) got;
+                        check("com.android.webview".equals(pi.packageName),
+                                "package_info_provider packageName " + pi.packageName);
+                        check(pi.versionCode == 1,
+                                "package_info_provider versionCode " + pi.versionCode);
+                        check(pi.applicationInfo != null,
+                                "package_info_provider applicationInfo is null");
+                        check("com.android.webview".equals(pi.applicationInfo.packageName),
+                                "package_info_provider applicationInfo.packageName "
+                                        + pi.applicationInfo.packageName);
+                        check(pi.applicationInfo.sourceDir.endsWith(".apk"),
+                                "package_info_provider sourceDir "
+                                        + pi.applicationInfo.sourceDir);
+                        check(pi.applicationInfo.uid > 0,
+                                "package_info_provider uid " + pi.applicationInfo.uid);
+                        check(pi.requestedPermissions != null
+                                        && pi.requestedPermissions.length == 1
+                                        && "android.permission.INTERNET".equals(
+                                                pi.requestedPermissions[0]),
+                                "package_info_provider requestedPermissions "
+                                        + java.util.Arrays.toString(pi.requestedPermissions));
+                        check(pi.splitNames == null,
+                                "package_info_provider splitNames "
+                                        + java.util.Arrays.toString(pi.splitNames));
+                        break;
+                    }
                     case "package_info_arrays":
                         got = PackageInfo.CREATOR.createFromParcel(p);
                         PackageInfo pi = (PackageInfo) got;

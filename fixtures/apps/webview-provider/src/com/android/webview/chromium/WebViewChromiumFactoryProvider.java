@@ -9,10 +9,26 @@ import android.webkit.*;
 
 public class WebViewChromiumFactoryProvider implements android.webkit.WebViewFactoryProvider {
     static final String TAG = "ACOSWvProvider";
+    /** WIRE.md §0: the session socket ACOS bind-mounts into the guest. */
+    static final String SOCKET_PATH = "/run/acos/webview.sock";
     private final android.webkit.WebViewDelegate mDelegate;
+    private AcosWebViewTransport.Transport mTransport;
 
     WebViewChromiumFactoryProvider(android.webkit.WebViewDelegate delegate) {
         mDelegate = delegate;
+    }
+
+    /**
+     * The session transport, created once. The stand-in is a connected
+     * stream pair over `SOCKET_PATH`; the broker client satisfies the same
+     * interface (`AcosWebViewTransport.Transport`), so wiring it in does
+     * not touch the provider.
+     */
+    synchronized AcosWebViewTransport.Transport transport(android.webkit.WebView view) {
+        if (mTransport == null) {
+            mTransport = AcosSessionSocket.open(SOCKET_PATH);
+        }
+        return mTransport;
     }
 
     @Override
@@ -22,7 +38,9 @@ public class WebViewChromiumFactoryProvider implements android.webkit.WebViewFac
     }
     @Override
     public android.webkit.WebViewProvider createWebView(android.webkit.WebView p0, android.webkit.WebView.PrivateAccess p1) {
-        return new WebViewChromium();
+        WebViewChromiumCore core = new WebViewChromiumCore(transport(p0));
+        core.attach(p0);
+        return new WebViewChromium(core);
     }
     @Override
     public android.webkit.CookieManager getCookieManager() {

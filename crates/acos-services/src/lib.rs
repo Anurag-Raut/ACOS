@@ -64,6 +64,7 @@ pub mod keychars; // W16: stock KeyCharacterMap (KCM) -> native parcel
 pub mod manifest_resolve; // W27: MAIN/LAUNCHER resolution incl. <activity-alias>
 pub mod misc;
 pub mod native_libs; // W17: APK x86_64 libs -> per-run nativeLibraryDir
+pub mod parcel_dump; // WV2: ACOS_PARCEL_DUMP=<path> reply byte dump
 pub mod parcelable;
 pub mod pms;
 pub mod provider;

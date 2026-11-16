@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use acos_aidl::MethodInfo;
+use acos_parcel::Parcel;
 
 /// The parsed `<meta-data>` model, re-exported so a crate that only depends on
 /// `acos-services` (the ART launcher building the guest's `ProviderInfo`s) can
@@ -747,6 +748,21 @@ fn trace_query(method: &str, key: &str, flags: i64, entries: usize) {
             "{method} key={key} flags={flags:#x} get_meta_data={} meta_entries={entries}",
             flags & GET_META_DATA != 0
         );
+    }
+}
+
+/// WV2: `ACOS_PARCEL_DUMP=<path>` records the wire bytes of one typed reply
+/// (the sibling of `ACOS_PMS_TRACE`, which records which query was answered).
+/// It encodes the value with the Rust spec — the bytes a Rust-written reply
+/// carries — so the provider/`webviewupdate` replies can be byte-diffed against
+/// the AOSP `writeToParcel` order. Inert unless the hook is set.
+fn dump_reply(tag: &str, value: &Parcelable) {
+    if !crate::parcel_dump::enabled() {
+        return;
+    }
+    let mut parcel = Parcel::new();
+    if crate::parcelable::write_payload(&mut parcel, value).is_ok() {
+        crate::parcel_dump::dump(tag, &parcel);
     }
 }
 
@@ -1768,7 +1784,12 @@ impl ServiceObject for PmsService {
                 let info = match Self::lookup(&state, package) {
                     Ok(record) => {
                         Self::cache(record);
-                        record.package.to_parcelable_with_flags(flags)
+                        let value = record.package.to_parcelable_with_flags(flags);
+                        dump_reply(
+                            &format!("pms.getPackageInfo.{}", record.package.package_name),
+                            &value,
+                        );
+                        value
                     }
                     Err(ServiceError::UnknownService { .. }) => Parcelable::Null,
                     Err(e) => return Err(e),

@@ -61,8 +61,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void onAttachedToWindow() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onAttachedToWindow()V");
+        mProvider.core().attachToWindow();
     }
     @Override
     public boolean onCheckIsTextEditor() {
@@ -86,8 +85,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void onDetachedFromWindow() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onDetachedFromWindow()V");
+        mProvider.core().detachFromWindow();
     }
     @Override
     public boolean onDragEvent(android.view.DragEvent p0) {
@@ -96,8 +94,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void onDraw(android.graphics.Canvas p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onDraw(Landroid/graphics/Canvas;)V");
+        mProvider.core().onDraw(p0);
     }
     @Override
     public void onDrawVerticalScrollBar(android.graphics.Canvas p0, android.graphics.drawable.Drawable p1, int p2, int p3, int p4, int p5) {
@@ -186,8 +183,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void onSizeChanged(int p0, int p1, int p2, int p3) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onSizeChanged(IIII)V");
+        mProvider.core().onSizeChanged(p0, p1, p2, p3);
     }
     @Override
     public void onStartTemporaryDetach() {
@@ -196,8 +192,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public boolean onTouchEvent(android.view.MotionEvent p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onTouchEvent(Landroid/view/MotionEvent;)Z");
+        return mProvider.core().onTouchEvent(p0);
     }
     @Override
     public boolean onTrackballEvent(android.view.MotionEvent p0) {

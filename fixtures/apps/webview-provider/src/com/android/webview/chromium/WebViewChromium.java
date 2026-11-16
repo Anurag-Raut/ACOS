@@ -12,14 +12,19 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
             new WebViewChromiumViewDelegate(this);
     private final WebViewChromiumScrollDelegate mScrollDelegate =
             new WebViewChromiumScrollDelegate(this);
+    private final WebViewChromiumCore mCore;
 
-    WebViewChromium() {
+    WebViewChromium(WebViewChromiumCore core) {
+        mCore = core;
+    }
+
+    WebViewChromiumCore core() {
+        return mCore;
     }
 
     @Override
     public void addJavascriptInterface(java.lang.Object p0, java.lang.String p1) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.addJavascriptInterface(Ljava/lang/Object;Ljava/lang/String;)V");
+        mCore.addJavascriptInterface(p0, p1);
     }
     @Override
     public boolean canGoBack() {
@@ -98,8 +103,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public void destroy() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.destroy()V");
+        mCore.destroy();
     }
     @Override
     public void documentHasImages(android.os.Message p0) {
@@ -113,8 +117,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public void evaluateJavaScript(java.lang.String p0, android.webkit.ValueCallback p1) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.evaluateJavaScript(Ljava/lang/String;Landroid/webkit/ValueCallback;)V");
+        mCore.evaluateJavascript(p0, p1);
     }
     @Override
     public int findAll(java.lang.String p0) {
@@ -227,8 +230,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public java.lang.String getUrl() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.getUrl()Ljava/lang/String;");
+        return mCore.currentUrl();
     }
     @Override
     public android.webkit.WebViewProvider.ViewDelegate getViewDelegate() {
@@ -246,8 +248,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public android.webkit.WebViewClient getWebViewClient() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.getWebViewClient()Landroid/webkit/WebViewClient;");
+        return mCore.client();
     }
     @Override
     public android.webkit.WebViewRenderProcess getWebViewRenderProcess() {
@@ -306,23 +307,19 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public void loadData(java.lang.String p0, java.lang.String p1, java.lang.String p2) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.loadData(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+        mCore.loadData(p0, p1, p2);
     }
     @Override
     public void loadDataWithBaseURL(java.lang.String p0, java.lang.String p1, java.lang.String p2, java.lang.String p3, java.lang.String p4) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.loadDataWithBaseURL(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+        mCore.loadDataWithBaseUrl(p0, p1, p2, p3, p4);
     }
     @Override
     public void loadUrl(java.lang.String p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.loadUrl(Ljava/lang/String;)V");
+        mCore.loadUrl(p0);
     }
     @Override
     public void loadUrl(java.lang.String p0, java.util.Map p1) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.loadUrl(Ljava/lang/String;Ljava/util/Map;)V");
+        mCore.loadUrl(p0);
     }
     @Override
     public void notifyFindDialogDismissed() {
@@ -376,13 +373,11 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public void reload() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.reload()V");
+        mCore.reload();
     }
     @Override
     public void removeJavascriptInterface(java.lang.String p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.removeJavascriptInterface(Ljava/lang/String;)V");
+        mCore.removeJavascriptInterface(p0);
     }
     @Override
     public void requestFocusNodeHref(android.os.Message p0) {
@@ -471,8 +466,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public void setNetworkAvailable(boolean p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.setNetworkAvailable(Z)V");
+        mCore.setNetworkAvailable(p0);
     }
     @Override
     public void setPictureListener(android.webkit.WebView.PictureListener p0) {
@@ -501,8 +495,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public void setWebViewClient(android.webkit.WebViewClient p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.setWebViewClient(Landroid/webkit/WebViewClient;)V");
+        mCore.setWebViewClient(p0);
     }
     @Override
     public void setWebViewRenderProcessClient(java.util.concurrent.Executor p0, android.webkit.WebViewRenderProcessClient p1) {
@@ -516,8 +509,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public void stopLoading() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.stopLoading()V");
+        mCore.stopLoading();
     }
     @Override
     public boolean zoomBy(float p0) {
