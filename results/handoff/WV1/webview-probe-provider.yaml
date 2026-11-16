@@ -1,0 +1,37 @@
+# WV1 wall-map probe: a real WebView in a real ACOS session, with the ACOS
+# WebView provider package installed as an extra system package (ADR-0031).
+# `extra_apks` is MPROC1's per-package install: the provider becomes an ordinary
+# installed package, which is exactly what `WebViewFactory` looks up.
+version: 1
+name: webview-probe-provider
+description: >-
+  Launch webview-probe with com.android.webview installed, and capture what
+  WebViewFactory does from hasSystemFeature through waitForAndGetProvider,
+  getPackageInfo, createApplicationContext and WebViewChromiumFactoryProviderForT.create.
+app: fixtures/build/apps/webview-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+extra_apks:
+  - fixtures/build/apps/webview-provider.apk
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.webview/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 8000
