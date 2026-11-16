@@ -39,6 +39,54 @@ public class MainActivity extends Activity {
     private TextView status;
     private TextView connectivity;
 
+    /**
+     * NET6: a fetch that has been pending this long is a bug, not a slow
+     * network, and "pending forever" is not an answer. The watchdog logs every
+     * thread's Java stack (the same frames ART's SIGQUIT dump prints) once per
+     * fetch, so a stuck fetch says where it is stuck instead of silently
+     * hanging. It never changes what the fetch itself does.
+     */
+    private static final long STUCK_AFTER_MS = 8000;
+    private volatile long fetchStartedAt;
+    private volatile boolean fetchRunning;
+    private final java.util.concurrent.atomic.AtomicBoolean fetchDumped =
+            new java.util.concurrent.atomic.AtomicBoolean();
+
+    private void startWatchdog() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                    if (!fetchRunning) {
+                        continue;
+                    }
+                    long pending = android.os.SystemClock.uptimeMillis() - fetchStartedAt;
+                    if (pending < STUCK_AFTER_MS || !fetchDumped.compareAndSet(false, true)) {
+                        continue;
+                    }
+                    Log.w(TAG, "stuck fetch: pending_ms=" + pending
+                            + " — dumping all thread stacks");
+                    for (java.util.Map.Entry<Thread, StackTraceElement[]> e
+                            : Thread.getAllStackTraces().entrySet()) {
+                        Thread t = e.getKey();
+                        StringBuilder sb = new StringBuilder("STACK thread=");
+                        sb.append(t.getName()).append(" state=").append(t.getState());
+                        Log.w(TAG, sb.toString());
+                        for (StackTraceElement f : e.getValue()) {
+                            Log.w(TAG, "STACK   at " + f);
+                        }
+                    }
+                    Log.w(TAG, "stuck fetch: dump done (pending_ms=" + pending + ")");
+                }
+            }
+        }, "net-check-watchdog").start();
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -50,6 +98,7 @@ public class MainActivity extends Activity {
         String caps = describeNetwork();
         connectivity.setText(caps);
         Log.i(TAG, "connectivity " + caps);
+        startWatchdog();
         String dns = probeDnsProxy();
         ((TextView) findViewById(R.id.dnsprobe)).setText(dns);
         Log.i(TAG, "dnsprobe " + dns);
@@ -175,6 +224,9 @@ public class MainActivity extends Activity {
 
     /** The actual HTTPS GET (items 4 and 6). */
     private void fetch() {
+        fetchDumped.set(false);
+        fetchStartedAt = android.os.SystemClock.uptimeMillis();
+        fetchRunning = true;
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -188,6 +240,22 @@ public class MainActivity extends Activity {
                     c.setRequestMethod("GET");
                     int code = c.getResponseCode();
                     text = "HTTP " + code;
+                    Log.i(TAG, "response code=" + code + " url=" + c.getURL()
+                            + " server=" + c.getHeaderField("Server")
+                            + " cfray=" + c.getHeaderField("cf-ray")
+                            + " via=" + c.getHeaderField("Via"));
+                    try {
+                        InputStream err = c.getErrorStream();
+                        if (err != null) {
+                            byte[] buf = new byte[200];
+                            int n = err.read(buf);
+                            Log.i(TAG, "response body=" + (n > 0
+                                    ? new String(buf, 0, n, "UTF-8").replace('\n', ' ')
+                                    : ""));
+                            err.close();
+                        }
+                    } catch (Throwable ignored) {
+                    }
                     try {
                         InputStream in = c.getInputStream();
                         byte[] buf = new byte[256];
@@ -205,6 +273,7 @@ public class MainActivity extends Activity {
                     text = t.getClass().getName();
                 }
                 Log.i(TAG, "fetch result=" + text);
+                fetchRunning = false;
                 final String shown = text;
                 runOnUiThread(new Runnable() {
                     @Override
