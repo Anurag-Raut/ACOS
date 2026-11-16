@@ -4645,6 +4645,10 @@ impl SessionBackend for ArtSession {
         Mode::Live
     }
 
+    fn display_size(&self) -> Option<(u32, u32)> {
+        Some(ArtSession::display_size(self))
+    }
+
     fn capabilities(&self) -> SessionCapabilities {
         SessionCapabilities {
             launch: true,

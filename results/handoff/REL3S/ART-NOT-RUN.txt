@@ -1,7 +1,0 @@
-# REL3S: the ART end-to-end test was NOT run.
-# Host disk reached 88% (COMMON_RULES: stop at 85%).
-# Command (see results/handoff/REL3S.md):
-#   ACOS_APP_ONLY=scroll-list tools/build-apps.sh
-#   tools/art-runtime/run-exclusive.sh --task REL3S -- tools/guarded.sh --mem 10G --time 900 -- \
-#     env -u ACOS_HOME CARGO_TARGET_DIR=$PWD/.cache/rel3s-target \
-#     cargo test -p acos-cli --release --offline --test rel3s_swipe -- --ignored --test-threads=1

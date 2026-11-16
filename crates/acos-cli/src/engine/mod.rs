@@ -508,6 +508,14 @@ pub trait SessionBackend {
     /// (`VelocityTracker`/`OverScroller`) decides whether it flings; the engine
     /// only publishes the finger stream. The default has no swipe command and
     /// says so (`input.swipe`) — never a fake send.
+    /// The live display size in pixels, when this engine reports it.
+    ///
+    /// A direction-only swipe/scroll step needs two points; without a display
+    /// the executor refuses the step rather than guessing a screen.
+    fn display_size(&self) -> Option<(u32, u32)> {
+        None
+    }
+
     fn swipe(
         &mut self,
         _from: (f32, f32),
@@ -543,8 +551,8 @@ pub trait SessionBackend {
             self.swipe(from, to, duration_ms, fling)?;
             let tree = self.tree()?;
             let seen: Vec<String> = tree
-                .nodes
-                .iter()
+                .all_nodes()
+                .into_iter()
                 .filter_map(|node| {
                     (!node.text.is_empty())
                         .then(|| node.text.clone())
@@ -567,12 +575,12 @@ pub trait SessionBackend {
         Err(BackendError::Protocol {
             code: ErrorCode::ElementNotFound,
             detail: format!(
-                "scroll_until: {selector:?} was not visible after {attempt} swipe(s); 
-                 the last settled tree (frame {frame_seq}) does not contain it",
+                "scroll_until: {selector:?} was not visible after {attempt} swipe(s); the last \
+                 settled tree (frame {frame_seq}) does not contain it"
             ),
             hint: Some(
-                "The list may have reached its end, the gesture may be too short to scroll, or 
-                 the selector may name a node that is never rendered. Check the last tree nodes 
+                "The list may have reached its end, the gesture may be too short to scroll, or \
+                 the selector may name a node that is never rendered. Check the last tree nodes \
                  in `details.last_tree_texts` before raising `max_attempts`."
                     .to_string(),
             ),
@@ -1178,6 +1186,30 @@ impl Backend for EngineBackend {
                         }
                         self.action_result(previous, action.kind())
                     }
+                    InputAction::Swipe {
+                        from,
+                        to,
+                        duration_ms,
+                        fling,
+                    } => {
+                        if !caps.swipe {
+                            return Err(BackendError::unsupported(
+                                "input.swipe",
+                                "this session engine has no swipe/scroll command",
+                            ));
+                        }
+                        let previous = self.current_frame_seq();
+                        if let EngineBackend::Session { session, .. } = self {
+                            session.begin_input();
+                            session.swipe(
+                                (from.0 as f32, from.1 as f32),
+                                (to.0 as f32, to.1 as f32),
+                                *duration_ms,
+                                *fling,
+                            )?;
+                        }
+                        self.action_result(previous, action.kind())
+                    }
                     InputAction::Type {
                         selector,
                         text,
@@ -1260,6 +1292,58 @@ impl Backend for EngineBackend {
                         self.action_result(previous, action.kind())
                     }
                 }
+            }
+        }
+    }
+
+    fn display_size(&self) -> Option<(u32, u32)> {
+        match self {
+            EngineBackend::Native(backend) => backend.display_size(),
+            EngineBackend::Session { session, .. } => session.display_size(),
+        }
+    }
+
+    fn scroll_until(
+        &mut self,
+        selector: &Selector,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        fling: bool,
+        max_attempts: usize,
+    ) -> Result<(acos_verify::backend::ScrollUntilReport, SessionObservation), BackendError> {
+        match self {
+            EngineBackend::Native(backend) => {
+                backend.scroll_until(selector, from, to, duration_ms, fling, max_attempts)
+            }
+            EngineBackend::Session { .. } => {
+                let caps = match self {
+                    EngineBackend::Session { session, .. } => session.capabilities(),
+                    EngineBackend::Native(_) => unreachable!(),
+                };
+                if !caps.swipe {
+                    return Err(BackendError::unsupported(
+                        "input.swipe",
+                        "this session engine has no swipe/scroll command",
+                    ));
+                }
+                let previous = self.current_frame_seq();
+                let report = if let EngineBackend::Session { session, .. } = self {
+                    session.begin_input();
+                    session.scroll_until(selector, from, to, duration_ms, fling, max_attempts)?
+                } else {
+                    unreachable!()
+                };
+                // The search's last traversal is the action's frame: bind it and
+                // attach the delivery record so the step reports `handled` too.
+                let observation = self.action_result(previous, "scroll_until")?;
+                Ok((
+                    acos_verify::backend::ScrollUntilReport {
+                        attempts: report.attempts,
+                        frame_seq: report.frame_seq,
+                    },
+                    observation,
+                ))
             }
         }
     }

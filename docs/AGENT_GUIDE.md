@@ -219,6 +219,25 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    `handled_evidence.published` equal to `acked` (a 300 ms swipe is ~20 events,
    not 2) and `unhandled` lists any event the window dropped — e.g. a gesture
    that lands on a non-scrollable view.
+
+   **The same two steps in a scenario (REL3S).** A scenario scrolls with the
+   same gesture and the same search:
+
+   ```yaml
+   - swipe: {direction: up, distance: 900, duration_ms: 300, fling: true}
+   - scroll_until: {selector: {text: {exact: "Row 80"}}, fling: true, max_attempts: 12}
+   - tap: {selector: {text: {exact: "Row 80"}}}
+   ```
+
+   `swipe` takes `from`/`to` points or `direction` (+ `distance`), `duration_ms`,
+   `fling`, the per-step `settle`/`settle_timeout_ms` rules and SE1's
+   `expect_change`. `scroll_until` takes the same geometry plus the `selector`
+   to find and `max_attempts` (1..50); it always runs strict. Both report REL3E's
+   `input` block (`handled`, `handled_evidence`, `target`), and `scroll_until`
+   also reports `input.until {selector, found, attempts, frame_seq}`; a miss
+   fails the step with `ELEMENT_NOT_FOUND` and `details.attempts` /
+   `details.last_tree_texts`. The next `assert_*` binds to the swipe/search's own
+   settled frame.
    Identity rule, compared fields and the 40-entry cap: `docs/MCP.md` §1c.
    **`handled` is the app's own answer, and it is the one you branch on.**
    Every `acos_tap`/`acos_key`/`acos_text`/`acos_swipe` reply (and every

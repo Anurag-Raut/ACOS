@@ -1,21 +1,68 @@
 # REL3S — swipe/scroll on the real-ART engine
 
-Branch `rel3s` (base `rel-030` `cec9c358`). Track REL3S of
+Branch `rel3s` (base `rel-030` `cec9c358`); **REL3S2** (branch `rel3s2`) finished
+and ran the ART proof and the scenario steps. Track REL3S of
 `docs/PLAN_2026-11-16.md` (v0.3.0). Feedback entry 9/10
 (`~/.claude/acos-feedback/ACOS_AGENT_FEEDBACK.md`): an agent could not scroll a
 list in a real session — `acos_swipe` / `acos swipe` / a scenario swipe step on
 ART answered `UNSUPPORTED_BACKEND` (`input.swipe`) because the live input channel
 had a tap publisher and nothing else.
 
-## Status: PARTIAL (feature implemented, ART end-to-end test NOT run)
+## Status: DONE (REL3S2)
 
-The code is complete for the core feature and unit-tested. The ART end-to-end
-proof (`crates/acos-cli/tests/rel3s_swipe.rs`) is written but **was not executed**:
-the host disk reached **88 %** (`df -h /`) while the run was queued, and
-COMMON_RULES says stop and report at >= 85 %. No acceptance claim is made for
-anything below marked UNVERIFIED.
+Session 1 wrote the gesture stream, the guest command and the `until` search and
+unit-tested them, but the ART run was refused by the disk limit and the scenario
+steps were not written. REL3S2 ran the ART proof on the real guest, added the two
+scenario steps, and ran one third-party (Gaten) scroll check. Evidence:
+`results/handoff/REL3S/art-test.log`, `art-scenario.log`, `gaten-scroll.log`,
+`gaten-scroll-compare.txt`, `scenario-*.verdict.json`, `gaten-scroll.verdict.json`.
 
-## What was built
+## REL3S2 completion
+
+* **ART e2e (`crates/acos-cli/tests/rel3s_swipe.rs`) — RAN, PASS.** On the real
+  ART fixture: one 300 ms fling moved the 100-row list (`Row 0` gone, `Row 23`
+  newly visible), `scroll_until {"text":"Row 80"}` found it (strict frame), and a
+  `Row 9999` miss failed with `ELEMENT_NOT_FOUND`, `attempts: 2`,
+  `max_attempts: 2` and the last tree's texts. Two test-side fixes from the first
+  real run: the capability check reads `acos_status` (the launch reply carries
+  `capabilities_used`, not the session capability map), and the delivery key is
+  `accepted` (not `delivered`). One product fix the run found: the miss's
+  `last_tree_texts` was empty because the search read only root nodes; it now
+  uses `UiTree::all_nodes()` (same fix in the verifier's default search).
+* **Scenario steps (`acos-protocol::scenario`)** — `swipe` and `scroll_until`,
+  schema regenerated (`crates/acos-protocol/schema/scenario.json`). Geometry is
+  explicit `from`/`to` points **or** `direction` (+ `distance`), validated with
+  stable paths; `scroll_until` always runs strict (a found node must come from a
+  settled observation). `SwipeDirection::endpoints` is the one rule the CLI/MCP
+  `acos_swipe` and the executor share.
+  `acos-verify`: `InputAction::Swipe`, `Backend::scroll_until` (default loop =
+  gesture + fresh observation), `Backend::display_size`, executor arms with
+  settle handling and REL3E's `input` block (plus `input.until` for the search).
+  `EngineBackend` forwards to `SessionBackend::swipe` / `SessionBackend::scroll_until`
+  (same source as `acos_swipe`), `NativeBackend` uses the frozen VM's
+  `AgentSession::swipe`; `TrustGuard` forwards delivery/display/search (it was
+  dropping `last_input_delivery`, so scenario `input` blocks never appeared).
+* **Scenario e2e (`crates/acos-cli/tests/rel3s_scenario.rs`) — RAN, PASS.**
+  `swipe` then `assert_text` of the row the launch tree did not render (the test
+  reads the pre-gesture capture tree and asserts the exact fold+1 row is new),
+  then `scroll_until Row 80` + `tap` + `Selected: Row 80`. The search uses a
+  controlled 500 px drag because a fast fling can pass the target between two
+  settled observations (the first attempt at a 14×120 ms fling overshot to
+  `Row 85..99`; the honest miss showed it).
+* **Gaten scroll smoke — RAN, PASS.** `scenarios/rel3s-gaten-scroll.yaml` on
+  `gaten-dev-f344272-x86_64-release-unsigned.apk`: search `a` → result list →
+  swipe (38 events, `handled: true`, `pixels_changed: true`, `expect_change`
+  satisfied). Trees: `17 results` and the first rows scrolled off, new rows
+  arrived, the first result's bounds moved `y=1489 → 36`.
+* **Known, pre-existing (not this branch):** `cargo test -p acos-cli --bins`
+  fails the two `view::tests` on this deep worktree path (`SUN_LEN`, documented
+  by REL3E); `cargo test -p acos-mcp --test compact_reply` fails because that
+  test still sends a `cursor` argument `acos_verify` no longer accepts (stale on
+  `rel3s`; unchanged by REL3S2).
+
+## Session 1 (original notes, kept for the record)
+
+### What was built
 
 1. **Real gesture stream (`crates/acos-services`)**
    * `input_channel::swipe_samples(from, to, duration_ns, interval_ns)` — the pure
@@ -79,19 +126,25 @@ anything below marked UNVERIFIED.
 | unit tests: interpolation/timestamps/pacing/per-event acks | **PASS** | `results/handoff/REL3S/unit-tests.log` — 4 tests `... ok` (`swipe_samples_interpolate_the_path_at_the_refresh_cadence`, `a_short_swipe_still_publishes_one_move_and_ends_at_the_lift_time`, `publish_swipe_sends_down_moves_and_up_with_real_event_times`, `input_host_swipe_reports_every_events_handled_bit`) |
 | unit tests: crates green (`acos-services`, `acos-protocol`, `acos-cli` bins, MCP guide) | **PASS** | same log: 82 + 90 + 120 + 12 passed, 0 failed |
 | workspace compiles (`cargo check --workspace --all-targets`) | **PASS** | no `error` lines |
-| ART e2e: one swipe moves a 100-row list, `scroll_until` finds row 80, a miss fails honestly | **UNVERIFIED — NOT RUN** | test written at `crates/acos-cli/tests/rel3s_swipe.rs`; the run was refused by the disk limit (88 %). Re-run with the exact command below. |
-| scenario `swipe` step / `scroll_until` as a scenario step | **NOT DONE** | the trait + serve.rs path exists (`InputAction`-independent); the scenario schema step (`StepRef::Swipe` in `acos-protocol::scenario`, `executor.rs`, `InputAction::Swipe` in `acos-verify::backend`, `EngineBackend::input`, `NativeBackend::input`) was not written |
-| Gaten scroll check | **NOT RUN** | `ls /home/Qui/Projects/acos/.cache/gaten` has a dev APK; no ART run attempted because of the disk limit |
+| ART e2e: one swipe moves a 100-row list, `scroll_until` finds row 80, a miss fails honestly | **PASS (REL3S2)** | `results/handoff/REL3S/art-test.log` — `test result: ok. 1 passed` |
+| scenario `swipe` step / `scroll_until` as a scenario step | **PASS (REL3S2)** | implemented (`scenario.json` regenerated) and run on the ART fixture: `results/handoff/REL3S/art-scenario.log`, `scenario-swipe.verdict.json`, `scenario-scroll.verdict.json` |
+| Gaten scroll check | **PASS (REL3S2)** | `scenarios/rel3s-gaten-scroll.yaml` on `gaten-dev-f344272`: verdict pass, 38/38 events handled, list moved — `results/handoff/REL3S/gaten-scroll.log`, `gaten-scroll-compare.txt` |
 
-Exact command for the ART test (needs a release `acos-art`, already in
-`.cache/rel3s-target/release/` if the target is kept):
+Exact command for the ART test (needs a release `acos-art`; REL3S2 built it in
+`.cache/rel3s2-target/release/`):
 
 ```
 ACOS_APP_ONLY=scroll-list tools/build-apps.sh
 tools/art-runtime/run-exclusive.sh --task REL3S -- \
   tools/guarded.sh --mem 10G --time 900 -- \
-  env -u ACOS_HOME CARGO_TARGET_DIR=$PWD/.cache/rel3s-target \
+  env -u ACOS_HOME CARGO_TARGET_DIR=$PWD/.cache/rel3s2-target \
   cargo test -p acos-cli --release --offline --test rel3s_swipe -- --ignored --test-threads=1
+```
+
+The scenario test uses the same launcher/target:
+
+```
+  cargo test -p acos-cli --release --offline --test rel3s_scenario -- --ignored --test-threads=1
 ```
 
 ## Also changed (integration fixes, unrelated to swipe)

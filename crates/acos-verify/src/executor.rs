@@ -15,9 +15,11 @@ use std::time::{Duration, Instant};
 use acos_protocol::assertion::{
     AssertionDiff, AssertionResult, RegionAssertion, ScreenshotAssertion,
 };
-use acos_protocol::commands::ResetScope;
+use acos_protocol::commands::{Point, ResetScope};
 use acos_protocol::events::{Event, EventBody};
-use acos_protocol::scenario::{Expectation, ExpectedError, Scenario, Step, StepRef, StepSettle};
+use acos_protocol::scenario::{
+    Expectation, ExpectedError, Scenario, Step, StepRef, StepSettle, SwipeDirection,
+};
 use acos_protocol::ui::Bounds;
 use acos_protocol::verdict::{
     AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
@@ -103,6 +105,10 @@ struct StepExec {
     /// no new frame and times out its settle; the agent still needs to be told
     /// *that nothing consumed it*, so the delivery travels with the failure.
     delivery: Option<crate::backend::InputDelivery>,
+    /// REL3S: the `scroll_until` search report (`selector`, `found`, `attempts`,
+    /// the settled `frame_seq`). `None` for every other step; `found: false`
+    /// with the miss's attempts when the search exhausted its budget.
+    until: Option<serde_json::Value>,
 }
 
 impl StepExec {
@@ -116,6 +122,7 @@ impl StepExec {
             session: None,
             settle: None,
             delivery: None,
+            until: None,
         }
     }
 
@@ -139,6 +146,7 @@ impl StepExec {
             session: None,
             settle: None,
             delivery: None,
+            until: None,
         }
     }
 
@@ -159,6 +167,7 @@ impl StepExec {
             session: None,
             settle: None,
             delivery: None,
+            until: None,
         }
     }
 
@@ -190,6 +199,7 @@ impl StepExec {
             session: None,
             settle: None,
             delivery: None,
+            until: None,
         }
     }
 
@@ -206,6 +216,7 @@ impl StepExec {
             session: None,
             settle: None,
             delivery: None,
+            until: None,
         }
     }
 
@@ -219,6 +230,7 @@ impl StepExec {
             session: None,
             settle: None,
             delivery: None,
+            until: None,
         }
     }
 }
@@ -441,7 +453,7 @@ pub fn run_scenario(
         // the injected point resolved to, plus whether a change was required -
         // `"auto"` for a tap, whose own state-change rule runs on every step even
         // when the scenario never asked for it.
-        step_result.input = step_input(step, exec.delivery.as_ref());
+        step_result.input = step_input(step, exec.delivery.as_ref(), exec.until.as_ref());
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -1139,6 +1151,75 @@ fn execute_step(
             };
             input_step(backend, &action, caps, previous, last_frame_seq)
         }
+        StepRef::Swipe(swipe) => {
+            capabilities_used.insert(Capability::Input.as_str().to_string());
+            if !caps.input {
+                return StepExec::unsupported(
+                    Capability::Input,
+                    "the backend cannot deliver a swipe/scroll gesture",
+                );
+            }
+            backend.set_settle_timeout(swipe.settle_timeout_ms);
+            backend.set_input_settle(matches!(swipe.settle, Some(StepSettle::Fast)));
+            backend.set_input_content_settle(matches!(swipe.settle, Some(StepSettle::Content)));
+            let (from, to) = match swipe_endpoints(
+                backend,
+                swipe.from,
+                swipe.to,
+                swipe.direction,
+                swipe.distance,
+            ) {
+                Ok(points) => points,
+                Err(error) => return StepExec::backend_error(&error, backend.id(), "swipe"),
+            };
+            let action = InputAction::Swipe {
+                from: (from.0.round() as i32, from.1.round() as i32),
+                to: (to.0.round() as i32, to.1.round() as i32),
+                duration_ms: swipe_duration(swipe.duration_ms, swipe.fling),
+                fling: swipe.fling,
+            };
+            input_step(backend, &action, caps, previous, last_frame_seq)
+        }
+        StepRef::ScrollUntil(scroll) => {
+            capabilities_used.insert(Capability::Input.as_str().to_string());
+            if !caps.input {
+                return StepExec::unsupported(
+                    Capability::Input,
+                    "the backend cannot deliver a scroll_until search",
+                );
+            }
+            // A found node is only ever reported from a settled traversal, so
+            // the search always runs under the strict rule.
+            backend.set_settle_timeout(scroll.settle_timeout_ms);
+            backend.set_input_settle(false);
+            backend.set_input_content_settle(false);
+            let (from, to) = match swipe_endpoints(
+                backend,
+                scroll.from,
+                scroll.to,
+                scroll.direction,
+                scroll.distance,
+            ) {
+                Ok(points) => points,
+                Err(error) => {
+                    return StepExec::backend_error(&error, backend.id(), "scroll_until")
+                }
+            };
+            let max_attempts = scroll
+                .max_attempts
+                .unwrap_or(if scroll.fling { 10 } else { 6 })
+                .clamp(1, 50);
+            scroll_until_step(
+                backend,
+                &scroll.selector,
+                from,
+                to,
+                swipe_duration(scroll.duration_ms, scroll.fling),
+                scroll.fling,
+                max_attempts,
+                last_frame_seq,
+            )
+        }
         StepRef::Type(ty) => {
             capabilities_used.insert(Capability::Input.as_str().to_string());
             if !caps.input {
@@ -1506,6 +1587,122 @@ fn input_step(
     }
 }
 
+/// Resolve a scenario swipe's two points: explicit `from`/`to`, or
+/// `direction` (+ optional `distance`) over the backend's live display.
+///
+/// Coordinates are display pixels, the same space as a tap and tree bounds. A
+/// backend that cannot report its display size cannot resolve a direction, and
+/// says so instead of guessing a screen.
+fn swipe_endpoints(
+    backend: &dyn Backend,
+    from: Option<Point>,
+    to: Option<Point>,
+    direction: Option<SwipeDirection>,
+    distance: Option<u32>,
+) -> Result<((f32, f32), (f32, f32)), BackendError> {
+    match (from, to) {
+        (Some(from), Some(to)) => Ok((
+            (from.x as f32, from.y as f32),
+            (to.x as f32, to.y as f32),
+        )),
+        (None, None) => {
+            let direction = direction.ok_or_else(|| BackendError::Error {
+                code: ErrorCode::InvalidArgument,
+                detail: "a swipe needs `from`/`to` points or a `direction`".to_string(),
+            })?;
+            let (width, height) = backend.display_size().ok_or_else(|| BackendError::Error {
+                code: ErrorCode::UnsupportedAssertion,
+                detail: format!(
+                    "this backend does not report its display size, so a direction-only swipe \
+                     ({direction:?}) cannot be resolved into screen points; name `from` and `to` \
+                     explicitly"
+                ),
+            })?;
+            Ok(direction.endpoints(distance, width, height))
+        }
+        _ => Err(BackendError::Error {
+            code: ErrorCode::InvalidArgument,
+            detail: "a swipe needs both `from` and `to` points".to_string(),
+        }),
+    }
+}
+
+/// The gesture duration a swipe step asks for (`fling` shortens the default).
+fn swipe_duration(duration_ms: Option<u64>, fling: bool) -> u64 {
+    duration_ms
+        .unwrap_or(if fling { 120 } else { 400 })
+        .clamp(1, 30_000)
+}
+
+/// A `scroll_until` step: a bounded search whose found node comes from a
+/// settled observation (REL3S).
+///
+/// The backend owns the per-attempt gesture + fresh traversal (the ART engine
+/// reuses the same `SessionBackend::scroll_until` the CLI/MCP path uses). This
+/// only enforces the executor's own rules: the returned observation must bind a
+/// frame, it must be newer than the previous step's frame, and the search report
+/// travels in the step's `input.until` evidence.
+fn scroll_until_step(
+    backend: &mut dyn Backend,
+    selector: &acos_protocol::Selector,
+    from: (f32, f32),
+    to: (f32, f32),
+    duration_ms: u64,
+    fling: bool,
+    max_attempts: usize,
+    last_frame_seq: Option<u64>,
+) -> StepExec {
+    let describe = serde_json::to_value(selector).unwrap_or(serde_json::Value::Null);
+    match backend.scroll_until(selector, from, to, duration_ms, fling, max_attempts) {
+        Ok((report, observation)) => {
+            if let Some(failure) = observation_binding_error(backend.id(), &observation) {
+                return failure;
+            }
+            if let Some(previous_seq) = last_frame_seq {
+                if observation.frame.frame_seq <= previous_seq {
+                    return no_fresh_frame_failure(previous_seq, &observation, "scroll_until");
+                }
+            }
+            let mut exec = StepExec::pass();
+            exec.delivery = observation
+                .input
+                .clone()
+                .or_else(|| backend.last_input_delivery());
+            exec.until = Some(serde_json::json!({
+                "selector": describe,
+                "found": true,
+                "attempts": report.attempts,
+                "frame_seq": report.frame_seq,
+            }));
+            exec.observation = Some(observation);
+            exec
+        }
+        Err(error) => {
+            let mut exec = StepExec::backend_error(&error, backend.id(), "scroll_until");
+            exec.delivery = backend.last_input_delivery();
+            // Keep the search report even on a miss: the error details already
+            // carry the attempts and the last tree's texts, and this block is
+            // the step-shaped view of the same facts.
+            if let BackendError::Protocol {
+                code: ErrorCode::ElementNotFound,
+                details: Some(details),
+                ..
+            } = &error
+            {
+                exec.until = Some(serde_json::json!({
+                    "selector": details.get("selector").cloned().unwrap_or(describe),
+                    "found": false,
+                    "attempts": details.get("attempts").cloned().unwrap_or(serde_json::Value::Null),
+                    "max_attempts": details.get("max_attempts").cloned().unwrap_or(serde_json::Value::Null),
+                    "frame_seq": details.get("last_frame_seq").cloned().unwrap_or(serde_json::Value::Null),
+                    "last_tree_texts": details.get("last_tree_texts").cloned().unwrap_or(serde_json::Value::Null),
+                }));
+            }
+            exec
+        }
+    }
+}
+
 fn environment_step(
     backend: &mut dyn Backend,
     caps: Capabilities,
@@ -1564,6 +1761,8 @@ fn frame_advancing_step(step: &Step) -> bool {
             StepRef::Launch(_)
                 | StepRef::WaitFor(_)
                 | StepRef::Tap(_)
+                | StepRef::Swipe(_)
+                | StepRef::ScrollUntil(_)
                 | StepRef::Type(_)
                 | StepRef::Key(_)
                 | StepRef::Back(_)
@@ -1603,6 +1802,7 @@ fn observation_binding_error(backend: &str, observation: &SessionObservation) ->
         session: None,
         settle: None,
         delivery: None,
+        until: None,
     })
 }
 
@@ -1646,6 +1846,7 @@ fn meaningful_error(observation: &SessionObservation) -> Option<StepExec> {
         session: None,
         settle: None,
         delivery: None,
+        until: None,
     })
 }
 
@@ -1653,6 +1854,7 @@ fn meaningful_error(observation: &SessionObservation) -> Option<StepExec> {
 fn fast_input_step(step: &Step) -> bool {
     match step.as_step() {
         Some(StepRef::Tap(tap)) => matches!(tap.settle, Some(StepSettle::Fast)),
+        Some(StepRef::Swipe(swipe)) => matches!(swipe.settle, Some(StepSettle::Fast)),
         Some(StepRef::Type(ty)) => matches!(ty.settle, Some(StepSettle::Fast)),
         Some(StepRef::Key(key)) => matches!(key.settle, Some(StepSettle::Fast)),
         _ => false,
@@ -1667,6 +1869,7 @@ fn fast_input_step(step: &Step) -> bool {
 fn expect_change_requested(step: &Step) -> bool {
     match step.as_step() {
         Some(StepRef::Tap(tap)) => tap.expect_change,
+        Some(StepRef::Swipe(swipe)) => swipe.expect_change,
         Some(StepRef::Type(ty)) => ty.expect_change,
         Some(StepRef::Key(key)) => key.expect_change,
         Some(StepRef::Back(back)) => back.expect_change,
@@ -1684,6 +1887,7 @@ fn expect_change_requested(step: &Step) -> bool {
 fn step_input(
     step: &Step,
     delivery: Option<&crate::backend::InputDelivery>,
+    until: Option<&serde_json::Value>,
 ) -> Option<serde_json::Value> {
     let expect_change = match step.as_step() {
         // A tap's state-change rule runs on every step, so an unflagged tap says
@@ -1695,42 +1899,52 @@ fn step_input(
                 serde_json::json!("auto")
             }
         }
+        Some(StepRef::Swipe(swipe)) => serde_json::json!(swipe.expect_change),
+        Some(StepRef::ScrollUntil(_)) => serde_json::json!(false),
         Some(StepRef::Type(ty)) => serde_json::json!(ty.expect_change),
         Some(StepRef::Key(key)) => serde_json::json!(key.expect_change),
         Some(StepRef::Back(back)) => serde_json::json!(back.expect_change),
         _ => return None,
     };
-    let Some(delivery) = delivery else {
-        return Some(serde_json::json!({
+    let mut input = match delivery {
+        None => serde_json::json!({
             "handled": serde_json::Value::Null,
             "handled_evidence": {"source": "none", "published": 0, "acked": 0},
             "target": serde_json::Value::Null,
             "expect_change": expect_change,
-        }));
+        }),
+        Some(delivery) => {
+            let unhandled: Vec<u64> = delivery
+                .acks
+                .iter()
+                .filter(|ack| !ack.handled)
+                .map(|ack| ack.seq)
+                .collect();
+            let target = delivery.target.clone();
+            let mut input = serde_json::json!({
+                "handled": delivery.handled,
+                "handled_evidence": {
+                    "source": if delivery.published > 0 { "finishInputEvent" } else { "none" },
+                    "published": delivery.published,
+                    "acked": delivery.acks.len(),
+                    "unhandled": unhandled,
+                },
+                "target": target.clone().unwrap_or(serde_json::Value::Null),
+                "expect_change": expect_change,
+            });
+            // The same one-line explanation an MCP reply carries, from the same facts.
+            if let Some(hint) = acos_protocol::ui::handling_hint(
+                target.as_ref(),
+                delivery.handled,
+                delivery.visual_change,
+            ) {
+                input["handled_hint"] = serde_json::json!(hint);
+            }
+            input
+        }
     };
-    let unhandled: Vec<u64> = delivery
-        .acks
-        .iter()
-        .filter(|ack| !ack.handled)
-        .map(|ack| ack.seq)
-        .collect();
-    let target = delivery.target.clone();
-    let mut input = serde_json::json!({
-        "handled": delivery.handled,
-        "handled_evidence": {
-            "source": if delivery.published > 0 { "finishInputEvent" } else { "none" },
-            "published": delivery.published,
-            "acked": delivery.acks.len(),
-            "unhandled": unhandled,
-        },
-        "target": target.clone().unwrap_or(serde_json::Value::Null),
-        "expect_change": expect_change,
-    });
-    // The same one-line explanation an MCP reply carries, from the same facts.
-    if let Some(hint) =
-        acos_protocol::ui::handling_hint(target.as_ref(), delivery.handled, delivery.visual_change)
-    {
-        input["handled_hint"] = serde_json::json!(hint);
+    if let Some(until) = until {
+        input["until"] = until.clone();
     }
     Some(input)
 }
@@ -1954,6 +2168,7 @@ fn step_settle(
 fn content_settle_unhonored(step: &Step, exec: &StepExec) -> Option<StepExec> {
     let requested = match step.as_step() {
         Some(StepRef::Tap(tap)) => matches!(tap.settle, Some(StepSettle::Content)),
+        Some(StepRef::Swipe(swipe)) => matches!(swipe.settle, Some(StepSettle::Content)),
         Some(StepRef::Type(ty)) => matches!(ty.settle, Some(StepSettle::Content)),
         Some(StepRef::Key(key)) => matches!(key.settle, Some(StepSettle::Content)),
         Some(StepRef::Launch(launch)) => matches!(launch.settle, Some(StepSettle::Content)),
@@ -2421,6 +2636,7 @@ fn no_fresh_frame_failure(
         session: None,
         settle: None,
         delivery: None,
+        until: None,
     }
 }
 
@@ -2868,6 +3084,7 @@ fn static_launch_assertion(
                 session: None,
                 settle: None,
                 delivery: None,
+                until: None,
             });
         }
     } else if launch.intent_action.is_none() && manifest.launcher_activity.is_none() {
@@ -2889,6 +3106,7 @@ fn static_launch_assertion(
             session: None,
             settle: None,
             delivery: None,
+            until: None,
         });
     }
     None
@@ -3273,7 +3491,7 @@ mod region_tests {
             settle: None,
         });
         let input =
-            step_input(step, current.input.as_ref()).expect("a tap step always has input evidence");
+            step_input(step, current.input.as_ref(), None).expect("a tap step always has input evidence");
         assert_eq!(input["handled"], serde_json::json!(false));
         assert_eq!(input["expect_change"], serde_json::json!("auto"));
         assert_eq!(input["handled_evidence"]["source"], serde_json::json!("finishInputEvent"));
@@ -3305,13 +3523,13 @@ mod region_tests {
              expect_change: true\n"
         ))
         .expect("a flagged tap scenario");
-        let input = step_input(flagged.steps.first().expect("the tap step"), current.input.as_ref())
+        let input = step_input(flagged.steps.first().expect("the tap step"), current.input.as_ref(), None)
             .expect("input evidence");
         assert_eq!(input["expect_change"], serde_json::json!(true));
 
         // No delivery at all is "unknown", never "not handled".
         current.input = None;
-        let input = step_input(step, current.input.as_ref()).expect("input evidence");
+        let input = step_input(step, current.input.as_ref(), None).expect("input evidence");
         assert_eq!(input["handled"], serde_json::Value::Null);
         assert_eq!(input["handled_evidence"]["source"], serde_json::json!("none"));
     }

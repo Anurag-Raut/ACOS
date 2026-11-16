@@ -41,6 +41,26 @@ fn acos() -> &'static str {
     env!("CARGO_BIN_EXE_acos")
 }
 
+/// The release `acos-art` launcher this branch built.
+///
+/// The track's own target dir is preferred; an explicit `ACOS_ART_BIN` wins, so
+/// the test can be pointed at a launcher built elsewhere without editing it.
+fn art_bin() -> PathBuf {
+    if let Some(path) = std::env::var_os("ACOS_ART_BIN") {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            return path;
+        }
+    }
+    for target in [".cache/rel3s-target", ".cache/rel3s2-target"] {
+        let path = repo_root().join(target).join("release/acos-art");
+        if path.is_file() {
+            return path;
+        }
+    }
+    repo_root().join(".cache/rel3s2-target/release/acos-art")
+}
+
 fn scratch(tag: &str) -> PathBuf {
     let dir = repo_root()
         .join(".cache")
@@ -63,7 +83,7 @@ impl Daemon {
         let dir = scratch(tag);
         let sockets = ShortSocketDir::new(tag);
         let socket = sockets.socket("serve.sock");
-        let art_bin = repo_root().join(".cache/rel3s-target/release/acos-art");
+        let art_bin = art_bin();
         let mut command = Command::new(acos());
         command
             .arg("serve")
@@ -212,7 +232,7 @@ fn visible_texts(tree: &Value) -> Vec<String> {
 #[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
 fn swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row() {
     let apk = repo_root().join("fixtures/build/apps/scroll-list.apk");
-    let art = repo_root().join(".cache/rel3s-target/release/acos-art");
+    let art = art_bin();
     if !apk.is_file() || !art.is_file() {
         eprintln!(
             "SKIP: {} or {} missing (build with ACOS_APP_ONLY=scroll-list tools/build-apps.sh \
@@ -228,7 +248,16 @@ fn swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row() {
 
     let launch = conn.call("acos_launch", json!({"base": b, "apk": apk}));
     assert_eq!(launch["ok"], json!(true), "{launch:#?}");
-    assert_eq!(launch["result"]["capabilities"]["swipe"], json!(true), "{launch:#?}");
+    // REL3S: the live session advertises the real gesture command. `acos_status`
+    // is the session's own capability report (the launch reply carries the
+    // `capabilities_used` envelope list, not this map).
+    let status = conn.call("acos_status", json!({"base": b}));
+    assert_eq!(status["ok"], json!(true), "{status:#?}");
+    assert_eq!(
+        status["result"]["capabilities"]["swipe"],
+        json!(true),
+        "the ART session must advertise its swipe command: {status:#?}"
+    );
 
     let tree = conn.call("acos_observe_tree", json!({"base": b, "max_nodes": 4000}));
     assert_eq!(tree["ok"], json!(true), "{tree:#?}");
@@ -251,7 +280,11 @@ fn swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row() {
     );
     assert_eq!(swipe["ok"], json!(true), "{swipe:#?}");
     let result = &swipe["result"];
-    assert_eq!(result["delivered"], json!(true), "{swipe:#?}");
+    assert_eq!(
+        result["accepted"],
+        json!(true),
+        "the live input channel accepted the gesture: {swipe:#?}"
+    );
     assert_eq!(
         result["handled_evidence"]["source"],
         json!("finishInputEvent"),

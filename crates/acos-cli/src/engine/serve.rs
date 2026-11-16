@@ -2215,30 +2215,17 @@ fn swipe_points(
         return Ok((from, to, duration_ms));
     }
     let (width, height) = session.display_size();
-    let (w, h) = (width as f32, height as f32);
     let direction = args
         .get("direction")
         .and_then(Value::as_str)
         .unwrap_or("up")
         .to_ascii_lowercase();
-    let cx = w / 2.0;
-    let cy = h / 2.0;
-    let axis = if matches!(direction.as_str(), "up" | "down") {
-        h * 0.6
-    } else {
-        w * 0.6
-    };
-    let distance = args
-        .get("distance")
-        .and_then(Value::as_f64)
-        .map_or(axis as f64, f64::abs) as f32;
-    let half = distance / 2.0;
-    let (from, to) = match direction.as_str() {
+    let direction = match direction.as_str() {
         // Finger up = the content scrolls up = later rows come into view.
-        "up" => ((cx, cy + half), (cx, cy - half)),
-        "down" => ((cx, cy - half), (cx, cy + half)),
-        "left" => ((cx + half, cy), (cx - half, cy)),
-        "right" => ((cx - half, cy), (cx + half, cy)),
+        "up" => acos_protocol::scenario::SwipeDirection::Up,
+        "down" => acos_protocol::scenario::SwipeDirection::Down,
+        "left" => acos_protocol::scenario::SwipeDirection::Left,
+        "right" => acos_protocol::scenario::SwipeDirection::Right,
         other => {
             return Err(BackendError::Failed {
                 code: ErrorCode::InvalidArgument,
@@ -2249,6 +2236,14 @@ fn swipe_points(
             })
         }
     };
+    let distance = args
+        .get("distance")
+        .and_then(Value::as_f64)
+        .map(|distance| distance.abs() as u32);
+    // One source for the direction semantics: the scenario `SwipeStep` resolves
+    // its points with the same `endpoints` rule (centre, 60 % of the axis by
+    // default).
+    let (from, to) = direction.endpoints(distance, width, height);
     Ok((from, to, duration_ms))
 }
 

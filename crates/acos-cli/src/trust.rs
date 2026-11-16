@@ -24,7 +24,7 @@
 use std::path::Path;
 
 use acos_protocol::commands::ResetScope;
-use acos_protocol::{Backend as ProtocolBackend, Envelope, ErrorCode};
+use acos_protocol::{Backend as ProtocolBackend, Envelope, ErrorCode, Selector};
 use acos_verify::backend::{
     Backend, BackendError, Capabilities, EnvironmentChange, InputAction, LaunchOutcome,
     LaunchRequest, LogRecord, ManifestInfo, SessionObservation,
@@ -345,6 +345,29 @@ impl Backend for TrustGuard {
         // Allowed in untrusted mode: the host injected the input. A tap with a
         // selector resolves its point from the tree (navigation only).
         self.inner.input(action)
+    }
+
+    fn last_input_delivery(&self) -> Option<acos_verify::backend::InputDelivery> {
+        // Host-observed delivery (`handled` acks, target): the wrapper must not
+        // drop the evidence the step reports.
+        self.inner.last_input_delivery()
+    }
+
+    fn display_size(&self) -> Option<(u32, u32)> {
+        self.inner.display_size()
+    }
+
+    fn scroll_until(
+        &mut self,
+        selector: &Selector,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        fling: bool,
+        max_attempts: usize,
+    ) -> Result<(acos_verify::backend::ScrollUntilReport, SessionObservation), BackendError> {
+        self.inner
+            .scroll_until(selector, from, to, duration_ms, fling, max_attempts)
     }
 
     fn reset(&mut self, scope: ResetScope) -> Result<(), BackendError> {

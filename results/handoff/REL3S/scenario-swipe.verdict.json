@@ -1,0 +1,364 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.scrolllist",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/fixtures/build/apps/scroll-list.apk",
+    "sha256": "bcbb7c427f729b710c47da6d83a4a4fbe328007798037c9dcfd04b441077952c"
+  },
+  "backend": "acos-native",
+  "captures": {
+    "before": "frames/2-before.png"
+  },
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/.cache/rel3s-scenario-swipe-1094069/artifacts",
+    "engine_report": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/.cache/rel3s-scenario-swipe-1094069/artifacts/engine.json",
+    "pruned_session_captures": 1,
+    "retention": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/.cache/rel3s-scenario-swipe-1094069/artifacts/retention.json",
+    "verdict": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/.cache/rel3s-scenario-swipe-1094069/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T04:56:44.439Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (prune-unreferenced): 19 file(s) / 1.9 MiB kept, 1 file(s) / 0.1 MiB pruned; see retention.json"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794802954183792483,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/fixtures/build/apps/scroll-list.apk",
+      "sha256": "bcbb7c427f729b710c47da6d83a4a4fbe328007798037c9dcfd04b441077952c",
+      "sha256_12": "bcbb7c427f72",
+      "size_bytes": 12756
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794804997287328665,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/.cache/rel3s-scenario-swipe-1094069/scenario.yaml",
+      "sha256": "18599943ee9d1e71e064cd077f3e707f70baa93bcdec78df63ed537394739dca",
+      "sha256_12": "18599943ee9d",
+      "size_bytes": 472
+    },
+    "scenario_engine": "art",
+    "warnings": [
+      {
+        "apk": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/fixtures/build/apps/scroll-list.apk",
+        "code": "SCENARIO_APP_OVERRIDDEN",
+        "message": "the scenario's own `app:` names /home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/crates/acos-cli/fixtures/build/apps/scroll-list.apk but this run used --apk /home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/fixtures/build/apps/scroll-list.apk; the verdict is about the --apk file (provenance.apk.sha256_12 is the digest of the bytes that ran). Drop --apk to run the scenario's own app.",
+        "scenario_app": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/crates/acos-cli/fixtures/build/apps/scroll-list.apk"
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.2.3",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/fixtures/build/apps/scroll-list.apk",
+    "apk_sha256": "bcbb7c427f729b710c47da6d83a4a4fbe328007798037c9dcfd04b441077952c",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/.cache/rel3s-scenario-swipe-1094069/scenario.yaml",
+    "scenario_sha256": "18599943ee9d1e71e064cd077f3e707f70baa93bcdec78df63ed537394739dca"
+  },
+  "request_id": "req_10b288_18e86da2c084bb3e",
+  "resources": {
+    "events": 2943,
+    "frames_captured": 5,
+    "memory_mib": 18,
+    "peak_rss_bytes": 19177472,
+    "sessions": 1,
+    "steps": 5,
+    "wall_ms": 3321
+  },
+  "scenario": {
+    "name": "rel3s-scenario",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/.cache/rel3s-scenario-swipe-1094069/scenario.yaml",
+    "sha256": "18599943ee9d1e71e064cd077f3e707f70baa93bcdec78df63ed537394739dca"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=69MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1094499-i1107882.scope)",
+    "code": null,
+    "disk_free_bytes": 173476233216,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "/home/Qui/.t3/worktrees/acos/t3-2f923074-8ad80b56ce8d2ccb/.cache/rel3s-scenario-swipe-1094069/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_scroll-list",
+  "started_at": "2026-11-16T04:56:41.118Z",
+  "status": "pass",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 74,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 54,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/2-before.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-capture.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "name": "before",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 3183,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-swipe.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 2,
+      "input": {
+        "expect_change": false,
+        "handled": true,
+        "handled_evidence": {
+          "acked": 188,
+          "published": 188,
+          "source": "finishInputEvent",
+          "unhandled": []
+        },
+        "target": null
+      },
+      "provenance": {},
+      "settle": {
+        "ack_ms": 3000,
+        "bound": "strict-event",
+        "first_change_ms": 3038,
+        "frame_ms": 3166,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "swipe"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              1924,
+              1038,
+              2050
+            ],
+            "hint": "",
+            "node": "n5_android:id/text1",
+            "text": "Row 15",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "exact": "Row 15"
+              }
+            },
+            "text": {
+              "exact": "Row 15"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n5_android:id/text1"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-assert_text.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 3,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 3000,
+        "bound": "strict-event",
+        "first_change_ms": 3038,
+        "frame_ms": 3166,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "present": false,
+            "visible": null
+          },
+          "expected": {
+            "selector": {
+              "text": {
+                "exact": "Row 0"
+              }
+            },
+            "visible": false
+          },
+          "kind": "not_visible",
+          "matched_node_ids": [],
+          "message": "node absent",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/04-assert_not_visible.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 4,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 3000,
+        "bound": "strict-event",
+        "first_change_ms": 3038,
+        "frame_ms": 3166,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "assert_not_visible"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "pass"
+}

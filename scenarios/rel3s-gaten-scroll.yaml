@@ -1,0 +1,45 @@
+# rel3s-gaten-scroll: REL3S scroll smoke on the real Gaten build.
+#
+# The REL3S swipe/scroll feature must work on a third-party RN/Fabric app, not
+# only the ACOS fixture. This scenario drives Gaten's own search result list —
+# the long-list screen a finger would scroll — and captures the tree before and
+# after one real gesture. The scenario itself asserts that the gesture was
+# delivered and that the app's own list still shows; the run's evidence
+# (captures/step JSON) is what a reviewer reads to see the list moved.
+#
+# Onboarding taps are navigation (`settle: fast`); the search-result wait and the
+# captures are strict. The APK is never committed: it comes from
+# `/home/Qui/Projects/acos/.cache/gaten/` (the owner's build cache).
+version: 1
+name: rel3s-gaten-scroll
+description: >-
+  Gaten (RN/Fabric) on real ART: search a broad reading, then swipe the result
+  list up with the REL3S gesture stream and capture both trees.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: art
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  # Focus the field, then type a broad romaji reading so the result list is long.
+  - tap: {selector: {content_desc: {exact: "Search Japanese dictionary"}}, settle_timeout_ms: 5000}
+  - type: {text: "a", settle: fast}
+  - wait_for: {selector: {text: {contains: "results"}}, timeout_ms: 30000}
+  - capture: {name: before}
+  - swipe:
+      from: {x: 540, y: 1900}
+      to: {x: 540, y: 700}
+      duration_ms: 600
+      fling: true
+      expect_change: true
+  - capture: {name: after}
