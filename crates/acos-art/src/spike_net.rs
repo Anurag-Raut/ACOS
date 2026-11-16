@@ -103,30 +103,107 @@ pub fn pasta_args() -> Vec<String> {
     .collect()
 }
 
-/// RFC1918 + link-local destinations are dropped in the session's own netns.
-///
-/// `pasta` forwards *any* destination the guest sends it, the LAN included
-/// (measured: `192.168.31.1:80 -> OK` with the hardened flags above). There is
-/// no destination ACL in passt, so the spike enforces it where the kernel can:
-/// the netns is owned by pasta's user namespace, so the command it spawns has
-/// `CAP_NET_ADMIN` over that netns only, which is enough for `iptables`.
-pub const LAN_GUARD: &str = "iptables -w -A OUTPUT -d 192.168.0.0/16 -j DROP; \
-iptables -w -A OUTPUT -d 10.0.0.0/8 -j DROP; \
-iptables -w -A OUTPUT -d 172.16.0.0/12 -j DROP; \
-iptables -w -A OUTPUT -d 169.254.0.0/16 -j DROP";
+// ---------------------------------------------------------------------------
+// The LAN boundary
+// ---------------------------------------------------------------------------
 
-/// Wrap a bwrap argv in `pasta` + the LAN guard.
+/// The chain the drop rules live in, inside the session's own netns.
+pub const BOUNDARY_CHAIN: &str = "acos-net-drop";
+
+/// Marker prefix of every line the boundary shim writes (stderr, and the file
+/// named by [`BOUNDARY_ENV`] when that is set).
+pub const BOUNDARY_MARK: &str = "acos-net:";
+
+/// Environment variable naming a file that the shim also appends its markers
+/// to. Inherited by the shim from the launcher (the guest never sees it: bwrap
+/// runs with `--clearenv`).
+pub const BOUNDARY_ENV: &str = "ACOS_SPIKE_NET_BOUNDARY";
+
+/// Exit code the shim uses when the boundary cannot be installed: the guest is
+/// then **not** started at all (fail closed).
+pub const BOUNDARY_FAIL_EXIT: i32 = 111;
+
+/// Destination ranges that must never be reachable from the guest (ADR-0030
+/// §3): RFC1918, link-local, and the CGNAT range.
+pub const LAN_DROP_CIDRS: &[&str] = &[
+    "192.168.0.0/16",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "169.254.0.0/16",
+    "100.64.0.0/10",
+];
+
+/// The setup shim run inside the session netns, before bwrap (and therefore
+/// before any guest code).
 ///
-/// The returned command runs `/bin/sh -c '<guard>; exec "$@"' sh bwrap ...`
-/// under pasta. `/bin/sh` comes from the host (pasta runs outside the sandbox
-/// mount namespace), so it costs the guest nothing.
+/// Why a shim and why here: `pasta` forwards *any* destination the guest sends
+/// it, the LAN included (measured: `192.168.31.1:80 -> OK` with the hardened
+/// flags). passt has no destination ACL, so the block is netfilter and it has
+/// to be installed by the only process with `CAP_NET_ADMIN` over the new netns
+/// — the command pasta spawns, which runs as root *in pasta's user
+/// namespace*. bwrap then puts the guest in a **child** user namespace with
+/// `--cap-drop ALL`, so the guest never holds a capability over this netns
+/// (the kernel's `ns_capable()` walks from the netns's owner namespace, i.e.
+/// pasta's, and stops there) and cannot touch the chain or reach nftables
+/// (see [`crate::seccomp`], which keeps `AF_NETLINK` denied even with the
+/// spike on).
+///
+/// The shim is fail closed: no `iptables`, a chain that cannot be created, or
+/// a rule that does not verify all exit [`BOUNDARY_FAIL_EXIT`] **without**
+/// starting the guest. It dumps the chain before and after the guest so the
+/// caller (and `tests/spike_net_boundary.rs`) can prove the guest left it
+/// untouched.
+#[must_use]
+pub fn boundary_script() -> String {
+    let mut rules = String::new();
+    for cidr in LAN_DROP_CIDRS {
+        rules.push_str(&format!(
+            "iptables -w -A {BOUNDARY_CHAIN} -d {cidr} -j DROP || fail add-{cidr}\n"
+        ));
+    }
+    let mut checks = String::new();
+    for cidr in LAN_DROP_CIDRS {
+        checks.push_str(&format!(
+            "iptables -w -C {BOUNDARY_CHAIN} -d {cidr} -j DROP || fail missing-{cidr}\n"
+        ));
+    }
+    format!(
+        r#"set -u
+boundary_file=${{{env}:-}}
+mark() {{ printf '{mark} %s\n' "$*" >&2; if [ -n "$boundary_file" ]; then printf '{mark} %s\n' "$*" >>"$boundary_file"; fi; }}
+fail() {{ mark "boundary=failed reason=$1 exit={fail}"; exit {fail}; }}
+dump() {{ {{ iptables -w -S {chain}; iptables -w -S OUTPUT; }} 2>&1 | tr '\n' ';'; }}
+command -v iptables >/dev/null 2>&1 || fail no-iptables
+mark "shim netns=$(readlink /proc/self/ns/net) userns=$(readlink /proc/self/ns/user) cap-eff=$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status)"
+iptables -w -N {chain} 2>/dev/null || iptables -w -F {chain} || fail chain
+{rules}iptables -w -C OUTPUT -j {chain} 2>/dev/null || iptables -w -A OUTPUT -j {chain} || fail output-jump
+{checks}iptables -w -C OUTPUT -j {chain} || fail missing-output-jump
+mark "rules=installed chain=$(dump)"
+"$@"; rc=$?
+mark "rules=after chain=$(dump) guest-exit=$rc"
+exit $rc
+"#,
+        env = BOUNDARY_ENV,
+        mark = BOUNDARY_MARK,
+        fail = BOUNDARY_FAIL_EXIT,
+        chain = BOUNDARY_CHAIN,
+        rules = rules,
+        checks = checks,
+    )
+}
+
+/// Wrap a bwrap argv in `pasta` + the boundary shim.
+///
+/// The returned command runs `/bin/sh -c '<boundary script>' sh bwrap ...`
+/// under pasta. `/bin/sh` and `iptables` come from the host (pasta runs outside
+/// the sandbox mount namespace), so they cost the guest nothing.
 pub fn wrap(bwrap_argv: &[std::ffi::OsString]) -> Command {
     let program = std::env::var(PASTA_ENV).unwrap_or_else(|_| "pasta".to_string());
     let mut c = Command::new(program);
     c.args(pasta_args());
     c.arg("/bin/sh");
     c.arg("-c");
-    c.arg(format!("{LAN_GUARD}; exec \"$@\""));
+    c.arg(boundary_script());
     c.arg("sh");
     c.arg("bwrap");
     c.args(bwrap_argv);
@@ -305,3 +382,87 @@ pub fn dns_socket_env_path() -> Option<PathBuf> {
 /// The guest's loopback for the LAN guard's own address (unused placeholder to
 /// keep the address in one place for the report/tests).
 pub const GUEST_ADDR: Ipv4Addr = Ipv4Addr::new(169, 254, 2, 15);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The shim installs every LAN range, verifies it rule by rule, and only
+    /// then starts the guest: an unguarded session is not possible.
+    #[test]
+    fn boundary_script_installs_verifies_and_fails_closed() {
+        let s = boundary_script();
+        for cidr in LAN_DROP_CIDRS {
+            let rule = format!("-d {cidr} -j DROP");
+            assert_eq!(
+                s.matches(&rule).count(),
+                2,
+                "{cidr} must be added once and checked once"
+            );
+            assert!(
+                s.contains(&format!(
+                    "iptables -w -A {BOUNDARY_CHAIN} {rule} || fail add-{cidr}"
+                )),
+                "the add of {cidr} must be fail closed"
+            );
+            assert!(
+                s.contains(&format!(
+                    "iptables -w -C {BOUNDARY_CHAIN} {rule} || fail missing-{cidr}"
+                )),
+                "the check of {cidr} must be fail closed"
+            );
+        }
+        // No iptables at all: the session must not start.
+        assert!(s.contains("command -v iptables >/dev/null 2>&1 || fail no-iptables"));
+        // The guest (`"$@"`) runs only after the last verification, and every
+        // failure path exits before it.
+        let run = s.find("\"$@\"").expect("the guest invocation");
+        assert!(s.rfind("|| fail").expect("a failure path") < run);
+        assert!(s.contains(&format!("exit {BOUNDARY_FAIL_EXIT}")));
+        // The chain is dumped before and after the guest, so a change is
+        // visible: `tests/spike_net_boundary.rs` compares the two dumps.
+        let installed = s.find("rules=installed").expect("the before dump");
+        let after = s.find("rules=after").expect("the after dump");
+        assert!(installed < run && run < after);
+        // The OUTPUT jump is what makes the chain effective for guest traffic.
+        assert!(s.contains(&format!("iptables -w -A OUTPUT -j {BOUNDARY_CHAIN}")));
+        assert!(s.contains(&format!(
+            "iptables -w -C OUTPUT -j {BOUNDARY_CHAIN} || fail"
+        )));
+    }
+
+    /// The marker file is opt-in (a host path), and the guest never sees it:
+    /// bwrap runs with `--clearenv`.
+    #[test]
+    fn boundary_marker_file_is_opt_in() {
+        let s = boundary_script();
+        assert!(s.contains(&format!("boundary_file=${{{BOUNDARY_ENV}:-}}")));
+        assert!(s.contains("if [ -n \"$boundary_file\" ]"));
+    }
+
+    /// pasta's hardening flags are all present (ADR-0030 amendment).
+    #[test]
+    fn pasta_args_keep_host_loopback_closed() {
+        let args = pasta_args();
+        assert!(
+            args.iter().any(|a| a == "--no-splice"),
+            "the loopback splice must be off"
+        );
+        for (flag, value) in [
+            ("-T", "none"),
+            ("-U", "none"),
+            ("--map-host-loopback", "none"),
+        ] {
+            let at = args
+                .iter()
+                .position(|a| a == flag)
+                .unwrap_or_else(|| panic!("{flag}"));
+            assert_eq!(args[at + 1], value, "{flag} must be {value}");
+        }
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some("--"),
+            "the pasta argv ends at --"
+        );
+    }
+}

@@ -176,3 +176,91 @@ CA store: the image **has** it — `.cache/art/sysroot/system/etc/security/cacer
 * No A/B metrics (step 7): cold/warm launch, per-session memory and the N=20 density
   check were not run with flag off vs flag on, so there is **no** evidence that `real`
   can be the default. Per the owner's condition the recommendation is therefore `off`.
+
+---
+
+# Session 2 (same branch `t3/spike-net`, new worktree) — boundary, fixture, gate
+
+Session 2 started from `4638d9f4` with three decisions from the orchestrator and one
+instruction each: (1) the LAN block must be a *boundary*, not a policy the guest can undo;
+(2) an app-level HTTPS proof through `acos verify --engine art`; (3) the A/B gate, then the
+default strictly from it.
+
+## 1. The LAN block becomes a boundary
+
+Session 1 installed the DROP rules from the same `/bin/sh` that then `exec`'d bwrap and
+left the guest with `--cap-drop ALL`. That was already almost a boundary, but nothing
+proved it, and the shim was fail-open (`iptables ...; exec bwrap` — a missing `iptables`
+silently ran the guest with *no* LAN block).
+
+Now (`crates/acos-art/src/spike_net.rs`, `boundary_script()`):
+
+* the chain is `acos-net-drop` (RFC1918 + `169.254/16` + `100.64/10`), jumped from
+  `OUTPUT`, installed **and verified rule by rule** (`iptables -w -C`) before bwrap runs;
+* any failure — no `iptables`, chain creation, one rule, the OUTPUT jump — exits `111`
+  and the guest is never started (fail closed, proven by the second test);
+* the shim dumps the chain before and after the guest, so "the guest left it alone" is a
+  diff of two dumps, not a claim;
+* the shim records its own `netns`/`userns` inode and `CapEff` (it is root in pasta's
+  user namespace, `CapEff=000001ffffffffff`) as the owner side of the comparison.
+
+Guest side, measured in the real mount view
+(`crates/acos-art/tests/spike_net_boundary.rs`, `results/handoff/SPIKE-NET/boundary/`):
+
+```
+probe: uid 10192
+probe: cap-eff 0000000000000000                    <- no capability at all
+probe: userns 4026533637   (shim/netns owner: 4026533566)   <- child userns
+probe: socket-netlink DENIED:EACCES                <- seccomp blocks AF_NETLINK
+probe: so-mark DENIED:EPERM                        <- no CAP_NET_ADMIN over the netns
+probe: socket-raw-inet DENIED:EPERM
+probe: iptables-flush exit=1
+probe: iptables-flush-output iptables: Failed to initialize nft: Permission denied
+probe: connect-public OK                           <- the feature still works
+probe: connect-lan Operation now in progress       <- DROPped (connect times out)
+probe: connect-host-loopback Connection refused    <- `-T none --no-splice`
+probe: done
+```
+
+and the shim's two dumps are byte-identical (rules untouched, guest exit 0). Host-side
+`/proc/<guest>/status` was read while the guest ran: `CapEff` is zero there too, and the
+guest's user namespace is not the netns owner's.
+
+`SO_MARK` is the capability probe on purpose: the kernel checks it against
+`sock_net(sk)->user_ns`, i.e. the netns's owner namespace — exactly the right the guest
+would need to rewrite the chain.
+
+## 2. The seccomp `AF_INET` branch was dead code (found here, fixed)
+
+Session 1 reported "seccomp allows `AF_INET`/`AF_INET6` only with the flag" and moved on.
+The branch it added came *after* `jeq(AF_UNIX, list, deny)`, so every non-`AF_UNIX` family
+went to the deny terminal first: with `ACOS_SPIKE_NET=1`, `socket(AF_INET, ...)` still
+returned `EACCES`. Session 1 never noticed because its transport probe ran inside the
+netns but *outside* bwrap (no seccomp), and an ART boot reaches first frame without a
+socket of its own.
+
+Fixed: the family gate now falls through `AF_UNIX → AF_INET → AF_INET6` to the syscall
+deny list and denies everything else. `seccomp::tests::socket_families_follow_the_spike_flag`
+runs the emitted cBPF program through a small interpreter and would have failed before the
+fix (`AF_INET` → EACCES) and fails if `AF_NETLINK` ever becomes reachable.
+
+## 3. Fixture `fixtures/apps/net-check` (items 4/5/6)
+
+`HttpURLConnection` GET of `https://example.com` on a background thread; `TextView id=status`
+shows `HTTP 200` or the exception class name (never a fake success); `id=connectivity` shows
+the `ConnectivityManager`/`NetworkCapabilities`/`LinkProperties` report. Scenario
+`scenarios/net-check.yaml` asserts `HTTP 200`, `internet=true validated=true` and the
+`NetCheck` log line. Built with `ACOS_APP_ONLY=net-check tools/build-apps.sh`
+(`fixtures/build/apps/net-check.apk`, 12 756 bytes). One API mismatch on the way:
+`LinkProperties.getAddresses()` is not in the API-34 stub; `getLinkAddresses()` is.
+
+## 4. What session 2 did *not* run, and why
+
+* `acos verify --engine art` on `net-check` (items 4/5/6 at app level): not run. It needs
+  a release `acos` build (built, `1m12s`) and then an ART session whose artifacts are
+  0.5–2 GB (`results/handoff/ARTGC.md`); the host disk crossed the gate in §4 of
+  COMMON_RULES (81 % → 87 % during this session) before the run could start.
+* The A/B gate: not run (same disk gate, and the session's remaining budget). No timings
+  were produced, so the default stays `off`.
+* `LinkProperties` addresses/DNS/routes: still empty (`connectivity.rs` unchanged);
+  item 5 remains PARTIAL.

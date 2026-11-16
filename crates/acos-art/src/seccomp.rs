@@ -387,15 +387,23 @@ fn build_program_with(action: &DenyAction, allow_inet: bool) -> Vec<Insn> {
 
     b.mark(socket_check);
     b.ld_abs(OFF_ARG0);
-    b.jeq(libc::AF_UNIX as u32, list, deny);
     if allow_inet {
+        // SPIKE-NET: `AF_UNIX | AF_INET | AF_INET6` pass on to the syscall
+        // deny list, every other family (notably `AF_NETLINK`, which is how
+        // nftables would rewrite the session's LAN-drop chain) is denied. The
+        // chain must fall through to `deny` only after all three comparisons:
+        // an earlier `jeq(AF_UNIX, list, deny)` would send `AF_INET` to `deny`
+        // and leave this branch dead (measured: `socket(AF_INET)` returned
+        // EACCES with the spike on).
         let inet4 = b.label();
         let inet6 = b.label();
-        b.jeq(libc::AF_INET as u32, inet4, inet6);
+        b.jeq(libc::AF_UNIX as u32, list, inet4);
         b.mark(inet4);
-        b.ja(list);
+        b.jeq(libc::AF_INET as u32, list, inet6);
         b.mark(inet6);
         b.jeq(libc::AF_INET6 as u32, list, deny);
+    } else {
+        b.jeq(libc::AF_UNIX as u32, list, deny);
     }
 
     b.mark(list);
@@ -565,6 +573,86 @@ mod tests {
 
     fn compiled() -> Vec<Insn> {
         build_program_with(&DenyAction::Errno, false)
+    }
+
+    /// A tiny cBPF interpreter for the op set `Builder` emits (Ld/And/Jeq/Ja/
+    /// Ret), so the socket-family gate is proven on the *program*, not on a
+    /// hand-read branch. `seccomp_data` is `nr, arch, ip, args[6]`.
+    fn evaluate(p: &[Insn], nr: u32, arg0: u64) -> u32 {
+        let mut pc = 0usize;
+        let mut acc: u64 = 0;
+        let word = |off: u32, nr: u32, arg0: u64| -> u64 {
+            match off {
+                OFF_NR => u64::from(nr),
+                OFF_ARCH => u64::from(AUDIT_ARCH),
+                o if (16..16 + 8 * 6).contains(&o) => {
+                    if o == OFF_ARG0 {
+                        arg0
+                    } else {
+                        0
+                    }
+                }
+                _ => 0,
+            }
+        };
+        for _ in 0..10_000 {
+            let i = &p[pc];
+            match i.code {
+                LD_ABS_W => {
+                    acc = word(i.k, nr, arg0);
+                    pc += 1;
+                }
+                AND_K => {
+                    acc &= u64::from(i.k);
+                    pc += 1;
+                }
+                JEQ_K => {
+                    pc += if acc == u64::from(i.k) {
+                        usize::from(i.jt) + 1
+                    } else {
+                        usize::from(i.jf) + 1
+                    };
+                }
+                JA => pc += i.k as usize + 1,
+                RET_K => return i.k,
+                other => panic!("unexpected op {other:#x} at {pc}"),
+            }
+        }
+        panic!("the filter did not terminate");
+    }
+
+    /// SPIKE-NET's socket gate: `AF_INET`/`AF_INET6` are reachable **only** with
+    /// the spike on, and `AF_NETLINK` is denied either way (it is how the nft
+    /// backend of `iptables` would rewrite the session's LAN-drop chain).
+    #[test]
+    fn socket_families_follow_the_spike_flag() {
+        let off = build_program_with(&DenyAction::Errno, false);
+        let on = build_program_with(&DenyAction::Errno, true);
+        let deny = RET_ERRNO | (libc::EACCES as u32 & 0xffff);
+        let unix = libc::AF_UNIX as u64;
+        let inet = libc::AF_INET as u64;
+        let inet6 = libc::AF_INET6 as u64;
+        let netlink = libc::AF_NETLINK as u64;
+
+        // Flag off: the production program is unchanged — only AF_UNIX.
+        assert_eq!(evaluate(&off, libc::SYS_socket as u32, unix), RET_ALLOW);
+        assert_eq!(evaluate(&off, libc::SYS_socket as u32, inet), deny);
+        assert_eq!(evaluate(&off, libc::SYS_socket as u32, netlink), deny);
+        // Flag on: internet families pass, netlink still does not.
+        assert_eq!(evaluate(&on, libc::SYS_socket as u32, unix), RET_ALLOW);
+        assert_eq!(evaluate(&on, libc::SYS_socket as u32, inet), RET_ALLOW);
+        assert_eq!(evaluate(&on, libc::SYS_socket as u32, inet6), RET_ALLOW);
+        assert_eq!(evaluate(&on, libc::SYS_socket as u32, netlink), deny);
+        assert_eq!(
+            evaluate(&on, libc::SYS_socketpair as u32, inet),
+            RET_ALLOW,
+            "socketpair goes through the same family gate"
+        );
+        // The rest of the deny list is untouched by the flag.
+        assert_eq!(evaluate(&on, libc::SYS_ptrace as u32, 0), deny);
+        assert_eq!(evaluate(&on, libc::SYS_mount as u32, 0), deny);
+        // And a plain syscall still passes.
+        assert_eq!(evaluate(&on, libc::SYS_read as u32, 0), RET_ALLOW);
     }
 
     #[test]

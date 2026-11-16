@@ -1,0 +1,74 @@
+# net-check: the SPIKE-NET app-level proof (ADR-0030 gate, items 4/5/6).
+#
+# One screen, three observable facts:
+#   id=url   the URL fetched (constant)
+#   id=status "HTTP 200" on success, otherwise the exception class name
+#   id=connectivity  what ConnectivityManager/NetworkCapabilities report
+#
+# Run with ACOS_SPIKE_NET=1 (and pasta on ACOS_SPIKE_NET_PASTA) for the pass
+# arm: real HTTPS through the session netns, DNS through dnsproxyd, TLS through
+# the image's CA store. With the flag unset the same APK must show the honest
+# failure (UnknownHostException or SocketException), never a fake success.
+version: 1
+name: net-check
+description: >-
+  Launch net-check, assert that ConnectivityManager reports a validated
+  INTERNET network with a real interface/addresses/DNS/routes and that an
+  in-app HTTPS GET of https://example.com returns HTTP 200.
+app: fixtures/build/apps/net-check.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.netcheck/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: url}
+      text: {exact: https://example.com}
+
+  # Item 6: a real HTTPS GET. The runtime waits for the matching tree, so this
+  # is event driven, not a sleep.
+  - assert_text:
+      selector: {id: status}
+      text: {exact: HTTP 200}
+      timeout_ms: 60000
+
+  # Item 5: the connectivity report an app sees.
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "internet=true validated=true"}
+      timeout_ms: 5000
+
+  - assert_log:
+      tag: NetCheck
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^fetch result=HTTP 200$'
+
+  - capture:
+      name: net-check-ok
+      format: png
+      fresh: true
+
+  - assert_no_crash: {}

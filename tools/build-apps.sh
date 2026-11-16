@@ -17,6 +17,7 @@
 #   fixtures/build/apps/svg-viewbox.apk
 #   fixtures/build/apps/offscreen-pager.apk
 #   fixtures/build/apps/insets-probe.apk
+#   fixtures/build/apps/net-check.apk
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -220,6 +221,13 @@ done
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).
+# --- net-check ---------------------------------------------------------------
+# SPIKE-NET fixture: apps that need the real network. HttpURLConnection GET of
+# https://example.com; the status code (or the exception class) goes into a
+# TextView, plus the ConnectivityManager report.
+build_apk net-check
+
+# --- keystore-probe ----------------------------------------------------------
 build_apk keystore-probe
 
 # insets-probe is the W7 window-model fixture: an edge-to-edge Activity that

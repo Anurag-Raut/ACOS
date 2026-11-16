@@ -1,5 +1,13 @@
 # SPIKE-NET — report (ADR-0030 spike gate: real network through pasta)
 
+> **Session 2 update (2026-11-16).** The LAN block is now a proven boundary and the
+> seccomp `AF_INET` gate was found broken and fixed. Item 2's fixture exists and builds;
+> the app-level `acos verify --engine art` run and the A/B gate were **not** run — the
+> host disk crossed the gate (81 % → 87 %) before them. **Recommended default: `off`**
+> (strictly: no A/B numbers, so no evidence that `on` is free). The session-2 verdicts
+> are in [§10](#10-session-2-verdicts) and the transcript in
+> `research/spike-net/LOG.md` §"Session 2".
+
 Branch `t3/spike-net` (worktree `/home/Qui/.t3/worktrees/acos/t3-2f28c6b2-bee01c021cecb8a6`).
 All spike code is gated on `ACOS_SPIKE_NET=1`; with the variable unset the sandbox flags,
 the seccomp program, the session startup and the connectivity capabilities are the
@@ -182,3 +190,102 @@ beyond noise), the recommendation is:
   `--no-map-gw`-only phrasing is measurably insufficient.
 * Accept `default off` for v0.4.0 pending the A/B, or schedule the A/B as the first task
   of the network track.
+
+
+---
+
+## 10. Session 2 verdicts
+
+Branch `t3/spike-net-session-2-gate` (base `4638d9f4`, session 1's work). Everything is
+still gated on `ACOS_SPIKE_NET=1`; with the flag unset the sandbox flags, the seccomp
+program and the connectivity bits are the previous ones.
+
+| # | Item | Verdict | Evidence |
+|---|---|---|---|
+| 1 | drop rules installed before the guest, and the guest cannot change them | **GO** | `results/handoff/SPIKE-NET/boundary/test-run.log`, `boundary/net-boundary.txt`, `boundary/guest-probe.stdout`; `crates/acos-art/tests/spike_net_boundary.rs` |
+| 2 | `fixtures/apps/net-check` + scenario (items 4/5/6 at app level) | **PARTIAL — fixture built, run not executed** | `fixtures/apps/net-check/`, `scenarios/net-check.yaml`, `fixtures/build/apps/net-check.apk` |
+| 3 | A/B gate (cold, warm, PSS, N=20 density), `ab-compare.py` rule | **NOT DONE** | — |
+| 4 | default recommendation strictly from the A/B | **`off`** (no A/B numbers ⇒ no evidence `on` is free) | this section |
+
+### 10.1 The boundary (item 1) — GO
+
+`spike_net::boundary_script()` replaces the old `/bin/sh -c '<guard>; exec "$@"'` string:
+
+* netfilter chain `acos-net-drop` (RFC1918, `169.254/16`, `100.64/10`) jumped from
+  `OUTPUT`, **verified rule by rule** before bwrap starts;
+* **fail closed**: no `iptables`, a chain that cannot be created or a rule that does not
+  verify ⇒ exit `111`, guest never started (proven by
+  `boundary_failure_never_starts_the_guest`: `boundary=failed reason=no-iptables exit=111`,
+  empty probe stdout);
+* the shim dumps the chain before *and* after the guest; a change would be a diff.
+
+Measured from inside the real guest mount view (`boundary/guest-probe.stdout`):
+
+```
+probe: uid 10192
+probe: cap-eff 0000000000000000                      no capability at all
+probe: userns 4026533637   shim/netns owner 4026533566   a *child* user namespace
+probe: socket-netlink DENIED:EACCES                  AF_NETLINK blocked by seccomp
+probe: so-mark DENIED:EPERM                          no CAP_NET_ADMIN over the netns
+probe: socket-raw-inet DENIED:EPERM
+probe: iptables-flush exit=1
+probe: iptables-flush-output iptables: Failed to initialize nft: Permission denied
+probe: connect-public OK                             the feature still works
+probe: connect-lan Operation now in progress         DROPped (connect times out)
+probe: connect-host-loopback Connection refused      `-T none --no-splice`
+```
+
+The two chain dumps in `boundary/net-boundary.txt` are identical (`rules=installed` /
+`rules=after … guest-exit=0`), and the host read `/proc/<guest>/status` while the guest ran:
+`CapEff=0` and the guest's userns differs from the netns owner's. `SO_MARK` is the
+capability probe because the kernel checks it against `sock_net(sk)->user_ns` — the very
+right needed to rewrite the chain.
+
+### 10.2 The seccomp `AF_INET` branch was dead code — fixed here
+
+Session 1's `allow_inet` branch was emitted *after* `jeq(AF_UNIX, list, deny)`, so every
+non-`AF_UNIX` family hit the deny terminal first: with the flag on, `socket(AF_INET)`
+returned `EACCES`. Session 1's probe ran inside the netns but outside bwrap, and an ART
+boot reaches first frame without creating its own socket, so nothing noticed.
+
+Fixed to fall through `AF_UNIX → AF_INET → AF_INET6` into the syscall deny list.
+`seccomp::tests::socket_families_follow_the_spike_flag` interprets the emitted cBPF
+program: `AF_INET`/`AF_INET6` are allowed only with the flag, `AF_NETLINK` is denied
+either way, and the flag-off program is unchanged. That test fails on session 1's code.
+
+### 10.3 Fixture and app-level proof (items 4/5/6) — PARTIAL
+
+`fixtures/apps/net-check` (`HttpURLConnection` GET of `https://example.com`; `id=status`
+holds `HTTP 200` or the exception class name; `id=connectivity` holds the
+`ConnectivityManager` report) and `scenarios/net-check.yaml` (asserts `HTTP 200`,
+`internet=true validated=true`, and the `NetCheck` log line) exist and the APK builds
+(`ACOS_APP_ONLY=net-check tools/build-apps.sh`).
+
+**Not run:** `ACOS_SPIKE_NET=1 acos verify --engine art` on it. The release `acos` was
+built (1 m 12 s) but an ART verify run writes 0.5–2 GB of artifacts
+(`results/handoff/ARTGC.md`) and the host disk crossed the gate before it could start.
+So item 4 (dnsproxyd) and item 5 (`LinkProperties`) keep session 1's PARTIAL status, and
+item 6 has a fixture but no measurement.
+
+### 10.4 A/B gate (item 3) — NOT DONE, default stays `off`
+
+No interleaved reps, no cold/warm launch, no PSS, no N=20 density; nothing is quoted as an
+A/B number. Per the owner's condition the recommendation is unchanged:
+
+> **Default `off`** for v0.4.0. `real` is available only if the A/B
+> (`tools/bench/acos-bench.sh` off vs on, interleaved, `tools/bench/ab-compare.py` gate)
+> later shows no metric worse than +5 %/+2 ms (fast metrics) and nothing outside the old
+> gate's band.
+
+Costs that measurement will have to absorb, now measured in structure rather than time:
+one `pasta` process per session, one `/bin/sh` shim that stays resident for the session's
+lifetime (needed for the after-dump), 5 + 1 `iptables` invocations at session start (each
+is an `xtables-nft-multi` exec), one DNS responder thread in the launcher.
+
+### 10.5 Remaining work, smallest first
+
+1. `ACOS_SPIKE_NET=1 acos verify --engine art --apk fixtures/build/apps/net-check.apk
+   --scenario scenarios/net-check.yaml` and the same with the flag off (must show
+   `UnknownHostException`/`SocketException`) — closes items 4/5/6.
+2. `LinkProperties` addresses/DNS/routes in `acos-services::connectivity` (item 5 parity).
+3. The A/B gate, on a host under the disk gate.
