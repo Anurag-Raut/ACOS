@@ -1213,3 +1213,9 @@ unavailable, never a silent offline) and the supervisor restarts it; host ports 
 session on request by a REDIRECT on that session's veth; the relay supervisor and `acos-netd`
 (dnsproxyd) live in the existing host broker; per-session pasta (BASE) stays as a fallback arm for
 one release. Option A (own userspace stack) remains the upgrade path if the throughput ceiling bites.
+ADR-0030 note (NET1, orchestrator): the relay supervisor is its own lazily started process
+(`acos-netd`), not code inside the MCP broker, because it must own the user namespace that holds the
+relay netns and every session netns, and plain CLI use has no broker. Host-port opt-in is pasta
+`-t <port>` plus a per-session DROP for sessions that did not opt in (simpler than an fd-passing
+REDIRECT proxy). Attach cost 15–49 ms (exec-based) is accepted for v0.4.0; rtnetlink (~2 ms) moves to
+the v0.5.0 density work.
