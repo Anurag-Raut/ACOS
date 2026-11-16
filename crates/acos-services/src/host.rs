@@ -164,6 +164,29 @@ pub trait ServiceObject: Send {
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
         Vec::new()
     }
+
+    /// The next instant at which this object's **own schedule** will have a
+    /// `system -> app` delivery ready (`None` = it has no timed feed).
+    ///
+    /// A timed feed is driven by the peer, not by a timer thread: the peer's
+    /// idle turn asks for this, sleeps until exactly that instant (or until a
+    /// guest frame arrives, whichever is first) and then calls
+    /// [`Self::advance_timed`]. That is what keeps an idle session with no timed
+    /// module at zero wakeups, and it is why a scheduled delivery lands on its
+    /// deadline instead of on the next poll.
+    fn next_delivery_deadline(&self) -> Option<std::time::Instant> {
+        None
+    }
+
+    /// Advance this object's schedule to `now`, queueing every delivery that is
+    /// due (and at most one extra, so a late wakeup never storms the guest).
+    ///
+    /// Called only from [`ServiceHost::take_timed_deliveries`], i.e. from the
+    /// peer's idle turn, for the same locking reason as
+    /// [`Self::drain_raw_deliveries`].
+    fn advance_timed(&mut self, now: std::time::Instant) {
+        let _ = now;
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
@@ -1382,11 +1405,28 @@ impl ServiceHost {
     /// action handler) would deadlock, which is exactly why this is not folded
     /// into [`Self::take_deliveries`].
     pub fn take_timed_deliveries(&mut self) -> Vec<PendingDelivery> {
+        let now = std::time::Instant::now();
+        for object in self.dynamic.values_mut() {
+            object.advance_timed(now);
+        }
         let mut out = std::mem::take(&mut self.deliveries);
         for object in self.dynamic.values_mut() {
             out.append(&mut object.drain_raw_deliveries());
         }
         out
+    }
+
+    /// The earliest instant at which a dynamic object's own schedule has a
+    /// delivery ready (`None` = nothing scheduled, so the peer may sleep until
+    /// a guest frame arrives).
+    ///
+    /// Read-only, and saturating: an object that is due *now* answers `now`.
+    #[must_use]
+    pub fn next_timed_deadline(&self) -> Option<std::time::Instant> {
+        self.dynamic
+            .values()
+            .filter_map(|object| object.next_delivery_deadline())
+            .min()
     }
 
     /// Drain lifecycle/log events from every constructed service.

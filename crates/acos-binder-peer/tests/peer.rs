@@ -538,3 +538,200 @@ fn wire_form_round_trips_a_null_binder_and_a_real_one() {
         assert_eq!(back.data_avail(), 0);
     }
 }
+
+// ---------------------------------------------------------------------------
+// ADR-0029 timed module deliveries: the peer sleeps until the deadline, not on
+// a fixed poll.
+// ---------------------------------------------------------------------------
+
+use std::os::unix::io::{FromRawFd, RawFd};
+use std::time::{Duration, Instant};
+
+use acos_binder_peer::{wait_for_idle, IdleWake};
+use acos_services::module::{ModuleConfig, ModuleRegistry, Profile};
+use acos_services::ServiceHost;
+
+/// A pair of connected Unix sockets: `(guest_side, peer_side)`. The guest side
+/// is kept alive and silent, exactly like an idle guest.
+fn silent_socketpair() -> (RawFd, RawFd) {
+    let mut fds = [0 as RawFd; 2];
+    let rc = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) };
+    assert_eq!(rc, 0, "socketpair: {}", std::io::Error::last_os_error());
+    (fds[0], fds[1])
+}
+
+/// A plain pipe: `(read, write)`.
+fn wakeup_pipe() -> (RawFd, RawFd) {
+    let mut fds = [0 as RawFd; 2];
+    let rc = unsafe { libc::pipe(fds.as_mut_ptr()) };
+    assert_eq!(rc, 0, "pipe: {}", std::io::Error::last_os_error());
+    (fds[0], fds[1])
+}
+
+fn wake(write: RawFd) {
+    let byte = 1u8;
+    let rc = unsafe { libc::write(write, (&byte as *const u8).cast::<libc::c_void>(), 1) };
+    assert_eq!(rc, 1);
+}
+
+/// A peer with `core` attached and nothing else.
+fn core_only_peer() -> Peer {
+    let mut host = ServiceHost::new();
+    let mut registry = ModuleRegistry::standard();
+    registry
+        .attach(&mut host, "core", Profile::Real, &ModuleConfig::default())
+        .expect("core attaches");
+    Peer::with_host(host, None)
+}
+
+#[test]
+fn an_idle_peer_with_no_timed_module_has_no_tick_wakeups() {
+    let mut peer = core_only_peer();
+    assert!(
+        peer.next_timed_deadline().is_none(),
+        "no attached module schedules a delivery, so there is nothing to wake for"
+    );
+    let (guest, _silent_guest) = silent_socketpair();
+    let (wake_read, wake_write) = wakeup_pipe();
+    // The stop wake arrives after two full seconds: the whole time the loop must
+    // sleep in one unbounded `poll(2)`, not tick.
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(2));
+        wake(wake_write);
+    });
+    let started = Instant::now();
+    let mut ticks = 0usize;
+    let mut waits = 0usize;
+    loop {
+        let deadline = peer
+            .next_timed_deadline()
+            .map(|due| due.saturating_duration_since(Instant::now()));
+        match wait_for_idle(guest, wake_read, deadline).expect("poll") {
+            IdleWake::Deadline => {
+                ticks += 1;
+                let _ = peer.tick();
+            }
+            IdleWake::Frame | IdleWake::Stop => break,
+        }
+        waits += 1;
+        assert!(waits < 8, "the peer must not poll: {waits} wait(s) in {ticks} tick(s)");
+    }
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed >= Duration::from_millis(1900),
+        "the peer slept until the stop wake, got {elapsed:?}"
+    );
+    assert_eq!(ticks, 0, "an idle session with no timed module must not tick");
+    assert_eq!(waits, 0, "one unbounded wait, no poll loop");
+    unsafe {
+        libc::close(guest);
+        libc::close(_silent_guest);
+        libc::close(wake_read);
+    }
+}
+
+#[test]
+fn a_scheduled_fix_fires_within_five_ms_of_its_deadline() {
+    const DESCRIPTOR: &str = "android.location.ILocationManager";
+    let mut host = ServiceHost::new();
+    let mut registry = ModuleRegistry::standard();
+    registry
+        .attach(&mut host, "core", Profile::Real, &ModuleConfig::default())
+        .expect("core attaches");
+    registry
+        .attach(
+            &mut host,
+            "location",
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
+        .expect("location attaches");
+    let mut peer = Peer::with_host(host, None);
+
+    // Register a Java listener exactly as `requestLocationUpdates` does, so the
+    // delivered fix becomes a `system -> app` frame with a driver handle.
+    let binder = peer
+        .host_mut()
+        .check_service("location")
+        .expect("lookup")
+        .expect("location is served");
+    let listener = 0x2233u64;
+    let mut data = Parcel::new();
+    data.write_interface_token(DESCRIPTOR).expect("token");
+    data.write_string16("gps").expect("provider");
+    data.write_int32(1);
+    data.write_string16("gps").expect("request provider");
+    data.write_int64(1000);
+    data.write_int32(0);
+    data.write_int64(0);
+    data.write_int64(0);
+    data.write_int32(i32::MAX);
+    data.write_int64(0);
+    data.write_float(0.0);
+    data.write_int64(0);
+    data.write_int32(0);
+    data.write_int32(0);
+    data.write_int32(0);
+    data.write_int32(0);
+    data.write_int32(0);
+    data.write_strong_binder(java(listener));
+    data.write_string16("dev.acos.fixtures.locationprobe")
+        .expect("package");
+    data.write_string16_opt(None).expect("tag");
+    data.write_string16("listener").expect("listener id");
+    data.set_data_position(0);
+    let mut reply = Parcel::new();
+    peer.host_mut()
+        .transact(binder, 3, &mut data, &mut reply, 0)
+        .expect("registerLocationListener");
+    // The registration itself notifies the listener; drop that first delivery so
+    // the measurement is about the track point.
+    peer.tick();
+
+    registry
+        .control(
+            peer.host_mut(),
+            "location",
+            "play_track",
+            &serde_json::json!({
+                "points": [{"lat": 37.1, "lng": -122.1}, {"lat": 37.2, "lng": -122.2}],
+                "interval_ms": 40
+            }),
+        )
+        .expect("play_track");
+    let deadline = peer
+        .next_timed_deadline()
+        .expect("a playing track schedules the next point");
+
+    let (guest, _silent_guest) = silent_socketpair();
+    let (wake_read, _wake_write) = wakeup_pipe();
+    let late = loop {
+        let wait = deadline.saturating_duration_since(Instant::now());
+        match wait_for_idle(guest, wake_read, Some(wait)).expect("poll") {
+            IdleWake::Deadline => break Instant::now().saturating_duration_since(deadline),
+            other => panic!("expected the track deadline, got {other:?}"),
+        }
+    };
+    let frames = peer.tick();
+    assert!(
+        !frames.is_empty(),
+        "the track point must reach the guest as a frame at its deadline"
+    );
+    assert_eq!(frames[0].ty, F_TXN);
+    assert_eq!(frames[0].target, listener);
+    assert!(
+        late <= Duration::from_millis(5),
+        "the fix fired {late:?} after its deadline (max 5 ms)"
+    );
+    assert_eq!(
+        peer.next_timed_deadline(),
+        Some(deadline + Duration::from_millis(40)),
+        "the schedule moves one interval per point, not by the time that elapsed"
+    );
+    unsafe {
+        libc::close(guest);
+        libc::close(_silent_guest);
+        libc::close(wake_read);
+        libc::close(_wake_write);
+    }
+}

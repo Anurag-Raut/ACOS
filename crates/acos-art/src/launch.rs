@@ -29,7 +29,9 @@ use crate::launcher::Outcome;
 use crate::logd::Logd;
 use crate::watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 use crate::{ArtRoot, Error, Result};
-use acos_binder_peer::{accept, close_frame_fds, listen, read_frame, write_frame, Frame, Peer};
+use acos_binder_peer::{
+    accept, close_frame_fds, listen, read_frame, wait_for_idle, write_frame, Frame, IdleWake, Peer,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
@@ -708,6 +710,10 @@ pub(crate) fn launch_session(
     let peer_stop = Arc::clone(&stop);
     let unsupported_log = staging.join("unsupported.jsonl");
     let (tx, rx) = mpsc::channel::<PeerSummary>();
+    // The peer sleeps in `poll(2)` until a guest frame or the earliest module
+    // deadline; this pipe is how the launcher's stop reaches that sleep.
+    let peer_wakeup = PeerWakeup::new().map_err(Error::Io)?;
+    let peer_wake_fd = peer_wakeup.read;
     let peer_log = unsupported_log.clone();
     let apk_for_peer = opts.apk.clone();
     // W10: the live session drives the same `InputHost` the window session
@@ -811,16 +817,15 @@ pub(crate) fn launch_session(
             };
             unsafe {
                 libc::close(listener);
-                // H4: the receive timeout notices `stop` after a guest death.
-                // Process exit closes this socket, which is the real wake.
-                // ADR-0029: it is also the idle tick that carries a module's
-                // *timed* delivery (a scripted location track, a sensor feed) to
-                // an idle guest: `Peer::tick` drains the host's
-                // `system -> app` queue on every turn, so 20 ms bounds how stale
-                // a scripted fix can be (50 wakeups/s on an idle session).
+                // H4: a guest death closes this socket, which is the real wake;
+                // the timeout only bounds a stall *inside* a frame, so it is
+                // generous. ADR-0029's timed module deliveries are not polled
+                // for: the peer sleeps in `poll(2)` until the earliest module
+                // deadline (or until the guest speaks, or the stop pipe fires),
+                // so an idle session with no timed module has zero wakeups.
                 let tv = libc::timeval {
-                    tv_sec: 0,
-                    tv_usec: 20_000,
+                    tv_sec: 1,
+                    tv_usec: 0,
                 };
                 libc::setsockopt(
                     client,
@@ -842,6 +847,7 @@ pub(crate) fn launch_session(
                 client,
                 &peer_stop,
                 &peer_control,
+                peer_wake_fd,
             );
             unsafe {
                 libc::close(client);
@@ -1699,6 +1705,9 @@ pub(crate) fn launch_session(
     // inside its scope. Both actions are idempotent and happen before any
     // capture/join, which is what bounds teardown after a guest death.
     stop.store(true, Ordering::Release);
+    // Wake the peer's idle wait: an idle session may be asleep until a deadline
+    // that will never come.
+    peer_wakeup.wake();
     cgroup.sample();
     if status.is_some() {
         cgroup.kill();
@@ -6612,12 +6621,73 @@ fn service_request(
     }
 }
 
+/// The launcher's half of the peer's idle wait: a self-pipe it writes to when it
+/// stops the session, so the peer can sleep in `poll(2)` until a guest frame or
+/// the earliest module deadline instead of pollong a socket on a timer.
+struct PeerWakeup {
+    read: RawFd,
+    write: RawFd,
+}
+
+impl PeerWakeup {
+    fn new() -> std::io::Result<Self> {
+        let mut fds = [0 as RawFd; 2];
+        let rc = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC | libc::O_NONBLOCK) };
+        if rc < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(Self {
+            read: fds[0],
+            write: fds[1],
+        })
+    }
+
+    /// Wake the peer's idle wait. Idempotent: the pipe is only a wakeup, the
+    /// `stop` flag carries the decision.
+    fn wake(&self) {
+        let byte = 1u8;
+        unsafe {
+            libc::write(
+                self.write,
+                (&byte as *const u8).cast::<libc::c_void>(),
+                1,
+            );
+        }
+    }
+}
+
+impl Drop for PeerWakeup {
+    fn drop(&mut self) {
+        unsafe {
+            libc::close(self.read);
+            libc::close(self.write);
+        }
+    }
+}
+
+/// Write `outs` to the guest and close their fds, reporting the first failure.
+fn write_out(fd: RawFd, outs: Vec<Frame>, context: &str) -> std::io::Result<()> {
+    for out in outs {
+        if let Err(error) = write_frame(fd, &out) {
+            eprintln!(
+                "peer-trace: write_frame FAILED {context}: {error} (ty={} seq={} code={} data={})",
+                out.ty, out.seq, out.code, out.data.len()
+            );
+            close_frame_fds(&out);
+            return Err(error);
+        }
+        close_frame_fds(&out);
+    }
+    Ok(())
+}
+
 fn serve(
     peer: &mut Peer,
     modules: &mut acos_services::module::ModuleRegistry,
     fd: RawFd,
     stop: &AtomicBool,
     control: &ServiceControl,
+    wake: RawFd,
 ) -> std::io::Result<()> {
     loop {
         // ADR-0029 item 4: drain live module requests between frames. The call
@@ -6655,39 +6725,46 @@ fn serve(
                 close_frame_fds(&out);
             }
         }
+        // ADR-0029: the idle turn waits for whichever comes first — a guest
+        // frame, the earliest **module** delivery deadline, or the launcher's
+        // stop wake. With no timed module the wait is unbounded, so an idle
+        // session costs no wakeups at all (the fixed 20 ms poll it replaces cost
+        // 50/s and still delivered a scripted fix up to 20 ms late).
+        let deadline = peer
+            .next_timed_deadline()
+            .map(|due| due.saturating_duration_since(Instant::now()));
+        match wait_for_idle(fd, wake, deadline)? {
+            IdleWake::Stop => {
+                // Drain the wakeup byte; `stop` is the decision.
+                let mut byte = 0u8;
+                unsafe {
+                    libc::read(wake, (&mut byte as *mut u8).cast::<libc::c_void>(), 1);
+                }
+                if stop.load(Ordering::Acquire) {
+                    return Ok(());
+                }
+                continue;
+            }
+            IdleWake::Deadline => {
+                write_out(fd, peer.tick(), "after a module deadline")?;
+                let _ = std::io::stderr().flush();
+                continue;
+            }
+            IdleWake::Frame => {}
+        }
         let frame: Frame = match read_frame(fd) {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            Err(e)
-                if (e.kind() == std::io::ErrorKind::WouldBlock
-                    || e.kind() == std::io::ErrorKind::TimedOut)
-                    && stop.load(Ordering::Acquire) =>
-            {
-                return Ok(())
-            }
-            // A live guest may be idle. Deliver what a module produced from its
-            // own thread (a scripted location track) and keep waiting: the
-            // timeout only exists to observe `stop`, not to end the session.
+            // poll(2) said readable but the frame is not (a short write from a
+            // dying guest): end the session, never spin.
             Err(e)
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     || e.kind() == std::io::ErrorKind::TimedOut =>
             {
-                for out in peer.tick() {
-                    if let Err(error) = write_frame(fd, &out) {
-                        eprintln!(
-                            "peer-trace: idle write_frame FAILED: {error} (ty={} seq={} code={} data={})",
-                            out.ty,
-                            out.seq,
-                            out.code,
-                            out.data.len()
-                        );
-                        close_frame_fds(&out);
-                        return Err(error);
-                    }
-                    close_frame_fds(&out);
+                if stop.load(Ordering::Acquire) {
+                    return Ok(());
                 }
-                let _ = std::io::stderr().flush();
-                continue
+                continue;
             }
             Err(e) => return Err(e),
         };

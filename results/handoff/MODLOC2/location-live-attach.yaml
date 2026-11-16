@@ -1,0 +1,82 @@
+# MODLOC2 evidence: a live module attach **and** detach as scenario steps.
+#
+# `service_ctl` is the scenario spelling of `acos_services {op: attach|detach}`
+# and `acos_service_ctl {module, op, args}`, so the whole lifecycle is in the
+# verdict instead of in an out-of-band driver script: the app starts with
+# `location` off, the scenario attaches it mid-run, feeds a fix, detaches it,
+# and reads the app's own next API call — the honest disabled-device answer plus
+# the structured "module is not attached" reply for the handle it still holds.
+version: 1
+name: location-live-attach
+description: location: attach scripted live, deliver a fix, detach, and read the app's honest answer.
+app: fixtures/build/apps/location-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 180000
+services:
+  - id: location
+    profile: off
+steps:
+  - launch:
+      activity: dev.acos.fixtures.locationprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 20000
+  # Off: the name answers the documented disabled-device node, never a fix.
+  - assert_text:
+      selector: {id: state}
+      text: {contains: "state=unavailable"}
+  - assert_text:
+      selector: {id: last}
+      text: {exact: "last=none"}
+  # Live attach: the same command `acos_services {op: "attach"}` sends.
+  - service_ctl:
+      module: location
+      op: attach
+      profile: scripted
+      config: {permissions: fine}
+  # The app re-runs its whole probe through the framework path it already used.
+  - tap: {id: check}
+  - wait_for:
+      selector: {id: state, text: {contains: "state=ready"}}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: state}
+      text: {contains: "providers=fused,gps,network,passive"}
+  # A control op on the module the scenario attached a moment ago.
+  - service_ctl:
+      module: location
+      op: set_location
+      args: {lat: 37.4220, lng: -122.0841, accuracy: 4.0, provider: gps}
+  - tap: {id: check}
+  - wait_for:
+      selector: {id: last, text: {contains: "37.4220"}}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: last}
+      text: {contains: "last=37.4220,-122.0841"}
+  - assert_text:
+      selector: {id: fix}
+      text: {contains: "fix=37.4220,-122.0841 provider=gps"}
+  # Live detach: the scenario proves the module stops answering.
+  - service_ctl: {module: location, op: detach}
+  - tap: {id: check}
+  - wait_for:
+      selector: {id: state, text: {contains: "state=unavailable"}}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: last}
+      text: {exact: "last=none"}

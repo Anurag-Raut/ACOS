@@ -99,7 +99,7 @@
 //!   refused with a structured error naming that gap, never accepted silently.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -508,6 +508,13 @@ pub struct ProviderState {
 }
 
 /// The scripted track a `play_track` control op started.
+///
+/// The track is a **schedule**, not a thread: [`LocationService`] publishes
+/// `next_due` through [`ServiceObject::next_delivery_deadline`] and advances it
+/// from [`ServiceObject::advance_timed`], which the peer's idle turn calls. So a
+/// session with no track has no pending deadline and the peer sleeps until the
+/// guest speaks (zero idle wakeups), and a scheduled point lands on its deadline
+/// rather than on the next poll.
 #[derive(Clone, Debug)]
 pub struct Track {
     /// What is playing, for the report.
@@ -520,6 +527,8 @@ pub struct Track {
     pub repeat: bool,
     /// How many points were delivered so far.
     pub delivered: u64,
+    /// When the next point is due (monotonic).
+    pub next_due: Instant,
 }
 
 /// The shared, thread-safe module state.
@@ -863,12 +872,11 @@ fn manifest_ref() -> &'static ModuleManifest {
     &MANIFEST
 }
 
-/// The module: shared state plus the track thread.
+/// The module: the shared state the service node and a `play_track` schedule
+/// read (`location` needs no thread: the peer's deadline wakeup drives it).
 pub struct LocationModule {
     state: Arc<Mutex<LocationState>>,
-    stop: Arc<AtomicBool>,
-    track: Option<std::thread::JoinHandle<()>>,
-    /// Monotonic stamp source shared with the service node and the track thread.
+    /// Monotonic stamp source shared with the service node.
     last_stamp: Stamp,
     profile: Profile,
 }
@@ -879,8 +887,6 @@ impl LocationModule {
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(LocationState::default())),
-            stop: Arc::new(AtomicBool::new(false)),
-            track: None,
             last_stamp: Stamp::new(),
             profile: Profile::Off,
         }
@@ -898,13 +904,10 @@ impl LocationModule {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// Stop the track thread (detach and `stop_track`).
-    fn stop_track_thread(&mut self) {
-        self.stop.store(true, Ordering::Release);
-        if let Some(handle) = self.track.take() {
-            let _ = handle.join();
-        }
-        self.stop = Arc::new(AtomicBool::new(false));
+    /// Stop the schedule (detach and `stop_track`): the node's
+    /// `next_delivery_deadline` answers `None` from then on.
+    fn stop_track(&mut self) {
+        self.lock().track = None;
     }
 
     /// The `delivered` control answer.
@@ -1129,6 +1132,8 @@ fn read_geocoder_params(data: &mut Parcel) -> Result<GeocoderParams> {
 /// The `ILocationManager` node.
 pub struct LocationService {
     state: Arc<Mutex<LocationState>>,
+    /// The session's monotonic stamp source (a delivered fix carries it).
+    stamp: Stamp,
 }
 
 impl LocationService {
@@ -1678,6 +1683,53 @@ impl ServiceObject for LocationService {
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
         std::mem::take(&mut self.lock().pending)
     }
+
+    /// The instant the playing track's next point is due (`None` = nothing is
+    /// scheduled, so the peer sleeps until the guest speaks).
+    fn next_delivery_deadline(&self) -> Option<Instant> {
+        self.lock().track.as_ref().map(|track| track.next_due)
+    }
+
+    /// Deliver every track point whose deadline has passed at `now` and move the
+    /// schedule forward by one interval per point.
+    ///
+    /// The peer calls this from its idle turn ([`ServiceHost::take_timed_deliveries`])
+    /// exactly at the deadline it slept until, so a scripted fix arrives on time
+    /// instead of up to a poll late. A wakeup that is late by several intervals
+    /// (a busy guest) delivers each missed point in order rather than collapsing
+    /// them, which is what a real provider does.
+    fn advance_timed(&mut self, now: Instant) {
+        let stamp = self.stamp.clone();
+        let mut state = self.lock();
+        loop {
+            let Some(track) = state.track.as_mut() else {
+                return;
+            };
+            if track.next_due > now {
+                return;
+            }
+            let index = usize::try_from(track.delivered).unwrap_or(0) % track.points.len().max(1);
+            let Some(mut fix) = track.points.get(index).cloned() else {
+                state.track = None;
+                return;
+            };
+            fix.time_ms = now_stamp().0;
+            let interval = track.interval;
+            let repeat = track.repeat;
+            let total = track.points.len();
+            track.next_due += interval;
+            deliver_to_registrations(&mut state, &stamp, fix);
+            let done = {
+                let track = state.track.as_mut().expect("the track is still playing");
+                track.delivered += 1;
+                !repeat && usize::try_from(track.delivered).unwrap_or(0) >= total
+            };
+            if done {
+                state.track = None;
+                return;
+            }
+        }
+    }
 }
 
 /// Transaction code used in the `registerLocationPendingIntent` refusal message
@@ -2007,6 +2059,7 @@ impl Module for LocationModule {
             DESCRIPTOR,
             Box::new(LocationService {
                 state: Arc::clone(&self.state),
+                stamp: self.last_stamp.clone(),
             }),
         );
         self.profile = profile;
@@ -2022,7 +2075,7 @@ impl Module for LocationModule {
     }
 
     fn detach(&mut self, _host: &mut ServiceHost) -> Result<()> {
-        self.stop_track_thread();
+        self.stop_track();
         {
             let mut state = self.lock();
             state.pending.clear();
@@ -2109,57 +2162,19 @@ impl Module for LocationModule {
                     .and_then(Value::as_str)
                     .unwrap_or("track")
                     .to_string();
-                self.stop_track_thread();
-                let stop = Arc::clone(&self.stop);
-                let state = Arc::clone(&self.state);
-                let stamp = self.last_stamp.clone();
+                self.stop_track();
+                // A schedule, not a thread: the first point is one interval out
+                // and the peer's deadline wakeup (`ServiceObject::advance_timed`)
+                // delivers it. `next_due` is what the peer sleeps until.
                 let track = Track {
                     label: label.clone(),
                     points: fixes.clone(),
                     interval: Duration::from_millis(interval_ms),
                     repeat,
                     delivered: 0,
+                    next_due: Instant::now() + Duration::from_millis(interval_ms),
                 };
-                self.lock().track = Some(track.clone());
-                let handle = std::thread::Builder::new()
-                    .name("acos-location-track".into())
-                    .spawn(move || {
-                        let mut index = 0usize;
-                        loop {
-                            if stop.load(Ordering::Acquire) {
-                                return;
-                            }
-                            std::thread::sleep(track.interval);
-                            if stop.load(Ordering::Acquire) {
-                                return;
-                            }
-                            let Some(mut fix) = track.points.get(index).cloned() else {
-                                return;
-                            };
-                            fix.time_ms = now_stamp().0;
-                            {
-                                let mut state = state
-                                    .lock()
-                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                                deliver_to_registrations(&mut state, &stamp, fix);
-                                if let Some(track) = state.track.as_mut() {
-                                    track.delivered += 1;
-                                }
-                            }
-                            index += 1;
-                            if index >= track.points.len() {
-                                if track.repeat {
-                                    index = 0;
-                                } else {
-                                    return;
-                                }
-                            }
-                        }
-                    })
-                    .map_err(|error| {
-                        ServiceError::Internal(format!("play_track thread: {error}"))
-                    })?;
-                self.track = Some(handle);
+                self.lock().track = Some(track);
                 Ok(json!({
                     "track": label,
                     "points": fixes.len(),
@@ -2168,7 +2183,7 @@ impl Module for LocationModule {
                 }))
             }
             "stop_track" => {
-                self.stop_track_thread();
+                self.stop_track();
                 let stopped = self.lock().track.take().is_some();
                 Ok(json!({"stopped": stopped}))
             }
