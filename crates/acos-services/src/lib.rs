@@ -68,6 +68,8 @@ pub mod module; // ADR-0029: service modules, profiles, tombstones, conformance 
 pub mod modules; // ADR-0029: the shipped non-core modules
 pub mod native_libs; // W17: APK x86_64 libs -> per-run nativeLibraryDir
 pub mod parcelable;
+pub mod pending_intent; // MODNOTIF4: PendingIntent sender records + the IIntentSender nodes
+pub mod permissions; // MODNOTIF2: the one runtime-permission table
 pub mod pms;
 pub mod provider;
 pub mod registry;

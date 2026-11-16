@@ -106,6 +106,24 @@ fn the_vibrator_module_passes_the_conformance_kit() {
     run_in_quiet_process("feedback.vibrator");
 }
 
+/// MODNOTIF2: the permissions module takes a `core` name over, so its kit run
+/// has one extra property the vibrator's has not: after detach the name must
+/// answer **core's** answer again, not be absent (a bare host has no core, so
+/// the kit sees it absent there — `modnotif2_permissions.rs` covers the session
+/// case with core attached).
+#[test]
+fn the_permissions_module_passes_the_conformance_kit() {
+    run_in_quiet_process("system.permissions");
+}
+
+/// MODNOTIF4: the notifications module takes the `notification` name over from
+/// `core` and its records are real state, so it owes the same kit as the
+/// permissions module.
+#[test]
+fn the_notifications_module_passes_the_conformance_kit() {
+    run_in_quiet_process("system.notifications");
+}
+
 #[test]
 fn the_telephony_module_passes_the_conformance_kit() {
     run_in_quiet_process("net.telephony");

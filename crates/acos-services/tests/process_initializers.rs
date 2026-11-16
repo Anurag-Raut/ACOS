@@ -192,6 +192,7 @@ fn an_unusable_initializer_fails_manifest_validation() {
                 name: "test",
                 descriptor: "android.os.ITest",
             }],
+            replaces: &[],
             process_initializers: items,
             features: &[],
             providers: &[],

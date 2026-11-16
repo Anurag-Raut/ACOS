@@ -1202,8 +1202,19 @@ impl Parcel {
     /// every incoming request looks object-free, and a handler that must find a
     /// client binder in the request — an `ISynchronousResultReceiver`, an
     /// `IIntentReceiver` — never sees it.
+    ///
+    /// `unmarshall` copies bytes without rebuilding the object table, so a
+    /// caller that imports a wire parcel (and rewrites its binder objects)
+    /// records them here. The table is what `marshall`/`frame_from_parcel` walk
+    /// to re-emit the wire stability records, and what `acos-services`'
+    /// `writeValue` length check uses to account for the stripped records.
     pub fn register_object(&mut self, offset: usize) {
-        self.objects.push(offset);
+        match self.objects.binary_search(&offset) {
+            // Offsets arrive in ascending order; keep the table sorted so the
+            // marshaller can walk it with a single cursor.
+            Ok(_) => {}
+            Err(index) => self.objects.insert(index, offset),
+        }
     }
 
     /// `nativeFreeBuffer` / `Parcel.recycle`: drop data, objects and fds.

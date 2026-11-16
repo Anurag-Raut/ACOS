@@ -124,6 +124,10 @@ fn manifest_ref() -> &'static ModuleManifest {
             name: sensors::SERVICE_NAME,
             descriptor: sensors::SENSOR_SERVER_DESCRIPTOR,
         }],
+        // `core` publishes the node and the module installs the feed into it,
+        // so the name is not replaced (MODNOTIF2's `replaces` is for the
+        // `notification`/`permission` names whose factory moves).
+        replaces: &[],
         process_initializers: &[],
         features: &[],
         providers: &[],

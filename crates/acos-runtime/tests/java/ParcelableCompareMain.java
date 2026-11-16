@@ -1,3 +1,8 @@
+import android.app.Notification;
+import android.app.PendingIntent;
+import android.content.IIntentReceiver;
+import android.content.IIntentSender;
+import android.content.Intent;
 import android.bluetooth.BluetoothDevice;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -7,7 +12,9 @@ import android.content.pm.PermissionInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
+import android.graphics.drawable.Icon;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.LocaleList;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -144,6 +151,49 @@ public final class ParcelableCompareMain {
         return b;
     }
 
+    /**
+     * A `Notification` in the MODNOTIF3 codec's shape: a resource small icon,
+     * title/text in the extras bundle, a group key and the channel id, with an
+     * optional content `PendingIntent`.
+     */
+    static Notification notification(PendingIntent contentIntent) throws Exception {
+        Notification n = new Notification();
+        n.when = 1700000000000L;
+        set(n, "creationTime", 1700000000000L);
+        set(n, "mSmallIcon",
+                Icon.createWithResource("dev.acos.fixtures.notif", 0x7f010001));
+        // The image's `Notification()` seeds a default `audioAttributes` and
+        // `STREAM_DEFAULT`; the codec models the null/0 pair, so the case pins
+        // them explicitly (every other optional field is null too).
+        set(n, "audioStreamType", 0);
+        set(n, "audioAttributes", null);
+        n.number = 1;
+        n.contentIntent = contentIntent;
+        n.flags = 0x10; // FLAG_ONGOING_EVENT
+        set(n, "mGroupKey", "fixture-group");
+        Bundle extras = new Bundle();
+        extras.putString("android.title", "hello");
+        extras.putString("android.text", "world");
+        n.extras = extras;
+        n.visibility = 1;
+        set(n, "mChannelId", "fixture-channel");
+        set(n, "mTimeout", 0L);
+        return n;
+    }
+
+    /**
+     * The `IIntentSender` a `PendingIntent` wraps. A local `Binder` is enough:
+     * `PendingIntent.writeToParcel` writes it with `writeStrongBinder` and the
+     * system side only ever calls `send` on it.
+     */
+    static final class Sender extends IIntentSender.Stub {
+        @Override
+        public void send(int code, Intent intent, String resolvedType,
+                IBinder whitelistToken, IIntentReceiver finishedReceiver,
+                String requiredPermission, Bundle options) {
+        }
+    }
+
     interface Writer {
         void write(Parcel p) throws Exception;
     }
@@ -191,6 +241,21 @@ public final class ParcelableCompareMain {
             p.writeValue(Integer.valueOf(12));
             p.writeValue(null);
         });
+        emit("notification", p -> notification(null).writeToParcel(p, 0));
+        // The guest allocates the binder handle, so the harness reports the one
+        // the framework itself wrote; the Rust side builds the same
+        // `PendingIntent` with it and byte-compares the whole notification.
+        final Sender sender = new Sender();
+        emit("intent_sender", p -> p.writeStrongBinder(sender));
+        // `PendingIntent(IIntentSender)` is `@hide`, so the public SDK stub does
+        // not declare it; the runtime class does, and that is the constructor
+        // the framework itself uses to rebuild a PendingIntent from a binder.
+        final Class<?> iis = Class.forName("android.content.IIntentSender");
+        final java.lang.reflect.Constructor<?> ctor =
+                PendingIntent.class.getDeclaredConstructor(iis);
+        ctor.setAccessible(true);
+        final PendingIntent pending = (PendingIntent) ctor.newInstance(sender);
+        emit("notification_intent", p -> notification(pending).writeToParcel(p, 0));
 
         for (String arg : args) {
             int eq = arg.indexOf('=');
@@ -301,6 +366,21 @@ public final class ParcelableCompareMain {
                         got = ResolveInfo.CREATOR.createFromParcel(p);
                         check(((ResolveInfo) got).activityInfo != null, "resolve_info activityInfo");
                         check(((ResolveInfo) got).filter == null, "resolve_info filter is null");
+                        break;
+                    case "notification":
+                        got = Notification.CREATOR.createFromParcel(p);
+                        Notification n = (Notification) got;
+                        check(n.extras != null, "notification extras");
+                        check("hello".equals(n.extras.getString("android.title")),
+                                "notification title");
+                        check("world".equals(n.extras.getString("android.text")),
+                                "notification text");
+                        check("fixture-channel".equals(get(n, "mChannelId")),
+                                "notification channel");
+                        check(n.contentIntent == null, "notification contentIntent is null");
+                        check(n.number == 1, "notification number");
+                        check(n.flags == 0x10, "notification flags");
+                        check(get(n, "mSmallIcon") != null, "notification small icon");
                         break;
                     default:
                         throw new AssertionError("unknown case " + name);
