@@ -185,9 +185,9 @@ socket), `acos-mcp`'s
 `private_daemon::tests::private_dir_is_per_process_and_under_the_runtime_dir` and
 `default_session_tools_use_the_private_art_daemon` (need a short
 `ACOS_RUNTIME_DIR`, and that var must not be inherited when a test sets its own
-`XDG_RUNTIME_DIR`). `git diff -r rel-030 HEAD -- crates/acos-cli/src/live_registry.rs
-crates/acos-mcp/src/private_daemon.rs` is empty: none of that code is touched by
-this merge. All three pass with the short dirs used above; the logs in this
+`XDG_RUNTIME_DIR`). `git diff --stat rel-030 HEAD -- crates/acos-cli/src/live_registry.rs
+crates/acos-mcp/src/private_daemon.rs` prints nothing: none of that code is
+touched by this merge. All three pass with the short dirs used above; the logs in this
 directory are from runs with them.
 
 ## 7. What remains
