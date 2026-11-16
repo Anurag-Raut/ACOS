@@ -7,7 +7,7 @@
 
 use acos_binder_peer::{
     import_parcel_for, java_binder_id, owner_process, peer::MAX_JAVA_BINDERS, Frame, Peer,
-    TagRefusal, F_REQ, F_TXN, JAVA_TAG, NODE_TAG, TAG_PRIMARY,
+    ProcessConn, TagRefusal, F_REQ, F_TXN, JAVA_TAG, NODE_TAG, TAG_PRIMARY,
 };
 use acos_parcel::Parcel;
 use acos_services::codec;
@@ -380,5 +380,96 @@ fn connect_seqpacket(path: &str) -> std::os::fd::RawFd {
         let rc = libc::connect(fd, &sa as *const _ as *const libc::sockaddr, len);
         assert_eq!(rc, 0, "connect {path}: {}", std::io::Error::last_os_error());
         fd
+    }
+}
+
+/// MPROC7: the launch facts are evidence, not connection state.
+///
+/// The launcher classifies a run *after* the guest has ended, from
+/// `PeerSummary::{bind_bytes, delivered, txn_bytes, txn_delivered}`. MPROC2
+/// moved those facts into the per-connection `LaunchState` and wiped them in
+/// `disconnect_process`, so an ordinary launch whose guest exits right after
+/// `bindApplication` (the `until=application-created` watcher quits the looper)
+/// reported `application_created=false` / `GUEST_EXITED` even though the bind
+/// had been delivered. `launch_hang::ordinary_launch_to_application_created_stays_fast`
+/// failed on `mproc5b`/`mproc5c` for exactly that reason and passes again with
+/// the facts kept.
+#[test]
+fn launch_delivery_facts_survive_the_guest_connection() {
+    let mut peer = Peer::new();
+    // The primary process: `launch_bind_len`/`launch_txn_len` are that
+    // process's launch facts (the secondary processes' first launch moves onto
+    // the host encoder, MPROC7).
+    peer.register_process(TAG_PRIMARY, "dev.acos.fixtures.proc-a").unwrap();
+
+    // The guest pushes the two marshalled requests the launch protocol carries
+    // (`bindApplication`, then the one `ClientTransaction`).
+    push_launch(
+        &mut peer,
+        TAG_PRIMARY,
+        acos_binder_peer::peer::LAUNCH_PUSH_BIND,
+        b"bind-request-bytes",
+    );
+    push_launch(
+        &mut peer,
+        TAG_PRIMARY,
+        acos_binder_peer::peer::LAUNCH_PUSH_TRANSACTION,
+        b"client-transaction-bytes",
+    );
+    assert_eq!(peer.launch_bind_len(), Some(18));
+    assert_eq!(peer.launch_txn_len(), Some(24));
+
+    peer.disconnect_process(TAG_PRIMARY);
+    assert!(
+        !peer.process(TAG_PRIMARY).is_some_and(ProcessConn::connected),
+        "the process is gone"
+    );
+    // The record of what the host delivered is still readable: it is what the
+    // launcher reports for a guest that ended before the launcher stopped it.
+    assert_eq!(
+        peer.launch_bind_len(),
+        Some(18),
+        "the delivered bind request is evidence after the guest died"
+    );
+    assert_eq!(
+        peer.launch_txn_len(),
+        Some(24),
+        "the delivered launch transaction is evidence after the guest died"
+    );
+
+    // A new guest under the same tag starts with a clean launch state: nothing
+    // from the previous instance may be replayed into it.
+    peer.register_process(TAG_PRIMARY, "dev.acos.fixtures.proc-a").unwrap();
+    assert_eq!(peer.launch_bind_len(), None);
+    assert_eq!(peer.launch_txn_len(), None);
+}
+
+/// Push one `acos.launch` request frame from process `tag` (the guest's
+/// `pushToPeer` in `LaunchMain.java`).
+fn push_launch(peer: &mut Peer, tag: u32, code: u32, bytes: &[u8]) {
+    let mut parcel = Parcel::new();
+    parcel
+        .write_interface_token("dev.acos.art.ILaunch")
+        .expect("interface token");
+    parcel
+        .write_byte_array(Some(bytes))
+        .expect("byte array");
+    let base = Frame {
+        ty: F_REQ,
+        seq: 7,
+        code,
+        flags: 0,
+        target: NODE_TAG | acos_binder_peer::peer::LAUNCH_NODE,
+        ..Default::default()
+    };
+    let frame = acos_binder_peer::frame_from_parcel(F_REQ, &base, &parcel);
+    let out = peer.handle_tagged(tag, frame);
+    assert_eq!(out.len(), 1, "the push is answered on the caller's connection");
+    assert_eq!(out[0].0, tag);
+    let mut reply = import_parcel_for(tag, &out[0].1);
+    let code = reply.read_int32().expect("reply status");
+    if code != 0 {
+        let msg = reply.read_string16().ok().flatten();
+        panic!("launch push refused: code={code} msg={msg:?}");
     }
 }

@@ -713,9 +713,20 @@ impl Peer {
     }
 
     /// Mark a process's connection closed and drop what it owned: its Java
-    /// binder table, its launch state, and every binder the host recorded as
-    /// owned by it (a delivery to a dead process must fail, not reach another
-    /// process's handle).
+    /// binder table and every binder the host recorded as owned by it (a
+    /// delivery to a dead process must fail, not reach another process's
+    /// handle).
+    ///
+    /// The launch state (whether `bindApplication` and the launch
+    /// `ClientTransaction` were stashed and delivered, and the app-thread wire)
+    /// is **kept**: it is the record of what the host already did for this
+    /// process, and the launcher reads it after the guest has ended to classify
+    /// the outcome (`PeerSummary`). Dropping it here made an ordinary launch
+    /// whose guest exits right after `bindApplication` look like a launch whose
+    /// bind never happened (`application_created=false`, `GUEST_EXITED`). A
+    /// process that reconnects under the same tag gets a fresh
+    /// [`ProcessConn`] from [`Self::register_process`], so nothing stale is
+    /// ever delivered to a new guest.
     ///
     /// Returns `(jave binders dropped, host binder records dropped)`.
     pub fn disconnect_process(&mut self, tag: u32) -> (usize, usize) {
@@ -725,7 +736,6 @@ impl Peer {
                 conn.connected = false;
                 binders = conn.java_binders.len();
                 conn.java_binders.clear();
-                conn.launch = LaunchState::default();
                 eprintln!(
                     "acos-binder-peer: process tag {tag} disconnected 
                      ({binders} java binders dropped)"
