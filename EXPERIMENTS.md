@@ -5030,3 +5030,75 @@ itself is pinned by `acos-art`'s `launch::rel3h_unhandled_input_tests::gate`
 unit tests (ack floor, confirmation window, posted-draw restart, pending-work
 reset). Follow-up (not this track): dispatch touches through the real view chain
 so a non-clickable listener runs.
+
+## E2.24 — FLAKEWIN: the launch `Adding window failed` flake is the binder driver's unlocked transaction-buffer allocator — MEASURED (defect proven; end-to-end flake not re-observed)
+
+- **Date / commit:** 2026-11-16, branch `flakewin` off `rel-030` `0e3719bf` (fix commit `a8bf0f42`).
+- **Question / goal:** the v0.3.0 candidate's launch flake — guest
+  `LOOPER_THREW: java.lang.RuntimeException: Adding window failed` →
+  `GUEST_EXIT_AFTER_RESUME` at launch, passing on re-run. What did
+  `IWindowSession.addToDisplayAsUser` actually answer, and why?
+- **Method:** decoded the guest's own crash report from
+  `results/handoff/REL3H2/rel3-art-tests-run1.log` and the preserved S3ab
+  occurrence (`results/bench/S3ab-evidence/repro-n20-binder-parcel/`) against
+  AOSP `Parcel.readException`/`createException` (`.cache/aosp`, r75) and
+  libbinder `ipcSetDataReference`; killed `Frame`/`Parcel` offsets against the
+  shim's writer (`crates/acos-services/src/window_session.rs`); audited the
+  guest driver (`crates/acos-binder-peer/native/binder_driver.c`) for every
+  writer of a delivered buffer; launched 4 800 fresh ART guests (counter +
+  hello-views, concurrency 1 and 4, `results/handoff/FLAKEWIN/launch-loop.sh`)
+  against the pre-fix and the fixed driver; plus a host-side two-thread race
+  through the real allocator.
+- **Inputs:** `fixtures/build/apps/counter.apk`, `hello-views.apk`; image API-34;
+  NDK 27.1 clang; shared boot image `fixed-c3663021f50cd4c5`.
+- **Result — the reply was not a reply.** The guest read exception code
+  `-1040187388` = `0xC2000004` (a `writeInterfaceToken` prelude, not a
+  `Parcel.EX_*` code), message `null` (the token's `-1` workSourceUid read as a
+  String16 length), remote-stack size `20`, "stack" `android.view.IWindow`, and
+  `ipcSetDataReference: unsupported type object (7209057) at offset 16`
+  (`0x006E0061` = `'a','n'` of `android.…`). Object offset **16** is the add
+  reply's own first object (`exception header, result, presence,
+  isInitialized`, then the `InputChannel` token); offset 16 is also where an
+  `IWindow` request's token body starts. So the guest held the add reply's
+  **object table** with another transaction's **data** — the
+  `IWindow.dispatchAppVisibility` request the shim sends right after the add
+  reply.
+- **Result — the cause.** `binder_driver.c`'s `mm_alloc` was a **lock-free** bump
+  heap, and the driver allocates concurrently by design: `build_reply` (the
+  reply, on the thread blocked in `transact`) and `deliver_incoming` (a
+  peer-initiated `BR_TRANSACTION`, on the looper thread) both call it with
+  `g.mu` released. Two callers read the same `g_bump`, got the same offset, and
+  the second `memcpy` overwrote the first parcel in place — data from one
+  transaction, object table from the other, exactly §1. AOSP's `binder_alloc`
+  takes `alloc->mutex` for the same reason.
+- **Result — the regression test.** 4 threads × 50 000 allocations through the
+  real `native/txn_heap.c`: pre-fix `duplicates=7979 overlaps=101657` of 200 000
+  (`results/handoff/FLAKEWIN/regression-before-fix.log`); fixed
+  `duplicates=0 overlaps=0`. Committed as
+  `crates/acos-binder-peer/tests/txn_heap.rs`.
+- **Result — launch loops.** Fixed driver: 1 600/1 600 launches (800 at
+  concurrency 1, 800 at concurrency 4) plus 400/400 on the final tree. Pre-fix
+  driver: **0 failures in 3 800 launches** (800 at concurrency 1, 3 000 at
+  concurrency 4). That is the honest caveat: the real rate is ~1e-3 per launch
+  (2 in ~3 000 resets, S3ab) and the collision needs a ~2 ns window, so a
+  launch loop cannot resolve it — P(0 failures in 3 800) ≈ e^-2.5. The loop
+  confirms no regression, not the fix's e2e effect. A 2 ms widened allocation
+  window (fault injection, never shipped) also passed 6/6 because in that
+  ordering the *delivery* (later writer) is the corrupted parcel, not the reply.
+- **Implementation:** `native/txn_heap.{c,h}` (new, leaf-mutex heap,
+  host-compilable), `binder_driver.c` uses it, heap exhaustion is named
+  (`ART_RESOURCE_LIMIT`) and yields `BR_FAILED_REPLY` instead of a hang,
+  `build.rs` + `acos-art` `build_driver` compile the unit and hash it into the
+  driver stamp and the build-cache key (`v3`), so no cached `.so` can carry the
+  old allocator.
+- **Trade-offs / regressions:** one `pthread_mutex_lock`/`unlock` pair per
+  delivered transaction (both call sites were already off the `g.mu` path, so no
+  lock ordering change). No gate or test changed. `cargo test --release -p
+  acos-services -p acos-art` 575 passed / 0 failed; `-p acos-binder-peer` 17/17.
+- **Fidelity / evidence:** real ART, release; `results/handoff/FLAKEWIN/REPORT.md`
+  (analysis, cohort table `launch-loops-summary.txt`, `loops/*.jsonl`,
+  `cargo-test-services-art.log`, `regression-before-fix.log`, `launch-loop.sh`).
+- **Open:** the flake is fixed by cause, not by reproduction. Smallest next
+  action: a guest-side assert on every `addToDisplayAsUser` reply
+  (`table[0] == 16 && data[0..4] == 0`) so the next occurrence is caught with
+  its parcel, and a safe block re-use policy for the still-monotonic heap.
