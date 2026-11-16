@@ -64,20 +64,56 @@ pub const INTENT_FIELD_COMPONENT: usize = crate::parcelable::INTENT_COMPONENT;
 pub const INTENT_FIELD_CATEGORIES: usize = crate::parcelable::INTENT_CATEGORIES;
 /// `Intent.mExtras` (`Bundle`).
 pub const INTENT_FIELD_EXTRAS: usize = crate::parcelable::INTENT_EXTRAS;
+/// `Intent.mType`.
+pub const INTENT_FIELD_TYPE: usize = crate::parcelable::INTENT_TYPE;
+/// `Intent.mIdentifier`.
+pub const INTENT_FIELD_IDENTIFIER: usize = crate::parcelable::INTENT_IDENTIFIER;
+/// `Intent.mFlags`.
+pub const INTENT_FIELD_FLAGS: usize = crate::parcelable::INTENT_FLAGS;
+/// `Intent.mSourceBounds` (a `Rect` parcelable, or null).
+pub const INTENT_FIELD_SOURCE_BOUNDS: usize = crate::parcelable::INTENT_SOURCE_BOUNDS;
+/// `Intent.mSelector` (a nested `Intent`, or null).
+pub const INTENT_FIELD_SELECTOR: usize = crate::parcelable::INTENT_SELECTOR;
+/// `Intent.mClipData` (a `ClipData` parcelable, or null).
+pub const INTENT_FIELD_CLIP_DATA: usize = crate::parcelable::INTENT_CLIP_DATA;
+/// `Intent.mContentUserHint`.
+pub const INTENT_FIELD_CONTENT_USER_HINT: usize = crate::parcelable::INTENT_CONTENT_USER_HINT;
 
 /// The typed intent facts the AMS state machine resolves against.
-#[derive(Debug, Clone, Default, PartialEq)]
+///
+/// These are the fields of the real `android.content.Intent` the session acts
+/// on: the resolver needs action/data/type/categories/component/package, and
+/// `Intent.fillIn` (PIFILLIN) needs every field the merge copies — including
+/// `type`, `identifier`, `flags`, `selector`, `sourceBounds` and `clipData`.
+/// A field the codec cannot carry (a non-null `Uri` body) stays a structured
+/// refusal in [`crate::parcelable::read_intent`], never a silent `None`.
+#[derive(Debug, Clone, PartialEq)]
 pub struct IntentFacts {
     /// `Intent.getAction()`.
     pub action: Option<String>,
     /// `Intent.getDataString()`.
     pub data: Option<String>,
+    /// `Intent.getType()`.
+    pub type_: Option<String>,
+    /// `Intent.getIdentifier()`.
+    pub identifier: Option<String>,
+    /// `Intent.getFlags()`.
+    pub flags: i32,
     /// `Intent.getPackage()`.
     pub package: Option<String>,
     /// Explicit component `(package, class)`.
     pub component: Option<(String, String)>,
+    /// `Intent.getSourceBounds()` — `(left, top, right, bottom)`.
+    pub source_bounds: Option<[i32; 4]>,
     /// `Intent.getCategories()`.
     pub categories: Vec<String>,
+    /// `Intent.getSelector()`.
+    pub selector: Option<Box<IntentFacts>>,
+    /// `Intent.getClipData()`: presence only (the codec carries the parcelable
+    /// value but does not interpret it).
+    pub clip_data: Option<Parcelable>,
+    /// `Intent.getContentUserHint()` (`UserHandle.USER_CURRENT` =-2 when unset).
+    pub content_user_hint: i32,
     /// `Intent.getExtras()` (string/int/bool values; other types recorded as
     /// present without a value).
     pub extras: BTreeMap<String, Extra>,
@@ -109,6 +145,29 @@ pub enum Extra {
     Parcelable(crate::value::Parcelable),
     /// A value of a type ACOS records but does not interpret.
     Present,
+}
+
+impl Default for IntentFacts {
+    fn default() -> Self {
+        // `Intent()` leaves `mContentUserHint` at `UserHandle.USER_CURRENT`
+        // (`-2`), which `Intent.writeToParcel` writes and `fillIn` compares
+        // against; a `0` here would claim a user hint the frame never had.
+        Self {
+            action: None,
+            data: None,
+            type_: None,
+            identifier: None,
+            flags: 0,
+            package: None,
+            component: None,
+            source_bounds: None,
+            categories: Vec::new(),
+            selector: None,
+            clip_data: None,
+            content_user_hint: crate::fill_in::USER_CURRENT,
+            extras: BTreeMap::new(),
+        }
+    }
 }
 
 impl IntentFacts {
@@ -168,12 +227,51 @@ impl IntentFacts {
             .and_then(Value::as_bundle)
             .map(reduce_extras)
             .unwrap_or_default();
+        let selector = f
+            .get(INTENT_FIELD_SELECTOR)
+            .and_then(Value::as_parcelable)
+            .filter(|p| !matches!(p, Parcelable::Null))
+            .map(|p| Box::new(Self::from_parcelable(p)));
+        let clip_data = f
+            .get(INTENT_FIELD_CLIP_DATA)
+            .and_then(Value::as_parcelable)
+            .filter(|p| !matches!(p, Parcelable::Null))
+            .cloned();
+        let source_bounds = f
+            .get(INTENT_FIELD_SOURCE_BOUNDS)
+            .and_then(Value::as_parcelable)
+            .filter(|p| !matches!(p, Parcelable::Null))
+            .and_then(|p| {
+                let values = p.fields()?;
+                if values.len() != 4 {
+                    return None;
+                }
+                Some([
+                    values[0].as_int()?,
+                    values[1].as_int()?,
+                    values[2].as_int()?,
+                    values[3].as_int()?,
+                ])
+            });
         Self {
             action: f.get(INTENT_FIELD_ACTION).and_then(Value::as_str).map(str::to_string),
             data: f.get(INTENT_FIELD_DATA).and_then(Value::as_str).map(str::to_string),
+            type_: f.get(INTENT_FIELD_TYPE).and_then(Value::as_str).map(str::to_string),
+            identifier: f
+                .get(INTENT_FIELD_IDENTIFIER)
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            flags: f.get(INTENT_FIELD_FLAGS).and_then(Value::as_int).unwrap_or(0),
             package: f.get(INTENT_FIELD_PACKAGE).and_then(Value::as_str).map(str::to_string),
             component,
+            source_bounds,
             categories,
+            selector,
+            clip_data,
+            content_user_hint: f
+                .get(INTENT_FIELD_CONTENT_USER_HINT)
+                .and_then(Value::as_int)
+                .unwrap_or(crate::fill_in::USER_CURRENT),
             extras,
         }
     }
@@ -194,27 +292,74 @@ impl IntentFacts {
                 ],
             )
         });
+        let source_bounds = self.source_bounds.map(|[left, top, right, bottom]| {
+            Parcelable::ordered(
+                "android.graphics.Rect",
+                vec![
+                    Value::Int(left),
+                    Value::Int(top),
+                    Value::Int(right),
+                    Value::Int(bottom),
+                ],
+            )
+        });
+        // `Intent.writeToParcel` writes `mCategories.size()`, so an empty set and
+        // a null set are the same bytes — but `fillIn` distinguishes them
+        // (`other.mCategories != null`), and `Intent.readFromParcel` answers
+        // null for count 0. Writing the empty list as null keeps the round trip
+        // faithful to the wire.
+        let categories = if self.categories.is_empty() {
+            Value::StringList(None)
+        } else {
+            Value::StringList(Some(self.categories.iter().cloned().map(Some).collect()))
+        };
         Parcelable::ordered(
             crate::parcelable::INTENT_CLASS,
             vec![
                 Value::Str(self.action.clone()),
                 Value::Str(self.data.clone()),
-                Value::Str(None),           // type
-                Value::Str(None),           // identifier
-                Value::Int(0),              // flags
+                Value::Str(self.type_.clone()),
+                Value::Str(self.identifier.clone()),
+                Value::Int(self.flags),
                 Value::Str(self.package.clone()),
                 Value::Parcelable(component.unwrap_or(Parcelable::Null)),
-                Value::Parcelable(Parcelable::Null), // sourceBounds
-                Value::StringList(Some(
-                    self.categories.iter().cloned().map(Some).collect(),
-                )),
-                Value::Parcelable(Parcelable::Null), // selector
-                Value::Parcelable(Parcelable::Null), // clipData
-                Value::Int(-2),                      // contentUserHint
-                Value::Bundle(Some(encode_extras(&self.extras))),
+                Value::Parcelable(source_bounds.unwrap_or(Parcelable::Null)),
+                categories,
+                Value::Parcelable(
+                    self.selector
+                        .as_deref()
+                        .map(Self::to_parcelable)
+                        .unwrap_or(Parcelable::Null),
+                ),
+                Value::Parcelable(self.clip_data.clone().unwrap_or(Parcelable::Null)),
+                Value::Int(self.content_user_hint),
+                // An Intent with no extras has a **null** `mExtras` (AOSP only
+                // creates the Bundle on the first `putExtra`), and `fillIn`
+                // distinguishes null from present for its `contentUserHint`
+                // side effect. Writing the empty map as an empty bundle would
+                // claim a bundle the original never had.
+                Value::Bundle(if self.extras.is_empty() {
+                    None
+                } else {
+                    Some(encode_extras(&self.extras))
+                }),
                 Value::Parcelable(Parcelable::Null), // originalIntent
             ],
         )
+    }
+
+    /// `Intent.fillIn(other, flags)` (AOSP `Intent.java:11530`), over the facts.
+    ///
+    /// The rules live in [`crate::fill_in::fill_in_value`], the one implementation
+    /// of the AOSP method: this converts the facts to the real Intent value, runs
+    /// it, and reduces the answer back, so the reduced path cannot drift from the
+    /// byte-verified one. Returns the `FILL_IN_*` change mask AOSP returns.
+    pub fn fill_in(&mut self, other: &Self, flags: i32) -> i32 {
+        let mut target = self.to_parcelable();
+        let changes = crate::fill_in::fill_in_value(&mut target, &other.to_parcelable(), flags)
+            .unwrap_or(0);
+        *self = Self::from_parcelable(&target);
+        changes
     }
 }
 
