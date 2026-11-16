@@ -1079,7 +1079,13 @@ fn wait_for_keeps_polling_through_unsettled_polls() {
         "two unsettled polls, match on poll 3: {:?}",
         outcome.verdict.failure
     );
-    assert_eq!(polls, 3);
+    // REL3A §2: the match appears on poll 3, but a content-stable verdict needs
+    // a second content-settled observation at least one window later, so the
+    // wait confirms it on a later poll instead of passing on the first sample.
+    assert!(
+        polls >= 4,
+        "the content verdict must be confirmed on a later settled poll, got {polls}"
+    );
 }
 
 /// ...and a screen that never settles is still a TIMEOUT at the wait_for

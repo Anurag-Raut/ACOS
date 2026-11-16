@@ -109,6 +109,12 @@ pub const SETTLE_REASON_UNSETTLED: &str = "unsettled";
 /// (REL3A §1: the default for text/tree steps).
 pub const SETTLE_REASON_STRICT_FELL_BACK: &str = "strict-did-not-settle";
 
+/// The `reason` of an auto-fallback observation whose backend reported no settle
+/// record at all. REL3A §2: the executor asked for content, but nothing confirmed
+/// it; the record is labelled `mode: strict` with `fallback_unconfirmed: true`
+/// rather than claiming a content-stable observation the backend never measured.
+pub const SETTLE_REASON_FALLBACK_UNCONFIRMED: &str = "fallback-unconfirmed";
+
 /// REL3A §2: the uniform settle record every step and reply publishes.
 ///
 /// `{mode, settled, waited_ms, reason}` are always present; the mode-specific

@@ -965,6 +965,12 @@ impl ServeEngine {
     ) -> Envelope {
         let trust = held.trust;
         let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+        // REL3A: every serve verb starts from the strict observation rule. Serve
+        // never asks for a content observation (its tree verbs select
+        // `settle: strict|fast|content` explicitly through `tree_with_settle`),
+        // and a rule left over from a verify step must never leak into a verb's
+        // capture/pixel evidence.
+        session.set_observation_settle("strict");
         // Correctness first: a dead guest must never answer from its cache.
         // Every verb starts with the child's own liveness, not with a frame.
         if let Some(exit) = session.liveness() {

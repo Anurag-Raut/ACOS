@@ -1,0 +1,71 @@
+# REL3A regression: the observation settle rule is scoped, never sticky.
+#
+# The bug this pins down (found in review): `wait_for` falls back from strict to
+# the content-stable rule on this forever-animating screen, and the session kept
+# `observation_settle = content` afterwards. The next `tap` (a fast navigation
+# action, so its own bound frame is not content) leaves it in place, and the
+# `assert_region` capture then binds a freshly *content*-settled frame - pixels
+# that were still animating - and passes. That is a false green: content
+# stability proves the tree, never the pixels.
+#
+# The fixed behaviour:
+#   * the executor scopes the rule to the observation loop and restores strict;
+#   * `frame()` consumes `content` once and restores strict;
+#   * `capture()` refuses a frame bound by a content record outright.
+# So the final strict capture can never settle on this screen and the scenario
+# must NOT pass. A pass here means the content rule leaked into pixel evidence.
+version: 1
+name: rel3a-content-sticky
+description: >-
+  A content-fallback wait followed by a fast tap must not leave the session in
+  content mode: the following assert_region takes its own strict capture and
+  cannot pass on a screen whose pixels never settle.
+app: fixtures/build/apps/settle-lab.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+animations: on
+expectation: non_pass
+budgets:
+  memory_mib: 512
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.settletab/.MainActivity
+      clear_state: true
+  # Start the endless animation with a navigation action (fast: binds the first
+  # fresh sample, never a content-stable frame, so the bound-settle ledger is
+  # not content and cannot mask the sticky-mode bug).
+  - tap:
+      selector: {id: progress_start}
+      settle: fast
+  # No `settle` key: auto. Strict cannot settle the spinner, so this must fall
+  # back to the content-stable rule and pass there.
+  - wait_for:
+      selector: {id: progress_stop}
+      timeout_ms: 15000
+  # A second fast navigation action after the content observation. Its frame is
+  # fast; if the observation rule leaked, this is where the session stays
+  # content.
+  - tap:
+      selector: {id: rapid_inc}
+      settle: fast
+  # The pixel claim. It must take a strict capture of its own; on this screen
+  # that cannot settle, so it must not pass.
+  - assert_region:
+      x: 0
+      y: 0
+      w: 200
+      h: 200
+      min_distinct_colors: 1

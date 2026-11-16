@@ -864,6 +864,35 @@ fn apply_expectation(
     });
 }
 
+/// REL3A: one observation's settle rule, scoped and never sticky.
+///
+/// `Backend::set_observation_settle` is session state: if the executor left it
+/// at `content`, every later observation (`capture`, a pixel assertion, the next
+/// action's frame) would inherit a rule it never asked for. A content-settled
+/// frame is not pixel evidence, so that leak is a false pass. The guard sets the
+/// rule for one call and restores `strict` on **every** exit path, including an
+/// early `return` or a panic in the observation.
+struct ObservationScope<'a> {
+    backend: &'a mut dyn Backend,
+}
+
+impl<'a> ObservationScope<'a> {
+    fn new(backend: &'a mut dyn Backend, mode: ObservationSettle) -> Self {
+        backend.set_observation_settle(mode);
+        Self { backend }
+    }
+
+    fn backend(&mut self) -> &mut dyn Backend {
+        self.backend
+    }
+}
+
+impl Drop for ObservationScope<'_> {
+    fn drop(&mut self) {
+        self.backend.set_observation_settle(ObservationSettle::Strict);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn execute_step(
     backend: &mut dyn Backend,
@@ -886,6 +915,11 @@ fn execute_step(
     let Some(step_ref) = step.as_step() else {
         return StepExec::unsupported(Capability::StaticManifest, "step has no recognised kind");
     };
+    // REL3A: the observation settle rule is scoped to the observation loops
+    // below. A step that does not observe (launch, capture, reset, a pixel
+    // assertion) starts from the strict rule, so a previous `wait_for` content
+    // fallback can never leak into its pixels.
+    backend.set_observation_settle(ObservationSettle::Strict);
     match step_ref {
         StepRef::Launch(launch) => {
             capabilities_used.insert(Capability::Launch.as_str().to_string());
@@ -984,6 +1018,14 @@ fn execute_step(
             // still unsettled, that settle TIMEOUT (with its evidence) is the
             // step's result.
             let mut unsettled: Option<BackendError> = None;
+            // REL3A §2: a content verdict is a *stability* claim, so one sample
+            // is never enough. The condition must hold on two consecutive
+            // content-settled observations at least one content window apart
+            // (explicit `settle: content` and the automatic fallback alike)
+            // before the step may pass. A poll that is not satisfied (or never
+            // settled) clears the pending confirmation.
+            let content_window = Duration::from_millis(crate::settle::content_window_ms(None));
+            let mut content_confirmation: Option<Instant> = None;
             loop {
                 polls += 1;
                 let mode = match requested {
@@ -994,11 +1036,15 @@ fn execute_step(
                 // P12b: the step's own settle budget, applied (and reset) for
                 // this observation. A previous step's budget must never leak.
                 backend.set_settle_timeout(wait.settle_timeout_ms);
-                backend.set_observation_settle(mode);
+                // REL3A: the rule is scoped to this one observation; the guard
+                // restores strict on every exit path.
+                let mut scope = ObservationScope::new(backend, mode);
+                let backend = scope.backend();
                 let attempt_started = Instant::now();
                 match backend.refresh() {
                     Err(error) if is_settle_timeout(&error) => {
                         settle_wait_ms += attempt_started.elapsed().as_millis() as u64;
+                        content_confirmation = None;
                         if requested.is_none() && mode == ObservationSettle::Strict {
                             // REL3A: strict settle cannot settle this screen (an
                             // endless animation). The tree content may still be
@@ -1042,12 +1088,24 @@ fn execute_step(
                             settle_wait_ms + attempt_started.elapsed().as_millis() as u64,
                             fell_back_from,
                         );
+                        let observed_at = Instant::now();
                         last = Some(observation);
                         if satisfied {
-                            let mut exec = StepExec::pass();
-                            exec.observation = last;
-                            exec.settle = settle_record;
-                            return exec;
+                            let confirmed = mode != ObservationSettle::Content
+                                || content_confirmation.is_some_and(|first| {
+                                    observed_at.duration_since(first) >= content_window
+                                });
+                            if confirmed {
+                                let mut exec = StepExec::pass();
+                                exec.observation = last;
+                                exec.settle = settle_record;
+                                return exec;
+                            }
+                            // The first content-settled observation that holds:
+                            // remember when it was seen and wait for the second.
+                            content_confirmation.get_or_insert(observed_at);
+                        } else {
+                            content_confirmation = None;
                         }
                     }
                     Err(error) => {
@@ -1089,13 +1147,18 @@ fn execute_step(
                         ProtocolError::new(
                             ErrorCode::Timeout,
                             format!(
-                                "wait_for timed out after {} ms: selector {} did not satisfy the condition (require_visible={}){}",
+                                "wait_for timed out after {} ms: selector {} did not satisfy the condition (require_visible={}){}{}",
                                 wait.timeout_ms, wait.selector, wait.require_visible,
                                 offscreen.as_ref().map_or_else(String::new, |node| format!(
                                     "; it DID match a node that is not visible to the user (bounds {}, visible_bounds {}) — scroll it into view first",
                                     node.get("bounds").and_then(serde_json::Value::as_str).unwrap_or("?"),
                                     node.get("visible_bounds").and_then(serde_json::Value::as_str).unwrap_or("<none>"),
-                                ))
+                                )),
+                                if content_confirmation.is_some() {
+                                    "; it DID match on a content-settled observation, but the content verdict needs a second settled observation at least one window later before it may pass"
+                                } else {
+                                    ""
+                                },
                             ),
                         )
                         .with_hint(
@@ -1111,6 +1174,7 @@ fn execute_step(
                             "require_visible": wait.require_visible,
                             "selector": wait.selector,
                             "offscreen_match": offscreen,
+                            "content_confirmation_pending": content_confirmation.is_some(),
                             "settle": exec.settle,
                             "last_frame_seq": last.as_ref().map(|observation| observation.frame.frame_seq),
                         })),
@@ -1548,7 +1612,23 @@ fn observation_assertion(
                 return failure;
             }
             let evaluated = evaluate(&observation);
-            if evaluated.result.passed {
+            // REL3A §2: a content verdict needs a second content-settled
+            // observation at least one window later. When a `timeout_ms` gives
+            // us the room to take it, do not short-circuit on the bound frame's
+            // content record: go through the poll loop (which confirms it).
+            // Without `timeout_ms` the old cheap single-observation path is
+            // unchanged (see AGENT_GUIDE: `settle` takes effect with
+            // `timeout_ms` on assertions).
+            let bound_is_content = observation
+                .settle
+                .as_ref()
+                .and_then(|settle| settle.get("mode"))
+                .and_then(serde_json::Value::as_str)
+                == Some("content");
+            let needs_content_confirmation = timeout_ms.is_some()
+                && (requested == Some(ObservationSettle::Content)
+                    || (requested.is_none() && bound_is_content));
+            if evaluated.result.passed && !needs_content_confirmation {
                 let mut exec = StepExec::passed_assertion(evaluated);
                 exec.settle = settle_record_of(&observation, requested.unwrap_or(ObservationSettle::Strict), 0, None);
                 exec.observation = Some(observation);
@@ -1577,6 +1657,9 @@ fn observation_assertion(
     let mut attempts = 0u64;
     let mut last_evaluated: Option<(SessionObservation, Evaluated)> = first;
     let mut unsettled: Option<BackendError> = None;
+    // The same two-consecutive-content-observations rule as `wait_for`.
+    let content_window = Duration::from_millis(crate::settle::content_window_ms(None));
+    let mut content_confirmation: Option<Instant> = None;
     loop {
         attempts += 1;
         let mode = match requested {
@@ -1584,11 +1667,14 @@ fn observation_assertion(
             None if fell_back_from.is_some() => ObservationSettle::Content,
             None => ObservationSettle::Strict,
         };
-        backend.set_observation_settle(mode);
+        // REL3A: scoped to this observation; strict is restored on every exit.
+        let mut scope = ObservationScope::new(backend, mode);
+        let backend = scope.backend();
         let attempt_started = Instant::now();
         match backend.refresh() {
             Err(error) if is_settle_timeout(&error) => {
                 waited_ms += attempt_started.elapsed().as_millis() as u64;
+                content_confirmation = None;
                 if requested.is_none() && mode == ObservationSettle::Strict {
                     // The same auto rule as `wait_for`: the event settle cannot
                     // settle this screen, so try the content-stable rule instead
@@ -1621,13 +1707,24 @@ fn observation_assertion(
                     waited_ms + attempt_started.elapsed().as_millis() as u64,
                     fell_back_from,
                 );
+                let observed_at = Instant::now();
                 let passed = evaluated.result.passed;
                 last_evaluated = Some((observation.clone(), evaluated));
                 if passed {
-                    let mut exec = StepExec::passed_assertion(last_evaluated.take().expect("just set").1);
-                    exec.settle = settled;
-                    exec.observation = Some(observation);
-                    return exec;
+                    let confirmed = mode != ObservationSettle::Content
+                        || content_confirmation.is_some_and(|first| {
+                            observed_at.duration_since(first) >= content_window
+                        });
+                    if confirmed {
+                        let mut exec =
+                            StepExec::passed_assertion(last_evaluated.take().expect("just set").1);
+                        exec.settle = settled;
+                        exec.observation = Some(observation);
+                        return exec;
+                    }
+                    content_confirmation.get_or_insert(observed_at);
+                } else {
+                    content_confirmation = None;
                 }
             }
             Err(error) => return StepExec::backend_error(&error, backend.id(), context),
@@ -1720,17 +1817,36 @@ fn settle_record_of(
     });
     match record {
         Some(record) => Some(record),
-        // No backend record: the observation exists, so say which rule the
-        // executor asked for, and that the backend did not name its own.
+        // No backend record: the backend did not confirm anything. REL3A §2: an
+        // observation may never be labelled `mode: content` on the executor's
+        // own say-so, so an unconfirmed auto fallback is reported as `strict`
+        // with `fallback_unconfirmed: true` (and the mode that was asked for).
         None => Some({
+            let unconfirmed = mode == ObservationSettle::Content;
+            let reported_mode = if unconfirmed {
+                ObservationSettle::Strict
+            } else {
+                mode
+            };
+            let reason = if unconfirmed {
+                crate::settle::SETTLE_REASON_FALLBACK_UNCONFIRMED
+            } else {
+                crate::settle::SETTLE_REASON_SETTLED
+            };
             let mut record = crate::settle::observation_settle_record(
-                mode,
+                reported_mode,
                 true,
                 waited_ms,
-                crate::settle::SETTLE_REASON_SETTLED,
+                reason,
             );
-            if let (Some(from), Some(object)) = (fell_back_from, record.as_object_mut()) {
-                object.insert("fallback_from".into(), serde_json::json!(from));
+            if let Some(object) = record.as_object_mut() {
+                if unconfirmed {
+                    object.insert("fallback_unconfirmed".into(), serde_json::json!(true));
+                    object.insert("requested_mode".into(), serde_json::json!(mode.as_str()));
+                }
+                if let Some(from) = fell_back_from {
+                    object.insert("fallback_from".into(), serde_json::json!(from));
+                }
             }
             record
         }),
@@ -3973,6 +4089,12 @@ mod rel3a_settle_tests {
         text_missing_polls: usize,
         /// How many refreshes have run.
         polls: usize,
+        /// How many content-settled refreshes have run.
+        content_polls: usize,
+        /// REL3A §2: when set, only the *first* content-settled observation
+        /// satisfies the text condition; every later one is content-stable but
+        /// no longer holds it. A single-sample content pass returns here.
+        flip_after_first_content: bool,
         frame_seq: u64,
         cached: Option<SessionObservation>,
     }
@@ -3985,6 +4107,8 @@ mod rel3a_settle_tests {
                 next_mode: ObservationSettle::Strict,
                 text_missing_polls: 0,
                 polls: 0,
+                content_polls: 0,
+                flip_after_first_content: false,
                 frame_seq: 1,
                 cached: None,
             };
@@ -4130,7 +4254,16 @@ mod rel3a_settle_tests {
             let mode = self.next_mode;
             self.modes.push(mode.as_str());
             self.frame_seq += 1;
-            let text_ready = self.polls > self.text_missing_polls;
+            if mode == ObservationSettle::Content {
+                self.content_polls += 1;
+            }
+            let text_ready = if self.flip_after_first_content
+                && mode == ObservationSettle::Content
+            {
+                self.content_polls == 1
+            } else {
+                self.polls > self.text_missing_polls
+            };
             let observation = match mode {
                 ObservationSettle::Strict => {
                     if self.animating {
@@ -4177,7 +4310,16 @@ mod rel3a_settle_tests {
         Scenario::from_yaml_str(yaml).expect("scenario parses")
     }
 
-    fn run(scenario_yaml: &str, mut backend: AnimatingBackend) -> RunOutcome {
+    fn run(scenario_yaml: &str, backend: AnimatingBackend) -> RunOutcome {
+        run_recording(scenario_yaml, backend).0
+    }
+
+    /// Like [`run`], but also returns the observation settle modes the backend
+    /// was asked for, in order (REL3A: the mode must not leak between steps).
+    fn run_recording(
+        scenario_yaml: &str,
+        mut backend: AnimatingBackend,
+    ) -> (RunOutcome, Vec<&'static str>) {
         let temp = std::env::temp_dir().join(format!(
             "acos-rel3a-{}-{}",
             std::process::id(),
@@ -4204,8 +4346,9 @@ mod rel3a_settle_tests {
         let parsed = scenario(scenario_yaml);
         let outcome = run_scenario(&parsed, &options, &mut backend, &crate::clock::FixedClock::new(1_794_318_674_000))
             .expect("run_scenario succeeds");
+        let modes = backend.modes.clone();
         let _ = std::fs::remove_dir_all(&temp);
-        outcome
+        (outcome, modes)
     }
 
     const HEADER: &str = "version: 1\nname: rel3a\napp: dev.acos.fixtures.counter\nisolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, density_dpi: 420}\n";
@@ -4230,6 +4373,51 @@ mod rel3a_settle_tests {
         assert_eq!(settle["fallback_from"], "strict");
         assert!(settle["waited_ms"].as_u64().is_some(), "waited_ms is present");
         assert!(settle["reason"].as_str().is_some(), "reason is present");
+    }
+
+    /// REL3A §2: one content-settled observation is not a verdict. A wait whose
+    /// condition holds on the first stable sample and then stops holding must
+    /// not pass (it did before REL3A: the first sample was returned at once).
+    #[test]
+    fn a_single_content_observation_does_not_pass_a_wait() {
+        let mut backend = AnimatingBackend::new(true);
+        backend.flip_after_first_content = true;
+        let outcome = run(
+            &format!(
+                "{HEADER}steps:\n  - wait_for: {{selector: {{id: results}}, timeout_ms: 1500}}\n"
+            ),
+            backend,
+        );
+        let step = &outcome.verdict.steps[0];
+        assert!(
+            !step.status.is_pass(),
+            "a condition that held on one content sample and then stopped must not pass"
+        );
+    }
+
+    /// REL3A §1: the observation settle rule is scoped to the observation loop.
+    /// A content fallback in a wait must be restored to strict before the next
+    /// step's capture; otherwise the capture inherits `settle: content` and
+    /// reports pixel evidence from a frame that never stopped animating.
+    #[test]
+    fn a_content_observation_does_not_leak_into_the_next_capture() {
+        let (outcome, modes) = run_recording(
+            &format!(
+                "{HEADER}steps:\n  - wait_for: {{selector: {{id: title}}, timeout_ms: 4000}}\n  - capture: {{name: leak, fresh: true}}\n"
+            ),
+            AnimatingBackend::new(true),
+        );
+        assert_eq!(outcome.verdict.steps[0].status, Status::Pass);
+        let capture = &outcome.verdict.steps[1];
+        assert!(
+            !capture.status.is_pass(),
+            "a capture after a content wait must use the strict rule, not inherit content"
+        );
+        assert_eq!(
+            modes.last().copied(),
+            Some("strict"),
+            "the capture must observe under strict, got modes {modes:?}"
+        );
     }
 
     /// REL3A §1/§3: `wait_for {settle: strict}` never silently falls back, and a
@@ -4406,6 +4594,31 @@ mod rel3a_settle_tests {
         let error = step.error.as_ref().expect("structured error");
         let details = error.details.as_ref().expect("details");
         assert_eq!(details["reason"], "content_settle_pixel");
+    }
+
+    /// REL3A §2: an observation may only be labelled `mode: content` on a
+    /// backend settle record. With no record the executor names the rule it
+    /// asked for and marks it unconfirmed - never a content verdict it did not
+    /// measure.
+    #[test]
+    fn an_unconfirmed_content_observation_is_labelled_strict() {
+        let backend = AnimatingBackend::new(false);
+        let observation = backend.observation(true, None);
+        let record = settle_record_of(
+            &observation,
+            ObservationSettle::Content,
+            12,
+            Some("strict"),
+        )
+        .expect("a record");
+        assert_eq!(record["mode"], "strict");
+        assert_eq!(record["fallback_unconfirmed"], true);
+        assert_eq!(record["requested_mode"], "content");
+        assert_eq!(record["settled"], true);
+        assert_eq!(
+            record["reason"],
+            crate::settle::SETTLE_REASON_FALLBACK_UNCONFIRMED
+        );
     }
 
     /// REL3A §1: `settle: fast` is rejected on waits and assertions at

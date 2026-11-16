@@ -1,0 +1,1537 @@
+{
+  "frame": {
+    "frame_seq": 3,
+    "produced_at": "2026-11-16T04:49:24.588Z",
+    "cause_id": "art",
+    "width": 1080,
+    "height": 2400,
+    "density": 420,
+    "content_hash": "0930b71b71c99dfe3bf044059cf5337d",
+    "meaningful": true,
+    "display_origin": [
+      0,
+      0
+    ],
+    "display_size": [
+      1080,
+      2400
+    ]
+  },
+  "package": "dev.acos.fixtures.settletab",
+  "nodes": [
+    {
+      "id": "n0_",
+      "class": "com.android.internal.policy.DecorView",
+      "resource_id": "",
+      "text": "",
+      "hint": "",
+      "content_desc": "",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visible_bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visible": true,
+      "enabled": true,
+      "focused": false,
+      "clickable": false,
+      "scrollable": false,
+      "checked": false,
+      "selected": false,
+      "password": false,
+      "children": [
+        {
+          "id": "n1_android:id/decor_content_parent",
+          "class": "com.android.internal.widget.ActionBarOverlayLayout",
+          "resource_id": "android:id/decor_content_parent",
+          "text": "",
+          "hint": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            0,
+            1080,
+            2337
+          ],
+          "visible_bounds": [
+            0,
+            0,
+            1080,
+            2337
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "selected": false,
+          "password": false,
+          "children": [
+            {
+              "id": "n2_android:id/content",
+              "class": "android.widget.FrameLayout",
+              "resource_id": "android:id/content",
+              "text": "",
+              "hint": "",
+              "content_desc": "",
+              "bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "visible_bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "visible": true,
+              "enabled": true,
+              "focused": false,
+              "clickable": false,
+              "scrollable": false,
+              "checked": false,
+              "selected": false,
+              "password": false,
+              "children": [
+                {
+                  "id": "n3_",
+                  "class": "android.widget.LinearLayout",
+                  "resource_id": "",
+                  "text": "",
+                  "hint": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    275,
+                    1080,
+                    2337
+                  ],
+                  "visible_bounds": [
+                    0,
+                    275,
+                    1080,
+                    2337
+                  ],
+                  "visible": true,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "selected": false,
+                  "password": false,
+                  "children": [
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        296,
+                        1059,
+                        412
+                      ],
+                      "visible_bounds": [
+                        21,
+                        296,
+                        1059,
+                        412
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/anim_start",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/anim_start",
+                          "text": "Anim 300ms",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            296,
+                            415,
+                            412
+                          ],
+                          "visible_bounds": [
+                            21,
+                            296,
+                            415,
+                            412
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/anim_text",
+                          "class": "android.widget.TextView",
+                          "resource_id": "dev.acos.fixtures.settletab:id/anim_text",
+                          "text": "anim-idle",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            298,
+                            1059,
+                            414
+                          ],
+                          "visible_bounds": [
+                            415,
+                            298,
+                            1059,
+                            412
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        412,
+                        1059,
+                        528
+                      ],
+                      "visible_bounds": [
+                        21,
+                        412,
+                        1059,
+                        528
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/delay40",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/delay40",
+                          "text": "Delay 40ms",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            412,
+                            415,
+                            528
+                          ],
+                          "visible_bounds": [
+                            21,
+                            412,
+                            415,
+                            528
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/delay40_text",
+                          "class": "android.widget.TextView",
+                          "resource_id": "dev.acos.fixtures.settletab:id/delay40_text",
+                          "text": "delay40-idle",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            414,
+                            1059,
+                            530
+                          ],
+                          "visible_bounds": [
+                            415,
+                            414,
+                            1059,
+                            528
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        528,
+                        1059,
+                        644
+                      ],
+                      "visible_bounds": [
+                        21,
+                        528,
+                        1059,
+                        644
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/delay200",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/delay200",
+                          "text": "Delay 200ms",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            528,
+                            415,
+                            644
+                          ],
+                          "visible_bounds": [
+                            21,
+                            528,
+                            415,
+                            644
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/delay200_text",
+                          "class": "android.widget.TextView",
+                          "resource_id": "dev.acos.fixtures.settletab:id/delay200_text",
+                          "text": "delay200-idle",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            530,
+                            1059,
+                            646
+                          ],
+                          "visible_bounds": [
+                            415,
+                            530,
+                            1059,
+                            644
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        644,
+                        1059,
+                        760
+                      ],
+                      "visible_bounds": [
+                        21,
+                        644,
+                        1059,
+                        760
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/delay1000",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/delay1000",
+                          "text": "Delay 1000ms",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            644,
+                            415,
+                            760
+                          ],
+                          "visible_bounds": [
+                            21,
+                            644,
+                            415,
+                            760
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/delay1000_text",
+                          "class": "android.widget.TextView",
+                          "resource_id": "dev.acos.fixtures.settletab:id/delay1000_text",
+                          "text": "delay1000-idle",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            646,
+                            1059,
+                            762
+                          ],
+                          "visible_bounds": [
+                            415,
+                            646,
+                            1059,
+                            760
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/delay1000_done",
+                          "class": "android.widget.TextView",
+                          "resource_id": "dev.acos.fixtures.settletab:id/delay1000_done",
+                          "text": "done",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            644,
+                            21,
+                            644
+                          ],
+                          "visible": false,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        760,
+                        1059,
+                        876
+                      ],
+                      "visible_bounds": [
+                        21,
+                        760,
+                        1059,
+                        876
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/bg_start",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/bg_start",
+                          "text": "Background 150ms",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            760,
+                            415,
+                            876
+                          ],
+                          "visible_bounds": [
+                            21,
+                            760,
+                            415,
+                            876
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/bg_text",
+                          "class": "android.widget.TextView",
+                          "resource_id": "dev.acos.fixtures.settletab:id/bg_text",
+                          "text": "bg-idle",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            762,
+                            1059,
+                            878
+                          ],
+                          "visible_bounds": [
+                            415,
+                            762,
+                            1059,
+                            876
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        876,
+                        1059,
+                        992
+                      ],
+                      "visible_bounds": [
+                        21,
+                        876,
+                        1059,
+                        992
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/chain_start",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/chain_start",
+                          "text": "Chain 3 hops",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            876,
+                            415,
+                            992
+                          ],
+                          "visible_bounds": [
+                            21,
+                            876,
+                            415,
+                            992
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/chain_text",
+                          "class": "android.widget.TextView",
+                          "resource_id": "dev.acos.fixtures.settletab:id/chain_text",
+                          "text": "chain-idle",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            878,
+                            1059,
+                            994
+                          ],
+                          "visible_bounds": [
+                            415,
+                            878,
+                            1059,
+                            992
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        992,
+                        1059,
+                        1108
+                      ],
+                      "visible_bounds": [
+                        21,
+                        992,
+                        1059,
+                        1108
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/dialog_start",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/dialog_start",
+                          "text": "Fade dialog",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            992,
+                            415,
+                            1108
+                          ],
+                          "visible_bounds": [
+                            21,
+                            992,
+                            415,
+                            1108
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/activity_start",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/activity_start",
+                          "text": "Activity transition",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            992,
+                            809,
+                            1108
+                          ],
+                          "visible_bounds": [
+                            415,
+                            992,
+                            809,
+                            1108
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/window_text",
+                          "class": "android.widget.TextView",
+                          "resource_id": "dev.acos.fixtures.settletab:id/window_text",
+                          "text": "window-idle",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            809,
+                            994,
+                            1059,
+                            1110
+                          ],
+                          "visible_bounds": [
+                            809,
+                            994,
+                            1059,
+                            1108
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        1108,
+                        1059,
+                        1224
+                      ],
+                      "visible_bounds": [
+                        21,
+                        1108,
+                        1059,
+                        1224
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/list_start",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/list_start",
+                          "text": "List smooth scroll",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            1108,
+                            415,
+                            1224
+                          ],
+                          "visible_bounds": [
+                            21,
+                            1108,
+                            415,
+                            1224
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/list_status",
+                          "class": "android.widget.TextView",
+                          "resource_id": "dev.acos.fixtures.settletab:id/list_status",
+                          "text": "list-idle",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            1110,
+                            1059,
+                            1226
+                          ],
+                          "visible_bounds": [
+                            415,
+                            1110,
+                            1059,
+                            1224
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_dev.acos.fixtures.settletab:id/fling_list",
+                      "class": "android.widget.ListView",
+                      "resource_id": "dev.acos.fixtures.settletab:id/fling_list",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        0,
+                        275,
+                        0,
+                        275
+                      ],
+                      "visible": false,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        1224,
+                        1059,
+                        1340
+                      ],
+                      "visible_bounds": [
+                        21,
+                        1224,
+                        1059,
+                        1340
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/progress_start",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/progress_start",
+                          "text": "Infinite progress",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            1224,
+                            415,
+                            1340
+                          ],
+                          "visible_bounds": [
+                            21,
+                            1224,
+                            415,
+                            1340
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/progress_stop",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/progress_stop",
+                          "text": "Stop",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            1224,
+                            678,
+                            1340
+                          ],
+                          "visible_bounds": [
+                            415,
+                            1224,
+                            678,
+                            1340
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/progress_indeterminate",
+                          "class": "android.widget.ProgressBar",
+                          "resource_id": "dev.acos.fixtures.settletab:id/progress_indeterminate",
+                          "text": "",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            678,
+                            1224,
+                            1059,
+                            1340
+                          ],
+                          "visible_bounds": [
+                            678,
+                            1224,
+                            1059,
+                            1340
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        1340,
+                        1059,
+                        1456
+                      ],
+                      "visible_bounds": [
+                        21,
+                        1340,
+                        1059,
+                        1456
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/lt_start",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/lt_start",
+                          "text": "LayoutTransition",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            1340,
+                            415,
+                            1456
+                          ],
+                          "visible_bounds": [
+                            21,
+                            1340,
+                            415,
+                            1456
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/lt_container",
+                          "class": "android.widget.LinearLayout",
+                          "resource_id": "dev.acos.fixtures.settletab:id/lt_container",
+                          "text": "",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            1340,
+                            1059,
+                            1456
+                          ],
+                          "visible_bounds": [
+                            415,
+                            1340,
+                            1059,
+                            1456
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        21,
+                        1456,
+                        1059,
+                        1572
+                      ],
+                      "visible_bounds": [
+                        21,
+                        1456,
+                        1059,
+                        1572
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/rapid_inc",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/rapid_inc",
+                          "text": "Rapid increment",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            21,
+                            1456,
+                            415,
+                            1572
+                          ],
+                          "visible_bounds": [
+                            21,
+                            1456,
+                            415,
+                            1572
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/rapid_reset",
+                          "class": "android.widget.Button",
+                          "resource_id": "dev.acos.fixtures.settletab:id/rapid_reset",
+                          "text": "Reset",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            415,
+                            1456,
+                            678,
+                            1572
+                          ],
+                          "visible_bounds": [
+                            415,
+                            1456,
+                            678,
+                            1572
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        },
+                        {
+                          "id": "n5_dev.acos.fixtures.settletab:id/rapid_count",
+                          "class": "android.widget.TextView",
+                          "resource_id": "dev.acos.fixtures.settletab:id/rapid_count",
+                          "text": "0",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            678,
+                            1456,
+                            1059,
+                            1572
+                          ],
+                          "visible_bounds": [
+                            678,
+                            1456,
+                            1059,
+                            1572
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": false,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main"
+                        }
+                      ],
+                      "package": "",
+                      "window": "main"
+                    }
+                  ],
+                  "package": "",
+                  "window": "main"
+                }
+              ],
+              "package": "",
+              "window": "main"
+            },
+            {
+              "id": "n2_android:id/action_bar_container",
+              "class": "com.android.internal.widget.ActionBarContainer",
+              "resource_id": "android:id/action_bar_container",
+              "text": "",
+              "hint": "",
+              "content_desc": "",
+              "bounds": [
+                0,
+                128,
+                1080,
+                275
+              ],
+              "visible_bounds": [
+                0,
+                128,
+                1080,
+                275
+              ],
+              "visible": true,
+              "enabled": true,
+              "focused": false,
+              "clickable": false,
+              "scrollable": false,
+              "checked": false,
+              "selected": false,
+              "password": false,
+              "children": [
+                {
+                  "id": "n3_android:id/action_bar",
+                  "class": "android.widget.Toolbar",
+                  "resource_id": "android:id/action_bar",
+                  "text": "",
+                  "hint": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    128,
+                    1080,
+                    275
+                  ],
+                  "visible_bounds": [
+                    0,
+                    128,
+                    1080,
+                    275
+                  ],
+                  "visible": true,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "selected": false,
+                  "password": false,
+                  "children": [
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.TextView",
+                      "resource_id": "",
+                      "text": "Settle Lab",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        166,
+                        281,
+                        237
+                      ],
+                      "visible_bounds": [
+                        42,
+                        166,
+                        281,
+                        237
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.ActionMenuView",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        1080,
+                        128,
+                        1080,
+                        275
+                      ],
+                      "visible": false,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main"
+                    }
+                  ],
+                  "package": "",
+                  "window": "main"
+                },
+                {
+                  "id": "n3_android:id/action_context_bar",
+                  "class": "com.android.internal.widget.ActionBarContextView",
+                  "resource_id": "android:id/action_context_bar",
+                  "text": "",
+                  "hint": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    128,
+                    0,
+                    128
+                  ],
+                  "visible": false,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "selected": false,
+                  "password": false,
+                  "children": [],
+                  "package": "",
+                  "window": "main"
+                }
+              ],
+              "package": "",
+              "window": "main"
+            }
+          ],
+          "package": "",
+          "window": "main"
+        },
+        {
+          "id": "n1_android:id/navigationBarBackground",
+          "class": "android.view.View",
+          "resource_id": "android:id/navigationBarBackground",
+          "text": "",
+          "hint": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            2337,
+            1080,
+            2400
+          ],
+          "visible_bounds": [
+            0,
+            2337,
+            1080,
+            2400
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "selected": false,
+          "password": false,
+          "children": [],
+          "package": "",
+          "window": "main"
+        },
+        {
+          "id": "n1_android:id/statusBarBackground",
+          "class": "android.view.View",
+          "resource_id": "android:id/statusBarBackground",
+          "text": "",
+          "hint": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            0,
+            1080,
+            128
+          ],
+          "visible_bounds": [
+            0,
+            0,
+            1080,
+            128
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "selected": false,
+          "password": false,
+          "children": [],
+          "package": "",
+          "window": "main"
+        }
+      ],
+      "package": "",
+      "window": "main"
+    }
+  ],
+  "truncated": false,
+  "text_available": true
+}

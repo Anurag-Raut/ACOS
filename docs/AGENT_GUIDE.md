@@ -458,6 +458,26 @@ with `INVALID_SCENARIO`/`INVALID_ARGUMENT`.
 Never weakened: an assertion still requires its condition on a *settled*
 observation, of the mode it reports.
 
+* **A content pass needs two observations.** Under `settle: content` — explicit
+  or the automatic fallback — the condition must hold on **two consecutive
+  content-settled observations at least one content window apart** (>= 300 ms)
+  before the step passes. One stable-looking sample is not a verdict. A poll
+  that is not satisfied (or never settles) resets the confirmation, so an
+  intermittent condition cannot slip through on unrelated stable samples.
+* **The residual hazard.** Content stability is *not* proof that the app
+  finished loading. A stalled JS thread, a paused renderer or a loading state
+  that simply has not updated the tree yet can look perfectly stable for a whole
+  window. `settle: content` answers "the readable content is not changing", not
+  "the app is ready". For a screen whose text arrives in a later phase, wait for
+  a **post-transition marker** (the destination screen's unique id/text, or a
+  ready flag the app sets) instead of the start button or the spinner, and only
+  then assert. Two observations reduce this window; they cannot eliminate it.
+* **The rule never leaks.** A content observation is scoped to the step that
+  asked for it. `capture`, `assert_screenshot` and `assert_region` always take
+  their own strict pixel capture; a capture whose frame is somehow bound by a
+  content record is refused with `details.reason: "content_settle_pixel"` rather
+  than reported as pixel evidence.
+
 * **Content settle backs UI/text/state claims only.** The content signature does
 not hash geometry (a view translated by an animation changes its `bounds` every
 frame), so a `bounds` claim — an assertion's own `bounds` **or**
@@ -489,6 +509,14 @@ frame), so a `bounds` claim — an assertion's own `bounds` **or**
 fresh settled observations until the condition holds or the deadline passes;
 without it they evaluate the frame the previous step bound (one observation, no
 extra traversal). A scenario that cannot prove its claim must fail.
+
+`settle` on an assertion therefore takes effect **only together with
+`timeout_ms`**: without a timeout there is no second observation to make, so the
+assertion reads the already-bound frame exactly as before (its `settle` record
+reports the rule that frame was bound with, not the one the step named). We keep
+that shape because it adds no default latency to the common case; spell out
+`timeout_ms` whenever you need `settle: content` (or want the assertion to wait
+at all).
 
 **Two coordinate spaces.** Tree bounds, `tap` `x`/`y`, `assert_region` and
 `region_masks` are **display** pixels (1080x2400 on the API-34 profile). A
