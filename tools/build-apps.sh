@@ -231,6 +231,10 @@ build_apk pms-parcel
 # row 0 left the viewport and a later row arrived, and `until` can search for
 # a deep row.
 build_apk scroll-list
+# back-layers is the REL3K2 Back-ordering fixture: an AlertDialog and an
+# EditText (whose focus raises the soft input) are the two layers above the
+# Activity. `scenarios/back-layers.yaml` asserts which layer consumed Back.
+build_apk back-layers
 # tap-targets is the REL3E input-handling fixture: a non-clickable label whose
 # clickable switch sits beside it (a tap there is a press the app never
 # consumes: `finishInputEvent(handled) = false`) and a clickable button that
