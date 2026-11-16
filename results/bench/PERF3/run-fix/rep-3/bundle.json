@@ -1,0 +1,145 @@
+{
+  "host_after": {
+    "loadavg1": 3.8,
+    "loadavg15": 6.58,
+    "loadavg5": 6.04,
+    "mem_available_gib": 46.27,
+    "mem_available_mib": 47378.7,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-82287ccb-3a5c5b00dcfc246d && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && tools/",
+        "comm": "bash",
+        "pid": 1923607
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task REL3H -- tools/guarded.sh --mem 10G --time 900 -- env CARGO_TARGET_DIR=/home/Qui/.t3/worktrees/acos/t3-82287ccb-3",
+        "comm": "bash",
+        "pid": 1923608
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && tools/",
+        "comm": "bash",
+        "pid": 2107775
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task MPROC4 -- tools/guarded.sh --mem 10G --time 500 -- env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-",
+        "comm": "bash",
+        "pid": 2107776
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 10G --time 500 -- env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_ART_DATA=/home/Qui/.t3/worktrees/acos/",
+        "comm": "bash",
+        "pid": 2107802
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 500 env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_ART_DATA=/home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1",
+        "comm": "timeout",
+        "pid": 2107811
+      },
+      {
+        "cmd": "python3 tools/mproc4-two-process-drive.py /home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d/.cache/mproc4-target/debug/acos-art fixtures/build/apps/proc",
+        "comm": "python3",
+        "pid": 2107812
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d/.cache/mproc4-target/debug/acos-art launch --apk fixtures/build/apps/proc-a.apk --extra-apk fixtures/b",
+        "comm": "acos-art",
+        "pid": 2107813
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 2108346
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 2108350
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 2108577
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 2108579
+      }
+    ],
+    "runnable": "1/2391",
+    "used_mib": 14530.0,
+    "used_pct": 23.47,
+    "utc": "2026-11-16T06:47:57+00:00"
+  },
+  "host_before": {
+    "loadavg1": 6.39,
+    "loadavg15": 6.52,
+    "loadavg5": 5.79,
+    "mem_available_gib": 45.25,
+    "mem_available_mib": 46336.8,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-82287ccb-3a5c5b00dcfc246d && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && tools/",
+        "comm": "bash",
+        "pid": 1923607
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task REL3H -- tools/guarded.sh --mem 10G --time 900 -- env CARGO_TARGET_DIR=/home/Qui/.t3/worktrees/acos/t3-82287ccb-3",
+        "comm": "bash",
+        "pid": 1923608
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && tools/",
+        "comm": "bash",
+        "pid": 2063390
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task MPROC4 -- tools/guarded.sh --mem 10G --time 500 -- env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-",
+        "comm": "bash",
+        "pid": 2063391
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 10G --time 500 -- env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_ART_DATA=/home/Qui/.t3/worktrees/acos/",
+        "comm": "bash",
+        "pid": 2063422
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 500 env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_ART_DATA=/home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1",
+        "comm": "timeout",
+        "pid": 2063431
+      },
+      {
+        "cmd": "python3 tools/mproc4-two-process-drive.py /home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d/.cache/mproc4-target/debug/acos-art fixtures/build/apps/proc",
+        "comm": "python3",
+        "pid": 2063432
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d/.cache/mproc4-target/debug/acos-art launch --apk fixtures/build/apps/proc-a.apk --extra-apk fixtures/b",
+        "comm": "acos-art",
+        "pid": 2063433
+      }
+    ],
+    "runnable": "4/2317",
+    "used_mib": 15571.9,
+    "used_pct": 25.15,
+    "utc": "2026-11-16T06:44:35+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "latency": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 202.113
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-16T06:44:35+00:00",
+  "wall_s": 202.113
+}

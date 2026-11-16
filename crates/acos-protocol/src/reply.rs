@@ -22,10 +22,24 @@
 //! tree may be any object with `children`. A tree node is treated as visible
 //! unless it says `visible:false`.
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use serde_json::{json, Map, Value};
+
+/// Bytes a diagnostic string keeps from each end when the reply has to fit.
+///
+/// The emergency path below bounds the *content* of a reply (one long string, a
+/// repeated block of text) before it ever considers dropping the reply's
+/// *structure*. 2 KiB is roughly a first screen of stack traces plus the marker
+/// that says what was cut.
+const CAP_STRING_BYTES: usize = 2 * 1024;
+
+/// Floor for [`CAP_STRING_BYTES`]: below this a string stops being a diagnosis.
+const CAP_STRING_FLOOR: usize = 256;
 
 /// Hard ceiling for one serialized agent reply, in bytes.
 ///
@@ -320,17 +334,114 @@ pub fn shape_tree(tree: &Value, sequence: Option<u64>, opts: &TreeShapeOptions) 
     }
 }
 
+/// One process-wide cache of the full-tree artifacts already on disk.
+///
+/// A live screen is observed far more often than it changes: the same tree is
+/// written by a reset and by every observation that follows it, each under a new
+/// frame sequence. Serializing and writing that unchanged tree again used to be
+/// on the reply path of *every* tree-bearing verb, and the dirty writes landed
+/// in the next fast tap's settle window (PERF3: M8 form fast +3.6 ms, while the
+/// tap reply itself never carried a tree). Reusing an existing file for
+/// byte-identical content keeps the artifact the reply names without touching
+/// the filesystem again.
+#[derive(Default)]
+struct TreeFileCache {
+    /// `(artifacts dir, content hash)` -> the artifact already holding it.
+    by_content: HashMap<(PathBuf, u64), PathBuf>,
+    /// `(artifacts dir, frame seq)` -> the content hash written there, so a
+    /// different tree for a reused sequence never overwrites a named artifact.
+    by_seq: HashMap<(PathBuf, u64), u64>,
+    /// The canonical `tree/` directory per artifacts dir, resolved once.
+    canonical_dirs: HashMap<PathBuf, PathBuf>,
+}
+
+fn tree_file_cache() -> &'static Mutex<TreeFileCache> {
+    static CACHE: OnceLock<Mutex<TreeFileCache>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(TreeFileCache::default()))
+}
+
+fn content_hash(bytes: &[u8]) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    hasher.finish()
+}
+
 /// Write the full tree as pretty JSON under `dir/tree/<seq>.json`.
+///
+/// Byte-identical content already written for this artifacts directory is not
+/// written again: the existing absolute path is returned, so the reply still
+/// names a complete tree file and every frame keeps its evidence. A different
+/// tree for a sequence that was already used gets its own `tree/<seq>-<hash>.json`
+/// name instead of replacing a file an earlier reply named.
 ///
 /// # Errors
 /// The directory or file could not be written.
 pub fn write_full_tree(dir: &Path, sequence: u64, tree: &Value) -> io::Result<PathBuf> {
+    let bytes = serde_json::to_vec_pretty(tree)?;
+    let hash = content_hash(&bytes);
+    let key_content = (dir.to_path_buf(), hash);
+    let key_seq = (dir.to_path_buf(), sequence);
+
+    // Fast path: this exact tree is already an artifact for this directory.
+    {
+        let cache = tree_file_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(path) = cache.by_content.get(&key_content) {
+            if path.is_file() {
+                return Ok(path.clone());
+            }
+        }
+    }
+
     let tree_dir = dir.join(TREE_DIR);
     std::fs::create_dir_all(&tree_dir)?;
-    let path = tree_dir.join(format!("{sequence}.json"));
-    let bytes = serde_json::to_vec_pretty(tree)?;
-    std::fs::write(&path, bytes)?;
-    Ok(std::fs::canonicalize(&path).unwrap_or(path))
+    let canonical_dir = {
+        let mut cache = tree_file_cache().lock().unwrap_or_else(|e| e.into_inner());
+        cache
+            .canonical_dirs
+            .entry(dir.to_path_buf())
+            .or_insert_with(|| std::fs::canonicalize(&tree_dir).unwrap_or_else(|_| tree_dir.clone()))
+            .clone()
+    };
+    let reused_sequence = {
+        let cache = tree_file_cache().lock().unwrap_or_else(|e| e.into_inner());
+        cache
+            .by_seq
+            .get(&key_seq)
+            .is_some_and(|previous| *previous != hash)
+    };
+    let file_name = if reused_sequence {
+        format!("{sequence}-{hash:016x}.json")
+    } else {
+        format!("{sequence}.json")
+    };
+    let path = canonical_dir.join(file_name);
+
+    // Write beside the target and rename, so a reader never sees a partial
+    // artifact and a failed write cannot truncate one already named.
+    static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let tmp = canonical_dir.join(format!(
+        ".tree-{sequence}-{}-{}.tmp",
+        std::process::id(),
+        TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    if let Err(error) = std::fs::write(&tmp, &bytes) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(error);
+    }
+    if let Err(error) = std::fs::rename(&tmp, &path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(error);
+    }
+
+    let mut cache = tree_file_cache().lock().unwrap_or_else(|e| e.into_inner());
+    if cache.by_content.len() > 4096 {
+        cache.by_content.clear();
+        cache.by_seq.clear();
+        cache.canonical_dirs.clear();
+    }
+    cache.by_content.insert(key_content, path.clone());
+    cache.by_seq.insert(key_seq, hash);
+    Ok(path)
 }
 
 /// Replace `value["result"]["tree"]` with its compact form and name the file.
@@ -461,7 +572,29 @@ fn enforce_cap_measured(
             return before - measure(value);
         }
     }
-    // 3. Anything else: keep the envelope and the diagnosis, replace the
+    // 3. Content before structure: a reply that overflows because of *what it
+    //    says* (a launch ladder repeats the same 13 KB blocker on every unproven
+    //    rung; a stack dump sits in `error.message`) must not lose *which rungs
+    //    it reports*. Bound every long string (head + tail + marker) and replace
+    //    a repeated block by a back-reference, halving the budget while the
+    //    reply still does not fit. `reached_stage`, the rung names/statuses and
+    //    the error code an agent acts on survive; only the prose shrinks.
+    //    Keeping the ladder is not cosmetic: an agent retries on `reached_stage`
+    //    and reads `blocker.code`, and 41566095 (REL3C) replaced the whole
+    //    result here, so a blocked launch answered `result: {reply_capped}` with
+    //    no rungs at all (crates/acos-cli/tests/native_launch.rs).
+    let mut string_cap = CAP_STRING_BYTES;
+    loop {
+        bound_long_strings(value, string_cap);
+        if measure(value) <= max_bytes {
+            return before - measure(value);
+        }
+        if string_cap <= CAP_STRING_FLOOR {
+            break;
+        }
+        string_cap /= 2;
+    }
+    // 4. Anything else: keep the envelope and the diagnosis, replace the
     //    oversized result with a pointer to the artifacts. A silent cut is worse
     //    than an honest "read it from here".
     if let Some(result) = value.get_mut("result").and_then(Value::as_object_mut) {
@@ -493,6 +626,111 @@ fn enforce_cap_measured(
         *result = replacement;
     }
     before - measure(value)
+}
+
+/// Bound every string longer than `cap` in `value`, and replace a repeat of an
+/// already-bounded string with a one-line back-reference.
+///
+/// The whole point is that the value keeps its shape: callers walk
+/// `result.stages[i].status` and `result.reached_stage` after the cap runs.
+fn bound_long_strings(value: &mut Value, cap: usize) {
+    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    bound_in_place(value, "result", cap, &mut seen);
+}
+
+fn bound_in_place(
+    value: &mut Value,
+    path: &str,
+    cap: usize,
+    seen: &mut std::collections::HashMap<String, String>,
+) {
+    match value {
+        Value::String(text) => {
+            if text.len() <= cap {
+                return;
+            }
+            let original = text.to_string();
+            let bytes = original.len();
+            if let Some(first) = seen.get(&original) {
+                // The same block of text twice costs an agent twice and says
+                // nothing new; the first copy carries the whole text. The head
+                // line travels with the back-reference, because that line is the
+                // message an agent greps for (`... re-run with --native`), not
+                // the stack dump behind it.
+                let head = original.lines().next().unwrap_or_default();
+                let head = &head[..floor_char_boundary(head, 512)];
+                *text = format!(
+                    "… [ACOS: identical to {first} ({bytes} bytes), not repeated; it begins: \
+                     {head}] …"
+                );
+                return;
+            }
+            seen.insert(original.clone(), path.to_string());
+            *text = bound_string_head_tail(&original, cap, path);
+        }
+        Value::Array(items) => {
+            for (index, item) in items.iter_mut().enumerate() {
+                bound_in_place(item, &format!("{path}[{index}]"), cap, seen);
+            }
+        }
+        Value::Object(map) => {
+            for (key, item) in map.iter_mut() {
+                // Paths the cap does not shorten: they are the pointer to the
+                // full evidence, and a cut path is useless.
+                if matches!(
+                    key.as_str(),
+                    "tree_path" | "verdict_path" | "artifacts_dir" | "log_path"
+                ) {
+                    continue;
+                }
+                bound_in_place(item, &format!("{path}.{key}"), cap, seen);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Keep the head and the line-aligned tail of `text`, with an honest marker.
+///
+/// Head first (the message, the exception class, the first frames), tail last
+/// (the deepest `caused by:`, the last frames): the two parts a reader uses.
+fn bound_string_head_tail(text: &str, cap: usize, path: &str) -> String {
+    let bytes = text.len();
+    let head = floor_char_boundary(text, cap * 2 / 3);
+    let tail_start = ceil_char_boundary(text, bytes - cap / 3).min(bytes);
+    let (head, tail_start) = if tail_start <= head {
+        (floor_char_boundary(text, cap / 2), ceil_char_boundary(text, bytes - cap / 2))
+    } else {
+        (head, tail_start)
+    };
+    if tail_start <= head || tail_start > bytes {
+        return format!(
+            "… [ACOS: {path} bounded for size — {bytes} bytes; read the run's artifacts] …"
+        );
+    }
+    format!(
+        "{}… [ACOS: {path} bounded for size — {bytes} bytes total, keeping the first {head} and \
+         the last {} bytes; the full text is in the run's artifacts] …{}",
+        &text[..head],
+        bytes - tail_start,
+        &text[tail_start..],
+    )
+}
+
+fn floor_char_boundary(text: &str, mut index: usize) -> usize {
+    index = index.min(text.len());
+    while index > 0 && !text.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
+}
+
+fn ceil_char_boundary(text: &str, mut index: usize) -> usize {
+    index = index.min(text.len());
+    while index < text.len() && !text.is_char_boundary(index) {
+        index += 1;
+    }
+    index
 }
 
 fn shrink_tree_page(value: &mut Value, page: usize) {
@@ -641,6 +879,58 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    fn reply_test_dir(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/acos-reply-tests")
+            .join(format!(
+                "{name}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            ))
+    }
+
+    /// PERF3: an unchanged screen is observed many times. The second write of
+    /// the same content names the artifact already on disk instead of dirtying
+    /// another file on the reply path.
+    #[test]
+    fn identical_tree_content_reuses_the_named_artifact() {
+        let dir = reply_test_dir("tree-reuse");
+        let tree = large_tree(3);
+        let first = write_full_tree(&dir, 7, &tree).expect("first write");
+        let second = write_full_tree(&dir, 8, &tree).expect("second write");
+        assert_eq!(first, second, "byte-identical content is not rewritten");
+        let written: Value = serde_json::from_slice(&std::fs::read(&second).unwrap()).unwrap();
+        assert_eq!(written["nodes"].as_array().unwrap().len(), 3);
+
+        // A removed artifact is not trusted from the cache: the next request
+        // writes it again and still returns a readable path.
+        std::fs::remove_file(&second).expect("remove artifact");
+        let third = write_full_tree(&dir, 9, &tree).expect("rewrite");
+        assert!(third.is_file(), "a missing artifact is written again");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A frame sequence can be reused by a relaunched guest with a different
+    /// tree. The new content must not replace the file an earlier reply named.
+    #[test]
+    fn a_different_tree_for_a_used_sequence_gets_its_own_artifact() {
+        let dir = reply_test_dir("tree-seq-reuse");
+        let first = write_full_tree(&dir, 7, &large_tree(3)).expect("first write");
+        let other = json!({"max_nodes": 2000, "truncated": false, "nodes": [
+            node("a different screen", 0, false)
+        ]});
+        let second = write_full_tree(&dir, 7, &other).expect("second write");
+        assert_ne!(first, second, "different content must not overwrite");
+        let old: Value = serde_json::from_slice(&std::fs::read(&first).unwrap()).unwrap();
+        assert_eq!(old["nodes"].as_array().unwrap().len(), 3);
+        let new: Value = serde_json::from_slice(&std::fs::read(&second).unwrap()).unwrap();
+        assert_eq!(new["nodes"][0]["text"], "a different screen");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn enforce_cap_shrinks_a_compact_page_instead_of_cutting_the_middle() {
         let tree = large_tree(400);
@@ -673,12 +963,106 @@ mod tests {
 
     #[test]
     fn an_enormous_non_tree_result_is_replaced_by_a_pointer_not_silently_cut() {
-        let huge = "x".repeat(40_000);
+        // Genuinely unshrinkable: many *small* strings, so bounding a string
+        // cannot help and the result can only be replaced by a pointer.
+        let junk: Vec<Value> = (0..600)
+            .map(|i| json!(format!("junk row {i} {}", "y".repeat(60))))
+            .collect();
         let mut envelope = json!({"ok": false, "error": {"message": "boom"},
-                                  "result": {"tree_path": "out/tree/1.json", "junk": huge}});
+                                  "result": {"tree_path": "out/tree/1.json", "junk": junk}});
         enforce_cap(&mut envelope, 4096);
         assert_eq!(envelope["result"]["reply_capped"], true);
         assert_eq!(envelope["result"]["tree_path"], "out/tree/1.json");
         assert!(serialized_len(&envelope) <= 4096);
+    }
+
+    #[test]
+    fn an_oversized_string_is_bounded_in_place_before_the_result_is_replaced() {
+        // One long string is content, not structure: bound it (head + tail +
+        // marker) and keep the rest of the result, instead of throwing the
+        // result away.
+        let huge = "x".repeat(40_000);
+        let mut envelope = json!({"ok": false, "error": {"message": "boom"},
+                                  "result": {"tree_path": "out/tree/1.json", "junk": huge}});
+        enforce_cap(&mut envelope, 4096);
+        assert!(envelope["result"]["reply_capped"].is_null());
+        assert_eq!(envelope["result"]["tree_path"], "out/tree/1.json");
+        let junk = envelope["result"]["junk"].as_str().unwrap();
+        assert!(junk.contains("bounded for size"), "{junk}");
+        assert!(junk.contains("40000 bytes"), "{junk}");
+        assert!(serialized_len(&envelope) <= 4096);
+    }
+
+    #[test]
+    fn a_blocked_launch_keeps_its_ladder_and_shortens_the_repeated_blocker() {
+        // The launch ladder names every rung and repeats one blocker text on
+        // each unproven one (a real `cos launch` reply: 5 x 13 KB). The cap
+        // must keep `reached_stage`, every rung's status and the blocker code:
+        // that is what an agent acts on. REL3C replaced the whole result here.
+        let blocker =
+            format!("vm: nativeHello() is not implemented\n{}", "frame 1\n".repeat(1600));
+        let stages: Vec<Value> = [
+            ("apk_parsed", "ok"),
+            ("process_booted", "ok"),
+            ("bind_application", "ok"),
+            ("application_on_create", "blocked"),
+            ("client_transaction", "not_reached"),
+            ("activity_on_create", "not_reached"),
+            ("on_resume", "not_reached"),
+            ("first_frame", "not_reached"),
+        ]
+        .into_iter()
+        .map(|(stage, status)| {
+            json!({
+                "stage": stage,
+                "ok": status == "ok",
+                "status": status,
+                "blocker": if status == "ok" { Value::Null } else { json!({
+                    "code": "UNSUPPORTED_JAVA_API",
+                    "message": blocker,
+                    "details": {"stage": stage},
+                }) },
+            })
+        })
+        .collect();
+        let mut envelope = json!({
+            "ok": false,
+            "status": "unsupported",
+            "error": {"code": "UNSUPPORTED_JAVA_API", "message": blocker},
+            "result": {
+                "reached_stage": "bind_application",
+                "stages": stages,
+                "package": "dev.acos.fixtures.nativehello",
+                "events": ["bind_application=ok", "application_on_create=blocked"],
+            },
+        });
+        assert!(serialized_len(&envelope) > MAX_REPLY_BYTES);
+        enforce_cap(&mut envelope, MAX_REPLY_BYTES);
+        assert!(serialized_len(&envelope) <= MAX_REPLY_BYTES);
+        assert!(envelope["result"]["reply_capped"].is_null());
+        assert_eq!(envelope["result"]["reached_stage"], "bind_application");
+        let stages = envelope["result"]["stages"].as_array().unwrap();
+        assert_eq!(stages.len(), 8);
+        assert_eq!(stages[3]["stage"], "application_on_create");
+        assert_eq!(stages[3]["status"], "blocked");
+        assert_eq!(stages[3]["blocker"]["code"], "UNSUPPORTED_JAVA_API");
+        // The whole text appears once (the envelope's top-level error is walked
+        // first), bounded head-and-tail with a marker; every later copy is a
+        // back-reference that still carries the actionable first line, so an
+        // agent reading any rung finds the `--native` hint.
+        let message = envelope["error"]["message"].as_str().unwrap();
+        assert!(message.contains("nativeHello() is not implemented"), "{message}");
+        assert!(message.contains("bounded for size"), "{message}");
+        assert!(message.contains("frame 1"), "the tail survives: {message}");
+        for rung in [3usize, 4, 7] {
+            let repeat = stages[rung]["blocker"]["message"].as_str().unwrap();
+            assert!(repeat.contains("not repeated"), "{repeat}");
+            assert!(
+                repeat.contains("nativeHello() is not implemented"),
+                "{repeat}"
+            );
+        }
+        // The top-level error keeps its code.
+        assert_eq!(envelope["error"]["code"], "UNSUPPORTED_JAVA_API");
     }
 }

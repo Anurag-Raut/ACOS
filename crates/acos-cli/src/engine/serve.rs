@@ -171,6 +171,10 @@ pub struct ServeEngine {
     default_engine: Engine,
     max_sessions: usize,
     artifacts_root: PathBuf,
+    /// REL3D: what this daemon reports in `hello`/`ping` (crate version, build
+    /// id, binary hash, pid, engine). A client compares it with its own before
+    /// it sends any request.
+    identity: acos_mcp::identity::Identity,
     /// VIEW1a: the live-view registry this daemon publishes its sessions to
     /// (`$XDG_RUNTIME_DIR/acos/live`, protocol v1 §5). It writes nothing until a
     /// session reaches ready.
@@ -195,18 +199,47 @@ impl ServeEngine {
         max_sessions: usize,
         artifacts_root: PathBuf,
     ) -> Self {
+        Self::with_identity(
+            legacy,
+            default_engine,
+            max_sessions,
+            artifacts_root,
+            false,
+        )
+    }
+
+    /// [`Self::new`] with the provenance a client needs to decide whether this
+    /// daemon may be replaced: `auto_started` is true when a client started it
+    /// (`acos session …`, the MCP server's private daemon) instead of an
+    /// operator running `acos serve` in a terminal.
+    pub fn with_identity(
+        legacy: Arc<LegacyBackend>,
+        default_engine: Engine,
+        max_sessions: usize,
+        artifacts_root: PathBuf,
+        auto_started: bool,
+    ) -> Self {
         // ZPROD3: keepers live inside the daemon's private runtime directory.
         let zygote = Arc::new(ZygoteHost::for_artifacts(&artifacts_root));
+        let identity =
+            acos_mcp::identity::Identity::daemon(default_engine.as_str(), auto_started);
         ServeEngine {
             legacy,
             default_engine,
             max_sessions: max_sessions.max(1),
             artifacts_root,
+            identity,
             live: crate::live_registry::LiveRegistry::from_env(),
             art: Mutex::new(HashMap::new()),
             routes: Mutex::new(HashMap::new()),
             zygote,
         }
+    }
+
+    /// This daemon's identity (REL3D).
+    #[must_use]
+    pub fn identity(&self) -> &acos_mcp::identity::Identity {
+        &self.identity
     }
 
 
@@ -361,6 +394,23 @@ impl ServeEngine {
         let request_id = request_id(args);
         let id = session_id(args);
 
+        if tool == acos_mcp::identity::TOOL_HELLO {
+            // REL3D: identity before any request. The client compares this with
+            // its own build and refuses to use a daemon built from other code.
+            return Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_value_result(json!({
+                "identity": self.identity,
+                "engine": self.default_engine.as_str(),
+                "sessions": self.session_count(),
+                "trust": Trust::Trusted.as_str(),
+                "evidence": EVIDENCE_NO_GUEST,
+            }));
+        }
         if tool == "ping" {
             return Envelope::pass(
                 request_id,
@@ -373,6 +423,12 @@ impl ServeEngine {
                 "pid": std::process::id(),
                 "engine": self.default_engine.as_str(),
                 "default_engine": self.default_engine.as_str(),
+                "sessions": self.session_count(),
+                // REL3D: `ping` reports the same identity `hello` does, so a
+                // status probe can never be answered without it.
+                "identity": self.identity,
+                "build_id": self.identity.build_id,
+                "version": self.identity.version,
                 "trust": Trust::Trusted.as_str(),
                 "evidence": EVIDENCE_NO_GUEST,
             }));

@@ -190,6 +190,30 @@ socket directory. Nothing outlives `acos-mcp`. **The same teardown runs on
 supervisor stops the server with `SIGTERM` — both destroy exactly the sessions
 this server launched, and no foreign `acos serve` is signalled.
 
+### The daemon must be the same build as the server (REL3D)
+
+A daemon speaking an older build's protocol is a wrong-answer risk (MODA11Y: an
+older `acos serve` answered a newer client `code 5 unsupported` for a service the
+new build implements), so the server never forwards to one:
+
+* every daemon reports its identity in `hello`/`ping` — crate version plus a
+  build id (`git sha` + a digest of the workspace sources + a hash of the
+  binary, computed once at start) — and `DaemonClient` sends its own and
+  compares **before any request**;
+* the private daemon is checked the same way right after it is spawned. It is
+  the `acos` binary (`ACOS_BIN`, the sibling of `acos-mcp`, or `PATH`), which
+  can be a different build than the server; the server then refuses it and the
+  tool call fails with `DAEMON_VERSION_MISMATCH` naming both identities instead
+  of answering from the other build;
+* with `ACOS_SESSION_DAEMON=1` an **external** daemon of another build is not
+  attached: one stderr line carries the structured warning
+  `{"code":"DAEMON_VERSION_MISMATCH","client":{…},"daemon":{…},"action":"private ART daemon (this server's own)"}`
+  and the server uses its own private ART daemon instead.
+
+The warning/error carries `client` and `daemon` identities (`version`, `git_sha`,
+`build_id`, `exe`/`exe_hash`, `pid`, `auto_started`), so a report can name both
+builds. `acos doctor` prints the CLI's identity next to a running daemon's.
+
 ### Session hygiene (FB5)
 
 Sessions cost memory (up to `ACOS_ART_MEM_MAX` each), so the server reclaims the

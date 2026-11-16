@@ -740,6 +740,7 @@ On a placeholder frame (window exists, app content never mounted) the answer is
 | `UNSAFE_PATH` | a path (or a symlink it names) escaped `ACOS_ALLOWED_ROOTS` | move the file under an allowed root, or add that root to `ACOS_ALLOWED_ROOTS` and restart; see Limits → Paths |
 | `INVALID_ARGUMENT`, `INVALID_SCENARIO` | bad request or bad YAML | read `details`/the validation `path` and fix it |
 | `INTERNAL`, `HOST_PANIC`, `GUEST_EXITED` | ACOS harness failure, needs triage | capture request/scenario/artifacts, report the harness bug; do not count it as a pass |
+| `DAEMON_VERSION_MISMATCH` | the `acos serve` daemon (or the MCP server's private daemon) is **another build** — an older daemon left over from before an upgrade, or a second checkout. Its answer would be that build's behaviour, not yours | nothing to fix in the app: the CLI never uses that daemon. `acos session …` replaces an idle auto-started daemon and otherwise runs a build-private one (stderr carries `{"code":"DAEMON_VERSION_MISMATCH","client":…,"daemon":…,"action":…}` with both identities, and the tool call that follows runs on *your* build). An operator-started `acos serve` is never signalled, so after an upgrade restart it (`acos doctor` prints its pid and build id next to the CLI's) |
 
 Two session-specific hints worth memorising:
 

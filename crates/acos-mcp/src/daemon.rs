@@ -14,6 +14,14 @@
 //! [`DaemonClient`] is shared by the CLI (`acos session …`) and by the MCP
 //! server when it is pointed at a running daemon. The socket path is
 //! [`socket_path`]; the runtime directory is created 0700 by the server.
+//!
+//! **REL3D: a connection is identity-checked before it carries a request.**
+//! `hello` (see [`crate::identity`]) exchanges both processes' build identities,
+//! and [`DaemonClient::call`] refuses a daemon built from other code: it answers
+//! `DAEMON_VERSION_MISMATCH` with both identities instead of forwarding. The
+//! routing layers (the CLI in `acos-cli::serve`, the MCP private daemon) decide
+//! what to do instead: replace an idle auto-started daemon, or run a build-private
+//! one — never mix.
 
 use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::os::unix::net::UnixStream;
@@ -24,6 +32,8 @@ use acos_protocol::{
     Backend as ProtocolBackend, Envelope, ErrorCode, Fidelity, Metrics, ProtocolError,
 };
 use serde_json::{json, Value};
+
+use crate::identity::{DaemonIdentity, Identity, Mismatch};
 
 /// Environment variable pinning the socket path (both server and client).
 pub const SOCKET_ENV: &str = "ACOS_SESSION_SOCKET";
@@ -38,6 +48,8 @@ pub const SOCKET_FILE: &str = "session.sock";
 
 /// The control tool that reports the daemon is alive.
 pub const TOOL_PING: &str = "ping";
+/// The control tool that exchanges build identities (`crate::identity`).
+pub use crate::identity::TOOL_HELLO;
 /// The control tool that lists held sessions.
 pub const TOOL_LIST: &str = "session_list";
 
@@ -196,29 +208,151 @@ pub fn mcp_daemon_requested() -> bool {
 pub struct DaemonClient {
     reader: BufReader<UnixStream>,
     next_id: u64,
+    /// What the daemon said about itself in `hello` (REL3D).
+    daemon: DaemonIdentity,
+    /// The live session count the daemon reported in `hello`, when it said.
+    sessions: Option<usize>,
 }
 
 impl std::fmt::Debug for DaemonClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DaemonClient").finish_non_exhaustive()
+        f.debug_struct("DaemonClient")
+            .field("daemon", &self.daemon)
+            .finish_non_exhaustive()
     }
 }
 
 impl DaemonClient {
-    /// Connect to the daemon at `path`.
+    /// Connect to the daemon at `path` and exchange identities.
+    ///
+    /// The connection is usable for tool calls only when [`Self::mismatch`]
+    /// returns `None`; [`Self::call`] enforces that. A daemon that cannot answer
+    /// `hello` (an older build) is recorded as [`DaemonIdentity::Unknown`] — that
+    /// is a mismatch, not a benefit of the doubt.
     pub fn connect(path: &Path) -> std::io::Result<Self> {
         let stream = UnixStream::connect(path)?;
         stream.set_read_timeout(Some(Duration::from_secs(600)))?;
         stream.set_write_timeout(Some(Duration::from_secs(600)))?;
-        Ok(DaemonClient {
+        let mut client = DaemonClient {
             reader: BufReader::new(stream),
             next_id: 0,
-        })
+            daemon: DaemonIdentity::Unknown {
+                reason: "hello was never answered".to_string(),
+                pid: None,
+            },
+            sessions: None,
+        };
+        client.handshake()?;
+        Ok(client)
     }
 
     /// Connect to the default socket.
     pub fn connect_default() -> std::io::Result<Self> {
         Self::connect(&socket_path())
+    }
+
+    /// The daemon's identity as `hello` reported it.
+    #[must_use]
+    pub fn daemon_identity(&self) -> &DaemonIdentity {
+        &self.daemon
+    }
+
+    /// The live session count `hello` reported (`None` when the daemon is too
+    /// old to report one — then [`Self::probe_call`] with `session_list` is the
+    /// only way to find out).
+    #[must_use]
+    pub fn sessions_hint(&self) -> Option<usize> {
+        self.sessions
+    }
+
+    /// One request on a connection that was **refused** for tool use, for the
+    /// routing decision only (REL3D).
+    ///
+    /// The only thing a mismatched daemon is ever asked is how many sessions it
+    /// holds: an idle auto-started one may be replaced, a busy one may not. It is
+    /// never asked to do session work — its answer would be another build's
+    /// behaviour, which is the bug this module exists to prevent.
+    pub fn probe_call(&mut self, tool: &str, args: &Value) -> std::io::Result<Envelope> {
+        self.request(tool, args)
+    }
+
+    /// Exchange identities with the daemon (`hello`).
+    ///
+    /// A structured refusal from a daemon that does not know `hello` leaves the
+    /// connection open and records [`DaemonIdentity::Unknown`]: the caller needs
+    /// the daemon's pid and session list to decide whether it may be replaced.
+    pub fn handshake(&mut self) -> std::io::Result<()> {
+        let client = Identity::local().clone();
+        let reply = self.request(TOOL_HELLO, &json!({ "client": client }))?;
+        self.daemon = match (reply.ok(), reply.result()) {
+            (true, Some(result)) => match result.get("identity") {
+                Some(identity) => match serde_json::from_value::<Identity>(identity.clone()) {
+                    Ok(identity) => DaemonIdentity::Known(identity),
+                    Err(e) => DaemonIdentity::Unknown {
+                        reason: format!("unreadable identity in hello: {e}"),
+                        pid: None,
+                    },
+                },
+                None => DaemonIdentity::Unknown {
+                    reason: "hello returned no identity".to_string(),
+                    pid: None,
+                },
+            },
+            _ => DaemonIdentity::Unknown {
+                reason: reply
+                    .error()
+                    .map(|error| format!("{}: {}", error.code, error.message))
+                    .unwrap_or_else(|| "hello failed".to_string()),
+                // A daemon that predates `hello` still answers `ping`, which
+                // carries its pid: the routing layer needs the pid to decide
+                // whether an idle, orphaned daemon may be replaced (and to name
+                // it in the warning).
+                pid: self.ping_pid(),
+            },
+        };
+        self.sessions = reply
+            .result()
+            .and_then(|result| result.get("sessions"))
+            .and_then(Value::as_u64)
+            .map(|count| count as usize);
+        Ok(())
+    }
+
+    /// The pid an older daemon reports in `ping` (`None` when it does not answer).
+    fn ping_pid(&mut self) -> Option<u32> {
+        let reply = self.request(TOOL_PING, &json!({})).ok()?;
+        reply
+            .result()
+            .and_then(|result| result.get("pid"))
+            .and_then(Value::as_u64)
+            .map(|pid| pid as u32)
+    }
+
+    /// The identity refusal for this connection, if the daemon is another build.
+    #[must_use]
+    pub fn mismatch(&self) -> Option<Mismatch> {
+        let client = Identity::local();
+        match &self.daemon {
+            DaemonIdentity::Known(daemon) => client.mismatch(daemon).map(|reason| Mismatch {
+                reason,
+                client: client.clone(),
+                daemon: self.daemon.clone(),
+            }),
+            DaemonIdentity::Unknown { reason, .. } => Some(Mismatch {
+                reason: crate::identity::MismatchReason::Build {
+                    client: client.label(),
+                    daemon: format!("unknown ({reason})"),
+                },
+                client: client.clone(),
+                daemon: self.daemon.clone(),
+            }),
+        }
+    }
+
+    /// Whether this connection may carry a request (same build).
+    #[must_use]
+    pub fn compatible(&self) -> bool {
+        self.mismatch().is_none()
     }
 
     /// The next request id this client will send (1-based).
@@ -228,7 +362,29 @@ impl DaemonClient {
     }
 
     /// Send one session tool call and read its envelope.
+    ///
+    /// REL3D: a daemon built from different code is refused *before* the request
+    /// is written, with a structured `DAEMON_VERSION_MISMATCH` failure that
+    /// carries both identities. Its answer is never returned as ours.
     pub fn call(&mut self, tool: &str, args: &Value) -> std::io::Result<Envelope> {
+        if let Some(mismatch) = self.mismatch() {
+            return Ok(Envelope::failure(
+                args.pointer("/base/request_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("req_daemon_identity"),
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                ProtocolError::new(ErrorCode::DaemonVersionMismatch, mismatch.message())
+                    .with_details(mismatch.to_json()),
+                Metrics::wall_ms(0),
+            ));
+        }
+        self.request(tool, args)
+    }
+
+    /// One request/response on the wire, identity unchecked (the handshake and
+    /// [`Self::call`] use it).
+    fn request(&mut self, tool: &str, args: &Value) -> std::io::Result<Envelope> {
         self.next_id += 1;
         let id = self.next_id;
         let request = json!({"id": id, "tool": tool, "args": args});

@@ -298,6 +298,14 @@ pub enum ErrorCode {
     /// the last zygote log lines, and the session is closed fail-closed.
     ZygoteDead,
 
+    /// The session daemon answered (or refused to identify itself) from a
+    /// **different build** than the caller: crate version, build id (git sha +
+    /// source digest) or the binary at the same path differ. The client never
+    /// mixes builds — it replaces an idle auto-started daemon or runs its own
+    /// private one; `error.details` carries both identities. Never retry against
+    /// the same daemon; never read its answer as this build's behaviour.
+    DaemonVersionMismatch,
+
     // ---- harness ----------------------------------------------------------
     /// ACOS itself failed (distinct from an app crash).
     Internal,
@@ -474,6 +482,7 @@ impl ErrorCode {
             ErrorCode::SeccompUnavailable => "SECCOMP_UNAVAILABLE",
             ErrorCode::GuestExited => "GUEST_EXITED",
             ErrorCode::ZygoteDead => "ZYGOTE_DEAD",
+            ErrorCode::DaemonVersionMismatch => "DAEMON_VERSION_MISMATCH",
             ErrorCode::Internal => "INTERNAL",
         }
     }
@@ -723,6 +732,9 @@ impl ErrorCode {
             }
             ErrorCode::ZygoteDead => {
                 "The persistent zygote keeper died or stopped acking (ACOS_ART_ZYGOTE=on). Read error.details.zygote for the keeper exit status and the last zygote log lines; the session is closed, not silently re-run on the exec path. Re-launch the session (a fresh keeper boots a new zygote and a new boot epoch) after the log names the cause."
+            }
+            ErrorCode::DaemonVersionMismatch => {
+                "Do not use that daemon's answer: it runs a different build (error.details carries rule, client and daemon identities). `acos session …` and the MCP server replace an idle auto-started daemon and otherwise start a build-private one, so rerunning the same command is safe. An operator-started `acos serve` must be restarted after an upgrade; `acos doctor` prints its identity next to the CLI's."
             }
             ErrorCode::Internal => {
                 "ACOS harness failure, not app behaviour. Capture request/scenario/artifacts and report it; do not count it as a pass."
@@ -1093,6 +1105,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::SeccompUnavailable,
     ErrorCode::GuestExited,
     ErrorCode::ZygoteDead,
+    ErrorCode::DaemonVersionMismatch,
     ErrorCode::Internal,
 ];
 
