@@ -2229,7 +2229,7 @@ fn probe_health_json(state: &Arc<std::sync::Mutex<ProbeState>>) -> serde_json::V
         "stale_samples": state.stale_samples,
         "guest_stall_pending_ms": state.stall_pending_ms,
         "newest_sample_age_ms": age,
-        "note": "the demand-probe channel's own counters at the timeout: wakes written,                  wakes the channel refused, guest samples the host refused (not newer), and                  the guest's own starved-probe mark",
+        "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
     })
 }
 
