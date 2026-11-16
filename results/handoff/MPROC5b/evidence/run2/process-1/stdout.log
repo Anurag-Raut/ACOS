@@ -1,0 +1,49 @@
+ACOSLAUNCH MARK resume-budget ms=12000 ready_ms=2000
+ACOSLAUNCH MARK natives registered
+ACOSLAUNCH MARK android-runtime ready rc=1
+ACOSLAUNCH MARK crash-handler rc=1
+ACOSLAUNCH MARK animations on=true scale=1.0 applied=true source=env:on
+ACOSLAUNCH MARK overlays applied=1 base=1 total=2 idmaps=/data/overlay/PixelConfigOverlayCommon.idmap
+ACOSLAUNCH MARK binder-looper started
+ACOSLAUNCH MARK app-flags flags=0x10883e46 source=manifest
+ACOSLAUNCH MARK providers count=0
+ACOSLAUNCH MARK bind-request-marshalled appInfo=(dev.acos.fixtures.procb sourceDir=/data/app/proc-b.apk uid=10192) bytes=1304
+ACOSLAUNCH MARK bind-request-pushed bytes=1304
+ACOSLAUNCH MARK displayinfo-field refreshRate -> java.lang.NoSuchFieldException: refreshRate
+ACOSLAUNCH MARK displayinfo-reply-pushed bytes=232
+ACOSLAUNCH MARK instrumentationinfo-reply-pushed bytes=388
+ACOSLAUNCH MARK attach-returned startSeq=1794814792079
+ACOSLAUNCH MARK start-activity-guard installed call=android.app.IActivityTaskManager
+ACOSLAUNCH MARK activity-result-watcher started
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {2db8b84} null: 138
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {2db8b84} null
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {2db8b84} null: 110
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {2db8b84} null
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {2db8b84} null: 164
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {2db8b84} null
+ACOSLAUNCH MARK application-created package=dev.acos.fixtures.procb application=android.app.Application base=dev.acos.fixtures.procb//data/app/proc-b.apk instrumentation=android.app.Instrumentation
+ACOSLAUNCH MARK app-flags flags=0x10883e46 source=manifest
+ACOSLAUNCH MARK obtain-shape LaunchActivityItem 0:Intent 1:int 2:ActivityInfo 3:Configuration 4:Configuration 5:int 6:String 7:IVoiceInteractor 8:int 9:Bundle 10:PersistableBundle 11:List 12:List 13:ActivityOptions 14:boolean 15:ProfilerInfo 16:IBinder 17:IActivityClientController 18:IBinder 19:boolean 20:IBinder
+ACOSLAUNCH MARK transaction-items launch=android.app.servertransaction.LaunchActivityItem resume=android.app.servertransaction.ResumeActivityItem
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {2db8b84} null: 159
+ACOSLAUNCH MARK schedule-transaction-delivered activity=dev.acos.fixtures.procb.ProcBActivity token=binder:b93217a transport=local-iapplicationthread
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {2db8b84} null
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {dc73e06} android.view.ViewRootImpl$7@15f6cc7: 0
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {dc73e06} android.view.ViewRootImpl$7@15f6cc7
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {1b022f4} android.view.Choreographer$FrameDisplayEventReceiver@f5d6a1d: 0
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {1b022f4} android.view.Choreographer$FrameDisplayEventReceiver@f5d6a1d
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {dc73e06} null: 8
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {dc73e06} null
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {dc73e06} null: 34
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {dc73e06} null
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {dc73e06} null: 6
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {dc73e06} null
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be8dc8c} dev.acos.art.LaunchMain$13@5a0bfd5: 0
+ACOSLAUNCH MARK first-traversal-skipped traversal:view_not_visible traversed=true app_visible=true skip=traversal:view_not_visible
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be8dc8c} dev.acos.art.LaunchMain$13@5a0bfd5
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {dc73e06} com.android.internal.policy.PhoneWindow$1@3a2c3ea: 0
+ACOSLAUNCH MARK activity-resumed activity=dev.acos.fixtures.procb.ProcBActivity window=com.android.internal.policy.PhoneWindow@4fae6db resume_ready=first-traversal draw_skip=traversal:view_not_visible first_traversal="traversed=true app_visible=true skip=traversal:view_not_visible"
+ACOSLAUNCH MARK window-views count=1
+ACOSPROBE-ROOTS {"count":1,"views":[{"z":0,"class":"com.android.internal.policy.DecorView","window":"window-1#0"}]}
+ACOSLAUNCH MARK live-probe-started
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {dc73e06} com.android.internal.policy.PhoneWindow$1@3a2c3ea
