@@ -319,6 +319,69 @@ impl InputDispatch {
         Ok(gesture)
     }
 
+    /// Publish one `MotionEvent` series (a voice/accessibility gesture) on
+    /// `token`'s channel, each event with its own time.
+    ///
+    /// This is the `dispatchGesture` path: the events are the guest's own
+    /// (`GestureDescription$MotionEventGenerator` sampled them on the device
+    /// clock), so the host publishes them verbatim instead of sleeping between
+    /// strokes. Every event is published before the first one can be acked, so
+    /// a failure half-way is still reported as a failure of the whole series.
+    pub fn inject_motion_series(
+        &mut self,
+        token: BinderId,
+        events: &[crate::input_channel::MotionEvent],
+    ) -> Result<Gesture> {
+        if events.is_empty() {
+            return Err(ChannelError::Malformed("empty gesture"));
+        }
+        let Some(_) = self.registry.publisher_mut(token) else {
+            let message = format!(
+                "inject_motion_series: no input channel for token {:#x}",
+                token.0
+            );
+            self.events.push(InputEvent::Error {
+                token,
+                message: message.clone(),
+            });
+            return Err(ChannelError::Io(message));
+        };
+        let mut dispatches = Vec::with_capacity(events.len());
+        for event in events {
+            let Some(publisher) = self.registry.publisher_mut(token) else {
+                return Err(ChannelError::Io("input channel vanished".into()));
+            };
+            // A stroke is many events: each one carries its own `eventId`, like
+            // the dispatcher's own allocation (`inject_tap` does the same), so
+            // the guest's `InputEventReceiver` never sees two `FINISHED` acks
+            // for one id.
+            let mut event = event.clone();
+            event.event_id = publisher.allocate_event_id();
+            match publisher.publish_motion(&event) {
+                Ok(dispatch) => {
+                    self.events.push(InputEvent::Published {
+                        token,
+                        seq: dispatch.seq,
+                        kind: "motion",
+                        detail: format!(
+                            "{:?} action={} t={}",
+                            dispatch.kind, event.action, event.event_time
+                        ),
+                    });
+                    dispatches.push(dispatch);
+                }
+                Err(error) => {
+                    self.events.push(InputEvent::Error {
+                        token,
+                        message: format!("inject_motion_series: {error}"),
+                    });
+                    return Err(error);
+                }
+            }
+        }
+        Ok(Gesture { dispatches })
+    }
+
     /// Publish a key press on `token`'s channel.
     pub fn inject_key(&mut self, token: BinderId, key_code: i32) -> Result<Gesture> {
         self.publish_key(token, key_code)
@@ -402,10 +465,9 @@ impl InputDispatch {
             match publisher.receive_consumer_response() {
                 Ok(Some(response)) => {
                     match &response {
-                        ConsumerResponse::Finished(ack) => self.events.push(InputEvent::Acked {
-                            token,
-                            ack: *ack,
-                        }),
+                        ConsumerResponse::Finished(ack) => {
+                            self.events.push(InputEvent::Acked { token, ack: *ack })
+                        }
                         ConsumerResponse::Timeline(timeline) => {
                             self.events.push(InputEvent::Timeline {
                                 token,
@@ -909,8 +971,12 @@ mod ack_accounting_tests {
     fn focus_messages_follow_the_policy_target_and_only_on_change() {
         const OTHER: BinderId = BinderId(0x7702);
         let mut dispatch = InputDispatch::new();
-        dispatch.register_window(TOKEN, "activity").expect("register");
-        dispatch.register_window(OTHER, "overlay").expect("register");
+        dispatch
+            .register_window(TOKEN, "activity")
+            .expect("register");
+        dispatch
+            .register_window(OTHER, "overlay")
+            .expect("register");
         dispatch.set_focus(Some(TOKEN)).expect("focus activity");
         assert_eq!(dispatch.focused(), Some(TOKEN));
 
@@ -927,7 +993,14 @@ mod ack_accounting_tests {
         }
         // Same target again: nothing is published.
         dispatch.set_focus(Some(TOKEN)).expect("same focus");
-        assert_eq!(dispatch.events().iter().filter(|e| matches!(e, InputEvent::Published { kind: "focus", .. })).count(), 1);
+        assert_eq!(
+            dispatch
+                .events()
+                .iter()
+                .filter(|e| matches!(e, InputEvent::Published { kind: "focus", .. }))
+                .count(),
+            1
+        );
 
         // A not-focusable overlay never becomes the target; `set_focus` is only
         // ever called with the WMS `focus_target()`, so the activity stays.
@@ -977,9 +1050,7 @@ mod ack_accounting_tests {
             }
         });
 
-        let gesture = host
-            .tap(10.0, 20.0, Duration::from_secs(2))
-            .expect("tap");
+        let gesture = host.tap(10.0, 20.0, Duration::from_secs(2)).expect("tap");
         acker.join().expect("acker");
 
         assert_eq!(gesture.seqs.len(), 2);

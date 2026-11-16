@@ -6866,22 +6866,44 @@ fn serve(
 
 /// Compile the userspace binder driver (`crates/acos-binder-peer/native`) with
 /// the NDK's bionic clang into `<data>/lib/libacos_binder_driver.so`.
+///
+/// FLAKEWIN: the driver's transaction-buffer heap is a second translation unit
+/// (`txn_heap.c` + `txn_heap.h`, host-testable on its own). It is embedded and
+/// compiled here with the driver, and it is part of the build-cache key: a heap
+/// change must never reuse a cached `.so` that still carries the old allocator.
 fn build_driver(root: &ArtRoot) -> Result<PathBuf> {
     const SOURCE: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../acos-binder-peer/native/binder_driver.c"
     ));
+    const HEAP_SOURCE: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../acos-binder-peer/native/txn_heap.c"
+    ));
+    const HEAP_HEADER: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../acos-binder-peer/native/txn_heap.h"
+    ));
     let dir = root.data.join("lib");
     fs::create_dir_all(&dir)?;
     let out = dir.join("libacos_binder_driver.so");
     let src = dir.join("binder_driver.c");
+    let heap_src = dir.join("txn_heap.c");
+    let heap_hdr = dir.join("txn_heap.h");
     let mut hash = 0xcbf2_9ce4_8422_2325u64;
-    for b in SOURCE.as_bytes() {
+    for b in SOURCE
+        .as_bytes()
+        .iter()
+        .chain(HEAP_SOURCE.as_bytes())
+        .chain(HEAP_HEADER.as_bytes())
+    {
         hash ^= u64::from(*b);
         hash = hash.wrapping_mul(0x100_0000_01b3);
     }
     let stamp = dir.join("binder_driver.hash");
     if out.is_file()
+        && heap_src.is_file()
+        && heap_hdr.is_file()
         && fs::read_to_string(&stamp)
             .map(|s| s.trim() == hash.to_string())
             .unwrap_or(false)
@@ -6889,13 +6911,17 @@ fn build_driver(root: &ArtRoot) -> Result<PathBuf> {
         return Ok(out);
     }
     fs::write(&src, SOURCE)?;
+    fs::write(&heap_src, HEAP_SOURCE)?;
+    fs::write(&heap_hdr, HEAP_HEADER)?;
     let clang = ndk_clang()?;
     // W37 (flagged call-site edit in the W36-owned launch.rs): compile once into
     // the shared content-addressed cache; a cold cohort serialises on the build
     // lock and every later launch only installs the verified `.so`.
     let cache_key = crate::build_cache::digest(&[
-        b"acos-art/binder-driver/v2",
+        b"acos-art/binder-driver/v3",
         SOURCE.as_bytes(),
+        HEAP_SOURCE.as_bytes(),
+        HEAP_HEADER.as_bytes(),
         crate::build_cache::file_id(&clang).as_bytes(),
     ]);
     let _build_lock = crate::build_cache::lock(&cache_key)?;
@@ -6917,6 +6943,9 @@ fn build_driver(root: &ArtRoot) -> Result<PathBuf> {
         ])
         .arg(&out)
         .arg(&src)
+        .arg(&heap_src)
+        .arg("-I")
+        .arg(&dir)
         .args(["-llog", "-ldl"])
         .status()?;
     if !st.success() {

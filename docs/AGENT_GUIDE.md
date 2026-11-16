@@ -510,13 +510,22 @@ and a detach answers the honest disabled state again on the same handle. Before
 that fix the attach replaced the binder and the cached proxy kept answering the
 old node. Full scenario: `results/handoff/MODLOC3/location-live-attach.yaml`.
 
-**Honest limit: `requestLocationUpdates(PendingIntent)`** (`requestLocationUpdates`
-with a `PendingIntent`) is refused with `UNSUPPORTED_ANDROID_API`. The framework
-delivers the fix as the *fill-in* intent of `IIntentSender.send` (the image's
-`LocationPendingIntentTransport` puts the `Location` under
-`LocationManager.KEY_LOCATION_CHANGED`); merging a fill-in into the stored intent
-is not modelled yet (PIFILLIN), so firing that sender would carry no fix. Use
-the `LocationListener` form.
+**`requestLocationUpdates(PendingIntent)`** is supported (PIFILLIN). The
+registration keeps the app's `IIntentSender`; every fix fires it with a
+*fill-in* intent carrying the `Location` under
+`LocationManager.KEY_LOCATION_CHANGED` (`"location"`), and a provider toggle
+fires `"providerEnabled"`, exactly like the image's
+`LocationPendingIntentTransport`. The system side merges the fill-in into the
+stored intent with `Intent.fillIn` (the image's
+`PendingIntentRecord.sendInner`: mutable senders merge, `FLAG_IMMUTABLE`
+senders ignore it) and delivers the merged activity/broadcast/service intent.
+`service_ctl set_location` reports `pending_intent_fires`. Full scenario:
+`scenarios/location-pending-intent.yaml`.
+
+A `PendingIntent` a module fires (a notification `tap`, a location fix) is a
+real `IIntentSender.send`: a **mutable** sender's fill-in is merged and
+delivered, an `FLAG_IMMUTABLE` sender's is ignored and named on the evidence
+(`fill_in_ignored: true`).
 
 `launch.activity` takes the same component spellings Android does, expanded
 before the launch gate runs: `com.example.app/.MainActivity` (a real

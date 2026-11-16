@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "results/handoff/BINDERCB/../../../fixtures/build/apps/tail-probe.apk",
+  "apk_sha256": "6c46306b9d6ef43459618ddc1919bc902456483bb4319b594b9755fa47975d9f",
+  "scenario_path": "results/handoff/BINDERCB/tail-telephony-longlived.yaml",
+  "scenario_sha256": "d2a2109879dcea3bf089397381d898f47b67e914dd1c0c3731dd07b7d7eaf1da",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

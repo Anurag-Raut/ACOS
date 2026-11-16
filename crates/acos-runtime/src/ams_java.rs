@@ -346,12 +346,84 @@ fn intent_facts(vm: &mut Vm, intent: Handle) -> JResult<IntentFacts> {
         _ => std::collections::BTreeMap::new(),
     };
 
+    let type_ = opt_string(vm, intent, "getType", "()Ljava/lang/String;")?;
+    let identifier = opt_string(vm, intent, "getIdentifier", "()Ljava/lang/String;")?;
+    let flags = match vm
+        .call_method(intent, "getFlags", "()I", &[])
+        .map_err(err)?
+    {
+        JavaValue::Int(v) => v,
+        _ => 0,
+    };
+    let source_bounds = match vm
+        .call_method(
+            intent,
+            "getSourceBounds",
+            "()Landroid/graphics/Rect;",
+            &[],
+        )
+        .map_err(err)?
+    {
+        JavaValue::Object(h) if h != NULL => {
+            let int_field = |vm: &mut Vm, name: &str| -> JResult<i32> {
+                match vm.get_field(h, name).map_err(err)? {
+                    JavaValue::Int(v) => Ok(v),
+                    other => Err(err(format!("Rect.{name} is {}", other.kind()))),
+                }
+            };
+            Some([
+                int_field(vm, "left")?,
+                int_field(vm, "top")?,
+                int_field(vm, "right")?,
+                int_field(vm, "bottom")?,
+            ])
+        }
+        _ => None,
+    };
+    let selector = match vm
+        .call_method(
+            intent,
+            "getSelector",
+            "()Landroid/content/Intent;",
+            &[],
+        )
+        .map_err(err)?
+    {
+        JavaValue::Object(h) if h != NULL => Some(Box::new(intent_facts(vm, h)?)),
+        _ => None,
+    };
+    // `ClipData` is presence-only here: the reduced facts record that the field
+    // is set (which is all `Intent.fillIn` reads), and a delivery that would
+    // have to encode the body is a structured `UnsupportedParcelable` instead
+    // of a guessed payload.
+    let clip_data = match vm
+        .call_method(intent, "getClipData", "()Landroid/content/ClipData;", &[])
+        .map_err(err)?
+    {
+        JavaValue::Object(h) if h != NULL => Some(acos_services::Parcelable::ordered(
+            "android.content.ClipData",
+            Vec::new(),
+        )),
+        _ => None,
+    };
+
     Ok(IntentFacts {
         action,
         data,
+        type_,
+        identifier,
+        flags,
         package,
         component,
+        source_bounds,
         categories,
+        selector,
+        clip_data,
+        // `getContentUserHint()` is `@hide`; the hint only matters for the
+        // Uri-copy path, and a guest-sent intent carries `USER_CURRENT` unless
+        // the framework set it (the fill-in path reads the hint off the wire,
+        // not through this reducer).
+        content_user_hint: acos_services::fill_in::USER_CURRENT,
         extras,
     })
 }
@@ -1012,13 +1084,38 @@ pub fn transact(
                 _ => (Vec::new(), Vec::new()),
             };
             let flags = args.get(flags_i).map(Arg::int).unwrap_or(0);
-            state.register_receiver(receiver, "", actions, categories, flags);
+            state.register_receiver(
+                receiver,
+                "",
+                actions.clone(),
+                categories.clone(),
+                flags,
+            );
+            // PIFILLIN: mirror the registration into the session's host-side
+            // AMS state. A broadcast the **system** originates (a module's
+            // control op: a scripted fix, an SMS, an adapter event — and a fired
+            // `PendingIntent`, whose sender record lives host-side) is delivered
+            // from there, and until this mirror existed those broadcasts matched
+            // no dynamic receiver at all in ART. The guest's own
+            // `broadcastIntent` keeps using this state, so a receiver is never
+            // delivered twice.
+            if let Some(host) = installed_host() {
+                let _ = host.borrow_mut().mirror_dynamic_receiver(
+                    receiver,
+                    actions,
+                    categories,
+                    flags,
+                );
+            }
             crate::pms_java::typed_object(vm, None, reply)?;
             Ok(Vec::new())
         }
         "unregisterReceiver" => {
             let receiver = args.first().map(Arg::binder).unwrap_or(0);
             state.unregister_receiver(receiver);
+            if let Some(host) = installed_host() {
+                let _ = host.borrow_mut().mirror_unregister_receiver(receiver);
+            }
             Ok(Vec::new())
         }
         "broadcastIntent" | "broadcastIntentWithFeature" => {

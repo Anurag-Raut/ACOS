@@ -326,6 +326,10 @@ pub struct ConnectivityState {
     pub callbacks_sent: u64,
     /// Requests released (evidence counter).
     pub released: u64,
+    /// Live requests' `IMessenger` callbacks as host-held strong references
+    /// (`crate::refs`): `registerNetworkCallback`/`listenForNetwork` take one,
+    /// `releaseNetworkRequest`/`unregisterNetworkCallback` drop it.
+    pub refs: crate::refs::GuestRefs,
     next_request_id: i32,
 }
 
@@ -803,6 +807,21 @@ impl ConnectivityService {
 }
 
 impl ServiceObject for ConnectivityService {
+    /// Registered network callbacks are host-held strong references
+    /// (`registerNetworkCallback`/`releaseNetworkRequest`), drained through the
+    /// shared `ConnectivityState::refs` ledger.
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        self.state.lock().unwrap().refs.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        self.state.lock().unwrap().refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.state.lock().unwrap().refs.release_all()
+    }
+
     fn call(&mut self, interface: &str, method: &MethodInfo, args: &[Value]) -> Result<CallResult> {
         if interface != "android.net.IConnectivityManager" {
             return Err(ServiceError::UnsupportedAndroidApi {
@@ -968,6 +987,12 @@ impl ServiceObject for ConnectivityService {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_string();
+                if let Some(messenger) = messenger {
+                    // A registered callback is a strong reference on the guest's
+                    // messenger (a repeat registration of the same binder is not
+                    // a second one).
+                    state.refs.hold(messenger);
+                }
                 let (request, queued) = self.register(
                     &mut state,
                     kind,
@@ -990,6 +1015,9 @@ impl ServiceObject for ConnectivityService {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_string();
+                if let Some(messenger) = messenger {
+                    state.refs.hold(messenger);
+                }
                 let (request, queued) = self.register(
                     &mut state,
                     RequestType::Listen,
@@ -1009,13 +1037,17 @@ impl ServiceObject for ConnectivityService {
                     method: method.name.clone(),
                     detail: "NetworkRequest argument carries no requestId".into(),
                 })?;
-                if state.requests.remove(&id).is_none() {
+                let removed = state.requests.remove(&id);
+                if removed.is_none() {
                     // AOSP: `IllegalArgumentException("Unknown NetworkRequest")`.
                     return Err(ServiceError::BadRequest {
                         interface: interface.to_string(),
                         method: method.name.clone(),
                         detail: format!("unknown NetworkRequest id {id}"),
                     });
+                }
+                if let Some(messenger) = removed.and_then(|record| record.messenger) {
+                    state.refs.release(messenger);
                 }
                 state.released += 1;
                 Vec::new()

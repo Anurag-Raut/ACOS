@@ -1,0 +1,101 @@
+1794823047276 ACOSWMS enter code=2 (addToDisplayAsUser) avail=476
+1794823047276 ACOSWMS lock-wait code=2
+1794823047276 ACOSWMS locked code=2
+1794823047276 ACOSWMS exit code=2
+1794823047279 ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=60
+1794823047279 ACOSWMS lock-wait code=39
+1794823047279 ACOSWMS locked code=39
+1794823047279 ACOSWMS exit code=39
+1794823047282 ACOSWMS enter code=5 (relayout) avail=480
+1794823047282 ACOSWMS lock-wait code=5
+1794823047282 ACOSWMS locked code=5
+1794823047282 ACOSWMS exit code=5
+1794823047283 ACOSWMS enter code=9 (finishDrawing) avail=164
+1794823047283 ACOSWMS lock-wait code=9
+1794823047283 ACOSWMS locked code=9
+1794823047283 ACOSWMS exit code=9
+1794823047284 ACOSA11Y getWindows enter
+1794823047284 ACOSA11Y getWindows snapshot=1
+1794823047296 ACOSWMS enter code=5 (relayout) avail=52
+1794823047296 ACOSWMS lock-wait code=5
+1794823047296 ACOSWMS locked code=5
+1794823047296 ACOSWMS exit code=5
+1794823047317 ACOSA11Y dispatchGesture enter
+1794823047317 ACOSA11Y dispatchGesture decoded seq=1 events=4 display=0
+1794823047317 ACOSA11Y dispatchGesture seq=1 t=0 action=0 at=(540.0,1392.0)
+1794823047317 ACOSA11Y dispatchGesture seq=1 t=16 action=2 at=(540.0,1392.0)
+1794823047317 ACOSA11Y dispatchGesture seq=1 t=32 action=2 at=(540.0,1392.0)
+1794823047317 ACOSA11Y dispatchGesture seq=1 t=40 action=1 at=(540.0,1392.0)
+1794823047318 ACOSA11Y dispatchGesture enter
+1794823047318 ACOSA11Y dispatchGesture decoded seq=2 events=14 display=0
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=0 action=0 at=(540.0,1991.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=16 action=2 at=(540.0,1959.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=32 action=2 at=(540.0,1927.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=48 action=2 at=(540.0,1895.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=64 action=2 at=(540.0,1863.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=80 action=2 at=(540.0,1831.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=96 action=2 at=(540.0,1799.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=112 action=2 at=(540.0,1767.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=128 action=2 at=(540.0,1735.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=144 action=2 at=(540.0,1703.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=160 action=2 at=(540.0,1671.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=176 action=2 at=(540.0,1639.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=192 action=2 at=(540.0,1607.0)
+1794823047318 ACOSA11Y dispatchGesture seq=2 t=200 action=1 at=(540.0,1591.0)
+1794823047333 ACOSWMS enter code=2 (addToDisplayAsUser) avail=392
+1794823047333 ACOSWMS lock-wait code=2
+1794823047333 ACOSWMS locked code=2
+1794823047333 ACOSWMS exit code=2
+1794823047348 ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=60
+1794823047348 ACOSWMS lock-wait code=39
+1794823047348 ACOSWMS locked code=39
+1794823047348 ACOSWMS exit code=39
+1794823047348 ACOSWMS enter code=5 (relayout) avail=396
+1794823047348 ACOSWMS lock-wait code=5
+1794823047348 ACOSWMS locked code=5
+1794823047348 ACOSWMS exit code=5
+1794823047348 ACOSWMS enter code=9 (finishDrawing) avail=164
+1794823047348 ACOSWMS lock-wait code=9
+1794823047348 ACOSWMS locked code=9
+1794823047348 ACOSWMS exit code=9
+1794823047365 ACOSWMS enter code=5 (relayout) avail=52
+1794823047365 ACOSWMS lock-wait code=5
+1794823047365 ACOSWMS locked code=5
+1794823047365 ACOSWMS exit code=5
+1794823047533 ACOSA11Y getWindows enter
+1794823047533 ACOSA11Y getWindows snapshot=2
+1794823047533 ACOSA11Y takeScreenshot enter
+1794823047547 ACOSA11Y takeScreenshot success display=0 1080x2400 stride=1080
+1794823047547 ACOSA11Y takeScreenshot enter
+1794823047947 ACOSA11Y takeScreenshot enter
+1794823048300 ACOSINPUT collect-wait token=0x100000009 seqs=[21, 22] budget_ms=2500
+1794823048349 ACOSWMS enter code=2 (addToDisplayAsUser) avail=392
+1794823048349 ACOSWMS lock-wait code=2
+1794823048349 ACOSWMS locked code=2
+1794823048349 ACOSWMS exit code=2
+1794823048363 ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=60
+1794823048363 ACOSWMS lock-wait code=39
+1794823048363 ACOSWMS locked code=39
+1794823048363 ACOSWMS exit code=39
+1794823048363 ACOSWMS enter code=5 (relayout) avail=396
+1794823048363 ACOSWMS lock-wait code=5
+1794823048363 ACOSWMS locked code=5
+1794823048363 ACOSWMS exit code=5
+1794823048363 ACOSWMS enter code=9 (finishDrawing) avail=164
+1794823048363 ACOSWMS lock-wait code=9
+1794823048363 ACOSWMS locked code=9
+1794823048363 ACOSWMS exit code=9
+1794823048379 ACOSWMS enter code=5 (relayout) avail=52
+1794823048379 ACOSWMS lock-wait code=5
+1794823048379 ACOSWMS locked code=5
+1794823048379 ACOSWMS exit code=5
+1794823048750 ACOSA11Y takeScreenshot enter
+1794823049150 ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=28
+1794823049150 ACOSWMS lock-wait code=39
+1794823049150 ACOSWMS locked code=39
+1794823049150 ACOSWMS exit code=39
+1794823049150 ACOSWMS enter code=4 (remove) avail=24
+1794823049150 ACOSWMS lock-wait code=4
+1794823049150 ACOSWMS locked code=4
+1794823049150 ACOSWMS exit code=4
+1794823049311 ACOSINPUT collect-wait token=0x100000009 seqs=[23, 24] budget_ms=2500

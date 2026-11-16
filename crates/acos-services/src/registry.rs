@@ -324,13 +324,23 @@ pub fn install_with_handles_and_insets(
     // A `notifications` `tap` must really fire the sender, and the delivery is
     // the AMS's (`send_pending_intent`), so the registry publishes it here.
     let fire_atms = Arc::clone(&atms);
-    host.set_pending_intent_fire(Arc::new(move |binder: u64, code: i32| {
-        fire_atms
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .ams
-            .send_pending_intent(binder, code)
-    }));
+    host.set_pending_intent_fire(Arc::new(
+        move |binder: u64,
+              code: i32,
+              fill_in: Option<crate::ams::IntentFacts>| {
+            fire_atms
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .ams
+                .send_pending_intent_with_fill_in(
+                    binder,
+                    code,
+                    fill_in
+                        .as_ref()
+                        .map_or(crate::pending_intent::FillIn::None, crate::pending_intent::FillIn::Intent),
+                )
+        },
+    ));
     host.set_permission_store(Arc::clone(&permissions));
     let display =
         Arc::new(Mutex::new(crate::display::DisplayState::new(
@@ -353,6 +363,10 @@ pub fn install_with_handles_and_insets(
         a11y_state.windows = Some(Arc::clone(&wms_state));
         // MODA11Y4: the same input channels the session's Back uses.
         a11y_state.input = Some(a11y_input);
+        // MODA11YNATIVE: `takeScreenshot` captures the composited frame and
+        // answers the `FLAG_SECURE` question from the same C1 state the
+        // session's captures read.
+        a11y_state.compositor = Some(Arc::clone(&compositor));
     }
     host.set_accessibility_state(Arc::clone(&a11y));
     let input = Arc::new(Mutex::new(crate::misc::InputState::new()));

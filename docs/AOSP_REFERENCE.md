@@ -26,3 +26,12 @@ Sparse checkouts: add more paths with `git -C <dir> sparse-checkout add <path>` 
 The window-layer table is also generated from this cache into `docs/WINDOW_LAYERS.md`
 with `tools/gen-window-layer-table.py` (cite file:line per row; re-run it after a
 tag change and diff the output against the transcribed table).
+- `ActivityManager.INTENT_SENDER_*` (the `IIntentSender`/`getIntentSender` type) are
+  **BROADCAST=1, ACTIVITY=2, ACTIVITY_RESULT=3, SERVICE=4, FOREGROUND_SERVICE=5**
+  (`base/core/java/android/app/ActivityManager.java:603-632`). The image's
+  `PendingIntent.getBroadcastAsUser` really sends `1` (PIFILLIN dex probe), so a
+  sender's `type` must not be read as "1 = activity": an earlier build had the
+  four shifted by one and delivered every `getBroadcast` sender as an activity
+  start. `Location.writeToParcel` in this image has no mock bit (bit 4 is
+  vertical accuracy), and `ActivityManager$PendingIntentInfo.writeToParcel` is
+  `(String, int, boolean, int)` — the reply `getInfoForIntentSender` must carry.

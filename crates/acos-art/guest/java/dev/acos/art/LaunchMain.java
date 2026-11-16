@@ -3502,6 +3502,15 @@ public final class LaunchMain {
                 // android.hardware.SystemSensorManager.nativeClassInit()`
                 // (Gaten, w25-gaten-launch).
                 "register_android_hardware_SensorManager",
+                // MODA11YNATIVE: an accessibility service's `takeScreenshot`
+                // result is a `HardwareBuffer` the app reads with
+                // `nReadHardwareBufferFromParcel`/the `nGet*` getters and uses
+                // with `Bitmap.wrapHardwareBuffer`. The image's libandroid_runtime
+                // exports the registration (and libui's `GraphicBuffer`
+                // unflatten goes through the ACOS gralloc shim, which owns the
+                // memfd), so the guest runs the REAL implementation — no
+                // substitute native.
+                "register_android_hardware_HardwareBuffer",
                 "register_com_android_internal_util_VirtualRefBasePtr",
         };
         String[] graphics = {"register_android_graphics_classes"};
@@ -3736,6 +3745,14 @@ public final class LaunchMain {
     static int PANEL_W = envInt("ACOSLAUNCH_WIDTH", 1080);
     static int PANEL_H = envInt("ACOSLAUNCH_PANEL_HEIGHT", 2400);
     static int DENSITY_DPI = envInt("ACOSLAUNCH_DENSITY", 420);
+    /**
+     * The display's nominal refresh rate, the same value `acos-services`'
+     * `DisplayInfo` serves (`60.000004` is what the API-34 emulator reports).
+     * `Display.getRefreshRate()` is what the framework samples time against
+     * (`AccessibilityService.calculateGestureSampleTimeMs`, `Choreographer`
+     * frame math), so the guest must report a real rate, never `0`.
+     */
+    static final float REFRESH_RATE_HZ = 60.000004f;
     static int STATUS_INSET = envInt("ACOSLAUNCH_STATUS_INSET", 128);
     static int NAV_INSET = envInt("ACOSLAUNCH_NAV_INSET", 63);
     /**
@@ -4086,7 +4103,24 @@ public final class LaunchMain {
         setField(cls, info, "state", 2);
         setField(cls, info, "colorMode", 0);
         setField(cls, info, "installOrientation", 0);
-        setField(cls, info, "refreshRate", 60.000004f);
+        setField(cls, info, "renderFrameRate", REFRESH_RATE_HZ);
+        setField(cls, info, "refreshRate", REFRESH_RATE_HZ);
+        // `DisplayInfo.getRefreshRate()` (the image's own bytecode) reads
+        // `refreshRateOverride > 0 ? it : (supportedModes.length == 0 ? 0 :
+        // getMode().getRefreshRate())`. A real display always carries the mode
+        // it is driving, so the reply must too: with an EMPTY `supportedModes`
+        // every app read `0 Hz`, and `AccessibilityService
+        // .calculateGestureSampleTimeMs` turned that into
+        // `(int)(1000 / 0.0f) == Integer.MAX_VALUE` — a gesture then had only
+        // its key-point steps (press and release, no `MOVE`s), so a swipe
+        // never scrolled anything. One mode, the size and rate ACOS serves.
+        Class<?> modeCls = Class.forName("android.view.Display$Mode");
+        Object mode = modeCls.getConstructor(int.class, int.class, int.class, float.class)
+                .newInstance(1, PANEL_W, PANEL_H, REFRESH_RATE_HZ);
+        Object modes = java.lang.reflect.Array.newInstance(modeCls, 1);
+        java.lang.reflect.Array.set(modes, 0, mode);
+        setField(cls, info, "supportedModes", modes);
+        setField(cls, info, "refreshRateOverride", 0.0f);
         Parcel p = Parcel.obtain();
         try {
             p.writeInt(0); // AIDL reply: no exception

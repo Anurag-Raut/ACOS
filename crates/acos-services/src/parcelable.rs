@@ -781,6 +781,17 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int, FieldOp::Int, FieldOp::Int, FieldOp::Int],
         verification: Verification::Full,
     },
+    // `android.app.ActivityManager$PendingIntentInfo.writeToParcel` (image dex
+    // `framework/classes.dex`): `writeString(mCreatorPackage)`,
+    // `writeInt(mCreatorUid)`, `writeBoolean(mImmutable)`,
+    // `writeInt(mIntentSenderType)`. `IActivityManager.getInfoForIntentSender`
+    // answers one, and the framework reads it on the `PendingIntent` path
+    // (PIFILLIN).
+    ParcelableSpec {
+        class: "android.app.ActivityManager$PendingIntentInfo",
+        fields: &[FieldOp::Str16, FieldOp::Int, FieldOp::Bool, FieldOp::Int],
+        verification: Verification::Full,
+    },
     // `android.os.LocaleList.writeToParcel` is a single `writeString8`
     // (`mStringRepresentation`); `Configuration` wraps it in
     // `writeTypedObject`.
@@ -2075,6 +2086,13 @@ pub fn read_payload(class: &str, parcel: &mut Parcel) -> Result<Parcelable> {
     if class == AUDIO_ATTRIBUTES_CLASS {
         return read_audio_attributes(parcel);
     }
+    // PIFILLIN: a `Location` travels in a `PendingIntent` fill-in's extras
+    // (`LocationManager.KEY_LOCATION_CHANGED`), so the codec has to read and
+    // write it. The layout lives in the `location` module next to the writer the
+    // `ILocationListener` path already uses.
+    if class == crate::modules::location::LOCATION_CLASS {
+        return crate::modules::location::read_location_value(parcel);
+    }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     let mut values = Vec::with_capacity(spec.fields.len());
     // `ACOS_PARCEL_TRACE=1` prints one line per field with the parcel offset, so
@@ -2119,6 +2137,9 @@ pub fn write_payload(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
     }
     if class == AUDIO_ATTRIBUTES_CLASS {
         return write_audio_attributes(parcel, value);
+    }
+    if class == crate::modules::location::LOCATION_CLASS {
+        return crate::modules::location::write_location_value(parcel, value);
     }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     if values.len() != spec.fields.len() {

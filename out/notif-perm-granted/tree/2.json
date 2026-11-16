@@ -1,12 +1,12 @@
 {
   "frame": {
-    "frame_seq": 6,
-    "produced_at": "2026-11-16T07:33:53.515Z",
+    "frame_seq": 2,
+    "produced_at": "2026-11-16T09:29:55.206Z",
     "cause_id": "art",
     "width": 1080,
     "height": 2400,
     "density": 420,
-    "content_hash": "18ac3728823a89c979f38d92fe981e2a",
+    "content_hash": "cac10568a82747fcd5448c2214bf4d5d",
     "meaningful": true,
     "display_origin": [
       0,
@@ -17,7 +17,7 @@
       2400
     ]
   },
-  "package": "dev.acos.fixtures.sensorprobe",
+  "package": "dev.acos.fixtures.notifpermprobe",
   "nodes": [
     {
       "id": "n0_",
@@ -132,22 +132,22 @@
                   "password": false,
                   "children": [
                     {
-                      "id": "n4_dev.acos.fixtures.sensorprobe:id/sensor_count",
+                      "id": "n4_dev.acos.fixtures.notifpermprobe:id/enabled",
                       "class": "android.widget.TextView",
-                      "resource_id": "dev.acos.fixtures.sensorprobe:id/sensor_count",
-                      "text": "sensors: 7",
+                      "resource_id": "dev.acos.fixtures.notifpermprobe:id/enabled",
+                      "text": "enabled: true",
                       "hint": "",
                       "content_desc": "",
                       "bounds": [
                         42,
                         317,
-                        212,
+                        256,
                         368
                       ],
                       "visible_bounds": [
                         42,
                         317,
-                        212,
+                        256,
                         368
                       ],
                       "visible": true,
@@ -161,29 +161,29 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "730299f",
+                      "window_id": "3639e62",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
                     },
                     {
-                      "id": "n4_dev.acos.fixtures.sensorprobe:id/sensor_names",
+                      "id": "n4_dev.acos.fixtures.notifpermprobe:id/posted",
                       "class": "android.widget.TextView",
-                      "resource_id": "dev.acos.fixtures.sensorprobe:id/sensor_names",
-                      "text": "accelerometer magnetometer gyroscope light proximity rotation_vector step_counter",
+                      "resource_id": "dev.acos.fixtures.notifpermprobe:id/posted",
+                      "text": "posted: id 7",
                       "hint": "",
                       "content_desc": "",
                       "bounds": [
                         42,
                         368,
-                        1038,
-                        462
+                        234,
+                        419
                       ],
                       "visible_bounds": [
                         42,
                         368,
-                        1038,
-                        462
+                        234,
+                        419
                       ],
                       "visible": true,
                       "enabled": true,
@@ -196,29 +196,29 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "730299f",
+                      "window_id": "3639e62",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
                     },
                     {
-                      "id": "n4_dev.acos.fixtures.sensorprobe:id/accel",
+                      "id": "n4_dev.acos.fixtures.notifpermprobe:id/channel",
                       "class": "android.widget.TextView",
-                      "resource_id": "dev.acos.fixtures.sensorprobe:id/accel",
-                      "text": "accel: -12.0 0.0 9.8",
+                      "resource_id": "dev.acos.fixtures.notifpermprobe:id/channel",
+                      "text": "channel: probe",
                       "hint": "",
                       "content_desc": "",
                       "bounds": [
                         42,
-                        462,
-                        352,
-                        513
+                        419,
+                        284,
+                        470
                       ],
                       "visible_bounds": [
                         42,
-                        462,
-                        352,
-                        513
+                        419,
+                        284,
+                        470
                       ],
                       "visible": true,
                       "enabled": true,
@@ -231,217 +231,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "730299f",
-                      "window_type": "TYPE_BASE_APPLICATION",
-                      "window_kind": "application",
-                      "window_z": 0
-                    },
-                    {
-                      "id": "n4_dev.acos.fixtures.sensorprobe:id/light",
-                      "class": "android.widget.TextView",
-                      "resource_id": "dev.acos.fixtures.sensorprobe:id/light",
-                      "text": "light: 1234",
-                      "hint": "",
-                      "content_desc": "",
-                      "bounds": [
-                        42,
-                        513,
-                        215,
-                        564
-                      ],
-                      "visible_bounds": [
-                        42,
-                        513,
-                        215,
-                        564
-                      ],
-                      "visible": true,
-                      "enabled": true,
-                      "focused": false,
-                      "clickable": false,
-                      "scrollable": false,
-                      "checked": false,
-                      "selected": false,
-                      "password": false,
-                      "children": [],
-                      "package": "",
-                      "window": "main",
-                      "window_id": "730299f",
-                      "window_type": "TYPE_BASE_APPLICATION",
-                      "window_kind": "application",
-                      "window_z": 0
-                    },
-                    {
-                      "id": "n4_dev.acos.fixtures.sensorprobe:id/shake",
-                      "class": "android.widget.TextView",
-                      "resource_id": "dev.acos.fixtures.sensorprobe:id/shake",
-                      "text": "shake: 11",
-                      "hint": "",
-                      "content_desc": "",
-                      "bounds": [
-                        42,
-                        564,
-                        200,
-                        615
-                      ],
-                      "visible_bounds": [
-                        42,
-                        564,
-                        200,
-                        615
-                      ],
-                      "visible": true,
-                      "enabled": true,
-                      "focused": false,
-                      "clickable": false,
-                      "scrollable": false,
-                      "checked": false,
-                      "selected": false,
-                      "password": false,
-                      "children": [],
-                      "package": "",
-                      "window": "main",
-                      "window_id": "730299f",
-                      "window_type": "TYPE_BASE_APPLICATION",
-                      "window_kind": "application",
-                      "window_z": 0
-                    },
-                    {
-                      "id": "n4_dev.acos.fixtures.sensorprobe:id/accel_seen",
-                      "class": "android.widget.TextView",
-                      "resource_id": "dev.acos.fixtures.sensorprobe:id/accel_seen",
-                      "text": "accel live",
-                      "hint": "",
-                      "content_desc": "",
-                      "bounds": [
-                        42,
-                        615,
-                        194,
-                        666
-                      ],
-                      "visible_bounds": [
-                        42,
-                        615,
-                        194,
-                        666
-                      ],
-                      "visible": true,
-                      "enabled": true,
-                      "focused": false,
-                      "clickable": false,
-                      "scrollable": false,
-                      "checked": false,
-                      "selected": false,
-                      "password": false,
-                      "children": [],
-                      "package": "",
-                      "window": "main",
-                      "window_id": "730299f",
-                      "window_type": "TYPE_BASE_APPLICATION",
-                      "window_kind": "application",
-                      "window_z": 0
-                    },
-                    {
-                      "id": "n4_dev.acos.fixtures.sensorprobe:id/light_seen",
-                      "class": "android.widget.TextView",
-                      "resource_id": "dev.acos.fixtures.sensorprobe:id/light_seen",
-                      "text": "light live",
-                      "hint": "",
-                      "content_desc": "",
-                      "bounds": [
-                        42,
-                        666,
-                        178,
-                        717
-                      ],
-                      "visible_bounds": [
-                        42,
-                        666,
-                        178,
-                        717
-                      ],
-                      "visible": true,
-                      "enabled": true,
-                      "focused": false,
-                      "clickable": false,
-                      "scrollable": false,
-                      "checked": false,
-                      "selected": false,
-                      "password": false,
-                      "children": [],
-                      "package": "",
-                      "window": "main",
-                      "window_id": "730299f",
-                      "window_type": "TYPE_BASE_APPLICATION",
-                      "window_kind": "application",
-                      "window_z": 0
-                    },
-                    {
-                      "id": "n4_dev.acos.fixtures.sensorprobe:id/shake_state",
-                      "class": "android.widget.TextView",
-                      "resource_id": "dev.acos.fixtures.sensorprobe:id/shake_state",
-                      "text": "shake ended: 11",
-                      "hint": "",
-                      "content_desc": "",
-                      "bounds": [
-                        42,
-                        717,
-                        311,
-                        768
-                      ],
-                      "visible_bounds": [
-                        42,
-                        717,
-                        311,
-                        768
-                      ],
-                      "visible": true,
-                      "enabled": true,
-                      "focused": false,
-                      "clickable": false,
-                      "scrollable": false,
-                      "checked": false,
-                      "selected": false,
-                      "password": false,
-                      "children": [],
-                      "package": "",
-                      "window": "main",
-                      "window_id": "730299f",
-                      "window_type": "TYPE_BASE_APPLICATION",
-                      "window_kind": "application",
-                      "window_z": 0
-                    },
-                    {
-                      "id": "n4_dev.acos.fixtures.sensorprobe:id/rescan",
-                      "class": "android.widget.Button",
-                      "resource_id": "dev.acos.fixtures.sensorprobe:id/rescan",
-                      "text": "Rescan",
-                      "hint": "",
-                      "content_desc": "",
-                      "bounds": [
-                        42,
-                        768,
-                        273,
-                        894
-                      ],
-                      "visible_bounds": [
-                        42,
-                        768,
-                        273,
-                        894
-                      ],
-                      "visible": true,
-                      "enabled": true,
-                      "focused": false,
-                      "clickable": true,
-                      "scrollable": false,
-                      "checked": false,
-                      "selected": false,
-                      "password": false,
-                      "children": [],
-                      "package": "",
-                      "window": "main",
-                      "window_id": "730299f",
+                      "window_id": "3639e62",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -449,7 +239,7 @@
                   ],
                   "package": "",
                   "window": "main",
-                  "window_id": "730299f",
+                  "window_id": "3639e62",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -457,7 +247,7 @@
               ],
               "package": "",
               "window": "main",
-              "window_id": "730299f",
+              "window_id": "3639e62",
               "window_type": "TYPE_BASE_APPLICATION",
               "window_kind": "application",
               "window_z": 0
@@ -522,19 +312,19 @@
                       "id": "n4_",
                       "class": "android.widget.TextView",
                       "resource_id": "",
-                      "text": "Sensor probe",
+                      "text": "Notification probe",
                       "hint": "",
                       "content_desc": "",
                       "bounds": [
                         42,
                         166,
-                        358,
+                        472,
                         237
                       ],
                       "visible_bounds": [
                         42,
                         166,
-                        358,
+                        472,
                         237
                       ],
                       "visible": true,
@@ -548,7 +338,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "730299f",
+                      "window_id": "3639e62",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -577,7 +367,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "730299f",
+                      "window_id": "3639e62",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -585,7 +375,7 @@
                   ],
                   "package": "",
                   "window": "main",
-                  "window_id": "730299f",
+                  "window_id": "3639e62",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -614,7 +404,7 @@
                   "children": [],
                   "package": "",
                   "window": "main",
-                  "window_id": "730299f",
+                  "window_id": "3639e62",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -622,7 +412,7 @@
               ],
               "package": "",
               "window": "main",
-              "window_id": "730299f",
+              "window_id": "3639e62",
               "window_type": "TYPE_BASE_APPLICATION",
               "window_kind": "application",
               "window_z": 0
@@ -630,7 +420,7 @@
           ],
           "package": "",
           "window": "main",
-          "window_id": "730299f",
+          "window_id": "3639e62",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -665,7 +455,7 @@
           "children": [],
           "package": "",
           "window": "main",
-          "window_id": "730299f",
+          "window_id": "3639e62",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -700,7 +490,7 @@
           "children": [],
           "package": "",
           "window": "main",
-          "window_id": "730299f",
+          "window_id": "3639e62",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -708,7 +498,7 @@
       ],
       "package": "",
       "window": "main",
-      "window_id": "730299f",
+      "window_id": "3639e62",
       "window_type": "TYPE_BASE_APPLICATION",
       "window_kind": "application",
       "window_z": 0
@@ -718,7 +508,7 @@
   "text_available": true,
   "windows": [
     {
-      "id": "730299f",
+      "id": "3639e62",
       "label": "main",
       "type_name": "TYPE_BASE_APPLICATION",
       "kind": "application",

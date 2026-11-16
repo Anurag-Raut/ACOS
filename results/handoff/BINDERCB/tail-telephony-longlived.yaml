@@ -1,0 +1,62 @@
+# BINDERCB proof: a PhoneStateListener registered at app start (onCreate) must be
+# reached by a host->guest callback later in the session - WITHOUT the fixture's
+# "Listen for calls" tap that re-registers a listener right before the event.
+#
+# The fixture registers a listener in `onCreate` (MainActivity.registerCallStateListener)
+# and the registry answers it with the current state (`notifyNow`), which is the
+# "CALL state=IDLE" line this scenario waits for. Nothing else registers a
+# listener afterwards, so the injected ringing event exercises exactly the
+# long-lived callback path.
+version: 1
+name: tail-telephony-longlived
+description: >-
+  net.telephony at `scripted`: a PhoneStateListener registered once at app start
+  (`onCreate`) receives the registry's initial state and then a scripted ringing
+  call state injected later in the session. No re-registration step.
+app: ../../../fixtures/build/apps/tail-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+services:
+  - id: net.telephony
+    profile: scripted
+steps:
+  - launch:
+      activity: dev.acos.fixtures.tailprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "TELEPHONY sim=READY phone=GSM network=LTE call=IDLE"}}
+      timeout_ms: 20000
+  # The listener registered in onCreate got the registry's initial state.
+  - wait_for:
+      selector: {text: {contains: "CALL state=IDLE"}}
+      timeout_ms: 20000
+  # A ringtone/telephony gap: let the session sit idle so this is a *long-lived*
+  # callback, not one that arrives in the same turn as the registration. The
+  # wait is event-driven: the app's own screen is the only thing that changes,
+  # so wait on a fresh frame of the telephony tab (a real observation, not a
+  # sleep).
+  - tap:
+      selector: {text: {exact: "Telephony"}}
+  - wait_for:
+      selector: {text: {contains: "line1=+15551234567"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: net.telephony
+      op: call_state
+      args: {state: ringing, number: "+15550002222"}
+  - wait_for:
+      selector: {text: {contains: "CALL state=RINGING number=+15550002222"}}
+      timeout_ms: 20000

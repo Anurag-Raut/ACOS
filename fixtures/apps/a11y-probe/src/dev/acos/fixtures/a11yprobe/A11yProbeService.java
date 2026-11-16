@@ -2,7 +2,12 @@ package dev.acos.fixtures.a11yprobe;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.accessibilityservice.GestureDescription;
+import android.graphics.ColorSpace;
+import android.graphics.Path;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.hardware.HardwareBuffer;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
@@ -11,9 +16,13 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.TextView;
+import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
+
+import java.util.ArrayList;
+import java.util.concurrent.Executor;
 
 import java.util.List;
 
@@ -95,6 +104,14 @@ public class A11yProbeService extends AccessibilityService {
     private void probe() {
         Log.i(TAG, "probe_start pid=" + Process.myPid()
                 + " tid=" + Thread.currentThread().getId());
+        // MODA11YNATIVE2: the display facts the gesture path is sampled
+        // against. `AccessibilityService.calculateGestureSampleTimeMs` divides
+        // 1000 by `Display.getRefreshRate()`, and a gesture is sampled into
+        // one `GestureStep` per sample — so a `0 Hz` display collapses a swipe
+        // to its press/release key points and no `MOVE` ever reaches the app.
+        // That is a display-fidelity fact, not a probe detail, so it is logged
+        // and asserted before anything uses the gesture stream.
+        logDisplay();
 
         List<AccessibilityWindowInfo> windows = null;
         int attempts = 0;
@@ -122,6 +139,20 @@ public class A11yProbeService extends AccessibilityService {
 
         AccessibilityNodeInfo root = getRootInActiveWindow();
         Log.i(TAG, "root " + describe(root));
+        // MODA11YNATIVE: the gesture and screenshot probes run on this same
+        // root, taken BEFORE the overlay is added. A query after the add would
+        // go through the service's own overlay window connection on this worker
+        // thread, which the framework answers on the main thread — the same
+        // same-process interaction wait MODA11Y4 documented.
+        Rect gestureTarget = boundsOf(root, "dev.acos.fixtures.a11yprobe:id/gesture_target");
+        Rect gestureList = boundsOf(root, "dev.acos.fixtures.a11yprobe:id/gesture_list");
+        Rect swatch = boundsOf(root, "dev.acos.fixtures.a11yprobe:id/swatch");
+        if (swatch != null) {
+            // The swatch the composited frame uses for the pixel claim; logged
+            // because a host-side region assertion has to name display pixels.
+            Log.i(TAG, "swatch bounds=[" + swatch.left + "," + swatch.top
+                    + "][" + swatch.right + "," + swatch.bottom + "]");
+        }
 
         if (root != null) {
             List<AccessibilityNodeInfo> byId =
@@ -135,6 +166,8 @@ public class A11yProbeService extends AccessibilityService {
             }
         }
         Log.i(TAG, "probe_done");
+
+        probeGestures(gestureTarget, gestureList);
 
         // MODA11Y5 step 4: the same service adds a TYPE_ACCESSIBILITY_OVERLAY
         // window through the WindowManager the framework gave it. AOSP fills
@@ -183,6 +216,200 @@ public class A11yProbeService extends AccessibilityService {
         }
         Log.i(TAG, "windows2 overlay=" + overlay);
         Log.i(TAG, "overlay_probe_done");
+
+        probeScreenshots();
+    }
+
+    /**
+     * MODA11YNATIVE step 1: `dispatchGesture`.
+     *
+     * <p>The framework's own `AccessibilityService.dispatchGesture` samples the
+     * `GestureDescription` into `MotionEvent`s
+     * (`GestureDescription$MotionEventGenerator`) and puts them in a
+     * `ParceledListSlice`, so what leaves this process is the real wire. The
+     * tap targets the {@code gesture_target} button and the swipe drags the
+     * {@code gesture_list} list; the app's own listeners count both, so the
+     * scenario's assertion is the app's state, not this log.
+     */
+    private void probeGestures(Rect tapBounds, Rect listBounds) {
+        if (tapBounds == null) {
+            Log.i(TAG, "gesture tap=false reason=no_gesture_target");
+        } else {
+            Path tap = new Path();
+            tap.moveTo(tapBounds.exactCenterX(), tapBounds.exactCenterY());
+            GestureDescription description = new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(tap, 0, 40))
+                    .build();
+            dispatch("tap", description);
+        }
+        if (listBounds == null) {
+            Log.i(TAG, "gesture swipe=false reason=no_gesture_list");
+        } else {
+            float x = listBounds.exactCenterX();
+            Path swipe = new Path();
+            swipe.moveTo(x, listBounds.bottom - 10);
+            swipe.lineTo(x, listBounds.top + 10);
+            GestureDescription description = new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(swipe, 0, 200))
+                    .build();
+            dispatch("swipe", description);
+        }
+    }
+
+    /** Dispatch one description and log the framework's own result callback. */
+    private void dispatch(String kind, GestureDescription description) {
+        boolean accepted = dispatchGesture(description,
+                new GestureResultCallback() {
+                    @Override
+                    public void onCompleted(GestureDescription gesture) {
+                        Log.i(TAG, "gesture_result kind=" + kind + " completed=true");
+                    }
+
+                    @Override
+                    public void onCancelled(GestureDescription gesture) {
+                        Log.i(TAG, "gesture_result kind=" + kind + " completed=false");
+                    }
+                }, new Handler(Looper.getMainLooper()));
+        Log.i(TAG, "gesture_sent kind=" + kind + " accepted=" + accepted
+                + " strokes=" + description.getStrokeCount());
+    }
+
+    private static Rect boundsOf(AccessibilityNodeInfo root, String viewId) {
+        if (root == null) {
+            return null;
+        }
+        List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByViewId(viewId);
+        if (found == null || found.isEmpty()) {
+            return null;
+        }
+        Rect bounds = new Rect();
+        found.get(0).getBoundsInScreen(bounds);
+        return bounds;
+    }
+
+    /**
+     * MODA11YNATIVE step 2: `takeScreenshot` and its failure paths.
+     *
+     * <p>Everything asserted here is the framework's own callback: AOSP's
+     * `AbstractAccessibilityServiceConnection.takeScreenshot` answers the 333 ms
+     * interval with `ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT` (3), an unknown
+     * display with `…INVALID_DISPLAY` (4) and a screen showing a
+     * `FLAG_SECURE` window with `…SECURE_WINDOW` (6), all through
+     * `TakeScreenshotCallback.onFailure`. The first call succeeds and reports
+     * the returned `HardwareBuffer`'s own description (frame size, format,
+     * usage, colour space) — the most an app can read here, see
+     * `screenshot_pixel unavailable=…`.
+     */
+    private void probeScreenshots() {
+        final Executor executor = getMainExecutor();
+        // 1. The success path first: it also arms the 333 ms interval.
+        takeScreenshot(0, executor, screenshotCallback("capture", true));
+        // 2. Immediately again: inside the interval, so AOSP answers 3.
+        takeScreenshot(0, executor, screenshotCallback("interval", false));
+        SystemClock.sleep(400);
+        // 3. A display this device does not have: 4.
+        takeScreenshot(5, executor, screenshotCallback("display", false));
+        SystemClock.sleep(400);
+        // 4. A FLAG_SECURE window on screen: 6.
+        addSecureOverlay(true);
+        SystemClock.sleep(400);
+        takeScreenshot(0, executor, screenshotCallback("secure", false));
+        SystemClock.sleep(400);
+        addSecureOverlay(false);
+    }
+
+    private TakeScreenshotCallback screenshotCallback(String kind, boolean success) {
+        return new TakeScreenshotCallback() {
+            @Override
+            public void onSuccess(ScreenshotResult result) {
+                HardwareBuffer buffer = result.getHardwareBuffer();
+                ColorSpace colorSpace = result.getColorSpace();
+                Log.i(TAG, "screenshot_result kind=" + kind + " status=0"
+                        + " width=" + buffer.getWidth()
+                        + " height=" + buffer.getHeight()
+                        + " format=" + buffer.getFormat()
+                        + " usage=" + buffer.getUsage()
+                        + " color_space=" + (colorSpace == null ? "null" : colorSpace.getName())
+                        + " timestamp=" + result.getTimestamp());
+                Log.i(TAG, "screenshot_expect kind=" + kind + " success=" + success);
+                // MODA11YNATIVE2: reading one pixel needs
+                // `Bitmap.wrapHardwareBuffer`, i.e. a HARDWARE bitmap, i.e. an
+                // EGL/GLES implementation in the guest. This image has none
+                // ("libEGL: assertion failed: !hnd couldn't find an OpenGL ES
+                // implementation", then SIGABRT on RenderThread), so the pixel
+                // read is not reachable here; the buffer's own metadata (frame
+                // size, format, usage, colour space) is what the app can
+                // assert, and the compositor frame it points at is asserted
+                // host-side. Logged, not silently skipped.
+                Log.i(TAG, "screenshot_pixel unavailable=hardware_bitmap_needs_egl");
+                buffer.close();
+            }
+
+            @Override
+            public void onFailure(int errorCode) {
+                Log.i(TAG, "screenshot_result kind=" + kind + " status=" + errorCode);
+                Log.i(TAG, "screenshot_expect kind=" + kind + " success=" + success);
+            }
+        };
+    }
+
+    /**
+     * Add (or remove) a {@code FLAG_SECURE} accessibility overlay.
+     *
+     * <p>This is what makes the secure-window failure reachable on a device with
+     * no DRM app: the overlay is a real window of the service's own with
+     * `WindowManager.LayoutParams.FLAG_SECURE`, so the compositor's
+     * `has_secure_window()` sees it and `takeScreenshot` answers
+     * `ERROR_TAKE_SCREENSHOT_SECURE_WINDOW`.
+     */
+    private boolean secureOverlayAdded;
+    private View secureOverlayView;
+    private WindowManager secureOverlayWindowManager;
+    private void addSecureOverlay(boolean add) {
+        final A11yProbeService service = this;
+        final java.util.concurrent.CountDownLatch done =
+                new java.util.concurrent.CountDownLatch(1);
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                WindowManager wm = (WindowManager) service.getSystemService(WINDOW_SERVICE);
+                secureOverlayWindowManager = wm;
+                if (add) {
+                    TextView view = new TextView(service);
+                    view.setText("secure");
+                    WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                            120, 60,
+                            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                                    | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                                    | WindowManager.LayoutParams.FLAG_SECURE,
+                            PixelFormat.TRANSLUCENT);
+                    params.gravity = Gravity.TOP | Gravity.START;
+                    params.x = 400;
+                    params.y = 600;
+                    wm.addView(view, params);
+                    secureOverlayView = view;
+                    secureOverlayAdded = true;
+                    Log.i(TAG, "secure_overlay added=true flags=" + params.flags);
+                } else if (secureOverlayAdded) {
+                    // Removed again, so the window stack the scenario asserts on
+                    // is back to the application window plus the one
+                    // non-secure overlay the MODA11Y5 step added.
+                    wm.removeView(secureOverlayView);
+                    secureOverlayView = null;
+                    secureOverlayAdded = false;
+                    Log.i(TAG, "secure_overlay added=false removed=true");
+                }
+            } catch (Throwable failure) {
+                Log.i(TAG, "secure_overlay added=" + add + " error=" + failure);
+            } finally {
+                done.countDown();
+            }
+        });
+        try {
+            done.await(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
@@ -225,6 +452,39 @@ public class A11yProbeService extends AccessibilityService {
             added.await(5, java.util.concurrent.TimeUnit.SECONDS);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Log the display facts `dispatchGesture` is sampled against.
+     *
+     * <p>`AccessibilityService.calculateGestureSampleTimeMs` is
+     * `(int)(1000 / Display.getRefreshRate())` for a `targetSdk > Q` app, and
+     * `MotionEventGenerator` emits one `GestureStep` per sample between a
+     * stroke's key points. A display that reports `0 Hz` therefore turns a
+     * 200 ms swipe into two steps (press, release) and **no** `MOVE` ever
+     * reaches the app — a real device reports 60/90/120, never 0. The values
+     * are logged because they are the difference between a scrolling list and
+     * a stationary one, and the scenario asserts them.
+     */
+    private void logDisplay() {
+        try {
+            android.hardware.display.DisplayManager dm =
+                    (android.hardware.display.DisplayManager) getSystemService(DISPLAY_SERVICE);
+            android.view.Display display =
+                    dm == null ? null : dm.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+            if (display == null) {
+                Log.i(TAG, "display null");
+                return;
+            }
+            android.view.Display.Mode mode = display.getMode();
+            Log.i(TAG, "display id=" + display.getDisplayId()
+                    + " refresh_rate=" + display.getRefreshRate()
+                    + " mode_id=" + (mode == null ? -1 : mode.getModeId())
+                    + " mode_rate=" + (mode == null ? 0f : mode.getRefreshRate())
+                    + " modes=" + display.getSupportedModes().length);
+        } catch (Throwable failure) {
+            Log.i(TAG, "display error=" + failure);
         }
     }
 

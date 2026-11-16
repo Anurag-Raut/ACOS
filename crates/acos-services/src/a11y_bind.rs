@@ -44,8 +44,7 @@ pub const SERVICE_INTERFACE: &str = "android.accessibilityservice.AccessibilityS
 /// The service-side interface the system calls `init` on.
 pub const SERVICE_CLIENT: &str = "android.accessibilityservice.IAccessibilityServiceClient";
 /// The system-side interface handed to the service by `init`.
-pub const SERVICE_CONNECTION: &str =
-    "android.accessibilityservice.IAccessibilityServiceConnection";
+pub const SERVICE_CONNECTION: &str = "android.accessibilityservice.IAccessibilityServiceConnection";
 /// `ActivityThread.PROCESS_STATE_TOP` (the state AMS reports for a bind it is
 /// about to deliver).
 const PROCESS_STATE_TOP: i32 = 2;
@@ -122,18 +121,19 @@ fn service_config_from_apk(
     let apk = match crate::apk_facts::open_shared(&apk_path) {
         Ok(apk) => apk,
         Err(error) => {
-            state
-                .unsupported
-                .push(format!("accessibility meta-data: open {}: {error}", apk_path.display()));
+            state.unsupported.push(format!(
+                "accessibility meta-data: open {}: {error}",
+                apk_path.display()
+            ));
             return None;
         }
     };
     match crate::a11y_config::A11yServiceConfig::from_apk(&apk, resource_id) {
         Ok(config) => Some(config),
         Err(error) => {
-            state
-                .unsupported
-                .push(format!("accessibility meta-data @{resource_id:#010x}: {error}"));
+            state.unsupported.push(format!(
+                "accessibility meta-data @{resource_id:#010x}: {error}"
+            ));
             None
         }
     }
@@ -201,13 +201,12 @@ fn default_compat_info() -> Parcelable {
 }
 
 fn request(interface: &str, code: u32, args: Vec<Value>) -> Result<Parcel> {
-    let method = acos_aidl::lookup(interface, code).ok_or_else(|| {
-        ServiceError::UnsupportedAndroidApi {
+    let method =
+        acos_aidl::lookup(interface, code).ok_or_else(|| ServiceError::UnsupportedAndroidApi {
             interface: interface.to_string(),
             code,
             method: format!("code {code}"),
-        }
-    })?;
+        })?;
     crate::codec::build_request(interface, method, &args)
 }
 
@@ -474,12 +473,12 @@ fn windows_changed_event(connection_id: i32, window_id: i32, changes: i32) -> Re
     data.write_int32(0); // mContentChangeTypes
     data.write_int32(changes); // mWindowChangeTypes
     data.write_int32(0); // mSpeechStateChangeTypes
-    // `TextUtils.writeToParcel`: a non-`Spanned` CharSequence is `int 1` and
-    // then `Parcel.writeString8` (the image's own
-    // `TextUtils.writeToParcel` at framework/classes3.dex 0x455fda-0x455ff6:
-    // `writeInt(1)`, `writeString8(cs == null ? null : cs.toString())`), so a
-    // null CharSequence is `1` + a `-1` length — not `0`, which is the
-    // `Spanned` branch and desynchronises the whole record.
+                         // `TextUtils.writeToParcel`: a non-`Spanned` CharSequence is `int 1` and
+                         // then `Parcel.writeString8` (the image's own
+                         // `TextUtils.writeToParcel` at framework/classes3.dex 0x455fda-0x455ff6:
+                         // `writeInt(1)`, `writeString8(cs == null ? null : cs.toString())`), so a
+                         // null CharSequence is `1` + a `-1` length — not `0`, which is the
+                         // `Spanned` branch and desynchronises the whole record.
     data.write_int32(1); // mPackageName: not spanned
     data.write_string8_opt(None)?; // mPackageName: null
     let now_ms = std::time::SystemTime::now()
@@ -487,9 +486,9 @@ fn windows_changed_event(connection_id: i32, window_id: i32, changes: i32) -> Re
         .map(|d| i64::try_from(d.as_millis()).unwrap_or(0))
         .unwrap_or(0);
     data.write_int64(now_ms); // mEventTime
-    // AMS sets the record's connection id when the service may retrieve
-    // window content, and lets the event carry no source otherwise
-    // (`AbstractAccessibilityServiceConnection.notifyAccessibilityEvent`).
+                              // AMS sets the record's connection id when the service may retrieve
+                              // window content, and lets the event carry no source otherwise
+                              // (`AbstractAccessibilityServiceConnection.notifyAccessibilityEvent`).
     data.write_int32(connection_id);
     // `writeAccessibilityRecordToParcel` for the event itself.
     data.write_int32(PROPERTY_IMPORTANT_FOR_ACCESSIBILITY); // mBooleanProperties
@@ -518,9 +517,9 @@ fn windows_changed_event(connection_id: i32, window_id: i32, changes: i32) -> Re
     data.write_int32(-1); // mSourceDisplayId (Display.INVALID_DISPLAY)
     data.write_int32(0); // record mSealed
     data.write_int32(0); // record count
-    // `in boolean serviceWantsEvent`: the service asked for window changes or
-    // not; a cache-critical event is delivered either way, and `true` is what
-    // AOSP passes when it does want it.
+                         // `in boolean serviceWantsEvent`: the service asked for window changes or
+                         // not; a cache-critical event is delivered either way, and `true` is what
+                         // AOSP passes when it does want it.
     data.write_int32(1);
     Ok(data)
 }
@@ -567,7 +566,7 @@ pub fn write_window_info(
     parcel.write_int32(window.id);
     parcel.write_int32(UNDEFINED_WINDOW_ID); // mParentId
     parcel.write_int32(UNDEFINED_WINDOW_ID); // mTaskId
-    // `Region.writeToParcel`: one rectangle, as a vector of four ints.
+                                             // `Region.writeToParcel`: one rectangle, as a vector of four ints.
     let (left, top, right, bottom) = window.frame;
     parcel.write_int32(4);
     parcel.write_int32(left);
@@ -585,7 +584,7 @@ pub fn write_window_info(
     } else {
         -1
     }); // mConnectionId
-    // `writeParcelable(null)`: a null class name.
+        // `writeParcelable(null)`: a null class name.
     parcel.write_int32(-1);
     Ok(())
 }
@@ -752,14 +751,14 @@ impl A11yConnectionNode {
             _ => None,
         };
         let interaction_id = data.read_int32()?;
-        let callback = data
-            .read_strong_binder()?
-            .map(|b| b.0)
-            .ok_or_else(|| ServiceError::BadRequest {
-                interface: SERVICE_CONNECTION.into(),
-                method: "findAccessibilityNodeInfo*".into(),
-                detail: "missing IAccessibilityInteractionConnectionCallback".into(),
-            })?;
+        let callback =
+            data.read_strong_binder()?
+                .map(|b| b.0)
+                .ok_or_else(|| ServiceError::BadRequest {
+                    interface: SERVICE_CONNECTION.into(),
+                    method: "findAccessibilityNodeInfo*".into(),
+                    detail: "missing IAccessibilityInteractionConnectionCallback".into(),
+                })?;
         // Only `findAccessibilityNodeInfoByAccessibilityId` carries `flags`;
         // the text/view-id twins go straight from the callback to the thread id
         // (the image's `IAccessibilityServiceConnection` signatures).
@@ -830,7 +829,6 @@ impl A11yConnectionNode {
         Ok(())
     }
 
-
     /// Relay one `performAccessibilityAction` request to the window's
     /// `IAccessibilityInteractionConnection` (code 6).
     ///
@@ -838,6 +836,226 @@ impl A11yConnectionNode {
     /// outcome arrives on the same callback (`setPerformAccessibilityActionResult`),
     /// which is dispatched inside the guest because both binders are local
     /// there.
+    /// Serve one `dispatchGesture` request.
+    ///
+    /// Everything the app observes is the framework's: the sequence number and
+    /// the sampled `MotionEvent`s come from the guest, the events go out on the
+    /// session's real `InputChannel`, and the answer is
+    /// `IAccessibilityServiceClient.onPerformGestureResult(sequence, delivered)`
+    /// (`code 11`) **after** the events were published — a `true` here means
+    /// the dispatcher accepted every event, never that the app handled it.
+    fn dispatch_gesture(
+        &mut self,
+        sequence: i32,
+        steps: &[crate::a11y_native::GestureStep],
+        display_id: i32,
+        state: &mut A11yState,
+    ) -> crate::misc::A11yGestureRecord {
+        let denied = |reason: String| crate::misc::A11yGestureRecord {
+            sequence,
+            events: steps.len(),
+            delivered: false,
+            reason: Some(reason),
+        };
+        if !state.can_perform_gestures() {
+            // AOSP: `if (mServiceInterface != null &&
+            // mSecurityPolicy.canPerformGestures(this))` — no injection and no
+            // callback for a service without the capability.
+            return denied(format!(
+                "dispatchGesture({sequence}): the service declares no canPerformGestures \
+                 capability, so AOSP neither injects nor answers"
+            ));
+        }
+        let Some(bound) = state.bound_service.clone() else {
+            return denied(format!(
+                "dispatchGesture({sequence}): no accessibility service is bound"
+            ));
+        };
+        if display_id != 0 {
+            // AOSP resolves the injector **per display**
+            // (`getMotionEventInjectorForDisplayLocked`); ACOS composites one
+            // display (id 0), so a gesture for another display has no injector
+            // and AOSP's own answer is `onPerformGestureResult(sequence,
+            // false)`.
+            let delivery = gesture_result_delivery(&bound, sequence, false);
+            self.deliveries.push(delivery);
+            return denied(format!(
+                "dispatchGesture({sequence}): no motion event injector for display {display_id}"
+            ));
+        }
+        let token = match state.gesture_token() {
+            Ok(token) => token,
+            Err(error) => {
+                let delivery = gesture_result_delivery(&bound, sequence, false);
+                self.deliveries.push(delivery);
+                return denied(format!("dispatchGesture({sequence}): {error}"));
+            }
+        };
+        let events = crate::a11y_native::GestureStep::gesture_events(steps);
+        // The stroke's clock starts now (the same `CLOCK_MONOTONIC` base a real
+        // `InputDispatcher` stamps events with) and every event keeps the
+        // guest's own offset from it, so a 200 ms swipe is a 200 ms event-time
+        // span even though the host publishes it in one turn.
+        let down_time_ns = crate::input_channel::monotonic_nanos();
+        let channel_events = crate::a11y_native::channel_events(&events, down_time_ns, display_id);
+        for event in &events {
+            let point = event.points.first().copied().unwrap_or((0.0, 0.0));
+            crate::trace::line(format!(
+                "ACOSA11Y dispatchGesture seq={sequence} t={} action={} at=({:.1},{:.1})",
+                event.time_ms, event.action, point.0, point.1
+            ));
+        }
+        match state.publish_gesture(token, &channel_events) {
+            Ok(()) => {
+                self.deliveries
+                    .push(gesture_result_delivery(&bound, sequence, true));
+                crate::misc::A11yGestureRecord {
+                    sequence,
+                    // The record counts the `MotionEvent`s the app received
+                    // (one per `GestureStep` point), which is what "the stroke
+                    // reached the list" means; `steps.len()` is the slice's
+                    // sampling, not the touch stream.
+                    events: events.len(),
+                    delivered: true,
+                    reason: None,
+                }
+            }
+            Err(reason) => {
+                self.deliveries
+                    .push(gesture_result_delivery(&bound, sequence, false));
+                denied(format!(
+                    "dispatchGesture({sequence}): the session input channel refused the \
+                     events: {reason}"
+                ))
+            }
+        }
+    }
+
+    /// Serve one `takeScreenshot` request.
+    ///
+    /// The order and the codes are AOSP's `AbstractAccessibilityServiceConnection
+    /// .takeScreenshot`: 333 ms interval (`ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT`
+    /// = 3) first, then the capability (the only failure that **throws**
+    /// `SecurityException`), then the display (`…INVALID_DISPLAY` = 4), then a
+    /// secure window (`…SECURE_WINDOW` = 6). Success is the
+    /// `screenshot_*` `Bundle` through `IRemoteCallback.sendResult` with a
+    /// `HardwareBuffer` over a memfd copy of the composited frame.
+    fn take_screenshot(
+        &mut self,
+        display_id: i32,
+        callback: Option<BinderId>,
+        state: &mut A11yState,
+        reply: &mut Parcel,
+    ) -> Result<()> {
+        /// `ACCESSIBILITY_TAKE_SCREENSHOT_REQUEST_INTERVAL_TIMES_MS`.
+        const INTERVAL_MS: i64 = 333;
+        /// `ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT`.
+        const ERROR_INTERVAL_TIME_SHORT: i32 = 3;
+        /// `ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY`.
+        const ERROR_INVALID_DISPLAY: i32 = 4;
+        /// `ERROR_TAKE_SCREENSHOT_SECURE_WINDOW`.
+        const ERROR_SECURE_WINDOW: i32 = 6;
+        let Some(callback) = callback else {
+            return Err(crate::error::ServiceError::BadRequest {
+                interface: SERVICE_CONNECTION.into(),
+                method: "takeScreenshot".into(),
+                detail: "a null RemoteCallback".into(),
+            });
+        };
+        let now = A11yState::uptime_ms();
+        let too_soon = state
+            .last_screenshot_ms
+            .is_some_and(|last| now.saturating_sub(last) <= INTERVAL_MS);
+        if too_soon {
+            self.screenshot_failure(callback, ERROR_INTERVAL_TIME_SHORT)?;
+            Self::record_screenshot(state, display_id, ERROR_INTERVAL_TIME_SHORT);
+            crate::exception::write_no_exception(reply);
+            return Ok(());
+        }
+        state.last_screenshot_ms = Some(now);
+        if !state.can_take_screenshot() {
+            // AOSP throws: `throw new SecurityException("Services don't have
+            // the capability of taking the screenshot.")`.
+            state.unsupported.push(format!(
+                "takeScreenshot({display_id}) denied: no capability"
+            ));
+            Self::record_screenshot(state, display_id, -1);
+            crate::exception::write_exception(
+                reply,
+                crate::exception::EX_SECURITY,
+                "Services don't have the capability of taking the screenshot.",
+            )?;
+            return Ok(());
+        }
+        // ACOS reports one display, the default one. AOSP refuses a display the
+        // display manager does not know and a private virtual display; both are
+        // "not this display" here.
+        if display_id != 0 {
+            self.screenshot_failure(callback, ERROR_INVALID_DISPLAY)?;
+            Self::record_screenshot(state, display_id, ERROR_INVALID_DISPLAY);
+            crate::exception::write_no_exception(reply);
+            return Ok(());
+        }
+        if crate::a11y_native::secure_window_visible(state) {
+            self.screenshot_failure(callback, ERROR_SECURE_WINDOW)?;
+            Self::record_screenshot(state, display_id, ERROR_SECURE_WINDOW);
+            crate::exception::write_no_exception(reply);
+            return Ok(());
+        }
+        let frame = match crate::a11y_native::capture_frame(state) {
+            Ok(frame) => frame,
+            Err(status) => {
+                self.screenshot_failure(callback, status)?;
+                Self::record_screenshot(state, display_id, status);
+                crate::exception::write_no_exception(reply);
+                return Ok(());
+            }
+        };
+        let mut data = Parcel::new();
+        crate::a11y_native::write_success_bundle(&mut data, &frame, now)?;
+        self.deliveries.push(PendingDelivery {
+            target: BinderId(callback.0),
+            interface: REMOTE_CALLBACK.to_string(),
+            code: 1,
+            method: "sendResult".into(),
+            data,
+        });
+        Self::record_screenshot(
+            state,
+            display_id,
+            crate::a11y_native::TAKE_SCREENSHOT_SUCCESS,
+        );
+        crate::trace::line(format!(
+            "ACOSA11Y takeScreenshot success display={display_id} {}x{} stride={}",
+            frame.width, frame.height, frame.stride
+        ));
+        crate::exception::write_no_exception(reply);
+        Ok(())
+    }
+
+    /// Send one `sendScreenshotFailure` `Bundle` (`screenshot_status` only).
+    fn screenshot_failure(&mut self, callback: BinderId, status: i32) -> Result<()> {
+        let mut data = Parcel::new();
+        crate::a11y_native::write_failure_bundle(&mut data, status)?;
+        self.deliveries.push(PendingDelivery {
+            target: callback,
+            interface: REMOTE_CALLBACK.to_string(),
+            code: 1,
+            method: "sendResult".into(),
+            data,
+        });
+        Ok(())
+    }
+
+    fn record_screenshot(state: &mut A11yState, display_id: i32, status: i32) {
+        if state.screenshots.len() >= 32 {
+            state.screenshots.remove(0);
+        }
+        state
+            .screenshots
+            .push(crate::misc::A11yScreenshotRecord { display_id, status });
+    }
+
     fn relay_action(
         &mut self,
         data: &mut Parcel,
@@ -852,14 +1070,14 @@ impl A11yConnectionNode {
         let present = data.read_int32()?;
         let bundle = (present != 0).then(|| (data.data_position(), data.remaining()));
         let interaction_id = data.read_int32()?;
-        let callback = data
-            .read_strong_binder()?
-            .map(|b| b.0)
-            .ok_or_else(|| ServiceError::BadRequest {
-                interface: SERVICE_CONNECTION.into(),
-                method: "performAccessibilityAction".into(),
-                detail: "missing IAccessibilityInteractionConnectionCallback".into(),
-            })?;
+        let callback =
+            data.read_strong_binder()?
+                .map(|b| b.0)
+                .ok_or_else(|| ServiceError::BadRequest {
+                    interface: SERVICE_CONNECTION.into(),
+                    method: "performAccessibilityAction".into(),
+                    detail: "missing IAccessibilityInteractionConnectionCallback".into(),
+                })?;
         let thread_id = data.read_int64()?;
         let windows = state.window_snapshot();
         let resolved = state
@@ -901,10 +1119,36 @@ impl A11yConnectionNode {
         reply.write_int32(1);
         Ok(())
     }
-
 }
 
 impl ServiceObject for A11yConnectionNode {
+    /// The service-side connection node drives the same `A11yState`: a
+    /// `publishService` on it roots the bound service's client binder, and the
+    /// turn that handled it is where the host learns about it.
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .refs
+            .drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .refs
+            .drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .refs
+            .release_all()
+    }
+
     fn call(
         &mut self,
         interface: &str,
@@ -1024,7 +1268,9 @@ impl ServiceObject for A11yConnectionNode {
                     reply.write_int32(1);
                     return Ok(true);
                 }
-                state.unsupported.push(format!("performGlobalAction({action})"));
+                state
+                    .unsupported
+                    .push(format!("performGlobalAction({action})"));
                 return Err(ServiceError::ModuleRejected {
                     module: "accessibility",
                     detail: format!(
@@ -1055,7 +1301,9 @@ impl ServiceObject for A11yConnectionNode {
                 // `performAccessibilityAction` gates on the same
                 // `canGetAccessibilityNodeInfoLocked` and answers `false`.
                 if !state.can_retrieve_window_content() {
-                    state.unsupported.push("performAccessibilityAction denied".into());
+                    state
+                        .unsupported
+                        .push("performAccessibilityAction denied".into());
                     crate::exception::write_no_exception(reply);
                     let _ = reply.write_int32(0);
                     return Ok(true);
@@ -1077,10 +1325,7 @@ impl ServiceObject for A11yConnectionNode {
                 }
                 let windows = state.window_snapshot();
                 crate::trace::line(format!("ACOSA11Y getWindows snapshot={}", windows.len()));
-                let connection_id = state
-                    .bound_service
-                    .as_ref()
-                    .map_or(-1, |b| b.connection_id);
+                let connection_id = state.bound_service.as_ref().map_or(-1, |b| b.connection_id);
                 crate::exception::write_no_exception(reply);
                 // `writeTypedObject(WindowListSparseArray)`: present, payload.
                 let _ = reply.write_int32(1);
@@ -1100,10 +1345,7 @@ impl ServiceObject for A11yConnectionNode {
                 let window = state
                     .resolve_window(&windows, requested)
                     .and_then(|index| windows.get(index).cloned());
-                let connection_id = state
-                    .bound_service
-                    .as_ref()
-                    .map_or(-1, |b| b.connection_id);
+                let connection_id = state.bound_service.as_ref().map_or(-1, |b| b.connection_id);
                 crate::exception::write_no_exception(reply);
                 match window {
                     Some(window) => {
@@ -1114,6 +1356,54 @@ impl ServiceObject for A11yConnectionNode {
                         let _ = reply.write_int32(0);
                     }
                 }
+            }
+            // `IAccessibilityServiceConnection.dispatchGesture(int sequence,
+            // in ParceledListSlice gestureSteps, int displayId)` — code 33.
+            //
+            // The app's own `AccessibilityService.dispatchGesture` sampled the
+            // strokes into `MotionEvent`s
+            // (`GestureDescription$MotionEventGenerator`) and put them in the
+            // slice, so the host receives real events and publishes them on the
+            // session's input channel. AOSP's `AccessibilityServiceConnection`
+            // serves the request only when
+            // `mSecurityPolicy.canPerformGestures(this)` holds; without the
+            // capability it neither injects nor answers, so neither does this
+            // module — it records the refusal instead of inventing a callback.
+            "dispatchGesture" => {
+                crate::trace::line("ACOSA11Y dispatchGesture enter");
+                let sequence = data.read_int32()?;
+                // AIDL writes every `in Parcelable` argument with
+                // `writeTypedObject`, i.e. its class name first and the payload
+                // after it (a null is a `-1` length and no payload).
+                expect_present(data, "dispatchGesture", "ParceledListSlice")?;
+                let events = crate::a11y_native::read_gesture_slice(data)?;
+                let display_id = data.read_int32()?;
+                crate::trace::line(format!(
+                    "ACOSA11Y dispatchGesture decoded seq={sequence} events={} display={display_id}",
+                    events.len()
+                ));
+                let record = self.dispatch_gesture(sequence, &events, display_id, &mut state);
+                if let Some(reason) = record.reason.clone() {
+                    state.unsupported.push(reason);
+                }
+                state.gestures.push(record);
+                crate::exception::write_no_exception(reply);
+            }
+            // `IAccessibilityServiceConnection.takeScreenshot(int displayId,
+            // in RemoteCallback callback)` — code 37.
+            //
+            // AOSP's order (`AbstractAccessibilityServiceConnection
+            // .takeScreenshot`): the 333 ms interval is checked **first**, then
+            // the capability, then the display, then a secure window; the
+            // capability failure is the only one that throws, every other
+            // failure is a `Bundle` with `screenshot_status` = the error code
+            // sent through `IRemoteCallback.sendResult`.
+            "takeScreenshot" => {
+                crate::trace::line("ACOSA11Y takeScreenshot enter");
+                let display_id = data.read_int32()?;
+                expect_present(data, "takeScreenshot", "RemoteCallback")?;
+                let callback = data.read_strong_binder()?;
+                self.take_screenshot(display_id, callback, &mut state, reply)?;
             }
             other => {
                 state.unsupported.push(format!("{interface}.{other}"));
@@ -1128,9 +1418,58 @@ impl ServiceObject for A11yConnectionNode {
     }
 }
 
+/// Read the presence marker `Parcel.writeTypedObject` writes before a
+/// parcelable argument's payload.
+///
+/// AIDL generates `writeTypedObject` for every `in`/`out` parcelable argument:
+/// `1` then the payload, or `0` for null (no class name — that is
+/// `writeParcelable`'s shape, and the captured `dispatchGesture` parcel in
+/// `tests/a11ynative.rs` shows the presence word immediately followed by the
+/// slice's item count). A null argument is a structured refusal: neither
+/// `dispatchGesture` nor `takeScreenshot` has a meaning without it.
+fn expect_present(data: &mut Parcel, method: &str, what: &str) -> Result<()> {
+    if data.read_int32()? != 0 {
+        return Ok(());
+    }
+    Err(crate::error::ServiceError::BadRequest {
+        interface: SERVICE_CONNECTION.into(),
+        method: method.into(),
+        detail: format!("a null {what}"),
+    })
+}
+
+/// `android.os.IRemoteCallback` — the binder `takeScreenshot` hands its result
+/// to (`sendResult(in Bundle)` = code 1, oneway).
+pub const REMOTE_CALLBACK: &str = "android.os.IRemoteCallback";
+
+/// `IAccessibilityServiceClient.onPerformGestureResult(int sequence, boolean
+/// completed)` — code 11 on the service client (MODA11Y7 `wire-map.txt`).
+pub const SERVICE_CLIENT_ON_PERFORM_GESTURE_RESULT: u32 = 11;
+
+/// The `onPerformGestureResult` delivery for a served gesture request.
+#[must_use]
+pub fn gesture_result_delivery(
+    bound: &crate::misc::A11yBoundService,
+    sequence: i32,
+    completed: bool,
+) -> PendingDelivery {
+    let mut data = Parcel::new();
+    data.write_interface_token(SERVICE_CLIENT)
+        .expect("parcel write");
+    data.write_int32(sequence);
+    data.write_int32(i32::from(completed));
+    PendingDelivery {
+        target: BinderId(bound.binder),
+        interface: SERVICE_CLIENT.to_string(),
+        code: SERVICE_CLIENT_ON_PERFORM_GESTURE_RESULT,
+        method: "onPerformGestureResult".into(),
+        data,
+    }
+}
+
 /// `IAccessibilityServiceConnection` transaction codes (AIDL declaration
 /// order), for the methods this node answers.
-const CONNECTION_METHODS: [(u32, &str); 12] = [
+const CONNECTION_METHODS: [(u32, &str); 14] = [
     (1, "setServiceInfo"),
     (2, "setAttributionTag"),
     (3, "findAccessibilityNodeInfoByAccessibilityId"),
@@ -1143,6 +1482,11 @@ const CONNECTION_METHODS: [(u32, &str); 12] = [
     (12, "performGlobalAction"),
     (13, "getSystemActions"),
     (14, "disableSelf"),
+    // Android 12+ interaction requests. The numbering is the image's own
+    // `IAccessibilityServiceConnection$Stub.getDefaultTransactionName` packed
+    // switch, not the AIDL file order (MODA11Y7 `wire-map.txt`).
+    (33, "dispatchGesture"),
+    (37, "takeScreenshot"),
 ];
 
 /// `AccessibilityService.GLOBAL_ACTION_BACK` (the only global action the
@@ -1224,15 +1568,13 @@ pub fn accessibility_info_for(
     component: &str,
     meta_data: &[MetaDataEntry],
 ) -> crate::value::Parcelable {
-    let mut value = service_info_value(component)
-        .unwrap_or(crate::value::Value::Parcelable(Parcelable::Null));
+    let mut value =
+        service_info_value(component).unwrap_or(crate::value::Value::Parcelable(Parcelable::Null));
     if let crate::value::Value::Parcelable(Parcelable::Ordered { values, .. }) = &mut value {
         for entry in meta_data {
             let number = match &entry.value {
                 crate::pms::MetaDataValue::Int(n) => Some(*n),
-                crate::pms::MetaDataValue::String(text) => {
-                    text.parse::<i32>().ok()
-                }
+                crate::pms::MetaDataValue::String(text) => text.parse::<i32>().ok(),
                 _ => None,
             };
             match entry.name.as_str() {
