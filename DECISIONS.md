@@ -1219,3 +1219,13 @@ relay netns and every session netns, and plain CLI use has no broker. Host-port 
 `-t <port>` plus a per-session DROP for sessions that did not opt in (simpler than an fd-passing
 REDIRECT proxy). Attach cost 15–49 ms (exec-based) is accepted for v0.4.0; rtnetlink (~2 ms) moves to
 the v0.5.0 density work.
+
+**ADR-0029 amendment (owner, 2026-11-16, after MODNOTIF): system UI comes from system apps in the
+guest.** The permission dialog and the notification shade are provided by small ACOS system apps
+installed in the session image and run as their own ART process (multi-process foundation): a
+`com.android.permissioncontroller` package with `GrantPermissionsActivity` answering the framework's own
+`buildRequestPermissionsIntent`, and an ACOS shade/system-UI app. The same mechanism later provides the
+launcher, Settings targets and the share chooser. ACOS does not paint host-side windows (option A
+rejected). The `notifications` and `permissions` service layers (state, control ops) are built now;
+names a module replaces (`notification`, `statusbar`, `permission`) move out of `core` into their
+modules so detach restores the core answer (orchestrator).
