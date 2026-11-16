@@ -1043,6 +1043,29 @@ impl AtmsService {
         Ok((matched, deliveries))
     }
 
+    /// Record a dynamic receiver registration that the runtime's AMS already
+    /// accepted (the session's one `registerReceiver`), so a broadcast the
+    /// **system** originates is matched by the same receiver.
+    pub fn register_receiver(
+        &mut self,
+        receiver: u64,
+        package: &str,
+        actions: Vec<String>,
+        categories: Vec<String>,
+        flags: i32,
+    ) {
+        let mut state = self.state.lock().unwrap();
+        state.register_receiver(receiver_registration_from_parts(
+            receiver, package, actions, categories, flags,
+        ));
+    }
+
+    /// Drop a mirrored registration (the guest unregistered it).
+    pub fn unregister_receiver(&mut self, receiver: u64) -> bool {
+        let mut state = self.state.lock().unwrap();
+        state.unregister_receiver(receiver)
+    }
+
     /// Drain the `IIntentReceiver.performReceive` deliveries the AMS state
     /// queued, whoever queued them.
     ///
@@ -1475,6 +1498,26 @@ fn describe_crash_info(crash: Option<&Parcelable>) -> String {
 /// [`ReceiverRegistration`]. Field indices follow `parcelable::SPECS` (which
 /// follows the image's `IntentFilter.writeToParcel`); a null filter is an empty
 /// record, not an error.
+/// A registration the runtime's AMS accepted, without a decoded `IntentFilter`
+/// (the runtime keeps the decoded actions/categories it matched on).
+fn receiver_registration_from_parts(
+    receiver: u64,
+    package: &str,
+    actions: Vec<String>,
+    categories: Vec<String>,
+    flags: i32,
+) -> ReceiverRegistration {
+    ReceiverRegistration {
+        receiver,
+        package: package.to_string(),
+        receiver_id: String::new(),
+        flags,
+        actions,
+        categories,
+        ..ReceiverRegistration::default()
+    }
+}
+
 fn receiver_registration(
     receiver: u64,
     package: &str,

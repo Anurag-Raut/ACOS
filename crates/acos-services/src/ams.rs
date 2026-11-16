@@ -1382,7 +1382,12 @@ impl AmsState {
             Err("the pending intent was cancelled".to_string())
         } else {
             match record.kind {
-                crate::pending_intent::TYPE_ACTIVITY => self
+                // `INTENT_SENDER_ACTIVITY` and `INTENT_SENDER_ACTIVITY_RESULT`
+                // both start the stored activity; the result half (its
+                // `resultTo`/`resultWho`) is not modelled by `start_activity`,
+                // which is what a tap/notification sender uses.
+                crate::pending_intent::TYPE_ACTIVITY
+                | crate::pending_intent::TYPE_ACTIVITY_RESULT => self
                     .start_activity(&intent, 0, 0, record.request_code)
                     .map_err(|e| e.to_string()),
                 crate::pending_intent::TYPE_BROADCAST => self
@@ -1540,6 +1545,7 @@ impl AmsState {
     ) -> Result<i32> {
         let ordered = result_to != 0;
         let mut matched = 0;
+
 
         // Manifest receivers first (in declared order), then dynamic ones.
         let manifest = self.manifests.resolve_receivers(intent);
@@ -1941,6 +1947,26 @@ pub fn dispatch(
             )?;
             vec![Value::Binder(binder.map(acos_parcel::BinderId))]
         }
+        // `ActivityManagerService.isIntentSenderTargetedToPackage` (image dex
+        // `services/classes.dex`, disassembled in
+        // `results/handoff/PIFILLIN/pending-intent-dex.txt`): the framework asks
+        // this before it hands a `PendingIntent` to a system service that will
+        // broadcast through it (`LocationManager.requestLocationUpdates` does).
+        // The image's rule is exactly "no stored intent carries both a package
+        // and a component"; a binder that is not a sender record is false.
+        "isIntentSenderTargetedToPackage" => {
+            let binder = value(0).and_then(Value::as_binder).map(|b| b.0);
+            let targeted = binder
+                .and_then(|binder| state.intent_senders.record(binder))
+                .map(|record| {
+                    !record
+                        .intents
+                        .iter()
+                        .any(|intent| intent.package.is_some() && intent.component.is_some())
+                })
+                .unwrap_or(false);
+            vec![Value::Bool(targeted)]
+        }
         "cancelIntentSender" => {
             let binder = value(0)
                 .and_then(Value::as_binder)
@@ -1954,9 +1980,13 @@ pub fn dispatch(
                 .and_then(Value::as_binder)
                 .map(|b| b.0)
                 .unwrap_or(0);
-            // `ActivityManager.PendingIntentInfo`: the creator package, whether
-            // the sender exists and whether it is an activity sender
-            // (`ActivityManager.java:4540`).
+            // `ActivityManager.PendingIntentInfo` — the image's four fields
+            // (`PendingIntentInfo.writeToParcel`: creator package, creator uid,
+            // immutable, intent-sender type), i.e. what
+            // `ActivityManagerService.getInfoForIntentSender` answers from the
+            // record. A session runs one app, so the creator uid is the fixture
+            // uid the manifest table was seeded with; a binder that is not a
+            // record answers the empty package with `immutable=false, type=0`.
             let record = state.intent_senders.record(binder);
             vec![Value::TypedObject(Parcelable::ordered(
                 "android.app.ActivityManager$PendingIntentInfo",
@@ -1964,12 +1994,17 @@ pub fn dispatch(
                     Value::Str(Some(
                         record.map(|r| r.package.clone()).unwrap_or_default(),
                     )),
-                    Value::Int(i32::from(record.is_some())),
-                    Value::Int(i32::from(
+                    Value::Int(
                         record
-                            .map(|r| r.kind == crate::pending_intent::TYPE_ACTIVITY)
+                            .map(|_| crate::pms::FIXTURE_UID)
+                            .unwrap_or(0),
+                    ),
+                    Value::Bool(
+                        record
+                            .map(|r| r.flags & crate::pending_intent::FLAG_IMMUTABLE != 0)
                             .unwrap_or(false),
-                    )),
+                    ),
+                    Value::Int(record.map(|r| r.kind).unwrap_or(0)),
                 ],
             ))]
         }

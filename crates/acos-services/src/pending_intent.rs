@@ -69,14 +69,23 @@ pub const FLAG_MUTABLE: i32 = 0x0200_0000;
 /// (`ActivityManagerService.getIntentSender`).
 pub const EPHEMERAL_FLAGS: i32 = FLAG_NO_CREATE | FLAG_CANCEL_CURRENT | FLAG_UPDATE_CURRENT;
 
-/// `IActivityManager.getIntentSender` `type`: `INTENT_SENDER_ACTIVITY`.
-pub const TYPE_ACTIVITY: i32 = 1;
+// `IActivityManager.getIntentSender`'s `type`, i.e. `ActivityManager.
+// INTENT_SENDER_*` (`base/core/java/android/app/ActivityManager.java:603-632`).
+// The broadcast value is **1**: an older build had these four shifted by one,
+// which made every `getBroadcast` sender deliver as an activity start and every
+// `getActivity` sender deliver as a broadcast. The values are pinned by
+// `the_sender_types_are_the_frameworks` below.
 /// `INTENT_SENDER_BROADCAST`.
-pub const TYPE_BROADCAST: i32 = 2;
+pub const TYPE_BROADCAST: i32 = 1;
+/// `INTENT_SENDER_ACTIVITY`.
+pub const TYPE_ACTIVITY: i32 = 2;
+/// `INTENT_SENDER_ACTIVITY_RESULT` (an activity sender whose result goes back
+/// to `resultTo`; delivered as an activity start, see [`crate::ams`]).
+pub const TYPE_ACTIVITY_RESULT: i32 = 3;
 /// `INTENT_SENDER_SERVICE`.
-pub const TYPE_SERVICE: i32 = 3;
+pub const TYPE_SERVICE: i32 = 4;
 /// `INTENT_SENDER_FOREGROUND_SERVICE`.
-pub const TYPE_FOREGROUND_SERVICE: i32 = 4;
+pub const TYPE_FOREGROUND_SERVICE: i32 = 5;
 
 /// `android.content.IIntentSender` transaction code of `send`
 /// (`IIntentSender.aidl` has exactly one method).
@@ -313,7 +322,11 @@ impl SenderTable {
     ) -> Result<Option<u64>> {
         if !matches!(
             kind,
-            TYPE_ACTIVITY | TYPE_BROADCAST | TYPE_SERVICE | TYPE_FOREGROUND_SERVICE
+            TYPE_BROADCAST
+                | TYPE_ACTIVITY
+                | TYPE_ACTIVITY_RESULT
+                | TYPE_SERVICE
+                | TYPE_FOREGROUND_SERVICE
         ) {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: "android.app.IActivityManager".into(),
@@ -589,6 +602,21 @@ mod tests {
         let mut table = SenderTable::default();
         table.bind_nodes(vec![100, 101, 102, 103]);
         table
+    }
+
+    /// The sender `type` values are `ActivityManager.INTENT_SENDER_*`
+    /// (`base/core/java/android/app/ActivityManager.java:603-632`), and the
+    /// framework really sends them: the image's
+    /// `PendingIntent.getBroadcastAsUser` passes `1`
+    /// (`framework/classes.dex`, disassembled in
+    /// `results/handoff/PIFILLIN/pending-intent-dex.txt`).
+    #[test]
+    fn the_sender_types_are_the_frameworks() {
+        assert_eq!(TYPE_BROADCAST, 1);
+        assert_eq!(TYPE_ACTIVITY, 2);
+        assert_eq!(TYPE_ACTIVITY_RESULT, 3);
+        assert_eq!(TYPE_SERVICE, 4);
+        assert_eq!(TYPE_FOREGROUND_SERVICE, 5);
     }
 
     #[test]

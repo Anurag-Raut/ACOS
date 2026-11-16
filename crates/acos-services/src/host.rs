@@ -1157,6 +1157,47 @@ impl ServiceHost {
             .unwrap_or_default()
     }
 
+    /// Mirror a **guest** dynamic receiver registration into the session's
+    /// host-side AMS state.
+    ///
+    /// The guest's `registerReceiver` is served by the runtime's AMS state
+    /// (`ams_java`), while a broadcast the **system** originates — a module
+    /// `control` op, and a fired `PendingIntent` whose sender record is
+    /// host-side — is delivered through [`Self::broadcast_intent`]'s state. Both
+    /// registers live in the same session; without this mirror the host-side
+    /// matcher saw no dynamic receiver, so a scripted fix/SMS fired from a
+    /// module reached nobody. The guest's own `broadcastIntent` keeps using the
+    /// runtime state, so a receiver is never delivered twice.
+    pub fn mirror_dynamic_receiver(
+        &mut self,
+        receiver: u64,
+        actions: Vec<String>,
+        categories: Vec<String>,
+        flags: i32,
+    ) -> Result<()> {
+        let object = self.ensure("android.app.IActivityManager")?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .ok_or_else(|| {
+                ServiceError::Internal("activity service is not an AtmsService".into())
+            })?;
+        service.register_receiver(receiver, "", actions, categories, flags);
+        Ok(())
+    }
+
+    /// Drop a mirrored registration when the guest unregisters it.
+    pub fn mirror_unregister_receiver(&mut self, receiver: u64) -> Result<bool> {
+        let object = self.ensure("android.app.IActivityManager")?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .ok_or_else(|| {
+                ServiceError::Internal("activity service is not an AtmsService".into())
+            })?;
+        Ok(service.unregister_receiver(receiver))
+    }
+
     /// Publish (or withdraw) one `PackageManager.hasSystemFeature` answer.
     ///
     /// A host with no package manager has no `hasSystemFeature` that could

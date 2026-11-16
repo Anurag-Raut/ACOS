@@ -1084,13 +1084,38 @@ pub fn transact(
                 _ => (Vec::new(), Vec::new()),
             };
             let flags = args.get(flags_i).map(Arg::int).unwrap_or(0);
-            state.register_receiver(receiver, "", actions, categories, flags);
+            state.register_receiver(
+                receiver,
+                "",
+                actions.clone(),
+                categories.clone(),
+                flags,
+            );
+            // PIFILLIN: mirror the registration into the session's host-side
+            // AMS state. A broadcast the **system** originates (a module's
+            // control op: a scripted fix, an SMS, an adapter event — and a fired
+            // `PendingIntent`, whose sender record lives host-side) is delivered
+            // from there, and until this mirror existed those broadcasts matched
+            // no dynamic receiver at all in ART. The guest's own
+            // `broadcastIntent` keeps using this state, so a receiver is never
+            // delivered twice.
+            if let Some(host) = installed_host() {
+                let _ = host.borrow_mut().mirror_dynamic_receiver(
+                    receiver,
+                    actions,
+                    categories,
+                    flags,
+                );
+            }
             crate::pms_java::typed_object(vm, None, reply)?;
             Ok(Vec::new())
         }
         "unregisterReceiver" => {
             let receiver = args.first().map(Arg::binder).unwrap_or(0);
             state.unregister_receiver(receiver);
+            if let Some(host) = installed_host() {
+                let _ = host.borrow_mut().mirror_unregister_receiver(receiver);
+            }
             Ok(Vec::new())
         }
         "broadcastIntent" | "broadcastIntentWithFeature" => {
