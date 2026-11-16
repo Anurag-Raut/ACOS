@@ -1,0 +1,35 @@
+{
+  "up": true,
+  "supervisor": {
+    "pid": 3761463,
+    "exe": "/home/Qui/.t3/worktrees/acos/t3-57545d37-7c87e0dcb541d029/.cache/net6-target/release/acos-netd",
+    "build_id": "f50f16491d83021d",
+    "version": "0.2.2",
+    "started_ms": 1794823364981
+  },
+  "fabric_pid": 3761465,
+  "pasta_pid": 3761468,
+  "pasta_version": "2026_10_02.cba3570",
+  "pasta_tag_expected": "2026_10_02.cba3570",
+  "host_ports": [],
+  "sessions": [
+    {
+      "index": 1,
+      "name": "revoke",
+      "veth": "acosv1",
+      "address": "10.163.1.2",
+      "gateway": "10.163.1.1",
+      "pid": 3762509,
+      "offline": false,
+      "delay_ms": 0,
+      "loss_pct": 0,
+      "host_ports": [],
+      "alive": true
+    }
+  ],
+  "relay_veths": [
+    "acosv1"
+  ],
+  "session_rules": 2,
+  "attach_ms_last": 28.982861
+}

@@ -771,12 +771,46 @@ impl Relay {
         })
     }
 
-    /// Drop or restore a session's traffic. A one-rule change in the relay netns:
-    /// nothing in the guest participates, so it also works mid-request.
+    /// Drop or restore a session's traffic, the way a phone loses and regains a
+    /// network.
+    ///
+    /// `offline` is two changes, in this order (NET6): the relay's own drop rule
+    /// (fail closed at the packet level), then **inside the session netns** the
+    /// default route is removed and the session's live TCP sockets are destroyed
+    /// ([`plan::session_offline_cmds`]). `online` restores one route and removes
+    /// the rule. Without the guest-side half, an app whose socket is already open
+    /// has nothing to observe: that was the NET5 finding, and it is why the
+    /// guest-side half is not optional (a failure there is a structured error,
+    /// never a half-applied "offline").
     pub fn set_offline(&mut self, name: &str, offline: bool) -> Result<SessionInfo, ProtoError> {
         self.require_up()?;
-        let net = self.session_mut(name)?.net.clone();
-        self.fabric_run(&plan::offline_rule(&net, offline))?;
+        let (net, pid) = {
+            let s = self
+                .sessions
+                .get_mut(name)
+                .ok_or_else(|| ProtoError {
+                    code: ErrorCode::NoSuchSession,
+                    message: format!("no session {name}"),
+                })?;
+            (s.net.clone(), s.pid)
+        };
+        if offline {
+            self.fabric_run(&plan::offline_rule(&net, true))?;
+            if let Some(pid) = pid.filter(|p| *p > 0) {
+                let pid = u32::try_from(pid).unwrap_or(0);
+                for cmd in plan::session_offline_cmds(&net, pid) {
+                    self.fabric_run(&cmd)?;
+                }
+            }
+        } else {
+            if let Some(pid) = pid.filter(|p| *p > 0) {
+                let pid = u32::try_from(pid).unwrap_or(0);
+                for cmd in plan::session_online_cmds(&net, pid) {
+                    self.fabric_run(&cmd)?;
+                }
+            }
+            self.fabric_run(&plan::offline_rule(&net, false))?;
+        }
         let s = self.session_mut(name)?;
         s.offline = offline;
         Ok(s.info())

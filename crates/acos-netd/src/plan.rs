@@ -231,19 +231,72 @@ pub fn veth_detach_rules(net: &SessionNet) -> Vec<String> {
 /// Offline: drop every packet the session sends (and, because the reply path
 /// has no session to return to, everything it would have received).
 ///
-/// NET5 open finding (`results/handoff/NET5/FINDING-offline.md`): a silent drop
-/// is not an "offline" an app can observe directly — after `offline`, a second
-/// `HttpURLConnection` fetch in the same guest process never completed (60 s, no
-/// exception, no dnsproxyd request), while the same retry with the module
-/// attached and online returns HTTP 200 instantly. `REJECT --reject-with
-/// tcp-reset` and bringing the veth *down* produced the identical hang, so the
-/// rule shape is not the cause; the behaviour is left exactly as NET3/NET4
-/// shipped it until the cause is isolated. `status` still reports `offline: true`
-/// for the session.
+/// NET5 open finding (`results/handoff/NET5/FINDING-OFFLINE.md`) measured that a
+/// relay-side drop alone is *not* an "offline" a guest can observe: after
+/// `offline`, the app's second `HttpURLConnection` fetch reused the first
+/// fetch's keep-alive TLS socket and blocked in `read(2)` forever — 60 s, no
+/// exception, no resolver request — because nothing told the guest kernel or the
+/// app that the network was gone. NET6 measured the exact frame
+/// (`SocketInputStream.socketRead0` under `Http1xStream.readResponseHeaders`)
+/// and fixed it the way Android does (see [`session_offline_cmds`]).
+///
+/// This rule stays: it is the fail-closed packet-level half of `offline`, and it
+/// also covers packets already in flight. [`session_offline_cmds`] below is the
+/// guest-facing half.
 #[must_use]
 pub fn offline_rule(net: &SessionNet, on: bool) -> String {
     let flag = if on { "-I" } else { "-D" };
     format!("iptables -w {flag} {SESSION_CHAIN} -i {} -j DROP", net.veth)
+}
+
+/// The **guest-facing** half of `offline`, run inside the session's own netns.
+///
+/// A phone that loses its network does two things an app can feel, and ACOS now
+/// does both:
+///
+/// * the default network goes away, so every new `connect(2)` fails at once with
+///   `ENETUNREACH` (Android: `java.net.SocketException: Network is unreachable`)
+///   instead of sitting in SYN retries — measured here: removing the default
+///   route makes `connect("1.1.1.1", 80)` fail in 0 ms with errno 101, while the
+///   route present makes it hang for the whole TCP budget;
+/// * sockets already open on the lost network are **destroyed** (`ss -K`, the
+///   userspace form of netd's `SOCK_DESTROY`), so a blocked read returns
+///   `ECONNRESET`/`ECONNABORTED` immediately — Android: `SocketException:
+///   Connection reset`. This is the half the NET5 finding needed: the stuck
+///   fetch was a *reused keep-alive* socket, so no route change alone can free
+///   it.
+///
+/// The interface itself is left up: the address and the veth are the session's
+/// identity, and a route is what "has a default network" means. Bringing the
+/// link down would flush the address too, and `online` would have to rebuild it
+/// instead of restoring one route.
+#[must_use]
+pub fn session_offline_cmds(net: &SessionNet, netns_pid: u32) -> Vec<String> {
+    // `ss -K` has no filter for "every state", so the states a live session can
+    // hold are named; a `time-wait` socket has no reader to wake.
+    let kill = format!(
+        "nsenter -t {netns_pid} -n -- sh -c 'for st in established syn-sent close-wait; do \
+         ss -K state $st >/dev/null 2>&1; done; true'"
+    );
+    vec![
+        format!(
+            "nsenter -t {netns_pid} -n -- sh -c 'ip route del default 2>/dev/null; true'"
+        ),
+        kill,
+        // Recorded for the report: the session really has no default route now.
+        format!("nsenter -t {netns_pid} -n -- sh -c 'ip route show default'"),
+    ]
+}
+
+/// The `online` half: restore exactly the route [`session_offline_cmds`]
+/// removed (`replace` is idempotent, so a doubled `online` is a no-op), then the
+/// relay's drop rule is taken out by the caller.
+#[must_use]
+pub fn session_online_cmds(net: &SessionNet, netns_pid: u32) -> Vec<String> {
+    vec![format!(
+        "nsenter -t {netns_pid} -n -- ip route replace default via {}",
+        ip(net.gateway)
+    )]
 }
 
 /// Latency/loss: a `netem` qdisc on the session's veth inside the relay netns.

@@ -24,6 +24,12 @@
         android:text="@string/pending" />
 
     <TextView
+        android:id="@+id/netcb"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/pending" />
+
+    <TextView
         android:id="@+id/dnsprobe"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

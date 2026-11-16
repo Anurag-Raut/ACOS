@@ -3357,18 +3357,26 @@ pub fn write_parcelable_bundle(parcel: &mut Parcel, entries: &[(&str, &Parcelabl
     let mut ordered: Vec<&(&str, &Parcelable)> = entries.iter().collect();
     ordered.sort_by_key(|(key, _)| java_string_hash(key));
     for (key, value) in ordered {
+        // `BaseBundle.writeArrayMapInternal` writes the key with `writeString`,
+        // and on API 34 `Parcel.writeString` *is* `writeString16`
+        // (Parcel.java:1151-1153), so a String16 key is correct here.
         parcel.write_string16(key)?;
-        match value {
-            Parcelable::Null => parcel.write_int32(val::NULL),
-            Parcelable::Ordered { class, .. } => {
-                parcel.write_int32(val::PARCELABLE);
-                parcel.write_string16(class)?;
-                write_payload(parcel, value)?;
+        // The value is `Parcel.writeValue`'s wire form: a type tag, then for
+        // `VAL_PARCELABLE` a **length prefix** covering the class name plus the
+        // payload (`isLengthPrefixed`, Parcel.java:4908-4925). NET6 measured the
+        // image reject tag+class+payload (no length) with `BadParcelableException:
+        // Unmarshalling unknown type code`, which is what every `Message` a
+        // `NetworkCallback` receives is made of.
+        let dynamic = match value {
+            Parcelable::Null => crate::value::DynamicValue::Null,
+            Parcelable::Ordered { .. } => {
+                crate::value::DynamicValue::Parcelable((*value).clone())
             }
             Parcelable::Fd(_) => {
                 return Err(bad("a bundle value cannot be a bare file descriptor"));
             }
-        }
+        };
+        write_dynamic(parcel, &dynamic)?;
     }
     let payload_end = parcel.data_size();
     let len = payload_end - payload_start;
