@@ -16,32 +16,26 @@ public class WebViewChromiumScrollDelegate implements WebViewProvider.ScrollDele
 
     @Override
     public int computeHorizontalScrollOffset() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ScrollDelegate.computeHorizontalScrollOffset()I");
+        return mProvider.core().computeHorizontalScrollOffset();
     }
     @Override
     public int computeHorizontalScrollRange() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ScrollDelegate.computeHorizontalScrollRange()I");
+        return mProvider.core().computeHorizontalScrollRange();
     }
     @Override
     public void computeScroll() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ScrollDelegate.computeScroll()V");
+        mProvider.core().computeScroll();
     }
     @Override
     public int computeVerticalScrollExtent() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ScrollDelegate.computeVerticalScrollExtent()I");
+        return mProvider.core().computeVerticalScrollExtent();
     }
     @Override
     public int computeVerticalScrollOffset() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ScrollDelegate.computeVerticalScrollOffset()I");
+        return mProvider.core().computeVerticalScrollOffset();
     }
     @Override
     public int computeVerticalScrollRange() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ScrollDelegate.computeVerticalScrollRange()I");
+        return mProvider.core().computeVerticalScrollRange();
     }
 }

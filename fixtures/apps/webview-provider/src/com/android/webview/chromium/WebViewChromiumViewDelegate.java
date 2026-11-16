@@ -31,18 +31,16 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public android.view.View findFocus(android.view.View p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.findFocus(Landroid/view/View;)Landroid/view/View;");
+        return mProvider.core().findFocus(p0);
     }
     @Override
     public android.view.accessibility.AccessibilityNodeProvider getAccessibilityNodeProvider() {
         throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.getAccessibilityNodeProvider()Landroid/view/accessibility/AccessibilityNodeProvider;");
+                "ACOS WebView provider: unsupported method ViewDelegate.getAccessibilityNodeProvider()Landroid/view/accessibility/AccessibilityNodeProvider; (the page AX tree is the WIRE v1 op ax, not yet mapped; see results/handoff/WV5a/WIRE-ADDITIONS.md §5)");
     }
     @Override
     public android.os.Handler getHandler(android.os.Handler p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.getHandler(Landroid/os/Handler;)Landroid/os/Handler;");
+        return p0;
     }
     @Override
     public boolean isVisibleToUserForAutofill(int p0) {
@@ -56,8 +54,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public android.view.WindowInsets onApplyWindowInsets(android.view.WindowInsets p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onApplyWindowInsets(Landroid/view/WindowInsets;)Landroid/view/WindowInsets;");
+        return p0;
     }
     @Override
     public void onAttachedToWindow() {
@@ -65,18 +62,15 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public boolean onCheckIsTextEditor() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onCheckIsTextEditor()Z");
+        return mProvider.core().isTextEditor();
     }
     @Override
     public void onConfigurationChanged(android.content.res.Configuration p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onConfigurationChanged(Landroid/content/res/Configuration;)V");
+        mProvider.core().onConfigurationChanged(p0);
     }
     @Override
     public android.view.inputmethod.InputConnection onCreateInputConnection(android.view.inputmethod.EditorInfo p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onCreateInputConnection(Landroid/view/inputmethod/EditorInfo;)Landroid/view/inputmethod/InputConnection;");
+        return mProvider.core().onCreateInputConnection(p0);
     }
     @Override
     public void onCreateVirtualViewTranslationRequests(long[] p0, int[] p1, java.util.function.Consumer p2) {
@@ -89,8 +83,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public boolean onDragEvent(android.view.DragEvent p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onDragEvent(Landroid/view/DragEvent;)Z");
+        return false;
     }
     @Override
     public void onDraw(android.graphics.Canvas p0) {
@@ -98,18 +91,15 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void onDrawVerticalScrollBar(android.graphics.Canvas p0, android.graphics.drawable.Drawable p1, int p2, int p3, int p4, int p5) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onDrawVerticalScrollBar(Landroid/graphics/Canvas;Landroid/graphics/drawable/Drawable;IIII)V");
+        // Scrollbars are the engine's overlay; the guest draws none.
     }
     @Override
     public void onFinishTemporaryDetach() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onFinishTemporaryDetach()V");
+        // View-recycling bookkeeping; nothing engine-side changes.
     }
     @Override
     public void onFocusChanged(boolean p0, int p1, android.graphics.Rect p2) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onFocusChanged(ZILandroid/graphics/Rect;)V");
+        mProvider.core().onFocusChanged(p0, p1, p2);
     }
     @Override
     public boolean onGenericMotionEvent(android.view.MotionEvent p0) {
@@ -123,13 +113,11 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void onInitializeAccessibilityEvent(android.view.accessibility.AccessibilityEvent p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onInitializeAccessibilityEvent(Landroid/view/accessibility/AccessibilityEvent;)V");
+        mProvider.core().onInitializeAccessibilityEvent(p0);
     }
     @Override
     public void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onInitializeAccessibilityNodeInfo(Landroid/view/accessibility/AccessibilityNodeInfo;)V");
+        mProvider.core().onInitializeAccessibilityNodeInfo(p0);
     }
     @Override
     public boolean onKeyDown(int p0, android.view.KeyEvent p1) {
@@ -148,13 +136,11 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void onMeasure(int p0, int p1) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onMeasure(II)V");
+        mProvider.core().onMeasure(p0, p1);
     }
     @Override
     public void onMovedToDisplay(int p0, android.content.res.Configuration p1) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onMovedToDisplay(ILandroid/content/res/Configuration;)V");
+        mProvider.core().onMovedToDisplay(p0, p1);
     }
     @Override
     public void onOverScrolled(int p0, int p1, boolean p2, boolean p3) {
@@ -178,8 +164,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void onScrollChanged(int p0, int p1, int p2, int p3) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onScrollChanged(IIII)V");
+        mProvider.core().onScrolled(p0, p1);
     }
     @Override
     public void onSizeChanged(int p0, int p1, int p2, int p3) {
@@ -187,8 +172,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void onStartTemporaryDetach() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onStartTemporaryDetach()V");
+        // View-recycling bookkeeping; nothing engine-side changes.
     }
     @Override
     public boolean onTouchEvent(android.view.MotionEvent p0) {
@@ -206,18 +190,15 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void onVisibilityChanged(android.view.View p0, int p1) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onVisibilityChanged(Landroid/view/View;I)V");
+        mProvider.core().onVisibilityChanged(p0, p1);
     }
     @Override
     public void onWindowFocusChanged(boolean p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onWindowFocusChanged(Z)V");
+        mProvider.core().onWindowFocusChanged(p0);
     }
     @Override
     public void onWindowVisibilityChanged(int p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.onWindowVisibilityChanged(I)V");
+        mProvider.core().onWindowVisibilityChanged(p0);
     }
     @Override
     public boolean performAccessibilityAction(int p0, android.os.Bundle p1) {
@@ -231,8 +212,7 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public void preDispatchDraw(android.graphics.Canvas p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.preDispatchDraw(Landroid/graphics/Canvas;)V");
+        // Nothing is drawn behind the page: the frame is `onDraw`'s.
     }
     @Override
     public boolean requestChildRectangleOnScreen(android.view.View p0, android.graphics.Rect p1, boolean p2) {
@@ -241,42 +221,34 @@ public class WebViewChromiumViewDelegate implements WebViewProvider.ViewDelegate
     }
     @Override
     public boolean requestFocus(int p0, android.graphics.Rect p1) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.requestFocus(ILandroid/graphics/Rect;)Z");
+        return mProvider.core().requestFocus(p0, p1);
     }
     @Override
     public void setBackgroundColor(int p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.setBackgroundColor(I)V");
+        mProvider.core().setBackgroundColor(p0);
     }
     @Override
     public boolean setFrame(int p0, int p1, int p2, int p3) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.setFrame(IIII)Z");
+        return mProvider.core().setFrame(p0, p1, p2, p3);
     }
     @Override
     public void setLayerType(int p0, android.graphics.Paint p1) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.setLayerType(ILandroid/graphics/Paint;)V");
+        mProvider.core().setLayerType(p0, p1);
     }
     @Override
     public void setLayoutParams(android.view.ViewGroup.LayoutParams p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.setLayoutParams(Landroid/view/ViewGroup$LayoutParams;)V");
+        mProvider.core().setLayoutParams(p0);
     }
     @Override
     public void setOverScrollMode(int p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.setOverScrollMode(I)V");
+        mProvider.core().setOverScrollMode(p0);
     }
     @Override
     public void setScrollBarStyle(int p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.setScrollBarStyle(I)V");
+        mProvider.core().setScrollBarStyle(p0);
     }
     @Override
     public boolean shouldDelayChildPressedState() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method ViewDelegate.shouldDelayChildPressedState()Z");
+        return true;
     }
 }

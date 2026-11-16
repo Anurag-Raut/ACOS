@@ -210,8 +210,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public android.webkit.WebSettings getSettings() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.getSettings()Landroid/webkit/WebSettings;");
+        return mCore.settings();
     }
     @Override
     public android.view.textclassifier.TextClassifier getTextClassifier() {
@@ -220,8 +219,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public java.lang.String getTitle() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.getTitle()Ljava/lang/String;");
+        return mCore.currentTitle();
     }
     @Override
     public java.lang.String getTouchIconUrl() {
@@ -243,8 +241,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public android.webkit.WebChromeClient getWebChromeClient() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.getWebChromeClient()Landroid/webkit/WebChromeClient;");
+        return mCore.chromeClient();
     }
     @Override
     public android.webkit.WebViewClient getWebViewClient() {
@@ -282,8 +279,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public void init(java.util.Map p0, boolean p1) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.init(Ljava/util/Map;Z)V");
+        mCore.init(p0, p1);
     }
     @Override
     public void insertVisualStateCallback(long p0, android.webkit.WebView.VisualStateCallback p1) {
@@ -490,8 +486,7 @@ public class WebViewChromium implements android.webkit.WebViewProvider {
     }
     @Override
     public void setWebChromeClient(android.webkit.WebChromeClient p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebViewProvider.setWebChromeClient(Landroid/webkit/WebChromeClient;)V");
+        mCore.setWebChromeClient(p0);
     }
     @Override
     public void setWebViewClient(android.webkit.WebViewClient p0) {

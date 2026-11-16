@@ -1,28 +1,36 @@
 package com.android.webview.chromium;
 
 // WV2: the provider's real code. The generated `WebViewChromium` /
-// `WebViewChromiumViewDelegate` / `WebViewChromiumScrollDelegate` classes only
-// forward their framework-interface methods here, so the framework surface and
-// the behaviour stay apart: the generator owns the 105-method contract, this
-// class owns what a WebView actually does.
+// `WebViewChromiumViewDelegate` / `WebViewChromiumScrollDelegate` /
+// `WebSettingsChromium` classes only forward their framework-interface methods
+// here, so the framework surface and the behaviour stay apart: the generator
+// owns the interface contracts, this class owns what a WebView actually does.
 //
-// Everything is expressed as wire calls (results/handoff/WVB/WIRE.md, §4):
+// Everything the engine owns is a wire call (results/handoff/WVB/WIRE.md, §4):
 // there is no in-process engine, no DevTools, no second process — the host
 // broker owns Chromium and this class is a client of it.
 //
-// Android semantics kept on the guest side, because they are the app-visible
-// contract rather than engine work:
-//   * `WebViewClient.onPageStarted` / `onPageFinished` fire from the broker's
-//     `navigation.*` events, on the UI thread, in event order;
-//   * `shouldOverrideUrlLoading` is a *host request* the broker makes before a
-//     navigation commits (`nav.shouldOverride`), answered with `allow`;
-//   * `onDraw` paints the last decoded frame at the View's own size/density
-//     (no scaling in the engine), so a stale frame stays on screen instead of
-//     tearing;
-//   * `onTouchEvent` forwards the raw pointer stream, `onSizeChanged` sets the
-//     viewport — the engine never guesses the guest's geometry.
+// WV5a (wall 9): the framework's `new WebView(context)` reaches the provider
+// through `View.<init>` -> `WebView.setOverScrollMode` ->
+// `ViewDelegate.setOverScrollMode`, and then through the first measure, layout
+// and draw. That walk is split by one rule:
+//
+//   * **guest-only state stays in the guest.** `overScrollMode`, the layer
+//     type, the background colour, the scrollbar style, the layout params, the
+//     scroll offsets and the `.getSettings()` object are the View's own state;
+//     Chromium's `AwContents` keeps the same values in `AwContents` and never
+//     sends them anywhere. Keeping them here is the same split, not a bypass.
+//   * **anything the engine owns is a WIRE v1 request**: the viewport
+//     (`view.create` on the first real measurement, `view.setViewport` on every
+//     layout change), navigation (`view.loadUrl`), focus (`input.setFocus`),
+//     frames (`render`, pulled once per invalidation from `onDraw`).
+//   * **anything still unsupported throws** a structured
+//     `UnsupportedOperationException` naming the method — never a silent no-op
+//     that reports success. The gaps that would need a new wire message are
+//     written up in results/handoff/WV5a/WIRE-ADDITIONS.md.
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -33,8 +41,11 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
@@ -56,21 +67,56 @@ public final class WebViewChromiumCore {
     private final int mView = NEXT_VIEW.incrementAndGet();
     private final Handler mUi = new Handler(Looper.getMainLooper());
     private final Paint mPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Paint mBackgroundPaint = new Paint();
     private final Map<String, JavascriptInterfaceBridge> mInterfaces = new ConcurrentHashMap<>();
 
     private volatile WebView mWebView;
     private volatile WebViewClient mClient;
+    private volatile WebChromeClient mChromeClient;
+    private volatile WebSettingsChromium mSettings;
     private volatile Bitmap mFrame;
+    private volatile long mFrameSeq;
     private volatile int mWidth;
     private volatile int mHeight;
     private volatile float mDensity = 1f;
     private volatile String mUrl = "about:blank";
+    private volatile String mTitle;
     private volatile boolean mCreated;
     private volatile boolean mPaused;
     private volatile int mScrollX;
     private volatile int mScrollY;
     private volatile boolean mNetworkAvailable = true;
     private volatile boolean mAttached = true;
+    /** The layout-confirmed size, i.e. what `view.setViewport` last reported. */
+    private volatile int mLayoutWidth;
+    private volatile int mLayoutHeight;
+    /** The measured size, i.e. what `view.create` was opened with. */
+    private volatile int mMeasuredWidth;
+    private volatile int mMeasuredHeight;
+
+    // -- guest-only View state (Chromium keeps the same values in AwContents) --
+    private volatile int mOverScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS;
+    private volatile int mLayerType = View.LAYER_TYPE_NONE;
+    private volatile Paint mLayerPaint;
+    private volatile int mBackgroundColor;
+    private volatile int mScrollBarStyle;
+    private volatile ViewGroup.LayoutParams mLayoutParams;
+    private volatile int mVisibility = View.VISIBLE;
+    private volatile int mWindowVisibility = View.VISIBLE;
+    private volatile boolean mHasWindowFocus;
+    private volatile boolean mViewFocused;
+
+    // -- frame pull state (coalesced, `render` per invalidation) -------------
+    private final Object mFrameLock = new Object();
+    private boolean mFrameDirty = true;
+    private boolean mFrameInFlight;
+    private int mFrameRequests;
+    private final AtomicInteger mDraws = new AtomicInteger();
+
+    // -- settings -----------------------------------------------------------
+    private volatile boolean mJavascriptEnabled;
+    private volatile String mUserAgent;
+    private volatile boolean mPrivateBrowsing;
 
     public WebViewChromiumCore(AcosWebViewTransport.Transport transport) {
         mTransport = transport;
@@ -80,6 +126,10 @@ public final class WebViewChromiumCore {
     /** `WebViewFactoryProvider.createWebView(WebView, PrivateAccess)`. */
     void attach(WebView webView) {
         mWebView = webView;
+        // `WebView` is a `ViewGroup`, so `ViewGroup`'s default `WILL_NOT_DRAW`
+        // would skip `onDraw` entirely and the page frame would never be
+        // painted. Chromium's provider draws in `onDraw` for the same reason.
+        webView.setWillNotDraw(false);
         mDensity = webView.getResources().getDisplayMetrics().density;
         mWidth = webView.getWidth();
         mHeight = webView.getHeight();
@@ -100,6 +150,166 @@ public final class WebViewChromiumCore {
         return mClient;
     }
 
+    void setWebChromeClient(WebChromeClient client) {
+        mChromeClient = client;
+    }
+
+    WebChromeClient chromeClient() {
+        return mChromeClient;
+    }
+
+    /** `WebViewProvider.getSettings`: one `WebSettings` per WebView. */
+    WebSettings settings() {
+        WebSettingsChromium settings = mSettings;
+        if (settings == null) {
+            synchronized (this) {
+                if (mSettings == null) {
+                    mSettings = new WebSettingsChromium(this);
+                }
+                settings = mSettings;
+            }
+        }
+        return settings;
+    }
+
+    /**
+     * `WebViewProvider.init(Map, boolean)`: the framework hands the JS
+     * interfaces from the hidden constructor over before any other provider
+     * call. Private browsing has no wire message (`WIRE-ADDITIONS.md` §3), so
+     * asking for it is an honest refusal instead of a shared-cache WebView that
+     * silently is not private.
+     */
+    void init(Map<String, Object> javaScriptInterfaces, boolean privateBrowsing) {
+        if (privateBrowsing) {
+            throw new UnsupportedOperationException(
+                    "ACOS WebView provider: unsupported feature privateBrowsing "
+                            + "(WebViewProvider.init(Ljava/util/Map;Z)V with privateBrowsing=true; "
+                            + "WIRE v1 has no per-view profile, see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        }
+        mPrivateBrowsing = false;
+        // `WebView` is a `ViewGroup`, and `ViewGroup`'s constructor sets
+        // `WILL_NOT_DRAW`, which makes `View.draw` skip `onDraw` — the page frame
+        // would never be painted and `onDraw` would never ask for one. This is
+        // the last provider call of the framework constructor (`ensureProviderCreated`
+        // -> `init`), i.e. after `ViewGroup`'s constructor has run, so the flag
+        // is cleared here for good. Chromium's provider does the same in `init`.
+        WebView view = mWebView;
+        if (view != null) {
+            view.setWillNotDraw(false);
+            // The engine paints its own scrollbars; the guest has none to offer
+            // (`WIRE-ADDITIONS.md` §4 — WIRE v1 has no content size).
+            view.setVerticalScrollBarEnabled(false);
+            view.setHorizontalScrollBarEnabled(false);
+        }
+        if (javaScriptInterfaces != null) {
+            for (Map.Entry<String, Object> entry : javaScriptInterfaces.entrySet()) {
+                addJavascriptInterface(entry.getValue(), entry.getKey());
+            }
+        }
+    }
+
+    // -- guest-only View state ----------------------------------------------
+
+    /**
+     * `ViewDelegate.setOverScrollMode`: the overscroll glow is the View's, not
+     * the page's. Chromium keeps `AwContents.mOverScrollMode` for the same
+     * reason; there is no engine op and none is needed.
+     */
+    void setOverScrollMode(int mode) {
+        mOverScrollMode = mode;
+    }
+
+    int overScrollMode() {
+        return mOverScrollMode;
+    }
+
+    /** `ViewDelegate.setLayerType`: which layer the *guest* Canvas renders into. */
+    void setLayerType(int layerType, Paint paint) {
+        mLayerType = layerType;
+        mLayerPaint = paint;
+    }
+
+    int layerType() {
+        return mLayerType;
+    }
+
+    Paint layerPaint() {
+        return mLayerPaint;
+    }
+
+    void setBackgroundColor(int color) {
+        mBackgroundColor = color;
+        mBackgroundPaint.setColor(color);
+        invalidate();
+    }
+
+    int backgroundColor() {
+        return mBackgroundColor;
+    }
+
+    void setScrollBarStyle(int style) {
+        mScrollBarStyle = style;
+    }
+
+    int scrollBarStyle() {
+        return mScrollBarStyle;
+    }
+
+    /**
+     * `ViewDelegate.setLayoutParams`. `WebView.setLayoutParams` is a **pure
+     * delegate** in this image (the image dex has no `super` call, the same as
+     * `setFrame`), so the View-side bookkeeping that `View.setLayoutParams`
+     * normally performs — storing `mLayoutParams`, resolving margins and
+     * requesting a layout — never happens unless the provider does it. Without
+     * it a parent reads `getLayoutParams() == null` and dies in
+     * `LinearLayout.measureVertical` (measured: `LOOPER_THREW`,
+     * `NPE ... LinearLayout$LayoutParams.weight on a null object reference`).
+     *
+     * <p>The provider is the View's own setter here, so it performs exactly
+     * those three steps: the field (the only route left, `setLayoutParams` being
+     * the override itself), then `requestLayout()`.
+     */
+    void setLayoutParams(ViewGroup.LayoutParams params) {
+        mLayoutParams = params;
+        WebView view = mWebView;
+        if (view == null) {
+            return;
+        }
+        try {
+            layoutParamsField().set(view, params);
+        } catch (Throwable e) {
+            // Never silent: a WebView whose parent cannot see its layout params
+            // is broken, and the app must hear about it.
+            throw new IllegalStateException(
+                    "ACOS WebView provider: could not install the View's layout params "
+                            + "(View.mLayoutParams): " + e, e);
+        }
+        view.requestLayout();
+    }
+
+    private static java.lang.reflect.Field sLayoutParamsField;
+
+    private static java.lang.reflect.Field layoutParamsField() throws NoSuchFieldException {
+        java.lang.reflect.Field field = sLayoutParamsField;
+        if (field == null) {
+            field = android.view.View.class.getDeclaredField("mLayoutParams");
+            field.setAccessible(true);
+            sLayoutParamsField = field;
+        }
+        return field;
+    }
+
+    ViewGroup.LayoutParams layoutParams() {
+        return mLayoutParams;
+    }
+
+    private void invalidate() {
+        WebView view = mWebView;
+        if (view != null) {
+            view.postInvalidateOnAnimation();
+        }
+    }
+
     // -- view lifecycle -----------------------------------------------------
 
     private void ensureCreated() {
@@ -114,9 +324,87 @@ public final class WebViewChromiumCore {
             params.put("height", mHeight);
             params.put("density", (double) mDensity);
             mTransport.call("view.create", params);
+            Log.i(TAG, "view.create view=" + mView + " " + mWidth + "x" + mHeight
+                    + " density=" + mDensity);
         } catch (Exception e) {
             throw failure("view.create", e);
         }
+    }
+
+    /**
+     * `ViewDelegate.onMeasure`: the framework has told us the size the View will
+     * have (`View.onMeasure` runs its own default measurement *before*
+     * forwarding here, so `getMeasuredWidth/Height` are already correct). That
+     * is the first moment a real geometry exists, so it is where the engine view
+     * is created (`view.create`, `WIRE.md` §4.2).
+     */
+    void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int w = measureSize(widthMeasureSpec, mMeasuredWidth);
+        int h = measureSize(heightMeasureSpec, mMeasuredHeight);
+        mMeasuredWidth = w;
+        mMeasuredHeight = h;
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+        if (!mCreated) {
+            mWidth = w;
+            mHeight = h;
+            ensureCreated();
+        }
+    }
+
+    /**
+     * `View.MeasureSpec` -> pixels, the same rule `View.getDefaultSize` uses
+     * (the framework already measured the View with it): a bounded spec is the
+     * size, an UNSPECIFIED one leaves the previous size.
+     */
+    private static int measureSize(int measureSpec, int previous) {
+        int mode = View.MeasureSpec.getMode(measureSpec);
+        int size = View.MeasureSpec.getSize(measureSpec);
+        if (mode == View.MeasureSpec.UNSPECIFIED) {
+            return previous;
+        }
+        return size;
+    }
+
+    /**
+     * `ViewDelegate.setFrame`. `WebView.setFrame` is a full override (the
+     * framework does not call `View.setFrame` for a WebView), so the provider
+     * owns the frame bookkeeping: `setLeft/Top/Right/Bottom` are the public
+     * `View` API that sets exactly the fields `View.setFrame` sets, and the
+     * size change goes to the engine as `view.setViewport` (`WIRE.md` §4.2).
+     *
+     * <p>Layout is authoritative: `view.create` was opened with the *measured*
+     * size, and the layout size is then pushed as a real resize, so the engine
+     * viewport is never a guess. A repeated layout at the same size sends
+     * nothing.
+     */
+    boolean setFrame(int left, int top, int right, int bottom) {
+        WebView view = mWebView;
+        int w = right - left;
+        int h = bottom - top;
+        boolean changed = w != mWidth || h != mHeight;
+        if (view != null) {
+            view.setLeft(left);
+            view.setTop(top);
+            view.setRight(right);
+            view.setBottom(bottom);
+        }
+        mWidth = w;
+        mHeight = h;
+        if (w <= 0 || h <= 0) {
+            return changed;
+        }
+        if (!mCreated) {
+            ensureCreated();
+            return changed;
+        }
+        if (w != mLayoutWidth || h != mLayoutHeight) {
+            mLayoutWidth = w;
+            mLayoutHeight = h;
+            sendViewport(w, h);
+        }
+        return changed;
     }
 
     /** `ViewDelegate.onSizeChanged` -> the guest's viewport (`WIRE.md` §4.2). */
@@ -130,6 +418,15 @@ public final class WebViewChromiumCore {
             ensureCreated();
             return;
         }
+        if (w == mLayoutWidth && h == mLayoutHeight) {
+            return;
+        }
+        mLayoutWidth = w;
+        mLayoutHeight = h;
+        sendViewport(w, h);
+    }
+
+    private void sendViewport(int w, int h) {
         JSONObject params = params();
         try {
             params.put("view", mView);
@@ -137,8 +434,10 @@ public final class WebViewChromiumCore {
             params.put("height", h);
             params.put("density", (double) mDensity);
             mTransport.call("view.setViewport", params);
+            Log.i(TAG, "view.setViewport view=" + mView + " " + w + "x" + h
+                    + " density=" + mDensity);
         } catch (Exception e) {
-            Log.w(TAG, "setViewport failed: " + e);
+            Log.w(TAG, "view.setViewport failed: " + e);
         }
     }
 
@@ -152,6 +451,83 @@ public final class WebViewChromiumCore {
         }
     }
 
+    // -- visibility and focus (both engine state, both on the wire) ---------
+
+    /**
+     * `ViewDelegate.onVisibilityChanged`. The View's visibility is guest state;
+     * what it *means* for the engine (renderer scheduling, `Page.setLifecycle
+     * Events`) has no WIRE v1 message yet, so the guest only stops asking for
+     * frames while it is not visible and the gap is written up in
+     * `WIRE-ADDITIONS.md` §1 — nothing claims the engine was told.
+     */
+    void onVisibilityChanged(View changedView, int visibility) {
+        mVisibility = visibility;
+        if (visibility == View.VISIBLE) {
+            mFrameDirty = true;
+            invalidate();
+        }
+    }
+
+    void onWindowVisibilityChanged(int visibility) {
+        mWindowVisibility = visibility;
+        if (visibility == View.VISIBLE) {
+            mFrameDirty = true;
+            invalidate();
+        }
+    }
+
+    /** The frame pull is pointless while the View cannot be seen. */
+    private boolean renderable() {
+        return mAttached && mCreated && mVisibility == View.VISIBLE
+                && mWindowVisibility == View.VISIBLE;
+    }
+
+    /**
+     * `ViewDelegate.onWindowFocusChanged`: window focus is engine state — it is
+     * what turns the page's `document.hasFocus()` on and starts the renderer's
+     * focus scheduling — so it goes over the wire as `input.setFocus`
+     * (`WIRE.md` §4.2), combined with the View's own focus.
+     */
+    void onWindowFocusChanged(boolean hasWindowFocus) {
+        mHasWindowFocus = hasWindowFocus;
+        sendFocus();
+    }
+
+    /** `ViewDelegate.onFocusChanged`: the same op, from the View's focus. */
+    void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
+        mViewFocused = focused;
+        sendFocus();
+    }
+
+    /** `ViewDelegate.requestFocus`: the View takes focus, so the page gets it. */
+    boolean requestFocus(int direction, Rect previouslyFocusedRect) {
+        mViewFocused = true;
+        sendFocus();
+        return true;
+    }
+
+    private void sendFocus() {
+        boolean focused = mViewFocused && mHasWindowFocus;
+        JSONObject params = params();
+        try {
+            params.put("view", mView);
+            params.put("focused", focused);
+            mTransport.call("input.setFocus", params);
+            Log.i(TAG, "input.setFocus view=" + mView + " focused=" + focused);
+        } catch (Exception e) {
+            Log.w(TAG, "input.setFocus failed: " + e);
+        }
+    }
+
+    void attachToWindow() {
+        mAttached = true;
+        ensureCreated();
+    }
+
+    void detachFromWindow() {
+        mAttached = false;
+    }
+
     // -- navigation ---------------------------------------------------------
 
     void loadUrl(String url) {
@@ -160,6 +536,7 @@ public final class WebViewChromiumCore {
         try {
             params.put("view", mView);
             params.put("url", url);
+            Log.i(TAG, "view.loadUrl view=" + mView + " url=" + url);
             mTransport.call("view.loadUrl", params);
             mUrl = url;
         } catch (Exception e) {
@@ -224,21 +601,51 @@ public final class WebViewChromiumCore {
         }
     }
 
-    void attachToWindow() {
-        mAttached = true;
-        ensureCreated();
-    }
-
-    void detachFromWindow() {
-        mAttached = false;
-    }
-
     void reload() {
         call("view.reload");
     }
 
     void stopLoading() {
         call("view.stop");
+    }
+
+    // -- settings -----------------------------------------------------------
+
+    void setJavascriptEnabled(boolean enabled) {
+        if (mCreated && enabled != mJavascriptEnabled) {
+            // `view.create` is the only WIRE v1 message that carries this flag
+            // (`WIRE.md` §4.2); changing it afterwards has no wire message, and
+            // pretending it took effect would be a false success.
+            throw new UnsupportedOperationException(
+                    "ACOS WebView provider: unsupported method WebSettings.setJavaScriptEnabled(Z) "
+                            + "after the engine view was created (WIRE v1 has no view.setSettings; "
+                            + "see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        }
+        mJavascriptEnabled = enabled;
+    }
+
+    boolean javascriptEnabled() {
+        return mJavascriptEnabled;
+    }
+
+    /** `WebSettings.setUserAgentString` -> `view.setUserAgent` (`WIRE.md` §4.2). */
+    void setUserAgent(String userAgent) {
+        mUserAgent = userAgent;
+        if (!mCreated) {
+            return;
+        }
+        JSONObject params = params();
+        try {
+            params.put("view", mView);
+            params.put("userAgent", userAgent);
+            mTransport.call("view.setUserAgent", params);
+        } catch (Exception e) {
+            throw failure("view.setUserAgent", e);
+        }
+    }
+
+    String userAgent() {
+        return mUserAgent;
     }
 
     // -- JavaScript ---------------------------------------------------------
@@ -354,33 +761,85 @@ public final class WebViewChromiumCore {
 
     // -- painting -----------------------------------------------------------
 
-    void setFrame(byte[] png) {
+    void setFrame(byte[] png, long seq) {
         Bitmap decoded = BitmapFactory.decodeByteArray(png, 0, png.length);
         if (decoded == null) {
             Log.w(TAG, "frame did not decode as an image (" + png.length + " bytes)");
             return;
         }
         mFrame = decoded;
-        View view = mWebView;
-        if (view != null) {
-            view.postInvalidateOnAnimation();
-        }
+        mFrameSeq = seq;
+        mFrameDirty = false;
+        Log.i(TAG, "frame decoded " + decoded.getWidth() + "x" + decoded.getHeight()
+                + " seq=" + seq + " bytes=" + png.length);
+        invalidate();
     }
 
-    /** `ViewDelegate.onDraw`: the last frame at the View's size, letterboxed. */
+    /**
+     * `ViewDelegate.onDraw`: paint the last frame at the View's own size
+     * (letterboxed into it, `FILTER_BITMAP`) and, per `WIRE.md` §4.2, ask the
+     * engine for the next one when something invalidated it. The pull is
+     * coalesced — at most one `render` in flight, never one per pixel.
+     */
     void onDraw(Canvas canvas) {
-        Bitmap frame = mFrame;
-        if (frame == null) {
-            return;
-        }
-        int w = mWebView == null ? mWidth : mWebView.getWidth();
-        int h = mWebView == null ? mHeight : mWebView.getHeight();
+        WebView view = mWebView;
+        int w = view == null ? mWidth : view.getWidth();
+        int h = view == null ? mHeight : view.getHeight();
         if (w <= 0 || h <= 0) {
             return;
         }
-        Rect src = new Rect(0, 0, frame.getWidth(), frame.getHeight());
-        Rect dst = new Rect(0, 0, w, h);
-        canvas.drawBitmap(frame, src, dst, mPaint);
+        if (mDraws.getAndIncrement() < 3) {
+            Log.i(TAG, "onDraw " + w + "x" + h + " dirty=" + mFrameDirty
+                    + " frame=" + (mFrame == null ? "none" : "present")
+                    + " renderable=" + renderable());
+        }
+        if (mBackgroundColor != 0) {
+            canvas.drawRect(0, 0, w, h, mBackgroundPaint);
+        }
+        Bitmap frame = mFrame;
+        if (frame != null) {
+            Rect src = new Rect(0, 0, frame.getWidth(), frame.getHeight());
+            Rect dst = new Rect(0, 0, w, h);
+            canvas.drawBitmap(frame, src, dst, mPaint);
+        }
+        requestFrame();
+    }
+
+    /** One `render` per invalidation, and only while the View can be seen. */
+    private void requestFrame() {
+        if (!renderable() || !mFrameDirty) {
+            return;
+        }
+        synchronized (mFrameLock) {
+            if (mFrameInFlight || !mFrameDirty) {
+                return;
+            }
+            mFrameInFlight = true;
+        }
+        mFrameRequests++;
+        Log.i(TAG, "onDraw " + mWidth + "x" + mHeight + " frame="
+                + (mFrame == null ? "none" : mFrame.getWidth() + "x" + mFrame.getHeight())
+                + " -> render #" + mFrameRequests);
+        Thread pull = new Thread(() -> {
+            try {
+                AcosWebViewTransport.Frame f = mTransport.render(mView);
+                JSONObject result = f.result();
+                long seq = result == null ? 0 : result.optLong("seq", 0);
+                if (f.blob != null && f.blob.length > 0) {
+                    setFrame(f.blob, seq);
+                } else {
+                    Log.w(TAG, "render returned no frame data");
+                }
+            } catch (IOException e) {
+                Log.w(TAG, "render failed: " + e);
+            } finally {
+                synchronized (mFrameLock) {
+                    mFrameInFlight = false;
+                }
+            }
+        }, "acos-webview-frame");
+        pull.setDaemon(true);
+        pull.start();
     }
 
     // -- input --------------------------------------------------------------
@@ -421,6 +880,48 @@ public final class WebViewChromiumCore {
         }
     }
 
+    /**
+     * `ScrollDelegate.computeScroll`: the guest's own scroller has nothing to
+     * advance (a WebView's scrolling is the engine's, and `flingScroll` is still
+     * unsupported), so there is nothing to compute here. Reported in
+     * `WIRE-ADDITIONS.md` §4: a real engine scroll needs a scroll-position
+     * message, which WIRE v1 does not have.
+     */
+    void computeScroll() {
+        // Nothing to advance: no guest scroller, no engine scroll request.
+    }
+
+    /**
+     * `ScrollDelegate.compute*ScrollRange/Offset/Extent`.
+     *
+     * <p>WIRE v1 carries no content size and no engine scroll offset
+     * (`WIRE-ADDITIONS.md` §4), so the only truthful answer is the guest's own
+     * geometry: the View is as big as its viewport, at the offset the guest has
+     * scrolled to (0 unless the app called `scrollTo`, which the engine does not
+     * follow yet). Reporting a fabricated content height would be worse: it
+     * would draw a scrollbar for a range nobody measured. The guest's own
+     * scrollbars are off (`init`), because the engine draws its own.
+     */
+    int computeHorizontalScrollRange() {
+        return mWidth;
+    }
+
+    int computeHorizontalScrollOffset() {
+        return mScrollX;
+    }
+
+    int computeVerticalScrollRange() {
+        return mHeight;
+    }
+
+    int computeVerticalScrollOffset() {
+        return mScrollY;
+    }
+
+    int computeVerticalScrollExtent() {
+        return mHeight;
+    }
+
     void onScrolled(int x, int y) {
         mScrollX = x;
         mScrollY = y;
@@ -432,6 +933,86 @@ public final class WebViewChromiumCore {
 
     int scrollY() {
         return mScrollY;
+    }
+
+    /** `WebViewDelegate.onMovedToDisplay` / `onConfigurationChanged`: density. */
+    void onConfigurationChanged(Configuration config) {
+        updateDensity(config);
+    }
+
+    void onMovedToDisplay(int displayId, Configuration config) {
+        updateDensity(config);
+    }
+
+    private void updateDensity(Configuration config) {
+        WebView view = mWebView;
+        if (config == null || view == null) {
+            return;
+        }
+        float density = view.getResources().getDisplayMetrics().density;
+        if (density == mDensity) {
+            return;
+        }
+        mDensity = density;
+        if (!mCreated || mWidth <= 0 || mHeight <= 0) {
+            return;
+        }
+        // A density change is a viewport change (`WIRE.md` §4.2 carries
+        // `density`), so it is re-sent with the same pixel size.
+        mLayoutWidth = 0;
+        sendViewport(mWidth, mHeight);
+    }
+
+    /**
+     * `ViewDelegate.findFocus`: this View is the focused one when it holds
+     * focus, otherwise the framework's own answer stands.
+     */
+    View findFocus(View superFocus) {
+        return mViewFocused && mWebView != null ? mWebView : superFocus;
+    }
+
+    /**
+     * `ViewDelegate.onCheckIsTextEditor`: the IME asks whether an editable text
+     * field owns the focus. WIRE v1 has no message reporting an engine text
+     * field, so until `input.text`'s counterpart lands the answer is "no" — the
+     * same answer the page gives while no field is focused
+     * (`WIRE-ADDITIONS.md` §5).
+     */
+    boolean isTextEditor() {
+        return false;
+    }
+
+    /** `ViewDelegate.onCreateInputConnection`: no engine text field ⇒ no IME. */
+    android.view.inputmethod.InputConnection onCreateInputConnection(
+            android.view.inputmethod.EditorInfo outAttrs) {
+        return null;
+    }
+
+    /**
+     * `ViewDelegate.onInitializeAccessibilityNodeInfo`: what Chromium's
+     * `AwContents` sets on the node a WebView exposes as a *View* (the page's
+     * own virtual tree is the separate `ax` question, §5).
+     */
+    void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo info) {
+        if (info == null || mWebView == null) {
+            return;
+        }
+        info.setClassName("android.webkit.WebView");
+        info.setPackageName(mWebView.getContext().getPackageName());
+        info.setSource(mWebView);
+        info.setEnabled(mWebView.isEnabled());
+        info.setFocusable(mWebView.isFocusable());
+        info.setFocused(mViewFocused);
+        info.setScrollable(false);
+    }
+
+    /** `ViewDelegate.onInitializeAccessibilityEvent`: the same class identity. */
+    void onInitializeAccessibilityEvent(android.view.accessibility.AccessibilityEvent event) {
+        if (event == null || mWebView == null) {
+            return;
+        }
+        event.setClassName("android.webkit.WebView");
+        event.setPackageName(mWebView.getContext().getPackageName());
     }
 
     // -- host -> guest ------------------------------------------------------
@@ -453,6 +1034,7 @@ public final class WebViewChromiumCore {
                 case "navigation.finished": {
                     final String url = event.optString("url", mUrl);
                     mUrl = url;
+                    mTitle = event.optString("title", mTitle);
                     final WebViewClient client = mClient;
                     if (client != null) {
                         mUi.post(() -> client.onPageFinished(mWebView, url));
@@ -469,23 +1051,11 @@ public final class WebViewChromiumCore {
                     break;
                 }
                 case "render.invalidated": {
-                    if (mPaused) {
-                        break;
-                    }
                     // Coalesced by the broker: one pull per invalidation, never
-                    // one per pixel (`WIRE.md` §5.1).
-                    Thread frame = new Thread(() -> {
-                        try {
-                            AcosWebViewTransport.Frame f = mTransport.render(mView);
-                            if (f.blob != null) {
-                                setFrame(f.blob);
-                            }
-                        } catch (IOException e) {
-                            Log.w(TAG, "render failed: " + e);
-                        }
-                    }, "acos-webview-frame");
-                    frame.setDaemon(true);
-                    frame.start();
+                    // one per pixel (`WIRE.md` §5.1). The pull happens in
+                    // `onDraw` so it is the View's own draw that asks.
+                    mFrameDirty = true;
+                    invalidate();
                     break;
                 }
                 default:
@@ -588,6 +1158,18 @@ public final class WebViewChromiumCore {
 
     String currentUrl() {
         return mUrl;
+    }
+
+    String currentTitle() {
+        return mTitle;
+    }
+
+    long frameSeq() {
+        return mFrameSeq;
+    }
+
+    boolean privateBrowsing() {
+        return mPrivateBrowsing;
     }
 
     void setPaused(boolean paused) {
