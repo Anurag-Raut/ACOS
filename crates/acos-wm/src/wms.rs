@@ -109,8 +109,12 @@ pub struct WindowRecord {
     pub requested_visible_types: i32,
     /// Whether the window may hold focus.
     pub focusable: bool,
-    /// Z-order.
+    /// Z-order: the window's index in the layer stack (band-major: wallpaper,
+    /// application, sub-window, application overlay, system windows, shade,
+    /// bars, IME). See [`crate::layers`].
     pub z: i64,
+    /// The window's kind, classified from `LayoutParams.type`.
+    pub kind: crate::layers::WindowKind,
     /// Monotonic relayout sequence (the `syncSeqId`).
     pub relayout_seq: u64,
     /// Last insets state sent to the client.
@@ -339,8 +343,15 @@ impl WindowManager {
                 leash.handle = Some(self.alloc_layer());
             }
         }
-        let focusable = !params.is_system_window();
-        let z = self.windows.len() as i64 + 1;
+        // A window may hold focus when the framework would let it: an app-type
+        // window (`!is_system_window`) that does not set `FLAG_NOT_FOCUSABLE`.
+        // An overlay is a system window *and* is normally NOT_FOCUSABLE, so this
+        // is two independent guards, exactly as `InputWindowHandle` has them.
+        let focusable = !params.is_system_window() && crate::layers::focusable(params.flags);
+        let kind = crate::layers::WindowKind::of(params.type_);
+        // Provisional z; `renumber_z` sets the real layer-stack index once the
+        // record is in `self.windows`.
+        let z = 0;
 
         let record = WindowRecord {
             id,
@@ -359,6 +370,7 @@ impl WindowManager {
             requested_visible_types,
             focusable,
             z,
+            kind,
             relayout_seq: 0,
             insets_state: insets_state.clone(),
             insets_controls: insets_controls.clone(),
@@ -369,6 +381,7 @@ impl WindowManager {
         if let Some(s) = self.sessions.get_mut(&session) {
             s.windows.push(id);
         }
+        self.renumber_z();
 
         // Measured launch order: visibility → focus → insetsControlChanged.
         self.callbacks.push(
@@ -551,15 +564,11 @@ impl WindowManager {
         if let Some(s) = self.sessions.get_mut(&record.session) {
             s.windows.retain(|w| *w != window);
         }
+        self.renumber_z();
         if self.focus == Some(window) {
-            self.focus = None;
-            // Focus the topmost remaining focusable window.
-            self.focus = self
-                .windows
-                .values()
-                .filter(|w| w.focusable)
-                .max_by_key(|w| w.z)
-                .map(|w| w.id);
+            // Focus the topmost remaining focusable window (layer order, not
+            // insertion order).
+            self.focus = self.focus_target();
         }
         Ok(())
     }
@@ -691,6 +700,60 @@ impl WindowManager {
     #[must_use]
     pub fn focused_window(&self) -> Option<&WindowRecord> {
         self.focus.and_then(|id| self.windows.get(&id))
+    }
+
+    /// The display's window layer stack: every live window with its real type,
+    /// frame, flags and attachment, in AOSP z-order.
+    ///
+    /// This is the one description of the stack that composition (C1's layer
+    /// placement), the UI tree and input hit-testing read, so an overlay cannot
+    /// be drawn in one order and tapped in another.
+    #[must_use]
+    pub fn layer_stack(&self) -> crate::layers::WindowLayerStack {
+        let mut stack = crate::layers::WindowLayerStack::new();
+        for record in self.windows.values() {
+            // A sub-window's `LayoutParams.token` is the window it is attached
+            // to; only a token that names a live window becomes the parent.
+            let parent = record
+                .params
+                .token
+                .filter(|t| self.windows.contains_key(&t.0))
+                .map(|t| t.0);
+            stack.upsert(crate::layers::LayerEntry {
+                window: record.id,
+                type_: record.params.type_,
+                flags: record.params.flags,
+                frame: record.frame,
+                parent,
+                seq: record.id,
+            });
+        }
+        stack
+    }
+
+    /// Re-index every window's `z` from the layer stack. Called after an add and
+    /// after a remove, so `z` is always the stack position (band-major, then
+    /// creation order, with sub-windows next to their parent).
+    fn renumber_z(&mut self) {
+        let stack = self.layer_stack();
+        for record in self.windows.values_mut() {
+            if let Some(z) = stack.z_of(record.id) {
+                record.z = z;
+            }
+        }
+    }
+
+    /// The window a touch at display point `p` goes to: the topmost **touchable**
+    /// window whose frame contains the point (`FLAG_NOT_TOUCHABLE` is skipped).
+    #[must_use]
+    pub fn hit_test(&self, point: PointI) -> Option<WindowId> {
+        self.layer_stack().hit_test(point)
+    }
+
+    /// The window that may take focus: the topmost focusable window.
+    #[must_use]
+    pub fn focus_target(&self) -> Option<WindowId> {
+        self.layer_stack().focus_target()
     }
 
     /// Compute the frame for `params` on this display.
