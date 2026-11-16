@@ -4725,3 +4725,44 @@ nothing in this change is on the tap path).
   step, never as a sample.
 - **Conclusion / next:** the release gate can run again; the remaining work is the M8 form fast
   path (REL3C/REL3F reply work on the submit tap) before v0.3.0 is claimed green.
+
+## E14.2 — PERF3: the M8 form-fast regression is REL3C's full-tree file write, and a content cache fixes it — PASS (lattice gate: +0.5 % / +0.18 ms, first slot 92 %→99 %)
+
+- **Question:** BENCHFIX measured M8 tap→settled form fast +3.64 ms / +11.1 % on rel-030
+  (v0.2.2 32.74 vs 36.38 ms trimmed, first slot 98 %→85 %). Which commit on the tap/reply path
+  causes it, and can it be fixed without dropping the REL3C full-tree artifact?
+- **Method:** reproduce with the bench's own driver in a 60 s form loop (reset fast → tap fast →
+  observe strict), then toggle the REL3C write in one rel-030 binary
+  (`ACOS_PERF3_WRITE_MODE=full|nowrite`) in interleaved blocks. Final proof: 3 interleaved reps,
+  `--bundle latency --reps 20 --fast-reps 40`, every acquisition through
+  `run-exclusive --task PERF3 --exclusive` + `guarded.sh --mem 8G --time 540`; `ab-compare.py`
+  lattice gate. Host 9950X, load 2–9 (other agents' builds).
+- **Inputs:** `fixtures/build/apps/form-validation.apk` and `counter.apk` (hardlinked from the
+  shared fixture build); sysroot `.cache/art/sysroot`. Arms: v0.2.2 tag
+  (`50537b60…`) and the PERF3 fix (`cacf5e28…`).
+- **Root cause (measured):** the extra time is all inside `guest_command_ms`; the tap reply itself
+  has `timing.input.absorb_ms = 0` and carries no tree. REL3C's `shape_tree` pretty-serialized and
+  synchronously wrote `tree/<frame_seq>.json` (plus `create_dir_all`/`canonicalize`) on every
+  reset/observation; the same form screen was rewritten under a new sequence every iteration, just
+  before the next tap. With the write disabled on the same rel-030 binary, rel-030 is at parity
+  with v0.2.2 (trimmed 32.744 vs 32.723 ms, +0.06 %); with the write on it is 35.58 vs 34.12 ms
+  (+1.46 ms) in the same block run. REL3F/int-022/REL3P are not on this loop.
+- **Fix:** `reply::write_full_tree` caches byte-identical full trees per artifacts directory and
+  returns the existing complete artifact instead of writing another one; a missing file is
+  rewritten, a different tree for a reused sequence gets `tree/<seq>-<hash>.json` (never replaces
+  a named artifact), and writes are temp+rename. Every tree-bearing reply still names a full tree;
+  no field removed, no test weakened. Two new unit tests pin reuse and sequence-collision
+  preservation.
+- **Result:** M8 form fast trimmed 33.57 (v0.2.2) vs 33.75 (fix): +0.18 ms / +0.5 %, first slot
+  92 %→99 % — PASS under ADR-0028 (+5 % / +2 ms). M8 counter fast +0.87 ms / +2.2 % (within-noise;
+  the old median gate flips because one rep per arm landed a frame later: v0.2.2 rep p50s
+  32.48/32.86/50.56, fix 49.39/33.06/47.56). M4 launch fast −10.2 %, M6 reset fast −2.3 %
+  (within-noise). Strict metrics flat.
+- **Fidelity / evidence:** measured, release binaries, owned daemons only; `host-pixel` frames.
+  `results/bench/PERF3/REPORT.md`, raw `run-{v022,fix}/rep-*`, merged `v022.json`/`fix.json`,
+  `ab-compare.json|txt`, and `diagnosis/` (loop reproduction, write on/off blocks, parity blocks,
+  scripts).
+- **Regression / false pass:** none. REL3C tests pass: `acos-protocol reply::tests` 7/7,
+  `acos-mcp --test compact_reply` 1/1, `acos-cli engine::serve::tests::shaped_tree` 1/1.
+- **Conclusion / next:** the BENCHFIX regression is closed. v0.3.0's remaining gate work is the
+  other tracks, not this reply path.

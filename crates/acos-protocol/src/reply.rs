@@ -22,8 +22,11 @@
 //! tree may be any object with `children`. A tree node is treated as visible
 //! unless it says `visible:false`.
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use serde_json::{json, Map, Value};
 
@@ -315,17 +318,114 @@ pub fn shape_tree(tree: &Value, sequence: Option<u64>, opts: &TreeShapeOptions) 
     }
 }
 
+/// One process-wide cache of the full-tree artifacts already on disk.
+///
+/// A live screen is observed far more often than it changes: the same tree is
+/// written by a reset and by every observation that follows it, each under a new
+/// frame sequence. Serializing and writing that unchanged tree again used to be
+/// on the reply path of *every* tree-bearing verb, and the dirty writes landed
+/// in the next fast tap's settle window (PERF3: M8 form fast +3.6 ms, while the
+/// tap reply itself never carried a tree). Reusing an existing file for
+/// byte-identical content keeps the artifact the reply names without touching
+/// the filesystem again.
+#[derive(Default)]
+struct TreeFileCache {
+    /// `(artifacts dir, content hash)` -> the artifact already holding it.
+    by_content: HashMap<(PathBuf, u64), PathBuf>,
+    /// `(artifacts dir, frame seq)` -> the content hash written there, so a
+    /// different tree for a reused sequence never overwrites a named artifact.
+    by_seq: HashMap<(PathBuf, u64), u64>,
+    /// The canonical `tree/` directory per artifacts dir, resolved once.
+    canonical_dirs: HashMap<PathBuf, PathBuf>,
+}
+
+fn tree_file_cache() -> &'static Mutex<TreeFileCache> {
+    static CACHE: OnceLock<Mutex<TreeFileCache>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(TreeFileCache::default()))
+}
+
+fn content_hash(bytes: &[u8]) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    hasher.finish()
+}
+
 /// Write the full tree as pretty JSON under `dir/tree/<seq>.json`.
+///
+/// Byte-identical content already written for this artifacts directory is not
+/// written again: the existing absolute path is returned, so the reply still
+/// names a complete tree file and every frame keeps its evidence. A different
+/// tree for a sequence that was already used gets its own `tree/<seq>-<hash>.json`
+/// name instead of replacing a file an earlier reply named.
 ///
 /// # Errors
 /// The directory or file could not be written.
 pub fn write_full_tree(dir: &Path, sequence: u64, tree: &Value) -> io::Result<PathBuf> {
+    let bytes = serde_json::to_vec_pretty(tree)?;
+    let hash = content_hash(&bytes);
+    let key_content = (dir.to_path_buf(), hash);
+    let key_seq = (dir.to_path_buf(), sequence);
+
+    // Fast path: this exact tree is already an artifact for this directory.
+    {
+        let cache = tree_file_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(path) = cache.by_content.get(&key_content) {
+            if path.is_file() {
+                return Ok(path.clone());
+            }
+        }
+    }
+
     let tree_dir = dir.join(TREE_DIR);
     std::fs::create_dir_all(&tree_dir)?;
-    let path = tree_dir.join(format!("{sequence}.json"));
-    let bytes = serde_json::to_vec_pretty(tree)?;
-    std::fs::write(&path, bytes)?;
-    Ok(std::fs::canonicalize(&path).unwrap_or(path))
+    let canonical_dir = {
+        let mut cache = tree_file_cache().lock().unwrap_or_else(|e| e.into_inner());
+        cache
+            .canonical_dirs
+            .entry(dir.to_path_buf())
+            .or_insert_with(|| std::fs::canonicalize(&tree_dir).unwrap_or_else(|_| tree_dir.clone()))
+            .clone()
+    };
+    let reused_sequence = {
+        let cache = tree_file_cache().lock().unwrap_or_else(|e| e.into_inner());
+        cache
+            .by_seq
+            .get(&key_seq)
+            .is_some_and(|previous| *previous != hash)
+    };
+    let file_name = if reused_sequence {
+        format!("{sequence}-{hash:016x}.json")
+    } else {
+        format!("{sequence}.json")
+    };
+    let path = canonical_dir.join(file_name);
+
+    // Write beside the target and rename, so a reader never sees a partial
+    // artifact and a failed write cannot truncate one already named.
+    static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let tmp = canonical_dir.join(format!(
+        ".tree-{sequence}-{}-{}.tmp",
+        std::process::id(),
+        TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    if let Err(error) = std::fs::write(&tmp, &bytes) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(error);
+    }
+    if let Err(error) = std::fs::rename(&tmp, &path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(error);
+    }
+
+    let mut cache = tree_file_cache().lock().unwrap_or_else(|e| e.into_inner());
+    if cache.by_content.len() > 4096 {
+        cache.by_content.clear();
+        cache.by_seq.clear();
+        cache.canonical_dirs.clear();
+    }
+    cache.by_content.insert(key_content, path.clone());
+    cache.by_seq.insert(key_seq, hash);
+    Ok(path)
 }
 
 /// Replace `value["result"]["tree"]` with its compact form and name the file.
@@ -633,6 +733,58 @@ mod tests {
             written["nodes"][1]["text"],
             "Settings row 1 — the content in the middle"
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn reply_test_dir(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/acos-reply-tests")
+            .join(format!(
+                "{name}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            ))
+    }
+
+    /// PERF3: an unchanged screen is observed many times. The second write of
+    /// the same content names the artifact already on disk instead of dirtying
+    /// another file on the reply path.
+    #[test]
+    fn identical_tree_content_reuses_the_named_artifact() {
+        let dir = reply_test_dir("tree-reuse");
+        let tree = large_tree(3);
+        let first = write_full_tree(&dir, 7, &tree).expect("first write");
+        let second = write_full_tree(&dir, 8, &tree).expect("second write");
+        assert_eq!(first, second, "byte-identical content is not rewritten");
+        let written: Value = serde_json::from_slice(&std::fs::read(&second).unwrap()).unwrap();
+        assert_eq!(written["nodes"].as_array().unwrap().len(), 3);
+
+        // A removed artifact is not trusted from the cache: the next request
+        // writes it again and still returns a readable path.
+        std::fs::remove_file(&second).expect("remove artifact");
+        let third = write_full_tree(&dir, 9, &tree).expect("rewrite");
+        assert!(third.is_file(), "a missing artifact is written again");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A frame sequence can be reused by a relaunched guest with a different
+    /// tree. The new content must not replace the file an earlier reply named.
+    #[test]
+    fn a_different_tree_for_a_used_sequence_gets_its_own_artifact() {
+        let dir = reply_test_dir("tree-seq-reuse");
+        let first = write_full_tree(&dir, 7, &large_tree(3)).expect("first write");
+        let other = json!({"max_nodes": 2000, "truncated": false, "nodes": [
+            node("a different screen", 0, false)
+        ]});
+        let second = write_full_tree(&dir, 7, &other).expect("second write");
+        assert_ne!(first, second, "different content must not overwrite");
+        let old: Value = serde_json::from_slice(&std::fs::read(&first).unwrap()).unwrap();
+        assert_eq!(old["nodes"].as_array().unwrap().len(), 3);
+        let new: Value = serde_json::from_slice(&std::fs::read(&second).unwrap()).unwrap();
+        assert_eq!(new["nodes"][0]["text"], "a different screen");
         let _ = std::fs::remove_dir_all(dir);
     }
 
