@@ -726,6 +726,23 @@ pub trait Module: Send {
     fn take_session_handles(&mut self) -> Option<crate::registry::LiveHandles> {
         None
     }
+
+    /// The node that answers this module's name while it is **off**.
+    ///
+    /// ADR-0029's default is "no node": the name answers `null` (AOSP's own
+    /// missing path) or the gap tombstone. A few names have no such path on a
+    /// real device: `location` is always published, and a phone with location
+    /// disabled still answers `ILocationManager` with no providers and no
+    /// geocoder. For those, the module hands back the honest disabled node and
+    /// [`ModuleRegistry::detach`] installs it after the attach scope has been
+    /// rolled back (so it is not undone with the module's own registrations).
+    ///
+    /// A returned node must answer the *disabled* device state, never data:
+    /// the conformance kit's honest-report check rejects a detached module whose
+    /// name still serves a working answer.
+    fn off_node(&self) -> Option<Box<dyn ServiceObject>> {
+        None
+    }
 }
 
 /// The AOSP behaviour a tombstone name is decided by.
@@ -1015,10 +1032,11 @@ impl ServiceObject for TombstoneService {
     fn raw_transact(
         &mut self,
         interface: &str,
-        _code: u32,
+        code: u32,
         _data: &mut acos_parcel::Parcel,
-        _reply: &mut acos_parcel::Parcel,
+        reply: &mut acos_parcel::Parcel,
     ) -> Result<bool> {
+        let _ = (code, reply);
         Err(self.tombstone.error(interface))
     }
 }
@@ -1078,6 +1096,7 @@ impl ModuleRegistry {
         for module in [
             Box::new(crate::core_module::CoreModule::new()) as Box<dyn Module>,
             Box::new(crate::modules::vibrator::VibratorModule::new()),
+            Box::new(crate::modules::location::LocationModule::new()),
         ] {
             if let Err(error) = registry.add(module) {
                 panic!("standard module set is invalid: {error}");
@@ -1092,7 +1111,16 @@ impl ModuleRegistry {
         let manifest = module.manifest();
         manifest.validate()?;
         for service in manifest.services {
+            // `core` is the always-attached baseline, and some of its names are
+            // *taken over* by a module: `geo.country`, `location` and
+            // `feedback.vibrator` all have a core node today (a device with no
+            // such module still publishes the name) and a module that owns the
+            // whole behaviour replaces it when it attaches. Two non-core modules
+            // claiming one name is still an error.
             if let Some(owner) = self.providers.insert(service.name, manifest.id) {
+                if owner == "core" {
+                    continue;
+                }
                 return Err(format!(
                     "module {:?} provides {:?}, which module {owner:?} already provides",
                     manifest.id, service.name
@@ -1277,8 +1305,16 @@ impl ModuleRegistry {
         self.entries[index].profile = Profile::Off;
         let id = self.entries[index].module.manifest().id;
         self.attached_order.retain(|attached| *attached != id);
+
         // The name is now unserved again: put its tombstone back, so a detached
         // module's name never falls back to a silent null.
+        // Only the module that *owns* a name restores its tombstone. `core`
+        // provides several names another module takes over (`location`), and
+        // detaching `core` must not put a tombstone back for a name whose owner
+        // is still a different, detached module: the registry installs those on
+        // the next `install_tombstones`, and restoring them here would leave a
+        // registration behind after a detach (the kit's
+        // `detaching_core_removes_its_registrations` check).
         let restore: Vec<&'static Tombstone> = self.entries[index]
             .module
             .manifest()
@@ -1286,12 +1322,19 @@ impl ModuleRegistry {
             .iter()
             .filter_map(|service| tombstone_for(service.name))
             .filter(|tombstone| tombstone.reaction == AospReaction::Tombstone)
+            .filter(|tombstone| tombstone.module == id)
             .filter(|tombstone| !self.tombstoned.contains(&tombstone.name))
             .collect();
         for tombstone in restore {
             install_tombstone(host, tombstone);
             self.tombstoned.push(tombstone.name);
         }
+        // Every module that is still off and has a documented disabled node
+        // (see [`Module::off_node`]) answers its name again. This is what makes
+        // a detach return the host to the same state the session started in:
+        // detaching `core` removes the node core registered for a name another
+        // module owns, and that module's off node takes the name back.
+        self.install_off_nodes(host);
         Ok(())
     }
 
@@ -1501,6 +1544,42 @@ impl ModuleRegistry {
             install_tombstone(host, tombstone);
             self.tombstoned.push(tombstone.name);
             installed.push(tombstone.name);
+        }
+        // The other half of "off is honest": a name that a real device always
+        // publishes has a documented disabled node instead of a tombstone
+        // ([`Module::off_node`]). It is installed here so every launch path gets
+        // the device's disabled answer before the guest boots, and so the
+        // conformance kit's baseline is the same state a detach restores.
+        self.install_off_nodes(host);
+        installed
+    }
+
+    /// Install the honest "off" node of every module that is not attached and
+    /// declares one ([`Module::off_node`]).
+    ///
+    /// Idempotent: a name already answered by the same node is replaced, never
+    /// duplicated (`ServiceHost::register_dynamic_named` keeps one node per
+    /// descriptor).
+    pub fn install_off_nodes(&mut self, host: &mut ServiceHost) -> Vec<&'static str> {
+        let mut installed = Vec::new();
+        for entry in &self.entries {
+            if entry.profile.is_attached() {
+                continue;
+            }
+            let manifest = entry.module.manifest();
+            let Some(node) = entry.module.off_node() else {
+                continue;
+            };
+            // One node per module: it answers the module's first provided name,
+            // which is the one a phone always publishes.
+            let Some(service) = manifest.services.first() else {
+                continue;
+            };
+            if tombstone_for(service.name).is_some() {
+                continue;
+            }
+            host.register_dynamic_named(service.name, service.descriptor, node);
+            installed.push(service.name);
         }
         installed
     }
@@ -2037,14 +2116,26 @@ pub mod conformance {
         let mut honest = true;
         let mut honest_detail = String::new();
         for name in &provides {
+            // A name a module *takes over* from `core` (`location`,
+            // `feedback.vibrator`, `geo.country`) answers the tombstone of the
+            // module that owns it now, not of the module that used to serve it.
+            // Both are honest: the check is "the name must not answer as if the
+            // detached module were attached, and the error must name an owner".
+            let owner = registry.module_of_service(name).unwrap_or(module_id);
             match host.check_service(name).ok().flatten() {
                 None => {}
                 Some(binder) => match transact_once(&mut host, binder) {
-                    Err(ServiceError::ModuleUnavailable { module, .. }) if module == module_id => {}
+                    // The two honest shapes ADR-0029 allows for an off module:
+                    // a tombstone naming the owner, or the framework's own
+                    // structured "not available" answer (`UNSUPPORTED_ANDROID_API`)
+                    // when the name has a documented disabled node
+                    // ([`Module::off_node`]). A working answer is never accepted.
+                    Err(ServiceError::ModuleUnavailable { module, .. }) if module == owner => {}
+                    Err(ServiceError::UnsupportedAndroidApi { .. }) => {}
                     other => {
                         honest = false;
                         honest_detail = format!(
-                            "detached module still answers {name:?}: {other:?} (expected null or a tombstone naming {module_id})"
+                            "detached module still answers {name:?}: {other:?} (expected null, a tombstone naming {owner}, or a structured unsupported answer)"
                         );
                     }
                 },

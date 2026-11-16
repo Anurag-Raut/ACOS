@@ -92,6 +92,11 @@ fn the_vibrator_module_passes_the_conformance_kit() {
 }
 
 #[test]
+fn the_location_module_passes_the_conformance_kit() {
+    run_in_quiet_process("location");
+}
+
+#[test]
 fn a_gap_name_answers_a_structured_tombstone_naming_the_module_and_the_attach_call() {
     let mut host = ServiceHost::new();
     let mut registry = ModuleRegistry::standard();
@@ -266,7 +271,28 @@ fn detaching_core_removes_its_registrations() {
         .check_service("package")
         .expect("lookup is infallible")
         .is_none());
-    assert!(host2.service_names().is_empty());
+    // Every core registration is gone. One name survives: `location` is owned by
+    // the `location` module, which is off, and a real device always publishes
+    // that name (see `Module::off_node`); the surviving node is the disabled
+    // device answer, never a working one.
+    assert_eq!(
+        host2.service_names(),
+        vec!["location"],
+        "only the off module's documented disabled node may outlive core"
+    );
+    let off = host2
+        .check_service("location")
+        .expect("lookup is infallible")
+        .expect("the off node is registered");
+    let descriptor = host2.descriptor_of(off).expect("descriptor").to_string();
+    let mut data = Parcel::new();
+    data.write_interface_token(&descriptor).expect("token");
+    data.set_data_position(0);
+    let mut reply = Parcel::new();
+    let error = host2
+        .transact(off, 1, &mut data, &mut reply, 0)
+        .expect_err("the disabled node must not answer a location");
+    assert_eq!(error.code(), "UNSUPPORTED_ANDROID_API");
 }
 
 #[test]

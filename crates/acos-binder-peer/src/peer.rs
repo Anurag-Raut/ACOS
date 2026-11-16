@@ -889,6 +889,18 @@ impl Peer {
         seq
     }
 
+    /// Deliveries that became ready while the guest was idle.
+    ///
+    /// A scripted/timed module (`location`'s `play_track`, a sensor or camera
+    /// feed) queues a `system -> app` delivery from its own thread. Without a
+    /// tick the peer only drains deliveries after a guest transaction, so the
+    /// app would see the feed only when it happened to call something. The peer
+    /// loop polls its socket with a bounded timeout and calls this on each idle
+    /// turn.
+    pub fn tick(&mut self) -> Vec<Frame> {
+        self.take_delivery_frames()
+    }
+
     fn take_delivery_frames(&mut self) -> Vec<Frame> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());

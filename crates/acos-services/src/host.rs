@@ -300,9 +300,34 @@ impl ServiceHost {
         descriptor: &'static str,
         object: Box<dyn ServiceObject>,
     ) -> BinderId {
+        // One node per descriptor: a module taking over a name `core` serves
+        // (`location`) replaces that node instead of adding a second binder with
+        // the same descriptor, which would make `checkService` ambiguous and
+        // leave a stray binder behind when one of them is removed.
+        if self.dynamic_descriptor(descriptor).is_some() {
+            self.remove_descriptor(descriptor);
+        }
         let binder = self.register_dynamic(descriptor, object);
         self.names.insert(name, descriptor);
         binder
+    }
+
+    /// Drop any dynamic node registered under `descriptor` (there is at most one
+    /// after [`Self::register_dynamic_named`]'s takeover rule, but a node may
+    /// have been registered by [`Self::register_dynamic`] without a name).
+    fn dynamic_descriptor(&self, descriptor: &str) -> Option<u64> {
+        self.binder_descriptors
+            .iter()
+            .find(|(id, existing)| **existing == descriptor && self.dynamic.contains_key(id))
+            .map(|(id, _)| *id)
+    }
+
+    fn remove_descriptor(&mut self, descriptor: &'static str) -> Option<BinderId> {
+        let id = self.dynamic_descriptor(descriptor)?;
+        self.dynamic.remove(&id);
+        self.binder_descriptors.remove(&id);
+        self.registry.remove(BinderId(id));
+        Some(BinderId(id))
     }
 
     /// Give a descriptor that is already registered a second
@@ -1053,8 +1078,17 @@ impl ServiceHost {
     }
 
     /// Drain `system -> app` deliveries queued by service handlers.
+    ///
+    /// Dynamic objects are drained too: a module such as `location` (or a
+    /// sensor/camera feed) delivers from its own timer thread, so its queue must
+    /// be readable without a guest transaction landing first. The peer polls
+    /// this on its idle tick (`acos-binder-peer`'s `Peer::tick`).
     pub fn take_deliveries(&mut self) -> Vec<PendingDelivery> {
-        std::mem::take(&mut self.deliveries)
+        let mut out = std::mem::take(&mut self.deliveries);
+        for object in self.dynamic.values_mut() {
+            out.append(&mut object.drain_raw_deliveries());
+        }
+        out
     }
 
     /// Drain lifecycle/log events from every constructed service.
