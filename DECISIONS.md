@@ -1193,3 +1193,11 @@ session. The shared design must keep per-session isolation (no session can see o
 traffic, per-session online/offline, latency and HAR controls), keep the host-loopback/LAN boundary and
 fail-closed behaviour, and cost near zero per session; it needs its own design note and a security
 review before implementation. Per-session pasta remains the proven fallback.
+
+**ADR-0029/0030/0031 amendment (owner, 2026-11-16): security takes a back seat.** ACOS is a tool
+agents use while developing apps, not an OS end users run. The mandatory security reviews in
+ADR-0030 and ADR-0031 are dropped. The shared network relay needs no inter-session traffic isolation
+beyond correctness (sessions must not disturb each other's results or controls). Cheap safeguards
+stay: no default guest route to host localhost services (it also protects the MCP daemon and
+`acos view`), explicit host-port opt-in (Metro), and fail-closed where it costs nothing. Any hardening
+that costs RAM or latency is out. Verdict honesty (0 false passes) is unaffected.
