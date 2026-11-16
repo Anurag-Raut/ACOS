@@ -5,6 +5,7 @@ use acos_parcel::{BinderId, Parcel};
 use acos_services::ams::IntentFacts;
 use acos_services::module::{ModuleConfig, ModuleRegistry, Profile};
 use acos_services::{ServiceError, ServiceHost};
+use acos_services::value::DynamicValue;
 
 fn java_binder(wire: u64) -> u64 {
     (1 << 32) | wire
@@ -170,6 +171,66 @@ fn the_manager_hands_out_the_adapter_and_the_scripted_state_answers() {
 }
 
 #[test]
+fn get_remote_name_answers_the_scripted_device_name() {
+    let (mut host, _registry) = attach("hw.bluetooth");
+    // The adapter must be on: `BluetoothDevice.getName()` returns null when the
+    // client sees a disabled adapter (`isBluetoothEnabled()`).
+    let (code, mut data) = open(&mut host, "bluetooth_manager", 5);
+    data.write_int32(0);
+    let _ = transact(&mut host, "bluetooth_manager", code, data).expect("enable");
+
+    /// `IBluetooth.getRemoteName(in BluetoothDevice, in AttributionSource,
+    /// receiver)` exactly as AIDL writes it: the device is a typed object
+    /// (presence word + `BluetoothDevice.writeToParcel` body, no class name).
+    fn remote_name(host: &mut ServiceHost, receiver: u64, address: &str) -> Option<DynamicValue> {
+        let (code, mut data) = open(host, "bluetooth", 32);
+        data.write_int32(1); // a present typed object
+        data.write_string16(address).unwrap(); // mAddress
+        data.write_int32(0); // mAddressType == ADDRESS_TYPE_PUBLIC
+        data.write_int32(0); // AttributionSource placeholder (data only)
+        data.write_string16("dev.acos.fixtures.tailprobe").unwrap();
+        data.write_strong_binder(BinderId(receiver));
+        transact_oneway(host, "bluetooth", code, data);
+        let deliveries = host.take_deliveries();
+        let delivery = deliveries.iter().find(|d| d.target.0 == receiver)?;
+        assert_eq!(
+            delivery.interface,
+            "com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver",
+            "the name travels through the client's receiver"
+        );
+        let mut payload = delivery.data.clone();
+        payload.set_data_position(0);
+        payload
+            .enforce_interface(
+                "com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver",
+            )
+            .expect("ISynchronousResultReceiver token");
+        assert_eq!(payload.read_int32().unwrap(), 1, "Result is a typed object");
+        let value = acos_services::parcelable::read_dynamic(&mut payload).expect("mObject");
+        let exception =
+            acos_services::parcelable::read_dynamic(&mut payload).expect("mException");
+        assert!(matches!(exception, DynamicValue::Null));
+        Some(value)
+    }
+
+    assert_eq!(
+        remote_name(&mut host, java_binder(71), "11:22:33:44:55:66"),
+        Some(DynamicValue::String(Some("ACOS Headset".into()))),
+        "the bonded device's scripted name"
+    );
+    assert_eq!(
+        remote_name(&mut host, java_binder(72), "AA:BB:CC:DD:EE:01"),
+        Some(DynamicValue::String(Some("ACOS Beacon".into()))),
+        "a scan result's scripted name"
+    );
+    assert_eq!(
+        remote_name(&mut host, java_binder(73), "00:00:00:00:00:00"),
+        Some(DynamicValue::String(None)),
+        "an unknown device has no name (null), not a fabricated one"
+    );
+}
+
+#[test]
 fn get_bonded_devices_answers_a_real_list_of_bluetooth_device_parcels() {
     let (mut host, _registry) = attach("hw.bluetooth");
     // The adapter must be on (AOSP's client returns an empty set otherwise).
@@ -282,6 +343,13 @@ fn a_scripted_scan_broadcasts_action_found_with_the_device_parcel() {
     match facts.extras.get("android.bluetooth.device.extra.NAME") {
         Some(acos_services::ams::Extra::String(name)) => assert_eq!(name, "ACOS Beacon"),
         other => panic!("expected the device name, got {other:?}"),
+    }
+    // `EXTRA_RSSI` is a **short** extra (`Intent.getShortExtra` casts the bundle
+    // value to `java.lang.Short`): an `Integer` there made the probe print
+    // `rssi=0` after the client's `ClassCastException` warning.
+    match facts.extras.get("android.bluetooth.device.extra.RSSI") {
+        Some(acos_services::ams::Extra::Short(rssi)) => assert_eq!(*rssi, -40),
+        other => panic!("expected a VAL_SHORT rssi extra, got {other:?}"),
     }
 }
 

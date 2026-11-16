@@ -2423,6 +2423,9 @@ pub mod val {
     pub const STRING: i32 = 0;
     /// `VAL_INTEGER`.
     pub const INTEGER: i32 = 1;
+    /// `VAL_SHORT` (`Bundle.putShort`): the tag, then a 4-byte int
+    /// (`Parcel.writeValue` VAL_SHORT → `writeInt`).
+    pub const SHORT: i32 = 5;
     /// `VAL_LONG`.
     pub const LONG: i32 = 6;
     /// `VAL_FLOAT`.
@@ -2961,6 +2964,7 @@ fn dynamic_to_value(v: crate::value::DynamicValue) -> Value {
         D::Null => Value::Skipped,
         D::String(s) => Value::Str(s),
         D::Int(i) => Value::Int(i),
+        D::Short(s) => Value::Short(s),
         D::Long(l) => Value::Long(l),
         D::Float(f) => Value::Float(f),
         D::Double(d) => Value::Double(d),
@@ -2989,6 +2993,7 @@ fn value_to_dynamic(v: &Value) -> Result<crate::value::DynamicValue> {
         Value::Str(s) => D::String(s.clone()),
         Value::Str8(s) => D::String(s.clone()),
         Value::Int(i) => D::Int(*i),
+        Value::Short(s) => D::Short(*s),
         Value::Long(l) => D::Long(*l),
         Value::Float(f) => D::Float(*f),
         Value::Double(d) => D::Double(*d),
@@ -3093,6 +3098,9 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
         val::NULL => D::Null,
         val::STRING => D::String(parcel.read_string16()?),
         val::INTEGER => D::Int(parcel.read_int32()?),
+        val::SHORT => D::Short(
+            i16::try_from(parcel.read_int32()?).map_err(|_| bad("VAL_SHORT out of range"))?,
+        ),
         val::LONG => D::Long(parcel.read_int64()?),
         val::FLOAT => D::Float(parcel.read_float()?),
         val::DOUBLE => D::Double(parcel.read_double()?),
@@ -3234,6 +3242,10 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
         D::Int(i) => {
             parcel.write_int32(val::INTEGER);
             parcel.write_int32(*i);
+        }
+        D::Short(s) => {
+            parcel.write_int32(val::SHORT);
+            parcel.write_int32(i32::from(*s));
         }
         D::Long(l) => {
             parcel.write_int32(val::LONG);

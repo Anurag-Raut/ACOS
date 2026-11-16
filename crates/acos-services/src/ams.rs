@@ -90,6 +90,10 @@ pub enum Extra {
     String(String),
     /// `putExtra(int)`.
     Int(i32),
+    /// `putExtra(String, short)`: a `VAL_SHORT` bundle value, which
+    /// `Bundle.getShort` casts to `java.lang.Short` (`BluetoothDevice`'s
+    /// `EXTRA_RSSI` is read with `getShortExtra`).
+    Short(i16),
     /// `putExtra(boolean)`.
     Bool(bool),
     /// `putExtra(String, byte[])` (a `VAL_BYTEARRAY` bundle value).
@@ -230,6 +234,7 @@ fn reduce_extras(bundle: &Bundle) -> BTreeMap<String, Extra> {
         let extra = match value {
             Value::Str(Some(s)) | Value::Str8(Some(s)) => Extra::String(s.clone()),
             Value::Int(i) => Extra::Int(*i),
+            Value::Short(s) => Extra::Short(*s),
             Value::Bool(b) => Extra::Bool(*b),
             Value::ByteArray(Some(bytes)) => Extra::Bytes(bytes.clone()),
             Value::Parcelable(parcelable) => Extra::Parcelable(parcelable.clone()),
@@ -259,6 +264,7 @@ fn encode_extras(extras: &BTreeMap<String, Extra>) -> Bundle {
         match value {
             Extra::String(s) => bundle.put(key, Value::Str(Some(s.clone()))),
             Extra::Int(i) => bundle.put(key, Value::Int(*i)),
+            Extra::Short(s) => bundle.put(key, Value::Short(*s)),
             Extra::Bool(b) => bundle.put(key, Value::Bool(*b)),
             Extra::Bytes(bytes) => bundle.put(key, Value::ByteArray(Some(bytes.clone()))),
             Extra::Parcelable(parcelable) => {

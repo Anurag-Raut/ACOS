@@ -7,6 +7,7 @@ import android.content.pm.PermissionInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
+import android.os.Bundle;
 import android.os.LocaleList;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -132,6 +133,17 @@ public final class ParcelableCompareMain {
         return b;
     }
 
+    /**
+     * A `Bundle` carrying the `BluetoothDevice.EXTRA_RSSI` short extra. The
+     * framework writes `putShort` as `VAL_SHORT` (tag 5) with a 4-byte int
+     * payload, and `Intent.getShortExtra` casts the value to `java.lang.Short`.
+     */
+    static Bundle rssiBundle() {
+        Bundle b = new Bundle();
+        b.putShort("android.bluetooth.device.extra.RSSI", (short) -40);
+        return b;
+    }
+
     interface Writer {
         void write(Parcel p) throws Exception;
     }
@@ -165,6 +177,7 @@ public final class ParcelableCompareMain {
     public static void main(String[] args) throws Exception {
         emit("configuration", p -> configuration().writeToParcel(p, 0));
         emit("persistable_bundle", p -> persistableBundle().writeToParcel(p, 0));
+        emit("bundle_short", p -> rssiBundle().writeToParcel(p, 0));
         // `SynchronousResultReceiver$Result.writeToParcel` (image dex):
         // `writeValue(mObject)` then `writeValue(mException)`. The Bluetooth
         // module answers `getBondedDevices` with a `List<BluetoothDevice>` and
@@ -247,6 +260,14 @@ public final class ParcelableCompareMain {
                         got = PersistableBundle.CREATOR.createFromParcel(p);
                         check(((PersistableBundle) got).getString("name").equals("helloviews"),
                                 "bundle name");
+                        break;
+                    case "bundle_short":
+                        got = Bundle.CREATOR.createFromParcel(p);
+                        check(((Bundle) got).getShort("android.bluetooth.device.extra.RSSI")
+                                        == (short) -40,
+                                "bundle_short rssi "
+                                        + ((Bundle) got).getShort(
+                                                "android.bluetooth.device.extra.RSSI"));
                         break;
                     case "application_info":
                         got = ApplicationInfo.CREATOR.createFromParcel(p);

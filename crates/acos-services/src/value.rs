@@ -159,6 +159,12 @@ pub enum DynamicValue {
     String(Option<String>),
     /// `VAL_INTEGER`.
     Int(i32),
+    /// `VAL_SHORT`: `Bundle.putShort`/`Intent.putExtra(String, short)`. The
+    /// image writes the tag then a 4-byte int (`Parcel.writeValue` VAL_SHORT →
+    /// `writeInt`), and the client's `getShort` casts to `java.lang.Short` — an
+    /// `Integer` there is a `ClassCastException` warning and the default comes
+    /// back (`BluetoothDevice.EXTRA_RSSI` was read as 0 that way).
+    Short(i16),
     /// `VAL_LONG`.
     Long(i64),
     /// `VAL_FLOAT`.
@@ -261,6 +267,8 @@ pub enum Value {
     Unit,
     /// `int`.
     Int(i32),
+    /// `short` (a `Bundle`/`Intent` extra value, `VAL_SHORT`).
+    Short(i16),
     /// `long`.
     Long(i64),
     /// `float`.

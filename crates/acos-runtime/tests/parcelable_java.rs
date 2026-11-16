@@ -252,6 +252,23 @@ fn encoded_result(object: DynamicValue, exception: DynamicValue) -> Vec<u8> {
     parcel.marshall()
 }
 
+/// A `Bundle` carrying the `BluetoothDevice.EXTRA_RSSI` short extra: the value
+/// is `VAL_SHORT` (tag 5, 4-byte payload), which `Intent.getShortExtra` casts
+/// to `java.lang.Short`.
+fn short_bundle_value() -> Bundle {
+    let mut bundle = Bundle::new();
+    bundle.put(EXTRA_RSSI_KEY, Value::Short(-40));
+    bundle
+}
+
+const EXTRA_RSSI_KEY: &str = "android.bluetooth.device.extra.RSSI";
+
+fn encoded_bundle(bundle: &Bundle) -> Vec<u8> {
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_bundle(&mut parcel, Some(bundle)).expect("encode bundle");
+    parcel.marshall()
+}
+
 fn encoded(value: &Parcelable) -> Vec<u8> {
     let mut parcel = acos_parcel::Parcel::new();
     parcelable::write_payload(&mut parcel, value).expect("encode payload");
@@ -332,6 +349,15 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         writes.get("bluetooth_result"),
         hex(&bonded_bytes)
     );
+    let short_bundle = short_bundle_value();
+    let short_bundle_bytes = encoded_bundle(&short_bundle);
+    assert_eq!(
+        writes.get("bundle_short").map(String::as_str),
+        Some(hex(&short_bundle_bytes).as_str()),
+        "Bundle.putShort (VAL_SHORT) real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("bundle_short"),
+        hex(&short_bundle_bytes)
+    );
     let state_bytes = encoded_result(DynamicValue::Int(12), DynamicValue::Null);
     assert_eq!(
         writes.get("bluetooth_state").map(String::as_str),
@@ -389,6 +415,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         format!("persistable_bundle={}", hex(&bundle_bytes)),
         format!("bluetooth_result={}", hex(&bonded_bytes)),
         format!("bluetooth_state={}", hex(&state_bytes)),
+        format!("bundle_short={}", hex(&short_bundle_bytes)),
         format!("application_info={}", hex(&app_bytes)),
         format!("activity_info={}", hex(&act_bytes)),
         format!("package_info={}", hex(&pkg_bytes)),
@@ -410,6 +437,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         "persistable_bundle",
         "bluetooth_result",
         "bluetooth_state",
+        "bundle_short",
         "application_info",
         "activity_info",
         "package_info",
@@ -430,6 +458,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         ("persistable_bundle", &bundle_bytes),
         ("bluetooth_result", &bonded_bytes),
         ("bluetooth_state", &state_bytes),
+        ("bundle_short", &short_bundle_bytes),
         ("application_info", &app_bytes),
         ("activity_info", &act_bytes),
         ("package_info", &pkg_bytes),
