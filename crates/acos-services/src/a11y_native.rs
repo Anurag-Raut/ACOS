@@ -566,7 +566,9 @@ pub const TAKE_SCREENSHOT_SUCCESS: i32 = 0;
 /// `VAL_MAP`: the framework then read an integer payload as a string, a long as
 /// an int, and a parcelable as a length-prefixed map. Nothing reads a `Bundle`
 /// with invented tags.
-use crate::parcelable::val::{INTEGER as VAL_INTEGER, LONG as VAL_LONG, PARCELABLE as VAL_PARCELABLE};
+use crate::parcelable::val::{
+    INTEGER as VAL_INTEGER, LONG as VAL_LONG, PARCELABLE as VAL_PARCELABLE,
+};
 /// Android 14 `Bundle` magic (`"BNDL"`).
 ///
 /// The one definition lives in [`crate::parcelable`] and is shared here on
@@ -582,7 +584,6 @@ fn java_string_hash(s: &str) -> i32 {
     s.encode_utf16()
         .fold(0i32, |h, c| h.wrapping_mul(31).wrapping_add(i32::from(c)))
 }
-
 
 /// Write one `VAL_PARCELABLE` value: the tag, the length of the value's body,
 /// then `writeParcelable(v, 0)`'s class name followed by the payload.
@@ -609,7 +610,10 @@ fn write_parcelable_value(
     let length = i32::try_from(end - start).map_err(|_| {
         bad_reply(
             "takeScreenshot",
-            format!("a {class} payload of {} bytes does not fit an int", end - start),
+            format!(
+                "a {class} payload of {} bytes does not fit an int",
+                end - start
+            ),
         )
     })?;
     parcel.set_data_position(length_at);
@@ -715,12 +719,16 @@ pub fn write_success_bundle(
                 })?;
             }
             KEY_SCREENSHOT_COLORSPACE => {
-                write_parcelable_value(parcel, "android.graphics.ParcelableColorSpace", |parcel| {
-                    // `ParcelableColorSpace.writeToParcel`: the `ColorSpace
-                    // .getId()` for a named space, and nothing else.
-                    parcel.write_int32(COLOR_SPACE_SRGB);
-                    Ok(())
-                })?;
+                write_parcelable_value(
+                    parcel,
+                    "android.graphics.ParcelableColorSpace",
+                    |parcel| {
+                        // `ParcelableColorSpace.writeToParcel`: the `ColorSpace
+                        // .getId()` for a named space, and nothing else.
+                        parcel.write_int32(COLOR_SPACE_SRGB);
+                        Ok(())
+                    },
+                )?;
             }
             KEY_SCREENSHOT_TIMESTAMP => {
                 parcel.write_int32(VAL_LONG);
