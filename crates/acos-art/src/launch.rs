@@ -687,13 +687,6 @@ pub(crate) fn launch_session(
     // the APK under test). Both are 0700 and owned by this uid.
     let view_dir = ShortSocketDir::new_named("view").map_err(Error::Io)?;
     let logd = Logd::start(&sockets.0).map_err(Error::Io)?;
-    // SPIKE-NET (gated): `sockets.0` is what the sandbox binds at `/dev/socket`
-    // (below), so the netd resolver proxy must be served *here*. With a session
-    // directory (ZPROD) this is exactly `<plan>/<tag>/sock`, the directory the
-    // zygote child mounts; without one it is this run's short socket dir.
-    // Serving any other directory leaves `/dev/socket/dnsproxyd` invisible to
-    // the app and `getaddrinfo` answers `EAI_NODATA` (measured).
-    let _dns = crate::spike_net::serve_dnsproxyd_if_enabled(&sockets.0).map_err(Error::Io)?;
     crate::stage("props-logd");
 
     // --- peer (in-process, real ServiceHost) -------------------------------
@@ -747,6 +740,15 @@ pub(crate) fn launch_session(
     session_modules
         .attach(&module_specs)
         .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    // NET5: the resolver proxy is served *after* the modules attach, because the
+    // `network` module is what decides whether this session has one (ADR-0030
+    // item 4). `sockets.0` is what the sandbox binds at `/dev/socket` (below), so
+    // it must be served here. With a session directory (ZPROD) this is exactly
+    // `<plan>/<tag>/sock`, the directory the zygote child mounts; without one it
+    // is this run's short socket dir. Serving any other directory leaves
+    // `/dev/socket/dnsproxyd` invisible to the app and `getaddrinfo` answers
+    // `EAI_NODATA` (measured).
+    let _dns = crate::spike_net::serve_dnsproxyd_if_enabled(&sockets.0).map_err(Error::Io)?;
     // ADR-0029 item 4: the attached set is published on the ready line and in
     // every `acos_services` reply, so the agent sees what the session actually
     // attached (never what it asked for).

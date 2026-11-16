@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::proto::{self, ErrorCode, ProtoError, Reply, Request, SessionInfo, StatusInfo};
-use crate::supervisor::NETD_SOCK;
+use crate::NETD_SOCK;
 
 /// How long [`Client::ensure_up`] waits for a fresh supervisor to answer.
 pub const START_TIMEOUT: Duration = Duration::from_secs(15);

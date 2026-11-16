@@ -41,8 +41,9 @@ pub const TICK: Duration = Duration::from_millis(500);
 
 /// The name of the fabric's control socket inside the state directory.
 const FABRIC_SOCK: &str = "fabric.sock";
-/// The supervisor's own control socket inside the state directory.
-pub const NETD_SOCK: &str = "netd.sock";
+/// The supervisor's own control socket inside the state directory (defined next
+/// to the client that connects to it, `acos_services::netd::NETD_SOCK`).
+pub use acos_netd_ctl::NETD_SOCK;
 
 /// One attached session.
 struct Session {

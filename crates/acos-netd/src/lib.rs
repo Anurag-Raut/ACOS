@@ -9,12 +9,16 @@
 //! Everything is behind `ACOS_SPIKE_NET=1` until the module framework (MOD0)
 //! lands [`crate::spike_flag`]; the default stays **off**.
 
-pub mod client;
 pub mod forward;
-pub mod net_ctl;
 pub mod plan;
-pub mod proto;
 pub mod supervisor;
+
+// NET5: the relay's control surface (the wire protocol, the client and the
+// `acos_net` verb's schema/parser) moved to `acos-services`, next to the module
+// whose control ops they *are*. Re-exported here so `acos_netd::client`,
+// `acos_netd::proto` and `acos_netd::net_ctl` keep working for every caller, and
+// so the transport daemon and the module cannot drift into two protocols.
+pub use acos_netd_ctl::{client, net_ctl, proto, NETD_SOCK};
 
 use std::io::Write;
 use std::os::unix::net::UnixListener;

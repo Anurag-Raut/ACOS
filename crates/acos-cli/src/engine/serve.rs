@@ -980,7 +980,7 @@ impl ServeEngine {
             // guest is never asked and nothing in it participates. The arm is
             // the module's own verb name, the same constant `acos-mcp`
             // advertises, so the CLI and MCP surfaces cannot drift.
-            acos_netd::net_ctl::NET_CTL_TOOL => net_ctl(id, args),
+            acos_netd::net_ctl::NET_CTL_TOOL => net_ctl(&mut session, args),
             other => {
                 return art_failure(
                     request_id,
@@ -1352,93 +1352,73 @@ fn label_timing(result: &mut Value, session: &ArtSession, tool: &str, started: s
 
 /// `acos_net`: the session's network controls, on the live session API.
 ///
-/// The verb's arguments are defined **once**, in
-/// [`acos_netd::net_ctl::net_ctl_schema`]: this dispatcher and the `acos-mcp`
-/// tool descriptor both read that value, so the two surfaces cannot drift
-/// (NET4; `acos-mcp/tests/net_ctl_parity.rs` asserts it).
+/// **NET5: this verb is the module's control path, not a second implementation.**
+/// The `network` service module owns the relay and its five ops; `acos_net` is
+/// the documented convenience spelling of exactly those ops, so this function
+/// parses the arguments (the closed [`acos_netd::net_ctl::net_ctl_schema`] that
+/// `acos-mcp` also advertises) and forwards them as one module control request
+/// `{op: "ctl", id: "network", ctl_op: <action>}`. `acos_service_ctl {module:
+/// "network", op: <action>}` and `acos_net {action: <action>}` therefore run the
+/// same code in the launcher, and `crates/acos-mcp/tests/net_ctl_parity.rs`
+/// pins that neither surface can grow a private copy.
 ///
-/// * `status`  — the relay state and this session's row (`up`, `offline`, …)
-/// * `offline` / `online` — drop/restore this session's traffic (its own veth
-///   only: a control on one session must not change another's result)
-/// * `delay` — `ms`, `jitter_ms`, `loss_pct` on this session's veth (`0/0/0`
-///   clears)
-/// * `hostport` — `port` (and `on`, default true): the explicit host-port
-///   opt-in (Metro). The relay forwards the port only when it is named, and only
-///   sessions that opted in may use it.
-///
-/// A relay that is down answers [`ErrorCode::NetworkUnavailable`] (fail closed),
-/// never a silent offline.
-fn net_ctl(session_id: &str, args: &Value) -> Result<Value, BackendError> {
-    use acos_netd::net_ctl::NetAction;
-    use acos_netd::proto::ErrorCode as NetCode;
-    let name = acos_art::spike_net::net_session_name(session_id);
+/// A session without the module answers `NETWORK_UNAVAILABLE` naming the attach
+/// call; a relay that is down does the same (fail closed), never a silent
+/// offline.
+fn net_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    use acos_netd::net_ctl::{action_keys, NetAction};
     let action = NetAction::from_args(args).map_err(|e| BackendError::Error {
         code: ErrorCode::InvalidArgument,
         detail: e.message,
     })?;
-    let to_backend = |e: acos_netd::proto::ProtoError| {
-        let code = match e.code {
-            NetCode::NetworkUnavailable => ErrorCode::NetworkUnavailable,
-            NetCode::NoSuchSession => ErrorCode::SessionNotFound,
-            NetCode::Invalid | NetCode::Unsupported => ErrorCode::InvalidArgument,
+    // The module's control op is the action name; its arguments are the keys that
+    // action owns (the parser above already refused every other key).
+    let mut ctl_args = serde_json::Map::new();
+    for key in action_keys(action.name()) {
+        if let Some(value) = args.get(*key) {
+            ctl_args.insert((*key).to_string(), value.clone());
+        }
+    }
+    let reply = session.service_op(json!({
+        "op": "ctl",
+        "id": acos_services::modules::network::MODULE_ID,
+        "ctl_op": action.name(),
+        "args": Value::Object(ctl_args),
+    }))?;
+    if reply.get("ok").and_then(Value::as_bool) == Some(false) {
+        // The module's structured refusal, mapped onto the transport's codes: a
+        // missing network is `NETWORK_UNAVAILABLE`, never a silent offline.
+        let code = match reply.get("code").and_then(Value::as_str) {
+            Some(acos_services::error::codes::NETWORK_UNAVAILABLE) => {
+                ErrorCode::NetworkUnavailable
+            }
+            Some(acos_services::error::codes::NETWORK_NO_SUCH_SESSION) => {
+                ErrorCode::SessionNotFound
+            }
+            Some(acos_services::error::codes::SERVICE_MODULE_REJECTED) => {
+                ErrorCode::InvalidArgument
+            }
+            Some(acos_services::error::codes::SERVICE_MODULE_UNAVAILABLE) => {
+                ErrorCode::NetworkUnavailable
+            }
             _ => ErrorCode::Internal,
         };
-        BackendError::Error {
+        return Err(BackendError::Error {
             code,
-            detail: format!(
-                "{} (relay session `{name}`)",
-                e.message
-            ),
-        }
-    };
-    let mut c = acos_netd::client::Client::connect().map_err(|e| BackendError::Error {
-        code: ErrorCode::NetworkUnavailable,
-        detail: format!(
-            "the network relay supervisor is not running ({}); start it with `acos-netd up`",
-            e.message
-        ),
-    })?;
-    let outcome = match action {
-        NetAction::Status => {
-            let st = c.status().map_err(to_backend)?;
-            let row = st.sessions.iter().find(|s| s.name == name).cloned();
-            json!({
-                "action": "status",
-                "relay": {
-                    "up": st.up,
-                    "down_reason": st.down_reason,
-                    "pasta_pid": st.pasta_pid,
-                    "pasta_version": st.pasta_version,
-                    "host_ports": st.host_ports,
-                    "sessions": st.sessions.len(),
-                },
-                // `null` when this session has no relay netns (it is not
-                // networked): a session without a row has no network, and the
-                // reply says so instead of implying one.
-                "session": row,
-                "networked": row.is_some(),
-            })
-        }
-        NetAction::Offline(offline) => {
-            let s = c.offline(&name, offline).map_err(to_backend)?;
-            json!({"action": action.name(), "session": s})
-        }
-        NetAction::Delay { ms, jitter_ms, loss_pct } => {
-            let s = c.delay(&name, ms, jitter_ms, loss_pct).map_err(to_backend)?;
-            json!({"action": "delay", "session": s})
-        }
-        NetAction::HostPort { port, on } => {
-            let st = c.host_port(port, on, Some(&name)).map_err(to_backend)?;
-            json!({
-                "action": "hostport",
-                "port": port,
-                "on": on,
-                "host_ports": st.host_ports,
-                "session": st.sessions.iter().find(|s| s.name == name).cloned(),
-            })
-        }
-    };
-    Ok(outcome)
+            detail: reply
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("the network module refused the control")
+                .to_string(),
+        });
+    }
+    let mut value = reply.get("value").cloned().unwrap_or(Value::Null);
+    value["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(value)
 }
 
 fn launch_reply(

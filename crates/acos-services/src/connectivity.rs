@@ -207,10 +207,17 @@ pub fn default_capabilities_bits() -> i64 {
     bits
 }
 
-/// `ACOS_SPIKE_NET=1` (spike gate only; the product will ask the module
-/// registry instead).
+/// Does this session have a real network?
+///
+/// NET5: the `network` module publishes its attached profile in
+/// [`crate::network`] and this is the same gate the launcher's sandbox and the
+/// guest's seccomp program read, so `ConnectivityManager`, the netns and
+/// `AF_INET` cannot disagree. With the module off the answer is the honest
+/// no-network device ACOS has always presented (no address, no DNS, no route,
+/// no `VALIDATED`); the `ACOS_SPIKE_NET` override only remains for the standalone
+/// `acos-art` binary's own spikes.
 fn spike_net_enabled() -> bool {
-    matches!(std::env::var("ACOS_SPIKE_NET").as_deref(), Ok("1") | Ok("true"))
+    crate::network::session_has_network()
 }
 
 /// `NetworkRequest.Type` ordinals (`ConnectivityManager.sendRequestForNetwork`

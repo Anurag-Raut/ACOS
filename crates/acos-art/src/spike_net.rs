@@ -34,7 +34,11 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Environment switch for the whole spike (`1` = on, unset = off).
+/// The spike's environment override (`1` = on, unset = off). The **product**
+/// gate is the `network` service module (ADR-0029/ADR-0030): attaching it
+/// publishes the profile in [`acos_services::network`], which is what
+/// [`enabled`] asks. The variable only remains for the standalone `acos-art`
+/// binary's own spike scripts and boundary tests, which have no module registry.
 pub const FLAG: &str = "ACOS_SPIKE_NET";
 /// Path of the `pasta` binary the spike uses (default: `pasta` in `PATH`).
 pub const PASTA_ENV: &str = "ACOS_SPIKE_NET_PASTA";
@@ -43,10 +47,15 @@ pub const PASTA_ENV: &str = "ACOS_SPIKE_NET_PASTA";
 /// what?"). Unset in normal runs.
 pub const DNS_LOG_ENV: &str = "ACOS_SPIKE_NET_DNS_LOG";
 
-/// True when the spike is switched on. The only gate in the module.
+/// True when this session has a real network. The only gate in the module.
+///
+/// NET5: one gate for every consumer — the `network` service module sets it at
+/// attach (before the guest's command is built), so `--unshare-net`, the seccomp
+/// program, `dnsproxyd` and `ConnectivityManager` all answer the same question
+/// the same way. `ACOS_SPIKE_NET` is the standalone launcher's override.
 #[must_use]
 pub fn enabled() -> bool {
-    matches!(std::env::var(FLAG).as_deref(), Ok("1") | Ok("true"))
+    acos_services::network::session_has_network()
 }
 
 /// Flags of the sandbox's bwrap command.

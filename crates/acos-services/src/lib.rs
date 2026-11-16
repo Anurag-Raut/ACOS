@@ -64,8 +64,10 @@ pub mod input_channel;
 pub mod keychars; // W16: stock KeyCharacterMap (KCM) -> native parcel
 pub mod manifest_resolve; // W27: MAIN/LAUNCHER resolution incl. <activity-alias>
 pub mod misc;
-pub mod module; // ADR-0029: service modules, profiles, tombstones, conformance kit
+pub mod module;
+pub mod netd; // the relay's control surface: protocol, client, `acos_net`'s schema
 pub mod modules; // ADR-0029: the shipped non-core modules
+pub mod network; // ADR-0029/NET5: which network profile this session attached
 pub mod native_libs; // W17: APK x86_64 libs -> per-run nativeLibraryDir
 pub mod parcelable;
 pub mod pending_intent; // MODNOTIF4: PendingIntent sender records + the IIntentSender nodes

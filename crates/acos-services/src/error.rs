@@ -46,6 +46,13 @@ pub mod codes {
     /// A permission dialog would be shown here, but ACOS has no permission
     /// controller system app yet (MODNOTIF2, ADR-0029 amendment).
     pub const PERMISSION_UI_UNAVAILABLE: &str = "PERMISSION_UI_UNAVAILABLE";
+    /// The session's network is not there (the relay is down, the session has no
+    /// netns, the `network` module is not attached). Fail closed: a caller must
+    /// never read this as "offline, keep going" (NET5).
+    pub const NETWORK_UNAVAILABLE: &str = "NETWORK_UNAVAILABLE";
+    /// The relay is up but has no session under this name (the module is
+    /// attached and its relay session is gone: a real, addressable gap).
+    pub const NETWORK_NO_SUCH_SESSION: &str = "NETWORK_NO_SUCH_SESSION";
 }
 
 /// Errors returned by [`crate::ServiceHost`] and the service state machines.
@@ -187,6 +194,20 @@ pub enum ServiceError {
         /// One line an agent can act on.
         detail: String,
     },
+    /// The session has no network: the relay is down, the session has no netns,
+    /// or the `network` module is not attached (NET5, ADR-0030). Fail closed: a
+    /// caller must never read this as "offline, keep going".
+    #[error("network unavailable: {detail}")]
+    NetworkUnavailable {
+        /// What is missing, and the call that would fix it.
+        detail: String,
+    },
+    /// The relay is up but this session has no row: its netns is gone.
+    #[error("no such network session: {detail}")]
+    NetworkNoSuchSession {
+        /// The relay's answer, with the relay session name.
+        detail: String,
+    },
     /// Internal failure.
     #[error("internal service error: {0}")]
     Internal(String),
@@ -213,6 +234,8 @@ impl ServiceError {
                 codes::SERVICE_PARCEL
             }
             Self::PermissionUiUnavailable { .. } => codes::PERMISSION_UI_UNAVAILABLE,
+            Self::NetworkUnavailable { .. } => codes::NETWORK_UNAVAILABLE,
+            Self::NetworkNoSuchSession { .. } => codes::NETWORK_NO_SUCH_SESSION,
             Self::Internal(_) => codes::SERVICE_INTERNAL,
             Self::ResourceLimit { .. } => codes::ART_RESOURCE_LIMIT,
         }
@@ -231,7 +254,9 @@ impl ServiceError {
             | Self::NotOwned { .. }
             | Self::ModuleUnavailable { .. }
             | Self::UnsupportedParcelable { .. }
-            | Self::PermissionUiUnavailable { .. } => EX_UNSUPPORTED_OPERATION,
+            | Self::PermissionUiUnavailable { .. }
+            | Self::NetworkUnavailable { .. }
+            | Self::NetworkNoSuchSession { .. } => EX_UNSUPPORTED_OPERATION,
             Self::ModuleRejected { .. } => EX_ILLEGAL_ARGUMENT,
             Self::UnknownBinder { .. } | Self::UnknownService { .. } => EX_ILLEGAL_ARGUMENT,
             Self::BadRequest { .. } | Self::BadReply { .. } => EX_ILLEGAL_ARGUMENT,

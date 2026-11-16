@@ -178,7 +178,18 @@ dependencies = [
 name = "acos-netd"
 version = "0.2.2"
 dependencies = [
+ "acos-netd-ctl",
  "acos-services",
+ "libc",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "acos-netd-ctl"
+version = "0.2.2"
+dependencies = [
  "libc",
  "serde",
  "serde_json",
@@ -277,6 +288,7 @@ dependencies = [
  "acos-aidl",
  "acos-apk",
  "acos-dex",
+ "acos-netd-ctl",
  "acos-parcel",
  "acos-protocol",
  "acos-sfgeom",
