@@ -441,14 +441,37 @@ fn native_write_blob(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     }))
 }
 
+/// The one `IBinder -> BinderId` mapping the parcel uses.
+///
+/// It is the **transport's** mapping (falling back to the VM's in-memory
+/// identity map when no transport is installed), the same one
+/// `Binder.transact` and `Parcel.readStrongBinder` use. That is what makes a
+/// written callback a GC root: `BinderTransport::binder_id_of` (the ACOS
+/// counterpart of libbinder's `JavaBBinder` + `NewGlobalRef`) roots the Java
+/// object, so the host's strong reference on the node keeps a listener alive
+/// after the app drops its own reference — exactly like Android, where the
+/// `JavaBBinder`'s global reference is what keeps the Java object alive while
+/// `BR_ACQUIRE` is outstanding.
+///
+/// This module used to map through its own `BinderObjectSink` (an identity map
+/// installed by a `set_binder_sink` that nothing ever called): the id was
+/// consistent, but **nothing rooted the object**, so a registered callback whose
+/// Java object the app no longer referenced was collected while its node stayed
+/// rooted and dispatched — `results/handoff/BINDERREF2` §2a.
+pub(crate) fn strong_binder_id(vm: &mut Vm, binder: Handle) -> Option<BinderId> {
+    super::binder::binder_id_of(vm, binder)
+}
+
+/// `IBinder` for a wire [`BinderId`] through the same mapping.
+pub(crate) fn strong_binder_object(vm: &mut Vm, id: BinderId) -> Option<Handle> {
+    super::binder::binder_object(vm, id)
+}
+
 fn native_write_strong_binder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
     let binder = vm.arg_ref(ctx, 1);
-    with_store(|s| {
-        let id = s.sink.binder_id(binder);
-        s.table.with_parcel(handle, |p| p.write_strong_binder_opt(id))
-    })
-    .map_err(perr)
+    let id = strong_binder_id(vm, binder);
+    with_store(|s| s.table.with_parcel(handle, |p| p.write_strong_binder_opt(id))).map_err(perr)
 }
 
 fn native_write_file_descriptor(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -579,7 +602,7 @@ fn native_read_strong_binder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
     let id = flat(with_store(|s| s.table.with_parcel(handle, Parcel::read_strong_binder)))?;
     let obj = match id {
-        Some(id) => with_store(|s| s.sink.binder_object(id)).unwrap_or(NULL),
+        Some(id) => strong_binder_object(vm, id).unwrap_or(NULL),
         None => NULL,
     };
     vm.ret_ref(ctx, obj);
@@ -955,6 +978,103 @@ mod tests {
         assert_eq!(sink.binder_object(a), Some(7));
         assert_eq!(sink.binder_object(b), Some(9));
         assert_eq!(sink.binder_id(NULL), None);
+    }
+
+    /// A `Parcel.writeStrongBinder` must map through the **transport** and let it
+    /// root the Java object — not through this module's own identity sink.
+    ///
+    /// That is the difference between a registered callback that survives the
+    /// app dropping its last reference and one that does not: libbinder keeps the
+    /// Java object alive through `JavaBBinder`'s JNI global reference, and the
+    /// ACOS counterpart of that reference is `BinderTransport::binder_id_of`
+    /// calling `Vm::root_handle`. `results/handoff/BINDERREF2/m-weak.json` is the
+    /// ART measurement (11 registered listeners, the app drops them, `alive=`
+    /// before this fix was 0 and 0 callbacks ran).
+    #[test]
+    fn a_written_callback_is_mapped_and_rooted_by_the_transport() {
+        use std::cell::RefCell;
+
+        struct RootingTransport {
+            /// `(handle, id)` pairs the transport was asked to map.
+            seen: RefCell<Vec<(u32, u64)>>,
+        }
+
+        impl super::super::binder::BinderTransport for RootingTransport {
+            fn binder_id_of(
+                &self,
+                vm: &mut Vm,
+                obj: Handle,
+            ) -> Option<BinderId> {
+                if obj == NULL {
+                    return None;
+                }
+                let id = BinderId(0x9100_0000 | u64::from(obj));
+                self.seen.borrow_mut().push((obj, id.0));
+                // What `acos-runtime`'s transport does for a Java `Binder`:
+                // the object becomes a bridge root (the JavaBBinder global ref).
+                vm.root_handle(obj);
+                Some(id)
+            }
+
+            fn binder_object(&self, _vm: &mut Vm, id: BinderId) -> Option<Handle> {
+                self.seen
+                    .borrow()
+                    .iter()
+                    .find(|(_, mapped)| *mapped == id.0)
+                    .map(|(handle, _)| *handle)
+            }
+
+            fn transact(
+                &self,
+                _vm: &mut Vm,
+                _binder: BinderId,
+                _code: u32,
+                _data: &mut Parcel,
+                _reply: &mut Parcel,
+                _flags: u32,
+            ) -> Result<Vec<super::super::binder::BinderDelivery>, String> {
+                Ok(Vec::new())
+            }
+
+            fn descriptor(&self, _id: BinderId) -> Option<String> {
+                None
+            }
+
+            fn is_alive(&self, _id: BinderId) -> bool {
+                true
+            }
+        }
+
+        let mut vm = Vm::new(crate::vm::VmOptions {
+            heap_max_bytes: 64 * 1024 * 1024,
+            gc_stress: false,
+            corelib: crate::vm::CoreLib::Bootstrap,
+            boot_dir: None,
+            trace_natives: false,
+        })
+        .expect("a VM without the boot classpath");
+        super::super::binder::install_transport(Box::new(RootingTransport {
+            seen: RefCell::new(Vec::new()),
+        }));
+
+        let handle: Handle = 0x0123_4567;
+        let id = strong_binder_id(&mut vm, handle);
+        assert_eq!(
+            id,
+            Some(BinderId(0x9100_0000 | u64::from(handle))),
+            "the parcel must use the transport's mapping, not its own identity sink"
+        );
+        assert!(
+            vm.native_roots.contains(&handle),
+            "the transport roots what it maps; without that a callback whose Java              object the app drops is collected while its node is still rooted"
+        );
+        assert_eq!(
+            strong_binder_object(&mut vm, id.expect("id")),
+            Some(handle),
+            "and the wire id maps back to the same Java object"
+        );
+        super::super::binder::clear_transport();
+        let _ = &mut vm;
     }
 
     #[test]

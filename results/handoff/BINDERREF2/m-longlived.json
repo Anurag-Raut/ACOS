@@ -1,0 +1,45 @@
+{
+ "app_held": 1,
+ "app_lines": [
+  "CALL state=IDLE number=null listener=1",
+  "CALL state=RINGING number=+15550002222 listener=1",
+  "CALLTOTAL state_lines=2 ringing=1 listeners=1 held=1 alive=1"
+ ],
+ "app_listeners": 1,
+ "app_ringing": 1,
+ "app_state_lines": 2,
+ "binder_trace": {
+  "deliveries": 64,
+  "lines_total": 213,
+  "node_exports": [
+   "I acos-binder tid=2 node: local binder=7f2817431b30 cookie=7f286740bb30 -> wire=1 (nodes=1)",
+   "I acos-binder tid=2 node: local binder=7f28174482a0 cookie=7f286740bbf0 -> wire=2 (nodes=2)",
+   "I acos-binder tid=2 node: local binder=7f2817448450 cookie=7f286740aff0 -> wire=3 (nodes=3)",
+   "I acos-binder tid=2 node: local binder=7f2817448000 cookie=7f286740c070 -> wire=4 (nodes=4)",
+   "I acos-binder tid=2 node: local binder=7f28174478e0 cookie=7f286740d690 -> wire=5 (nodes=5)",
+   "I acos-binder tid=2 node: local binder=7f281745b4d0 cookie=7f286740e470 -> wire=6 (nodes=6)",
+   "I acos-binder tid=2 node: local binder=7f281745b890 cookie=7f286740d630 -> wire=7 (nodes=7)",
+   "I acos-binder tid=2 node: local binder=7f281745c220 cookie=7f286740e8f0 -> wire=8 (nodes=8)",
+   "I acos-binder tid=2 node: local binder=7f281745c280 cookie=7f286740fa30 -> wire=9 (nodes=9)",
+   "I acos-binder tid=2 node: local binder=7f281745c8b0 cookie=7f286740eb90 -> wire=10 (nodes=10)",
+   "I acos-binder tid=2 node: local binder=7f281745c820 cookie=7f286740f370 -> wire=11 (nodes=11)",
+   "I acos-binder tid=2 node: local binder=7f281745c490 cookie=7f286740faf0 -> wire=12 (nodes=12)",
+   "I acos-binder tid=2 node: local binder=7f281745cac0 cookie=7f286740f490 -> wire=13 (nodes=13)",
+   "I acos-binder tid=2 node: local binder=7f281741d460 cookie=7f2767404690 -> wire=14 (nodes=14)",
+   "I acos-binder tid=2 node: local binder=7f281745c5e0 cookie=7f286740f730 -> wire=15 (nodes=15)",
+   "I acos-binder tid=2 node: local binder=7f281745ea70 cookie=7f286740ead0 -> wire=16 (nodes=16)",
+   "I acos-binder tid=2 node: local binder=7f281745c970 cookie=7f276745cc10 -> wire=17 (nodes=17)",
+   "I acos-binder tid=2 node: local binder=7f2817462160 cookie=7f2867411050 -> wire=18 (nodes=18)",
+   "I acos-binder tid=2 node: local binder=7f2817462040 cookie=7f2867411530 -> wire=19 (nodes=19)",
+   "I acos-binder tid=2 node: local binder=7f2817460c00 cookie=7f276745d750 -> wire=20 (nodes=20)",
+   "I acos-binder tid=2 node: local binder=7f281745dba0 cookie=7f279744c958 -> wire=21 (nodes=21)"
+  ],
+  "replies_ok": 64
+ },
+ "failures": [],
+ "idle_s": 30.0,
+ "mode": "longlived",
+ "ringing_after": 1,
+ "ringing_before": 0,
+ "verdict": "pass"
+}

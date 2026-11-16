@@ -640,6 +640,14 @@ pub struct LocationState {
     pub pending_fires: Vec<PendingFire>,
     /// Why a delivery was refused, for the report (`None` when clean).
     pub last_error: Option<String>,
+    /// One-shot callbacks whose reference is released as soon as the delivery
+    /// that uses them has been handed to the peer (`getCurrentLocation`,
+    /// geocoding): they are not registrations, so they must not stay rooted.
+    pub one_shot: Vec<BinderId>,
+    /// The live registrations as host-held strong references (one per
+    /// registered `ILocationListener`/one-shot callback, released when the
+    /// registration goes away or the module detaches — `crate::refs`).
+    pub refs: crate::refs::GuestRefs,
 }
 
 impl std::fmt::Debug for LocationState {
@@ -687,6 +695,8 @@ impl LocationState {
             pending: Vec::new(),
             pending_fires: Vec::new(),
             last_error: None,
+            one_shot: Vec::new(),
+            refs: crate::refs::GuestRefs::new(),
         }
     }
 
@@ -1925,10 +1935,16 @@ impl ServiceObject for LocationService {
                             // one-shot and is never registered).
                             state.pending.push(current_delivery(callback, &fix));
                             state.record(&fix, "current");
+                            state.refs.hold(callback);
+                            state.one_shot.push(callback);
                         }
-                        None => state
-                            .pending_current
-                            .push((callback, provider.clone(), None)),
+                        None => {
+                            state.refs.hold(callback);
+                            state.one_shot.push(callback);
+                            state
+                                .pending_current
+                                .push((callback, provider.clone(), None))
+                        }
                     }
                 }
                 // `@nullable ICancellationSignal`: this module answers null and
@@ -1971,6 +1987,10 @@ impl ServiceObject for LocationService {
                     state.registrations.retain(|registration| {
                         !matches!(registration.sink, Sink::Listener(existing) if existing == listener)
                     });
+                    // A registration is a strong reference on the guest's
+                    // listener: the host keeps its node alive until it is
+                    // unregistered (a repeat registration is not a second one).
+                    state.refs.hold(listener);
                     state.registrations.push(Registration {
                         sink: Sink::Listener(listener),
                         provider: provider.clone(),
@@ -2007,6 +2027,10 @@ impl ServiceObject for LocationService {
                 state.registrations.retain(|registration| {
                     !matches!(registration.sink, Sink::Listener(existing) if Some(existing) == listener)
                 });
+                if let Some(listener) = listener {
+                    // The registration the host held a reference for is gone.
+                    state.refs.release(listener);
+                }
                 write_no_exception(reply);
             }
             // void registerLocationPendingIntent(String, LocationRequest,
@@ -2061,6 +2085,10 @@ impl ServiceObject for LocationService {
                         interval_ms,
                         last_delivered: None,
                     });
+                    // A `PendingIntent` registration is a reference on the
+                    // sender, exactly like the `ILocationListener` form's is on
+                    // the listener.
+                    state.refs.hold(sender);
                     // The framework's provider reports the current enabled state
                     // to a transport that has just been added; the listener form
                     // already does this on registration, and the fill-in is the
@@ -2091,9 +2119,11 @@ impl ServiceObject for LocationService {
                     None
                 };
                 if let Some(sender) = target {
-                    self.lock().registrations.retain(|registration| {
+                    let mut state = self.lock();
+                    state.registrations.retain(|registration| {
                         !matches!(registration.sink, Sink::PendingIntent(existing) if existing == sender)
                     });
+                    state.refs.release(sender);
                 }
                 write_no_exception(reply);
             }
@@ -2153,7 +2183,14 @@ impl ServiceObject for LocationService {
                     // The framework's no-geocoder path: `onResults(null, null)`.
                     None => geocode_delivery(callback, Err(None)),
                 };
-                self.lock().pending.push(delivery);
+                {
+                    let mut state = self.lock();
+                    // The geocode callback answers exactly once: a reference
+                    // only until its delivery is on its way.
+                    state.refs.hold(callback);
+                    state.one_shot.push(callback);
+                    state.pending.push(delivery);
+                }
                 write_no_exception(reply);
             }
             // void getFromLocationName(String, double, double, double, double,
@@ -2194,7 +2231,12 @@ impl ServiceObject for LocationService {
                     Some(addresses) => geocode_delivery(callback, Ok(&addresses)),
                     None => geocode_delivery(callback, Err(None)),
                 };
-                self.lock().pending.push(delivery);
+                {
+                    let mut state = self.lock();
+                    state.refs.hold(callback);
+                    state.one_shot.push(callback);
+                    state.pending.push(delivery);
+                }
                 write_no_exception(reply);
             }
             // boolean hasProvider(String)
@@ -2300,7 +2342,28 @@ impl ServiceObject for LocationService {
     }
 
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
-        std::mem::take(&mut self.lock().pending)
+        let mut state = self.lock();
+        let deliveries = std::mem::take(&mut state.pending);
+        // The one-shot callbacks in this batch are about to be delivered, so
+        // their reference is dropped now (one turn: the delivery is queued
+        // before the release is reported, and the peer sends deliveries before
+        // reference frames).
+        for id in std::mem::take(&mut state.one_shot) {
+            state.refs.release(id);
+        }
+        deliveries
+    }
+
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        self.lock().refs.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        self.lock().refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.lock().refs.release_all()
     }
 
     /// The instant the playing track's next point is due (`None` = nothing is
@@ -2701,6 +2764,10 @@ impl Module for LocationModule {
 
     fn detach(&mut self, host: &mut ServiceHost) -> Result<()> {
         self.stop_track();
+        // Every listener this module rooted is released before the node empties
+        // itself: the guest may be alive for the rest of the session, and a
+        // registration the host no longer holds must not keep the node rooted.
+        host.release_object_refs(DESCRIPTOR);
         {
             let mut state = self.lock();
             state.pending.clear();

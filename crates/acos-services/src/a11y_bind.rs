@@ -1122,6 +1122,33 @@ impl A11yConnectionNode {
 }
 
 impl ServiceObject for A11yConnectionNode {
+    /// The service-side connection node drives the same `A11yState`: a
+    /// `publishService` on it roots the bound service's client binder, and the
+    /// turn that handled it is where the host learns about it.
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .refs
+            .drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .refs
+            .drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .refs
+            .release_all()
+    }
+
     fn call(
         &mut self,
         interface: &str,

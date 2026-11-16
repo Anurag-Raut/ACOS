@@ -40,8 +40,8 @@ use acos_parcel::{BinderId, BinderKind, FlatObject, Parcel};
 use acos_services::{codes, exception, registry, ServiceError, ServiceHost};
 
 use crate::protocol::{
-    Frame, F_REP, F_REQ, F_RSP, F_TXN, INTERFACE_TRANSACTION, PING_TRANSACTION, TF_ONE_WAY,
-    TF_STATUS_CODE,
+    Frame, F_HELLO, F_REF, F_REP, F_REQ, F_RSP, F_TXN, INTERFACE_TRANSACTION, PING_TRANSACTION,
+    PROTOCOL_VERSION, REF_RELEASE, TF_ONE_WAY, TF_STATUS_CODE,
 };
 
 /// Bit 32 marks a driver wire handle (a Java local binder).
@@ -174,6 +174,13 @@ pub struct Peer {
     /// Reverse replies received from Java (peer-initiated transactions are
     /// two-way here, matching the runtime's `BinderDelivery`).
     pub reverse_replies: u64,
+    /// The wire protocol version the driver announced in its `F_HELLO`.
+    /// `None` means an older driver that never sent one: such a peer must not
+    /// send `F_REF` (the driver would reject the frame) and keeps its nodes
+    /// alive for the session, which is exactly what an old pair assumes.
+    driver_protocol: Option<u32>,
+    /// `F_REF` operations refused because the driver cannot be told about them.
+    ref_frames_suppressed: u64,
     /// How many of those replies were `TF_STATUS_CODE` failures, i.e. libbinder
     /// never dispatched the transaction to `onTransact` (typically
     /// `UNKNOWN_TRANSACTION` from a node that was not rooted). Counting these
@@ -237,6 +244,8 @@ impl Peer {
             launch_txn_delivered: false,
             reverse_replies: 0,
             reverse_failed: 0,
+            driver_protocol: None,
+            ref_frames_suppressed: 0,
         }
     }
 
@@ -329,10 +338,101 @@ impl Peer {
             .map(Vec::as_slice)
     }
 
+    /// The wire protocol version the driver announced (`None` for a driver that
+    /// predates the handshake).
+    #[must_use]
+    pub fn driver_protocol(&self) -> Option<u32> {
+        self.driver_protocol
+    }
+
+    /// `F_REF` frames suppressed because the driver cannot receive them.
+    #[must_use]
+    pub fn ref_frames_suppressed(&self) -> u64 {
+        self.ref_frames_suppressed
+    }
+
+    /// Take one strong reference on a guest binder (a service stored it).
+    pub fn retain_binder(&mut self, id: BinderId) -> u32 {
+        self.host_mut().retain_binder(id)
+    }
+
+    /// Drop one strong reference on a guest binder.
+    pub fn release_binder(&mut self, id: BinderId) -> u32 {
+        self.host_mut().release_binder(id)
+    }
+
+    /// Host-held references on `id` (tests and diagnostics).
+    #[must_use]
+    pub fn held_refs_of(&self, id: BinderId) -> u32 {
+        self.host.held_refs(id)
+    }
+
+    /// Turn the host's dropped references into `F_REF` release frames.
+    ///
+    /// A node exists while the host references it: this is the message that
+    /// tells the driver to unroot and free it (→ `BR_RELEASE` + `BR_DECREFS` on
+    /// the guest). Drivers that did not announce protocol v2 never get one.
+    fn take_ref_frames(&mut self) -> Vec<Frame> {
+        let released = self.host.take_released_binders();
+        if released.is_empty() {
+            return Vec::new();
+        }
+        if self.driver_protocol.unwrap_or(0) < 2 {
+            self.ref_frames_suppressed += released.len() as u64;
+            return Vec::new();
+        }
+        released
+            .into_iter()
+            .filter_map(|id| {
+                let wire = java_wire(id)?;
+                Some(Frame::plain(
+                    F_REF,
+                    0,
+                    REF_RELEASE,
+                    0,
+                    u64::from(wire),
+                    Vec::new(),
+                ))
+            })
+            .collect()
+    }
+
+    /// The guest process is gone (its socket closed, or the runtime is being
+    /// torn down): release every strong reference the host still holds.
+    ///
+    /// The driver dies with the guest in the current model, so the frames this
+    /// would send have nowhere to go; the point is that the host does not keep a
+    /// reference table for a process that no longer exists (a long-lived peer —
+    /// the `MPROC` death path — sends `F_REF` releases here instead of leaking
+    /// the nodes). What was released is returned for the caller's log.
+    pub fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.host.release_all_refs()
+    }
+
     /// Handle one incoming frame and return the frames to send back.
     pub fn handle(&mut self, frame: Frame) -> Vec<Frame> {
         let mut out = Vec::new();
         match frame.ty {
+            F_HELLO => {
+                let version = frame.seq;
+                self.driver_protocol = Some(version);
+                if version > PROTOCOL_VERSION {
+                    // The driver speaks something newer. Nothing in this build
+                    // is optional, so record it as evidence and keep talking v2
+                    // frames only: an unknown frame must never be guessed at.
+                    let record = UnsupportedRecord {
+                        descriptor: "<wire>".into(),
+                        code: version,
+                        method: "hello".into(),
+                        error: codes::UNSUPPORTED_ANDROID_API.into(),
+                        message: format!(
+                            "driver speaks wire protocol v{version}, this peer v{PROTOCOL_VERSION}"
+                        ),
+                    };
+                    self.log_unsupported(&record);
+                }
+                return out;
+            }
             F_REQ => {
                 if let Some(reply) = self.handle_request(&frame) {
                     if frame.flags & TF_ONE_WAY == 0 {
@@ -344,11 +444,33 @@ impl Peer {
                 self.reverse_replies += 1;
                 if frame.flags & TF_STATUS_CODE != 0 {
                     self.reverse_failed += 1;
+                    // The guest's driver answers a transaction to a node it can
+                    // no longer address with a `TF_STATUS_CODE` reply instead of
+                    // dropping it (the kernel's `BR_DEAD_REPLY`). That is a
+                    // *lost callback*, not a log line: record it in the
+                    // evidence log so a verdict can see that the framework
+                    // never reached `onTransact`, and name the status.
+                    let status = frame
+                        .data
+                        .get(..4)
+                        .and_then(|b| b.try_into().ok())
+                        .map(i32::from_le_bytes);
                     eprintln!(
                         "acos-binder-peer: reverse delivery seq={} was NOT dispatched \
-                         (TF_STATUS_CODE reply: libbinder never reached onTransact)",
-                        frame.seq
+                         (TF_STATUS_CODE reply: libbinder never reached onTransact, \
+                         status={:?})",
+                        frame.seq, status
                     );
+                    let record = serde_json::json!({
+                        "kind": "REVERSE_DELIVERY_DEAD_OBJECT",
+                        "seq": frame.seq,
+                        // -32 = DEAD_OBJECT: the node is gone, so the host must
+                        // report the callback as undeliverable (the same answer a
+                        // real binder gives a transaction to a dead node).
+                        "status": status,
+                    })
+                    .to_string();
+                    self.log_line(&record);
                 } else if !frame.data.is_empty() {
                     // A non-empty reply body is the binder exception parcel
                     // (status word != 0): print its printable run so a guest
@@ -384,7 +506,13 @@ impl Peer {
                 eprintln!("acos-binder-peer: ignoring frame type {other}");
             }
         }
+        // Deliveries first, then reference frames. A release must never
+        // overtake a delivery to the same node: the driver unroots the node on
+        // `BR_RELEASE` + `BR_DECREFS`, so a `F_TXN` sent after it would answer
+        // `DEAD_OBJECT` even though the callback was queued while the
+        // registration (and its reference) still existed.
         out.extend(self.take_delivery_frames());
+        out.extend(self.take_ref_frames());
         if let Some(frame) = self.take_launch_delivery() {
             out.push(frame);
         }

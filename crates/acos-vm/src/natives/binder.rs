@@ -269,7 +269,7 @@ impl FallbackSink {
 // Strong binders: `Parcel.writeStrongBinder` / `readStrongBinder`
 // ---------------------------------------------------------------------------
 
-fn binder_id_of(vm: &mut Vm, obj: Handle) -> Option<BinderId> {
+pub(crate) fn binder_id_of(vm: &mut Vm, obj: Handle) -> Option<BinderId> {
     if obj == NULL {
         return None;
     }
@@ -303,7 +303,7 @@ fn binder_id_of(vm: &mut Vm, obj: Handle) -> Option<BinderId> {
     FALLBACK.with(|f| f.borrow_mut().binder_id(obj))
 }
 
-fn binder_object(vm: &mut Vm, id: BinderId) -> Option<Handle> {
+pub(crate) fn binder_object(vm: &mut Vm, id: BinderId) -> Option<Handle> {
     if id.is_null() {
         return None;
     }

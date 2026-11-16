@@ -77,6 +77,13 @@ const SERVICE_CALLBACK_DESCRIPTOR: &str = "android.os.IServiceCallback";
 /// `IServiceCallback.onRegistration(String, IBinder)`.
 const SERVICE_CALLBACK_ON_REGISTRATION: u32 = 1;
 
+/// Bit 32 of a binder id: every binder object owned by the **guest** JVM
+/// arrives with it (`acos-binder-peer`'s `JAVA_TAG`, tagged where the parcel is
+/// decoded). The driver owns those nodes, so a host reference on one is a
+/// reference the driver can act on even though the host's [`BinderRegistry`]
+/// never registered the handle itself.
+pub const GUEST_BINDER_TAG: u64 = 1 << 32;
+
 /// The `IServiceCallback.onRegistration(@utf8InCpp String, IBinder)` frame.
 ///
 /// The AIDL is `oneway interface IServiceCallback { void onRegistration(
@@ -205,6 +212,40 @@ pub trait ServiceObject: Send {
     fn advance_timed(&mut self, now: std::time::Instant) {
         let _ = now;
     }
+
+    /// Binders this handler started holding a strong reference to since the
+    /// last drain (a registered callback, a stored `IIntentReceiver`, ...).
+    ///
+    /// A registration *is* a reference: the framework's `Parcel` took one when
+    /// the binder was flattened, and the service that stored the handle owns it
+    /// until it drops the registration. Reporting it here is what lets the host
+    /// keep the guest's node alive for as long as the registration exists and
+    /// release it (→ `BR_RELEASE` + `BR_DECREFS`) when it does not.
+    ///
+    /// Drained after **both** dispatch paths (the decoded `acos-aidl` `call`
+    /// and `raw_transact`), so a module uses one mechanism wherever its
+    /// interface is served. The host applies the retained set before the
+    /// released one, so a handler that re-registers the same binder in one
+    /// transaction nets out.
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        Vec::new()
+    }
+
+    /// Binders the handler dropped its registration (strong reference) for.
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        Vec::new()
+    }
+
+    /// Drop **every** reference this handler still holds and return them.
+    ///
+    /// Called when the handler goes away while the guest may still be alive:
+    /// module detach (the object is dropped, so a later transient can never
+    /// report the release) and session teardown. A handler holds its
+    /// registrations in shared state, so the release has to be reported here
+    /// rather than in `Drop` (which has no host to report to).
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        Vec::new()
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
@@ -327,6 +368,14 @@ pub struct ServiceHost {
     /// a live module attach is the event they wait for).
     notifications: Vec<PendingNotification>,
     deliveries: Vec<PendingDelivery>,
+    /// Host-held strong references per binder: one per live registration
+    /// (telephony listener, `IIntentReceiver`, `IAccessibilityManagerClient`,
+    /// PendingIntent sender, ...). The count is what the peer reports to the
+    /// driver as `F_REF`, so a node exists exactly while the host references it.
+    refs: HashMap<u64, u32>,
+    /// Binders whose last host reference was dropped and that the peer still has
+    /// to tell the driver about (`F_REF` release).
+    released_binders: Vec<BinderId>,
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
     constructions: u64,
@@ -405,6 +454,8 @@ impl ServiceHost {
             notifications: Vec::new(),
             deliveries: Vec::new(),
             dead: HashMap::new(),
+            refs: HashMap::new(),
+            released_binders: Vec::new(),
             trace: None,
             seq: AtomicU64::new(1),
             constructions: 0,
@@ -628,6 +679,59 @@ impl ServiceHost {
         self.dead.retain(|_, owner| *owner != module);
     }
 
+    /// Drop every strong reference `descriptor`'s handler holds on guest
+    /// binders and release them on the host, returning what was released.
+    ///
+    /// This is the seam for a module that installs a feed/back-end into a node
+    /// it does **not** own (the `sensors` module serves through `core`'s
+    /// `sensorservice` node, whose lifetime is the session's): the object
+    /// survives the module's scope, so `end_scope` does not see the
+    /// registrations the module caused and the module's `detach` reports them
+    /// here. A descriptor that was never constructed holds nothing.
+    pub fn release_object_refs(&mut self, descriptor: &str) -> Vec<BinderId> {
+        let held = match self.entries.get_mut(descriptor) {
+            Some(entry) => match entry.object.as_mut() {
+                Some(object) => object.release_all_refs(),
+                None => Vec::new(),
+            },
+            None => {
+                // A node registered with `register_dynamic` (the compositor, the
+                // sensor/display event connections, `location`'s
+                // `ILocationManager`) serves through the dynamic table.
+                let Some(binder) = self.binder_for_descriptor(descriptor) else {
+                    return Vec::new();
+                };
+                match self.dynamic.get_mut(&binder.0) {
+                    Some(object) => object.release_all_refs(),
+                    None => Vec::new(),
+                }
+            }
+        };
+        for id in &held {
+            self.release_binder(*id);
+        }
+        held
+    }
+
+    /// Release **every** reference every live handler holds (session teardown:
+    /// the guest process is gone, so its nodes must not stay rooted on a
+    /// long-lived peer).
+    pub fn release_all_refs(&mut self) -> Vec<BinderId> {
+        let mut held: Vec<BinderId> = Vec::new();
+        for entry in self.entries.values_mut() {
+            if let Some(object) = entry.object.as_mut() {
+                held.extend(object.release_all_refs());
+            }
+        }
+        for object in self.dynamic.values_mut() {
+            held.extend(object.release_all_refs());
+        }
+        for id in &held {
+            self.release_binder(*id);
+        }
+        held
+    }
+
     /// Snapshot the registration tables so a module's registrations can be
     /// rolled back as a unit (ADR-0029 detach).
     #[must_use]
@@ -666,7 +770,15 @@ impl ServiceHost {
             .filter(|key| !before_entries.contains(key))
             .collect();
         for key in added_entries {
-            if let Some(entry) = self.entries.remove(key) {
+            if let Some(mut entry) = self.entries.remove(key) {
+                // The object is about to be dropped. Any callback registration
+                // it still holds has to be released *now*: `Drop` has no host to
+                // report to, and the guest may outlive the detach.
+                if let Some(mut object) = entry.object.take() {
+                    for id in object.release_all_refs() {
+                        self.release_binder(id);
+                    }
+                }
                 freed.push(entry.binder);
             }
         }
@@ -682,10 +794,17 @@ impl ServiceHost {
             Vec::new()
         };
         for (descriptor, binder, factory) in overwritten {
+            let mut dropped_refs: Vec<BinderId> = Vec::new();
             if let Some(entry) = self.entries.get_mut(descriptor) {
+                if let Some(mut object) = entry.object.take() {
+                    dropped_refs = object.release_all_refs();
+                }
                 freed.push(entry.binder);
                 self.registry.remove(entry.binder);
                 self.binder_descriptors.remove(&entry.binder.0);
+            }
+            for id in dropped_refs {
+                self.release_binder(id);
             }
             self.entries.insert(
                 descriptor,
@@ -736,7 +855,11 @@ impl ServiceHost {
             .filter(|id| !known_dynamic.contains(id))
             .collect();
         for id in added_dynamic {
-            self.dynamic.remove(&id);
+            if let Some(mut object) = self.dynamic.remove(&id) {
+                for held in object.release_all_refs() {
+                    self.release_binder(held);
+                }
+            }
             freed.push(BinderId(id));
         }
         let added_descriptors: Vec<u64> = self
@@ -1228,6 +1351,61 @@ impl ServiceHost {
         self.deliveries.push(delivery);
     }
 
+    /// Take one strong reference on `id` (a service stored the binder).
+    ///
+    /// Returns the new count. Two kinds of id can be referenced:
+    ///
+    /// * a handle the [`BinderRegistry`] knows (a local node, a proxy); and
+    /// * a **guest** binder (`GUEST_BINDER_TAG`, the peer's `JAVA_TAG`), which
+    ///   is the shape every callback reaches a module as. The registry does not
+    ///   have to know it: the driver owns those nodes, and rooting them is
+    ///   exactly what the reference is for.
+    ///
+    /// A null id is refused (`0`), and so is an unknown host-local id: a
+    /// reference to a handle the host cannot name would be a reference to
+    /// nothing.
+    pub fn retain_binder(&mut self, id: BinderId) -> u32 {
+        if id.0 == 0 || (!self.registry.contains(id) && id.0 & GUEST_BINDER_TAG == 0) {
+            return 0;
+        }
+        let count = self.refs.entry(id.0).or_insert(0);
+        *count = count.saturating_add(1);
+        *count
+    }
+
+    /// Drop one strong reference. At zero the binder is queued for release, so
+    /// the peer tells the driver to unroot the node (`F_REF` release →
+    /// `BR_RELEASE` + `BR_DECREFS`). Returns the remaining count.
+    pub fn release_binder(&mut self, id: BinderId) -> u32 {
+        let Some(count) = self.refs.get_mut(&id.0) else {
+            // Nothing was held: a release for a reference the host never took
+            // must not tell the driver to unroot a node the guest may still be
+            // using (`retain` refused, `release` silently ignored).
+            return 0;
+        };
+        *count = count.saturating_sub(1);
+        let remaining = *count;
+        if remaining == 0 {
+            self.refs.remove(&id.0);
+            if !self.released_binders.contains(&id) {
+                self.released_binders.push(id);
+            }
+        }
+        remaining
+    }
+
+    /// Host-held reference count of `id` (diagnostics and tests).
+    #[must_use]
+    pub fn held_refs(&self, id: BinderId) -> u32 {
+        self.refs.get(&id.0).copied().unwrap_or(0)
+    }
+
+    /// Binders whose last host reference was dropped since the last call.
+    #[must_use]
+    pub fn take_released_binders(&mut self) -> Vec<BinderId> {
+        std::mem::take(&mut self.released_binders)
+    }
+
     /// Deliver a broadcast the **host** originates (a module's control op).
     ///
     /// Goes through the session's own `IActivityManager` state, so the same
@@ -1411,10 +1589,23 @@ impl ServiceHost {
             let handled = object.raw_transact(&descriptor, code, data, reply)?;
             let finished = object.finished();
             let mut raw_deliveries = object.drain_raw_deliveries();
+            let mut raw_retained = object.drain_retained();
+            let mut raw_released = object.drain_released();
+            let mut finished_refs = if finished {
+                object.release_all_refs()
+            } else {
+                Vec::new()
+            };
             if finished {
                 self.dynamic.remove(&binder.0);
             }
             self.deliveries.append(&mut raw_deliveries);
+            for id in raw_retained.drain(..) {
+                self.retain_binder(id);
+            }
+            for id in raw_released.drain(..).chain(finished_refs.drain(..)) {
+                self.release_binder(id);
+            }
             if !handled {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: descriptor,
@@ -1540,7 +1731,18 @@ impl ServiceHost {
 
         let object = self.ensure_for_binder(binder, &descriptor)?;
         let mut call = object.call(&descriptor, method, &args)?;
+        // The reference model is the same on both dispatch paths: a handler
+        // that stores a callback binder reports it here, whether its interface
+        // is decoded or hand-rolled.
+        let mut retained = object.drain_retained();
+        let mut released = object.drain_released();
         self.deliveries.append(&mut call.deliveries);
+        for id in retained.drain(..) {
+            self.retain_binder(id);
+        }
+        for id in released.drain(..) {
+            self.release_binder(id);
+        }
 
         // MODA11Y2: two system services are wired here rather than inside a
         // `ServiceObject`, because the state they need is cross-service:
