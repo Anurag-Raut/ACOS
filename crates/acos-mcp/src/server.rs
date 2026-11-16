@@ -356,7 +356,10 @@ impl<B: Backend> Server<B> {
             None => None,
         };
         if let Some(envelope) = valid_arguments {
-            // `args` still shapes the reply (`full`, `cursor`) on the error path.
+            // `args` still shapes the reply (`full`, `cursor`) on the error path:
+            // REL3B's strict-argument rejection goes through REL3C's one reply
+            // rule, so an invalid-argument reply is bounded and shaped exactly
+            // like every other reply.
             return tool_result(
                 id,
                 &envelope,

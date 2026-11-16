@@ -1393,6 +1393,46 @@
         }
       ]
     },
+    "StepAttempt": {
+      "description": "One attempt at a step the engine may perform more than once.\n\nA step is one entry in `verdict.json` and in the reply's `result.verdict`; an attempt is never a second entry. `StepResult.status` is the *final* outcome and `StepResult.attempts` is the history that produced it, so a passing step can never look failing because an earlier attempt was retried.",
+      "properties": {
+        "attempt": {
+          "description": "1-based attempt number (`1` is the first real gesture/traversal).",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "frame_seq": {
+          "description": "The settled traversal this attempt judged, when it took one.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why it ended that way, in one line (the miss reason, the error).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Status"
+            }
+          ],
+          "description": "The attempt's own outcome."
+        }
+      },
+      "required": [
+        "attempt",
+        "status"
+      ],
+      "type": "object"
+    },
     "StepResult": {
       "description": "One step in a scenario run.",
       "properties": {
@@ -1401,6 +1441,13 @@
           "description": "Assertion results (empty for non-assertion steps).",
           "items": {
             "$ref": "#/definitions/AssertionResult"
+          },
+          "type": "array"
+        },
+        "attempts": {
+          "description": "Every attempt the step took, in order, when it took more than one (a `scroll_until` search performs one real gesture + fresh traversal per attempt). `status` above is the last attempt's outcome; this array says how it got there. Absent when the step succeeded on its first attempt.\n\nOne entry per step is the rule that keeps `verdict.json` and the inline reply's `result.verdict` the same document: both are built from this struct, so neither can carry a \"retried non-pass\" step in a passing run.",
+          "items": {
+            "$ref": "#/definitions/StepAttempt"
           },
           "type": "array"
         },
@@ -1463,7 +1510,7 @@
               "$ref": "#/definitions/Status"
             }
           ],
-          "description": "Step outcome."
+          "description": "Step outcome. The **final** one: a retried attempt never changes this into a second entry."
         },
         "step": {
           "description": "Step kind (`launch`, `assert_text`, ...).",

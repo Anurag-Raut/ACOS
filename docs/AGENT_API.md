@@ -1405,6 +1405,31 @@ A `capture` step's own `name` is persisted in three places: the step JSON
 `frames/<frame_seq>.png` is still written (it is what `frame_seq` names); the
 named copy is the same bytes under a second name.
 
+**One step is one entry.** `steps[]` has exactly one entry per scenario step, and
+its `status` is the *final* outcome. When a step took more than one real attempt
+(today: `scroll_until`, which performs one gesture and one fresh settled
+traversal per attempt) the history is explicit in `attempts[]`:
+
+```json
+{
+  "index": 1,
+  "step": "scroll_until",
+  "status": "pass",
+  "frame_seq": 3,
+  "attempts": [
+    {"attempt": 1, "status": "fail", "reason": "selector not visible in this attempt's settled traversal"},
+    {"attempt": 2, "status": "pass", "reason": "selector visible in this attempt's settled traversal", "frame_seq": 3}
+  ]
+}
+```
+
+A step that never passes keeps every attempt (`attempts: [fail, fail, fail]`) and
+its `status`/`error` are the final miss. `attempts` is absent when the step
+succeeded on its first attempt, so "a retry happened" is answerable from the
+reply alone. `verdict.json`, `steps/NN-<kind>.json` and the inline
+`result.verdict` are all written from the same `Verdict` structure: a passing run
+never shows a retried non-pass step in one view and a pass in the other.
+
 A non-pass verdict has `failure` populated:
 
 ```json
