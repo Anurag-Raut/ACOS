@@ -4678,3 +4678,54 @@ nothing in this change is on the tap path).
   peak vs the 256 MiB limit). INT-KG-AB recorded the same `launch_hang` flake on
   `main` and queued it as LHFLAKE.
 
+
+## E13.17 — NETSHARE: one shared relay instead of one pasta per session — MEASURED (design note, no product code)
+
+- **Date / commit:** 2026-11-16, branch `netshare` from `t3/spike-net-session-2-gate` (bf0420b1)
+- **Question / goal:** ADR-0030 amendment 2 (owner) asks for ONE network relay for every
+  session instead of one `pasta` per session (~28 MiB each). Which shape keeps per-session
+  online/offline + latency controls, keeps the host-loopback/LAN boundary, and costs ~0
+  per session — and what does it actually cost?
+- **Method:** four prototype arms in `.cache/netshare/proto` (kept: `results/handoff/NETSHARE/proto`),
+  each driven as `unshare --user --map-root-user` (no sudo, no kernel change): BASE = one
+  `pasta` per session (the spike shape, boundary shim included); B1 = one relay netns + one
+  `pasta`, sessions join it; B2 = one relay netns + one `pasta` with a per-session netns
+  joined by a veth pair; A = one Python userspace NAT owning one TAP fd per session
+  (ARP/ICMP/UDP only, no TCP). Guests are real `bwrap` sandboxes (production namespace and
+  cap flags, no `--unshare-net`) running `dig` (UDP proof) and `curl` of a 20 MB Cloudflare
+  file (TCP/TLS). PSS from `smaps_rollup` of the network processes only. Cells: 1/5/20
+  sessions, interleaved, every cell under `run-exclusive.sh --exclusive` +
+  `guarded.sh --mem 8G`; host RAM < 25 %, disk < 80 %.
+- **Inputs:** `pasta 2026_10_02.cba3570` (built from the pinned tag, sha256
+  `314c37e8…36c0edf60`, same record as `research/spike-net/artifacts/passt-build.txt`),
+  kernel/iptables of the host, `bubblewrap 0.13.1`.
+- **Result:** BASE 23.9–24.7 MiB PSS per session, attach 11.6–17.2 ms (N≤5) and **887 ms**
+  (N=20), 20 processes, 30.6 MB/s aggregate at N=20. B1 and B2: **flat 24–27 MiB total**
+  from 1 to 20 sessions (pasta 23.6 + relay 0.5), attach 2.3–4.3 ms (B1) / 27–40 ms (B2,
+  of which ~25 ms is prototype glue; the same four netlink operations measure 2 ms), 2
+  processes. B2 per-session controls measured on live sessions: dropping `-i v1` gave
+  `curl` `rc=28` timeouts for session 1 only (session 2 kept 200 at 84 ms);
+  `tc netem delay 400ms` on `v2` gave 1275 ms vs 72 ms for session 2 only (session 1
+  unchanged at 67 ms). A: one process, 7.0 MiB at N=1 → 3.5 MiB at N=20 (Python
+  interpreter; +0.17 MiB/session), attach 0.5–3.8 ms, and a real UDP NAT proven
+  (`dig @1.1.1.1` → 162.159.140.220 through the single relay); TCP not implemented.
+- **Finding:** B1 (the literal "all sessions join one netns" shape) cannot implement
+  per-session controls: inside one netns all sessions share addresses, interfaces and uid
+  (unprivileged userns mappings collapse to the owner's host uid, so `-m owner` cannot
+  separate them), and giving the guest a per-session source address needs `CAP_NET_ADMIN`
+  in that netns. B2 = B1 + per-session netns + veth fixes that at the same measured cost
+  and moves the boundary into a netns the guest holds no capability over. One `pasta` is a
+  single epoll loop: ~15–18 MB/s aggregate at N=20 vs ~30 MB/s with 20 pastas — the one
+  measured regression of sharing.
+- **Fidelity / evidence:** MEASURED. `results/handoff/NETSHARE/DESIGN.md`,
+  `results/handoff/NETSHARE/raw/measurements.jsonl`,
+  `results/handoff/NETSHARE/raw/controls-summary.json` (+ the two request logs),
+  `results/handoff/NETSHARE/proto/`. One BASE row measured before a harness fix
+  (`--unshare-net` still in that arm's bwrap) was deleted from the JSONL after the fix.
+- **Regression / false pass:** no product code changed, nothing to regress. Not measured:
+  B2 with a real ART session and the production `dnsproxyd` path at N=20, pasta's memory
+  at 20 × concurrent flows, option C (seccomp user-notify) end to end.
+- **Conclusion / next:** recommend B2 (one `acos-netd`: userns + relay netns + pinned
+  `pasta`, per-session veth, boundary once, control API for offline/delay/loss/HAR);
+  default stays `off` per ADR-0030 item 6. Option A is the upgrade path with identical
+  plumbing and a 4–8 week TCP stack. Owner decisions listed in DESIGN.md §"Open questions".
