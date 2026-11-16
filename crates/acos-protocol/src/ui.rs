@@ -627,6 +627,68 @@ impl UiNode {
     }
 }
 
+/// Where a pointer event at one screen point lands in a [`UiTree`].
+///
+/// This is the *tree geometry* answer to "what is under the tap", computed from
+/// the same tree the tap's selectors were resolved against (the visible rect of
+/// every node, deepest match first). It is deliberately separate from the
+/// authoritative framework fact: whether the app's window **consumed** the
+/// event is `handled` in the reply, which comes from the guest's
+/// `InputEventReceiver.finishInputEvent(handled)` and is never derived from this
+/// geometry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TapHit<'a> {
+    /// The visible nodes whose rect contains the point, root first, deepest last.
+    pub path: Vec<&'a UiNode>,
+    /// The node that consumes a press at the point: the deepest node on the path
+    /// that is `clickable`. `None` means nothing on that branch takes a click.
+    pub consumer: Option<&'a UiNode>,
+    /// When `consumer` is `None`, the clickable node nearest the point that is
+    /// **not** on the path: the sibling or cousin an agent should tap instead
+    /// (a switch's label next to the switch, a row's title next to its
+    /// pressable). `None` when the tree shows no clickable node at all.
+    pub suggestion: Option<&'a UiNode>,
+}
+
+impl TapHit<'_> {
+    /// The deepest node at the point, when any node's rect contains it.
+    #[must_use]
+    pub fn node(&self) -> Option<&UiNode> {
+        self.path.last().copied()
+    }
+
+    /// Squared centre distance from `(x, y)` to a node, the ranking used to pick
+    /// a `suggestion`.
+    fn distance(node: &UiNode, x: i32, y: i32) -> i64 {
+        let (cx, cy) = node.visible_rect().center();
+        let dx = i64::from(cx) - i64::from(x);
+        let dy = i64::from(cy) - i64::from(y);
+        dx * dx + dy * dy
+    }
+}
+
+/// Append the visible nodes whose rect contains `(x, y)`, root first.
+///
+/// A hidden node hides its whole subtree, matching `visible`'s definition (a
+/// node is visible only when it and every ancestor are shown).
+fn hit_path<'a>(node: &'a UiNode, x: i32, y: i32, out: &mut Vec<&'a UiNode>) -> bool {
+    if !node.visible {
+        return false;
+    }
+    let rect = node.visible_rect();
+    let inside = x >= rect.left() && x < rect.right() && y >= rect.top() && y < rect.bottom();
+    if !inside {
+        return false;
+    }
+    out.push(node);
+    for child in &node.children {
+        if hit_path(child, x, y, out) {
+            break;
+        }
+    }
+    true
+}
+
 /// A snapshot of the UI tree for one frame.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct UiTree {
@@ -699,6 +761,41 @@ impl UiTree {
         self.all_nodes()
             .into_iter()
             .find(|node| no_index.accepts_node(node))
+    }
+
+    /// Hit-test `(x, y)` against the tree's visible rects.
+    ///
+    /// The deepest chain wins; when two windows both contain the point the later
+    /// root (the window drawn on top in the probe's document order) wins, which
+    /// is the same order every other tree consumer reads. Only nodes that are
+    /// `visible` to the user can be hit: an off-screen node never answers a tap,
+    /// exactly as it never resolves as a tap target.
+    #[must_use]
+    pub fn tap_hit(&self, x: i32, y: i32) -> TapHit<'_> {
+        let mut best: Vec<&UiNode> = Vec::new();
+        for root in &self.nodes {
+            let mut path = Vec::new();
+            hit_path(root, x, y, &mut path);
+            // `>=` keeps the later (top-most) window when both contain the point.
+            if !path.is_empty() && path.len() >= best.len() {
+                best = path;
+            }
+        }
+        let consumer = best.iter().rev().find(|node| node.clickable).copied();
+        let suggestion = if consumer.is_some() {
+            None
+        } else {
+            self.all_nodes()
+                .into_iter()
+                .filter(|node| node.visible && node.clickable)
+                .filter(|node| !best.iter().any(|on_path| on_path.id == node.id))
+                .min_by_key(|node| TapHit::distance(node, x, y))
+        };
+        TapHit {
+            path: best,
+            consumer,
+            suggestion,
+        }
     }
 
     /// The first node that matches the selector's *fields* but is not visible to

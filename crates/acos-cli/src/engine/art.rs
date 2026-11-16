@@ -923,12 +923,44 @@ fn acks_from_reply(reply: &serde_json::Value) -> Vec<InputAck> {
 /// tree with the pre-action one (see [`tree_signature`]). The acks are copied
 /// verbatim and remain guest-asserted.
 fn delivery(reply: &serde_json::Value, visual_change: bool) -> InputDelivery {
+    let (handled, published) = handled_from_reply(reply);
     InputDelivery {
         delivered: true,
         visual_change,
+        handled,
+        published,
         acks: acks_from_reply(reply),
+        target: reply.get("target").cloned(),
         settle: reply.get("settle").cloned(),
     }
+}
+
+/// REL3E: the app window's own answer, read from the guest's `gesture` record.
+///
+/// The guest acks every published `InputMessage` with the `handled` bit its
+/// `InputEventReceiver.finishInputEvent` was called with (AOSP `ViewRootImpl`
+/// passes `FLAG_FINISHED_HANDLED`, and drops with `false`), so this is the
+/// framework's verdict, never a heuristic:
+///
+/// * **any** unhandled ack proves nothing consumed that event → `Some(false)`;
+/// * every published event acked handled → `Some(true)`;
+/// * a short or missing ack list → `None` (unknown; the reply says so, it never
+///   claims "not handled" for an event the guest never answered).
+fn handled_from_reply(reply: &serde_json::Value) -> (Option<bool>, usize) {
+    let published = reply
+        .pointer("/gesture/seqs")
+        .and_then(|value| value.as_array())
+        .map(Vec::len)
+        .unwrap_or(0);
+    let acks = acks_from_reply(reply);
+    let handled = if acks.iter().any(|ack| !ack.handled) {
+        Some(false)
+    } else if published > 0 && acks.len() == published {
+        Some(true)
+    } else {
+        None
+    };
+    (handled, published)
 }
 
 /// P1: the guest's own fast-mode verdict, when it reported one. `None` means
@@ -2111,9 +2143,17 @@ impl ArtSession {
         cached.observed(previous).map(Some)
     }
 
+    /// REL3E: attach the resolved-target/hit-test block to the action's own
+    /// delivery record, so `verify` publishes the same `target` the MCP reply
+    /// carries instead of re-deriving it.
+    pub fn attach_input_target(&mut self, target: serde_json::Value) {
+        if let Some(input) = self.last_input.as_mut() {
+            input.target = Some(target);
+        }
+    }
+
     /// The bound tree of the most recent completed traversal, without issuing a
     /// command.
-    #[allow(dead_code)]
     pub fn bound_tree(&self) -> Option<UiTree> {
         self.cached.as_ref().map(|frame| frame.tree.clone())
     }
@@ -2854,10 +2894,14 @@ impl ArtSession {
         if self.last_input_settle.is_none() {
             self.last_input_settle = reply.get("settle").cloned();
         }
+        let (handled, published) = handled_from_reply(reply);
         self.last_input = Some(InputDelivery {
             delivered: true,
             visual_change,
+            handled,
+            published,
             acks: acks_from_reply(reply),
+            target: reply.get("target").cloned(),
             settle: reply.get("settle").cloned(),
         });
         Ok(())

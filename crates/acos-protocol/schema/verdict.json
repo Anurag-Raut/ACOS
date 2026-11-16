@@ -1423,6 +1423,9 @@
           "minimum": 0.0,
           "type": "integer"
         },
+        "input": {
+          "description": "REL3E: the input step's own evidence. `handled` is the app window's `finishInputEvent(handled)` answer (`null` when the guest did not ack), `target` is what the selector resolved to plus the hit-test at the injected point, and `expect_change` says whether a change was required - `\"auto\"` for a `tap` (the step's own state-change check), `true`/`false` for the scenario's explicit flag. `None` for steps that inject no input."
+        },
         "name": {
           "description": "`capture` step name (the scenario's own label for this screenshot).\n\nWritten into the step JSON so \"the screenshot for X\" is answerable from the artifacts; the same name keys `verdict.json`'s `captures` map.",
           "type": [

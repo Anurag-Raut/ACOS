@@ -395,8 +395,22 @@ pub struct InputDelivery {
     pub delivered: bool,
     /// The completed frame after the action differs from the one before it.
     pub visual_change: bool,
+    /// REL3E: the app window's own `finishInputEvent(handled)` answer for the
+    /// whole gesture. `Some(false)` proves nothing consumed the event (a tap on
+    /// a label with no handler), `Some(true)` proves the window consumed it,
+    /// `None` means the guest did not ack every dispatched event: unknown, never
+    /// a guess.
+    pub handled: Option<bool>,
+    /// REL3E: how many `InputMessage`s the host published for this gesture.
+    /// Compared with `acks.len()` it says whether `handled` is a complete
+    /// answer.
+    pub published: usize,
     /// Guest acknowledgments, in delivery order.
     pub acks: Vec<InputAck>,
+    /// REL3E: the action reply's `target` block, verbatim: the node the selector
+    /// resolved to and the hit-test result at the injected point. `None` when the
+    /// backend reports no target.
+    pub target: Option<serde_json::Value>,
     /// The settle block the action's reply carried (P12). Includes
     /// `pixels_changed`; this is evidence, not a pass/fail rule.
     pub settle: Option<serde_json::Value>,

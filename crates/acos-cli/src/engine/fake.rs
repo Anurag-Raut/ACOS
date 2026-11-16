@@ -471,7 +471,10 @@ impl SessionBackend for FakeSession {
         self.settle_json.as_ref().map(|settle| acos_verify::backend::InputDelivery {
             delivered: true,
             visual_change: false,
+            handled: None,
+            published: 0,
             acks: Vec::new(),
+            target: None,
             settle: Some(settle.clone()),
         })
     }
