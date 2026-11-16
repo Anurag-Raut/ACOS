@@ -11,6 +11,7 @@
 
 pub mod client;
 pub mod forward;
+pub mod net_ctl;
 pub mod plan;
 pub mod proto;
 pub mod supervisor;

@@ -144,6 +144,7 @@ name = "acos-mcp"
 version = "0.2.2"
 dependencies = [
  "acos-jni",
+ "acos-netd",
  "acos-protocol",
  "acos-runtime",
  "acos-sandbox",

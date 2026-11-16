@@ -2036,6 +2036,9 @@ mod engine_tests {
             None,
             None,
             None,
+            // NET4: the addressable session id of this run (a one-shot run
+            // publishes `verify-<pid>`; the fake session here has none).
+            None,
         );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["engine"], "art");
@@ -2392,6 +2395,9 @@ mod engine_tests {
             None,
             None,
             None,
+            None,
+            // NET4: the addressable session id of this run (a one-shot run
+            // publishes `verify-<pid>`; the fake session here has none).
             None,
         );
         assert!(!envelope.status().is_pass());

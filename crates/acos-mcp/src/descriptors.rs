@@ -52,6 +52,9 @@ pub const HELP_TOOL: &str = "acos_help";
 /// but its report is a JSON object rather than an ACOS envelope, so it is
 /// handled in the same dispatch path.
 pub const SESSION_TOOL_NAMES: &[&str] = &[
+    // NET4: the network module's control verb, advertised with the schema
+    // `acos_netd::net_ctl` defines (the session API dispatches the same verb).
+    acos_netd::net_ctl::NET_CTL_TOOL,
     "acos_launch",
     "acos_observe_tree",
     "acos_tap",
@@ -311,6 +314,23 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         schema
     };
     match name {
+        // NET4: the network module's controls, on the session's own netns.
+        // The argument schema is *not* written here: it is
+        // `acos_netd::net_ctl::net_ctl_schema()`, the same value the session API
+        // parses with, so the CLI and MCP surfaces cannot drift (asserted by
+        // `tests/net_ctl_parity.rs`).
+        acos_netd::net_ctl::NET_CTL_TOOL => (
+            "Control the network of a session you hold: the relay state, this session's \
+             own connectivity (`offline`/`online`), latency/loss shaping (`delay`, on this \
+             session's veth only) and the explicit host-loopback opt-in (`hostport`, e.g. \
+             Metro's ws://localhost:8081). It is the MCP face of the CLI's `acos_net` verb: \
+             same name, same arguments, closed schema. Needs the session to have the network \
+             module on; a session without a relay netns answers `networked:false` (status) \
+             and a dead relay is `NETWORK_UNAVAILABLE`, never a silent offline. Common \
+             errors: SESSION_NOT_FOUND, NETWORK_UNAVAILABLE, INVALID_ARGUMENT (unknown \
+             argument, unknown action, port out of range).",
+            acos_netd::net_ctl::net_ctl_schema(),
+        ),
         "acos_launch" => (
             "Call this FIRST for an app you want to drive: it boots the APK in an in-process \
              session that persists across MCP calls (the CLI relaunches per invocation). Returns \
@@ -774,8 +794,9 @@ mod tests {
     fn every_protocol_tool_is_mapped_to_a_command() {
         let caps = Capabilities::unprobed();
         let infos = tool_infos(&caps);
-        // 13 protocol tools + acos_capabilities + acos_help + 9 session tools.
-        assert_eq!(infos.len(), 24);
+        // 13 protocol tools + acos_capabilities + acos_help + 10 session tools
+        // (NET4 added the network module's `acos_net`).
+        assert_eq!(infos.len(), 25);
         let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
         for descriptor in mcp_tools().tools {
             assert!(

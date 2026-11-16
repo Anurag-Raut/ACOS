@@ -324,6 +324,7 @@ fn tool_returns(tool: &ToolInfo) -> &'static str {
         "acos_swipe" => "`accepted`, `state_changed`, the injected gesture seqs",
         "acos_logs" => "`logs[]` (priority, tag, message, line, repeat_count), `total`/`count`, `filter`, `stage_reached`, `crash`",
         "acos_status" => "`launched`, `stage_reached`, `published_frames`, `package`/`activity`, `capabilities`",
+        "acos_net" => "`action`, the relay state (`up`, `pasta_version`, `host_ports`) and this \n                       session's own row (`networked`, `offline`, `delay_ms`, `loss_pct`); \n                       `hostport` also returns the relay's `host_ports` list",
         "acos_doctor" => "`checks[]` with pass/fail and a concrete `fix` per failing check",
         "acos_capabilities" => "the implemented command list, the resolved `acos` binary/version and the server limits",
         "acos_help" => "`guide` (the requested section), `guide_topics`, `fidelity_rules`, `supported`/`unsupported`",
