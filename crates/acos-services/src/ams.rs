@@ -32,7 +32,7 @@
 //! * Any unsupported transaction (flag, launch mode, provider method) raises
 //!   `UNSUPPORTED_ANDROID_API`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use acos_aidl::MethodInfo;
 
@@ -875,6 +875,17 @@ pub struct AmsState {
     /// (set by the standard registry); `None` in a bare state machine, where an
     /// unresolvable intent stays the structured `START_NOT_FOUND`.
     pub intents: Option<std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>>,
+    /// W53/WV3: `IActivityManager.addPackageDependency` records, i.e. the
+    /// packages the calling guest process declared it depends on. On a device
+    /// this is `ProcessRecord.pkgDeps` — the set AMS consults when a package is
+    /// updated or removed, which is exactly why `WebViewFactory` registers
+    /// `com.android.webview` before it reads that package's `PackageInfo` ("so
+    /// that we will be killed if the package info goes out-of-date",
+    /// `WebViewFactory.java:459`). ACOS has one guest process per session and
+    /// does not uninstall packages while it runs, so the set is session state:
+    /// recorded, never fabricated, and readable as evidence. Sorted, so the
+    /// recorded order is deterministic.
+    pub package_dependencies: BTreeSet<String>,
 }
 
 impl AmsState {
@@ -1052,6 +1063,25 @@ impl AmsState {
             }
         }
         Some((pending.token, pending.class))
+    }
+
+    /// `IActivityManager.addPackageDependency(String packageName)`: record that
+    /// the calling process depends on `packageName`, exactly like
+    /// `ActivityManagerService.addPackageDependency` adds it to the caller's
+    /// `ProcessRecord.pkgDeps`.
+    ///
+    /// Android 14's AIDL method takes **one** `String` (transaction 96): the
+    /// image's `IActivityManager$Stub$Proxy.addPackageDependency` writes
+    /// `writeString(packageName)` and nothing else, and `IActivityManager$Stub`
+    /// reads one `readString()` before `writeNoException()` (checked with
+    /// `dexdump` of `.cache/boot/android-34/dex/framework/classes.dex`; the AOSP
+    /// source cache agrees — the `(String, int)` overload is a later platform).
+    /// The reply is void.
+    ///
+    /// Returns `true` when the dependency was newly recorded. A repeat is not an
+    /// error (`pkgDeps` is a set on a device too); it does not change the set.
+    pub fn add_package_dependency(&mut self, package_name: &str) -> bool {
+        self.package_dependencies.insert(package_name.to_string())
     }
 
     /// `finishActivity`: pop the activity from its task. Returns whether the
@@ -1534,6 +1564,33 @@ pub fn dispatch(
                 }
                 state.publish_content_providers(records);
             }
+            Vec::new()
+        }
+        // W53/WV3 (wall 5 of the WebView provider load):
+        // `WebViewFactory.getWebViewContextAndSetProvider` registers the chosen
+        // provider package with AMS before it reads that package's
+        // `PackageInfo`, so a provider update kills the process that holds a
+        // stale record. The faithful answer is the recorded dependency and a
+        // void reply (the transport writes `writeNoException` only).
+        "addPackageDependency" => {
+            let package = value(0).and_then(Value::as_str).ok_or_else(|| {
+                ServiceError::BadRequest {
+                    interface: interface.to_string(),
+                    method: method.name.clone(),
+                    detail: "arg 0: expected the package name (String)".into(),
+                }
+            })?;
+            if package.is_empty() {
+                // AOSP only records a name it can resolve; an empty dependency
+                // is never a real package and would break the kill-on-update
+                // contract the call exists for.
+                return Err(ServiceError::BadRequest {
+                    interface: interface.to_string(),
+                    method: method.name.clone(),
+                    detail: "arg 0: empty package name".into(),
+                });
+            }
+            state.add_package_dependency(package);
             Vec::new()
         }
         // K2/R3: read-only queries. The guest's real memory state is the
@@ -2032,5 +2089,77 @@ mod tests {
             component.field(1).and_then(Value::as_str),
             Some("dev.acos.fixtures.svcprovider.EchoService")
         );
+    }
+
+    /// Wall 5 of the WebView provider load (WV3):
+    /// `IActivityManager.addPackageDependency(String)` is AMS surface, not a
+    /// WebView hook, so it is pinned twice — against the image's own AIDL
+    /// (transaction 96, one `String`, a void reply) and behaviourally through
+    /// `dispatch` (the dependency is recorded, the reply carries no exception
+    /// word, and the same package recorded twice is still one dependency).
+    ///
+    /// Fails before the dispatch arm existed: `dispatch` returned `Ok(None)`,
+    /// which the service layer turns into
+    /// `unsupported Android API: android.app.IActivityManager code 96` — the
+    /// exact exception `WebViewFactory.getWebViewContextAndSetProvider` threw.
+    #[test]
+    fn add_package_dependency_is_recorded_and_replies_void() {
+        use acos_aidl::WireOp;
+        let method = acos_aidl::lookup_by_name("android.app.IActivityManager", "addPackageDependency")
+            .expect("the table decodes addPackageDependency from the image");
+        assert_eq!(method.code, 96, "IActivityManager.addPackageDependency code");
+        assert!(
+            !method.oneway,
+            "the framework's proxy calls readException() on the reply"
+        );
+        assert_eq!(
+            method.args,
+            vec![WireOp::Str16],
+            "Android 14 writes one String (the (String, int) overload is newer)"
+        );
+        assert!(
+            method.reply.is_empty(),
+            "the reply is writeNoException() and nothing else"
+        );
+
+        let mut state = AmsState::new();
+        let args = vec![Value::Str(Some("com.android.webview".into()))];
+        let result = dispatch(
+            &mut state,
+            "android.app.IActivityManager",
+            &method,
+            &args,
+        )
+        .expect("dispatch")
+        .expect("addPackageDependency is handled, not UNSUPPORTED");
+        assert!(
+            result.reply.is_empty(),
+            "a void method replies with the exception word only, got {:?}",
+            result.reply
+        );
+        assert!(result.deliveries.is_empty());
+        assert!(state.package_dependencies.contains("com.android.webview"));
+
+        // Recording twice is the same dependency, not a second entry.
+        let again = dispatch(
+            &mut state,
+            "android.app.IActivityManager",
+            &method,
+            &args,
+        )
+        .expect("dispatch")
+        .expect("handled");
+        assert!(again.reply.is_empty());
+        assert_eq!(state.package_dependencies.len(), 1);
+
+        // An empty name is refused, not recorded: it could never be a package.
+        let empty = dispatch(
+            &mut state,
+            "android.app.IActivityManager",
+            &method,
+            &[Value::Str(Some(String::new()))],
+        );
+        assert!(matches!(empty, Err(ServiceError::BadRequest { .. })));
+        assert_eq!(state.package_dependencies.len(), 1);
     }
 }
