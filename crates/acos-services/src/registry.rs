@@ -292,9 +292,15 @@ pub fn install_with_handles_and_insets(
     // trusting the launch config, and the dispatcher needs the state for the
     // system -> app bind (`attachApplication` / `publishService`).
     let pms_shared = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
-    a11y.lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .pms = Some(Arc::clone(&pms_shared));
+    {
+        let mut a11y_state = a11y
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        a11y_state.pms = Some(Arc::clone(&pms_shared));
+        // MODA11Y3: `getWindows`/`getWindow` answer from the LAYER1 window
+        // stack, which is also what composition, the UI tree and input read.
+        a11y_state.windows = Some(Arc::clone(&wms_state));
+    }
     host.set_accessibility_state(Arc::clone(&a11y));
     let input = Arc::new(Mutex::new(crate::misc::InputState::new()));
     let textservices = Arc::new(Mutex::new(crate::misc::TextServicesState::new()));

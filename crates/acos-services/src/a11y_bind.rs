@@ -279,6 +279,186 @@ pub fn init_delivery(
     }
 }
 
+/// `IAccessibilityInteractionConnection`: the app-side object the system calls
+/// to reach a window's node tree.
+pub const INTERACTION_CONNECTION: &str =
+    "android.view.accessibility.IAccessibilityInteractionConnection";
+
+/// `AccessibilityWindowInfo.UNDEFINED_WINDOW_ID`.
+pub const UNDEFINED_WINDOW_ID: i32 = -1;
+
+/// `AccessibilityWindowInfo.ACTIVE_WINDOW_ID`.
+pub const ACTIVE_WINDOW_ID: i32 = 0x7fff_ffff;
+
+/// `AccessibilityWindowInfo.WindowListSparseArray`'s item class, as
+/// `Parcel.writeParcelable` names it.
+const WINDOW_INFO_CLASS: &str = "android.view.accessibility.AccessibilityWindowInfo";
+
+/// `AccessibilityWindowInfo.BOOLEAN_PROPERTY_*` masks.
+const BOOLEAN_ACTIVE: i32 = 0x1;
+const BOOLEAN_FOCUSED: i32 = 0x2;
+
+/// Write one `AccessibilityWindowInfo` payload (no `writeTypedObject` presence
+/// marker), in the image's `writeToParcel` order.
+///
+/// Transcribed from the API-34 `framework.jar` (`AccessibilityWindowInfo.
+/// writeToParcel`: displayId, type, layer, booleanProperties, id, parentId,
+/// taskId, Region, CharSequence title, anchorId, transitionTime, child ids,
+/// connectionId, LocaleList). `Region.writeToParcel` is
+/// `AParcel_writeVector<int32_t>`: a count and then `left/top/right/bottom`
+/// per rectangle.
+pub fn write_window_info(
+    parcel: &mut Parcel,
+    window: &crate::misc::A11yWindow,
+    connection_id: i32,
+) -> Result<()> {
+    parcel.write_int32(0); // mDisplayId
+    parcel.write_int32(window.type_);
+    parcel.write_int32(window.layer);
+    let mut properties = 0;
+    if window.active {
+        properties |= BOOLEAN_ACTIVE;
+    }
+    if window.focused {
+        properties |= BOOLEAN_FOCUSED;
+    }
+    parcel.write_int32(properties);
+    parcel.write_int32(window.id);
+    parcel.write_int32(UNDEFINED_WINDOW_ID); // mParentId
+    parcel.write_int32(UNDEFINED_WINDOW_ID); // mTaskId
+    // `Region.writeToParcel`: one rectangle, as a vector of four ints.
+    let (left, top, right, bottom) = window.frame;
+    parcel.write_int32(4);
+    parcel.write_int32(left);
+    parcel.write_int32(top);
+    parcel.write_int32(right);
+    parcel.write_int32(bottom);
+    // `writeCharSequence(null)`: no span marker, then a null string.
+    parcel.write_int32(0);
+    parcel.write_int32(-1);
+    parcel.write_int64(0); // mAnchorId
+    parcel.write_int64(0); // mTransitionTime
+    parcel.write_int32(0); // child count
+    parcel.write_int32(if window.connection.is_some() {
+        connection_id
+    } else {
+        -1
+    }); // mConnectionId
+    // `writeParcelable(null)`: a null class name.
+    parcel.write_int32(-1);
+    Ok(())
+}
+
+/// Write the `AccessibilityWindowInfo.WindowListSparseArray` payload
+/// (one display, its windows topmost first).
+fn write_window_list(
+    parcel: &mut Parcel,
+    windows: &[crate::misc::A11yWindow],
+    connection_id: i32,
+) -> Result<()> {
+    parcel.write_int32(1); // one display
+    parcel.write_int32(i32::try_from(windows.len()).unwrap_or(i32::MAX));
+    for window in windows {
+        // `writeParcelable` writes the item's class name first.
+        parcel.write_string16(WINDOW_INFO_CLASS)?;
+        write_window_info(parcel, window, connection_id)?;
+    }
+    parcel.write_int32(0); // displayId
+    Ok(())
+}
+
+/// One relayed interaction, as the service asked for it.
+struct Interaction {
+    /// `IAccessibilityInteractionConnection` transaction code.
+    code: u32,
+    /// `accessibilityNodeId` (the app resolves `0` to the window root).
+    node_id: i64,
+    /// The text / view id of a `findAccessibilityNodeInfosBy*` request.
+    needle: Option<String>,
+    /// `performAccessibilityAction`'s action id.
+    action: i32,
+    /// The `interactionId` the app must echo in the callback.
+    interaction_id: i32,
+    /// The service's `IAccessibilityInteractionConnectionCallback` binder.
+    callback: u64,
+    /// The service's fetch flags.
+    flags: i32,
+    /// The interrogating thread id the service reported.
+    thread_id: i64,
+    /// Byte range of a non-null `Bundle arguments` in the request parcel.
+    bundle: Option<(usize, usize)>,
+}
+
+impl Interaction {
+    /// Build the `IAccessibilityInteractionConnection` request parcel.
+    ///
+    /// The interface has no `acos-aidl` table (the app-side accessibility AIDL
+    /// is not in the decoded set), so the argument order is the interface's own
+    /// (`base/core/java/android/view/accessibility/IAccessibilityInteractionConnection.aidl`,
+    /// API 34) and every value is a scalar, a binder or a typed object.
+    fn request(&self, source: Option<&Parcel>) -> Result<Parcel> {
+        let mut data = Parcel::new();
+        data.write_interface_token(INTERACTION_CONNECTION)?;
+        data.write_int64(self.node_id);
+        if self.code == 6 {
+            // performAccessibilityAction(long nodeId, int action, Bundle, int
+            // interactionId, callback, int flags, int pid, long tid)
+            data.write_int32(self.action);
+            self.write_bundle(&mut data, source)?;
+            data.write_int32(self.interaction_id);
+            data.write_strong_binder(BinderId(self.callback));
+            data.write_int32(self.flags);
+            // `interrogatingPid`: the module does not model the guest pid, so 0
+            // (unknown) is written rather than a made-up value.
+            data.write_int32(0);
+            data.write_int64(self.thread_id);
+            return Ok(data);
+        }
+        // findAccessibilityNodeInfoByAccessibilityId(long, Region, int,
+        // callback, int, int pid, long tid, MagnificationSpec, float[], Bundle)
+        // and the text/view-id twins (long, String, Region, int, callback, int,
+        // int, long, spec, float[]).
+        match self.code {
+            1 => {}
+            2 | 3 => data.write_string16(self.needle.as_deref().unwrap_or(""))?,
+            other => {
+                return Err(ServiceError::UnsupportedAndroidApi {
+                    interface: INTERACTION_CONNECTION.into(),
+                    code: other,
+                    method: format!("code {other}"),
+                })
+            }
+        }
+        // Region bounds: null (`writeTypedObject(null)`).
+        data.write_int32(0);
+        data.write_int32(self.interaction_id);
+        data.write_strong_binder(BinderId(self.callback));
+        data.write_int32(self.flags);
+        data.write_int32(0);
+        data.write_int64(self.thread_id);
+        // MagnificationSpec: null.
+        data.write_int32(0);
+        // float[] matrixValues: null.
+        data.write_int32(-1);
+        if self.code == 1 {
+            self.write_bundle(&mut data, source)?;
+        }
+        Ok(data)
+    }
+
+    /// Write `Bundle arguments`: the service's own payload bytes, or null.
+    fn write_bundle(&self, data: &mut Parcel, source: Option<&Parcel>) -> Result<()> {
+        match (self.bundle, source) {
+            (Some((offset, len)), Some(source)) => {
+                data.write_int32(1);
+                data.append_from(source, offset, len)?;
+            }
+            _ => data.write_int32(0),
+        }
+        Ok(())
+    }
+}
+
 /// `IAccessibilityServiceConnection`: the object a bound accessibility service
 /// talks to.
 ///
@@ -288,14 +468,127 @@ pub fn init_delivery(
 /// rest with a structured `UNSUPPORTED_ANDROID_API`, never a made-up reply.
 pub struct A11yConnectionNode {
     state: Arc<Mutex<A11yState>>,
+    deliveries: Vec<PendingDelivery>,
 }
 
 impl A11yConnectionNode {
     /// Wrap the module state.
     #[must_use]
     pub fn new(state: Arc<Mutex<A11yState>>) -> Self {
-        Self { state }
+        Self {
+            state,
+            deliveries: Vec::new(),
+        }
     }
+
+    /// Relay one `findAccessibilityNodeInfo*` request to the window's
+    /// `IAccessibilityInteractionConnection` and answer the service the way
+    /// AOSP's `AccessibilityServiceConnection` does.
+    ///
+    /// AOSP's flow is asynchronous in the app but synchronous for the service:
+    /// the system calls the connection (oneway) and returns the window's
+    /// package names; the app then invokes the `callback` the service passed,
+    /// and `AccessibilityInteractionClient` wakes the service thread waiting on
+    /// that `interactionId`. ACOS keeps exactly that shape: the reply is
+    /// written **now** (so the peer can send the oneway delivery in this turn),
+    /// the request is queued against the app's own binder, and the callback
+    /// comes back inside the guest (both binders are local there, so the result
+    /// needs no host round trip).
+    fn relay_find(
+        &mut self,
+        code: u32,
+        data: &mut Parcel,
+        reply: &mut Parcel,
+        state: &mut A11yState,
+    ) -> Result<()> {
+        // `IAccessibilityServiceConnection` argument order:
+        //   int windowId, long nodeId, [String text|viewId], int interactionId,
+        //   IBinder callback, int flags, long threadId[, Bundle arguments]
+        let requested = data.read_int32()?;
+        let node_id = data.read_int64()?;
+        let needle = match code {
+            4 | 5 => Some(data.read_string16()?.unwrap_or_default()),
+            _ => None,
+        };
+        let interaction_id = data.read_int32()?;
+        let callback = data
+            .read_strong_binder()?
+            .map(|b| b.0)
+            .ok_or_else(|| ServiceError::BadRequest {
+                interface: SERVICE_CONNECTION.into(),
+                method: "findAccessibilityNodeInfo*".into(),
+                detail: "missing IAccessibilityInteractionConnectionCallback".into(),
+            })?;
+        // Only `findAccessibilityNodeInfoByAccessibilityId` carries `flags`;
+        // the text/view-id twins go straight from the callback to the thread id
+        // (the image's `IAccessibilityServiceConnection` signatures).
+        let flags = if code == 3 { data.read_int32()? } else { 0 };
+        let thread_id = data.read_int64()?;
+        let bundle = if code == 3 {
+            let present = data.read_int32()?;
+            (present != 0).then(|| (data.data_position(), data.remaining()))
+        } else {
+            None
+        };
+        let windows = state.window_snapshot();
+        let resolved = state
+            .resolve_window(&windows, requested)
+            .and_then(|index| windows.get(index).cloned());
+        let Some(window) = resolved else {
+            // AOSP answers `null` when the window is gone / not visible to the
+            // service; the client then returns null without waiting.
+            crate::exception::write_no_exception(reply);
+            let _ = reply.write_int32(-1);
+            return Ok(());
+        };
+        let Some(connection) = window.connection else {
+            // The window exists but the app has not registered an interaction
+            // connection: nothing can answer, so the honest reply is "no
+            // result" rather than a fabricated node.
+            crate::exception::write_no_exception(reply);
+            let _ = reply.write_int32(-1);
+            return Ok(());
+        };
+        // Service code 3/4/5 -> interaction code 1/3/2.
+        let interaction_code = match code {
+            3 => 1,
+            4 => 3,
+            5 => 2,
+            _ => unreachable!(),
+        };
+        let interaction = Interaction {
+            code: interaction_code,
+            node_id,
+            needle,
+            action: 0,
+            interaction_id,
+            callback,
+            flags,
+            thread_id,
+            bundle,
+        };
+        let request = interaction.request(Some(data))?;
+        self.deliveries.push(PendingDelivery {
+            target: BinderId(connection),
+            interface: INTERACTION_CONNECTION.to_string(),
+            code: interaction_code,
+            method: "findAccessibilityNodeInfo*".into(),
+            data: request,
+        });
+        state.record_interaction(crate::misc::A11yInteraction {
+            code,
+            window: window.id,
+            interaction_id,
+            window_binder: window.window,
+        });
+        crate::exception::write_no_exception(reply);
+        // AOSP returns the window's reported package names; the client treats
+        // `null` as "no request went out" and a non-null array as "wait for the
+        // callback".
+        reply.write_string16_array(Some(&[window.package.as_str()]))?;
+        Ok(())
+    }
+
 }
 
 impl ServiceObject for A11yConnectionNode {
@@ -342,8 +635,8 @@ impl ServiceObject for A11yConnectionNode {
         let Some(name) = name else {
             return Ok(false);
         };
-        let mut state = self
-            .state
+        let shared = Arc::clone(&self.state);
+        let mut state = shared
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         match name {
@@ -407,6 +700,43 @@ impl ServiceObject for A11yConnectionNode {
                     ),
                 });
             }
+            "findAccessibilityNodeInfoByAccessibilityId"
+            | "findAccessibilityNodeInfosByText"
+            | "findAccessibilityNodeInfosByViewId" => {
+                self.relay_find(code, data, reply, &mut state)?;
+            }
+            "getWindows" => {
+                let windows = state.window_snapshot();
+                let connection_id = state
+                    .bound_service
+                    .as_ref()
+                    .map_or(-1, |b| b.connection_id);
+                crate::exception::write_no_exception(reply);
+                // `writeTypedObject(WindowListSparseArray)`: present, payload.
+                let _ = reply.write_int32(1);
+                write_window_list(reply, &windows, connection_id)?;
+            }
+            "getWindow" => {
+                let requested = data.read_int32()?;
+                let windows = state.window_list_readonly();
+                let window = state
+                    .resolve_window(&windows, requested)
+                    .and_then(|index| windows.get(index).cloned());
+                let connection_id = state
+                    .bound_service
+                    .as_ref()
+                    .map_or(-1, |b| b.connection_id);
+                crate::exception::write_no_exception(reply);
+                match window {
+                    Some(window) => {
+                        let _ = reply.write_int32(1);
+                        write_window_info(reply, &window, connection_id)?;
+                    }
+                    None => {
+                        let _ = reply.write_int32(0);
+                    }
+                }
+            }
             other => {
                 state.unsupported.push(format!("{interface}.{other}"));
                 return Ok(false);
@@ -414,13 +744,22 @@ impl ServiceObject for A11yConnectionNode {
         }
         Ok(true)
     }
+
+    fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
+        std::mem::take(&mut self.deliveries)
+    }
 }
 
 /// `IAccessibilityServiceConnection` transaction codes (AIDL declaration
 /// order), for the methods this node answers.
-const CONNECTION_METHODS: [(u32, &str); 6] = [
+const CONNECTION_METHODS: [(u32, &str); 11] = [
     (1, "setServiceInfo"),
     (2, "setAttributionTag"),
+    (3, "findAccessibilityNodeInfoByAccessibilityId"),
+    (4, "findAccessibilityNodeInfosByText"),
+    (5, "findAccessibilityNodeInfosByViewId"),
+    (9, "getWindow"),
+    (10, "getWindows"),
     (11, "getServiceInfo"),
     (12, "performGlobalAction"),
     (13, "getSystemActions"),

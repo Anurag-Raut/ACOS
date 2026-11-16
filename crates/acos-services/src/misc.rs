@@ -41,6 +41,56 @@ pub struct A11yConnection {
     pub package: String,
 }
 
+/// One accessibility window (MODA11Y3 step 1).
+///
+/// The facts come from the LAYER1 window stack (`crate::wms::WmsState`), which
+/// is the one description of the stack composition, the UI tree and input read;
+/// the accessibility window id is this module's own (assigned when the app
+/// registers its interaction connection or when the window is first listed),
+/// because that is the id the app's `ViewRootImpl` is handed back by
+/// `addAccessibilityInteractionConnection` and the id the service passes to
+/// `findAccessibilityNodeInfoByAccessibilityId`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct A11yWindow {
+    /// `AccessibilityWindowInfo.getId()`.
+    pub id: i32,
+    /// The `IWindow` binder id the window was added with.
+    pub window: u64,
+    /// The registered `IAccessibilityInteractionConnection`, if any.
+    pub connection: Option<u64>,
+    /// The package that owns the window (`addAccessibilityInteractionConnection`).
+    pub package: String,
+    /// `AccessibilityWindowInfo` type (`TYPE_APPLICATION` = 1, ...).
+    pub type_: i32,
+    /// Layer: larger is higher (`getWindows` order is topmost first).
+    pub layer: i32,
+    /// Window frame in display coordinates.
+    pub frame: (i32, i32, i32, i32),
+    /// The window is the focused one.
+    pub focused: bool,
+    /// The window is the active one (AOSP: the focused one while no touch
+    /// interaction is in progress).
+    pub active: bool,
+}
+
+/// One interaction request relayed to an app's
+/// `IAccessibilityInteractionConnection` (MODA11Y3 step 1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct A11yInteraction {
+    /// `IAccessibilityServiceConnection` transaction code (3 = by id, 4 = by
+    /// text, 5 = by view id, 8 = perform action).
+    pub code: u32,
+    /// The accessibility window id the request named (resolved).
+    pub window: i32,
+    /// The `interactionId` the app must echo in the callback.
+    pub interaction_id: i32,
+    /// The `IWindow` binder whose connection the request went to.
+    pub window_binder: u64,
+}
+
+/// The bounded interaction log (an always-on service polls).
+const MAX_INTERACTIONS: usize = 128;
+
 /// One system-initiated bind waiting for the app's `publishService` reply.
 #[derive(Debug, Clone, PartialEq)]
 pub struct A11yPendingBind {
@@ -122,6 +172,16 @@ pub struct A11yState {
     pub next_bind_seq: i64,
     /// `disableSelf()` was called by the service.
     pub self_disabled: bool,
+    /// The LAYER1 window-manager state `getWindows` reads. `None` in a bare
+    /// host (unit tests construct that shape); the module then reports no
+    /// windows instead of inventing them.
+    pub windows: Option<Arc<Mutex<crate::wms::WmsState>>>,
+    /// accessibility window id assigned to each `IWindow` binder.
+    pub window_ids: Vec<(u64, i32)>,
+    /// Next accessibility window id (1-based, never reused).
+    pub next_window_id: i32,
+    /// Interaction requests relayed to an app connection (bounded).
+    pub interactions: Vec<A11yInteraction>,
 }
 
 /// Keep the event log bounded; an always-on UI sends thousands of events.
@@ -146,6 +206,10 @@ impl A11yState {
             bound_service: None,
             next_bind_seq: 0,
             self_disabled: false,
+            windows: None,
+            window_ids: Vec::new(),
+            next_window_id: 1,
+            interactions: Vec::new(),
         }
     }
 
@@ -318,6 +382,22 @@ impl A11yState {
                 serde_json::json!({"type": t, "count": n})
             }).collect::<Vec<_>>(),
             "service_bound": self.bound_service.is_some(),
+            "windows": self.window_list_readonly().into_iter().map(|w| serde_json::json!({
+                "id": w.id,
+                "window": format!("{:#x}", w.window),
+                "type": w.type_,
+                "layer": w.layer,
+                "bounds": [w.frame.0, w.frame.1, w.frame.2, w.frame.3],
+                "focused": w.focused,
+                "active": w.active,
+                "package": w.package,
+                "connection": w.connection.map(|c| format!("{c:#x}")),
+            })).collect::<Vec<_>>(),
+            "interactions": self.interactions.iter().map(|i| serde_json::json!({
+                "code": i.code,
+                "window": i.window,
+                "interaction_id": i.interaction_id,
+            })).collect::<Vec<_>>(),
             "bound_service": self.bound_service.as_ref().map(|b| serde_json::json!({
                 "component": b.component,
                 "binder": format!("{:#x}", b.binder),
@@ -334,6 +414,166 @@ impl A11yState {
             "self_disabled": self.self_disabled,
             "unsupported": self.unsupported,
         })
+    }
+
+    /// The accessibility window id for an `IWindow` binder, assigned on first
+    /// use and kept for the life of the session (AOSP's `AccessibilityWindowId`
+    /// is per window, not per registration).
+    pub fn window_id_for(&mut self, window: u64) -> i32 {
+        if let Some((_, id)) = self.window_ids.iter().find(|(w, _)| *w == window) {
+            return *id;
+        }
+        let id = self.next_window_id;
+        self.next_window_id = self.next_window_id.saturating_add(1);
+        self.window_ids.push((window, id));
+        id
+    }
+
+    /// Forget the id of a window that was removed.
+    pub fn forget_window(&mut self, window: u64) {
+        self.window_ids.retain(|(w, _)| *w != window);
+    }
+
+    /// The LAYER1 window stack, topmost first, with the accessibility facts
+    /// AOSP's `AccessibilityManagerService.getWindows` reports.
+    ///
+    /// The order and the layer are AOSP's: `getWindows` is ordered from the
+    /// topmost window down, and `getLayer()` is `count - 1 - index` (so the
+    /// topmost window has the largest layer). Everything else is read from the
+    /// window stack: the type, the frame and which window is focused.
+    pub fn window_snapshot(&mut self) -> Vec<A11yWindow> {
+        let Some(windows) = &self.windows else {
+            return Vec::new();
+        };
+        let (entries, focused) = {
+            let wms = windows
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let entries: Vec<(u64, i32, (i32, i32, i32, i32))> = wms
+                .wm
+                .layer_stack()
+                .ordered()
+                .into_iter()
+                .map(|entry| {
+                    (
+                        entry.window,
+                        entry.type_,
+                        (
+                            entry.frame.left,
+                            entry.frame.top,
+                            entry.frame.right,
+                            entry.frame.bottom,
+                        ),
+                    )
+                })
+                .collect();
+            (entries, wms.wm.focus)
+        };
+        let count = i32::try_from(entries.len()).unwrap_or(i32::MAX);
+        let mut out = Vec::with_capacity(entries.len());
+        // `ordered()` is bottom-first; AOSP reports topmost first.
+        for (index, (window, type_, frame)) in entries.into_iter().rev().enumerate() {
+            let id = self.window_id_for(window);
+            let record = self.connections.iter().find(|c| c.window == window);
+            let is_focused = focused == Some(window);
+            out.push(A11yWindow {
+                id,
+                window,
+                connection: record.map(|c| c.connection),
+                package: record.map(|c| c.package.clone()).unwrap_or_default(),
+                type_: a11y_window_type(type_),
+                layer: count - 1 - i32::try_from(index).unwrap_or(0),
+                frame,
+                focused: is_focused,
+                active: is_focused,
+            });
+        }
+        out
+    }
+
+    /// The same list as [`Self::window_snapshot`] without assigning new ids
+    /// (the report is built from `&self`); a window that was never registered
+    /// or listed keeps id `0`.
+    #[must_use]
+    pub fn window_list_readonly(&self) -> Vec<A11yWindow> {
+        let Some(windows) = &self.windows else {
+            return Vec::new();
+        };
+        let (entries, focused) = {
+            let wms = windows
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let entries: Vec<(u64, i32, (i32, i32, i32, i32))> = wms
+                .wm
+                .layer_stack()
+                .ordered()
+                .into_iter()
+                .map(|entry| {
+                    (
+                        entry.window,
+                        entry.type_,
+                        (
+                            entry.frame.left,
+                            entry.frame.top,
+                            entry.frame.right,
+                            entry.frame.bottom,
+                        ),
+                    )
+                })
+                .collect();
+            (entries, wms.wm.focus)
+        };
+        let count = i32::try_from(entries.len()).unwrap_or(i32::MAX);
+        let mut out = Vec::with_capacity(entries.len());
+        for (index, (window, type_, frame)) in entries.into_iter().rev().enumerate() {
+            let id = self
+                .window_ids
+                .iter()
+                .find(|(w, _)| *w == window)
+                .map(|(_, id)| *id)
+                .unwrap_or(0);
+            let record = self.connections.iter().find(|c| c.window == window);
+            let is_focused = focused == Some(window);
+            out.push(A11yWindow {
+                id,
+                window,
+                connection: record.map(|c| c.connection),
+                package: record.map(|c| c.package.clone()).unwrap_or_default(),
+                type_: a11y_window_type(type_),
+                layer: count - 1 - i32::try_from(index).unwrap_or(0),
+                frame,
+                focused: is_focused,
+                active: is_focused,
+            });
+        }
+        out
+    }
+
+    /// The window a service means by `accessibilityWindowId`:
+    /// `ACTIVE_WINDOW_ID` (and `ANY_WINDOW_ID`) resolve to the active one.
+    #[must_use]
+    pub fn resolve_window(&self, windows: &[A11yWindow], requested: i32) -> Option<usize> {
+        const ACTIVE_WINDOW_ID: i32 = 0x7fff_ffff;
+        const ANY_WINDOW_ID: i32 = -2;
+        match requested {
+            ACTIVE_WINDOW_ID | ANY_WINDOW_ID => windows.iter().position(|w| w.active),
+            -1 => None,
+            id => windows.iter().position(|w| w.id == id),
+        }
+    }
+
+    /// The accessibility window info for one id.
+    #[must_use]
+    pub fn window_by_id(&self, windows: &[A11yWindow], id: i32) -> Option<A11yWindow> {
+        windows.iter().find(|w| w.id == id).cloned()
+    }
+
+    /// Record one relayed interaction (bounded).
+    pub fn record_interaction(&mut self, interaction: A11yInteraction) {
+        if self.interactions.len() >= MAX_INTERACTIONS {
+            self.interactions.remove(0);
+        }
+        self.interactions.push(interaction);
     }
 
     /// The accessibility services the **installed package** declares.
@@ -416,6 +656,42 @@ impl A11yState {
             service_info: None,
             bind_info: pending.info.clone(),
         });
+    }
+}
+
+/// `AccessibilityWindowInfo`'s view of a window type, from the AOSP mapping
+/// (`AccessibilityWindowInfo.TYPE_*`).
+///
+/// `TYPE_APPLICATION` = 1, `TYPE_INPUT_METHOD` = 2, `TYPE_SYSTEM` = 3,
+/// `TYPE_ACCESSIBILITY_OVERLAY` = 4, `TYPE_SPLIT_SCREEN_DIVIDER` = 5,
+/// `TYPE_MAGNIFICATION_OVERLAY` = 6. Every other window kind is a system window
+/// (`TYPE_SYSTEM`), which is what AOSP reports for a window that is not one of
+/// the five named ones.
+#[must_use]
+pub fn a11y_window_type(type_: i32) -> i32 {
+    use acos_wm::layers::{
+        WindowKind, TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY, TYPE_ACCESSIBILITY_OVERLAY,
+        TYPE_APPLICATION_MEDIA, TYPE_INPUT_METHOD, TYPE_INPUT_METHOD_DIALOG,
+        TYPE_MAGNIFICATION_OVERLAY,
+    };
+    if type_ == TYPE_INPUT_METHOD || type_ == TYPE_INPUT_METHOD_DIALOG {
+        return 2;
+    }
+    if type_ == TYPE_ACCESSIBILITY_OVERLAY {
+        return 4;
+    }
+    if type_ == TYPE_MAGNIFICATION_OVERLAY
+        || type_ == TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY
+    {
+        return 6;
+    }
+    match WindowKind::of(type_) {
+        WindowKind::Application => 1,
+        // `TYPE_APPLICATION_MEDIA` is a sub-window drawn behind its activity;
+        // AOSP reports sub-windows as `TYPE_APPLICATION`.
+        WindowKind::SubWindow if type_ == TYPE_APPLICATION_MEDIA => 1,
+        WindowKind::SubWindow => 1,
+        _ => 3,
     }
 }
 
@@ -624,9 +900,11 @@ impl ServiceObject for A11yService {
                     connection,
                     package,
                 });
-                // `AccessibilityWindowId`: the image uses the interaction
-                // connection id as the window id (`AccessibilityWindowInfo`).
-                let id = i32::try_from(state.connections.len()).unwrap_or(i32::MAX);
+                // `AccessibilityWindowId`: one id per `IWindow`, assigned on
+                // first use and stable for the session. The same id is what
+                // `AccessibilityWindowInfo.getId()` reports, so a service that
+                // lists the windows can query the connection by id.
+                let id = state.window_id_for(window);
                 Ok(CallResult {
                     reply: vec![Value::Int(id)],
                     deliveries: Vec::new(),
@@ -636,6 +914,7 @@ impl ServiceObject for A11yService {
                 let window = args.first().and_then(Value::as_binder).map(|b| b.0);
                 if let Some(window) = window {
                     state.connections.retain(|c| c.window != window);
+                    state.forget_window(window);
                 }
                 Ok(CallResult {
                     reply: Vec::new(),
