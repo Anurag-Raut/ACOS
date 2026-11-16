@@ -61,6 +61,14 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+// The test also compiles against the driver *before* the reference model, to
+// show what each check adds: `ACOS_WIRE_VERSION` is what that driver lacks, so
+// name the two frames the checks use here.
+#ifndef ACOS_WIRE_VERSION
+enum { F_HELLO = 5, F_REF = 6 };
+enum { REF_ACQUIRE = 1, REF_RELEASE = 2 };
+#endif
+
 // ---------------------------------------------------------------- harness ----
 static int g_failures;
 static int g_check;

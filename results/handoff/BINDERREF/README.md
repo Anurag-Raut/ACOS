@@ -211,6 +211,19 @@ New checks, each failing before the change it covers:
 | 17 | a released object exported again gets a new node and is rooted | node release + re-root |
 | 18 | the re-exported node receives callbacks | node release + re-root |
 
+`driver-test-before.txt` / `driver-test-after.txt` are the *same* test binary
+against the driver from `aebe0009` and this branch:
+
+```
+not ok 13 … again=0x7f220a3838d8                       (no reuse)
+not ok 14 … failed=1 high-water 538840 -> 1040344 of 1040384   (map exhausted)
+not ok 15 … BR_RELEASE=0 BR_DECREFS=0                  (no release path)
+not ok 16 … dead_object replies +0                     (node not released)
+not ok 17 … wire=106 -> 106, re-rooted=0               (no new node)
+not ok 18 … delivered=0
+RESULT failures=6        ->        RESULT failures=0
+```
+
 Peer tests: `a_dropped_registration_releases_the_guest_node_over_the_wire`
 (hello → retain ×2 → release ×2 → one `F_REF` with the driver's wire handle) and
 `a_driver_without_the_handshake_never_gets_a_reference_frame`.
