@@ -556,3 +556,80 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod dns_tests {
+    use super::*;
+    use std::io::Write as _;
+
+    /// A short, private directory: an AF_UNIX `sun_path` holds 108 bytes, and the
+    /// checkout path is longer than that. This is the product's own convention
+    /// (`ShortSocketDir` uses `/run/user/<uid>` for the same reason), not `/tmp`.
+    fn scratch(tag: &str) -> PathBuf {
+        let uid = unsafe { libc::getuid() };
+        let dir = PathBuf::from(format!("/run/user/{uid}/acos-dns-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a short private socket dir");
+        dir
+    }
+
+    /// The responder must be reachable by an app uid: `/dev/socket/dnsproxyd` is
+    /// world-writable on a device (`srw-rw-rw-`) because every app connects to
+    /// it. A 0755 bind denies `connect()` to the guest uid and bionic then
+    /// answers `EAI_NODATA` without ever reaching this code — measured as the
+    /// first wall of session 3.
+    #[test]
+    fn dnsproxyd_socket_is_world_writable_and_answers() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = scratch("dns");
+        let proxy = serve_dnsproxyd(&dir).expect("the responder binds");
+        let mode = std::fs::symlink_metadata(proxy.path())
+            .expect("the socket exists")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o666, "dnsproxyd must be world-writable, got {mode:o}");
+
+        // Exactly the request bionic's `android_getaddrinfo_proxy` writes
+        // (`getaddrinfo <host> <serv> <flags> <family> <socktype> <protocol>
+        // <netid>` + NUL).
+        let mut s = UnixStream::connect(proxy.path()).expect("connect");
+        s.write_all(b"getaddrinfo localhost ^ 1024 0 1 0 0\0").expect("request");
+        s.shutdown(Shutdown::Write).ok();
+        let mut head = [0u8; 4];
+        s.read_exact(&mut head).expect("a query result code");
+        assert_eq!(&head[..3], b"222", "DnsProxyQueryResult, got {head:?}");
+        let mut more = [0u8; 4];
+        s.read_exact(&mut more).expect("the first address marker");
+        assert_eq!(i32::from_be_bytes(more), 1, "at least one address");
+        drop(s);
+
+        // Dropping the handle stops the loop and removes the socket: the zygote
+        // recycles a session's socket dir on every reset.
+        let path = proxy.path().to_path_buf();
+        drop(proxy);
+        assert!(!path.exists(), "the socket is removed when the session ends");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The addresses pasta configures and the addresses `LinkProperties` reports
+    /// are one set of constants, so the interface an app reads cannot drift from
+    /// the interface the namespace has.
+    #[test]
+    fn pasta_args_use_the_connectivity_constants() {
+        use acos_services::connectivity::{
+            NET_DNS_SERVER, NET_GUEST_ADDRESS, NET_GUEST_GATEWAY, NET_GUEST_PREFIX_LEN,
+        };
+        let ip = |a: [u8; 4]| format!("{}.{}.{}.{}", a[0], a[1], a[2], a[3]);
+        let args = pasta_args();
+        for (flag, expected) in [
+            ("-a", format!("{}/{}", ip(NET_GUEST_ADDRESS), NET_GUEST_PREFIX_LEN)),
+            ("-g", ip(NET_GUEST_GATEWAY)),
+            ("-D", ip(NET_DNS_SERVER)),
+        ] {
+            let at = args.iter().position(|a| a == flag).unwrap_or_else(|| panic!("{flag}"));
+            assert_eq!(args[at + 1], expected, "{flag} must match LinkProperties");
+        }
+    }
+}

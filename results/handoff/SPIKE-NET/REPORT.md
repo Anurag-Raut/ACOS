@@ -1,12 +1,19 @@
 # SPIKE-NET — report (ADR-0030 spike gate: real network through pasta)
 
-> **Session 2 update (2026-11-16).** The LAN block is now a proven boundary and the
-> seccomp `AF_INET` gate was found broken and fixed. Item 2's fixture exists and builds;
-> the app-level `acos verify --engine art` run and the A/B gate were **not** run — the
-> host disk crossed the gate (81 % → 87 %) before them. **Recommended default: `off`**
-> (strictly: no A/B numbers, so no evidence that `on` is free). The session-2 verdicts
-> are in [§10](#10-session-2-verdicts) and the transcript in
-> `research/spike-net/LOG.md` §"Session 2".
+> **Session 3 update (2026-11-16).** The app-level gate is **GO**: a real HTTPS GET of
+> `https://example.com` returns `HTTP 200` on screen through the session's namespace,
+> bionic's `dnsproxyd` proxy and the image's CA store, and the same APK fails honestly
+> with the flag off (`SecurityException`, no VALIDATED capability). `LinkProperties` is
+> at device parity (interface, address, DNS server, default route, DHCP server). The
+> **A/B gate was not produced**: `tools/bench` is broken at this commit (and on `main`)
+> — three defects fixed here, two open in other tracks — so no M3/M4/M5/M6/M7/M8, M2 PSS
+> or N=20 cell exists for either arm. **Recommended default: `off`**, now on measured
+> grounds rather than "no data": the boundary costs ~**30 MiB per session** (pasta
+> 27.6 MiB RSS + the shim shell; the 18 `iptables` execs are ~12 ms and the after-dump
+> ~2.4 ms), on a 74–109 MiB session. Session-3 verdicts are in
+> [§11](#11-session-3-verdicts-app-level-proof-parity-and-the-ab), the transcript in
+> `research/spike-net/LOG.md` §"Session 3"; evidence under
+> `results/handoff/SPIKE-NET/net-check/`.
 
 Branch `t3/spike-net` (worktree `/home/Qui/.t3/worktrees/acos/t3-2f28c6b2-bee01c021cecb8a6`).
 All spike code is gated on `ACOS_SPIKE_NET=1`; with the variable unset the sandbox flags,
@@ -289,3 +296,165 @@ is an `xtables-nft-multi` exec), one DNS responder thread in the launcher.
    `UnknownHostException`/`SocketException`) — closes items 4/5/6.
 2. `LinkProperties` addresses/DNS/routes in `acos-services::connectivity` (item 5 parity).
 3. The A/B gate, on a host under the disk gate.
+
+---
+
+## 11. Session 3 verdicts (app-level proof, parity, and the A/B)
+
+Branch `t3/spike-net-session-2-gate`, base `9cac941f`, commits `d05ce3cb` (app-level
+proof + parity) and the report commit. Everything still gated on `ACOS_SPIKE_NET=1`;
+with the flag unset the sandbox flags, the seccomp program, the connectivity bits and
+the `LinkProperties` bytes are the previous ones.
+
+| # | Item | Verdict | Evidence |
+|---|---|---|---|
+| 1 | pasta pinned, static, licence recorded (session 1) | **GO** | `research/spike-net/artifacts/passt-build.txt` (re-built this session: same sha256 `314c37e8…`) |
+| 2 | namespace: internet reachable, host loopback and LAN unreachable; the LAN block is a boundary | **GO** | §2, §10, `results/handoff/SPIKE-NET/boundary/`, `crates/acos-art/tests/spike_net_boundary.rs` |
+| 3 | seccomp allows `AF_INET`/`AF_INET6` only with the flag | **GO** | `seccomp::tests::socket_families_follow_the_spike_flag` (fails on session 1's code) |
+| 4 | dnsproxyd (netd replacement): the guest's resolver reaches it and gets answers | **GO** | §11.1; `results/handoff/SPIKE-NET/net-check/on/dnsproxyd-requests.log`; `dnsproxyd_socket_is_world_writable_and_answers` |
+| 5 | connectivity reports a validated INTERNET network **and** a real `LinkProperties` | **GO** | §11.2; `net-check/{on,off}/verdict.json`, `logcat.txt`; 3 `link_properties_tests` |
+| 6 | in-app HTTPS GET of `https://example.com` renders `HTTP 200`; flag off fails honestly | **GO** | §11.1/§11.3; `net-check/on/3-net-check-ok.png`, `net-check/off/3-net-check-offline.png` |
+| 7 | A/B (cold, warm, PSS, N=20 density) vs flag off, `ab-compare.py` gate | **BLOCKED — the bench harness is broken at this commit; only a lean substitute A/B exists** | §11.4/§11.5 |
+| 8 | default recommendation strictly from the A/B | **`off`** — no gate was produced, and the per-session memory cost measured outside the bench (+30 MiB) is far outside any noise band | §11.6 |
+
+### 11.1 Item 4/6 — the app-level proof, and the wall that was in the way
+
+`ACOS_SPIKE_NET=1 acos verify --engine art --apk fixtures/build/apps/net-check.apk
+--scenario scenarios/net-check.yaml` → **`pass` (10 steps)**:
+
+```
+NetCheck: connectivity active=100 internet=true validated=true iface=wlan0 addrs=1 dns=1 dnsList=1.1.1.1 routes=1
+NetCheck: dnsprobe dnsprobe exists=true canRead=true canWrite=true …
+NetCheck: body-first-bytes-len=256
+NetCheck: fetch result=HTTP 200
+dnsproxyd: req="getaddrinfo example.com ^ 1024 0 1 0 0" -> 222 answers=3
+```
+
+The wall, found in the guest's own words: `/dev/socket/dnsproxyd` did not exist for the
+app. Four different directories are bound at `/dev/socket`, and the verify/live path uses
+`launch.rs`'s (`<plan>/<tag>/sock` under the production zygote), not the session
+launcher's `sock_dir` session 1 had served. bionic's `android_getaddrinfo_proxy`
+therefore failed to `connect()` and answered `EAI_NODATA` — the app showed exactly
+`UnknownHostException: … No address associated with hostname`. `serve_dnsproxyd` now
+returns a stoppable handle and is started in **every** `/dev/socket` producer
+(`launch.rs`, `session.rs`, `app.rs`), `0666` like the device's socket. TLS needed
+nothing: the image's CA store trusts `example.com` as-is.
+
+### 11.2 Item 5 — `LinkProperties` parity
+
+`describeNetwork()` in the fixture now prints the DNS server values, and the scenario
+asserts `iface=wlan0 addrs=1 dns=1 dnsList=1.1.1.1 routes=1` on top of
+`internet=true validated=true`. Reported values are the namespace's real ones:
+`169.254.2.15/24`, DNS `1.1.1.1`, default route `0.0.0.0/0 via 169.254.2.1 dev wlan0`,
+DHCP server `169.254.2.1`, MTU 1500, `wlan0`. They are constants in
+`acos-services::connectivity` and `spike_net::pasta_args()` builds `-a/-g/-D` from them,
+so the interface pasta configures and the one apps read cannot drift (a test asserts it).
+
+Codec work this needed (not a stub): `FieldOp::AddressList` (int count +
+`writeByteArray` per address, IPv6 scope-id form included) and specs for
+`android.net.LinkAddress`, `android.net.RouteInfo` and `android.net.IpPrefix`; the
+`LinkProperties` spec's three `Int(0)` counts became variable-length lists. Flag-off
+bytes are unchanged (an empty list writes the same `0`), and
+`flag_off_keeps_every_list_empty` pins it.
+
+### 11.3 Item 6, flag off — the honest failure
+
+`env -u ACOS_SPIKE_NET acos verify --engine art --scenario scenarios/net-check-offline.yaml`
+→ **`pass` (9 steps)**, i.e. the failure is asserted, not tolerated:
+
+```
+connectivity … internet=true validated=false iface=wlan0 addrs=0 dns=0 dnsList=none routes=0
+dnsprobe exists=false …
+fetch failed: java.lang.SecurityException: Permission denied (missing INTERNET permission?)
+fetch result=java.lang.SecurityException
+```
+
+Session 2 predicted `UnknownHostException`/`SocketException`. The measured class is
+`java.lang.SecurityException`: the seccomp filter denies `socket(AF_INET)` with `EACCES`
+and libcore's `IoBridge` maps that to `SecurityException(… missing INTERNET permission?)`
+before any name is resolved. The offline scenario accepts either class and the logcat
+records which one happened. No fake success, no VALIDATED bit, no socket.
+
+### 11.4 Item 7 — the A/B gate was not produced: `tools/bench` is broken
+
+Run exactly as documented (`acos-bench.sh --no-build --reps 1 --latency-reps 10
+--fast-reps 16 --task SPIKE-NET`, own `--target-dir`/`--scratch-root`, `ACOS_ART_BIN` and
+the arm's env exported; the driver is `research/spike-net/ab/run-arm.sh`), every phase fails **before a number is produced**, on the off
+arm as well as the on arm:
+
+| defect | location | state |
+|---|---|---|
+| `NameError: _environ_has` | `d2_warm.py` `survivors()` | **fixed here** (Python twin of `tools/bench/reap-daemons.sh::bench_environ_has`) |
+| `NameError: _record_daemon` | `d2_warm.py` `Serve.__init__` | **fixed here** (appends `pid starttime` to `ACOS_BENCH_PIDFILE`) |
+| `UnboundLocalError: cohort` | `acos_bench.py` `phase_loop` | **fixed here** (initialised before the `try`; it masked the real error) |
+| `RuntimeError: two consecutive settled captures differ: [None, None]` | `phase_latency` | **open** — 4.8 s failure on the off arm too |
+| `RuntimeError: reference tree is not the count-0 screen: count='0' nodes=14` | `phase_cold` | **open** — stored reference tree no longer matches the rendering |
+
+These are not this spike's regressions: `git diff main HEAD -- tools/bench` is empty, so
+`main` (`a9d351b2`) fails identically, and nothing has run the bench since the
+zygote-owner commits. Closing the last two means re-baselining a reference tree and
+redefining "settled" — rel3/PERF-REL3 decisions, and re-baselining to make a gate pass is
+exactly what the rules forbid.
+
+### 11.5 What could still be measured (substitute, clearly not M3/M4/M4-PSS)
+
+Interleaved, same binary, same scenario, alternating arms, `acos verify --engine art` on
+`hello-views` (`research/spike-net/ab/lean-ab.sh`, 2 reps/arm; per-run artifacts
+   deleted):
+
+| measurement | flag off | flag on |
+|---|---|---|
+| launch step wall (`steps[0].wall_ms`) | 155, 155 ms | 154, 155 ms |
+| ART session boot (`session_start_ms`) | 177, 177 ms (one cold boot-image build: 3894 ms) | 176, 219 ms |
+| session cgroup **peak**, `hello-views` | 108, 109 MiB | 144, 147 MiB |
+| session cgroup **peak**, `net-check` | 74 MiB | 104 MiB |
+
+Per-session cost of the boundary itself (direct measurement, not inference):
+
+| part | cost |
+|---|---|
+| `pasta` process (production flags, re-execs into `passt.avx2`) | **27.6 MiB RSS**, 1 thread |
+| the shim's `/bin/sh` (resident for the session: it writes the after-dump) | ~4 MiB RSS |
+| chain install **and** rule-by-rule verification (1 `-N`, 5 `-A`, `OUTPUT` jump, 5 `-C`, 1 `-C`) | **7 ms** |
+| the before+after dumps = 4 of the 18 `iptables` execs | **≈2.4 ms** (10 × `iptables -S` = 6 ms) |
+| pasta + shim end to end (netns + userns + chain + 2 dumps) | **31 / 36 / 42 ms** wall |
+
+So the shim's after-dump is **not** what costs: the cost is `pasta` (~28 MiB RSS, one
+process per session) plus its shell, and the execs are noise. The +30 MiB cgroup delta is
+exactly pasta + shim.
+
+### 11.6 Default recommendation — `off`
+
+Strictly from the A/B the answer is unchanged from sessions 1–2: **no gate was produced,
+so `on` is not proven free**. This session adds the reason to keep it `off` even before
+the bench works: an extra `pasta` process per session costs **~28 MiB RSS resident plus
+~4 MiB of shim shell** (measured session delta +30 MiB on a 74–109 MiB session, i.e.
++28 % to +40 %), while its wall cost is ~31–42 ms at session start with no detectable
+change in the launch step (155 vs 154/155 ms). A +30 MiB per-session regression is
+outside any noise band the gate can express.
+
+> **Default `off`** for v0.4.0: `real` is attach-on-demand until (a) the bench runs the
+> four tracked metrics again, and (b) the per-session cost is either accepted by the
+> owner as a module cost or reduced (one pasta per *session* is the design; a shared
+> pasta relay would change ADR-0030 §3 and needs its own security review).
+
+### 11.7 Remaining work, smallest first
+
+1. Repair the bench (`phase_latency` settle capture, `phase_cold` reference) on its own
+   track, then run item 7 for real (`--reps 3`, interleaved, `--exclusive`,
+   `ab-compare.py`). The three harness defects fixed here are already in this branch.
+2. If the owner wants `real` as the default despite the memory cost: make the shim's
+   after-dump optional (it is 4 of 18 execs, ≈2.4 ms — a diagnostic, not a boundary) and
+   re-measure; it will not recover the 28 MiB.
+3. Productise: pasta discovery/version in `acos doctor`, packaging, the `iptables` guard
+   owned by the module (not a shell shim), `DnsProxy` as a service with
+   `gethostbyname` + netd `DnsResolver` binder, then the hot controls (offline/online,
+   latency/loss, HAR proxy).
+
+### 11.8 One residual finding, unrelated to the gate
+
+`android.net.LocalSocketImpl.connectLocal` has **no native implementation** in this
+image (the fixture's raw-socket probe reports `UnsatisfiedLinkError: No implementation
+found for void android.net.LocalSocketImpl.connectLocal(…)`). Nothing in the gate depends
+on it (bionic's resolver is C, not `LocalSocket`), but any app using `LocalSocket` on
+ACOS will fail. Not fixed here — it is an image/libcore gap, not a network one.

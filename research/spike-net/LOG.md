@@ -264,3 +264,162 @@ the `ConnectivityManager`/`NetworkCapabilities`/`LinkProperties` report. Scenari
   were produced, so the default stays `off`.
 * `LinkProperties` addresses/DNS/routes: still empty (`connectivity.rs` unchanged);
   item 5 remains PARTIAL.
+
+# Session 3 (branch `t3/spike-net-session-2-gate`) — the app-level proof, parity, and the A/B
+
+Started from `9cac941f` (session 2). Goal: finish the ADR-0030 gate — items 4/5/6 at
+app level, item 5 parity, item 7's A/B — and set the default strictly from the A/B.
+
+## 1. Rebuild the pieces the worktree did not have
+
+The worktree is fresh, so: `cargo build --release -p acos-cli -p acos-art` into
+`.cache/sn3-target` (1 m 10 s + 53 s), `pasta` re-built from the pinned tag
+(`make static VERSION=2026_10_02.cba3570`, 6.5 s, sha256 identical to session 1's
+`314c37e8…`), `net-check.apk` re-built (12 756 B).
+
+First run failed on the scenario, not the network: `engine: art` is not in the
+scenario loader's vocabulary (`native-preferred | native-only | reference-only`).
+That is v0.3.0 track B's known CLI/YAML mismatch; the CLI `--engine art` selects
+the engine, so the field is gone from `scenarios/net-check.yaml`.
+
+## 2. Item 4: why the resolver was dead — the wrong `/dev/socket`
+
+With `ACOS_SPIKE_NET=1` the app reported
+`java.net.UnknownHostException: … No address associated with hostname`
+(`EAI_NODATA`). Instrumenting the responder (env-gated request log) showed **zero
+connections**: bionic never reached the socket.
+
+A guest-side probe in the fixture (new `id=dnsprobe`, kept — it is what found
+this) said: `exists=false`, and its own `System.loadLibrary("netd_client")` failed
+with `… /system/lib64/libnetd_client.so … is not accessible for the namespace
+"clns-2"` — that error is the *app's* classloader namespace refusing a non-public
+library, i.e. the probe's own attempt, not libc's internal `dlopen`.
+
+Reading where `/dev/socket` comes from settled it: **four** different directories
+are bound at `/dev/socket`, and the verify path uses
+`launch.rs`'s `sockets.0` (`<plan>/<tag>/sock` under the production zygote, a short
+`/run/user/<uid>/…` dir otherwise), not the session launcher's `sock_dir` where
+session 1 had put the responder (`session.rs`). So `/dev/socket/dnsproxyd` did not
+exist in the app's mount view, bionic's `android_getaddrinfo_proxy` failed to
+`connect()` and `getaddrinfo` answered `EAI_NODATA` — exactly the "No address
+associated with hostname" the app showed.
+
+Fix, at the level of the class rather than the one site: `serve_dnsproxyd` now
+returns a `DnsProxy` handle (Drop stops the accept loop via a self-connect and
+removes the socket) and is started in **every** directory that becomes
+`/dev/socket` — `launch.rs` (the verify/live path), `session.rs`, `app.rs`
+(`render-app`) — through `serve_dnsproxyd_if_enabled`, which is a no-op without
+the flag. The socket is `0666` like the device's (`srw-rw-rw-`; SELinux, not DAC,
+restricts it on Android), with the reasoning in the code.
+
+Result (evidence `results/handoff/SPIKE-NET/net-check/on/`):
+
+```
+NetCheck: connectivity active=100 internet=true validated=true iface=wlan0 \
+          addrs=1 dns=1 dnsList=1.1.1.1 routes=1
+NetCheck: dnsprobe dnsprobe exists=true canRead=true canWrite=true …
+NetCheck: body-first-bytes-len=256
+NetCheck: fetch result=HTTP 200
+dnsproxyd request log: req="getaddrinfo example.com ^ 1024 0 1 0 0" -> 222 answers=3
+```
+
+`acos verify --engine art` → `pass` (10 steps). Item 6 done; DNS/TLS through the
+image's CA store work with no extra CA work.
+
+## 3. Item 5 parity: `LinkProperties`
+
+The app's report was `iface=wlan0 addrs=0 dns=0 routes=0`. `connectivity.rs` now
+returns the namespace's real interface behind the flag: `169.254.2.15/24`, DNS
+`1.1.1.1`, default route `0.0.0.0/0 via 169.254.2.1 dev wlan0`, DHCP server
+`169.254.2.1`. One source of truth: those addresses are constants in
+`acos-services::connectivity`, and `spike_net::pasta_args()` formats its
+`-a/-g/-D` flags from them, so pasta cannot configure one interface while apps
+read another.
+
+The wire side needed real codec work, not a stub: `FieldOp::AddressList` (int
+count + `writeByteArray` per address, with the IPv6 scope-id form) and specs for
+`android.net.LinkAddress`, `android.net.RouteInfo`, `android.net.IpPrefix`; the
+`LinkProperties` spec now has variable-length lists where it had three `Int(0)`
+counts. Without the flag every list is empty, and an empty list writes the same
+`0` the old `Int(0)` wrote, so the flag-off bytes are unchanged.
+
+Now `addrs=1 dns=1 dnsList=1.1.1.1 routes=1` and the scenario asserts it.
+
+## 4. Flag off: the honest failure is a `SecurityException`, not `UnknownHostException`
+
+With the flag unset (new `scenarios/net-check-offline.yaml`, which asserts the
+failure so "off still works" is a verdict):
+
+```
+connectivity … internet=true validated=false iface=wlan0 addrs=0 dns=0 dnsList=none routes=0
+dnsprobe exists=false …
+fetch failed: java.lang.SecurityException: Permission denied (missing INTERNET permission?)
+fetch result=java.lang.SecurityException
+```
+
+Session 2 predicted `UnknownHostException`/`SocketException`; the measured class
+is `java.lang.SecurityException`, because the seccomp filter denies
+`socket(AF_INET)` with `EACCES` and libcore's `IoBridge` turns that into
+`SecurityException: Permission denied (missing INTERNET permission?)` before any
+name is resolved. The scenario accepts either, and the report says which happened.
+`acos verify` → `pass` (9 steps): no fake success, no VALIDATED bit, no socket.
+
+## 5. Tests (each fails on the code before this session)
+
+* `acos-art --lib dns_tests::dnsproxyd_socket_is_world_writable_and_answers` — the
+  socket mode is 0666 (the measured first wall), a real bionic request gets
+  `222` + one address, and dropping the handle removes the socket.
+* `acos-art --lib dns_tests::pasta_args_use_the_connectivity_constants` — the
+  drift guard for the addresses above.
+* `acos-services --lib link_properties_tests::{flag_on_reports_…,
+  flag_off_keeps_every_list_empty, validated_capability_follows_the_flag}`.
+* Whole `acos-services` suite green (86 lib + every integration test), plus the
+  `parcelable` DEX oracle test (which is what proves the new spec orders).
+
+## 6. Item 7: the A/B gate — the bench harness is broken at this commit
+
+`tools/bench/acos-bench.sh` (with `--no-build`, my own target dir and scratch, and
+`ACOS_ART_BIN`/`ACOS_SPIKE_NET*` exported) fails on this branch **and on `main`**
+before any number is produced:
+
+| defect | where | state |
+|---|---|---|
+| `NameError: _environ_has` | `tools/art-runtime/d2_warm.py:363` (`survivors`) | **fixed here** (Python twin of `bench_environ_has`) |
+| `NameError: _record_daemon` | `d2_warm.py:314` (`Serve.__init__`) | **fixed here** (appends `pid starttime` to `ACOS_BENCH_PIDFILE`) |
+| `UnboundLocalError: cohort` | `tools/bench/acos_bench.py` `phase_loop` | **fixed here** (initialise before the `try`; it masked the real error) |
+| `RuntimeError: two consecutive settled captures differ: [None, None]` | `phase_latency` | **open** — fails in 4.8 s on the *off* arm too |
+| `RuntimeError: reference tree is not the count-0 screen: count='0' nodes=14` | `phase_cold` | **open** — the stored reference tree no longer matches the current rendering |
+
+So no M3/M4/M5/M6/M7/M8, no M2 PSS and no N=20 cell were produced, on either arm.
+Fixing the last two would mean re-baselining a reference tree and changing what
+"settled" means — both are other tracks' decisions (rel3 settle, PERF-REL3), not
+this spike's, and re-baselining to make a gate pass is exactly what the rules
+forbid.
+
+## 7. What the flag costs, measured without the bench
+
+Lean, interleaved substitute on the launch path (same binary, same scenario,
+alternating arms, `acos verify --engine art` on `hello-views`, `.cache/ab/lean-ab.sh`):
+
+| measurement | flag off | flag on |
+|---|---|---|
+| launch step wall (`steps[0].wall_ms`, 2 reps/arm) | 155, 155 ms | 154, 155 ms |
+| ART session boot (`session_start_ms`) | 177, 177 ms (one cold image build: 3894) | 176, 219 ms |
+| session cgroup **peak** (`hello-views`) | 108, 109 MiB | 144, 147 MiB |
+| session cgroup **peak** (`net-check`) | 74 MiB | 104 MiB |
+
+Direct per-session costs of the boundary (measured, not inferred):
+
+* `pasta` process: **27.6 MiB RSS**, 1 thread (`/proc/<pid>/status` of the real
+  binary with the production flags; it re-execs into `passt.avx2`).
+* the shim's `/bin/sh`: ~4 MiB RSS, resident for the whole session (it is what
+  writes the after-dump).
+* the whole chain install **and** verification (1 `-N`, 5 `-A`, 1 `-C`/`-A` on
+  `OUTPUT`, 5 `-C`, 1 `-C` on the jump): **7 ms**; 10 × `iptables -S` = 6 ms, so
+  the **before+after dumps (4 of the 18 `iptables` execs) cost ≈ 2.4 ms**.
+* pasta + shim end to end (netns/userns setup + chain + 2 dumps): **31, 36, 42 ms**
+  wall per session.
+
+So the after-dump is **not** what costs: the cost is `pasta` itself (~28 MiB RSS,
+one process per session) plus the shim's shell; the execs are noise (≈12 ms for
+all 18). The +30 MiB session-cgroup delta matches pasta + shim.

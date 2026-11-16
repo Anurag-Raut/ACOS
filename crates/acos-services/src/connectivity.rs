@@ -901,3 +901,113 @@ fn request_id_of(value: Option<&Value>) -> Option<i32> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod link_properties_tests {
+    use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    /// The flag is process-wide, so these tests take turns.
+    static ENV: Mutex<()> = Mutex::new(());
+
+    fn with_flag<T>(on: bool, f: impl FnOnce() -> T) -> T {
+        let _guard: MutexGuard<'_, ()> = ENV.lock().unwrap_or_else(|e| e.into_inner());
+        // The mutex makes this the only thread of this test binary that touches
+        // the flag; no other test reads it (`grep ACOS_SPIKE_NET`).
+        if on {
+            std::env::set_var("ACOS_SPIKE_NET", "1");
+        } else {
+            std::env::remove_var("ACOS_SPIKE_NET");
+        }
+        let out = f();
+        std::env::remove_var("ACOS_SPIKE_NET");
+        out
+    }
+
+    fn list(value: &Value) -> Vec<Value> {
+        match value {
+            Value::List(Some(items)) => items.clone(),
+            other => panic!("expected a list, got {other:?}"),
+        }
+    }
+
+    /// Item 5 parity: with the network attached, `getLinkProperties()` describes
+    /// the interface the namespace really has — the guest address, the DNS
+    /// server DHCP handed out, and a default route through pasta's gateway.
+    #[test]
+    fn flag_on_reports_the_namespaces_interface_addresses_dns_and_route() {
+        let lp = with_flag(true, default_link_properties);
+        let fields = lp.fields().expect("an ordered LinkProperties payload");
+
+        assert_eq!(
+            fields[0],
+            Value::Str(Some("wlan0".to_string())),
+            "interface name"
+        );
+
+        let addrs = list(&fields[1]);
+        assert_eq!(addrs.len(), 1, "one link address");
+        let Value::Parcelable(Parcelable::Ordered { class, values }) = &addrs[0] else {
+            panic!("a LinkAddress parcelable");
+        };
+        assert_eq!(class, "android.net.LinkAddress");
+        assert_eq!(
+            values[0],
+            Value::ByteArray(Some(NET_GUEST_ADDRESS.to_vec())),
+            "the address pasta configures"
+        );
+        assert_eq!(values[1], Value::Int(i32::from(NET_GUEST_PREFIX_LEN)));
+
+        let dns = list(&fields[2]);
+        assert_eq!(dns.len(), 1, "one DNS server");
+        assert_eq!(dns[0], Value::ByteArray(Some(NET_DNS_SERVER.to_vec())));
+
+        assert_eq!(fields[3], Value::List(Some(Vec::new())), "no private DNS");
+        assert_eq!(
+            fields[8],
+            Value::ByteArray(Some(NET_GUEST_GATEWAY.to_vec())),
+            "the DHCP server is pasta's gateway"
+        );
+
+        let routes = list(&fields[11]);
+        assert_eq!(routes.len(), 1, "one default route");
+        let Value::Parcelable(Parcelable::Ordered { class, values }) = &routes[0] else {
+            panic!("a RouteInfo parcelable");
+        };
+        assert_eq!(class, "android.net.RouteInfo");
+        assert_eq!(
+            values[1],
+            Value::ByteArray(Some(NET_GUEST_GATEWAY.to_vec())),
+            "the route's gateway"
+        );
+        assert_eq!(values[2], Value::Str(Some("wlan0".to_string())));
+    }
+
+    /// The flag-off payload is the one ACOS shipped: nothing to describe, and the
+    /// wire bytes are an explicit zero count per list (the previous `Int(0)`
+    /// fields and an empty `List` are byte-identical).
+    #[test]
+    fn flag_off_keeps_every_list_empty() {
+        let lp = with_flag(false, default_link_properties);
+        let fields = lp.fields().expect("an ordered LinkProperties payload");
+        for index in [1, 2, 3, 6, 11] {
+            assert_eq!(
+                fields[index],
+                Value::List(Some(Vec::new())),
+                "field {index} must stay empty without the network module"
+            );
+        }
+        assert_eq!(fields[8], Value::ByteArray(None), "no DHCP server address");
+    }
+
+    /// The flag adds `NET_CAPABILITY_VALIDATED` and nothing else.
+    #[test]
+    fn validated_capability_follows_the_flag() {
+        let bit = 1i64 << CAP_VALIDATED;
+        let off = with_flag(false, default_capabilities_bits);
+        assert_eq!(off & bit, 0, "flag off must not claim a validated network");
+        let on = with_flag(true, default_capabilities_bits);
+        assert_ne!(on & bit, 0, "flag on reports the network as validated");
+        assert_eq!(on & !bit, off, "no other capability changes");
+    }
+}
