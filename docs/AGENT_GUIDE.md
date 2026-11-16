@@ -184,6 +184,44 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    `state_changed: false` with `accepted: true` means the event was delivered
    but the screen did not change — read the in-band `note` and `changes`.
    Identity rule, compared fields and the 40-entry cap: `docs/MCP.md` §1c.
+   **`handled` is the app's own answer, and it is the one you branch on.**
+   Every `acos_tap`/`acos_key`/`acos_text`/`acos_swipe` reply (and every
+   scenario `tap`/`type`/`key`/`back` step JSON, under `input`) carries
+   `handled`: the bit the app window passed to Android's
+   `InputEventReceiver.finishInputEvent(handled)`. It is the framework's
+   verdict, not a guess from pixels:
+
+   - `handled: false` — **nothing in the app consumed the input.** A tap on a
+     label whose row is not pressable (the switch beside it is) is exactly this:
+     `state_changed: false` is then the correct, expected outcome, not a broken
+     tap. The same reply's `target` names what happened: `target.node` is the
+     node the selector resolved to, `target.hit.node` is what the injected point
+     actually hit (its `class`, `text`/`content_desc`, `bounds`, `clickable`),
+     `target.hit.consumer` is the nearest clickable ancestor-or-self (`null`
+     when there is none), and `target.hit.suggest` is the nearest clickable node
+     off that branch — the switch, the row's pressable, the button. A
+     `handled_hint` spells it out: *"nothing tappable there … tap the nearest
+     clickable android.widget.Switch … instead"*.
+   - `handled: true` + `state_changed: false` — the app **did** consume it and
+     the settled frame still shows no change: the handler may be asynchronous,
+     or the control already had that state. `handled_hint` says so. Assert on
+     the state you expect rather than expecting a change.
+   - `handled: true` + `state_changed: true` — the press was consumed and the
+     screen changed; `changes` says what.
+   - `handled: null` — the guest did not ack every event
+     (`handled_evidence.acked` < `published`): **unknown**, never reported as
+     "not handled". `handled_evidence` always travels with the boolean
+     (`source`, `published`, `acked`, `unhandled` seqs).
+
+   Two consequences worth knowing. (a) `state_changed` is evidence about the
+   screen; `handled` is evidence about the app. An agent that only reads
+   `state_changed` cannot tell "nothing tappable there" from "handled, nothing
+   changed" — read `handled` first. (b) The hit-test in `target.hit` is
+   computed from the tree the tap resolved against (visible rects, deepest
+   node first); it tells you *what is there*. `handled` tells you *whether the
+   app took it*. When they disagree (`hit.clickable: true`, `handled: false`)
+   the control was hit but refused the press — disabled, or a parent
+   intercepted it.
 6. **Read the app's own words.** `acos_logs` returns the guest log buffer and
    also `launched` / `stage_reached`, so an empty buffer is only clean if the
    app actually reached `onCreate`. The **default view is `min_priority: "W"`
@@ -421,6 +459,17 @@ A scenario step is a fixed document: it keeps first-match-plus-`index`.)
   latency-sensitive probing only: it may be mid-animation, it is **never**
   assertion evidence, and `acos_assert` rejects it with `INVALID_ARGUMENT`.
   Scenarios cannot request fast for an assertion step at all.
+* **A `tap` step always runs its own state-change check** (`expect_change:
+  auto`). The step JSON's `input` block says `expect_change: "auto"` for every
+  tap, so this is no longer hidden: when the tap's settled frame differs from
+  the previous observation, the step additionally requires the change to be
+  visible in **both** the UI tree and the screenshot (`state_change` assertion),
+  and fails with `ASSERTION_FAILED` if only one moved. A tap that the app did
+  not handle (`input.handled: false`) or that changed nothing
+  (`state_changed: false`) passes with an `input_delivery` assertion and an
+  explanatory message — the auto rule never asks a no-op tap to repaint. Set
+  `expect_change: true` when you want "this tap must change something" to be a
+  hard requirement; `input.expect_change` then reads `true`.
 * Strict settle does *not* require pixels to change. `expect_change: true` on a
   `tap`/`type`/`key`/`back` step is the opt-in that does: `pixels_changed:false`
   then fails with `ASSERTION_FAILED` / `details.reason: "expect_change"`.

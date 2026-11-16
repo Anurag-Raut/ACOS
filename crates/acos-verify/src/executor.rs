@@ -1602,7 +1602,15 @@ fn expect_change_requested(step: &Step) -> bool {
 /// scenario's explicit flag for `type`/`key`/`back`.
 fn step_input(step: &Step, observation: Option<&SessionObservation>) -> Option<serde_json::Value> {
     let expect_change = match step.as_step() {
-        Some(StepRef::Tap(_)) => serde_json::json!("auto"),
+        // A tap's state-change rule runs on every step, so an unflagged tap says
+        // `"auto"` - never a silent `false` that hides the rule.
+        Some(StepRef::Tap(tap)) => {
+            if tap.expect_change {
+                serde_json::json!(true)
+            } else {
+                serde_json::json!("auto")
+            }
+        }
         Some(StepRef::Type(ty)) => serde_json::json!(ty.expect_change),
         Some(StepRef::Key(key)) => serde_json::json!(key.expect_change),
         Some(StepRef::Back(back)) => serde_json::json!(back.expect_change),
@@ -3118,6 +3126,90 @@ mod region_tests {
         assert!(detail.contains("display region [0,0][4,4]"), "{detail}");
         assert!(detail.contains("display origin [0,4]"), "{detail}");
         assert_eq!(evaluated.error.unwrap().code(), ErrorCode::AssertionFailed);
+    }
+
+    /// REL3E: a tap step's JSON says `expect_change: "auto"` explicitly (the
+    /// step's own state-change rule runs whether or not the scenario asked), it
+    /// carries the app window's `handled` answer and the target block, and a tap
+    /// the app never handled passes with that fact instead of a claim.
+    #[test]
+    fn rel3e_tap_step_reports_handled_target_and_expect_change_auto() {
+        const HEAD: &str = "version: 1\nname: rel3e\napp: dev.acos.fixtures.taptargets\n\
+             isolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, \
+             density_dpi: 420}\n";
+        let scenario = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - tap:\n      selector: {{id: title}}\n"
+        ))
+        .expect("a one-tap scenario");
+        let step = scenario.steps.first().expect("the tap step");
+        assert!(matches!(step.as_step(), Some(StepRef::Tap(_))));
+
+        let previous = observation(&[[0, 0, 0, 255]], 1, 1);
+        let mut current = observation(&[[0, 0, 0, 255]], 1, 1);
+        current.input = Some(InputDelivery {
+            delivered: true,
+            visual_change: false,
+            handled: Some(false),
+            published: 2,
+            acks: vec![
+                crate::backend::InputAck {
+                    seq: 1,
+                    handled: false,
+                    latency_us: Some(900),
+                },
+                crate::backend::InputAck {
+                    seq: 2,
+                    handled: false,
+                    latency_us: Some(950),
+                },
+            ],
+            target: Some(serde_json::json!({
+                "selector": {"id": "title"},
+                "hit": {"node": {"class": "android.widget.TextView"}, "suggest": {"class": "android.widget.Switch"}},
+            })),
+            settle: None,
+        });
+        let input = step_input(step, Some(&current)).expect("a tap step always has input evidence");
+        assert_eq!(input["handled"], serde_json::json!(false));
+        assert_eq!(input["expect_change"], serde_json::json!("auto"));
+        assert_eq!(input["handled_evidence"]["source"], serde_json::json!("finishInputEvent"));
+        assert_eq!(input["handled_evidence"]["published"], serde_json::json!(2));
+        assert_eq!(input["handled_evidence"]["acked"], serde_json::json!(2));
+        assert_eq!(
+            input["handled_evidence"]["unhandled"],
+            serde_json::json!([1, 2]),
+            "the unhandled event seqs are named"
+        );
+        assert_eq!(input["target"]["selector"]["id"], serde_json::json!("title"));
+
+        // The finding must not turn "nothing consumed it" into a failure, and it
+        // must not claim a state change either.
+        let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default());
+        assert!(evaluated.result.passed, "{:?}", evaluated.result);
+        assert_eq!(evaluated.result.kind, "input_delivery");
+        let message = evaluated.result.message.unwrap_or_default();
+        assert!(message.contains("did not consume"), "{message}");
+        let actual = evaluated.result.actual.expect("the measured facts");
+        assert_eq!(actual["delivered"], serde_json::json!(true));
+        assert_eq!(actual["handled"], serde_json::json!(false));
+        assert_eq!(actual["visual_change"], serde_json::json!(false));
+        assert_eq!(actual["acks"], serde_json::json!(2));
+
+        // A step that explicitly asked for a change says `true`, not "auto".
+        let flagged = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - tap:\n      selector: {{id: title}}\n      \
+             expect_change: true\n"
+        ))
+        .expect("a flagged tap scenario");
+        let input = step_input(flagged.steps.first().expect("the tap step"), Some(&current))
+            .expect("input evidence");
+        assert_eq!(input["expect_change"], serde_json::json!(true));
+
+        // No delivery at all is "unknown", never "not handled".
+        current.input = None;
+        let input = step_input(step, Some(&current)).expect("input evidence");
+        assert_eq!(input["handled"], serde_json::Value::Null);
+        assert_eq!(input["handled_evidence"]["source"], serde_json::json!("none"));
     }
 
     #[test]

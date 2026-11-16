@@ -318,10 +318,16 @@ fn tool_returns(tool: &ToolInfo) -> &'static str {
         "acos_observe_tree" => {
             "`nodes[]` (id, class, resource_id, text, content_desc, bounds, visible/\nenabled/focused/clickable/scrollable), `windows`, `truncated`, `max_nodes`"
         }
-        "acos_tap" => "`accepted`, `state_changed`, `input_ack_seq` and `pixels_changed` when it was measured",
-        "acos_text" => "`accepted`, `state_changed`, `text_path` (`input-connection` or `key-events`)",
-        "acos_key" => "`accepted`, `state_changed`, `input_ack_seq`",
-        "acos_swipe" => "`accepted`, `state_changed`, the injected gesture seqs",
+        "acos_tap" => {
+            "`handled` (the app window's own `finishInputEvent` answer), `accepted`, \n`state_changed`, `target` (resolved node + the hit-test at the injected point, \nwith the clickable node to tap instead), `acks` and `pixels_changed` when measured"
+        }
+        "acos_text" => {
+            "`handled`, `accepted`, `state_changed`, `target` (the field the text went to) \nand `text_path` (`input-connection` or `key-events`)"
+        }
+        "acos_key" => "`handled`, `accepted`, `state_changed`, `target`, `acks`",
+        "acos_swipe" => {
+            "`handled`, `accepted`, `state_changed`, `target` and the injected gesture seqs; \non the ART engine swipe is still `unsupported` (a structured refusal, never a fake send)"
+        }
         "acos_logs" => "`logs[]` (priority, tag, message, line, repeat_count), `total`/`count`, `filter`, `stage_reached`, `crash`",
         "acos_status" => "`launched`, `stage_reached`, `published_frames`, `package`/`activity`, `capabilities`",
         "acos_doctor" => "`checks[]` with pass/fail and a concrete `fix` per failing check",

@@ -2978,6 +2978,10 @@ fn input_envelope(
             "session_id": session_id,
             "action": kind,
             "accepted": report.accepted,
+            // REL3E: the app window's own `finishInputEvent(handled)` answer,
+            // carried by the VM's native ack hook. `null` = the guest did not
+            // ack every event, never "not handled".
+            "handled": report.handled,
             "state_changed": report.state_changed,
             "input_ack_seq": report.ack_seqs.last().copied(),
             "text_path": report.path,

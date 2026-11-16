@@ -217,6 +217,12 @@ for app in counter todo-list multi-activity form-validation settle-lab thread-he
     build_apk "$app"
 done
 
+# tap-targets is the REL3E input-handling fixture: a non-clickable label whose
+# clickable switch sits beside it (a tap there is a press the app never
+# consumes: `finishInputEvent(handled) = false`) and a clickable button that
+# changes state (handled = true). See fixtures/apps/tap-targets/res/layout/main.xml.
+build_apk tap-targets
+
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).

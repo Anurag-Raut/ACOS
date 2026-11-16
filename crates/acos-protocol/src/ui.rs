@@ -667,6 +667,17 @@ impl TapHit<'_> {
     }
 }
 
+/// The child list that contains the node whose id is `id` (its siblings,
+/// including itself), anywhere in the tree.
+fn sibling_nodes<'a>(nodes: &'a [UiNode], id: &str) -> Option<&'a [UiNode]> {
+    if nodes.iter().any(|node| node.id == id) {
+        return Some(nodes);
+    }
+    nodes
+        .iter()
+        .find_map(|node| sibling_nodes(&node.children, id))
+}
+
 /// Append the visible nodes whose rect contains `(x, y)`, root first.
 ///
 /// A hidden node hides its whole subtree, matching `visible`'s definition (a
@@ -785,11 +796,28 @@ impl UiTree {
         let suggestion = if consumer.is_some() {
             None
         } else {
-            self.all_nodes()
-                .into_iter()
-                .filter(|node| node.visible && node.clickable)
-                .filter(|node| !best.iter().any(|on_path| on_path.id == node.id))
-                .min_by_key(|node| TapHit::distance(node, x, y))
+            // A **sibling** of the deepest node on the path wins over anything
+            // further away: the switch beside a row's label is the control that
+            // owns the state, even when a button in the next row is closer to
+            // the finger. Only when no level of the path has a clickable
+            // sibling does the nearest clickable node anywhere answer.
+            best.iter()
+                .rev()
+                .find_map(|on_path| {
+                    sibling_nodes(&self.nodes, &on_path.id).and_then(|siblings| {
+                        siblings
+                            .iter()
+                            .filter(|node| node.id != on_path.id && node.visible && node.clickable)
+                            .min_by_key(|node| TapHit::distance(node, x, y))
+                    })
+                })
+                .or_else(|| {
+                    self.all_nodes()
+                        .into_iter()
+                        .filter(|node| node.visible && node.clickable)
+                        .filter(|node| !best.iter().any(|on_path| on_path.id == node.id))
+                        .min_by_key(|node| TapHit::distance(node, x, y))
+                })
         };
         TapHit {
             path: best,
@@ -1205,5 +1233,65 @@ mod tests {
             "bounds=[0,0][100,100] include_invisible=true"
         );
         assert_eq!(Selector::default().human(), "<empty selector>");
+    }
+
+    /// REL3E: the hit-test answers "what is at this point", deepest node first,
+    /// and ranks a clickable **sibling** above a nearer clickable node in
+    /// another subtree - the switch beside a row's label is the control that
+    /// owns the state even when a button below is closer to the finger.
+    #[test]
+    fn tap_hit_finds_the_deepest_node_and_prefers_a_clickable_sibling() {
+        let label = UiNode::new("label", "android.widget.TextView", Bounds::new(40, 300, 660, 405))
+            .with_text("Floating button");
+        let switch = UiNode::new("switch", "android.widget.Switch", Bounds::new(670, 300, 1040, 405))
+            .with_text("Floating button")
+            .clickable(true);
+        let row = UiNode::new("row", "android.widget.LinearLayout", Bounds::new(40, 300, 1040, 430))
+            .with_children(vec![label, switch]);
+        // A clickable button in the next row is geometrically closer to (350,350)
+        // than the switch is, and must still lose to the sibling.
+        let button = UiNode::new("inc", "android.widget.Button", Bounds::new(40, 430, 280, 560))
+            .with_text("Increment")
+            .clickable(true);
+        let root = UiNode::new("root", "android.widget.LinearLayout", Bounds::new(0, 0, 1080, 2400))
+            .with_children(vec![row, button]);
+        let tree = UiTree::new(frame(), "dev.acos.fixtures.taptargets", vec![root]);
+
+        let hit = tree.tap_hit(350, 350);
+        assert_eq!(hit.path.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), vec!["root", "row", "label"]);
+        assert_eq!(hit.node().map(|n| n.id.as_str()), Some("label"));
+        assert_eq!(hit.consumer, None, "neither the label nor its ancestors are clickable");
+        assert_eq!(
+            hit.suggestion.map(|n| n.id.as_str()),
+            Some("switch"),
+            "the sibling switch wins over the nearer button in another row"
+        );
+
+        // The switch itself is a consumer: no suggestion, and the hit node is it.
+        let hit = tree.tap_hit(800, 350);
+        assert_eq!(hit.node().map(|n| n.id.as_str()), Some("switch"));
+        assert_eq!(hit.consumer.map(|n| n.id.as_str()), Some("switch"));
+        assert_eq!(hit.suggestion, None);
+
+        // A clickable ancestor is the consumer even when the leaf takes no click.
+        let inner = UiNode::new("inner", "android.widget.TextView", Bounds::new(60, 320, 200, 380))
+            .with_text("Row title");
+        let pressable =
+            UiNode::new("pressable", "android.view.ViewGroup", Bounds::new(40, 300, 660, 405))
+                .with_children(vec![inner])
+                .clickable(true);
+        let root = UiNode::new("root", "android.widget.LinearLayout", Bounds::new(0, 0, 1080, 2400))
+            .with_children(vec![pressable]);
+        let tree = UiTree::new(frame(), "dev.acos.fixtures.taptargets", vec![root]);
+        let hit = tree.tap_hit(100, 350);
+        assert_eq!(hit.node().map(|n| n.id.as_str()), Some("inner"));
+        assert_eq!(hit.consumer.map(|n| n.id.as_str()), Some("pressable"));
+
+        // A point outside every rect hits nothing at all (the root is a real
+        // node, so only a point outside the root is empty).
+        let empty = tree.tap_hit(2000, 2000);
+        assert!(empty.path.is_empty());
+        assert_eq!(empty.node(), None);
+        assert_eq!(empty.consumer, None);
     }
 }
