@@ -1,0 +1,27 @@
++ A=.cache/modloc3-target/release/acos
++ R=results/handoff/MODLOC3
++ rm -rf results/handoff/MODLOC3/v-location-probe results/handoff/MODLOC3/v-location-geocoder results/handoff/MODLOC3/v-location-live-detach results/handoff/MODLOC3/v-sensors-scripted
++ .cache/modloc3-target/release/acos verify results/handoff/MODLOC2/location-probe.yaml --engine art --artifacts results/handoff/MODLOC3/v-location-probe
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, location:scripted attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, net.telephony, hw.bluetooth, hw.biometric, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  artifacts: results/handoff/MODLOC3/v-location-probe
+  steps: 12
++ .cache/modloc3-target/release/acos verify results/handoff/MODLOC2/location-geocoder.yaml --engine art --artifacts results/handoff/MODLOC3/v-location-geocoder
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, location:scripted attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, net.telephony, hw.bluetooth, hw.biometric, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  artifacts: results/handoff/MODLOC3/v-location-geocoder
+  steps: 3
++ .cache/modloc3-target/release/acos verify results/handoff/MODLOC2/location-live-detach.yaml --engine art --artifacts results/handoff/MODLOC3/v-location-live-detach
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  artifacts: results/handoff/MODLOC3/v-location-live-detach
+  steps: 12
++ .cache/modloc3-target/release/acos verify scenarios/sensors-scripted.yaml --engine art --artifacts results/handoff/MODLOC3/v-sensors-scripted
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  artifacts: results/handoff/MODLOC3/v-sensors-scripted
+  steps: 16

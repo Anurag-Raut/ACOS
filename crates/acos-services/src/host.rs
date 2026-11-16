@@ -182,6 +182,29 @@ pub trait ServiceObject: Send {
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
         Vec::new()
     }
+
+    /// The next instant at which this object's **own schedule** will have a
+    /// `system -> app` delivery ready (`None` = it has no timed feed).
+    ///
+    /// A timed feed is driven by the peer, not by a timer thread: the peer's
+    /// idle turn asks for this, sleeps until exactly that instant (or until a
+    /// guest frame arrives, whichever is first) and then calls
+    /// [`Self::advance_timed`]. That is what keeps an idle session with no timed
+    /// module at zero wakeups, and it is why a scheduled delivery lands on its
+    /// deadline instead of on the next poll.
+    fn next_delivery_deadline(&self) -> Option<std::time::Instant> {
+        None
+    }
+
+    /// Advance this object's schedule to `now`, queueing every delivery that is
+    /// due (and at most one extra, so a late wakeup never storms the guest).
+    ///
+    /// Called only from [`ServiceHost::take_timed_deliveries`], i.e. from the
+    /// peer's idle turn, for the same locking reason as
+    /// [`Self::drain_raw_deliveries`].
+    fn advance_timed(&mut self, now: std::time::Instant) {
+        let _ = now;
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
@@ -296,6 +319,12 @@ pub struct ServiceHost {
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
     constructions: u64,
+    /// Binder handles the guest still holds from a **detached** module, mapped
+    /// to the module id. ADR-0029 item 2: a detach removes the registration, but
+    /// the guest's `BinderProxy` still carries the old handle; a transaction on
+    /// it must answer the structured "module is off, attach it" error naming the
+    /// module, never a bare `unknown binder handle` that no agent can act on.
+    dead: HashMap<u64, &'static str>,
     /// The `INotificationManager` state, kept here so the runtime (which plays
     /// the system-UI role) can surface a toast the app asked for. Android shows
     /// a text toast from `NotificationManagerService` in the system process;
@@ -364,6 +393,7 @@ impl ServiceHost {
             declared: Vec::new(),
             notifications: Vec::new(),
             deliveries: Vec::new(),
+            dead: HashMap::new(),
             trace: None,
             seq: AtomicU64::new(1),
             constructions: 0,
@@ -446,10 +476,35 @@ impl ServiceHost {
         descriptor: &'static str,
         object: Box<dyn ServiceObject>,
     ) -> BinderId {
+        // One node per descriptor: a module taking over a name `core` serves
+        // (`location`) replaces that node instead of adding a second binder with
+        // the same descriptor, which would make `checkService` ambiguous and
+        // leave a stray binder behind when one of them is removed.
+        if self.dynamic_descriptor(descriptor).is_some() {
+            self.remove_descriptor(descriptor);
+        }
         let binder = self.register_dynamic(descriptor, object);
         self.names.insert(name, descriptor);
         self.notify_registered(name);
         binder
+    }
+
+    /// Drop any dynamic node registered under `descriptor` (there is at most one
+    /// after [`Self::register_dynamic_named`]'s takeover rule, but a node may
+    /// have been registered by [`Self::register_dynamic`] without a name).
+    fn dynamic_descriptor(&self, descriptor: &str) -> Option<u64> {
+        self.binder_descriptors
+            .iter()
+            .find(|(id, existing)| **existing == descriptor && self.dynamic.contains_key(id))
+            .map(|(id, _)| *id)
+    }
+
+    fn remove_descriptor(&mut self, descriptor: &'static str) -> Option<BinderId> {
+        let id = self.dynamic_descriptor(descriptor)?;
+        self.dynamic.remove(&id);
+        self.binder_descriptors.remove(&id);
+        self.registry.remove(BinderId(id));
+        Some(BinderId(id))
     }
 
     /// Give a descriptor that is already registered a second
@@ -549,6 +604,17 @@ impl ServiceHost {
         self.binder_descriptors.remove(&binder.0);
         self.registry.remove(binder);
         Some(binder)
+    }
+
+    /// Remember that a detached module used to answer `binder`, so the guest's
+    /// stale proxy gets the structured "module is off" error (see `dead`).
+    pub fn mark_detached_binder(&mut self, binder: BinderId, module: &'static str) {
+        self.dead.insert(binder.0, module);
+    }
+
+    /// Drop every dead-handle record (a module re-attach replaces them).
+    pub fn clear_detached_binders(&mut self, module: &str) {
+        self.dead.retain(|_, owner| *owner != module);
     }
 
     /// Snapshot the registration tables so a module's registrations can be
@@ -1221,11 +1287,30 @@ impl ServiceHost {
         reply: &mut Parcel,
         oneway: bool,
     ) -> Result<CallInfo> {
+        if !self.binder_descriptors.contains_key(&binder.0) {
+            if let Some(module) = self.dead.get(&binder.0).copied() {
+                let interface = data
+                    .peek_interface_token()
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                return Err(ServiceError::ModuleUnavailable {
+                    service: format!("binder {:#x}", binder.0),
+                    interface,
+                    module,
+                    attach: crate::module::attach_call(
+                        module,
+                        crate::module::Profile::Scripted,
+                    ),
+                });
+            }
+            return Err(ServiceError::UnknownBinder { handle: binder.0 });
+        }
         let binder_descriptor = self
             .binder_descriptors
             .get(&binder.0)
             .copied()
-            .ok_or(ServiceError::UnknownBinder { handle: binder.0 })?
+            .unwrap_or("<unknown>")
             .to_string();
 
         // The interface token is authoritative (it is what `enforceInterface`
@@ -1597,6 +1682,40 @@ impl ServiceHost {
     /// Drain `system -> app` deliveries queued by service handlers.
     pub fn take_deliveries(&mut self) -> Vec<PendingDelivery> {
         std::mem::take(&mut self.deliveries)
+    }
+
+    /// Drain the deliveries a **dynamic** object produced from its own thread
+    /// (a module's timed feed: `location`'s `play_track`, a sensor or camera
+    /// stream).
+    ///
+    /// Only the peer's idle tick calls this (`Peer::tick`), because a dynamic
+    /// object's `drain_raw_deliveries` may take its own state lock: a caller
+    /// that already holds that lock (a test scoring the compositor state, an
+    /// action handler) would deadlock, which is exactly why this is not folded
+    /// into [`Self::take_deliveries`].
+    pub fn take_timed_deliveries(&mut self) -> Vec<PendingDelivery> {
+        let now = std::time::Instant::now();
+        for object in self.dynamic.values_mut() {
+            object.advance_timed(now);
+        }
+        let mut out = std::mem::take(&mut self.deliveries);
+        for object in self.dynamic.values_mut() {
+            out.append(&mut object.drain_raw_deliveries());
+        }
+        out
+    }
+
+    /// The earliest instant at which a dynamic object's own schedule has a
+    /// delivery ready (`None` = nothing scheduled, so the peer may sleep until
+    /// a guest frame arrives).
+    ///
+    /// Read-only, and saturating: an object that is due *now* answers `now`.
+    #[must_use]
+    pub fn next_timed_deadline(&self) -> Option<std::time::Instant> {
+        self.dynamic
+            .values()
+            .filter_map(|object| object.next_delivery_deadline())
+            .min()
     }
 
     /// Drain lifecycle/log events from every constructed service.

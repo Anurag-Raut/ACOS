@@ -31,7 +31,9 @@
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::os::unix::io::RawFd;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use acos_parcel::binder::BINDER_TYPE_FD;
 use acos_parcel::{BinderId, BinderKind, FlatObject, Parcel};
@@ -909,12 +911,51 @@ impl Peer {
     }
 
     /// The `system -> app` frames queued by anything that ran on the host (a
-    /// binder transaction, or a module's live `control` op). Public so the
-    /// launcher can flush them after a control request, which is not followed
-    /// by a binder transaction of its own.
+    /// binder transaction, or a module's live `control` op).
+    ///
+    /// [`Self::tick`] is what the launcher calls after a control request and on
+    /// the idle turn: a control op can park a delivery in the module's **own**
+    /// object (that is where a scripted feed lives), and only the timed drain
+    /// reaches it. This plain drain stays for the transaction path.
     pub fn take_delivery_frames(&mut self) -> Vec<Frame> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());
+        self.frames_for_deliveries(pending)
+    }
+
+    /// Deliveries that became ready while the guest was idle.
+    ///
+    /// A scripted/timed module (`location`'s `play_track`, a sensor or camera
+    /// feed) queues a `system -> app` delivery from its own thread. Without a
+    /// tick the peer only drains deliveries after a guest transaction, so the
+    /// app would see the feed only when it happened to call something. The peer
+    /// loop asks [`Self::next_timed_deadline`] how long it may sleep and calls
+    /// this when that deadline (or a guest frame) arrives.
+    pub fn tick(&mut self) -> Vec<Frame> {
+        // `take_timed_deliveries` (not the plain queue): a module's feed lives in
+        // the module's own object, which only this idle turn may lock, and it
+        // advances a timed schedule (`Module::advance_timed`) to the instant the
+        // peer slept until.
+        let mut pending = std::mem::take(&mut self.local_deliveries);
+        pending.extend(self.host.take_timed_deliveries());
+        self.frames_for_deliveries(pending)
+    }
+
+    /// The instant the earliest **module** delivery is due.
+    ///
+    /// `None` means no attached module has a timed feed, so the peer may sleep
+    /// until the guest speaks: an idle session with no timed module has zero
+    /// wakeups (the fixed 20 ms poll this replaces woke it 50 times a second).
+    /// A delivery that is already queued answers `now`.
+    #[must_use]
+    pub fn next_timed_deadline(&self) -> Option<Instant> {
+        if !self.local_deliveries.is_empty() {
+            return Some(Instant::now());
+        }
+        self.host.next_timed_deadline()
+    }
+
+    fn frames_for_deliveries(&mut self, mut pending: Vec<acos_services::PendingDelivery>) -> Vec<Frame> {
         // Defence in depth: even the frames produced in one turn are bounded, so a
         // single transaction that fans out into thousands of reverse deliveries
         // cannot grow this turn's `out` without limit.
@@ -1208,5 +1249,74 @@ pub fn host_binder_kind(id: BinderId) -> BinderKind {
         BinderKind::Proxy
     } else {
         BinderKind::Local
+    }
+}
+
+/// What an idle wait produced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdleWake {
+    /// The guest wrote something: read a frame.
+    Frame,
+    /// A module's scheduled delivery is due: call [`Peer::tick`].
+    Deadline,
+    /// The launcher woke the peer (`stop` pipe): it is stopping the session, or
+    /// it queued a module request (attach/detach/control) that the idle turn
+    /// must pick up.
+    Wake,
+}
+
+/// Sleep until the guest has a frame to read (`fd`), the module `deadline`
+/// elapses, or the launcher's wake pipe (`stop_fd`) fires.
+///
+/// `deadline` is the **remaining** time (see [`Peer::next_timed_deadline`]);
+/// `None` sleeps until a frame or the stop wake, i.e. forever when neither
+/// happens. That is the whole idle policy: no fixed poll interval, no wakeup a
+/// caller did not ask for.
+///
+/// # Errors
+///
+/// The `poll(2)` error, so a broken socket is reported instead of spun on.
+pub fn wait_for_idle(
+    fd: RawFd,
+    stop_fd: RawFd,
+    deadline: Option<Duration>,
+) -> std::io::Result<IdleWake> {
+    let timeout_ms: libc::c_int = match deadline {
+        None => -1,
+        Some(remaining) => {
+            let micros = remaining.as_micros().min(i64::MAX as u128) as i64;
+            // Round **up**: waking 1 ms early would tick before the deadline and
+            // then sleep again, which is exactly the poll the deadline replaces.
+            libc::c_int::try_from((micros + 999) / 1000).unwrap_or(libc::c_int::MAX)
+        }
+    };
+    let mut fds = [
+        libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        },
+        libc::pollfd {
+            fd: stop_fd,
+            events: libc::POLLIN,
+            revents: 0,
+        },
+    ];
+    loop {
+        let ready = unsafe { libc::poll(fds.as_mut_ptr(), 2, timeout_ms) };
+        if ready < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+        if fds[1].revents != 0 {
+            return Ok(IdleWake::Wake);
+        }
+        if fds[0].revents != 0 {
+            return Ok(IdleWake::Frame);
+        }
+        return Ok(IdleWake::Deadline);
     }
 }

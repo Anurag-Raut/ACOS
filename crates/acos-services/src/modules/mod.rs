@@ -3,6 +3,7 @@
 pub mod accessibility;
 pub mod biometric;
 pub mod bluetooth;
+pub mod location;
 pub mod notifications;
 pub mod permissions;
 pub mod sensors;

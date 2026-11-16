@@ -239,6 +239,11 @@ build_apk a11y-probe
 # clients answered. Built at targetSdk 34 like the module scenario corpus.
 build_apk tail-probe
 
+# location-probe is the MODLOC fixture: it shows `getLastKnownLocation`, live
+# updates from a scripted track and the geocoder state on screen, so a scenario
+# can assert what the app really received (fixtures/apps/location-probe).
+build_apk location-probe
+
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).

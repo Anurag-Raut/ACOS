@@ -854,6 +854,31 @@ pub trait Module: Send {
     fn take_session_handles(&mut self) -> Option<crate::registry::LiveHandles> {
         None
     }
+
+    /// The node that answers this module's name while it is **off**.
+    ///
+    /// ADR-0029's default is "no node": the name answers `null` (AOSP's own
+    /// missing path) or the gap tombstone. A few names have no such path on a
+    /// real device, so they need a present-but-disabled node. There are two ways
+    /// to get one and they are not interchangeable:
+    ///
+    /// * **`core` publishes it** and the module fills it
+    ///   ([`crate::core_module::FILLED_BY_MODULE`], ADR-0029 note MODSENS) — this
+    ///   is what `sensorservice` and `location` do, because their framework
+    ///   client caches the proxy for the process's life and a hot attach must
+    ///   reuse the binder. The module has no `off_node`; a detach empties the
+    ///   node in place.
+    /// * **the module hands one back here** when the name is the module's own and
+    ///   no client caches the proxy: [`ModuleRegistry::detach`] installs it after
+    ///   the attach scope has been rolled back (so it is not undone with the
+    ///   module's own registrations). No shipped module needs this today.
+    ///
+    /// A returned node must answer the *disabled* device state, never data:
+    /// the conformance kit's honest-report check rejects a detached module whose
+    /// name still serves a working answer.
+    fn off_node(&self) -> Option<Box<dyn ServiceObject>> {
+        None
+    }
 }
 
 /// The AOSP behaviour a tombstone name is decided by.
@@ -1146,10 +1171,11 @@ impl ServiceObject for TombstoneService {
     fn raw_transact(
         &mut self,
         interface: &str,
-        _code: u32,
+        code: u32,
         _data: &mut acos_parcel::Parcel,
-        _reply: &mut acos_parcel::Parcel,
+        reply: &mut acos_parcel::Parcel,
     ) -> Result<bool> {
+        let _ = (code, reply);
         Err(self.tombstone.error(interface))
     }
 }
@@ -1213,6 +1239,7 @@ impl ModuleRegistry {
             Box::new(crate::modules::notifications::NotificationsModule::new()),
             Box::new(crate::modules::sensors::SensorsModule::new()),
             Box::new(crate::modules::vibrator::VibratorModule::new()),
+            Box::new(crate::modules::location::LocationModule::new()),
             Box::new(crate::modules::telephony::TelephonyModule::new()),
             Box::new(crate::modules::bluetooth::BluetoothModule::new()),
             Box::new(crate::modules::biometric::BiometricModule::new()),
@@ -1399,6 +1426,8 @@ impl ModuleRegistry {
             host.remove_service(name);
             self.tombstoned.retain(|tombstoned| tombstoned != name);
         }
+        let id_for_attach = self.entries[index].module.manifest().id;
+        host.clear_detached_binders(id_for_attach);
         let attach_result = self.entries[index].module.attach(host, profile, config);
         match attach_result {
             Ok(()) => {
@@ -1442,8 +1471,9 @@ impl ModuleRegistry {
             return Ok(());
         }
         self.entries[index].module.detach(host)?;
+        let mut freed = Vec::new();
         if let Some(scope) = self.entries[index].scope.take() {
-            host.end_scope(scope);
+            freed = host.end_scope(scope);
         }
         // A feature another attached module still provides stays on; one this
         // module alone published is turned off again.
@@ -1466,8 +1496,16 @@ impl ModuleRegistry {
         }
         let id = self.entries[index].module.manifest().id;
         self.attached_order.retain(|attached| *attached != id);
+
         // The name is now unserved again: put its tombstone back, so a detached
         // module's name never falls back to a silent null.
+        // Only the module that *owns* a name restores its tombstone. `core`
+        // provides several names another module takes over (`location`), and
+        // detaching `core` must not put a tombstone back for a name whose owner
+        // is still a different, detached module: the registry installs those on
+        // the next `install_tombstones`, and restoring them here would leave a
+        // registration behind after a detach (the kit's
+        // `detaching_core_removes_its_registrations` check).
         let restore: Vec<&'static Tombstone> = self.entries[index]
             .module
             .manifest()
@@ -1475,12 +1513,28 @@ impl ModuleRegistry {
             .iter()
             .filter_map(|service| tombstone_for(service.name))
             .filter(|tombstone| tombstone.reaction == AospReaction::Tombstone)
+            .filter(|tombstone| tombstone.module == id)
             .filter(|tombstone| !self.tombstoned.contains(&tombstone.name))
             .collect();
         for tombstone in restore {
             install_tombstone(host, tombstone);
             self.tombstoned.push(tombstone.name);
         }
+        // ADR-0029 item 2: the guest may still hold a `BinderProxy` for each
+        // handle this detach freed. Answering a bare `unknown binder handle`
+        // would be a service-layer error an agent cannot act on, so the handles
+        // are remembered and answer the structured "module is off, attach it".
+        let id_for_dead = self.entries[index].module.manifest().id;
+        for binder in freed {
+            host.mark_detached_binder(binder, id_for_dead);
+        }
+        // Every module that is still off and has a documented disabled node
+        // (see [`Module::off_node`]) answers its name again. This is what makes
+        // a detach return the host to the same state the session started in.
+        // (A node `core` publishes and a module fills — `sensorservice`,
+        // `location` — is emptied by the module's own `detach` and is rolled back
+        // with `core`'s registrations; no shipped module needs this hook.)
+        self.install_off_nodes(host);
         Ok(())
     }
 
@@ -1749,6 +1803,42 @@ impl ModuleRegistry {
             install_tombstone(host, tombstone);
             self.tombstoned.push(tombstone.name);
             installed.push(tombstone.name);
+        }
+        // The other half of "off is honest": a name that a real device always
+        // publishes has a documented disabled node instead of a tombstone
+        // ([`Module::off_node`]). It is installed here so every launch path gets
+        // the device's disabled answer before the guest boots, and so the
+        // conformance kit's baseline is the same state a detach restores.
+        self.install_off_nodes(host);
+        installed
+    }
+
+    /// Install the honest "off" node of every module that is not attached and
+    /// declares one ([`Module::off_node`]).
+    ///
+    /// Idempotent: a name already answered by the same node is replaced, never
+    /// duplicated (`ServiceHost::register_dynamic_named` keeps one node per
+    /// descriptor).
+    pub fn install_off_nodes(&mut self, host: &mut ServiceHost) -> Vec<&'static str> {
+        let mut installed = Vec::new();
+        for entry in &self.entries {
+            if entry.profile.is_attached() {
+                continue;
+            }
+            let manifest = entry.module.manifest();
+            let Some(node) = entry.module.off_node() else {
+                continue;
+            };
+            // One node per module: it answers the module's first provided name,
+            // which is the one a phone always publishes.
+            let Some(service) = manifest.services.first() else {
+                continue;
+            };
+            if tombstone_for(service.name).is_some() {
+                continue;
+            }
+            host.register_dynamic_named(service.name, service.descriptor, node);
+            installed.push(service.name);
         }
         installed
     }

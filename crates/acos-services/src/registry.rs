@@ -531,11 +531,13 @@ pub fn install_with_handles_and_insets(
     // `acos-aidl` table (their own `raw_transact` answers the exact wire
     // shape), so they are dynamic nodes registered under their real
     // `ServiceManager` names — `checkService` answers on the first try.
-    host.register_dynamic_named(
-        "location",
-        crate::extras::LOCATION_DESCRIPTOR,
-        Box::new(crate::extras::LocationService::new()),
-    );
+    //
+    // MODLOC3: `location` is `core`'s node as well
+    // (`core_module::FILLED_BY_MODULE`). What is published here is the
+    // disabled-device answer; the `location` module fills the same object while
+    // it is attached, so a guest's cached `ILocationManager` proxy survives a
+    // hot attach and a detach only empties the node again.
+    crate::modules::location::install(host);
     host.register_dynamic_named(
         "trust",
         crate::extras::TRUST_DESCRIPTOR,

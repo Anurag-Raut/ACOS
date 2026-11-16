@@ -136,6 +136,11 @@ fn the_bluetooth_and_biometric_modules_pass_the_conformance_kit() {
 }
 
 #[test]
+fn the_location_module_passes_the_conformance_kit() {
+    run_in_quiet_process("location");
+}
+
+#[test]
 fn a_gap_name_answers_a_structured_tombstone_naming_the_module_and_the_attach_call() {
     let mut host = ServiceHost::new();
     let mut registry = ModuleRegistry::standard();
@@ -332,7 +337,23 @@ fn detaching_core_removes_its_registrations() {
         .check_service("package")
         .expect("lookup is infallible")
         .is_none());
-    assert!(host2.service_names().is_empty());
+    // Every core registration is gone, `location` included. The `location` node
+    // is **core's** now (`core_module::FILLED_BY_MODULE`, ADR-0029 note MODSENS:
+    // the module fills it while attached and a detach empties it in place), so it
+    // is rolled back with the rest instead of surviving as a second,
+    // module-owned node. Nothing survives a `core` detach.
+    assert!(
+        host2.service_names().is_empty(),
+        "a core detach must leave no registration behind, got {:?}",
+        host2.service_names()
+    );
+    assert!(
+        host2
+            .check_service("location")
+            .expect("lookup is infallible")
+            .is_none(),
+        "the location node is core's, so detaching core removes it"
+    );
 }
 
 #[test]

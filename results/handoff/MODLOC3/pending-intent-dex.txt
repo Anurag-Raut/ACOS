@@ -1,0 +1,69 @@
+MODLOC3 item 2 probe: how the framework delivers a location through a PendingIntent
+image dex: /home/Qui/Projects/acos/.cache/boot/android-34/dex/services/classes2.dex
+
+== deliverOnLocationChanged ==
+CLASS Lcom/android/server/location/provider/LocationProviderManager$LocationPendingIntentTransport;
+METHOD deliverOnLocationChanged (Landroid/location/LocationResult;Landroid/os/IRemoteCallback;)V
+  0000 op=71 Landroid/app/BroadcastOptions;->makeBasic()Landroid/app/BroadcastOptions;
+  0003 op=0c 
+  0004 op=12 
+  0005 op=6e Landroid/app/BroadcastOptions;->setDontSendToRestrictedApps(Z)V
+  0008 op=16 
+  000a op=12 
+  000b op=13 
+  000d op=1a ""
+  000f op=07 
+  0010 op=74 Landroid/app/BroadcastOptions;->setTemporaryAppAllowlist(JIILjava/lang/String;)V
+  0013 op=22 Landroid/content/Intent;
+  0015 op=70 Landroid/content/Intent;-><init>()V
+  0018 op=6e Landroid/location/LocationResult;->getLastLocation()Landroid/location/Location;
+  001b op=0c 
+  001c op=1a "location"
+  001e op=6e Landroid/content/Intent;->putExtra(Ljava/lang/String;Landroid/os/Parcelable;)Landroid/content/Intent;
+  0021 op=0c 
+  0022 op=6e Landroid/location/LocationResult;->size()I
+  0025 op=0a 
+  0026 op=37 
+  0028 op=6e Landroid/location/LocationResult;->asList()Ljava/util/List;
+  002b op=0c 
+  002c op=12 
+  002d op=23 [Landroid/location/Location;
+  002f op=72 Ljava/util/List;->toArray([Ljava/lang/Object;)[Ljava/lang/Object;
+  0032 op=0c 
+  0033 op=1f 
+  0035 op=1a "locations"
+  0037 op=6e Landroid/content/Intent;->putExtra(Ljava/lang/String;[Landroid/os/Parcelable;)Landroid/content/Intent;
+  003a op=38 
+  003c op=22 Lcom/android/server/location/provider/LocationProviderManager$LocationPendingIntentTransport$$ExternalSyntheticLambda0;
+  003e op=70 Lcom/android/server/location/provider/LocationProviderManager$LocationPendingIntentTransport$$ExternalSyntheticLambda0;-><init>(Landroid/os/IRemoteCallback;)V
+  0041 op=28 
+  0042 op=12 
+  0043 op=54 
+  0045 op=54 
+  0047 op=6e Landroid/app/BroadcastOptions;->toBundle()Landroid/os/Bundle;
+  004a op=0c 
+  004b op=71 Lcom/android/server/location/provider/LocationProviderManager$PendingIntentSender;->send(Landroid/app/PendingIntent;Landroid/content/Context;Landroid/content/Intent;Ljava/lang/Runnable;Landroid/os/Bundle;)V
+  004e op=0e 
+
+== deliverOnProviderEnabledChanged ==
+CLASS Lcom/android/server/location/provider/LocationProviderManager$LocationPendingIntentTransport;
+METHOD deliverOnProviderEnabledChanged (Ljava/lang/String;Z)V
+  0000 op=71 Landroid/app/BroadcastOptions;->makeBasic()Landroid/app/BroadcastOptions;
+  0003 op=0c 
+  0004 op=12 
+  0005 op=6e Landroid/app/BroadcastOptions;->setDontSendToRestrictedApps(Z)V
+  0008 op=54 
+  000a op=54 
+  000c op=12 
+  000d op=22 Landroid/content/Intent;
+  000f op=70 Landroid/content/Intent;-><init>()V
+  0012 op=1a "providerEnabled"
+  0014 op=6e Landroid/content/Intent;->putExtra(Ljava/lang/String;Z)Landroid/content/Intent;
+  0017 op=0c 
+  0018 op=12 
+  0019 op=12 
+  001a op=12 
+  001b op=6e Landroid/app/BroadcastOptions;->toBundle()Landroid/os/Bundle;
+  001e op=0c 
+  001f op=74 Landroid/app/PendingIntent;->send(Landroid/content/Context;ILandroid/content/Intent;Landroid/app/PendingIntent$OnFinished;Landroid/os/Handler;Ljava/lang/String;Landroid/os/Bundle;)V
+  0022 op=0e 

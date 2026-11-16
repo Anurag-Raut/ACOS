@@ -117,6 +117,12 @@ impl Server {
         command.env("ACOS_MCP_QUIET", "1");
         command.env_remove("ACOS_SESSION_DAEMON");
         command.env_remove("ACOS_MCP_ENGINE");
+        // The private socket path must fit `sun_path` (108 bytes with the NUL)
+        // and this test pins it to the short `XDG_RUNTIME_DIR` it made, so an
+        // inherited `ACOS_RUNTIME_DIR` (a deep worktree scratch path in this
+        // repo's harness) must not override it: the caller's directory length
+        // is not this test's business.
+        command.env_remove("ACOS_RUNTIME_DIR");
         for (key, value) in env {
             command.env(key, value);
         }
