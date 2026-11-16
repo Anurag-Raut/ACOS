@@ -1,0 +1,7 @@
+{
+  "request_id": "req_366f68_18e87dc2d095e623",
+  "started_at": "2026-11-16T09:52:07.183Z",
+  "scenario": "scenarios/a11y-probe.yaml",
+  "apk": "fixtures/build/apps/a11y-probe.apk",
+  "acos_version": "0.2.2"
+}
