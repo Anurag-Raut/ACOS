@@ -1,5 +1,15 @@
 # WV3 — WebView track, guest side, session 3
 
+> **Wall 8 is CLOSED on `wv4`** (`results/handoff/WV4/`): the guest now
+> registers the image's own `android.net.LocalSocketImpl` natives and the
+> session mounts a host socket directory at `/run/acos`, so the failure below is
+> gone — with no broker it is the honest `ENGINE_UNAVAILABLE … No such file or
+> directory` (ENOENT), and against a test listener the connect and the WIRE
+> `hello` round-trip. The scenario in this directory was also tightened: it now
+> asserts the fixture's "WebView created:" status (`expectation: fail` +
+> `ASSERTION_FAILED` until the host broker lands) instead of passing on the
+> activity's `status` view alone.
+
 Status: **PARTIAL, and the provider now genuinely instantiates.** Walls 5, 6 and
 7 of `WebViewFactory.getProvider()` are closed; the framework loads the
 provider package, builds its classloader, and runs

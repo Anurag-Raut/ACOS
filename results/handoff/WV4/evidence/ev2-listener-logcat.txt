@@ -1,0 +1,21 @@
+1794812297568     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794812297568     76  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794812297568     77  D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED
+1794812297568     78  I WVProbe: hasSystemFeature(android.software.webview)=true
+1794812297568     79  I WVProbe: WebView.getCurrentWebViewPackage()=PackageInfo{dfb1096 com.android.webview}
+1794812297568     80  I WVProbe: myUid=10192
+1794812297568     81  I WVProbe: own getPackageInfo(0x100024c0) -> dev.acos.fixtures.webview sigs=1
+1794812297568     82  I WebViewFactory: Loading com.android.webview version 1.0 (code 1)
+1794812297568     83  W ziparchive: Unable to open '/data/app/webview-provider.dm': No such file or directory
+1794812297568     84  W ziparchive: Unable to open '/data/app/webview-provider.dm': No such file or directory
+1794812297568     85  D nativeloader: Configuring clns-3 for other apk /data/app/webview-provider.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib-extra/com.android.webview/x86_64, permitted_path=/data:/mnt/expand
+1794812297568     86  E WebViewLibraryLoader: can't load with relro file; address space not reserved
+1794812297568     87  I ACOSWvProvider: create(WebViewDelegate present)
+1794812297568     88  I WVProbe: WebView FAILED: java.lang.UnsupportedOperationException: ACOS WebView provider: unsupported method ViewDelegate.setOverScrollMode(I)V
+  at com.android.webview.chromium.WebViewChromiumViewDelegate.setOverScrollMode(WebViewChromiumViewDelegate.java:269)
+  at android.webkit.WebView.setOverScrollMode(WebView.java:2668)
+  at android.view.View.<init>(View.java:5497)
+  at android.view.View.<init>(View.java:5638)
+1794812297568     89  E logdw: dev.acos.fixtures.webview.MainActivity
+1794812297568     90  E logdw: dev.acos.fixtures.webview.MainActivity
+1794812297568     91  E logdw: dev.acos.fixtures.webview.MainActivity

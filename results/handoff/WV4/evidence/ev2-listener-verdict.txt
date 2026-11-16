@@ -1,0 +1,10 @@
+status: fail
+engine: art  backend: acos-native  fidelity: art-reference
+failure.code: ASSERTION_FAILED  step_index: 2  summary: step 2 (assert_text) fail
+failure.message:
+expected text containing "WebView created:", got text "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{dfb1096 com.android.webview}\nmyUid=10192\nown getPackageInfo(0x100024c0) -> dev.acos.fixtures.webview sigs=1\nWebView FAILED: java.lang.UnsupportedOperationException: ACOS WebView provider: unsupported method ViewDelegate.setOverScrollMode(I)V\n  at com.android.webview.chromium.WebViewChromiumViewDelegate.setOverScrollMode(WebViewChromiumViewDelegate.java:269)\n  at android.webkit.WebView.setOverScrollMode(WebView.java:2668)\n  at android.view.View.<init>(View.java:5497)\n  at android.view.View.<init>(View.java:5638)\n" / hint ""
+notes:
+  - stopped at step 2 (assert_text): fail; later steps were not executed
+  - scenario expected `pass`, engine produced `fail` — result is a truthful partial
+  - coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.
+  - artifacts: referenced (keep-all): 14 file(s) / 1.2 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json

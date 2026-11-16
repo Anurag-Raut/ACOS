@@ -3432,6 +3432,25 @@ public final class LaunchMain {
                 // (Gaten, w25-gaten-launch).
                 "register_android_hardware_SensorManager",
                 "register_com_android_internal_util_VirtualRefBasePtr",
+                // WV4 (wall 8): `android.net.LocalSocketImpl`'s socket natives.
+                // The WebView provider's session transport is one `AF_UNIX`
+                // stream socket per session (`results/handoff/WVB/WIRE.md` §0);
+                // `AcosSessionSocket.open` calls
+                // `LocalSocket.connect(new LocalSocketAddress("/run/acos/webview.sock",
+                // Namespace.FILESYSTEM))`, i.e. `LocalSocketImpl.connectLocal`,
+                // whose seven natives (connectLocal, bindLocal, read_native,
+                // readba_native, write_native, writeba_native,
+                // getPeerCredentials_native) live in the image's own
+                // libandroid_runtime (`register_android_net_LocalSocketImpl`,
+                // base/core/jni/android_net_LocalSocketImpl.cpp). Without the
+                // registration the provider dies with `UnsatisfiedLinkError: No
+                // implementation found for void
+                // android.net.LocalSocketImpl.connectLocal(...)`. The image's
+                // implementation is a real `connect(2)` with real errno ->
+                // IOException (`socket_local_client_connect`), so the failure
+                // with no broker is the honest ENOENT/ECONNREFUSED, never a
+                // fabricated transport.
+                "register_android_net_LocalSocketImpl",
         };
         String[] graphics = {"register_android_graphics_classes"};
         StringBuilder missing = new StringBuilder();

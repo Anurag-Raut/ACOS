@@ -1,13 +1,21 @@
-# WV1 wall-map probe: a real WebView in a real ACOS session, with the ACOS
-# WebView provider package installed as an extra system package (ADR-0031).
-# `extra_apks` is MPROC1's per-package install: the provider becomes an ordinary
-# installed package, which is exactly what `WebViewFactory` looks up.
+# WV3 probe — CORRECTED by WV4 (wall 8).
+#
+# The original file asserted only that the activity reached its `status` view,
+# so it reported `pass` while the WebView was never constructed (WV3's own
+# STATUS lists "the fixture constructs a WebView ... FAIL"). WV4 tightens it:
+# `assert_text` on the fixture's WebView-constructed status, and the expectation
+# pinned to reality — `fail`/ASSERTION_FAILED until the host WebView broker
+# serves /run/acos/webview.sock (results/handoff/WVB/WIRE.md). When the broker
+# lands, flip `expectation` to `pass` and drop `expect_error`; nothing else
+# changes.
 version: 1
 name: webview-probe-provider
 description: >-
-  Launch webview-probe with com.android.webview installed, and capture what
-  WebViewFactory does from hasSystemFeature through waitForAndGetProvider,
-  getPackageInfo, createApplicationContext and WebViewChromiumFactoryProviderForT.create.
+  Launch webview-probe with com.android.webview installed and assert the
+  fixture's own WebView-constructed status (the `status` TextView must contain
+  "WebView created:"). Expectation is `fail`/ASSERTION_FAILED until the host
+  WebView broker serves /run/acos/webview.sock: a run that only reaches the
+  status view is NOT a passing WebView.
 app: fixtures/build/apps/webview-probe.apk
 engine: native-preferred
 fallback: report-and-escalate
@@ -24,7 +32,9 @@ capabilities:
   - lifecycle
   - ui.offscreen
   - ui.text
-expectation: pass
+expectation: fail
+expect_error:
+  code: ASSERTION_FAILED
 budgets:
   memory_mib: 512
   wall_ms: 120000
@@ -35,3 +45,9 @@ steps:
   - wait_for:
       selector: {id: status}
       timeout_ms: 8000
+  # The fixture reports every stage into `status` (logcat tag WVProbe), so this
+  # is the WebView-constructed assertion, not a liveness check on the activity.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "WebView created:"}
+      timeout_ms: 12000

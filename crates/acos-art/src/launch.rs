@@ -545,6 +545,13 @@ pub(crate) fn launch_session(
         Some(d) => root.run_dir_at(&d.join("run"), "launch")?,
         None => root.new_run_dir("launch")?,
     };
+    // WV4: this session's WebView socket directory (`wv/`, mounted at
+    // `/run/acos` by the sandbox). Resolved and length-checked before the guest
+    // exists: a `sun_path` overflow must read as a launch error naming the
+    // session directory, not as an unattributable `connect()` failure in the
+    // WebView.
+    let webview_socket_dir = crate::webview_socket::host_dir(run.path())?;
+    crate::webview_socket::check_sun_path(&webview_socket_dir)?;
     crate::stage("run-dir");
 
     // H17: the APK is an input every guest maps (ART mmaps the dex/resources), so
@@ -2065,6 +2072,16 @@ pub(crate) fn launch_session(
             summary.resource_limits
         ));
     }
+    // WV4: publish where this session's WebView socket lives on the host. The
+    // guest side is fixed (`/run/acos/webview.sock`, WIRE.md §0); the host side
+    // is the session's own directory, so the broker (or a test listener) knows
+    // exactly which file the guest will connect to.
+    unsupported_notes.push(format!(
+        "webview socket: {} -> guest {} (host transport; no listener means the guest's \
+         connect fails with the real ENOENT)",
+        crate::webview_socket::host_socket_path(&webview_socket_dir).display(),
+        crate::webview_socket::GUEST_SOCKET_PATH
+    ));
     let mut result = LaunchResult {
         outcome,
         code,
