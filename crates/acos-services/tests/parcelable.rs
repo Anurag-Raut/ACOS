@@ -14,14 +14,26 @@ fn dex_dir() -> std::path::PathBuf {
 
 #[test]
 fn codec_field_orders_match_the_framework_dex() {
-    let dir = dex_dir();
+    // EVERY boot-classpath DEX directory, not one: a single `dex/framework`
+    // scan skipped `android.net.*` (framework-connectivity) and every apex jar
+    // as "class not found", which is how the wrong NetworkCapabilities and
+    // LinkProperties field lists stayed `Verification::Full` unverified.
+    let dirs = parcelable::boot_classpath_dex_dirs().expect("boot DEX cache (run from the repo root)");
+    assert!(
+        dirs.len() > 10,
+        "the oracle must cover every boot-classpath jar, saw {} dirs",
+        dirs.len()
+    );
     let mut checked = 0usize;
     let mut full = 0usize;
+    let mut missing = Vec::new();
     let mut failures = Vec::new();
     for spec in parcelable::SPECS {
-        let Ok(scanned) = parcelable::Scanner::write_to_parcel(&dir, spec.class) else {
+        let Ok(scanned) = parcelable::Scanner::write_to_parcel_in(&dirs, spec.class) else {
             // Some curated ACOS-owned values have no Java `writeToParcel` on the
-            // boot classpath; that is expected.
+            // boot classpath; that is expected, and every codec that *does*
+            // have one is verified.
+            missing.push(spec.class);
             continue;
         };
         let result = parcelable::verify(spec, &scanned);
@@ -58,7 +70,11 @@ fn codec_field_orders_match_the_framework_dex() {
             real_len
         );
     }
-    println!("verified {checked} specs against the boot DEX ({full} full)");
+    println!(
+        "verified {checked} specs against {} boot DEX dirs ({full} full); no writeToParcel for {}",
+        dirs.len(),
+        missing.len()
+    );
     assert!(checked >= 10, "expected to verify at least 10 codecs");
     assert!(failures.is_empty(), "codec drift:\n{}", failures.join("\n"));
 }

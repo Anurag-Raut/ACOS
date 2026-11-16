@@ -6,6 +6,8 @@ import android.content.pm.PermissionInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
+import android.net.LinkProperties;
+import android.net.NetworkCapabilities;
 import android.os.LocaleList;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -193,6 +195,56 @@ public final class ParcelableCompareMain {
         return pi;
     }
 
+    /**
+     * REL3P2: the capabilities of ACOS's emulated default network, built from
+     * the framework's own constants so the test also checks the cap bit
+     * positions. The uids (ArraySet of UidRange), the SSID, the underlying
+     * networks, the specifier and the transport info are null, the allowed /
+     * administrator uids and the sub ids are the constructor's empty sets: the
+     * offline values ACOS serves today.
+     */
+    static NetworkCapabilities networkCapabilities() throws Exception {
+        NetworkCapabilities nc = new NetworkCapabilities();
+        long caps = 0;
+        for (String name : new String[] {
+                "NET_CAPABILITY_NOT_METERED", "NET_CAPABILITY_INTERNET",
+                "NET_CAPABILITY_NOT_RESTRICTED", "NET_CAPABILITY_TRUSTED",
+                "NET_CAPABILITY_NOT_VPN", "NET_CAPABILITY_NOT_ROAMING",
+                "NET_CAPABILITY_FOREGROUND", "NET_CAPABILITY_NOT_CONGESTED",
+                "NET_CAPABILITY_NOT_SUSPENDED", "NET_CAPABILITY_NOT_VCN_MANAGED"}) {
+            caps |= 1L << ((Integer) field(NetworkCapabilities.class, name).get(null)).intValue();
+        }
+        set(nc, "mNetworkCapabilities", caps);
+        set(nc, "mForbiddenNetworkCapabilities", 0L);
+        set(nc, "mTransportTypes",
+                1L << ((Integer) field(NetworkCapabilities.class, "TRANSPORT_WIFI").get(null)).intValue());
+        set(nc, "mLinkUpBandwidthKbps", 0);
+        set(nc, "mLinkDownBandwidthKbps", 0);
+        set(nc, "mNetworkSpecifier", null);
+        set(nc, "mTransportInfo", null);
+        set(nc, "mSignalStrength", Integer.MIN_VALUE);
+        set(nc, "mUids", null);
+        set(nc, "mSSID", null);
+        set(nc, "mPrivateDnsBroken", Boolean.FALSE);
+        set(nc, "mOwnerUid", 1000);
+        set(nc, "mRequestorUid", 1000);
+        set(nc, "mRequestorPackageName", "android");
+        set(nc, "mUnderlyingNetworks", null);
+        set(nc, "mEnterpriseId", 0);
+        return nc;
+    }
+
+    /**
+     * REL3P2: ACOS's emulated `LinkProperties` -- the wifi interface name and
+     * the AOSP emulator's MTU, with every address, route and proxy list empty.
+     */
+    static LinkProperties linkProperties() {
+        LinkProperties lp = new LinkProperties();
+        lp.setInterfaceName("wlan0");
+        lp.setMtu(1500);
+        return lp;
+    }
+
     interface Writer {
         void write(Parcel p) throws Exception;
     }
@@ -211,6 +263,8 @@ public final class ParcelableCompareMain {
         emit("configuration", p -> configuration().writeToParcel(p, 0));
         emit("persistable_bundle", p -> persistableBundle().writeToParcel(p, 0));
         emit("package_info_arrays", p -> packageInfoArrays().writeToParcel(p, 0));
+        emit("network_capabilities", p -> networkCapabilities().writeToParcel(p, 0));
+        emit("link_properties", p -> linkProperties().writeToParcel(p, 0));
 
         for (String arg : args) {
             int eq = arg.indexOf('=');
@@ -287,6 +341,47 @@ public final class ParcelableCompareMain {
                                 "package_info_arrays signatures "
                                         + (pi.signatures == null ? "null" : pi.signatures.length));
                         check(pi.versionCode == 7, "package_info_arrays versionCode");
+                        break;
+                    case "network_capabilities":
+                        got = NetworkCapabilities.CREATOR.createFromParcel(p);
+                        NetworkCapabilities nc = (NetworkCapabilities) got;
+                        check(nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+                                "network_capabilities INTERNET");
+                        check(nc.hasCapability((Integer) field(NetworkCapabilities.class,
+                                        "NET_CAPABILITY_NOT_VCN_MANAGED").get(null)),
+                                "network_capabilities NOT_VCN_MANAGED");
+                        check(!nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+                                "network_capabilities VALIDATED must be off");
+                        check(nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+                                "network_capabilities WIFI transport");
+                        check(nc.getLinkUpstreamBandwidthKbps() == 0
+                                        && nc.getLinkDownstreamBandwidthKbps() == 0,
+                                "network_capabilities bandwidth");
+                        check(nc.getSignalStrength() == Integer.MIN_VALUE,
+                                "network_capabilities signalStrength "
+                                        + nc.getSignalStrength());
+                        check(nc.getNetworkSpecifier() == null,
+                                "network_capabilities specifier must be null");
+                        check(nc.getTransportInfo() == null,
+                                "network_capabilities transportInfo must be null");
+                        check(nc.getEnterpriseIds().length == 0,
+                                "network_capabilities enterprise ids");
+                        check(nc.getOwnerUid() == 1000, "network_capabilities ownerUid");
+                        break;
+                    case "link_properties":
+                        got = LinkProperties.CREATOR.createFromParcel(p);
+                        LinkProperties lp = (LinkProperties) got;
+                        check("wlan0".equals(lp.getInterfaceName()),
+                                "link_properties interface " + lp.getInterfaceName());
+                        check(lp.getMtu() == 1500, "link_properties mtu " + lp.getMtu());
+                        check(lp.getLinkAddresses().isEmpty(), "link_properties link addresses");
+                        check(lp.getDnsServers().isEmpty(), "link_properties dns servers");
+                        check(lp.getDomains() == null, "link_properties domains");
+                        check(lp.getRoutes().isEmpty(), "link_properties routes");
+                        check(lp.getHttpProxy() == null, "link_properties http proxy");
+                        check(lp.getNat64Prefix() == null, "link_properties nat64 prefix");
+                        check(lp.isWakeOnLanSupported() == false, "link_properties wake on lan");
+                        check(!lp.isWakeOnLanSupported(), "link_properties wake on lan");
                         break;
                     case "service_info":
                         got = ServiceInfo.CREATOR.createFromParcel(p);

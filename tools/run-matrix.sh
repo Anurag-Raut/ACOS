@@ -169,6 +169,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import statistics
 import subprocess
 import sys
@@ -330,9 +331,17 @@ def run_one(scenario, rep, index):
     rid = "%02d-%s-r%d" % (index, meta["name"].replace("/", "-"), rep)
     unit = "acos-bench-%s" % uuid.uuid4().hex[:12]
     adir = os.path.join(ARTIFACTS, rid)
-    os.makedirs(adir, exist_ok=True)
-    stdout_path = os.path.join(adir, "stdout.json")
-    stderr_path = os.path.join(adir, "stderr.txt")
+    # Do NOT create `adir` here. `acos verify --artifacts` owns its artifacts
+    # directory (ADR-0026, "one run owns one artifacts directory"): a directory
+    # that already holds files is another run's evidence and is refused with
+    # INVALID_ARGUMENT, so creating it and writing our own stdout/stderr into it
+    # before the run made every row `verdict=error class=harness` (REL3P).
+    # The harness's own logs live in a driver scratch dir and move into `adir`
+    # after verify has finished writing its evidence.
+    logdir = os.path.join(ARTIFACTS, ".driver")
+    os.makedirs(logdir, exist_ok=True)
+    stdout_path = os.path.join(logdir, rid + ".stdout.json")
+    stderr_path = os.path.join(logdir, rid + ".stderr.txt")
     cmd = [ACOS, "verify", scenario, "--json", "--artifacts", adir]
     if APK_OVERRIDE:
         cmd += ["--apk", APK_OVERRIDE]
@@ -380,6 +389,13 @@ def run_one(scenario, rep, index):
         rc = 124
     stop_scope(unit)
     host_end = {"loadavg1": loadavg1(), "mem_available_mib": meminfo_mib()}
+    # The run is over: merge the harness logs into the run's own directory.
+    # When verify created it this is a no-op for ownership; when verify failed
+    # before writing anything (no JSON envelope) the logs are the only evidence
+    # and still land beside the row.
+    os.makedirs(adir, exist_ok=True)
+    stdout_path = shutil.move(stdout_path, os.path.join(adir, "stdout.json"))
+    stderr_path = shutil.move(stderr_path, os.path.join(adir, "stderr.txt"))
 
     doc = {}
     try:

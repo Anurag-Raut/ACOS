@@ -356,6 +356,29 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         writes.get("package_info_arrays"),
         hex(&pkg_arrays_bytes)
     );
+    // REL3P2: the two `android.net` replies ACOS serves today
+    // (`getNetworkCapabilities` / `getLinkProperties`) against the real
+    // framework writers. The assertions below compare the *production*
+    // builders, so a change in `connectivity.rs` that stops being
+    // framework-exact fails here.
+    let caps = acos_services::connectivity::default_network_capabilities();
+    let caps_bytes = encoded(&caps);
+    assert_eq!(
+        writes.get("network_capabilities").map(String::as_str),
+        Some(hex(&caps_bytes).as_str()),
+        "NetworkCapabilities real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("network_capabilities"),
+        hex(&caps_bytes)
+    );
+    let link = acos_services::connectivity::default_link_properties();
+    let link_bytes = encoded(&link);
+    assert_eq!(
+        writes.get("link_properties").map(String::as_str),
+        Some(hex(&link_bytes).as_str()),
+        "LinkProperties real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("link_properties"),
+        hex(&link_bytes)
+    );
     let bundle = persistable_bundle_value();
     let bundle_bytes = encoded(&bundle);
     assert_eq!(
@@ -420,6 +443,8 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         format!("instrumentation_info={}", hex(&instrumentation_bytes)),
         format!("permission_info={}", hex(&permission_bytes)),
         format!("resolve_info={}", hex(&resolve_bytes)),
+        format!("network_capabilities={}", hex(&caps_bytes)),
+        format!("link_properties={}", hex(&link_bytes)),
     ];
     let (_rt, outcome) = run_case_args(&dex, "ParcelableCompareMain", &args);
     assert!(
@@ -440,6 +465,8 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         "instrumentation_info",
         "permission_info",
         "resolve_info",
+        "network_capabilities",
+        "link_properties",
     ] {
         assert!(
             outcome.stdout.contains(&format!("read.{name}=ok")),
@@ -459,6 +486,8 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         ("instrumentation_info", &instrumentation_bytes),
         ("permission_info", &permission_bytes),
         ("resolve_info", &resolve_bytes),
+        ("network_capabilities", &caps_bytes),
+        ("link_properties", &link_bytes),
     ] {
         assert_eq!(
             roundtrips.get(name).map(String::as_str),
