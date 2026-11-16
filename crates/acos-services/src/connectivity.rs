@@ -120,7 +120,12 @@ pub const IMESSENGER_SEND: u32 = 1;
 #[must_use]
 pub fn default_capabilities_bits() -> i64 {
     let mut bits = 0i64;
-    for cap in [
+    // SPIKE-NET (ADR-0030 gate): with pasta attached the session has a real,
+    // NATed interface, so the network is reported as validated and apps'
+    // `isInternetReachable` / ConnectivityManager checks pass. Off by default:
+    // the sandbox has no sockets at all, and claiming VALIDATED there would be
+    // a lie.
+    let mut caps: Vec<u32> = vec![
         CAP_NOT_METERED,
         CAP_INTERNET,
         CAP_NOT_RESTRICTED,
@@ -131,10 +136,22 @@ pub fn default_capabilities_bits() -> i64 {
         CAP_NOT_CONGESTED,
         CAP_NOT_SUSPENDED,
         CAP_NOT_VCN_MANAGED,
-    ] {
+    ]
+    .into_iter()
+    .collect();
+    if spike_net_enabled() {
+        caps.push(CAP_VALIDATED);
+    }
+    for cap in caps {
         bits |= 1i64 << cap;
     }
     bits
+}
+
+/// `ACOS_SPIKE_NET=1` (spike gate only; the product will ask the module
+/// registry instead).
+fn spike_net_enabled() -> bool {
+    matches!(std::env::var("ACOS_SPIKE_NET").as_deref(), Ok("1") | Ok("true"))
 }
 
 /// `NetworkRequest.Type` ordinals (`ConnectivityManager.sendRequestForNetwork`

@@ -351,7 +351,12 @@ fn audit_action() -> DenyAction {
 }
 
 /// Assemble the filter program.
-fn build_program_with(action: &DenyAction) -> Vec<Insn> {
+///
+/// SPIKE-NET: `allow_inet` also permits `AF_INET`/`AF_INET6` sockets. It is
+/// only ever set when `ACOS_SPIKE_NET=1`, i.e. when the session really has a
+/// network namespace with an interface in it (ADR-0030 §2: the address
+/// families are allowed only when the network module is attached).
+fn build_program_with(action: &DenyAction, allow_inet: bool) -> Vec<Insn> {
     let mut b = Builder::new();
     let deny = b.label();
     let kill = b.label();
@@ -383,6 +388,15 @@ fn build_program_with(action: &DenyAction) -> Vec<Insn> {
     b.mark(socket_check);
     b.ld_abs(OFF_ARG0);
     b.jeq(libc::AF_UNIX as u32, list, deny);
+    if allow_inet {
+        let inet4 = b.label();
+        let inet6 = b.label();
+        b.jeq(libc::AF_INET as u32, inet4, inet6);
+        b.mark(inet4);
+        b.ja(list);
+        b.mark(inet6);
+        b.jeq(libc::AF_INET6 as u32, list, deny);
+    }
 
     b.mark(list);
     b.ld_abs(OFF_NR);
@@ -441,7 +455,7 @@ pub fn build_blob() -> Vec<u8> {
 
 /// The blob for an explicit deny action (the audit uses [`DenyAction::Kill`]).
 pub fn build_blob_with(action: &DenyAction) -> Vec<u8> {
-    let prog = build_program_with(action);
+    let prog = build_program_with(action, crate::spike_net::enabled());
     let mut out = Vec::with_capacity(prog.len() * 8);
     for i in &prog {
         out.extend_from_slice(&i.code.to_le_bytes());
@@ -550,7 +564,7 @@ mod tests {
     use super::*;
 
     fn compiled() -> Vec<Insn> {
-        build_program_with(&DenyAction::Errno)
+        build_program_with(&DenyAction::Errno, false)
     }
 
     #[test]
@@ -563,13 +577,13 @@ mod tests {
 
     #[test]
     fn audit_action_kills_and_never_returns_eacces() {
-        let p = build_program_with(&DenyAction::Kill(None));
+        let p = build_program_with(&DenyAction::Kill(None), false);
         // The kill terminal is emitted before the allow/deny terminals.
         assert!(p.iter().any(|i| i.k == RET_KILL_PROCESS));
         assert_eq!(build_blob_with(&DenyAction::Kill(None)).len(), p.len() * 8);
         // The production build carries the same (unreachable) kill terminal, so
         // its last instruction is still the EACCES deny.
-        let q = build_program_with(&DenyAction::Errno);
+        let q = build_program_with(&DenyAction::Errno, false);
         assert_eq!(q.last().map(|i| i.k), Some(RET_ERRNO | (libc::EACCES as u32 & 0xffff)));
         // A subset build jumps to the kill terminal only for the listed nrs.
         let sub = DenyAction::Kill(Some(vec![libc::SYS_ptrace as u32]));

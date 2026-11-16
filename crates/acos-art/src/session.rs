@@ -433,6 +433,12 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     let sock_dir = sdir.join("socket");
     fs::create_dir_all(&sock_dir)?;
     let logd = Logd::start(&sock_dir).map_err(Error::Io)?;
+    // SPIKE-NET: netd replacement for `/dev/socket/dnsproxyd` (gated). The
+    // socket lands in the session's own socket dir, which is what the sandbox
+    // binds over `/dev/socket`, so the guest sees it at the device path.
+    if crate::spike_net::enabled() {
+        crate::spike_net::serve_dnsproxyd(&sock_dir).map_err(Error::Io)?;
+    }
 
     let guest_apk = format!("/data/app/{apk_name}");
     let guest_out = format!("/data/session/{session_id}/out");

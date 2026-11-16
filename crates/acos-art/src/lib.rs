@@ -43,6 +43,8 @@ pub mod live_view;
 pub mod logd;
 pub mod props;
 pub mod seccomp;
+/// SPIKE-NET (ADR-0030 gate): pasta networking, gated on `ACOS_SPIKE_NET=1`.
+pub mod spike_net;
 pub mod watchdog;
 
 use std::ffi::OsString;
@@ -1378,8 +1380,10 @@ impl<'a> Sandbox<'a> {
         let mut a: Vec<OsString> = Vec::new();
         // Namespaces, env clearing and pid-1 supervision first: bwrap applies
         // options in order, so these must precede every mount and `--setenv`.
-        for f in SANDBOX_FLAGS {
-            a.push((*f).into());
+        // SPIKE-NET: with the spike on, `--unshare-net` is dropped because the
+        // network namespace is the one pasta created (see `spike_net`).
+        for f in spike_net::sandbox_flags() {
+            a.push(f.into());
         }
         // Runs get an application uid (see `guest_uid`); host-side staging
         // steps and the argv-shape tests keep the caller's uid.
@@ -1613,6 +1617,10 @@ impl<'a> Sandbox<'a> {
         }
         if std::env::var_os("ACOS_ART_DEBUG_ARGV").is_some() {
             eprintln!("bwrap {}", a.iter().map(|x| x.to_string_lossy().to_string()).collect::<Vec<_>>().join(" "));
+        }
+        if spike_net::enabled() {
+            // SPIKE-NET: run bwrap *inside* the netns pasta configured for it.
+            return Ok(spike_net::wrap(&a));
         }
         b.args(a);
         Ok(b)
