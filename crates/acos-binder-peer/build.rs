@@ -28,6 +28,8 @@ fn find_ndk() -> Option<PathBuf> {
 
 fn main() {
     println!("cargo:rerun-if-changed=native/binder_driver.c");
+    println!("cargo:rerun-if-changed=native/txn_heap.c");
+    println!("cargo:rerun-if-changed=native/txn_heap.h");
     println!("cargo:rerun-if-env-changed=ANDROID_NDK_HOME");
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let dst = out.join("libacos_binder_driver.so");
@@ -52,6 +54,7 @@ fn main() {
         ])
         .arg(&dst)
         .arg("native/binder_driver.c")
+        .arg("native/txn_heap.c")
         .args(["-llog", "-ldl"])
         .status();
     match status {

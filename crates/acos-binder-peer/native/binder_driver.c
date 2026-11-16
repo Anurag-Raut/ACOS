@@ -507,63 +507,18 @@ static int xform_objects(uint8_t* data, size_t dsize, uint8_t* offs, size_t osiz
 }
 
 // ------------------------------------------------- (3) transaction-buffer heap
-struct blk { size_t off, size; int used; };
-static struct blk g_blk[512];
-static int g_nblk;
-static size_t g_bump;
-
-static int blk_cmp(const void* a, const void* b) {
-    const struct blk* x = a;
-    const struct blk* y = b;
-    return (x->off > y->off) - (x->off < y->off);
-}
-
-static void* mm_alloc(size_t n) {
-    n = (n + 7) & ~(size_t)7;
-    // Monotonic allocation: the kernel may reuse a freed transaction buffer,
-    // but a userspace driver cannot prove libbinder has dropped every reference
-    // to the old contents at the moment BC_FREE_BUFFER arrives.  The mapping is
-    // 1 MB and a delivered transaction is a few hundred bytes, so never reusing
-    // a block is both safe and cheap (E3G's race came from premature reuse).
-    if (g_bump + n > g.map_size) {
-        WARN("transaction buffer exhausted (%zu/%zu used)", g_bump, g.map_size);
-        return NULL;
-    }
-    size_t off = g_bump;
-    g_bump += n;
-    if (g_nblk < 512) {
-        g_blk[g_nblk].off = off;
-        g_blk[g_nblk].size = n;
-        g_blk[g_nblk].used = 1;
-        g_nblk++;
-    }
-    return g.map + off;
-}
-
-static void mm_free(void* p) {
-    if (p == NULL) return;
-    size_t off = (size_t)((uint8_t*)p - g.map);
-    for (int i = 0; i < g_nblk; i++) {
-        if (g_blk[i].off == off && g_blk[i].used) {
-            g_blk[i].used = 0;
-            // coalesce with neighbours
-            qsort(g_blk, (size_t)g_nblk, sizeof(g_blk[0]), blk_cmp);
-            for (int j = 0; j + 1 < g_nblk;) {
-                if (!g_blk[j].used && !g_blk[j + 1].used &&
-                    g_blk[j].off + g_blk[j].size == g_blk[j + 1].off) {
-                    g_blk[j].size += g_blk[j + 1].size;
-                    memmove(&g_blk[j + 1], &g_blk[j + 2],
-                            sizeof(g_blk[0]) * (size_t)(g_nblk - j - 2));
-                    g_nblk--;
-                } else {
-                    j++;
-                }
-            }
-            return;
-        }
-    }
-    DBG("free of unknown buffer %p", p);
-}
+// FLAKEWIN: the heap lives in `txn_heap.c`, which takes its own lock. Two
+// binder threads allocate concurrently by design (a reply on the thread blocked
+// in `transact` and a peer-initiated `BR_TRANSACTION` on the looper thread are
+// the launch case: `addToDisplayAsUser`'s reply and
+// `IWindow.dispatchAppVisibility`), and the lock-free bump allocator that lived
+// here handed both the same offset, so one parcel overwrote the other in place.
+// The kernel's `binder_alloc` allocates under `alloc->mutex` for the same reason.
+//
+// Lock order: `txn_heap.c`'s own mutex is a leaf. `g.mu` is never held across a
+// `txn_alloc`/`txn_free` call (callers reach the heap after unlocking, or before
+// taking it), so the two can never deadlock.
+#include "txn_heap.h"
 
 // -------------------------------------------------------------- socket frames
 static int send_frame(uint32_t type, uint32_t seq, uint32_t code, uint32_t flags, uint64_t target,
@@ -791,7 +746,6 @@ static void driver_init(int fd) {
         g.fd = fd;
         g.next_wire = 1;
         g.next_handle = 1;
-        g_bump = 4096;
         pthread_mutex_init(&g.mu, NULL);
         pthread_cond_init(&g.cv_txn, NULL);
         pthread_cond_init(&g.cv_rsp, NULL);
@@ -803,6 +757,10 @@ static void driver_init(int fd) {
         } else {
             g.map_size = BINDER_VM_SIZE;
         }
+        // The first page is never handed out (offset 0 is also what libbinder's
+        // `mObjects`/`data.ptr.buffer` report for "no buffer").
+        txn_heap_init(g.map == NULL ? NULL : g.map + 4096,
+                      g.map_size > 4096 ? g.map_size - 4096 : 0);
         connect_peer();
     }
     pthread_mutex_unlock(&g_start_mu);
@@ -891,8 +849,13 @@ static int deliver_incoming(void) {
     uint8_t* offs = q->data + dsize;
     pthread_mutex_unlock(&g.mu);
     xform_objects(q->data, dsize, offs, osize, 1, fds, &nfds);
-    void* buf = mm_alloc(dsize + 8 + osize + 8);
+    void* buf = txn_alloc(dsize + 8 + osize + 8);
     if (buf == NULL) {
+        // ART_RESOURCE_LIMIT: named, not silent. The oneway delivery is dropped
+        // (the kernel driver fails `binder_alloc_new_buf` the same way) and the
+        // caller's frame counter records it.
+        WARN("ART_RESOURCE_LIMIT: transaction buffer exhausted (need %zu of %zu)",
+             dsize + 8 + osize + 8, txn_heap_capacity());
         free(q->data);
         free(q);
         pthread_mutex_lock(&g.mu);
@@ -995,7 +958,7 @@ static int build_reply(struct slot* s) {
     }
     int keep = s->nfds;
     s->nfds = 0;
-    void* buf = mm_alloc(dsize + 8 + osize + 8);
+    void* buf = txn_alloc(dsize + 8 + osize + 8);
     if (buf == NULL) {
         for (int i = 0; i < keep; i++) close(s->fds[i]);
         return -1;
@@ -1137,7 +1100,7 @@ static void handle_commands(const uint8_t* wbuf, size_t wsize) {
                 int owned = 0;
                 for (int i = 0; i < T.n_txn_buf; i++) {
                     if (T.txn_buf[i] == (uint8_t*)(uintptr_t)p) {
-                        mm_free((void*)(uintptr_t)p);
+                        txn_free((void*)(uintptr_t)p);
                         T.txn_buf[i] = T.txn_buf[--T.n_txn_buf];
                         owned = 1;
                         break;
@@ -1296,8 +1259,16 @@ static int e3g_write_read(struct binder_write_read* bwr) {
         if (done.status != 0 || done.data == NULL) {
             uint32_t cmd = BR_FAILED_REPLY;
             pend_append(&cmd, 4);
+        } else if (build_reply(&done) != 0) {
+            // FLAKEWIN: the reply could not be allocated (transaction buffer
+            // exhausted, named by the `ART_RESOURCE_LIMIT` warning inside
+            // `build_reply`). libbinder turns `BR_FAILED_REPLY` into
+            // `RemoteException("Transaction failed")` on the caller's side,
+            // which AOSP handles — replying with nothing would leave the guest
+            // blocked in `waitForResponse` for a reply that can never come.
+            uint32_t cmd = BR_FAILED_REPLY;
+            pend_append(&cmd, 4);
         } else {
-            build_reply(&done);
             free(done.data);
             free(done.offs);
         }
