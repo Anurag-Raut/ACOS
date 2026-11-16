@@ -159,7 +159,26 @@ fn walk_compact(node: &Value, out: &mut Vec<Value>) {
                     .unwrap_or(false),
             ),
         );
-        for key in ["visible", "window", "package"] {
+        // The node's *state* flags. `focused`/`password` are the live-input
+        // evidence (FB1: "the tree now says the field is focused", "password
+        // typing is masked"), `scrollable`/`enabled`/`checked`/`selected` are
+        // what a tap or a wait decides on, and the daemon already computed them.
+        // Dropping them left the compact screen unable to answer any question
+        // about input, and forced a full-tree read for a boolean. They are
+        // copied only when the source node carries them, so a minimal tree
+        // (a Flutter semantics node, an RN tree) is not filled with invented
+        // defaults.
+        for key in [
+            "visible",
+            "window",
+            "package",
+            "enabled",
+            "focused",
+            "password",
+            "scrollable",
+            "checked",
+            "selected",
+        ] {
             if let Some(value) = map.get(key) {
                 compact.insert(key.to_string(), value.clone());
             }
@@ -456,38 +475,128 @@ fn enforce_cap_measured(
             return before - measure(value);
         }
     }
-    // 3. Anything else: keep the envelope and the diagnosis, replace the
-    //    oversized result with a pointer to the artifacts. A silent cut is worse
-    //    than an honest "read it from here".
-    if let Some(result) = value.get_mut("result").and_then(Value::as_object_mut) {
-        let keep: Vec<(&str, Value)> = [
-            "tree_path",
-            "verdict_path",
-            "artifacts_dir",
-            "session_id",
-            "frame_seq",
-            "tree_node_count",
-        ]
-        .into_iter()
-        .filter_map(|key| result.get(key).cloned().map(|value| (key, value)))
-        .collect();
-        let mut replacement = Map::new();
-        replacement.insert("reply_capped".into(), Value::Bool(true));
-        replacement.insert("cap_bytes".into(), json!(max_bytes));
-        replacement.insert(
-            "note".into(),
-            Value::String(
-                "this result was larger than the reply cap; the full evidence is in the \
-                 artifacts paths named here"
-                    .to_string(),
-            ),
-        );
-        for (key, value) in keep {
-            replacement.insert(key.to_string(), value);
-        }
-        *result = replacement;
+    // 3. Anything else: keep the envelope, the diagnosis and the pointer to the
+    //    artifacts, and drop only the *bulk*. A silent cut is worse than an
+    //    honest "read it from here", but a pointer that says nothing about the
+    //    outcome is worse still: an agent that asked "did this pass, and if not
+    //    where" must not have to open a file to find out.
+    if let Some(result) = value.get_mut("result") {
+        *result = capped_result_pointer(result, max_bytes, measure);
     }
     before - measure(value)
+}
+
+/// The `result` object that replaces an oversized one: the artifact pointers
+/// plus a bounded *diagnosis* (outcome, failing step, provenance).
+///
+/// REL3C shipped paths only, so a capped `verify --json` answered "reply_capped"
+/// and nothing about the run. The fields below are exactly the ones an agent
+/// branches on, and they are bounded by construction: they are scalars and two
+/// small maps taken out of the verdict, never the tree, the step list or the
+/// log.
+fn capped_result_pointer(
+    result: &Value,
+    max_bytes: usize,
+    measure: fn(&Value) -> usize,
+) -> Value {
+    let mut replacement = Map::new();
+    replacement.insert("reply_capped".into(), Value::Bool(true));
+    replacement.insert("cap_bytes".into(), json!(max_bytes));
+    replacement.insert(
+        "note".into(),
+        Value::String(
+            "this result was larger than the reply cap; only the bulk (tree, steps, logs) \
+             was dropped and the full evidence is in the artifacts paths named here"
+                .to_string(),
+        ),
+    );
+
+    // Pointers to the evidence that stays on disk.
+    for key in [
+        "tree_path",
+        "verdict_path",
+        "artifacts_dir",
+        "session_id",
+        "frame_seq",
+        "tree_node_count",
+    ] {
+        if let Some(value) = result.get(key) {
+            replacement.insert(key.to_string(), value.clone());
+        }
+    }
+
+    // The verdict's own outcome. `verdict.status` is authoritative; the legacy
+    // `verdict.verdict` alias is used only when it is absent.
+    let verdict = result.get("verdict");
+    let verdict_status = verdict
+        .and_then(|verdict| verdict.pointer("/status"))
+        .or_else(|| verdict.and_then(|verdict| verdict.pointer("/verdict")))
+        .or_else(|| result.get("status"))
+        .cloned();
+    if let Some(status) = verdict_status {
+        replacement.insert("verdict_status".into(), status);
+    }
+
+    // The failing step, said in one line: index, kind, message. `step` is the
+    // scenario's step kind; `message` is the step error's message (a failing
+    // step always carries one), falling back to the verdict's failure summary.
+    if let Some(step) = verdict
+        .and_then(|verdict| verdict.pointer("/steps"))
+        .and_then(Value::as_array)
+        .and_then(|steps| {
+            steps.iter().find(|step| {
+                step.get("status")
+                    .and_then(Value::as_str)
+                    .is_some_and(|status| status != "pass")
+            })
+        })
+    {
+        let mut summary = Map::new();
+        for (key, from) in [
+            ("index", "/index"),
+            ("kind", "/step"),
+            ("status", "/status"),
+        ] {
+            if let Some(value) = step.pointer(from) {
+                summary.insert(key.to_string(), value.clone());
+            }
+        }
+        if let Some(message) = step
+            .pointer("/error/message")
+            .or_else(|| verdict.and_then(|verdict| verdict.pointer("/failure/summary")))
+        {
+            summary.insert("message".into(), message.clone());
+        }
+        replacement.insert("failed_step".into(), Value::Object(summary));
+    }
+
+    // Provenance: which APK/scenario produced this (REL3B `result.provenance`)
+    // and which evidence classes are host-observed vs guest-asserted
+    // (`verdict.evidence_provenance`).
+    if let Some(provenance) = result.get("provenance") {
+        replacement.insert("provenance".into(), provenance.clone());
+    }
+    if let Some(provenance) = verdict.and_then(|verdict| verdict.pointer("/evidence_provenance")) {
+        replacement.insert("evidence_provenance".into(), provenance.clone());
+    }
+    if let Some(failure) = verdict.and_then(|verdict| verdict.pointer("/failure")) {
+        replacement.insert("failure".into(), failure.clone());
+    }
+
+    // The summary above is small, but it is not allowed to break the cap it
+    // exists to respect: drop the optional halves from the outside in, keeping
+    // the outcome and the failing step (the two answers the cap must never take
+    // away), and finally fall back to bare pointers.
+    let mut value = Value::Object(replacement);
+    for key in ["failure", "evidence_provenance", "provenance"] {
+        if measure(&value) <= max_bytes {
+            break;
+        }
+        if let Some(object) = value.as_object_mut() {
+            object.remove(key);
+        }
+    }
+    value
 }
 
 fn shrink_tree_page(value: &mut Value, page: usize) {
@@ -675,5 +784,92 @@ mod tests {
         assert_eq!(envelope["result"]["reply_capped"], true);
         assert_eq!(envelope["result"]["tree_path"], "out/tree/1.json");
         assert!(serialized_len(&envelope) <= 4096);
+    }
+
+    /// A fix-shaped envelope whose `result` is far over the cap but whose
+    /// diagnosis is small: the REL3C integration requirement is that the capped
+    /// object still answers "did it pass, which step failed and why, and what
+    /// produced this", not only "read the file".
+    #[test]
+    fn a_capped_verify_reply_keeps_the_outcome_failing_step_and_provenance() {
+        let step = |index: usize, kind: &str, status: &str| {
+            json!({"index": index, "step": kind, "status": status, "duration_ms": 1})
+        };
+        let mut steps = vec![
+            step(0, "launch", "pass"),
+            step(1, "tap", "pass"),
+            json!({
+                "index": 2,
+                "step": "assert_text",
+                "status": "fail",
+                "duration_ms": 3,
+                "error": {"code": "assertion_failed", "message": "expected \"Todo\" in the tree"},
+            }),
+        ];
+        // Bulk: the real cap-filler is the step list and the assertion detail.
+        for index in 3..400 {
+            steps.push(json!({
+                "index": index,
+                "step": "assert_text",
+                "status": "pass",
+                "duration_ms": 1,
+                "assertions": [{"detail": "y".repeat(120)}],
+            }));
+        }
+        let mut envelope = json!({
+            "ok": false,
+            "status": "fail",
+            "error": {"code": "assertion_failed", "message": "step 2 failed"},
+            "result": {
+                "artifacts_dir": "out/run",
+                "verdict_path": "out/run/verdict.json",
+                "provenance": {
+                    "engine": "art",
+                    "fidelity": "art-reference",
+                    "apk": {"sha256_12": "8170835e70f2"},
+                    "scenario": {"sha256_12": "4ac610c4ce06"},
+                    "warnings": []
+                },
+                "verdict": {
+                    "status": "fail",
+                    "evidence_provenance": {"frames": "host-observed", "logs": "guest-asserted"},
+                    "failure": {"code": "assertion_failed", "step_index": 2, "summary": "assert_text failed"},
+                    "steps": steps,
+                },
+            },
+        });
+        assert!(
+            serialized_len(&envelope) > MAX_REPLY_BYTES,
+            "the fixture must exceed the cap: {}",
+            serialized_len(&envelope)
+        );
+        let reduced = enforce_cap(&mut envelope, MAX_REPLY_BYTES);
+        assert!(reduced > 0);
+        assert!(serialized_len(&envelope) <= MAX_REPLY_BYTES);
+        // Envelope outcome survives untouched.
+        assert_eq!(envelope["status"], "fail");
+        assert_eq!(envelope["error"]["code"], "assertion_failed");
+        // Verdict outcome.
+        assert_eq!(envelope["result"]["reply_capped"], true);
+        assert_eq!(envelope["result"]["verdict_status"], "fail");
+        // Failing step summary: index, kind, message.
+        assert_eq!(envelope["result"]["failed_step"]["index"], 2);
+        assert_eq!(envelope["result"]["failed_step"]["kind"], "assert_text");
+        assert_eq!(
+            envelope["result"]["failed_step"]["message"],
+            "expected \"Todo\" in the tree"
+        );
+        // Provenance: apk/scenario identity and host vs guest evidence.
+        assert_eq!(
+            envelope["result"]["provenance"]["apk"]["sha256_12"],
+            "8170835e70f2"
+        );
+        assert_eq!(
+            envelope["result"]["evidence_provenance"]["frames"],
+            "host-observed"
+        );
+        // Only the bulk is gone: no step list, no tree, no log list inline.
+        assert!(envelope["result"].get("steps").is_none());
+        assert!(envelope["result"].get("verdict").is_none());
     }
 }

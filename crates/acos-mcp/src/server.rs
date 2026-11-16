@@ -356,7 +356,16 @@ impl<B: Backend> Server<B> {
             None => None,
         };
         if let Some(envelope) = valid_arguments {
-            return tool_result(id, &envelope, &self.negotiated_version(), &self.config);
+            // REL3B's strict-argument rejection still goes through REL3C's one
+            // reply rule, so an invalid-argument reply is bounded and shaped
+            // exactly like every other reply.
+            return tool_result(
+                id,
+                &envelope,
+                &self.negotiated_version(),
+                &self.config,
+                &args,
+            );
         }
 
         let permit = match self.gate.acquire(self.config.queue_timeout, token) {
