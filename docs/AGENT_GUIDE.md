@@ -459,12 +459,13 @@ A scenario step is a fixed document: it keeps first-match-plus-`index`.)
   latency-sensitive probing only: it may be mid-animation, it is **never**
   assertion evidence, and `acos_assert` rejects it with `INVALID_ARGUMENT`.
   Scenarios cannot request fast for an assertion step at all.
-* **A `tap` step always runs its own state-change check** (`expect_change:
-  auto`). The step JSON's `input` block says `expect_change: "auto"` for every
-  tap, so this is no longer hidden: when the tap's settled frame differs from
-  the previous observation, the step additionally requires the change to be
-  visible in **both** the UI tree and the screenshot (`state_change` assertion),
-  and fails with `ASSERTION_FAILED` if only one moved. A tap that the app did
+* **A `tap` step always runs its own state-change check**
+  (`expect_change: "auto"`). The step JSON's `input` block says
+  `expect_change: "auto"` for every tap, so this is no longer hidden: when the
+  tap's settled frame differs from the previous observation, the step
+  additionally requires the change to be visible in **both** the UI tree and the
+  screenshot (`state_change` assertion), and fails with `ASSERTION_FAILED` if
+  only one moved. A tap that the app did
   not handle (`input.handled: false`) or that changed nothing
   (`state_changed: false`) passes with an `input_delivery` assertion and an
   explanatory message — the auto rule never asks a no-op tap to repaint. Set
