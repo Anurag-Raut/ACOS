@@ -4670,6 +4670,9 @@ impl SessionBackend for ArtSession {
             request["args"] = args.clone();
         }
         let reply = self.service_op(request)?;
+        if std::env::var_os("ACOS_SERVICE_CTL_DEBUG").is_some() {
+            eprintln!("acos-service-ctl: {reply}");
+        }
         if let Some(modules) = reply.get("modules").and_then(|v| v.as_array()) {
             self.modules = modules.clone();
         }

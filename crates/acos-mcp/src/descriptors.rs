@@ -838,8 +838,9 @@ mod tests {
     fn every_protocol_tool_is_mapped_to_a_command() {
         let caps = Capabilities::unprobed();
         let infos = tool_infos(&caps);
-        // 13 protocol tools + acos_capabilities + acos_help + 10 session tools.
-        assert_eq!(infos.len(), 25);
+        // 13 protocol tools + acos_capabilities + acos_help + the session tools
+        // (`SESSION_TOOL_NAMES`).
+        assert_eq!(infos.len(), 13 + 2 + SESSION_TOOL_NAMES.len());
         let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
         for descriptor in mcp_tools().tools {
             assert!(

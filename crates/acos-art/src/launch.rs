@@ -1163,6 +1163,22 @@ pub(crate) fn launch_session(
     sb.env("ACOSART_LOAD", "libandroid_runtime.so");
     sb.env("E3G_SOCK", "/data/acos-launch.sock");
     sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
+    // ADR-0029: the telephony module needs the framework's
+    // `TelephonyServiceManager`, which on a phone the telephony module's own
+    // process installs before any app starts. Forward the attached set's answer
+    // (never a guess): the guest installs it once, before the app boots.
+    let attached = |id: &str| {
+        session_module_rows.iter().any(|row| {
+            row.get("id").and_then(|value| value.as_str()) == Some(id)
+                && row.get("state").and_then(|value| value.as_str()) == Some("attached")
+        })
+    };
+    if attached("net.telephony") {
+        sb.env("ACOSLAUNCH_TELEPHONY", "1");
+    }
+    if attached("hw.bluetooth") {
+        sb.env("ACOSLAUNCH_BLUETOOTH", "1");
+    }
     // Display geometry the guest boots at. Forwarded only when the caller set
     // it (`acos-art launch --width …`, or the engine's `ACOS_ART_*`), so the
     // default guest is unchanged and the reference-device baselines keep
@@ -6556,11 +6572,24 @@ fn serve(
         // transaction is served.
         while let Some((id, request)) = control.take() {
             let reply = service_request(peer, modules, &request);
+            let debug_reply = reply.to_string();
             control.reply(id, reply);
             // A live `ctl` op can queue `system -> app` deliveries (an SMS, a
             // call-state event, an authentication result). No binder
             // transaction follows to flush them, so do it here.
-            for out in peer.take_delivery_frames() {
+            let flushed = peer.take_delivery_frames();
+            if let Ok(path) = std::env::var("ACOS_SERVICE_CTL_LOG") {
+                use std::io::Write as _;
+                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                    let _ = writeln!(
+                        file,
+                        "ctl reply={debug_reply} flushed={} targets={:?}",
+                        flushed.len(),
+                        flushed.iter().map(|f| (f.ty, f.code, f.target)).collect::<Vec<_>>()
+                    );
+                }
+            }
+            for out in flushed {
                 if let Err(e) = write_frame(fd, &out) {
                     eprintln!(
                         "peer-trace: write_frame FAILED after control op: {e} (ty={} seq={} code={} data={})",

@@ -363,6 +363,19 @@ impl Peer {
                         frame.data.len(),
                         text
                     );
+                    // A `system -> app` delivery the app's `onTransact` rejected
+                    // (a non-empty reply body is a binder exception parcel) is
+                    // evidence, not a log line: record it next to the
+                    // unsupported-transaction records so a verdict can see that
+                    // the callback never ran.
+                    let record = serde_json::json!({
+                        "kind": "REVERSE_DELIVERY_EXCEPTION",
+                        "seq": frame.seq,
+                        "bytes": frame.data.len(),
+                        "text": text,
+                    })
+                    .to_string();
+                    self.log_line(&record);
                 }
             }
             other => {
@@ -703,6 +716,12 @@ impl Peer {
         self.log_unsupported(&record);
     }
 
+    fn log_line(&mut self, line: &str) {
+        if let Some(log) = self.log.as_mut() {
+            let _ = writeln!(log, "{line}");
+        }
+    }
+
     fn log_unsupported(&mut self, record: &UnsupportedRecord) {
         // Keep the *first* records (they are the diagnosis of what the launch
         // needed), bound the in-memory copy and the JSONL file, and count what
@@ -908,6 +927,17 @@ impl Peer {
                  (cap {MAX_PENDING_DELIVERIES} per turn)"
             );
             pending.truncate(MAX_PENDING_DELIVERIES);
+        }
+        if std::env::var_os("ACOS_SERVICE_CTL_LOG").is_some() && !pending.is_empty() {
+            let path = std::env::var("ACOS_SERVICE_CTL_LOG").unwrap_or_default();
+            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                let _ = writeln!(
+                    file,
+                    "deliveries={} targets={:?}",
+                    pending.len(),
+                    pending.iter().map(|d| (d.interface.clone(), d.code, d.target.0)).collect::<Vec<_>>()
+                );
+            }
         }
         let mut out = Vec::new();
         for d in pending {

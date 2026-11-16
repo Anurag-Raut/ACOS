@@ -537,10 +537,16 @@ impl ServiceObject for AdapterService {
                 // All four are `oneway` and answer through the client's
                 // `ISynchronousResultReceiver`; a oneway reply has no header.
                 let Some(target) = result_receiver(data) else {
+                    let detail = format!(
+                        "code {code}: no ISynchronousResultReceiver binder in the request ({} object(s), {} byte(s))",
+                        data.objects().len(),
+                        data.data_size()
+                    );
+                    state.unsupported.push(detail.clone());
                     return Err(ServiceError::BadRequest {
                         interface: BLUETOOTH_DESCRIPTOR.to_string(),
                         method: format!("code {code}"),
-                        detail: "no ISynchronousResultReceiver binder in the request".into(),
+                        detail,
                     });
                 };
                 match code {

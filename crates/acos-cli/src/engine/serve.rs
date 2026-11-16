@@ -2792,6 +2792,9 @@ fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, Back
             request["args"] = module_args.clone();
         }
         let mut reply = session.service_op(request)?;
+        if std::env::var_os("ACOS_SERVICE_CTL_DEBUG").is_some() {
+            eprintln!("acos-service-ctl: {}", reply);
+        }
         reply["session_id"] = json!(args
             .pointer("/base/session_id")
             .or_else(|| args.get("session_id"))

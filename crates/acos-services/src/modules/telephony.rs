@@ -125,6 +125,14 @@ const REGISTRY_LISTEN_WITH_EVENT_LIST: u32 = 4;
 const SMS_SEND_TEXT_FOR_SUBSCRIBER: u32 = 5;
 /// `ISms.isSmsSimPickActivityNeeded(int)`.
 const SMS_IS_SIM_PICK_ACTIVITY_NEEDED: u32 = 19;
+/// `ISms.isImsSmsSupportedForSubscriber(int)`.
+const SMS_IS_IMS_SMS_SUPPORTED_FOR_SUBSCRIBER: u32 = 18;
+/// `ISms.getPreferredSmsSubscription()`.
+const SMS_GET_PREFERRED_SMS_SUBSCRIPTION: u32 = 20;
+/// `ISms.getImsSmsFormatForSubscriber(int)`.
+const SMS_GET_IMS_SMS_FORMAT_FOR_SUBSCRIBER: u32 = 21;
+/// `ISms.isSMSPromptEnabled()`.
+const SMS_IS_SMS_PROMPT_ENABLED: u32 = 22;
 
 /// `IPhoneStateListener.onLegacyCallStateChanged(int, String)` — the callback a
 /// `PhoneStateListener` with `LISTEN_CALL_STATE` is registered as.
@@ -172,6 +180,17 @@ pub struct InjectedSms {
     pub matched: i32,
 }
 
+/// One scripted call-state change and what it delivered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallEvent {
+    /// `TelephonyManager.CALL_STATE_*`.
+    pub state: i32,
+    /// The incoming number the event carried.
+    pub number: Option<String>,
+    /// Registered listeners that received the event.
+    pub delivered: u32,
+}
+
 /// A registered `IPhoneStateListener` and the event ids it asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateListener {
@@ -208,6 +227,8 @@ pub struct TelephonyState {
     pub call_state: i32,
     /// Registered listeners.
     pub listeners: Vec<StateListener>,
+    /// Scripted call-state changes (the `call_state` control op's evidence).
+    pub call_events: Vec<CallEvent>,
     /// Recorded outgoing SMS.
     pub sent: Vec<SentSms>,
     /// Injected incoming SMS.
@@ -229,6 +250,7 @@ impl Default for TelephonyState {
             incoming_number: None,
             call_state: CALL_STATE_IDLE,
             listeners: Vec::new(),
+            call_events: Vec::new(),
             sent: Vec::new(),
             injected: Vec::new(),
             unsupported: Vec::new(),
@@ -250,6 +272,11 @@ impl TelephonyState {
             "operator_name": self.operator_name,
             "call_state": self.call_state,
             "incoming_number": self.incoming_number,
+            "call_events": self.call_events.iter().map(|event| json!({
+                "state": event.state,
+                "number": event.number,
+                "delivered": event.delivered,
+            })).collect::<Vec<_>>(),
             "listeners": self.listeners.iter().map(|l| json!({
                 "events": l.events,
                 "package": l.package,
@@ -338,7 +365,11 @@ fn manifest_ref() -> &'static ModuleManifest {
             ram_mib: 1,
             startup_ms: 5,
         },
-        attach: AttachMode::Hot,
+        // The framework's `TelephonyServiceManager` is installed once, before
+        // the guest boots (the phone process's job on a device), so telephony is
+        // an at-launch module: a live attach could serve `phone` but every
+        // `TelephonyManager` call would still NPE on the null manager.
+        attach: AttachMode::AtLaunch,
         controls: &CONTROL_OPS,
         security: SecurityClass::InProcess,
     };
@@ -769,6 +800,36 @@ impl ServiceObject for SmsService {
                     });
                 }
                 write_no_exception(reply);
+                Ok(true)
+            }
+            // `SmsManager.sendTextMessage` resolves the subscription before it
+            // sends: `getPreferredSmsSubscription` (no subscription service, so
+            // AOSP's own invalid id), `isImsSmsSupported` false and the IMS
+            // format. Answering them keeps the framework on its own path instead
+            // of failing with a structured error for a method the stub simply
+            // did not list.
+            SMS_GET_PREFERRED_SMS_SUBSCRIPTION => {
+                write_no_exception(reply);
+                reply.write_int32(-1); // SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                Ok(true)
+            }
+            SMS_IS_IMS_SMS_SUPPORTED_FOR_SUBSCRIBER => {
+                let _sub = data.read_int32().map_err(|e| self.bad("isImsSmsSupportedForSubscriber", e.to_string()))?;
+                write_no_exception(reply);
+                reply.write_int32(0);
+                Ok(true)
+            }
+            SMS_GET_IMS_SMS_FORMAT_FOR_SUBSCRIBER => {
+                let _sub = data.read_int32().map_err(|e| self.bad("getImsSmsFormatForSubscriber", e.to_string()))?;
+                write_no_exception(reply);
+                reply
+                    .write_string16_opt(Some("3gpp"))
+                    .map_err(ServiceError::Parcel)?;
+                Ok(true)
+            }
+            SMS_IS_SMS_PROMPT_ENABLED => {
+                write_no_exception(reply);
+                reply.write_int32(0);
                 Ok(true)
             }
             SMS_IS_SIM_PICK_ACTIVITY_NEEDED => {
@@ -1315,6 +1376,11 @@ impl Module for TelephonyModule {
                         delivered += 1;
                     }
                 }
+                state_of(&shared).call_events.push(CallEvent {
+                    state: next,
+                    number: number.clone(),
+                    delivered,
+                });
                 Ok(json!({
                     "call_state": next,
                     "incoming_number": number,
@@ -1360,6 +1426,7 @@ impl Module for TelephonyModule {
                 let mut state = state_of(&shared);
                 state.sent.clear();
                 state.injected.clear();
+                state.call_events.clear();
                 state.unsupported.clear();
                 Ok(json!({"reset": true}))
             }
@@ -1392,7 +1459,7 @@ impl Module for TelephonyModule {
                 .and_then(Value::as_array)
                 .map_or(0, Vec::len);
             report.reason = Some(format!(
-                "{} profile: scripted SIM/network/line-1 answers, {sent} recorded outgoing SMS, {injected} injected incoming SMS, {listeners} call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)",
+                "{} profile: scripted SIM/network/line-1 answers, {sent} recorded outgoing SMS, {injected} injected incoming SMS, {listeners} call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)",
                 self.profile
             ));
         }
