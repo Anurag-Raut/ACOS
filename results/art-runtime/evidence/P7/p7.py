@@ -46,7 +46,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent.parent.parent          # results/art-runtime/evidence/P7
 sys.path.insert(0, str(REPO / "tools"))
+sys.path.insert(0, str(REPO / "tools/bench"))
 import benchlib  # noqa: E402
+import bench_reply  # noqa: E402  (BENCHFIX: the reply/tree contract)
 
 BIN = REPO / "target/release/acos"
 ART_BIN = REPO / "target/release/acos-art"
@@ -171,8 +173,23 @@ def count_text(tree):
 
 
 def tree_ok(tree):
-    """The counter's settled, correct tree: count 0 and the full node set."""
-    return (count_text(tree) == EXPECT_TEXT and len(nodes_of(tree)) == EXPECT_NODES)
+    """The counter's settled, correct screen (count 0, fixture ids present).
+
+    BENCHFIX: this used to be `len(nodes_of(tree)) == EXPECT_NODES` (12), a
+    measurement of one ART revision written down in P6.  The same verified screen
+    walks 14 nodes since v0.2.2, so every M3 run refused its own reference
+    (`reference tree is not the count-0 screen: count='0' nodes=14`).  A measured
+    node count is not a correctness rule; `bench_reply.counter_screen_problems`
+    checks what the rule actually means (the count node says 0, the fixture's
+    `count`/`inc`/`reset` nodes are laid out, the walk is not truncated, and the
+    node set is not a skeleton) and needs no magic number.
+    """
+    return not bench_reply.counter_screen_problems(tree)
+
+
+def screen(tree, where):
+    """The full tree of a reply (inline on v0.2.2-, `tree_path` file on rel-030+)."""
+    return bench_reply.full_tree(tree, where)
 
 
 def start_daemon(scratch, tag):
@@ -215,30 +232,32 @@ def make_reference(scratch):
     try:
         d = Daemon(sock)
         base = {"session_id": "s_ref"}
-        ms, r = d.call("acos_launch", {"base": base, "apk": str(APK)})
-        env = r.get("envelope") or {}
-        if not env.get("ok"):
-            raise RuntimeError("reference launch failed: %s" % json.dumps(r)[:400])
-        res = env["result"]
-        if not tree_ok(res.get("tree")):
-            raise RuntimeError("reference tree is not the count-0 screen: count=%r nodes=%d"
-                               % (count_text(res.get("tree")), len(nodes_of(res.get("tree")))))
-        shots = []
+        # BENCHFIX: `pixels: true` is what makes the launch reply's frame a real
+        # capture with an md5 (on rel-030 a metadata-only frame carries ""), and the
+        # screen is read from the full tree the reply points at, not from a compact
+        # page.  The two captures are frame-only `acos_observe` replies: FB2c
+        # confines a `screenshot: <path>` to the session's artifacts directory, so
+        # the old `<scratch>/ref-N.png` was an argument error and both captures
+        # came back with no frame at all.
+        ms, r = d.call("acos_launch", {"base": base, "apk": str(APK), "pixels": True})
+        res, res_tree = bench_reply.require_launch(r.get("envelope"), "reference launch")
+        bench_reply.require_counter_screen(res_tree, "reference launch")
+        md5s = []
         for i in (1, 2):
-            p = scratch / ("ref-%d.png" % i)
-            ms, r = d.call("acos_observe", {"base": base, "png": True, "screenshot": str(p)})
-            shots.append(((r["envelope"]["result"]["frame"]), p))
-        md5s = [s[0]["md5"] for s in shots]
-        if md5s[0] != md5s[1]:
-            raise RuntimeError("two consecutive settled captures differ: %s" % md5s)
+            _ms, rr = d.call("acos_observe", {"base": base, "tree": False})
+            _value, md5 = bench_reply.require_capture(
+                rr.get("envelope"), "reference capture %d" % i)
+            md5s.append(md5)
+        md5 = bench_reply.identical_captures(md5s, "reference")
         # the launch reply's bound frame must be the same settled screen
-        if res.get("frame", {}).get("md5") != md5s[0]:
+        launch_md5 = bench_reply.frame_md5(res, "reference launch")
+        if launch_md5 != md5:
             raise RuntimeError("launch frame %s != settled capture %s"
-                               % (res.get("frame", {}).get("md5"), md5s[0]))
+                               % (launch_md5, md5))
         d.call("acos_destroy", {"base": base})
         d.close()
-        return {"md5": md5s[0], "png": str(shots[0][1]), "nodes": len(nodes_of(res["tree"])),
-                "count_text": count_text(res["tree"]), "daemon_start_ms": sock_ms,
+        return {"md5": md5, "nodes": len(nodes_of(res_tree)),
+                "count_text": count_text(res_tree), "daemon_start_ms": sock_ms,
                 "launch_ms": ms}
     finally:
         stop_daemon(proc)
@@ -254,15 +273,20 @@ def one_launch(d, base, ref_md5, scratch, tag, t0, t0_utc):
     t_launch_send = time.perf_counter()
     launch_utc = utc()
     row["launch_start_ms"] = (t_launch_send - t0) * 1000.0
-    launch_ms, reply = d.call("acos_launch", {"base": base, "apk": str(APK)})
+    # BENCHFIX: pixels give the reply a real capture md5 (M3 compares it to the
+    # reference); the screen is the full tree, never the compact page.
+    launch_ms, reply = d.call("acos_launch", {"base": base, "apk": str(APK),
+                                              "pixels": True})
     env = reply.get("envelope") or {}
     row["launch_wall_ms"] = launch_ms
     if not env.get("ok"):
         row["error"] = (env.get("error") or {}).get("code") or "launch-failed"
         return row
     res = env["result"]
-    row["launch_tree_ok"] = tree_ok(res.get("tree"))
-    row["launch_count_text"] = count_text(res.get("tree"))
+    launch_tree = screen(res, "M3/M4 launch")
+    row["launch_tree_ok"] = tree_ok(launch_tree)
+    row["launch_count_text"] = count_text(launch_tree)
+    row["launch_nodes"] = len(nodes_of(launch_tree))
     row["launch_frame_md5"] = (res.get("frame") or {}).get("md5")
     row["launch_frame_seq"] = (res.get("frame") or {}).get("frame_seq")
     row["launch_frame_captured_at"] = (res.get("frame") or {}).get("captured_at")
@@ -278,21 +302,12 @@ def one_launch(d, base, ref_md5, scratch, tag, t0, t0_utc):
         # observing real captures until one is (P6's screencap poll).
         while polls < 30:
             polls += 1
-            p = scratch / ("poll-%s-%d.png" % (tag, polls))
-            ms, r = d.call("acos_observe", {"base": base, "png": True, "screenshot": str(p)})
+            ms, r = d.call("acos_observe", {"base": base, "tree": False})
             fr = ((r.get("envelope") or {}).get("result") or {}).get("frame") or {}
             if fr.get("md5") == ref_md5:
                 accepted = ("poll", (time.perf_counter() - t_launch_send) * 1000.0,
                             t_ms_since(fr.get("captured_at"), launch_utc))
-                try:
-                    p.unlink()
-                except OSError:
-                    pass
                 break
-            try:
-                p.unlink()
-            except OSError:
-                pass
     row["polls"] = polls
     if accepted is None:
         row["error"] = "no-correct-frame"
@@ -306,11 +321,12 @@ def one_launch(d, base, ref_md5, scratch, tag, t0, t0_utc):
                               else row["launch_start_ms"] + accepted[2])
     # P6's rule: re-read the tree AFTER the accepted frame.
     tv_ms, tv = d.call("acos_observe_tree", {"base": base})
-    vres = (tv.get("envelope") or {}).get("result") or {}
+    vres, vtree = bench_reply.require_tree_read(tv.get("envelope"),
+                                                "M3/M4 verify tree")
     row["verify_tree_wall_ms"] = tv_ms
-    row["verify_count_text"] = count_text(vres.get("tree"))
-    row["verify_nodes"] = len(nodes_of(vres.get("tree")))
-    row["verified"] = tree_ok(vres.get("tree"))
+    row["verify_count_text"] = count_text(vtree)
+    row["verify_nodes"] = len(nodes_of(vtree))
+    row["verified"] = tree_ok(vtree)
     row["total_wall_ms"] = (time.perf_counter() - t0) * 1000.0
     row["ok"] = bool(row["verified"])
     return row
