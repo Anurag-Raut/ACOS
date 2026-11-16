@@ -1044,11 +1044,11 @@ pub(crate) fn launch_session(
         sb.with_image(Some(image.dir.clone()));
     }
     sb.run_root(run.path());
-    // NET3: the relay session takes the *serve* session id when the caller has
-    // one (`ACOS_ART_SESSION_ID`, set by the engine's interactive spawn), so the
-    // live session API's `acos_net` controls address the session the client
-    // knows. Without it the name is `art-<pid>` and no client could name it.
-    if let Ok(id) = std::env::var("ACOS_ART_SESSION_ID") {
+    // NET3/NET4: the relay session is named after the session id the engine
+    // published (`ACOS_ART_SESSION_ID`) — for an `acos serve` session and for a
+    // one-shot `verify` run alike — so the live session API's `acos_net` controls
+    // address the session by the id its own client holds.
+    if let Ok(id) = std::env::var(crate::spike_net::SESSION_ID_ENV) {
         if !id.is_empty() {
             sb.net_session(Some(&id));
         }

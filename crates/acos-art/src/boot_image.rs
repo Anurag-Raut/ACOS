@@ -94,7 +94,16 @@ pub const IMAGE_FORMAT_VERSION: u32 = 1;
 /// Cache manifest identity (independent of [`IMAGE_FORMAT_VERSION`]).
 pub const CACHE_FORMAT: &str = "acos-art-boot-image/1";
 /// Entry directories kept in the cache (current + one previous input set).
+///
+/// Chosen together with [`KEEP_FRESH_SECS`]: the cap is by *last use*, not by
+/// build time, so a launch never evicts the entry another launch is using.
 pub const KEEP_ENTRIES: usize = 2;
+/// An entry used within this window is not evicted for space: some session (or
+/// another agent's session on this host) is running on it.
+pub const KEEP_FRESH_SECS: u64 = 900;
+/// Hard cap on entries, so a host that legitimately needs several images cannot
+/// grow the cache without bound. Each entry is ~170 MiB.
+pub const MAX_ENTRIES: usize = KEEP_ENTRIES + 1;
 /// Bytes sampled from each end of an image file for the integrity checksum.
 pub const SAMPLE_BYTES: usize = 4096;
 
@@ -423,8 +432,19 @@ fn fnv_bytes(hash: &mut u64, bytes: &[u8]) {
     }
 }
 
-fn fnv_file_identity(hash: &mut u64, path: &Path) -> bool {
-    fnv_bytes(hash, path.to_string_lossy().as_bytes());
+/// Hash a file's *identity* — its path **relative to the sysroot**, its size and
+/// its mtime — never the absolute path.
+///
+/// The relative path is what makes the key portable: every worktree mounts the
+/// same AOSP image at a different absolute path (`<wt>/.cache/art/sysroot`), so
+/// hashing the absolute path gave each worktree its own cache entry even though
+/// the bytes were identical. On a host shared by several agents that turned into
+/// cache thrash: `KEEP_ENTRIES` entries were evicted by the other worktrees'
+/// builds, and every launch then paid a 4–12 s dex2oat rebuild inside the guest
+/// boot (measured, NET4 §1).
+fn fnv_file_identity(hash: &mut u64, sysroot: &Path, path: &Path) -> bool {
+    let rel = path.strip_prefix(sysroot).unwrap_or(path);
+    fnv_bytes(hash, rel.to_string_lossy().as_bytes());
     match fs::metadata(path) {
         Ok(meta) => {
             fnv_bytes(hash, &meta.len().to_le_bytes());
@@ -440,9 +460,9 @@ fn fnv_file_identity(hash: &mut u64, path: &Path) -> bool {
 }
 
 /// The `dex2oat64` binary and the runtime libraries the image must match.
-fn runtime_binaries(root: &ArtRoot) -> Vec<PathBuf> {
+fn runtime_binaries(sysroot: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    let mut apex_dirs: Vec<PathBuf> = fs::read_dir(root.sysroot.join("system/apex"))
+    let mut apex_dirs: Vec<PathBuf> = fs::read_dir(sysroot.join("system/apex"))
         .map(|rd| rd.flatten().map(|entry| entry.path()).collect())
         .unwrap_or_default();
     apex_dirs.sort();
@@ -462,7 +482,7 @@ fn runtime_binaries(root: &ArtRoot) -> Vec<PathBuf> {
     }
     // The linker resolves these from the platform too.
     for rel in ["system/lib64/libandroid_runtime.so", "system/lib64/libc.so"] {
-        let path = root.sysroot.join(rel);
+        let path = sysroot.join(rel);
         if path.is_file() {
             out.push(path);
         }
@@ -474,7 +494,7 @@ fn runtime_binaries(root: &ArtRoot) -> Vec<PathBuf> {
 /// `system/apex/*/jars/*.jar`. A superset of the live `BOOTCLASSPATH` is
 /// deliberate: a jar that appears, disappears or changes must invalidate the
 /// entry even if `derive_classpath` has not re-run yet.
-fn boot_jars(root: &ArtRoot) -> Vec<PathBuf> {
+fn boot_jars(sysroot: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut push_jars = |dir: &Path| {
         if let Ok(rd) = fs::read_dir(dir) {
@@ -486,8 +506,8 @@ fn boot_jars(root: &ArtRoot) -> Vec<PathBuf> {
             }
         }
     };
-    push_jars(&root.sysroot.join("system/framework"));
-    let mut apex_dirs: Vec<PathBuf> = fs::read_dir(root.sysroot.join("system/apex"))
+    push_jars(&sysroot.join("system/framework"));
+    let mut apex_dirs: Vec<PathBuf> = fs::read_dir(sysroot.join("system/apex"))
         .map(|rd| rd.flatten().map(|entry| entry.path()).collect())
         .unwrap_or_default();
     apex_dirs.sort();
@@ -500,28 +520,41 @@ fn boot_jars(root: &ArtRoot) -> Vec<PathBuf> {
 }
 
 /// Hash every input of the image recipe into one cache key.
+///
+/// **The sysroot's location is not an input; its content is.** Two sessions that
+/// read the same image through different mount points must share one boot image
+/// (see [`fnv_file_identity`]), so nothing here may hash an absolute path.
 pub fn inputs(root: &ArtRoot, image_format: &str, base: u32) -> Result<Inputs> {
+    inputs_for_sysroot(&root.sysroot, image_format, base)
+}
+
+/// [`inputs`] for a sysroot path (the same recipe, separated so the key can be
+/// tested without an [`ArtRoot`]).
+pub fn inputs_for_sysroot(sysroot: &Path, image_format: &str, base: u32) -> Result<Inputs> {
     let mut hash = FNV_OFFSET;
     fnv_bytes(&mut hash, CACHE_FORMAT.as_bytes());
     fnv_bytes(&mut hash, &IMAGE_FORMAT_VERSION.to_le_bytes());
     fnv_bytes(&mut hash, image_format.as_bytes());
     fnv_bytes(&mut hash, &base.to_le_bytes());
     fnv_bytes(&mut hash, b"--instruction-set=x86_64");
-    fnv_bytes(&mut hash, root.sysroot.to_string_lossy().as_bytes());
+    // A fixed tag where the sysroot's absolute path used to be: the layout
+    // below names every input relative to the sysroot, so the tag only keeps
+    // this section distinct from a recipe that hashes no sysroot at all.
+    fnv_bytes(&mut hash, b"sysroot");
     // The boot classpath definition the build will be given. The environ file
     // is what `derive_classpath` wrote; BOOTCLASSPATH is the sysroot fallback.
     for rel in ["system/environ/classpath", "BOOTCLASSPATH"] {
-        if let Ok(text) = fs::read_to_string(root.sysroot.join(rel)) {
+        if let Ok(text) = fs::read_to_string(sysroot.join(rel)) {
             fnv_bytes(&mut hash, rel.as_bytes());
             fnv_bytes(&mut hash, text.as_bytes());
         }
     }
-    for path in runtime_binaries(root) {
-        fnv_file_identity(&mut hash, &path);
+    for path in runtime_binaries(sysroot) {
+        fnv_file_identity(&mut hash, sysroot, &path);
     }
-    let jars = boot_jars(root);
+    let jars = boot_jars(sysroot);
     for jar in &jars {
-        fnv_file_identity(&mut hash, jar);
+        fnv_file_identity(&mut hash, sysroot, jar);
     }
     Ok(Inputs { key: format!("{hash:016x}"), jars: jars.len(), base })
 }
@@ -724,33 +757,93 @@ fn with_dir_lock<T>(cache: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
     result
 }
 
-/// Keep the newest [`KEEP_ENTRIES`] `fixed-*` directories, best effort. A
-/// directory still mapped by a running session cannot be freed, and deleting it
-/// is safe on Linux (the inode lives until the last mapping is gone).
+/// The "last used" stamp of one cache entry, kept **next to** it: a published
+/// entry is read-only (and immutable), so the only thing a launch may write is
+/// this marker.
+fn use_stamp(cache: &Path, key: &str) -> PathBuf {
+    cache.join(format!(".use-{key}"))
+}
+
+/// Record that an entry was used now (`hit` or fresh build). Best effort: a
+/// cache that cannot be stamped still serves.
+fn touch_use_stamp(cache: &Path, key: &str) {
+    let path = use_stamp(cache, key);
+    if let Ok(file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = file.set_modified(std::time::SystemTime::now());
+    }
+}
+
+/// The cache key of an entry directory (`fixed-<key>` becomes `<key>`).
+fn entry_key(path: &Path) -> String {
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    name.strip_prefix("fixed-").unwrap_or(&name).to_string()
+}
+
+/// Keep the [`KEEP_ENTRIES`] most recently **used** `fixed-*` directories, plus
+/// any entry used within [`KEEP_FRESH_SECS`] up to [`MAX_ENTRIES`], best effort.
+///
+/// **Why last use and not build time.** On a host shared by several agents the
+/// cache holds the boot image of every image in use. Pruning by build time let
+/// one worktree's build evict another worktree's *live* entry, and the next
+/// launch in that worktree paid a full `dex2oat` rebuild (4–12 s) inside the
+/// guest's boot — the relay-arm "boot regression" of NET3 (`engine.json`
+/// `timing.boot_image.cache=built`). A stamp touched on every lookup means an
+/// entry that a session is running on is never the oldest.
+///
+/// A directory still mapped by a running session cannot be freed, and deleting
+/// it is safe on Linux (the inode lives until the last mapping is gone) — but
+/// the *next* launch there would rebuild, which is exactly what the freshness
+/// rule prevents.
 fn prune(cache: &Path, keep: &Path) {
     let Ok(rd) = fs::read_dir(cache) else { return };
+    let now = std::time::SystemTime::now();
+    let fresh = |at: std::time::SystemTime| {
+        now.duration_since(at)
+            .map(|d| d.as_secs() < KEEP_FRESH_SECS)
+            .unwrap_or(false)
+    };
     let mut entries: Vec<(std::time::SystemTime, PathBuf)> = rd
         .flatten()
         .filter(|entry| entry.file_name().to_string_lossy().starts_with("fixed-"))
         .map(|entry| {
-            let mtime = entry
-                .metadata()
-                .and_then(|m| m.modified())
+            let key = entry_key(&entry.path());
+            let used = fs::metadata(use_stamp(cache, &key)).and_then(|m| m.modified()).ok();
+            let mtime = used
+                .or_else(|| entry.metadata().and_then(|m| m.modified()).ok())
                 .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
             (mtime, entry.path())
         })
         .collect();
     entries.sort_by(|a, b| b.0.cmp(&a.0));
-    for (_, path) in entries.into_iter().skip(KEEP_ENTRIES) {
-        if path != keep {
-            let _ = fs::remove_dir_all(&path);
+    let mut kept = 0usize;
+    for (at, path) in entries {
+        if path == keep {
+            kept += 1;
+            continue;
+        }
+        if kept < KEEP_ENTRIES || (kept < MAX_ENTRIES && fresh(at)) {
+            kept += 1;
+            continue;
+        }
+        let key = entry_key(&path);
+        if fs::remove_dir_all(&path).is_ok() {
+            let _ = fs::remove_file(use_stamp(cache, &key));
         }
     }
-    // Temp directories from a killed build.
+    // Temp directories from a killed build, and stamps whose entry is gone.
     if let Ok(rd) = fs::read_dir(cache) {
         for entry in rd.flatten() {
-            if entry.file_name().to_string_lossy().starts_with(".tmp-") {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with(".tmp-") {
                 let _ = fs::remove_dir_all(entry.path());
+            } else if let Some(key) = name.strip_prefix(".use-") {
+                if !cache.join(format!("fixed-{key}")).exists() {
+                    let _ = fs::remove_file(entry.path());
+                }
             }
         }
     }
@@ -781,13 +874,17 @@ where
 {
     let target = cache.join(format!("fixed-{}", inputs.key));
     private_dir(cache)?;
-    // Fast path without the lock: a valid entry is immutable.
+    // Fast path without the lock: a valid entry is immutable. A hit stamps the
+    // entry as used *before* returning, so a concurrent build elsewhere on this
+    // host cannot prune what this session is about to map.
     if validate_entry(&target, &inputs.key).is_ok() {
+        touch_use_stamp(cache, &inputs.key);
         return Ok((target, CacheOutcome::Hit));
     }
     with_dir_lock(cache, || {
         // Re-check under the lock: a concurrent builder may have published it.
         if validate_entry(&target, &inputs.key).is_ok() {
+            touch_use_stamp(cache, &inputs.key);
             return Ok((target.clone(), CacheOutcome::Hit));
         }
         let reason = validate_entry(&target, &inputs.key).err();
@@ -833,6 +930,7 @@ where
         }
         fs::rename(&tmp, &target)?;
         File::open(cache)?.sync_all()?;
+        touch_use_stamp(cache, &inputs.key);
         let pointer = cache.join("current.json");
         write_json(
             &pointer,
@@ -1289,18 +1387,118 @@ mod tests {
         assert!(!cache.join("fixed-00000000000000ff").exists());
     }
 
-    #[test]
-    fn pruning_keeps_the_newest_entries() {
-        let cache = scratch("prune");
-        for key in ["0000000000000001", "0000000000000002", "0000000000000003"] {
-            ensure_cached(&cache, &inputs_for(key), fake_build).unwrap();
-        }
-        let dirs: Vec<String> = fs::read_dir(&cache)
+    fn cache_dirs(cache: &Path) -> Vec<String> {
+        let mut dirs: Vec<String> = fs::read_dir(cache)
             .unwrap()
             .flatten()
             .map(|e| e.file_name().to_string_lossy().to_string())
             .filter(|n| n.starts_with("fixed-"))
             .collect();
-        assert_eq!(dirs.len(), KEEP_ENTRIES, "kept exactly {KEEP_ENTRIES}: {dirs:?}");
+        dirs.sort();
+        dirs
+    }
+
+    /// Age an entry's last-use stamp, so a test can make it "stale" without
+    /// waiting [`KEEP_FRESH_SECS`].
+    fn age_use_stamp(cache: &Path, key: &str, secs: u64) {
+        let path = use_stamp(cache, key);
+        let file = OpenOptions::new().write(true).open(&path).unwrap();
+        file.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(secs))
+            .unwrap();
+    }
+
+    /// NET4: an entry another agent is *using* is not evicted by a build here.
+    /// Before the last-use stamp, prune ordered entries by build time, so two
+    /// worktrees sharing one host (this one) evicted each other's boot image on
+    /// every launch and paid a 4–12 s `dex2oat` rebuild inside the guest boot.
+    #[test]
+    fn pruning_keeps_a_fresh_entry_and_evicts_a_stale_one() {
+        let cache = scratch("prune");
+        for key in ["0000000000000001", "0000000000000002", "0000000000000003"] {
+            ensure_cached(&cache, &inputs_for(key), fake_build).unwrap();
+        }
+        // The two oldest are stale; the newest one (`0003`, just built) is fresh.
+        age_use_stamp(&cache, "0000000000000001", KEEP_FRESH_SECS + 60);
+        age_use_stamp(&cache, "0000000000000002", KEEP_FRESH_SECS + 60);
+        // A hit on the oldest one makes it the most recently used.
+        let (_, outcome) =
+            ensure_cached(&cache, &inputs_for("0000000000000001"), fake_build).unwrap();
+        assert_eq!(outcome, CacheOutcome::Hit, "the entry is still valid");
+        assert_eq!(
+            cache_dirs(&cache),
+            vec![
+                "fixed-0000000000000001".to_string(),
+                "fixed-0000000000000002".to_string(),
+                "fixed-0000000000000003".to_string()
+            ],
+            "KEEP_ENTRIES plus the fresh entries: nothing is evicted yet"
+        );
+        // Now a fourth, distinct entry: the total exceeds MAX_ENTRIES, so the
+        // least recently used *and* stale entry (`0002`) goes; the fresh one
+        // built here and the freshly used one stay.
+        ensure_cached(&cache, &inputs_for("0000000000000004"), fake_build).unwrap();
+        assert_eq!(
+            cache_dirs(&cache),
+            vec![
+                "fixed-0000000000000001".to_string(),
+                "fixed-0000000000000003".to_string(),
+                "fixed-0000000000000004".to_string()
+            ],
+            "the stale, least recently used entry is the one that goes"
+        );
+    }
+
+    /// NET4: the same image reached through two different mount points is **one**
+    /// cache entry. Hashing the absolute sysroot path (the pre-NET4 key) gave
+    /// each worktree its own entry, and on a shared host those entries evicted
+    /// each other — the actual cause of the relay arm's 4.7–12.6 s session boot.
+    #[test]
+    fn the_same_image_at_two_paths_has_one_key() {
+        let base = scratch("key-paths");
+        let a = base.join("wt-a/sysroot");
+        let b = base.join("wt-b/sysroot");
+        let framework = a.join("system/framework");
+        fs::create_dir_all(&framework).unwrap();
+        let apex = a.join("system/apex/com.android.art");
+        fs::create_dir_all(apex.join("bin")).unwrap();
+        fs::create_dir_all(apex.join("lib64")).unwrap();
+        fs::create_dir_all(a.join("system/lib64")).unwrap();
+        fs::write(a.join("BOOTCLASSPATH"), "/system/framework/a.jar\n").unwrap();
+        fs::write(apex.join("bin/dex2oat64"), b"dex2oat").unwrap();
+        fs::write(apex.join("lib64/libart.so"), b"art").unwrap();
+        fs::write(framework.join("a.jar"), b"jar-bytes").unwrap();
+        fs::write(a.join("system/lib64/libc.so"), b"libc").unwrap();
+        // The other worktree's mount point shares the **same inodes** (as the
+        // per-worktree `.cache/art` symlink does), so only the absolute path
+        // differs between the two roots.
+        let mut rels: Vec<PathBuf> = Vec::new();
+        collect_files(&a, &a, &mut rels);
+        for rel in &rels {
+            let dst = b.join(rel);
+            fs::create_dir_all(dst.parent().unwrap()).unwrap();
+            fs::hard_link(a.join(rel), &dst).unwrap();
+        }
+
+        let key_a = inputs_for_sysroot(&a, "uncompressed", ART_BASE_ADDRESS).unwrap();
+        let key_b = inputs_for_sysroot(&b, "uncompressed", ART_BASE_ADDRESS).unwrap();
+        assert_eq!(key_a, key_b, "one image, one key, whatever its mount point");
+        assert_eq!(key_a.jars, 1, "the jar is an input");
+        assert!(a.to_string_lossy() != b.to_string_lossy());
+
+        // A rebuilt jar (new content and mtime) still misses the cache.
+        fs::write(a.join("system/framework/a.jar"), b"jar-bytes2").unwrap();
+        let changed = inputs_for_sysroot(&a, "uncompressed", ART_BASE_ADDRESS).unwrap();
+        assert_ne!(key_a.key, changed.key, "a changed jar must miss the cache");
+    }
+
+    fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_files(root, &path, out);
+            } else {
+                out.push(path.strip_prefix(root).unwrap().to_path_buf());
+            }
+        }
     }
 }

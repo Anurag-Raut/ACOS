@@ -1640,7 +1640,19 @@ impl<'a> Sandbox<'a> {
                 // network, and every attach costs a netns + veth.
                 Ok(acos_netd::client::Arm::Relay) => {
                     if self.active_run_root().is_some() {
-                        return Ok(spike_net::relay_wrap(&a, self.net_session.as_deref()));
+                        // NET4: a relay session is *named by the session id* and
+                        // nothing else. A session without one could not be
+                        // addressed by `acos_net`, so this fails closed instead of
+                        // inventing a name no client can use.
+                        let Some(id) = self.net_session.as_deref() else {
+                            return Err(Error::Layout(format!(
+                                "the relay arm needs a session id: set {} (the engine \
+                                 publishes the id it addresses the session by; a relay \
+                                 session without one is unreachable by `acos_net`)",
+                                spike_net::SESSION_ID_ENV
+                            )));
+                        };
+                        return Ok(spike_net::relay_wrap(&a, id));
                     }
                 }
                 Err(e) => return Err(Error::Layout(format!("{e}"))),

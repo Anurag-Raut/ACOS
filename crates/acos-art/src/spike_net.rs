@@ -214,17 +214,22 @@ pub fn arm() -> Result<acos_netd::client::Arm, String> {
     acos_netd::client::Arm::from_env().map_err(|e| e.message)
 }
 
-/// The relay session name for an ART session id (`None` = a one-shot run).
+/// The environment variable that carries this session's id from the engine
+/// (`acos-cli`'s ART engine) into the launcher process.
+pub const SESSION_ID_ENV: &str = "ACOS_ART_SESSION_ID";
+
+/// The relay session name for a session id — **one** rule for both paths.
 ///
-/// One naming rule for both sides: `acos-art` spawns the session under this name
-/// and the session API addresses the same session by its own id, so the controls
-/// (`offline`, `delay`, `hostport`) name the session the guest actually runs in.
+/// NET4: the engine publishes a session id for *every* session it starts (the
+/// `acos serve` id for an interactive session, its own run id for a one-shot
+/// `verify`), the launcher names the relay session `acos-<id>` from
+/// [`SESSION_ID_ENV`], and `acos_net` resolves the same `acos-<id>` from the id
+/// its client holds. Before this the one-shot path fell back to `art-<pid>`,
+/// which named a session no client could ever address — the network of a
+/// `verify` run was unreachable even though it existed.
 #[must_use]
-pub fn net_session_name(session_id: Option<&str>) -> String {
-    match session_id {
-        Some(id) if !id.is_empty() => format!("acos-{id}"),
-        _ => format!("art-{}", std::process::id()),
-    }
+pub fn net_session_name(session_id: &str) -> String {
+    format!("acos-{session_id}")
 }
 
 /// The `acos-netd` binary: `ACOS_NETD_BIN`, else the one built next to this
@@ -257,7 +262,7 @@ pub fn netd_bin() -> std::ffi::OsString {
 /// the guest's status. Killing it, or the launcher dying, tears the session down
 /// (the supervisor detaches a session whose owner is gone).
 #[must_use]
-pub fn relay_wrap(bwrap_argv: &[std::ffi::OsString], session_id: Option<&str>) -> Command {
+pub fn relay_wrap(bwrap_argv: &[std::ffi::OsString], session_id: &str) -> Command {
     let mut c = Command::new(netd_bin());
     c.arg("run");
     c.arg(net_session_name(session_id));
@@ -431,7 +436,24 @@ fn handle(mut s: UnixStream) -> std::io::Result<()> {
     let socktype = num(it.next());
     let protocol = num(it.next());
 
-    let answers = resolve(host, serv, flags, family, socktype, protocol);
+    // NET4: hand the guest only addresses the session can actually route.
+    //
+    // The session's interface is IPv4-only by construction — `plan::relay_pasta_args`
+    // and `pasta_args` configure `10.163.x.x/30`, and `acos_services::connectivity`
+    // (the constants `LinkProperties` reports to apps) has a single IPv4 address
+    // and no IPv6 route. A resolver that also answers `AAAA` therefore describes a
+    // network the session does not have: `HttpURLConnection` (default connect
+    // timeout = infinite) picks the first address and hangs on an unroutable
+    // IPv6 destination, so `net-check`'s status stayed `pending` for the whole
+    // 60 s budget with the guest log showing no completed fetch (measured; one
+    // `getaddrinfo example.com` answer carried 3 addresses).
+    //
+    // netd's resolver answers per-network capabilities the same way: a network
+    // without IPv6 gets no AAAA records, not an address the app cannot reach.
+    // When the relay grows IPv6 this filter goes with it (`session_has_ipv6`).
+    let ipv6 = session_has_ipv6();
+    let answers = resolve(host, serv, flags, family, socktype, protocol)
+        .map(|answers| addresses_for_the_session(answers, ipv6));
     let Some(answers) = answers else {
         log_request(&text, "500 resolve-failed");
         s.write_all(b"500\0")?;
@@ -458,6 +480,7 @@ fn handle(mut s: UnixStream) -> std::io::Result<()> {
     Ok(())
 }
 
+#[derive(Clone)]
 struct Answer {
     flags: i32,
     family: i32,
@@ -477,6 +500,28 @@ fn log_request(request: &str, outcome: &str) {
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(f, "req={request:?} -> {outcome}");
     }
+}
+
+/// Does the session's interface have a global IPv6 address?
+///
+/// It does not: [`pasta_args`]/`plan::relay_pasta_args` configure IPv4 only, and
+/// [`acos_services::connectivity`] reports one IPv4 address. This is a function
+/// (not a constant) so the day IPv6 is configured the DNS answer follows the
+/// interface instead of staying behind.
+#[must_use]
+pub fn session_has_ipv6() -> bool {
+    false
+}
+
+/// Drop the answers this session cannot route: `AAAA`/`AF_INET6` records while
+/// the session has no IPv6 address. A query that asked for IPv6 only then has no
+/// answers at all, which bionic reports as `EAI_NODATA` — the honest answer for
+/// an IPv4-only network.
+fn addresses_for_the_session(answers: Vec<Answer>, ipv6: bool) -> Vec<Answer> {
+    if ipv6 {
+        return answers;
+    }
+    answers.into_iter().filter(|answer| answer.family != libc::AF_INET6).collect()
 }
 
 /// Resolve one query with the host's resolver (`libc::getaddrinfo`).
@@ -678,6 +723,39 @@ mod dns_tests {
         drop(proxy);
         assert!(!path.exists(), "the socket is removed when the session ends");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// NET4: the resolver must not hand the guest an address family its interface
+    /// does not have.
+    ///
+    /// The session is IPv4-only (`pasta_args`/`plan` configure `10.163.x.x/30`,
+    /// `LinkProperties` reports one IPv4 address), but the host resolver answers
+    /// `getaddrinfo example.com` with A *and* AAAA records. `HttpURLConnection`
+    /// has no connect timeout by default, so an unroutable first IPv6 address
+    /// left `net-check`'s status `pending` until the scenario's 60 s budget
+    /// expired (`logs/logcat.txt` had no completed fetch line at all).
+    #[test]
+    fn the_resolver_never_answers_an_address_family_the_session_lacks() {
+        assert!(!session_has_ipv6(), "the session interface is IPv4-only");
+        let answers = resolve("example.com", "^", 0, libc::AF_UNSPEC, 0, 0)
+            .expect("the host resolves example.com (this test needs host DNS)");
+        assert!(!answers.is_empty());
+        let kept = addresses_for_the_session(answers.clone(), false);
+        assert!(
+            kept.iter().all(|answer| answer.family == libc::AF_INET),
+            "an IPv4-only session must get no AAAA answer"
+        );
+        assert!(!kept.is_empty(), "the A records are still returned");
+        assert_eq!(
+            addresses_for_the_session(answers.clone(), true).len(),
+            answers.len(),
+            "with IPv6 configured nothing is filtered"
+        );
+        // An IPv6-only query has no answer on this session (bionic: EAI_NODATA),
+        // instead of an address the guest cannot route.
+        if let Some(v6) = resolve("example.com", "^", 0, libc::AF_INET6, 0, 0) {
+            assert!(addresses_for_the_session(v6, false).is_empty());
+        }
     }
 
     /// The addresses pasta configures and the addresses `LinkProperties` reports
