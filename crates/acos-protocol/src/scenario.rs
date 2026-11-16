@@ -150,6 +150,10 @@ pub struct Step {
     /// debuggable/source-owned builds; never for arbitrary third-party APKs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_activity_method: Option<CallActivityMethodStep>,
+    /// ADR-0029: drive a scripted module's control operation (`set_location`,
+    /// `play_track`, ...) on the live session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_ctl: Option<ServiceCtlStep>,
     /// ADR-0029 item 4/5: module ids this step needs attached (`feedback.vibrator`).
     ///
     /// A step whose module is `off` is `unsupported`, never `pass`: the executor
@@ -209,6 +213,8 @@ pub enum StepRef<'a> {
     SetTime(&'a TimeSetup),
     /// See [`Step::call_activity_method`].
     CallActivityMethod(&'a CallActivityMethodStep),
+    /// See [`Step::service_ctl`].
+    ServiceCtl(&'a ServiceCtlStep),
 }
 
 impl StepRef<'_> {
@@ -239,6 +245,7 @@ impl StepRef<'_> {
             StepRef::SetTheme(_) => "set_theme",
             StepRef::SetTime(_) => "set_time",
             StepRef::CallActivityMethod(_) => "call_activity_method",
+            StepRef::ServiceCtl(_) => "service_ctl",
         }
     }
 }
@@ -271,6 +278,7 @@ impl Step {
             self.set_theme.is_some(),
             self.set_time.is_some(),
             self.call_activity_method.is_some(),
+            self.service_ctl.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -359,6 +367,9 @@ impl Step {
                 .call_activity_method
                 .as_ref()
                 .map(StepRef::CallActivityMethod);
+        }
+        if self.service_ctl.is_some() {
+            return self.service_ctl.as_ref().map(StepRef::ServiceCtl);
         }
         None
     }
@@ -657,6 +668,23 @@ pub struct TimeSetup {
     /// Optional IANA timezone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
+}
+
+/// `service_ctl`: drive a scripted service module's control operation.
+///
+/// This is the scenario spelling of `acos_services {op: "ctl"}`. It exists so a
+/// scenario can feed a scripted module (a location fix, a sensor value) and then
+/// assert what the app shows, without a side channel outside the verdict.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceCtlStep {
+    /// Module id (`location`).
+    pub module: String,
+    /// Control operation (`set_location`).
+    pub op: String,
+    /// Operation arguments (the module's `controls` docs describe the shape).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<serde_json::Value>,
 }
 
 /// `call_activity_method` (optional; debug/source-owned builds only).
@@ -1197,6 +1225,14 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
             }
             StepRef::Key(key) => validate_expect_change(&mut v, &path, key.expect_change, key.settle),
             StepRef::Back(_) | StepRef::Rotate(_) => {}
+            StepRef::ServiceCtl(ctl) => {
+                if ctl.module.trim().is_empty() {
+                    v.push(format!("{path}.module"), "service_ctl needs a module id");
+                }
+                if ctl.op.trim().is_empty() {
+                    v.push(format!("{path}.op"), "service_ctl needs a control op");
+                }
+            }
             StepRef::AssertText(assertion) => {
                 validate_selector(&mut v, &path, &assertion.selector, "selector");
                 if let Some(problem) = assertion.text.validate() {

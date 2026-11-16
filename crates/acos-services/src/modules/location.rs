@@ -36,6 +36,14 @@
 //!   `onFlushComplete(int)` = 3. `ILocationCallback` (`oneway`):
 //!   `onLocation(Location)` = 1. `IGeocodeCallback` (`oneway`): `onError(String)`
 //!   = 1, `onResults(List<Address>)` = 2.
+//! * `Geocoder` (the image): `IGeocodeListener.onResults(String,
+//!   List<Address>)` is code 1, and the request carries
+//!   `android.location.GeocoderParams` (`uid`, package String8, attribution
+//!   String8, locale language/country/variant String8). The `android-14.0.0_r75`
+//!   AIDL renamed these two calls (`reverseGeocode`/`forwardGeocode` with a
+//!   request object) but the image's framework client still sends the
+//!   GeocoderParams form, so that is what is served (image dex
+//!   `Geocoder.getFromLocation:(DDILandroid/location/GeocodeListener;)V`).
 //! * `Address.writeToParcel` (`Address.java:533`): locale language/country
 //!   String16, address-line count + (index, line) pairs, feature name,
 //!   admin area, sub-admin area, locality, sub-locality, thoroughfare,
@@ -114,8 +122,8 @@ pub const DESCRIPTOR: &str = "android.location.ILocationManager";
 pub const LISTENER_DESCRIPTOR: &str = "android.location.ILocationListener";
 /// Descriptor of the one-shot callback interface.
 pub const CALLBACK_DESCRIPTOR: &str = "android.location.ILocationCallback";
-/// Descriptor of the geocode callback.
-pub const GEOCODE_CALLBACK_DESCRIPTOR: &str = "android.location.provider.IGeocodeCallback";
+/// Descriptor of the geocode callback the image's `Geocoder` uses.
+pub const GEOCODE_CALLBACK_DESCRIPTOR: &str = "android.location.IGeocodeListener";
 /// Descriptor of the cancellation signal returned by `getCurrentLocation`.
 pub const CANCELLATION_DESCRIPTOR: &str = "android.os.ICancellationSignal";
 /// Descriptor of the `PendingIntent` target the pending-intent form would drive.
@@ -139,9 +147,12 @@ pub mod codes {
     pub const UNREGISTER_LOCATION_PENDING_INTENT: u32 = 6;
     /// `boolean isGeocodeAvailable()`.
     pub const IS_GEOCODE_AVAILABLE: u32 = 12;
-    /// `void reverseGeocode(ReverseGeocodeRequest, IGeocodeCallback)`.
+    /// `void getFromLocation(double, double, int, GeocoderParams,
+    /// IGeocodeListener)` — the image's geocoder ABI (code 13; the r75 AIDL
+    /// renamed it `reverseGeocode`).
     pub const REVERSE_GEOCODE: u32 = 13;
-    /// `void forwardGeocode(ForwardGeocodeRequest, IGeocodeCallback)`.
+    /// `void getFromLocationName(String, double, double, double, double, int,
+    /// GeocoderParams, IGeocodeListener)` (image ABI, code 14).
     pub const FORWARD_GEOCODE: u32 = 14;
     /// `boolean hasProvider(String)`.
     pub const HAS_PROVIDER: u32 = 36;
@@ -181,12 +192,10 @@ pub mod callback_codes {
     pub const ON_LOCATION: u32 = 1;
 }
 
-/// `IGeocodeCallback` transaction codes.
+/// `IGeocodeListener` transaction codes (the image's `Geocoder` ABI).
 pub mod geocode_codes {
-    /// `onError(String)`.
-    pub const ON_ERROR: u32 = 1;
-    /// `onResults(List<Address>)`.
-    pub const ON_RESULTS: u32 = 2;
+    /// `onResults(String error, List<Address> results)`.
+    pub const ON_RESULTS: u32 = 1;
 }
 
 /// `ICancellationSignal.cancel()`.
@@ -695,7 +704,10 @@ pub fn write_location(parcel: &mut Parcel, fix: &Fix) -> Result<()> {
     parcel.write_int64(fix.elapsed_realtime_ns);
     parcel.write_double(fix.latitude);
     parcel.write_double(fix.longitude);
-    if let Some(altitude) = fix.altitude.filter(|_| fix.mock || fields & mask::ALTITUDE != 0) {
+    if let Some(altitude) = fix
+        .altitude
+        .filter(|_| fix.mock || fields & mask::ALTITUDE != 0)
+    {
         parcel.write_double(altitude);
     }
     if let Some(speed) = fix.speed {
@@ -944,9 +956,7 @@ fn deliver_to_registrations(state: &mut LocationState, stamp: &Stamp, mut fix: F
         };
         // gps/network receive their own fixes; fused and passive mirror every
         // provider (the scripted fused stream is the union of all fixes).
-        let interested = provider == fix.provider
-            || provider == "fused"
-            || provider == "passive";
+        let interested = provider == fix.provider || provider == "fused" || provider == "passive";
         let allowed = state.provider_enabled(&fix.provider);
         if !interested || !allowed {
             i += 1;
@@ -1051,7 +1061,11 @@ fn provider_delivery(target: BinderId, provider: &str, enabled: bool) -> Pending
     }
 }
 
-/// `IGeocodeCallback.onError(String)` / `onResults(List<Address>)`.
+/// `IGeocodeListener.onResults(String error, List<Address> results)`.
+///
+/// One oneway transaction carries either the addresses or the error string
+/// (the image's `IGeocodeListener`, code 1; `Geocoder.GeocodeImpl` turns a
+/// non-null error into `GeocodeListener.onError`).
 fn geocode_delivery(
     target: BinderId,
     result: std::result::Result<&[AddressRecord], Option<&str>>,
@@ -1062,26 +1076,52 @@ fn geocode_delivery(
         Ok(addresses) => {
             // Oneway callbacks carry only their arguments: the transaction code
             // is the code, never a parcel word.
+            let _ = data.write_string16_opt(None);
             let _ = write_addresses(&mut data, addresses);
-            PendingDelivery {
-                target,
-                interface: GEOCODE_CALLBACK_DESCRIPTOR.to_string(),
-                code: geocode_codes::ON_RESULTS,
-                method: "onResults".into(),
-                data,
-            }
         }
         Err(message) => {
             let _ = data.write_string16_opt(message);
-            PendingDelivery {
-                target,
-                interface: GEOCODE_CALLBACK_DESCRIPTOR.to_string(),
-                code: geocode_codes::ON_ERROR,
-                method: "onError".into(),
-                data,
-            }
+            // A null typed list is `-1` (`Parcel.writeTypedList(null)`).
+            let _ = data.write_int32(-1);
         }
     }
+    PendingDelivery {
+        target,
+        interface: GEOCODE_CALLBACK_DESCRIPTOR.to_string(),
+        code: geocode_codes::ON_RESULTS,
+        method: "onResults".into(),
+        data,
+    }
+}
+
+/// `GeocoderParams`: the parcelable the image's geocoder call carries.
+#[derive(Clone, Debug, Default)]
+struct GeocoderParams {
+    language: String,
+    country: String,
+    variant: String,
+    package: String,
+}
+
+/// Read `android.location.GeocoderParams` (presence word, uid, package,
+/// attribution tag, locale language/country/variant — all String8).
+fn read_geocoder_params(data: &mut Parcel) -> Result<GeocoderParams> {
+    let present = data.read_int32()?;
+    if present == 0 {
+        return Ok(GeocoderParams::default());
+    }
+    let _uid = data.read_int32()?;
+    let package = data.read_string8()?.unwrap_or_default();
+    let _attribution_tag = data.read_string8()?;
+    let language = data.read_string8()?.unwrap_or_default();
+    let country = data.read_string8()?.unwrap_or_default();
+    let variant = data.read_string8()?.unwrap_or_default();
+    Ok(GeocoderParams {
+        language,
+        country,
+        variant,
+        package,
+    })
 }
 
 /// The `ILocationManager` node.
@@ -1124,23 +1164,38 @@ impl LocationService {
     }
 
     /// Read `provider`, `LastLocationRequest`, `packageName`, `attributionTag`.
-    fn read_last_location_args(
-        &self,
-        data: &mut Parcel,
-    ) -> Result<(String, String)> {
+    fn read_last_location_args(&self, data: &mut Parcel) -> Result<(String, String)> {
         let provider = data.read_string16()?.unwrap_or_default();
+        // `in LastLocationRequest request`: AIDL writes a parcelable argument as
+        // `writeTypedObject`, i.e. an int32 presence word (1) before the body.
+        let request_present = data.read_int32()?;
+        if request_present == 0 {
+            return Err(ServiceError::android(
+                EX_ILLEGAL_ARGUMENT,
+                "getLastLocation: null LastLocationRequest".to_string(),
+            ));
+        }
         // LastLocationRequest: three booleans.
         let _hidden_from_app_ops = data.read_int32()?;
         let _adas_gnss_bypass = data.read_int32()?;
         let _location_settings_ignored = data.read_int32()?;
         let package = data.read_string16()?.unwrap_or_default();
-        let _attribution_tag = data.read_string8()?;
+        // `@nullable String attributionTag` is a String16 in AIDL-generated code.
+        let _attribution_tag = data.read_string16()?;
         Ok((provider, package))
     }
 
     /// Read a `LocationRequest` and return `(provider, min_interval_ms,
     /// interval_ms)`.
     fn read_location_request(data: &mut Parcel) -> Result<(String, i64, i64)> {
+        // AIDL parcelable argument: int32 presence word, then the body.
+        let request_present = data.read_int32()?;
+        if request_present == 0 {
+            return Err(ServiceError::android(
+                EX_ILLEGAL_ARGUMENT,
+                "null LocationRequest".to_string(),
+            ));
+        }
         let provider = data.read_string16()?.unwrap_or_default();
         let interval_ms = data.read_int64()?;
         let _quality = data.read_int32()?;
@@ -1154,10 +1209,69 @@ impl LocationService {
         let _adas_gnss_bypass = data.read_int32()?;
         let _bypass = data.read_int32()?;
         let _low_power = data.read_int32()?;
-        // WorkSource: a typed object (0 when null) the module does not act on.
-        let _work_source_present = data.read_int32_lenient();
+        // `WorkSource` is a typed object; the module does not act on it but must
+        // consume its body or the listener binder that follows lands mid-object.
+        skip_work_source(data)?;
         Ok((provider, min_interval_ms, interval_ms))
     }
+}
+
+/// Consume `WorkSource`'s parcel form (`WorkSource.writeToParcel`).
+///
+/// `LocationRequest.Builder` always builds a non-null `WorkSource` (an empty one
+/// by default), so `writeTypedObject` writes `1` plus
+/// `mNum`, `int[] mUids`, `String[] mNames` and the `WorkChain` list. An empty
+/// WorkSource is 20 bytes; without skipping them every later argument is read
+/// four bytes off and the listener binder looks like garbage.
+fn skip_work_source(data: &mut Parcel) -> Result<()> {
+    let present = data.read_int32()?;
+    if present == 0 {
+        return Ok(());
+    }
+    let _num = data.read_int32()?;
+    // int[] mUids: `writeIntArray` writes -1 for null, else count + ints.
+    let uids = data.read_int32()?;
+    if uids > 0 {
+        let bytes = (uids as usize)
+            .checked_mul(4)
+            .ok_or_else(|| ServiceError::BadRequest {
+                interface: DESCRIPTOR.to_string(),
+                method: "WorkSource".into(),
+                detail: "uids count overflows".into(),
+            })?;
+        if bytes > data.remaining() {
+            return Err(ServiceError::BadRequest {
+                interface: DESCRIPTOR.to_string(),
+                method: "WorkSource".into(),
+                detail: format!("uids count {uids} exceeds the parcel"),
+            });
+        }
+        data.set_data_position(data.data_position() + bytes);
+    } else if uids < -1 {
+        return Err(ServiceError::BadRequest {
+            interface: DESCRIPTOR.to_string(),
+            method: "WorkSource".into(),
+            detail: format!("bad int[] length {uids}"),
+        });
+    }
+    // String[] mNames: count + String16 each.
+    let names = data.read_int32()?;
+    for _ in 0..names.max(0) {
+        let _ = data.read_string16()?;
+    }
+    // ArrayList<WorkChain>: -1 for null, else count + parcelables.
+    let chains = data.read_int32()?;
+    if chains > 0 {
+        return Err(ServiceError::UnsupportedAndroidApi {
+            interface: DESCRIPTOR.to_string(),
+            code: codes::REGISTER_LOCATION_LISTENER,
+            method: format!(
+                "{MODULE_ID}: a LocationRequest carrying {chains} WorkChain(s) is not modelled; \
+                 send a plain request"
+            ),
+        });
+    }
+    Ok(())
 }
 
 impl ServiceObject for LocationService {
@@ -1210,17 +1324,17 @@ impl ServiceObject for LocationService {
                 let (_request_provider, _min_interval, _interval) =
                     Self::read_location_request(data)?;
                 let Some(callback) = data.read_strong_binder()? else {
-                    return Err(self.illegal_argument(
-                        "getCurrentLocation: null ILocationCallback".into(),
-                    ));
+                    return Err(
+                        self.illegal_argument("getCurrentLocation: null ILocationCallback".into())
+                    );
                 };
                 let _package = data.read_string16()?;
-                let _attribution_tag = data.read_string8()?;
+                let _attribution_tag = data.read_string16()?;
                 let _listener_id = data.read_string16()?;
                 if !self.lock().providers.contains_key(provider.as_str()) {
-                    return Err(self.illegal_argument(format!(
-                        "provider \"{provider}\" does not exist"
-                    )));
+                    return Err(
+                        self.illegal_argument(format!("provider \"{provider}\" does not exist"))
+                    );
                 }
                 {
                     let mut state = self.lock();
@@ -1252,18 +1366,25 @@ impl ServiceObject for LocationService {
                 let provider = data.read_string16()?.unwrap_or_default();
                 let (_request_provider, min_interval_ms, interval_ms) =
                     Self::read_location_request(data)?;
+                if std::env::var_os("ACOS_LOCATION_DEBUG").is_some() {
+                    eprintln!(
+                        "ACOS_LOCATION_DEBUG register: size={} pos={}",
+                        data.data_size(),
+                        data.data_position()
+                    );
+                }
                 let Some(listener) = data.read_strong_binder()? else {
                     return Err(self.illegal_argument(
                         "registerLocationListener: null ILocationListener".into(),
                     ));
                 };
                 let package = data.read_string16()?.unwrap_or_default();
-                let _attribution_tag = data.read_string8()?;
+                let _attribution_tag = data.read_string16()?;
                 let _listener_id = data.read_string16()?;
                 if !self.lock().providers.contains_key(provider.as_str()) {
-                    return Err(self.illegal_argument(format!(
-                        "provider \"{provider}\" does not exist"
-                    )));
+                    return Err(
+                        self.illegal_argument(format!("provider \"{provider}\" does not exist"))
+                    );
                 }
                 {
                     let mut state = self.lock();
@@ -1282,10 +1403,14 @@ impl ServiceObject for LocationService {
                     // state as a first callback: the framework's provider sends
                     // `onProviderEnabledChanged` when the registration is added
                     // (`LocationProviderManager.onProviderEnabledChanged`).
-                    if let Some(enabled) = state.providers.get(provider.as_str()).map(|_| {
-                        state.provider_enabled(&provider)
-                    }) {
-                        state.pending.push(provider_delivery(listener, &provider, enabled));
+                    if let Some(enabled) = state
+                        .providers
+                        .get(provider.as_str())
+                        .map(|_| state.provider_enabled(&provider))
+                    {
+                        state
+                            .pending
+                            .push(provider_delivery(listener, &provider, enabled));
                         state.provider_events.push(json!({
                             "provider": provider,
                             "enabled": enabled,
@@ -1318,7 +1443,7 @@ impl ServiceObject for LocationService {
                     None
                 };
                 let _package = data.read_string16()?;
-                let _attribution_tag = data.read_string8()?;
+                let _attribution_tag = data.read_string16()?;
                 let mut state = self.lock();
                 state.last_error = Some(format!(
                     "registerLocationPendingIntent({provider}) refused: delivering location \
@@ -1356,19 +1481,23 @@ impl ServiceObject for LocationService {
                 write_no_exception(reply);
                 reply.write_int32(i32::from(available));
             }
-            // void reverseGeocode(ReverseGeocodeRequest, IGeocodeCallback)
+            // void getFromLocation(double, double, int, GeocoderParams,
+            // IGeocodeListener) — the geocoder ABI the API-34 image ships.
+            //
+            // The `android-14.0.0_r75` AIDL replaced this with
+            // `reverseGeocode(ReverseGeocodeRequest, IGeocodeCallback)`, but the
+            // image's framework client (`Geocoder.getFromLocation(DDI
+            // LGeocodeListener;)V` in the framework dex) still sends the
+            // GeocoderParams form and reads `IGeocodeListener.onResults(String,
+            // List<Address>)` (transaction 1). The image is what runs, so this is
+            // the shape served; the transaction codes are the same.
             codes::REVERSE_GEOCODE => {
                 let latitude = data.read_double()?;
                 let longitude = data.read_double()?;
                 let max_results = data.read_int32()?;
-                let language = data.read_string8()?;
-                let country = data.read_string8()?;
-                let variant = data.read_string8()?;
-                let _uid = data.read_int32()?;
-                let package = data.read_string8()?.unwrap_or_default();
-                let _attribution_tag = data.read_string8()?;
+                let params = read_geocoder_params(data)?;
                 let callback = data.read_strong_binder()?.ok_or_else(|| {
-                    self.illegal_argument("reverseGeocode: null IGeocodeCallback".into())
+                    self.illegal_argument("getFromLocation: null IGeocodeListener".into())
                 })?;
                 let answers = {
                     let mut state = self.lock();
@@ -1380,14 +1509,14 @@ impl ServiceObject for LocationService {
                     );
                     state.geocoder.as_mut().map(|script| {
                         script.calls.push(json!({
-                            "op": "reverse",
+                            "op": "getFromLocation",
                             "lat": latitude,
                             "lng": longitude,
                             "max_results": max_results,
-                            "language": language,
-                            "country": country,
-                            "variant": variant,
-                            "package": package,
+                            "language": params.language,
+                            "country": params.country,
+                            "variant": params.variant,
+                            "package": params.package,
                             "results": answer.as_ref().map(|a| a.len()).unwrap_or(0),
                         }))
                     });
@@ -1395,28 +1524,24 @@ impl ServiceObject for LocationService {
                 };
                 let delivery = match answers {
                     Some(addresses) => geocode_delivery(callback, Ok(&addresses)),
-                    // The framework's no-geocoder path: `callback.onError(null)`.
+                    // The framework's no-geocoder path: `onResults(null, null)`.
                     None => geocode_delivery(callback, Err(None)),
                 };
                 self.lock().pending.push(delivery);
                 write_no_exception(reply);
             }
-            // void forwardGeocode(ForwardGeocodeRequest, IGeocodeCallback)
+            // void getFromLocationName(String, double, double, double, double,
+            // int, GeocoderParams, IGeocodeListener)
             codes::FORWARD_GEOCODE => {
-                let name = data.read_string8()?.unwrap_or_default();
+                let name = data.read_string16()?.unwrap_or_default();
                 let _lower_left_lat = data.read_double()?;
                 let _lower_left_lng = data.read_double()?;
                 let _upper_right_lat = data.read_double()?;
                 let _upper_right_lng = data.read_double()?;
                 let max_results = data.read_int32()?;
-                let language = data.read_string8()?;
-                let country = data.read_string8()?;
-                let variant = data.read_string8()?;
-                let _uid = data.read_int32()?;
-                let package = data.read_string8()?.unwrap_or_default();
-                let _attribution_tag = data.read_string8()?;
+                let params = read_geocoder_params(data)?;
                 let callback = data.read_strong_binder()?.ok_or_else(|| {
-                    self.illegal_argument("forwardGeocode: null IGeocodeCallback".into())
+                    self.illegal_argument("getFromLocationName: null IGeocodeListener".into())
                 })?;
                 let answers = {
                     let mut state = self.lock();
@@ -1427,13 +1552,13 @@ impl ServiceObject for LocationService {
                     );
                     state.geocoder.as_mut().map(|script| {
                         script.calls.push(json!({
-                            "op": "forward",
+                            "op": "getFromLocationName",
                             "name": name,
                             "max_results": max_results,
-                            "language": language,
-                            "country": country,
-                            "variant": variant,
-                            "package": package,
+                            "language": params.language,
+                            "country": params.country,
+                            "variant": params.variant,
+                            "package": params.package,
                             "results": answer.as_ref().map(|a| a.len()).unwrap_or(0),
                         }))
                     });
@@ -1455,12 +1580,7 @@ impl ServiceObject for LocationService {
             }
             // List<String> getAllProviders()
             codes::GET_ALL_PROVIDERS => {
-                let names: Vec<&str> = self
-                    .lock()
-                    .providers
-                    .keys()
-                    .copied()
-                    .collect();
+                let names: Vec<&str> = self.lock().providers.keys().copied().collect();
                 write_no_exception(reply);
                 reply.write_string16_array(Some(&names))?;
             }
@@ -1643,13 +1763,15 @@ fn require_f64(args: &Value, key: &str) -> Result<f64> {
 fn optional_f32(args: &Value, key: &str) -> Result<Option<f32>> {
     match args.get(key) {
         None | Some(Value::Null) => Ok(None),
-        Some(value) => value
-            .as_f64()
-            .map(|v| Some(v as f32))
-            .ok_or_else(|| ServiceError::ModuleRejected {
-                module: MODULE_ID,
-                detail: format!("`{key}` must be a number, got {value}"),
-            }),
+        Some(value) => {
+            value
+                .as_f64()
+                .map(|v| Some(v as f32))
+                .ok_or_else(|| ServiceError::ModuleRejected {
+                    module: MODULE_ID,
+                    detail: format!("`{key}` must be a number, got {value}"),
+                })
+        }
     }
 }
 
@@ -1717,12 +1839,7 @@ fn fix_from_json(args: &Value, default_provider: &str) -> Result<Fix> {
 
 /// Parse one `Address` from JSON (the control payload).
 fn address_from_json(value: &Value) -> Result<AddressRecord> {
-    let string = |key: &str| {
-        value
-            .get(key)
-            .and_then(Value::as_str)
-            .map(str::to_string)
-    };
+    let string = |key: &str| value.get(key).and_then(Value::as_str).map(str::to_string);
     let lines = value
         .get("lines")
         .and_then(Value::as_array)
@@ -1759,10 +1876,7 @@ fn address_from_json(value: &Value) -> Result<AddressRecord> {
 /// Parse a `set_geocoder` payload.
 fn geocoder_from_json(args: &Value) -> Result<GeocoderScript> {
     let mut script = GeocoderScript {
-        present: args
-            .get("present")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
+        present: args.get("present").and_then(Value::as_bool).unwrap_or(true),
         ..GeocoderScript::default()
     };
     if let Some(places) = args.get("places").and_then(Value::as_array) {
@@ -1832,14 +1946,12 @@ impl Module for LocationModule {
             .and_then(Value::as_bool)
             .unwrap_or(true);
         let permission = match config.string("permissions") {
-            Some(text) => PermissionLevel::parse(text).ok_or_else(|| {
-                ServiceError::ModuleRejected {
+            Some(text) => {
+                PermissionLevel::parse(text).ok_or_else(|| ServiceError::ModuleRejected {
                     module: MODULE_ID,
-                    detail: format!(
-                        "`permissions` is {text:?}; use one of none, coarse, fine"
-                    ),
-                }
-            })?,
+                    detail: format!("`permissions` is {text:?}; use one of none, coarse, fine"),
+                })?
+            }
             // The launch config grants the manifest's location permissions until
             // the permissions module exists; `fine` is what a fixture that
             // declares ACCESS_FINE_LOCATION gets.
@@ -1942,8 +2054,12 @@ impl Module for LocationModule {
                     }
                     let enabled = state.provider_enabled(&fix.provider);
                     let location_enabled = state.location_enabled;
-                    let delivered = deliver_to_registrations(&mut state, &self.last_stamp, fix.clone());
-                    let stored = state.providers.get(fix.provider.as_str()).and_then(|p| p.last.clone());
+                    let delivered =
+                        deliver_to_registrations(&mut state, &self.last_stamp, fix.clone());
+                    let stored = state
+                        .providers
+                        .get(fix.provider.as_str())
+                        .and_then(|p| p.last.clone());
                     (delivered, stored, enabled, location_enabled)
                 };
                 let (delivered, stored, enabled, location_enabled) = stored;
@@ -2038,9 +2154,9 @@ impl Module for LocationModule {
                             }
                         }
                     })
-                    .map_err(|error| ServiceError::Internal(format!(
-                        "play_track thread: {error}"
-                    )))?;
+                    .map_err(|error| {
+                        ServiceError::Internal(format!("play_track thread: {error}"))
+                    })?;
                 self.track = Some(handle);
                 Ok(json!({
                     "track": label,
@@ -2240,7 +2356,6 @@ impl Module for LocationModule {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // `profile: off` node
 // ---------------------------------------------------------------------------
@@ -2279,7 +2394,10 @@ mod tests {
         assert_eq!(parcel.read_float().unwrap(), 90.0);
         assert_eq!(parcel.read_float().unwrap(), 4.0);
         assert_eq!(parcel.read_int32().unwrap(), -1); // null extras
-        assert!(parcel.read_int32().is_err(), "parcel must be fully consumed");
+        assert!(
+            parcel.read_int32().is_err(),
+            "parcel must be fully consumed"
+        );
     }
 
     #[test]
@@ -2293,9 +2411,19 @@ mod tests {
         assert_eq!(coarse.altitude, None);
         assert_eq!(coarse.speed, None);
         assert_eq!(coarse.bearing, None);
-        assert!(distance_m(fix.latitude, fix.longitude, coarse.latitude, coarse.longitude) < 150.0);
+        assert!(
+            distance_m(
+                fix.latitude,
+                fix.longitude,
+                coarse.latitude,
+                coarse.longitude
+            ) < 150.0
+        );
         // Snapping is stable: the same fix twice lands on the same grid point.
-        assert_eq!(coarse.latitude, permit(&fix, PermissionLevel::Coarse).latitude);
+        assert_eq!(
+            coarse.latitude,
+            permit(&fix, PermissionLevel::Coarse).latitude
+        );
         // A fine caller sees the scripted point untouched.
         assert_eq!(permit(&fix, PermissionLevel::Fine), fix);
     }
@@ -2327,7 +2455,10 @@ mod tests {
         });
         let stamp = Stamp::new();
         let first = Fix::now("gps", 37.4220, -122.0841, 4.0);
-        assert_eq!(deliver_to_registrations(&mut state, &stamp, first.clone()), 1);
+        assert_eq!(
+            deliver_to_registrations(&mut state, &stamp, first.clone()),
+            1
+        );
         let second = Fix::now("network", 37.4221, -122.0840, 20.0);
         assert_eq!(
             deliver_to_registrations(&mut state, &stamp, second),
@@ -2336,10 +2467,7 @@ mod tests {
         );
         assert_eq!(state.pending.len(), 1);
         assert_eq!(state.delivered.len(), 1);
-        assert_eq!(
-            state.pending[0].code,
-            listener_codes::ON_LOCATION_CHANGED
-        );
+        assert_eq!(state.pending[0].code, listener_codes::ON_LOCATION_CHANGED);
         // The delivered parcel carries the fix.
         let mut parcel = state.pending[0].data.clone();
         parcel.set_data_position(0);
@@ -2362,11 +2490,7 @@ mod tests {
         });
         let stamp = Stamp::new();
         assert_eq!(
-            deliver_to_registrations(
-                &mut state,
-                &stamp,
-                Fix::now("network", 1.0, 2.0, 30.0)
-            ),
+            deliver_to_registrations(&mut state, &stamp, Fix::now("network", 1.0, 2.0, 30.0)),
             1
         );
         assert_eq!(
@@ -2390,11 +2514,8 @@ mod tests {
         let stamp = Stamp::new();
         deliver_to_registrations(&mut state, &stamp, Fix::now("gps", 1.0, 2.0, 5.0));
         state.location_enabled = false;
-        let delivered = deliver_to_registrations(
-            &mut state,
-            &stamp,
-            Fix::now("gps", 3.0, 4.0, 5.0),
-        );
+        let delivered =
+            deliver_to_registrations(&mut state, &stamp, Fix::now("gps", 3.0, 4.0, 5.0));
         assert_eq!(delivered, 0);
         assert!(state.permitted_last("gps").is_none());
     }
@@ -2459,14 +2580,20 @@ mod tests {
             Some("1 Infinite Loop")
         );
         assert_eq!(parcel.read_int32().unwrap(), 1);
-        assert_eq!(parcel.read_string16().unwrap().as_deref(), Some("Cupertino"));
+        assert_eq!(
+            parcel.read_string16().unwrap().as_deref(),
+            Some("Cupertino")
+        );
         assert_eq!(
             parcel.read_string16().unwrap().as_deref(),
             Some("Apple Park")
         );
         assert_eq!(parcel.read_string16().unwrap().as_deref(), Some("CA"));
         assert!(parcel.read_string16().unwrap().is_none()); // sub-admin area
-        assert_eq!(parcel.read_string16().unwrap().as_deref(), Some("Cupertino"));
+        assert_eq!(
+            parcel.read_string16().unwrap().as_deref(),
+            Some("Cupertino")
+        );
         assert!(parcel.read_string16().unwrap().is_none()); // sub-locality
         assert!(parcel.read_string16().unwrap().is_none()); // thoroughfare
         assert!(parcel.read_string16().unwrap().is_none()); // sub-thoroughfare

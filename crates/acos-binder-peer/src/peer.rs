@@ -898,12 +898,20 @@ impl Peer {
     /// loop polls its socket with a bounded timeout and calls this on each idle
     /// turn.
     pub fn tick(&mut self) -> Vec<Frame> {
-        self.take_delivery_frames()
+        // `take_timed_deliveries` (not the plain queue): a module's feed lives in
+        // the module's own object, which only this idle turn may lock.
+        let mut pending = std::mem::take(&mut self.local_deliveries);
+        pending.extend(self.host.take_timed_deliveries());
+        self.frames_for_deliveries(pending)
     }
 
     fn take_delivery_frames(&mut self) -> Vec<Frame> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());
+        self.frames_for_deliveries(pending)
+    }
+
+    fn frames_for_deliveries(&mut self, mut pending: Vec<acos_services::PendingDelivery>) -> Vec<Frame> {
         // Defence in depth: even the frames produced in one turn are bounded, so a
         // single transaction that fans out into thousands of reverse deliveries
         // cannot grow this turn's `out` without limit.

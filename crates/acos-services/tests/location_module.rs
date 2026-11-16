@@ -29,7 +29,12 @@ fn host_with(config: serde_json::Value) -> (ServiceHost, BinderId) {
         .attach(&mut host, "core", Profile::Real, &ModuleConfig::default())
         .expect("core attaches");
     registry
-        .attach(&mut host, "location", Profile::Scripted, &spec(config).config)
+        .attach(
+            &mut host,
+            "location",
+            Profile::Scripted,
+            &spec(config).config,
+        )
         .expect("location attaches");
     let binder = host
         .check_service("location")
@@ -56,13 +61,49 @@ fn transact(
 
 fn write_last_location_request(data: &mut Parcel) {
     data.write_string16("gps").expect("provider");
-    // LastLocationRequest: hiddenFromAppOps, adasGnssBypass, settingsIgnored.
+    // AIDL parcelable argument: int32 presence word (writeTypedObject), then
+    // LastLocationRequest's three booleans.
+    data.write_int32(1);
     data.write_int32(0);
     data.write_int32(0);
     data.write_int32(0);
     data.write_string16("dev.acos.fixtures.locationprobe")
         .expect("package");
-    data.write_string8_opt(None).expect("attribution tag");
+    data.write_string16_opt(None).expect("attribution tag");
+}
+
+/// `android.location.GeocoderParams` the way the image's `Geocoder` writes it:
+/// presence word, uid, package String8, attribution String8, locale
+/// language/country/variant String8.
+fn write_geocoder_params(data: &mut Parcel) {
+    data.write_int32(1); // parcelable presence
+    data.write_int32(10000); // uid
+    data.write_string8("dev.acos.fixtures.locationprobe")
+        .expect("package");
+    data.write_string8_opt(None).expect("tag");
+    data.write_string8("en").expect("language");
+    data.write_string8("US").expect("country");
+    data.write_string8("").expect("variant");
+}
+
+/// One `LocationRequest` argument the way the generated proxy writes it:
+/// presence word, then the parcelable body.
+fn write_location_request(data: &mut Parcel, provider: &str) {
+    data.write_int32(1);
+    data.write_string16(provider).expect("request provider");
+    data.write_int64(1000);
+    data.write_int32(0);
+    data.write_int64(0);
+    data.write_int64(0);
+    data.write_int32(i32::MAX);
+    data.write_int64(0);
+    data.write_float(0.0);
+    data.write_int64(0);
+    data.write_int32(0);
+    data.write_int32(0);
+    data.write_int32(0);
+    data.write_int32(0);
+    data.write_int32(0);
 }
 
 /// The `Location` fields in `Location.writeToParcel` order.
@@ -125,7 +166,10 @@ fn a_coarse_grant_gets_a_coarsened_fix_and_a_missing_grant_gets_a_security_excep
         .expect_err("no location grant must throw");
     match &error {
         ServiceError::Android { code, message } => {
-            assert_eq!(*code, -1, "Parcel.EX_SECURITY is java.lang.SecurityException");
+            assert_eq!(
+                *code, -1,
+                "Parcel.EX_SECURITY is java.lang.SecurityException"
+            );
             assert!(
                 message.contains("ACCESS_FINE_LOCATION"),
                 "the message must name the permission, got {message}"
@@ -141,11 +185,12 @@ fn an_unknown_provider_is_a_null_location_and_provider_queries_follow_the_settin
     let (mut host, binder) = host_with(json!({}));
     let reply = transact(&mut host, binder, 1, |data| {
         data.write_string16("nonesuch").expect("provider");
+        data.write_int32(1); // LastLocationRequest presence
         data.write_int32(0);
         data.write_int32(0);
         data.write_int32(0);
         data.write_string16("p").expect("package");
-        data.write_string8_opt(None).expect("tag");
+        data.write_string16_opt(None).expect("tag");
     })
     .expect_err("an unknown provider is an IllegalArgumentException");
     assert_eq!(reply.exception_code(), -3);
@@ -157,7 +202,11 @@ fn an_unknown_provider_is_a_null_location_and_provider_queries_follow_the_settin
         })
         .expect("reply");
         assert_eq!(reply.read_int32().expect("header"), 0);
-        assert_eq!(reply.read_int32().expect("hasProvider"), expected, "{provider}");
+        assert_eq!(
+            reply.read_int32().expect("hasProvider"),
+            expected,
+            "{provider}"
+        );
     }
     // isLocationEnabledForUser = 48.
     let mut reply = transact(&mut host, binder, 48, |data| data.write_int32(0)).expect("reply");
@@ -171,6 +220,49 @@ fn an_unknown_provider_is_a_null_location_and_provider_queries_follow_the_settin
     .expect("reply");
     assert_eq!(reply.read_int32().expect("header"), 0);
     assert_eq!(reply.read_int32().expect("enabled"), 1);
+}
+
+#[test]
+fn a_location_request_with_a_real_work_source_keeps_the_listener_aligned() {
+    // `LocationRequest.Builder` builds a non-null empty WorkSource, so the real
+    // proxy writes `writeTypedObject(workSource)` = presence 1, mNum 0, int[]
+    // null, String[] null, chains null (16 bytes). The listener binder follows.
+    let (mut host, binder) = host_with(json!({}));
+    let listener = BinderId(0x1000_0010);
+    transact(&mut host, binder, 3, |data| {
+        data.write_string16("gps").expect("provider");
+        data.write_int32(1); // LocationRequest presence
+        data.write_string16("gps").expect("request provider");
+        data.write_int64(1000);
+        data.write_int32(0);
+        data.write_int64(0);
+        data.write_int64(0);
+        data.write_int32(i32::MAX);
+        data.write_int64(0);
+        data.write_float(0.0);
+        data.write_int64(0);
+        data.write_int32(0);
+        data.write_int32(0);
+        data.write_int32(0);
+        data.write_int32(0);
+        data.write_int32(1); // WorkSource present
+        data.write_int32(0); // mNum
+        data.write_int32(-1); // int[] mUids null
+        data.write_int32(-1); // String[] mNames null
+        data.write_int32(-1); // chains null
+        data.write_strong_binder(listener);
+        data.write_string16("p").expect("package");
+        data.write_string16_opt(None).expect("tag");
+        data.write_string16("id").expect("listener id");
+    })
+    .expect("a non-null WorkSource must keep the listener aligned");
+    let deliveries = host.take_deliveries();
+    assert_eq!(
+        deliveries.len(),
+        1,
+        "the registration emits the provider state"
+    );
+    assert_eq!(deliveries[0].target, listener);
 }
 
 #[test]
@@ -206,16 +298,12 @@ fn the_geocoder_answers_the_scripted_addresses_and_the_no_geocoder_path_sends_on
     // transacts in this test, so the delivery stays queued and can be read.
     let callback = BinderId(0x1000_0001);
     let mut reply = transact(&mut host, binder, 13, |data| {
+        // The image's geocoder ABI: getFromLocation(double, double, int,
+        // GeocoderParams, IGeocodeListener).
         data.write_double(37.4221);
         data.write_double(-122.0840);
         data.write_int32(3);
-        data.write_string8("en").expect("language");
-        data.write_string8("US").expect("country");
-        data.write_string8("").expect("variant");
-        data.write_int32(10000);
-        data.write_string8("dev.acos.fixtures.locationprobe")
-            .expect("package");
-        data.write_string8_opt(None).expect("tag");
+        write_geocoder_params(data);
         data.write_strong_binder(callback);
     })
     .expect("reply");
@@ -230,16 +318,23 @@ fn the_geocoder_answers_the_scripted_addresses_and_the_no_geocoder_path_sends_on
     );
     assert_eq!(deliveries.len(), 1, "one geocode callback");
     let delivery = &deliveries[0];
-    assert_eq!(delivery.code, 2, "onResults");
+    assert_eq!(delivery.code, 1, "onResults");
     assert_eq!(delivery.target, callback);
     let mut body = delivery.data.clone();
     body.set_data_position(0);
-    body.enforce_interface("android.location.provider.IGeocodeCallback")
+    body.enforce_interface("android.location.IGeocodeListener")
         .expect("token");
+    assert!(
+        body.read_string16().expect("error").is_none(),
+        "successful geocode has a null error string"
+    );
     assert_eq!(body.read_int32().expect("list size"), 1);
     assert_eq!(body.read_int32().expect("present"), 1);
     assert_eq!(body.read_string16().expect("lang").expect("lang"), "en");
-    assert_eq!(body.read_string16().expect("country").expect("country"), "US");
+    assert_eq!(
+        body.read_string16().expect("country").expect("country"),
+        "US"
+    );
     assert_eq!(body.read_int32().expect("line count"), 1);
     assert_eq!(body.read_int32().expect("line index"), 0);
     assert_eq!(
@@ -254,7 +349,8 @@ fn the_geocoder_answers_the_scripted_addresses_and_the_no_geocoder_path_sends_on
         "Mountain View"
     );
 
-    // No geocoder: `callback.onError(null)` (LocationManagerService:1380-1410).
+    // No geocoder: the framework answers no addresses (`onResults(null, null)`),
+    // which `Geocoder.GeocodeImpl` turns into `GeocodeListener.onError(null)`.
     let (mut host, binder) = host_with(json!({}));
     let mut reply = transact(&mut host, binder, 12, |_| {}).expect("reply");
     assert_eq!(reply.read_int32().expect("header"), 0);
@@ -264,26 +360,23 @@ fn the_geocoder_answers_the_scripted_addresses_and_the_no_geocoder_path_sends_on
         data.write_double(0.0);
         data.write_double(0.0);
         data.write_int32(1);
-        data.write_string8("en").expect("lang");
-        data.write_string8("").expect("country");
-        data.write_string8("").expect("variant");
-        data.write_int32(10000);
-        data.write_string8("p").expect("package");
-        data.write_string8_opt(None).expect("tag");
+        write_geocoder_params(data);
         data.write_strong_binder(callback);
     })
     .expect("reply");
     let deliveries = host.take_deliveries();
-    eprintln!(
-        "no-geocoder deliveries: {:?}",
-        deliveries
-            .iter()
-            .map(|d| (d.interface.clone(), d.code, d.method.clone()))
-            .collect::<Vec<_>>()
-    );
     assert_eq!(deliveries.len(), 1);
-    assert_eq!(deliveries[0].code, 1, "onError");
-    assert_eq!(deliveries[0].method, "onError");
+    assert_eq!(deliveries[0].code, 1, "onResults");
+    assert_eq!(deliveries[0].method, "onResults");
+    let mut body = deliveries[0].data.clone();
+    body.set_data_position(0);
+    body.enforce_interface("android.location.IGeocodeListener")
+        .expect("token");
+    assert!(
+        body.read_string16().expect("error").is_none(),
+        "the no-geocoder path answers onResults(null, null)"
+    );
+    assert_eq!(body.read_int32().expect("list"), -1, "null address list");
 }
 
 #[test]
@@ -301,31 +394,21 @@ fn play_track_delivers_at_real_timing_and_the_session_records_each_fix() {
             &spec(json!({})).config,
         )
         .expect("location attaches");
-    let binder = host.check_service("location").expect("lookup").expect("binder");
+    let binder = host
+        .check_service("location")
+        .expect("lookup")
+        .expect("binder");
 
     // Register a listener exactly as `LocationManager.requestLocationUpdates`
     // does: LocationRequest, ILocationListener, package, attribution tag, id.
     let listener = BinderId(0x1000_0003);
     transact(&mut host, binder, 3, |data| {
         data.write_string16("gps").expect("provider");
-        data.write_string16("gps").expect("request provider");
-        data.write_int64(1000);
-        data.write_int32(0);
-        data.write_int64(0);
-        data.write_int64(0);
-        data.write_int32(i32::MAX);
-        data.write_int64(0);
-        data.write_float(0.0);
-        data.write_int64(0);
-        data.write_int32(0);
-        data.write_int32(0);
-        data.write_int32(0);
-        data.write_int32(0);
-        data.write_int32(0);
+        write_location_request(data, "gps");
         data.write_strong_binder(listener);
         data.write_string16("dev.acos.fixtures.locationprobe")
             .expect("package");
-        data.write_string8_opt(None).expect("tag");
+        data.write_string16_opt(None).expect("tag");
         data.write_string16("listener-id").expect("listener id");
     })
     .expect("registerLocationListener");
@@ -357,7 +440,9 @@ fn play_track_delivers_at_real_timing_and_the_session_records_each_fix() {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     let mut fixes: Vec<(f64, f64)> = Vec::new();
     while std::time::Instant::now() < deadline && fixes.len() < 3 {
-        for delivery in host.take_deliveries() {
+        // The module delivers from its own thread: `take_timed_deliveries` is the
+        // drain the peer's idle tick uses (see `ServiceHost::take_timed_deliveries`).
+        for delivery in host.take_timed_deliveries() {
             if delivery.code != 1 {
                 continue;
             }
@@ -389,14 +474,21 @@ fn play_track_delivers_at_real_timing_and_the_session_records_each_fix() {
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    assert_eq!(fixes.len(), 3, "the three track points must arrive: {fixes:?}");
+    assert_eq!(
+        fixes.len(),
+        3,
+        "the three track points must arrive: {fixes:?}"
+    );
     assert!((fixes[2].0 - 37.4223).abs() < 1e-9);
     assert!((fixes[2].1 + 122.0844).abs() < 1e-9);
 
     let record = registry
         .control("location", "delivered", &json!(null))
         .expect("delivered");
-    assert_eq!(record["count"], 3, "every delivered fix is recorded: {record}");
+    assert_eq!(
+        record["count"], 3,
+        "every delivered fix is recorded: {record}"
+    );
     assert_eq!(record["fixes"][2]["lat"], 37.4223);
     let report = registry
         .reports()
@@ -431,8 +523,8 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
     let error = transact(&mut host, off_binder, 1, write_last_location_request)
         .expect_err("an off module must not pretend a fix");
     assert_eq!(error.code(), "UNSUPPORTED_ANDROID_API");
-    let mut reply = transact(&mut host, off_binder, 12, |_| {})
-    .expect("geocoder presence is a fixed truth");
+    let mut reply =
+        transact(&mut host, off_binder, 12, |_| {}).expect("geocoder presence is a fixed truth");
     assert_eq!(reply.read_int32().expect("header"), 0);
     assert_eq!(reply.read_int32().expect("present"), 0);
 
@@ -444,27 +536,17 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
             &spec(json!({})).config,
         )
         .expect("attach");
-    let binder = host.check_service("location").expect("lookup").expect("binder");
+    let binder = host
+        .check_service("location")
+        .expect("lookup")
+        .expect("binder");
     let listener = BinderId(0x1000_0004);
     transact(&mut host, binder, 3, |data| {
         data.write_string16("gps").expect("provider");
-        data.write_string16("gps").expect("request provider");
-        data.write_int64(1000);
-        data.write_int32(0);
-        data.write_int64(0);
-        data.write_int64(0);
-        data.write_int32(i32::MAX);
-        data.write_int64(0);
-        data.write_float(0.0);
-        data.write_int64(0);
-        data.write_int32(0);
-        data.write_int32(0);
-        data.write_int32(0);
-        data.write_int32(0);
-        data.write_int32(0);
+        write_location_request(data, "gps");
         data.write_strong_binder(listener);
         data.write_string16("p").expect("package");
-        data.write_string8_opt(None).expect("tag");
+        data.write_string16_opt(None).expect("tag");
         data.write_string16("id").expect("listener id");
     })
     .expect("register");
@@ -479,7 +561,7 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
         .expect("set_provider_enabled");
     assert_eq!(toggled["enabled"], false);
     assert_eq!(toggled["listeners_notified"], 1);
-    let deliveries = host.take_deliveries();
+    let deliveries = host.take_timed_deliveries();
     assert_eq!(deliveries.len(), 1);
     assert_eq!(deliveries[0].code, 2);
     let mut body = deliveries[0].data.clone();
@@ -490,6 +572,14 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
 
     // Detach: the name goes back to the honest disabled device answer.
     registry.detach(&mut host, "location").expect("detach");
+    // A handle the guest still holds answers the structured "module is off"
+    // error after the detach, never a bare unknown-handle service error.
+    let stale = transact(&mut host, binder, 1, write_last_location_request)
+        .expect_err("a stale handle must answer the structured error");
+    match &stale {
+        ServiceError::ModuleUnavailable { module, .. } => assert_eq!(*module, "location"),
+        other => panic!("expected ModuleUnavailable, got {other:?}"),
+    }
     let off = host
         .check_service("location")
         .expect("lookup")
@@ -503,4 +593,3 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
         Err(ServiceError::ModuleRejected { .. })
     ));
 }
-

@@ -18,7 +18,8 @@ use std::path::{Path, PathBuf};
 use acos_protocol::commands::{KeyName, Orientation, ResetScope};
 use acos_protocol::identity::{DisplaySpec, IsolationLevel};
 use acos_protocol::scenario::{
-    DensitySetup, LocaleSetup, NetworkSetup, PermissionSetup, ThemeSetup, TimeSetup,
+    DensitySetup, LocaleSetup, NetworkSetup, PermissionSetup, ServiceCtlStep, ThemeSetup,
+    TimeSetup,
 };
 use acos_protocol::{
     Backend as ProtocolBackend, ErrorCode, Fidelity, FrameMeta, LogLevel, ProtocolError, Selector,
@@ -44,6 +45,8 @@ pub enum Capability {
     Reset,
     /// set_network / set_permission / set_locale / set_density / set_theme / set_time.
     Environment,
+    /// `service_ctl`: drive a scripted service module (a location fix, a track).
+    ServiceModule,
     /// Crash/ANR reports distinct from ordinary logs.
     CrashReports,
 }
@@ -60,6 +63,7 @@ impl Capability {
             Capability::Input => "input",
             Capability::Reset => "reset",
             Capability::Environment => "environment",
+            Capability::ServiceModule => "service.module",
             Capability::CrashReports => "crash-reports",
         }
     }
@@ -99,6 +103,8 @@ pub struct Capabilities {
     pub reset: bool,
     /// Environment knobs.
     pub environment: bool,
+    /// Scripted service modules (`service_ctl`: a location fix, a sensor value).
+    pub service_modules: bool,
     /// Crash/ANR reports.
     pub crash_reports: bool,
 }
@@ -115,6 +121,7 @@ impl Capabilities {
             Capability::Input => self.input,
             Capability::Reset => self.reset,
             Capability::Environment => self.environment,
+            Capability::ServiceModule => self.service_modules,
             Capability::CrashReports => self.crash_reports,
         }
     }
@@ -511,6 +518,8 @@ pub enum EnvironmentChange {
     Theme(ThemeSetup),
     /// Set the runtime clock.
     Time(TimeSetup),
+    /// Drive a scripted service module's control op (`service_ctl`).
+    ServiceCtl(ServiceCtlStep),
 }
 
 impl EnvironmentChange {
@@ -523,6 +532,7 @@ impl EnvironmentChange {
             EnvironmentChange::Density(_) => "set_density",
             EnvironmentChange::Theme(_) => "set_theme",
             EnvironmentChange::Time(_) => "set_time",
+            EnvironmentChange::ServiceCtl(_) => "service_ctl",
         }
     }
 }

@@ -1425,6 +1425,22 @@ fn execute_step(
         StepRef::SetTime(setup) => {
             environment_step(backend, caps, EnvironmentChange::Time(setup.clone()))
         }
+        StepRef::ServiceCtl(step) => {
+            // A scripted module is its own capability: a backend may drive
+            // environment knobs and still have no module registry, and vice
+            // versa. Without the capability the step is `unsupported`, never a
+            // pass on a module that did not exist.
+            if !caps.has(Capability::ServiceModule) {
+                return StepExec::unsupported(
+                    Capability::ServiceModule,
+                    "the backend has no service-module registry, so `service_ctl` cannot be applied",
+                );
+            }
+            match backend.configure(&EnvironmentChange::ServiceCtl(step.clone())) {
+                Ok(()) => StepExec::pass(),
+                Err(error) => StepExec::backend_error(&error, backend.id(), "service_ctl"),
+            }
+        }
         StepRef::CallActivityMethod(_) => StepExec::unsupported(
             Capability::Environment,
             "call_activity_method requires an injected debug hook that this build does not provide",

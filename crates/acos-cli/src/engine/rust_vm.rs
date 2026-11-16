@@ -111,6 +111,7 @@ impl SessionBackend for RustVmSession {
             close: true,
             logs: caps.logs,
             environment: caps.environment,
+            service_module: caps.service_modules,
             crash_reports: caps.crash_reports,
         }
     }

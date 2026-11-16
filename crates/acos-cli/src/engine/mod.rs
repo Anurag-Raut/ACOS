@@ -125,6 +125,8 @@ pub struct SessionCapabilities {
     pub logs: bool,
     /// Environment changes (`set_*`).
     pub environment: bool,
+    /// Scripted service modules (`service_ctl` on a `hot` module).
+    pub service_module: bool,
     /// Crash/ANR reports distinct from logs.
     pub crash_reports: bool,
 }
@@ -165,6 +167,7 @@ impl SessionCapabilities {
             ("close", self.close),
             ("logs", self.logs),
             ("environment", self.environment),
+            ("service_module", self.service_module),
             ("crash_reports", self.crash_reports),
         ]
     }
@@ -180,6 +183,9 @@ impl SessionCapabilities {
             input: self.tap || self.key || self.type_text,
             reset: self.reset,
             environment: self.environment,
+            // ADR-0029: only a session with a module registry can drive
+            // `service_ctl`; the ART engine reports it from its module table.
+            service_modules: self.service_module,
             crash_reports: self.crash_reports,
         }
     }
@@ -332,6 +338,29 @@ pub trait SessionBackend {
     /// rows). Engines with no module registry report none, never a guess.
     fn modules(&self) -> Vec<serde_json::Value> {
         Vec::new()
+    }
+
+    /// The live module rows, when the engine can publish them after the run
+    /// (the verdict cites the final state, not the launch snapshot).
+    fn module_rows_handle(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        None
+    }
+
+    /// ADR-0029: drive one module control operation on the live session
+    /// (`service_ctl`). Engines without a module registry refuse, never pretend.
+    fn service_ctl(
+        &mut self,
+        module: &str,
+        op: &str,
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        let _ = (module, op, args);
+        Err(BackendError::unsupported(
+            "environment",
+            "this engine has no service-module registry",
+        ))
     }
 
     /// Start the app and return the first completed frame.
@@ -585,6 +614,17 @@ impl EngineBackend {
         match self {
             EngineBackend::Native(_) => Some(Mode::Live),
             EngineBackend::Session { session, .. } => Some(session.mode()),
+        }
+    }
+
+    /// The live module rows' shared handle, so a verdict can read the final set.
+    #[must_use]
+    pub fn module_rows(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        match self {
+            EngineBackend::Native(_) => None,
+            EngineBackend::Session { session, .. } => session.module_rows_handle(),
         }
     }
 
@@ -1141,13 +1181,26 @@ impl Backend for EngineBackend {
     fn configure(&mut self, change: &EnvironmentChange) -> Result<(), BackendError> {
         match self {
             EngineBackend::Native(backend) => backend.configure(change),
-            EngineBackend::Session { .. } => Err(BackendError::unsupported(
-                "environment",
-                format!(
-                    "the ART session protocol has no `{}` command yet",
-                    change.kind()
-                ),
-            )),
+            // ADR-0029: a scenario `service_ctl` step drives a scripted module on
+            // the live session. The launcher's peer thread owns the module table,
+            // so this is a `services ctl` command, and a module refusal (module
+            // off, unknown op) is the step's failure — never a silent success.
+            EngineBackend::Session { session, .. } => match change {
+                EnvironmentChange::ServiceCtl(step) => session
+                    .service_ctl(
+                        &step.module,
+                        &step.op,
+                        step.args.as_ref().unwrap_or(&serde_json::Value::Null),
+                    )
+                    .map(|_| ()),
+                other => Err(BackendError::unsupported(
+                    "environment",
+                    format!(
+                        "the ART session protocol has no `{}` command yet",
+                        other.kind()
+                    ),
+                )),
+            },
         }
     }
 

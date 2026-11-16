@@ -116,6 +116,10 @@ pub struct ArtSession {
     services: Vec<serde_json::Value>,
     /// The modules the guest's ready line reported as attached (verdict rows).
     modules: Vec<serde_json::Value>,
+    /// The same rows, shared with `EngineBackend` so the verdict can cite the
+    /// session's **final** module state (delivered fixes included) instead of the
+    /// launch snapshot.
+    module_rows: Arc<Mutex<Vec<serde_json::Value>>>,
     /// H13b: the boot image this session's ready line reported —
     /// `{mode, cache: hit|built|fallback|external|none, reason}` — so a serve's
     /// launch reply and session list can say whether the shared-image cache hit.
@@ -1900,6 +1904,7 @@ impl ArtSession {
             density: 420,
             services: services.to_vec(),
             modules: Vec::new(),
+            module_rows: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             boot_image: None,
             stream_socket: None,
             cached: None,
@@ -2132,8 +2137,21 @@ impl ArtSession {
         let reply = self.command(request)?;
         if let Some(modules) = reply.get("modules").and_then(|v| v.as_array()) {
             self.modules = modules.clone();
+            self.publish_module_rows();
         }
         Ok(reply)
+    }
+
+    /// The live module rows (the verdict cites these after the run).
+    #[must_use]
+    pub fn module_rows(&self) -> std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>> {
+        std::sync::Arc::clone(&self.module_rows)
+    }
+
+    fn publish_module_rows(&self) {
+        if let Ok(mut rows) = self.module_rows.lock() {
+            *rows = self.modules.clone();
+        }
     }
 
     /// The bound frame's identity: `(frame_seq, md5, captured_at)`.
@@ -4652,6 +4670,41 @@ impl SessionBackend for ArtSession {
         self.modules.clone()
     }
 
+    fn module_rows_handle(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        Some(self.module_rows())
+    }
+
+    /// ADR-0029: a scenario `service_ctl` step is a `services ctl` command on the
+    /// live session; the module's control decides validity.
+    fn service_ctl(
+        &mut self,
+        module: &str,
+        op: &str,
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        let reply = self.service_op(serde_json::json!({
+            "op": "ctl",
+            "id": module,
+            "ctl_op": op,
+            "args": args,
+        }))?;
+        if reply.get("ok").and_then(serde_json::Value::as_bool) == Some(false) {
+            return Err(BackendError::Failed {
+                code: acos_protocol::ErrorCode::UnsupportedAndroidApi,
+                detail: format!(
+                    "service_ctl {module}::{op} refused: {}",
+                    reply
+                        .get("error")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("no reason given")
+                ),
+            });
+        }
+        Ok(reply)
+    }
+
     fn mode(&self) -> Mode {
         // This engine launches a real Activity; `render-app` (offline preview)
         // is a different command and never reaches this adapter.
@@ -4682,6 +4735,7 @@ impl SessionBackend for ArtSession {
             // The guest logd sink, snapshotted live (provenance guest-asserted).
             logs: true,
             environment: false,
+            service_module: true,
             // Fatal guest log entries (ART LOG(FATAL)/CHECK/abort_message and
             // the JVM's `FATAL EXCEPTION` line) are a real crash signature.
             crash_reports: true,
@@ -5256,6 +5310,12 @@ impl SessionBackend for ArtSession {
             return Ok(());
         }
         self.closed = true;
+        // ADR-0029: the verdict cites the session's final module rows, so ask
+        // the launcher for them once before the process goes away (the rows
+        // carry the delivered-fix record, which grows while the app runs).
+        if !self.modules.is_empty() {
+            let _ = self.service_op(serde_json::json!({"op": "list"}));
+        }
         let stopped = self.shutdown();
         // ZPROD3: a zygote session's app child lives inside the keeper's
         // sandbox, so closing the session must end *that child* too (by its
@@ -6060,6 +6120,7 @@ mod tests {
             close: true,
             logs: true,
             environment: false,
+            service_module: true,
             // Fatal guest log entries (ART LOG(FATAL)/CHECK/abort_message and
             // the JVM's `FATAL EXCEPTION` line) are a real crash signature.
             crash_reports: true,

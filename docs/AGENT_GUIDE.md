@@ -396,6 +396,38 @@ A step that declares `requires_services` is `unsupported` (with
 behaviour the session does not have. The scenario `services:` block needs
 `--engine art`; the Rust VM refuses it.
 
+**Feeding a scripted module (`service_ctl`).** A `scripted` module is driven by
+control operations, live, from a scenario step or from `acos_services`. The
+module's `controls` in `acos_capabilities` lists every op and its arguments:
+
+```yaml
+services:
+  - id: location                    # no GPS in a sandbox: `scripted` is the top profile
+    profile: scripted
+    config: {permissions: fine}      # the launch config grants the permission
+steps:
+  - launch: {activity: dev.acos.fixtures.locationprobe/.MainActivity}
+  - service_ctl:                     # one module control op, applied to the live session
+      module: location
+      op: set_location
+      args: {lat: 37.4220, lng: -122.0841, accuracy: 4.0, provider: gps}
+  - wait_for: {selector: {id: last, text: {contains: "37.4220"}}, timeout_ms: 10000}
+  - service_ctl:
+      module: location
+      op: play_track
+      args: {interval_ms: 250, points: [{lat: 37.423, lng: -122.085},
+                                        {lat: 37.424, lng: -122.086}]}
+  - assert_text: {selector: {id: fix}, text: {contains: "provider=gps"}}
+```
+
+`service_ctl` needs a backend with a module registry (`art`); elsewhere the step
+is `unsupported`, never a pass. A module that is `off` refuses the op with
+`SERVICE_MODULE_REJECTED` naming the attach call. On a live session the same
+call is `acos_services {"op": "ctl", "id": "location", "ctl_op": "set_location",
+"args": {...}}`; `{"op":"list"}` shows what is attached. What a module delivered
+is recorded in the session: `verdict.json` → `modules[].reason` names the
+delivered fixes, and `ctl_op: "delivered"` returns the list itself.
+
 `launch.activity` takes the same component spellings Android does, expanded
 before the launch gate runs: `com.example.app/.MainActivity` (a real
 `adb shell am start` component, `ComponentName.unflattenFromString`),

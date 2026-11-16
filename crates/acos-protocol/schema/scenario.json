@@ -1077,6 +1077,28 @@
       },
       "type": "object"
     },
+    "ServiceCtlStep": {
+      "additionalProperties": false,
+      "description": "`service_ctl`: drive a scripted service module's control operation.\n\nThis is the scenario spelling of `acos_services {op: \"ctl\"}`. It exists so a scenario can feed a scripted module (a location fix, a sensor value) and then assert what the app shows, without a side channel outside the verdict.",
+      "properties": {
+        "args": {
+          "description": "Operation arguments (the module's `controls` docs describe the shape)."
+        },
+        "module": {
+          "description": "Module id (`location`).",
+          "type": "string"
+        },
+        "op": {
+          "description": "Control operation (`set_location`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "module",
+        "op"
+      ],
+      "type": "object"
+    },
     "ServiceRequest": {
       "additionalProperties": false,
       "description": "One `services:` entry (`{id, profile, config}`), the scenario spelling of a launch request (ADR-0029 item 4).",
@@ -1350,6 +1372,17 @@
             }
           ],
           "description": "Rotate the display."
+        },
+        "service_ctl": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ServiceCtlStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ADR-0029: drive a scripted module's control operation (`set_location`, `play_track`, ...) on the live session."
         },
         "set_density": {
           "anyOf": [

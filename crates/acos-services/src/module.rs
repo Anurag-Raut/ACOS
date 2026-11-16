@@ -1267,6 +1267,8 @@ impl ModuleRegistry {
             host.remove_service(name);
             self.tombstoned.retain(|tombstoned| tombstoned != name);
         }
+        let id_for_attach = self.entries[index].module.manifest().id;
+        host.clear_detached_binders(id_for_attach);
         let attach_result = self.entries[index].module.attach(host, profile, config);
         match attach_result {
             Ok(()) => {
@@ -1299,8 +1301,9 @@ impl ModuleRegistry {
             return Ok(());
         }
         self.entries[index].module.detach(host)?;
+        let mut freed = Vec::new();
         if let Some(scope) = self.entries[index].scope.take() {
-            host.end_scope(scope);
+            freed = host.end_scope(scope);
         }
         self.entries[index].profile = Profile::Off;
         let id = self.entries[index].module.manifest().id;
@@ -1328,6 +1331,14 @@ impl ModuleRegistry {
         for tombstone in restore {
             install_tombstone(host, tombstone);
             self.tombstoned.push(tombstone.name);
+        }
+        // ADR-0029 item 2: the guest may still hold a `BinderProxy` for each
+        // handle this detach freed. Answering a bare `unknown binder handle`
+        // would be a service-layer error an agent cannot act on, so the handles
+        // are remembered and answer the structured "module is off, attach it".
+        let id_for_dead = self.entries[index].module.manifest().id;
+        for binder in freed {
+            host.mark_detached_binder(binder, id_for_dead);
         }
         // Every module that is still off and has a documented disabled node
         // (see [`Module::off_node`]) answers its name again. This is what makes

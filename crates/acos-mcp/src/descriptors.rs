@@ -648,7 +648,9 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              set with the session's allow/refuse detail; `attach`/`detach` change the session \
              and answer with the new set. Only `hot` modules can change on a live session: an \
              `at-launch` module (e.g. `core`) is refused with the launch call in the message, \
-             never silently ignored. `acos_capabilities` with `session_id` shows the same set.",
+             never silently ignored. `ctl` drives a scripted module's control operation \
+             (`location`: `set_location`, `play_track`, ...) and answers the module's own result; \
+             `acos_capabilities` with `session_id` shows the same set.",
             json!({
                 "type": "object",
                 "additionalProperties": false,
@@ -656,12 +658,14 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 "properties": {
                     "op": {
                         "type": "string",
-                        "enum": ["list", "status", "attach", "detach"],
-                        "description": "`list`/`status` are read-only. `attach`/`detach` need `id` and are refused for an `at-launch` module."
+                        "enum": ["list", "status", "attach", "detach", "ctl"],
+                        "description": "`list`/`status` are read-only. `attach`/`detach`/`ctl` need `id`; `attach`/`detach` are refused for an `at-launch` module."
                     },
-                    "id": {"type": "string", "minLength": 1, "description": "Module id for attach/detach (`feedback.vibrator`)."},
+                    "id": {"type": "string", "minLength": 1, "description": "Module id for attach/detach/ctl (`location`)."},
                     "profile": {"type": "string", "enum": ["off", "stub", "scripted", "real"], "description": "attach: requested profile; omit for the module's default."},
                     "config": {"type": "object", "description": "attach: module configuration object."},
+                    "ctl_op": {"type": "string", "minLength": 1, "description": "ctl: the module control operation (`set_location`). The module's `controls` in `acos_capabilities` lists them."},
+                    "args": {"type": "object", "description": "ctl: operation arguments (`{lat, lng}` for `set_location`)."},
                     "base": base.clone()
                 }
             }),

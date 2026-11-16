@@ -298,6 +298,7 @@ impl SessionBackend for FakeSession {
             close: true,
             logs: false,
             environment: false,
+            service_module: false,
             crash_reports: false,
         }
     }

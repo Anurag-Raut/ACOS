@@ -185,7 +185,8 @@ impl Backend for ReferenceBackend {
             reset: false,
             environment: false,
             crash_reports: false,
-        }
+                    service_modules: false,
+}
     }
 
     fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {

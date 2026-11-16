@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Location Probe</string>
+    <string name="state_initial">state=starting</string>
+</resources>

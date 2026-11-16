@@ -217,6 +217,11 @@ for app in counter todo-list multi-activity form-validation settle-lab thread-he
     build_apk "$app"
 done
 
+# location-probe is the MODLOC fixture: it shows `getLastKnownLocation`, live
+# updates from a scripted track and the geocoder state on screen, so a scenario
+# can assert what the app really received (fixtures/apps/location-probe).
+build_apk location-probe
+
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).

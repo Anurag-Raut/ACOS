@@ -197,6 +197,12 @@ pub struct ServiceHost {
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
     constructions: u64,
+    /// Binder handles the guest still holds from a **detached** module, mapped
+    /// to the module id. ADR-0029 item 2: a detach removes the registration, but
+    /// the guest's `BinderProxy` still carries the old handle; a transaction on
+    /// it must answer the structured "module is off, attach it" error naming the
+    /// module, never a bare `unknown binder handle` that no agent can act on.
+    dead: HashMap<u64, &'static str>,
     /// The `INotificationManager` state, kept here so the runtime (which plays
     /// the system-UI role) can surface a toast the app asked for. Android shows
     /// a text toast from `NotificationManagerService` in the system process;
@@ -236,6 +242,7 @@ impl ServiceHost {
             aux: HashMap::new(),
             dynamic: HashMap::new(),
             deliveries: Vec::new(),
+            dead: HashMap::new(),
             trace: None,
             seq: AtomicU64::new(1),
             constructions: 0,
@@ -426,6 +433,17 @@ impl ServiceHost {
         self.binder_descriptors.remove(&binder.0);
         self.registry.remove(binder);
         Some(binder)
+    }
+
+    /// Remember that a detached module used to answer `binder`, so the guest's
+    /// stale proxy gets the structured "module is off" error (see `dead`).
+    pub fn mark_detached_binder(&mut self, binder: BinderId, module: &'static str) {
+        self.dead.insert(binder.0, module);
+    }
+
+    /// Drop every dead-handle record (a module re-attach replaces them).
+    pub fn clear_detached_binders(&mut self, module: &str) {
+        self.dead.retain(|_, owner| *owner != module);
     }
 
     /// Snapshot the registration tables so a module's registrations can be
@@ -835,11 +853,30 @@ impl ServiceHost {
         reply: &mut Parcel,
         oneway: bool,
     ) -> Result<CallInfo> {
+        if !self.binder_descriptors.contains_key(&binder.0) {
+            if let Some(module) = self.dead.get(&binder.0).copied() {
+                let interface = data
+                    .peek_interface_token()
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                return Err(ServiceError::ModuleUnavailable {
+                    service: format!("binder {:#x}", binder.0),
+                    interface,
+                    module,
+                    attach: crate::module::attach_call(
+                        module,
+                        crate::module::Profile::Scripted,
+                    ),
+                });
+            }
+            return Err(ServiceError::UnknownBinder { handle: binder.0 });
+        }
         let binder_descriptor = self
             .binder_descriptors
             .get(&binder.0)
             .copied()
-            .ok_or(ServiceError::UnknownBinder { handle: binder.0 })?
+            .unwrap_or("<unknown>")
             .to_string();
 
         // The interface token is authoritative (it is what `enforceInterface`
@@ -1078,12 +1115,20 @@ impl ServiceHost {
     }
 
     /// Drain `system -> app` deliveries queued by service handlers.
-    ///
-    /// Dynamic objects are drained too: a module such as `location` (or a
-    /// sensor/camera feed) delivers from its own timer thread, so its queue must
-    /// be readable without a guest transaction landing first. The peer polls
-    /// this on its idle tick (`acos-binder-peer`'s `Peer::tick`).
     pub fn take_deliveries(&mut self) -> Vec<PendingDelivery> {
+        std::mem::take(&mut self.deliveries)
+    }
+
+    /// Drain the deliveries a **dynamic** object produced from its own thread
+    /// (a module's timed feed: `location`'s `play_track`, a sensor or camera
+    /// stream).
+    ///
+    /// Only the peer's idle tick calls this (`Peer::tick`), because a dynamic
+    /// object's `drain_raw_deliveries` may take its own state lock: a caller
+    /// that already holds that lock (a test scoring the compositor state, an
+    /// action handler) would deadlock, which is exactly why this is not folded
+    /// into [`Self::take_deliveries`].
+    pub fn take_timed_deliveries(&mut self) -> Vec<PendingDelivery> {
         let mut out = std::mem::take(&mut self.deliveries);
         for object in self.dynamic.values_mut() {
             out.append(&mut object.drain_raw_deliveries());

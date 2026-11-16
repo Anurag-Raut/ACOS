@@ -2733,18 +2733,18 @@ fn status_value(session: &ArtSession) -> Value {
 /// set it actually has.
 fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let op = args.get("op").and_then(Value::as_str).unwrap_or("");
-    if !matches!(op, "list" | "status" | "attach" | "detach") {
+    if !matches!(op, "list" | "status" | "attach" | "detach" | "ctl") {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
-            detail: format!("unknown op {op:?}; use list, status, attach or detach"),
+            detail: format!("unknown op {op:?}; use list, status, attach, detach or ctl"),
         });
     }
     let mut request = json!({"op": op});
-    if matches!(op, "attach" | "detach") {
+    if matches!(op, "attach" | "detach" | "ctl") {
         let Some(id) = args.get("id").and_then(Value::as_str) else {
             return Err(BackendError::Failed {
                 code: ErrorCode::InvalidArgument,
-                detail: format!("{op} needs a string `id`"),
+                detail: format!("{op} needs a string `id` (the module id)"),
             });
         };
         request["id"] = json!(id);
@@ -2755,6 +2755,21 @@ fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, Back
         }
         if let Some(config) = args.get("config") {
             request["config"] = config.clone();
+        }
+    }
+    if op == "ctl" {
+        // The MCP/CLI spelling carries the module control op in `ctl_op` (a
+        // scenario `service_ctl` step). `op` is already taken by the outer
+        // operation, so the inner one is never inferred.
+        let Some(ctl_op) = args.get("ctl_op").and_then(Value::as_str) else {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "ctl needs a string `ctl_op` (the module control operation)".into(),
+            });
+        };
+        request["ctl_op"] = json!(ctl_op);
+        if let Some(ctl_args) = args.get("args") {
+            request["args"] = ctl_args.clone();
         }
     }
     let mut reply = session.service_op(request)?;

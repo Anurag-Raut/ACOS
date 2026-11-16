@@ -1,0 +1,44 @@
+# MODLOC evidence: the same app with the location module detached. The module is
+# attached at launch, then detached live (`hot`), and the app's *next* location
+# call must take the honest missing/disabled path -- never a stale fix.
+version: 1
+name: location-off
+description: location attaches then detaches; the app's next call gets the honest disabled path.
+app: fixtures/build/apps/location-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+services:
+  - id: location
+    profile: scripted
+    config:
+      permissions: fine
+steps:
+  - launch:
+      activity: dev.acos.fixtures.locationprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: state}
+      text: {contains: "state=ready"}
+  - service_ctl:
+      module: location
+      op: set_location
+      args: {lat: 37.4220, lng: -122.0841, accuracy: 4.0, provider: gps}
+  - wait_for:
+      selector: {id: last, text: {contains: "37.4220"}}
+      timeout_ms: 10000
