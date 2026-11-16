@@ -17,7 +17,9 @@ name: rel3p-pms-parcel
 description: >-
   Launch the REL3P fixture and check that a GET_SIGNATURES|GET_META_DATA|
   GET_PERMISSIONS PackageInfo reply decodes without an exception and carries
-  the APK's signature and its requested permissions.
+  the APK's signature and its requested permissions, and that the
+  getNetworkCapabilities/getLinkProperties replies decode in the framework's
+  own readers (REL3P2).
 app: fixtures/build/apps/pms-parcel.apk
 engine: native-preferred
 fallback: report-and-escalate
@@ -56,5 +58,25 @@ steps:
       patterns:
         - '^getPackageInfo flags=0x100024c0 sigs=1 perms=2 splits=-1 meta=N '
         - '^OK$'
+
+  # REL3P2: the two `android.net` replies ACOS serves today must decode in the
+  # framework's own NetworkCapabilities/LinkProperties readers and carry the
+  # offline values (`wifi`, not validated, no addresses/routes/proxy).
+  - wait_for:
+      selector: {id: net_report}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: net_report}
+      text:
+        exact: "net wifi=1 validated=0 iface=wlan0 mtu=1500 dns=0 routes=0 proxy=null nat64=null stacked=0"
+
+  - assert_log:
+      tag: AcosPmsParcel
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^netcaps ok wifi=1 internet=1 validated=0 up=0 down=0 signal=-2147483648 owner=1000 spec=null tinfo=null enterprise=0$'
+        - '^netlink ok iface=wlan0 mtu=1500 dns=0 links=0 routes=0 proxy=null nat64=null domains=null pdns=null wol=0$'
 
   - assert_no_crash: {}
