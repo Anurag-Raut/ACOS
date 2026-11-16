@@ -760,6 +760,26 @@
         }
       ]
     },
+    "Point": {
+      "description": "A point in screen pixels.",
+      "properties": {
+        "x": {
+          "description": "X coordinate.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Y coordinate.",
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
     "RegionAssertion": {
       "description": "A host-side pixel/region assertion over one freshly captured frame.\n\n**Coordinates are display pixels** (the same space as UI-tree bounds and tap `x`/`y`), not PNG pixels. The executor converts them with the frame's [`acos_protocol::FrameMeta::display_origin`]; a region the frame does not cover (the status bar or navigation band above/below the ART app-area capture) fails loudly instead of cropping a shifted region.\n\nAt least one criterion must be present; `text_ocr` is recognised but has no implementation in this build (the executor returns `UNSUPPORTED_ASSERTION`, never a pass). `hash` is the lowercase/uppercase hex SHA-256 of the cropped region's tightly packed RGBA8 bytes (row-major). `equals_png` names a PNG relative to the scenario file; it must be the same size as the region, or the same size as the frame (in which case the same region is cropped from it).",
       "properties": {
@@ -990,6 +1010,96 @@
       "required": [
         "baseline",
         "tolerance"
+      ],
+      "type": "object"
+    },
+    "ScrollUntilStep": {
+      "description": "`scroll_until`.\n\nSwipe repeatedly until `selector` is visible in a **settled** observation. Every attempt is one real gesture followed by a fresh traversal (never a cached tree), so a found node is always backed by a frame the framework was showing after the gesture settled. The search is bounded by `max_attempts`; a miss is a structured `ELEMENT_NOT_FOUND` naming the attempts and the last tree's texts - never a pass.",
+      "properties": {
+        "direction": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SwipeDirection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Gesture direction (alternative to `from`/`to`)."
+        },
+        "distance": {
+          "description": "Gesture length in pixels with `direction` (default 60 % of the axis).",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "Gesture duration in milliseconds (default 400; 120 with `fling`).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "fling": {
+          "description": "A quick gesture: default duration 120 ms and 10 attempts.",
+          "type": "boolean"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Point"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Gesture start (finger down), in display pixels."
+        },
+        "max_attempts": {
+          "description": "Swipes to try before failing (default 6; 10 with `fling`; max 50).",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "selector": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Selector"
+            }
+          ],
+          "description": "The node to scroll into view."
+        },
+        "settle_timeout_ms": {
+          "description": "P12b: strict settle deadline for each attempt (milliseconds).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "to": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Point"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Gesture end (finger up), in display pixels."
+        }
+      },
+      "required": [
+        "selector"
       ],
       "type": "object"
     },
@@ -1313,6 +1423,17 @@
           ],
           "description": "Rotate the display."
         },
+        "scroll_until": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ScrollUntilStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Swipe until a selector is visible (a bounded search)."
+        },
         "set_density": {
           "anyOf": [
             {
@@ -1379,6 +1500,17 @@
           ],
           "description": "Set the runtime clock."
         },
+        "swipe": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SwipeStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Swipe/scroll the screen with a real touch gesture."
+        },
         "tap": {
           "anyOf": [
             {
@@ -1440,6 +1572,124 @@
           "type": "string"
         }
       ]
+    },
+    "SwipeDirection": {
+      "description": "The direction of a swipe gesture (the direction the **finger** travels).\n\n`up` moves the finger toward the top of the screen, so the content scrolls up and later rows come into view; this is the same word the CLI/MCP `acos_swipe` takes.",
+      "oneOf": [
+        {
+          "description": "Finger up: content scrolls up (later rows).",
+          "enum": [
+            "up"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Finger down: content scrolls down (earlier rows).",
+          "enum": [
+            "down"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Finger left: content scrolls left.",
+          "enum": [
+            "left"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Finger right: content scrolls right.",
+          "enum": [
+            "right"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "SwipeStep": {
+      "description": "`swipe`.\n\nOne real touch gesture: `DOWN`, interpolated `MOVE`s at the display refresh cadence, `UP`, delivered through the same live input channel a tap uses. The list's own physics decides whether it scrolls/flings; the engine only publishes the finger stream. The step settles with the scenario's settle rule (strict by default) and reports the app's `finishInputEvent(handled)` answer like every other input step (REL3E).\n\nGeometry: explicit `from`/`to` points, or `direction` (+ optional `distance`) over the display. Exactly one form is accepted.",
+      "properties": {
+        "direction": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SwipeDirection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Gesture direction (alternative to `from`/`to`)."
+        },
+        "distance": {
+          "description": "Gesture length in pixels with `direction` (default 60 % of the axis).",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "Gesture duration in milliseconds (default 400; 120 with `fling`).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "expect_change": {
+          "description": "SE1: fail the step when the settled frame's pixels are unchanged.",
+          "type": "boolean"
+        },
+        "fling": {
+          "description": "A quick gesture: default duration 120 ms (the framework's own velocity tracker decides the fling; this only changes the timing).",
+          "type": "boolean"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Point"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Gesture start (finger down), in display pixels."
+        },
+        "settle": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepSettle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Settle rule for this input (`strict` default, `fast`/`content` opt-in)."
+        },
+        "settle_timeout_ms": {
+          "description": "P12b: strict/fast settle deadline for this swipe (milliseconds).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "to": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Point"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Gesture end (finger up), in display pixels."
+        }
+      },
+      "type": "object"
     },
     "TapStep": {
       "description": "`tap`.",

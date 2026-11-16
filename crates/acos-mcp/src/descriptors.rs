@@ -758,12 +758,59 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             })),
         ),
         "acos_swipe" => (
-            "Swipe in the held session from `from` to `to`; each point is an object with integer \
-             `x` and `y`. `duration_ms` defaults to 300. The ART engine has no swipe command \
-             (UNSUPPORTED_BACKEND, `input.swipe`), so it returns no `changes` there. `changes` \
-             (the `diff` argument) applies when the engine supports the action. Common errors: ELEMENT_NOT_FOUND with \
-             `details.kind=NoWindowAtPoint` (no frame yet), INVALID_ARGUMENT (a point missing x/y).",
+            "Swipe/scroll in the held session: `from`+`to` points (objects with integer `x` and \
+             `y`), or `direction` (`up`/`down`/`left`/`right`) plus an optional `distance` in \
+             pixels (default 60% of the display along that axis). The ART engine publishes a real \
+             interpolated MotionEvent stream (DOWN, MOVEs at the display refresh cadence with real \
+             timestamps, UP) through the same input channel a tap uses, so a ListView/RecyclerView/ \
+             RN FlatList flings with its own physics; `duration_ms` defaults to 400 (120 when \
+             `fling: true`). `handled` is the window's own `finishInputEvent` bit per event \
+             (REL3E), and `changes` is the settled tree diff (FB3).\n\n`until` (a selector object, \
+             e.g. `{\"text\": \"Row 80\"}`) turns the call into a bounded `scroll_until` search: it \
+             swipes, takes a fresh **settled** traversal and repeats up to `max_attempts` (default \
+             6, 10 with `fling`). `until.found` is only ever reported from such a traversal; a miss \
+             is ELEMENT_NOT_FOUND with `details.attempts` and `details.last_tree_texts`.\n\nCommon \
+             errors: ELEMENT_NOT_FOUND `details.kind=NoWindowAtPoint` (no frame yet), \
+             INVALID_ARGUMENT (missing point/direction, or `until` with a non-strict settle).",
             with_base(json!({
+                "from": {
+                    "type": "object",
+                    "description": "Gesture start point `{x,y}` in display pixels.",
+                    "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}
+                },
+                "to": {
+                    "type": "object",
+                    "description": "Gesture end point `{x,y}` in display pixels.",
+                    "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": ["up", "down", "left", "right"],
+                    "description": "Direction-based gesture used when `from`/`to` are absent: `up` \
+                                    moves the finger up, i.e. the content scrolls up and later rows \
+                                    come into view."
+                },
+                "distance": {
+                    "type": "integer",
+                    "description": "Direction-based gesture length in pixels (default 60% of the \
+                                    display along the direction's axis)."
+                },
+                "fling": {
+                    "type": "boolean",
+                    "description": "A fast gesture (short duration, high velocity) instead of a slow \
+                                    drag. The list's own fling physics decide how far it coasts."
+                },
+                "until": {
+                    "type": "object",
+                    "description": "Selector to scroll into view (`id`/`content_desc`/`text`); the \
+                                    call repeats the swipe up to `max_attempts` and reports \
+                                    `until.found` only from a settled observation."
+                },
+                "max_attempts": {
+                    "type": "integer",
+                    "description": "Bound for an `until` search (1..50; default 6, or 10 with \
+                                    `fling`)."
+                },
                 "diff": {
                     "type": "boolean",
                     "description": "FB3: include `changes`, the settled UI-tree diff of this action \

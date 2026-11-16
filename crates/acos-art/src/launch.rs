@@ -5434,12 +5434,50 @@ fn interactive_serve(
                     }
                 }
             }
-            "tap" | "key" | "type_text" => {
+            "tap" | "key" | "type_text" | "swipe" => {
                 let text_arg = request
                     .get("text")
                     .and_then(|v| v.as_str())
                     .map(str::to_string);
-                let (x, y, key_code) = if cmd == "tap" {
+                // REL3S: a swipe is a real interpolated MotionEvent stream, so
+                // it names two points and a duration (never a direction the
+                // guest would have to invent physics for).
+                let mut swipe_from = (0.0f32, 0.0f32);
+                let mut swipe_to = (0.0f32, 0.0f32);
+                let mut swipe_duration = Duration::from_millis(300);
+                let (x, y, key_code) = if cmd == "swipe" {
+                    let point = |suffix: &str| {
+                        let x = request.get(&format!("x{suffix}")).and_then(|v| v.as_i64());
+                        let y = request.get(&format!("y{suffix}")).and_then(|v| v.as_i64());
+                        match (x, y) {
+                            (Some(x), Some(y)) => Some((x as f32, y as f32)),
+                            _ => None,
+                        }
+                    };
+                    match (point("1"), point("2")) {
+                        (Some(from), Some(to)) => {
+                            swipe_from = from;
+                            swipe_to = to;
+                            swipe_duration = Duration::from_millis(
+                                request
+                                    .get("duration_ms")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(300)
+                                    .clamp(1, 30_000),
+                            );
+                            (from.0, from.1, None)
+                        }
+                        _ => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": cmd, "code": "BAD_REQUEST",
+                                "error": "swipe needs integers x1, y1, x2 and y2 (and optional duration_ms)",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                    }
+                } else if cmd == "tap" {
                     let x = request.get("x").and_then(|v| v.as_i64());
                     let y = request.get("y").and_then(|v| v.as_i64());
                     match (x, y) {
@@ -5506,15 +5544,30 @@ fn interactive_serve(
                 // phase; the looper lines the guest printed in between are the
                 // stages. Both are stamped on the same monotonic base.
                 let injection_started = Instant::now();
+                let gesture_label = if cmd == "swipe" {
+                    format!(
+                        "from ({},{}) to ({},{}) in {} ms",
+                        swipe_from.0,
+                        swipe_from.1,
+                        swipe_to.0,
+                        swipe_to.1,
+                        swipe_duration.as_millis()
+                    )
+                } else {
+                    format!("at ({x},{y})")
+                };
                 trace_host(
                     probe_state,
                     &format!(
-                        "{cmd} publish_begin x={x} y={y} ack_wait_ms={}",
+                        "{cmd} publish_begin {gesture_label} ack_wait_ms={}",
                         ack_wait.as_millis()
                     ),
                 );
                 let injected = match (cmd, key_code) {
                     ("tap", _) => live.input.tap(x, y, ack_wait),
+                    ("swipe", _) => live
+                        .input
+                        .swipe(swipe_from, swipe_to, swipe_duration, ack_wait),
                     ("type_text", _) => live
                         .input
                         .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
@@ -5673,7 +5726,7 @@ fn interactive_serve(
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": "NO_FRESH_FRAME",
                             "error": format!(
-                                "{cmd} at ({x},{y}) completed no settled observation within {} ms \
+                                "{cmd} {gesture_label} completed no settled observation within {} ms \
                                  (c1_generation {g0} -> {g1}, probe_seq {p0} -> {p1}) and the \
                                  in-guest probe has produced no sample",
                                 settle_timeout.as_millis()

@@ -112,6 +112,10 @@ result must be reported as a harness failure, never as a passing test.
   the whole session log.
 * `capture.fresh: true` (default) requires a frame produced after the request.
   A stale frame can never satisfy it.
+* `swipe` publishes a real `DOWN`/`MOVE`…/`UP` gesture (REL3S); `scroll_until`
+  repeats it until the selector is visible in a **settled** traversal (a miss
+  names its attempts and the last tree's texts). Both bind the next assertion to
+  their own settled frame; `scroll_until` always runs strict.
 * Assertions on text/bounds verify the exact ART-reference values; if the
   runtime's layout differs, the scenario fails with a structured diff rather
   than silently accepting a near match.

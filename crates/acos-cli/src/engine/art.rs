@@ -4672,6 +4672,10 @@ impl SessionBackend for ArtSession {
         Mode::Live
     }
 
+    fn display_size(&self) -> Option<(u32, u32)> {
+        Some(ArtSession::display_size(self))
+    }
+
     fn capabilities(&self) -> SessionCapabilities {
         SessionCapabilities {
             launch: true,
@@ -4684,6 +4688,10 @@ impl SessionBackend for ArtSession {
             // key stroke per character (ASCII / US layout).
             type_text: true,
             key: true,
+            // REL3S: a real interpolated MotionEvent stream on the live input
+            // channel (DOWN, MOVEs at the refresh cadence, UP), the same
+            // delivery path a tap uses. Scroll/fling physics are the app's own.
+            swipe: true,
             // ROT4: a real display rotation through the guest's
             // `ActivityThread` configuration path (WMS DisplaySpec + the
             // manifest's `configChanges` decide relaunch vs
@@ -4977,6 +4985,34 @@ impl SessionBackend for ArtSession {
         self.input_command(
             serde_json::json!({"cmd":"tap","x":x - dx,"y":y - dy}),
             "input.tap",
+        )
+    }
+
+    /// REL3S: one real swipe/scroll gesture through the guest's live input
+    /// channel, delivered exactly like a tap (same channel, same ack
+    /// collection, same settle rule).
+    ///
+    /// `from`/`to` are display coordinates; the input channel's transform is
+    /// window-local, so both ends are shifted by the first window's measured
+    /// origin (the single-window rule `tap` uses).
+    fn swipe(
+        &mut self,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        _fling: bool,
+    ) -> Result<(), BackendError> {
+        let (dx, dy) = self.input_offset;
+        self.input_command(
+            serde_json::json!({
+                "cmd": "swipe",
+                "x1": from.0.round() as i64 - dx as i64,
+                "y1": from.1.round() as i64 - dy as i64,
+                "x2": to.0.round() as i64 - dx as i64,
+                "y2": to.1.round() as i64 - dy as i64,
+                "duration_ms": duration_ms.max(1),
+            }),
+            "input.swipe",
         )
     }
 
@@ -6066,6 +6102,7 @@ mod tests {
             screenshot: true,
             tap: true,
             tap_text: true,
+            swipe: true,
             type_text: true,
             key: true,
             rotate: true,

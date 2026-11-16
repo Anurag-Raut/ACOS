@@ -1845,6 +1845,16 @@ impl SessionBackend {
             }
             "back" => input_envelope(request_id, &id, session.key(4), "key"),
             "swipe" => {
+                // REL3S: `until` is a settled-observation search, which only the
+                // ART session engine can prove; the frozen VM must not pretend.
+                if action.get("until").is_some_and(|value| !value.is_null()) {
+                    return invalid_argument(
+                        request_id,
+                        "action.until",
+                        "`until` needs the ART engine (`--engine art`): it is only reported found \
+                         from a settled observation",
+                    );
+                }
                 let from = action.get("from");
                 let to = action.get("to");
                 let (Some(from), Some(to)) = (from, to) else {
@@ -2432,7 +2442,7 @@ impl SessionBackend {
             )),
             "acos_swipe" => Some(self.call_action(
                 &request_id,
-                &json!({"base": session_base(args), "action": {"kind": "swipe", "from": args.get("from"), "to": args.get("to"), "duration_ms": args.get("duration_ms")}}),
+                &json!({"base": session_base(args), "action": {"kind": "swipe", "from": args.get("from"), "to": args.get("to"), "direction": args.get("direction"), "distance": args.get("distance"), "duration_ms": args.get("duration_ms"), "fling": args.get("fling"), "until": args.get("until"), "max_attempts": args.get("max_attempts")}}),
                 ctx,
             )),
             "acos_logs" => Some(self.call_logs(&request_id, args)),

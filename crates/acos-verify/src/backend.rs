@@ -480,6 +480,21 @@ pub enum InputAction {
         /// Explicit y.
         y: Option<i32>,
     },
+    /// Swipe/scroll with a real touch gesture.
+    ///
+    /// The engine publishes `DOWN`, interpolated `MOVE`s and `UP` on the live
+    /// input channel; the scroll container's own physics decides whether it
+    /// moves/flings. Coordinates are display pixels (the same space as a tap).
+    Swipe {
+        /// Finger-down point (display pixels).
+        from: (i32, i32),
+        /// Finger-up point (display pixels).
+        to: (i32, i32),
+        /// Gesture duration in milliseconds.
+        duration_ms: u64,
+        /// A quick gesture (timing only; the app decides the physics).
+        fling: bool,
+    },
     /// Type text.
     Type {
         /// Target selector (absent = current focus).
@@ -502,12 +517,25 @@ impl InputAction {
     pub const fn kind(&self) -> &'static str {
         match self {
             InputAction::Tap { .. } => "tap",
+            InputAction::Swipe { .. } => "swipe",
             InputAction::Type { .. } => "type",
             InputAction::Key(_) => "key",
             InputAction::Back => "back",
             InputAction::Rotate(_) => "rotate",
         }
     }
+}
+
+/// The result of a bounded `scroll_until` search.
+///
+/// `frame_seq` is the settled traversal the target was found in, so a caller
+/// can bind an assertion to the very frame that proves the node was on screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScrollUntilReport {
+    /// Swipes it took (1 = the first gesture already revealed the node).
+    pub attempts: usize,
+    /// The settled traversal's frame sequence the node was found in.
+    pub frame_seq: u64,
 }
 
 /// One environment change (`set_*` step).
@@ -764,6 +792,94 @@ pub trait Backend {
             Capability::Input,
             format!("this backend cannot deliver `{}` input", action.kind()),
         ))
+    }
+
+    /// The live display size in pixels, when the backend knows it.
+    ///
+    /// Used to resolve a direction-only gesture (`swipe: {direction: up}`) into
+    /// two points. `None` means the backend cannot say, and such a step is a
+    /// structured error rather than a guess.
+    fn display_size(&self) -> Option<(u32, u32)> {
+        None
+    }
+
+    /// Swipe repeatedly until `selector` is visible in a **settled** observation.
+    ///
+    /// Bounded by `max_attempts`; every attempt is one real gesture followed by
+    /// a fresh observation (never a cached tree), so a "found" can only come
+    /// from a frame the app itself produced after the gesture. The default loops
+    /// over [`Self::input`]; an engine with its own search command (ART) overrides
+    /// it and reports the same facts. A miss is a structured
+    /// `ELEMENT_NOT_FOUND` naming the attempts and the last tree's texts - never
+    /// a pass and never a silent no-op.
+    fn scroll_until(
+        &mut self,
+        selector: &Selector,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        fling: bool,
+        max_attempts: usize,
+    ) -> Result<(ScrollUntilReport, SessionObservation), BackendError> {
+        let attempts = max_attempts.max(1);
+        let mut last: Option<(u64, usize, Vec<String>)> = None;
+        for attempt in 1..=attempts {
+            let observation = self.input(&InputAction::Swipe {
+                from: (from.0.round() as i32, from.1.round() as i32),
+                to: (to.0.round() as i32, to.1.round() as i32),
+                duration_ms,
+                fling,
+            })?;
+            let seen: Vec<String> = observation
+                .tree
+                .all_nodes()
+                .into_iter()
+                .filter_map(|node| {
+                    (!node.text.is_empty())
+                        .then(|| node.text.clone())
+                        .or_else(|| {
+                            (!node.content_desc.is_empty()).then(|| node.content_desc.clone())
+                        })
+                })
+                .take(40)
+                .collect();
+            let frame_seq = observation.frame.frame_seq;
+            let hit = observation
+                .tree
+                .find_one(selector)
+                .is_some_and(|node| node.visible);
+            last = Some((frame_seq, attempt, seen));
+            if hit {
+                return Ok((
+                    ScrollUntilReport {
+                        attempts: attempt,
+                        frame_seq,
+                    },
+                    observation,
+                ));
+            }
+        }
+        let (frame_seq, attempt, seen) = last.unwrap_or((0, 0, Vec::new()));
+        Err(BackendError::Protocol {
+            code: ErrorCode::ElementNotFound,
+            detail: format!(
+                "scroll_until: {selector:?} was not visible after {attempt} swipe(s); the last \
+                 settled observation (frame {frame_seq}) does not contain it",
+            ),
+            hint: Some(
+                "The list may have reached its end, the gesture may be too short to scroll, or \
+                 the selector may name a node that is never rendered. Check the last tree nodes \
+                 in `details.last_tree_texts` before raising `max_attempts`."
+                    .to_string(),
+            ),
+            details: Some(serde_json::json!({
+                "attempts": attempt,
+                "max_attempts": attempts,
+                "last_frame_seq": frame_seq,
+                "selector": selector.human(),
+                "last_tree_texts": seen,
+            })),
+        })
     }
 
     /// Reset session state.

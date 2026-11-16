@@ -226,6 +226,11 @@ done
 # framework decoded from the ACOS PMS reply. It is the app-visible check that
 # `PackageInfo.writeToParcel`'s String8 arrays are encoded as String8.
 build_apk pms-parcel
+# scroll-list is the REL3S swipe/scroll fixture: a ListView of 100 rows
+# ("Row 0".."Row 99"). A real swipe on it moves the list, so a test can prove
+# row 0 left the viewport and a later row arrived, and `until` can search for
+# a deep row.
+build_apk scroll-list
 # tap-targets is the REL3E input-handling fixture: a non-clickable label whose
 # clickable switch sits beside it (a tap there is a press the app never
 # consumes: `finishInputEvent(handled) = false`) and a clickable button that

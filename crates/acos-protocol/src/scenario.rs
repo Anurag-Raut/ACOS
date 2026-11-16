@@ -18,7 +18,7 @@ use crate::assertion::{
     LogAssertion, NoCrashAssertion, RegionAssertion, ScreenshotAssertion, StateAssertion,
     TextAssertion, VisibilityAssertion,
 };
-use crate::commands::{CaptureFormat, KeyName, Orientation, ResetScope};
+use crate::commands::{CaptureFormat, KeyName, Orientation, Point, ResetScope};
 use crate::error::ErrorCode;
 use crate::identity::{DisplaySpec, IsolationLevel, ResourceBudget};
 use crate::ui::{Bounds, Selector};
@@ -109,6 +109,12 @@ pub struct Step {
     /// Tap a selector or point.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tap: Option<TapStep>,
+    /// Swipe/scroll the screen with a real touch gesture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swipe: Option<SwipeStep>,
+    /// Swipe until a selector is visible (a bounded search).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scroll_until: Option<ScrollUntilStep>,
     /// Type text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r#type: Option<TypeStep>,
@@ -188,6 +194,10 @@ pub enum StepRef<'a> {
     WaitFor(&'a WaitForStep),
     /// See [`Step::tap`].
     Tap(&'a TapStep),
+    /// See [`Step::swipe`].
+    Swipe(&'a SwipeStep),
+    /// See [`Step::scroll_until`].
+    ScrollUntil(&'a ScrollUntilStep),
     /// See [`Step::r#type`].
     Type(&'a TypeStep),
     /// See [`Step::key`].
@@ -239,6 +249,8 @@ impl StepRef<'_> {
             StepRef::Launch(_) => "launch",
             StepRef::WaitFor(_) => "wait_for",
             StepRef::Tap(_) => "tap",
+            StepRef::Swipe(_) => "swipe",
+            StepRef::ScrollUntil(_) => "scroll_until",
             StepRef::Type(_) => "type",
             StepRef::Key(_) => "key",
             StepRef::Back(_) => "back",
@@ -271,6 +283,8 @@ impl Step {
             self.launch.is_some(),
             self.wait_for.is_some(),
             self.tap.is_some(),
+            self.swipe.is_some(),
+            self.scroll_until.is_some(),
             self.r#type.is_some(),
             self.key.is_some(),
             self.back.is_some(),
@@ -308,6 +322,12 @@ impl Step {
         }
         if self.tap.is_some() {
             return self.tap.as_ref().map(StepRef::Tap);
+        }
+        if self.swipe.is_some() {
+            return self.swipe.as_ref().map(StepRef::Swipe);
+        }
+        if self.scroll_until.is_some() {
+            return self.scroll_until.as_ref().map(StepRef::ScrollUntil);
         }
         if self.r#type.is_some() {
             return self.r#type.as_ref().map(StepRef::Type);
@@ -509,6 +529,131 @@ pub struct TapStep {
     /// mid-animation and can never back a claim.
     #[serde(default, skip_serializing_if = "is_false")]
     pub expect_change: bool,
+}
+
+/// The direction of a swipe gesture (the direction the **finger** travels).
+///
+/// `up` moves the finger toward the top of the screen, so the content scrolls
+/// up and later rows come into view; this is the same word the CLI/MCP
+/// `acos_swipe` takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum SwipeDirection {
+    /// Finger up: content scrolls up (later rows).
+    Up,
+    /// Finger down: content scrolls down (earlier rows).
+    Down,
+    /// Finger left: content scrolls left.
+    Left,
+    /// Finger right: content scrolls right.
+    Right,
+}
+
+impl SwipeDirection {
+    /// The two gesture endpoints, centred on the display.
+    ///
+    /// `distance` defaults to 60 % of the axis (the same rule as the CLI/MCP
+    /// `acos_swipe`); the two points are symmetric around the display centre so
+    /// the gesture never starts outside the screen for a normal distance.
+    #[must_use]
+    pub fn endpoints(self, distance: Option<u32>, width: u32, height: u32) -> ((f32, f32), (f32, f32)) {
+        let (w, h) = (width as f32, height as f32);
+        let (cx, cy) = (w / 2.0, h / 2.0);
+        let axis = if matches!(self, SwipeDirection::Up | SwipeDirection::Down) {
+            h * 0.6
+        } else {
+            w * 0.6
+        };
+        let distance = distance.map_or(axis, |d| d as f32);
+        let half = distance / 2.0;
+        match self {
+            SwipeDirection::Up => ((cx, cy + half), (cx, cy - half)),
+            SwipeDirection::Down => ((cx, cy - half), (cx, cy + half)),
+            SwipeDirection::Left => ((cx + half, cy), (cx - half, cy)),
+            SwipeDirection::Right => ((cx - half, cy), (cx + half, cy)),
+        }
+    }
+}
+
+/// `swipe`.
+///
+/// One real touch gesture: `DOWN`, interpolated `MOVE`s at the display refresh
+/// cadence, `UP`, delivered through the same live input channel a tap uses. The
+/// list's own physics decides whether it scrolls/flings; the engine only
+/// publishes the finger stream. The step settles with the scenario's settle
+/// rule (strict by default) and reports the app's `finishInputEvent(handled)`
+/// answer like every other input step (REL3E).
+///
+/// Geometry: explicit `from`/`to` points, or `direction` (+ optional `distance`)
+/// over the display. Exactly one form is accepted.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct SwipeStep {
+    /// Gesture start (finger down), in display pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<Point>,
+    /// Gesture end (finger up), in display pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<Point>,
+    /// Gesture direction (alternative to `from`/`to`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<SwipeDirection>,
+    /// Gesture length in pixels with `direction` (default 60 % of the axis).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance: Option<u32>,
+    /// Gesture duration in milliseconds (default 400; 120 with `fling`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// A quick gesture: default duration 120 ms (the framework's own velocity
+    /// tracker decides the fling; this only changes the timing).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fling: bool,
+    /// P12b: strict/fast settle deadline for this swipe (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
+    /// Settle rule for this input (`strict` default, `fast`/`content` opt-in).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
+    /// SE1: fail the step when the settled frame's pixels are unchanged.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub expect_change: bool,
+}
+
+/// `scroll_until`.
+///
+/// Swipe repeatedly until `selector` is visible in a **settled** observation.
+/// Every attempt is one real gesture followed by a fresh traversal (never a
+/// cached tree), so a found node is always backed by a frame the framework was
+/// showing after the gesture settled. The search is bounded by `max_attempts`;
+/// a miss is a structured `ELEMENT_NOT_FOUND` naming the attempts and the last
+/// tree's texts - never a pass.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ScrollUntilStep {
+    /// The node to scroll into view.
+    pub selector: Selector,
+    /// Gesture start (finger down), in display pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<Point>,
+    /// Gesture end (finger up), in display pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<Point>,
+    /// Gesture direction (alternative to `from`/`to`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<SwipeDirection>,
+    /// Gesture length in pixels with `direction` (default 60 % of the axis).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance: Option<u32>,
+    /// Gesture duration in milliseconds (default 400; 120 with `fling`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// A quick gesture: default duration 120 ms and 10 attempts.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fling: bool,
+    /// Swipes to try before failing (default 6; 10 with `fling`; max 50).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_attempts: Option<usize>,
+    /// P12b: strict settle deadline for each attempt (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
 }
 
 /// `type`.
@@ -982,6 +1127,70 @@ fn validate_timeout(validation: &mut ScenarioValidation, path: &str, timeout: Op
     }
 }
 
+/// Validate a swipe's geometry: explicit `from`/`to` points **or** a
+/// `direction` (+ optional `distance`), never both and never half a pair.
+///
+/// `step_name` is the YAML step key (`swipe` / `scroll_until`), so the error
+/// path names the exact field an author has to fix.
+fn validate_swipe_geometry(
+    validation: &mut ScenarioValidation,
+    path: &str,
+    step_name: &str,
+    from: Option<Point>,
+    to: Option<Point>,
+    direction: Option<SwipeDirection>,
+    distance: Option<u32>,
+    duration_ms: Option<u64>,
+    settle_timeout_ms: Option<u64>,
+) {
+    match (from, to) {
+        (Some(from), Some(to)) => {
+            if from == to {
+                validation.push(
+                    format!("{path}.{step_name}.to"),
+                    "a swipe's `from` and `to` points must differ (a zero-length gesture is not a swipe)",
+                );
+            }
+            if direction.is_some() || distance.is_some() {
+                validation.push(
+                    format!("{path}.{step_name}"),
+                    "accepts `from`/`to` points or `direction`/`distance`, not both",
+                );
+            }
+        }
+        (None, None) => {
+            if direction.is_none() {
+                validation.push(
+                    format!("{path}.{step_name}"),
+                    "needs `from` and `to` points, or a `direction` (up/down/left/right)",
+                );
+            }
+        }
+        _ => validation.push(
+            format!("{path}.{step_name}"),
+            "needs both `from` and `to` (one point is not a gesture)",
+        ),
+    }
+    if distance == Some(0) {
+        validation.push(
+            format!("{path}.{step_name}.distance"),
+            "distance must be > 0 pixels",
+        );
+    }
+    if duration_ms == Some(0) {
+        validation.push(
+            format!("{path}.{step_name}.duration_ms"),
+            "duration_ms must be > 0",
+        );
+    }
+    if settle_timeout_ms == Some(0) {
+        validation.push(
+            format!("{path}.{step_name}.settle_timeout_ms"),
+            "settle_timeout_ms must be > 0",
+        );
+    }
+}
+
 fn validate_regex(validation: &mut ScenarioValidation, path: &str, pattern: &str) {
     if let Err(e) = regex::Regex::new(pattern) {
         validation.push(path, format!("invalid regex: {e}"));
@@ -1259,6 +1468,42 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
             StepRef::Tap(tap) => {
                 validate_action_like(&mut v, &format!("steps[{index}]"), tap, "tap");
                 validate_expect_change(&mut v, &path, tap.expect_change, tap.settle);
+            }
+            StepRef::Swipe(swipe) => {
+                validate_swipe_geometry(
+                    &mut v,
+                    &format!("steps[{index}]"),
+                    "swipe",
+                    swipe.from,
+                    swipe.to,
+                    swipe.direction,
+                    swipe.distance,
+                    swipe.duration_ms,
+                    swipe.settle_timeout_ms,
+                );
+                validate_expect_change(&mut v, &path, swipe.expect_change, swipe.settle);
+            }
+            StepRef::ScrollUntil(scroll) => {
+                validate_swipe_geometry(
+                    &mut v,
+                    &format!("steps[{index}]"),
+                    "scroll_until",
+                    scroll.from,
+                    scroll.to,
+                    scroll.direction,
+                    scroll.distance,
+                    scroll.duration_ms,
+                    scroll.settle_timeout_ms,
+                );
+                validate_selector(&mut v, &path, &scroll.selector, "selector");
+                if let Some(max_attempts) = scroll.max_attempts {
+                    if max_attempts == 0 || max_attempts > 50 {
+                        v.push(
+                            format!("{path}.max_attempts"),
+                            "max_attempts must be in 1..=50",
+                        );
+                    }
+                }
             }
             StepRef::Type(ty) => {
                 if ty.selector.is_none() {
@@ -1677,5 +1922,90 @@ steps:
                 .iter()
                 .all(|e| e.code == ErrorCode::InvalidScenario));
         }
+    }
+
+    /// REL3S: `swipe` and `scroll_until` are first-class steps. Geometry is
+    /// either two points or a direction (+ distance), and a scroll search never
+    /// accepts a non-strict settle (a found node must come from a settled
+    /// observation).
+    #[test]
+    fn swipe_and_scroll_until_parse_and_validate() {
+        let yaml = r#"
+version: 1
+name: swipe
+app: fixtures/build/apps/scroll-list.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+steps:
+  - launch: {activity: .MainActivity}
+  - swipe: {from: {x: 540, y: 1800}, to: {x: 540, y: 600}, duration_ms: 300, fling: true}
+  - swipe: {direction: up, distance: 900}
+  - scroll_until: {selector: {text: {exact: "Row 80"}}, direction: up, fling: true, max_attempts: 12}
+  - scroll_until: {selector: {text: {exact: "Row 90"}}, from: {x: 540, y: 1900}, to: {x: 540, y: 500}}
+"#;
+        let scenario = Scenario::from_yaml_str(yaml).expect("parses");
+        assert!(scenario.validate().is_ok(), "{:?}", scenario.validate());
+        assert_eq!(scenario.steps[1].kind(), "swipe");
+        assert_eq!(scenario.steps[3].kind(), "scroll_until");
+        let swipe = scenario.steps[2].swipe.as_ref().expect("direction swipe");
+        assert_eq!(swipe.direction, Some(SwipeDirection::Up));
+        assert_eq!(swipe.distance, Some(900));
+        let scroll = scenario.steps[3]
+            .scroll_until
+            .as_ref()
+            .expect("scroll_until");
+        assert_eq!(scroll.max_attempts, Some(12));
+        // The default form still serializes the fields it was given only.
+        let text = scenario.to_yaml_string().unwrap();
+        assert!(text.contains("scroll_until"), "{text}");
+    }
+
+    /// REL3S: half a gesture, both geometry forms at once, a zero-length
+    /// gesture and an unbounded search are all scenario bugs, reported with a
+    /// stable path before anything runs.
+    #[test]
+    fn swipe_geometry_errors_have_paths() {
+        for (body, expected_path) in [
+            ("{from: {x: 1, y: 2}}", "steps[1].swipe"),
+            (
+                "{from: {x: 1, y: 2}, to: {x: 1, y: 900}, direction: up}",
+                "steps[1].swipe",
+            ),
+            ("{from: {x: 5, y: 5}, to: {x: 5, y: 5}}", "steps[1].swipe.to"),
+            ("{}", "steps[1].swipe"),
+        ] {
+            let yaml = format!(
+                "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {{mode: offscreen, width: 8, height: 8, density_dpi: 420}}\nsteps:\n  - launch: {{activity: .MainActivity}}\n  - swipe: {body}\n"
+            );
+            let scenario = Scenario::from_yaml_str_unvalidated(&yaml).expect("parses");
+            let validation = scenario.validate();
+            assert!(!validation.is_ok(), "swipe {body} must be rejected");
+            assert!(
+                validation.errors.iter().any(|e| e.path == expected_path),
+                "swipe {body}: expected {expected_path}, got {:?}",
+                validation.errors
+            );
+        }
+        let yaml = "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nsteps:\n  - scroll_until: {selector: {text: {exact: \"x\"}}, direction: up, max_attempts: 0}\n";
+        let scenario = Scenario::from_yaml_str_unvalidated(yaml).expect("parses");
+        let validation = scenario.validate();
+        assert!(validation
+            .errors
+            .iter()
+            .any(|e| e.path == "steps[0].scroll_until.max_attempts"));
+    }
+
+    /// REL3S: `up` is the direction the finger travels. The gesture starts at
+    /// the bottom half and ends in the top half, so the content scrolls up and
+    /// later rows come into view (the same rule the CLI uses).
+    #[test]
+    fn swipe_direction_up_moves_the_finger_toward_the_top() {
+        let ((x1, y1), (x2, y2)) = SwipeDirection::Up.endpoints(Some(1000), 1080, 2400);
+        assert_eq!((x1, x2), (540.0, 540.0));
+        assert_eq!((y1, y2), (1700.0, 700.0));
+        let ((x1, _), (x2, _)) = SwipeDirection::Left.endpoints(None, 1000, 2000);
+        assert!(x1 > x2, "left moves the finger toward x=0");
+        let ((_, y1), (_, y2)) = SwipeDirection::Down.endpoints(Some(400), 1000, 2000);
+        assert!(y1 < y2, "down moves the finger toward the bottom");
     }
 }

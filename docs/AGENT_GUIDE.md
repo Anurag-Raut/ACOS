@@ -164,7 +164,7 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    `acos_tap {"id": "inc"}`, `acos_tap {"x":.., "y":..}`,
    `acos_key {"code": "back"}`, `acos_text {"text": "hello"}` (types into the
    focused editor — the same guest `type_text` command a scenario `type` step
-   sends), `acos_swipe {"from":[x1,y1], "to":[x2,y2]}`. `text` names a node the
+   sends), `acos_swipe {"from":{"x":x1,"y":y1}, "to":{"x":x2,"y":y2}}`. `text` names a node the
    way the platform does — its text, else its content description — so a React
    Native pressable (`accessibilityLabel`, e.g. a bottom tab) is reachable by the
    label you read on screen. `content_desc` and `id` are the *explicit* fields:
@@ -184,6 +184,60 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    or bounds you have not seen (`diff: false` restores the old reply).
    `state_changed: false` with `accepted: true` means the event was delivered
    but the screen did not change — read the in-band `note` and `changes`.
+
+   **Scrolling a list (REL3S).** The ART engine publishes a real gesture, not a
+   jump: `DOWN`, one `MOVE` every ~16 ms (the display refresh cadence) with real
+   event timestamps, then `UP`, on the same input channel a tap uses. The app's
+   own `VelocityTracker`/`OverScroller` therefore decide the fling, so a
+   `ListView`/`RecyclerView`/RN `FlatList` scrolls exactly as it does on a phone.
+   Three ways to name the gesture:
+
+   ```
+   acos_swipe {"from": {"x": 300, "y": 1100}, "to": {"x": 300, "y": 400},
+               "duration_ms": 300, "fling": true}
+   acos_swipe {"direction": "up", "distance": 900, "duration_ms": 300}
+   acos_swipe {"direction": "up", "fling": true, "until": {"text": "Row 80"}}
+   ```
+
+   `direction` (`up`/`down`/`left`/`right`) gestures across the display centre;
+   `up` moves the finger up, which scrolls the content up and brings later rows
+   into view. `duration_ms` defaults to 400 (120 with `fling: true`); a slow
+   drag follows the finger, a fling coasts on the list's own physics.
+
+   **`until` is `scroll_until`.** With a selector, the call repeats the swipe
+   (bounded by `max_attempts`, default 6, 10 with `fling`) and after **every**
+   swipe takes a fresh **settled** traversal and looks for the node. `until.found`
+   is only ever reported from such a traversal (`until.attempts`,
+   `until.frame_seq` name it). If the node never appears, the call fails with
+   `ELEMENT_NOT_FOUND`, `error.details.attempts`, `error.details.max_attempts` and
+   `error.details.last_tree_texts` (what the list actually showed at the end) —
+   never a pass, and never a guess from a cached tree. `until` requires the
+   strict settle; `settle: fast`/`content` is refused because neither can prove a
+   settled observation.
+
+   `handled` works per event: a scrolling gesture reports
+   `handled_evidence.published` equal to `acked` (a 300 ms swipe is ~20 events,
+   not 2) and `unhandled` lists any event the window dropped — e.g. a gesture
+   that lands on a non-scrollable view.
+
+   **The same two steps in a scenario (REL3S).** A scenario scrolls with the
+   same gesture and the same search:
+
+   ```yaml
+   - swipe: {direction: up, distance: 900, duration_ms: 300, fling: true}
+   - scroll_until: {selector: {text: {exact: "Row 80"}}, fling: true, max_attempts: 12}
+   - tap: {selector: {text: {exact: "Row 80"}}}
+   ```
+
+   `swipe` takes `from`/`to` points or `direction` (+ `distance`), `duration_ms`,
+   `fling`, the per-step `settle`/`settle_timeout_ms` rules and SE1's
+   `expect_change`. `scroll_until` takes the same geometry plus the `selector`
+   to find and `max_attempts` (1..50); it always runs strict. Both report REL3E's
+   `input` block (`handled`, `handled_evidence`, `target`), and `scroll_until`
+   also reports `input.until {selector, found, attempts, frame_seq}`; a miss
+   fails the step with `ELEMENT_NOT_FOUND` and `details.attempts` /
+   `details.last_tree_texts`. The next `assert_*` binds to the swipe/search's own
+   settled frame.
    Identity rule, compared fields and the 40-entry cap: `docs/MCP.md` §1c.
    **`handled` is the app's own answer, and it is the one you branch on.**
    Every `acos_tap`/`acos_key`/`acos_text`/`acos_swipe` reply (and every
