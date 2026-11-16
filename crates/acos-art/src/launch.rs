@@ -2140,6 +2140,18 @@ struct ProbeState {
     /// ROT4: the guest's own diagnostic lines (`ACOSLAUNCH MARK …`), oldest
     /// first, so an interactive reply can carry the rungs that ran for it.
     marks: std::collections::VecDeque<String>,
+    /// SETTLE5: the demand-probe channel's own health, so a `probe-floor`
+    /// timeout says which side stalled instead of leaving it a mystery.
+    /// `wakes_sent` counts wake lines written to the guest's stdin,
+    /// `wake_failures` counts writes the channel refused (a dead reader),
+    /// `stale_samples` counts guest samples the host refused to publish
+    /// because their sequence was not newer (a probe-thread restart), and
+    /// `stall_pending_ms` is the guest's own `probe-stalled` mark (a sample
+    /// posted to the main looper that has not run for this long).
+    wakes_sent: u64,
+    wake_failures: u64,
+    stale_samples: u64,
+    stall_pending_ms: Option<u64>,
 }
 
 /// W59 latency trace: `elapsed_us tag text` per line, written under one lock
@@ -2189,6 +2201,36 @@ fn host_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// SETTLE5: the demand-probe channel's own health, attached to a settle
+/// timeout so it names the side that stalled. `probe-floor` used to read as
+/// "no fresh sample", which is equally consistent with a dead wake channel, a
+/// guest that keeps emitting samples the host refuses, and a guest main looper
+/// that cannot run the posted probe; these counters separate them:
+///
+/// * `wake_failures` > 0 — the guest's stdin refused a wake (a dead reader /
+///   control thread); the demand channel is gone and only the guest's own
+///   fallback can publish.
+/// * `stale_samples` > 0 — the guest emitted samples whose sequence was not
+///   newer (a probe-thread restart), so the host froze on the old sample.
+/// * `guest_stall_pending_ms` is the guest's own `probe-stalled` mark: a sample
+///   posted to its main looper that has not run for this long (its main thread
+///   is busy or blocked; the probe is starved, not silent).
+fn probe_health_json(state: &Arc<std::sync::Mutex<ProbeState>>) -> serde_json::Value {
+    let state = state.lock().unwrap_or_else(|e| e.into_inner());
+    let age = state
+        .latest
+        .as_ref()
+        .map(|sample| host_ms().saturating_sub(sample.at_ms));
+    serde_json::json!({
+        "wakes_sent": state.wakes_sent,
+        "wake_failures": state.wake_failures,
+        "stale_samples": state.stale_samples,
+        "guest_stall_pending_ms": state.stall_pending_ms,
+        "newest_sample_age_ms": age,
+        "note": "the demand-probe channel's own counters at the timeout: wakes written,                  wakes the channel refused, guest samples the host refused (not newer), and                  the guest's own starved-probe mark",
+    })
 }
 
 fn env_u64(name: &str, default: u64) -> u64 {
@@ -2834,6 +2876,19 @@ fn drain_tee_lines<R: std::io::Read>(
         if trimmed.starts_with("ACOSLAUNCH ") || trimmed.starts_with("ACOSPROBE-STALL") {
             eprintln!("acos-art: guest: {trimmed}");
             let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            // SETTLE5: the guest names its own starved probe (a sample posted
+            // to the main looper that has not run). Kept as the newest mark so
+            // a settle timeout can report a guest-side stall with its measured
+            // age, never as a guess.
+            if let Some(rest) = trimmed.strip_prefix("ACOSLAUNCH MARK probe-stalled") {
+                if let Some(ms) = rest
+                    .split_whitespace()
+                    .find_map(|word| word.strip_prefix("pending_ms="))
+                    .and_then(|value| value.parse::<u64>().ok())
+                {
+                    state.stall_pending_ms = Some(ms);
+                }
+            }
             state.marks.push_back(trimmed.to_string());
             while state.marks.len() > 64 {
                 state.marks.pop_front();
@@ -2965,10 +3020,34 @@ fn drain_tee_lines<R: std::io::Read>(
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                     let newer = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
                     if newer {
+                        let at_ms = host_ms();
+                        // SETTLE5 diagnostic: the host's own receipt time and
+                        // the guest's build time, so a stalled probe can be
+                        // attributed to the guest (no line), the pipe (line
+                        // without receipt) or the wait (receipt ignored).
+                        // Trace-only: no reply changes.
+                        if let Some(trace) = state.trace.as_mut() {
+                            let guest_ms = value
+                                .get("time")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(0);
+                            let cause = value
+                                .get("cause")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("?");
+                            trace.line(
+                                "HOST",
+                                &format!(
+                                    "probe rx seq={seq} cause={cause} lag_ms={} settled={settled} \
+                                     draw_seq={draw_seq} gen={generation}",
+                                    at_ms.saturating_sub(guest_ms)
+                                ),
+                            );
+                        }
                         state.latest = Some(ProbeSample {
                             seq,
                             tree,
-                            at_ms: host_ms(),
+                            at_ms,
                             generation,
                             draw_ms,
                             draw_seq,
@@ -2977,6 +3056,19 @@ fn drain_tee_lines<R: std::io::Read>(
                             window_gone,
                             animations_on,
                         });
+                    } else {
+                        state.stale_samples = state.stale_samples.saturating_add(1);
+                        let latest = state
+                            .latest
+                            .as_ref()
+                            .map(|p| p.seq)
+                            .unwrap_or_default();
+                        if let Some(trace) = state.trace.as_mut() {
+                            trace.line(
+                                "HOST",
+                                &format!("probe stale seq={seq} latest={latest}"),
+                            );
+                        }
                     }
                     // P9: wake the startup loop (and anyone else waiting on a
                     // fresh sample) instead of making it poll for this.
@@ -3661,7 +3753,31 @@ fn wait_for_event_settled(
     let mut first_change_ms: Option<u64> = None;
     let mut last_reason = String::from("no-probe");
     let mut last_pixels_changed: Option<bool> = None;
-    request_guest_probe(guest_stdin);
+    // SETTLE5 diagnostic: trace the wait's own decisions (entry floor, every
+    // wake it sends, every reason change), so a `probe-floor` timeout can be
+    // attributed to a guest that never answered, a wake that never arrived, or
+    // a sample the host ignored. Trace-only (`ACOS_ART_INPUT_TRACE`); no reply
+    // changes.
+    let mut traced_reason = String::new();
+    trace_host(
+        probe_state,
+        &format!(
+            "settle entry floor={entry_floor} gen={entry_generation} \
+             deadline_ms={} await_tree={} pending={:?}",
+            deadline.saturating_duration_since(Instant::now()).as_millis(),
+            await_tree.is_some(),
+            latest_probe(probe_state)
+                .map(|s| s.pending.clone())
+                .unwrap_or_default()
+        ),
+    );
+    let entry_wake = request_guest_probe(guest_stdin, probe_state);
+    trace_host(
+        probe_state,
+        &format!(
+            "settle wake probe_seq={entry_floor} reason=entry written={entry_wake}"
+        ),
+    );
     loop {
         let (unsupported_seq, marker) = latest_unsupported(probe_state);
         if unsupported_seq > unsupported_baseline {
@@ -3895,9 +4011,34 @@ fn wait_for_event_settled(
         if last_wake.elapsed() >= Duration::from_millis(wake_ms)
             && current_probe_seq == last_requested_seq
         {
-            request_guest_probe(guest_stdin);
+            let written = request_guest_probe(guest_stdin, probe_state);
+            trace_host(
+                probe_state,
+                &format!(
+                    "settle wake probe_seq={current_probe_seq} reason=pacing written={written}"
+                ),
+            );
             last_requested_seq = current_probe_seq;
             last_wake = Instant::now();
+        }
+        if last_reason != traced_reason {
+            traced_reason = last_reason.clone();
+            let (seq, age, draw_seq, settled) = match &probe {
+                Some(sample) => (
+                    sample.seq,
+                    host_ms().saturating_sub(sample.at_ms),
+                    sample.draw_seq,
+                    sample.settled,
+                ),
+                None => (0, 0, 0, false),
+            };
+            trace_host(
+                probe_state,
+                &format!(
+                    "settle wait reason={last_reason} probe_seq={seq} age_ms={age} \
+                     draw_seq={draw_seq} settled={settled} floor={entry_floor}"
+                ),
+            );
         }
         if Instant::now() >= deadline {
             // A timeout must still state the pixel fact (true|false), even when
@@ -4026,7 +4167,7 @@ fn wait_for_settled_observation(
             && last_change.elapsed() >= quiet
             && last_wake.elapsed() >= Duration::from_millis(20)
         {
-            request_guest_probe(guest_stdin);
+            request_guest_probe(guest_stdin, probe_state);
             last_wake = Instant::now();
         }
         // Fast mode binds the guest's own post-input tree sample. The baseline
@@ -4274,12 +4415,33 @@ fn open_guest_probe_fifo(dir: &Path) -> Result<std::fs::File> {
 /// Ask the guest for one probe sample on its main looper, out of its 50 ms
 /// cadence. The guest reads `PROBE` lines from stdin (interactive sessions only)
 /// and wakes the probe thread immediately; this never changes the view tree.
-fn request_guest_probe(stdin: &mut Option<GuestProbeChannel>) {
-    if let Some(writer) = stdin.as_mut() {
-        use std::io::Write;
-        let _ = writeln!(writer, "PROBE");
-        let _ = writer.flush();
+///
+/// Returns whether the wake was actually written. SETTLE5: a wake that cannot
+/// be written (a closed guest stdin, a dead reader) must not be silent — the
+/// caller traces it, and the demand-probe channel's health is part of the
+/// timeout evidence instead of a guess.
+fn request_guest_probe(
+    stdin: &mut Option<GuestProbeChannel>,
+    state: &Arc<std::sync::Mutex<ProbeState>>,
+) -> bool {
+    let Some(writer) = stdin.as_mut() else {
+        return true;
+    };
+    use std::io::Write;
+    let written = writeln!(writer, "PROBE")
+        .and_then(|_| writer.flush())
+        .is_ok();
+    // SETTLE5: the channel's health is evidence, and a wake the pipe refuses is
+    // counted rather than silently swallowed. Only the counters change; the
+    // demand probe's behaviour is unchanged.
+    let mut guard = state.lock().unwrap_or_else(|e| e.into_inner());
+    if written {
+        guard.wakes_sent = guard.wakes_sent.saturating_add(1);
+    } else {
+        guard.wake_failures = guard.wake_failures.saturating_add(1);
     }
+    drop(guard);
+    written
 }
 
 enum FastTreeEnd {
@@ -4335,7 +4497,7 @@ fn wait_for_fast_tree(
         }
         if !requested {
             requested = true;
-            request_guest_probe(guest_stdin);
+            request_guest_probe(guest_stdin, probe_state);
             trace_host(probe_state, "fast-tree requested an immediate guest probe");
         }
         if Instant::now() >= deadline {
@@ -5154,6 +5316,13 @@ fn interactive_serve(
                 // G3f1: say what the request waited for, so a reply can never
                 // be mistaken for "the same tree again": the sample it binds
                 // was forced to differ from the caller's baseline tree.
+                if tree_timeout.is_some() {
+                    // SETTLE5: a timed-out tree request carries the probe
+                    // channel's health, so `probe-floor` names its cause.
+                    if let Some(map) = settle_json.as_object_mut() {
+                        map.insert("probe".into(), probe_health_json(probe_state));
+                    }
+                }
                 if baseline_tree.is_some() {
                     if let Some(map) = settle_json.as_object_mut() {
                         map.insert("awaited".into(), serde_json::json!("tree-change"));
@@ -5791,7 +5960,13 @@ fn interactive_serve(
                             "token": format!("{:#x}", injected.token.0),
                         }),
                     );
-                    map.insert("settle".into(), settle_timing.to_json(false, ack_ms));
+                    let mut settle_json = settle_timing.to_json(false, ack_ms);
+                    let health = probe_health_json(probe_state);
+                    if let Some(set) = settle_json.as_object_mut() {
+                        set.insert("probe".into(), health.clone());
+                    }
+                    map.insert("settle".into(), settle_json);
+                    map.insert("probe".into(), health);
                     map.insert(
                         "warning".into(),
                         serde_json::json!(format!(
@@ -6557,7 +6732,34 @@ fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
                 frame.fds.len()
             );
         }
+        // SETTLE5: a single peer transaction is the guest's main thread
+        // blocked in `transact` — the one host-side path that can stop the
+        // in-guest probe from running while it is being waited on. A slow one
+        // is therefore always named (threshold `ACOS_PEER_SLOW_MS`, default
+        // 250 ms): the next strict-settle `probe-floor` can cite the call
+        // instead of guessing. Nothing about the reply changes.
+        let calls_before = peer.service_calls().len();
+        let frame_target = frame.target;
+        let frame_code = frame.code;
+        let started = std::time::Instant::now();
         let outs = peer.handle(frame);
+        let elapsed = started.elapsed();
+        if elapsed >= Duration::from_millis(env_u64("ACOS_PEER_SLOW_MS", 250)) {
+            let calls = peer.service_calls();
+            let call = calls
+                .get(calls_before)
+                .or_else(|| calls.last())
+                .map(|c| format!("{}#{}", c.descriptor, c.method))
+                .unwrap_or_else(|| "unknown".to_string());
+            eprintln!(
+                "acos-art: peer transact slow elapsed_ms={} target={:#x} code={} call={} \
+                 (the guest main thread waits for this reply)",
+                elapsed.as_millis(),
+                frame_target,
+                frame_code,
+                call
+            );
+        }
         if dbg {
             eprintln!("peer-trace: handle -> {} frames", outs.len());
         }
@@ -6924,6 +7126,10 @@ mod probe_line_tests {
                 bad_probe_lines: self.bad_probe_lines,
                 trace: None,
                 marks: self.marks.clone(),
+                wakes_sent: self.wakes_sent,
+                wake_failures: self.wake_failures,
+                stale_samples: self.stale_samples,
+                stall_pending_ms: self.stall_pending_ms,
                 wake: Arc::clone(&self.wake),
                 anim_traced: self.anim_traced.clone(),
                 touch_traced: self.touch_traced,
@@ -7073,6 +7279,97 @@ mod probe_line_tests {
         assert!(read_capped_line(&mut cursor, 8).unwrap().is_none());
         let next = read_capped_line(&mut cursor, 8).unwrap().unwrap();
         assert_eq!(next, b"next\n");
+    }
+
+    /// SETTLE5: a settle that times out on `probe-floor` must carry the demand
+    /// probe's own health, not just "the newest sample is old". The parser turns
+    /// the guest's `probe-stalled` mark and a refused (not-newer) sample into
+    /// the exact counters the timeout reports, so the next occurrence names the
+    /// side that stalled.
+    #[test]
+    fn a_starved_probe_and_a_stale_sample_are_counted_for_the_timeout_evidence() {
+        let state = drain(concat!(
+            "ACOSPROBE {\"seq\":5,\"tree\":{\"nodes\":[]}}\n",
+            "ACOSLAUNCH MARK probe-stalled pending_ms=1234 wake=received\n",
+            "ACOSPROBE {\"seq\":4,\"tree\":{\"nodes\":[]}}\n",
+            "ACOSPROBE {\"seq\":6,\"tree\":{\"nodes\":[]}}\n",
+        ));
+        assert_eq!(state.latest.as_ref().map(|s| s.seq), Some(6));
+        assert_eq!(state.stall_pending_ms, Some(1234));
+        // Only seq 4 was refused; 6 advanced the sample.
+        assert_eq!(state.stale_samples, 1);
+
+        let health = probe_health_json(&Arc::new(std::sync::Mutex::new(state)));
+        assert_eq!(health["stale_samples"], serde_json::json!(1));
+        assert_eq!(health["guest_stall_pending_ms"], serde_json::json!(1234));
+        assert!(health["newest_sample_age_ms"].as_u64().is_some());
+        assert_eq!(health["wake_failures"], serde_json::json!(0));
+    }
+
+    /// SETTLE5: a wake the channel refuses is counted, never silently dropped.
+    /// Before this, `request_guest_probe` discarded the write error, so a dead
+    /// reader degraded the session to the 5 s fallback with no evidence at all
+    /// (every strict settle then timed out as a bare `probe-floor`).
+    #[test]
+    fn a_refused_probe_wake_is_counted_and_a_written_one_is_counted_separately() {
+        let dir = std::env::temp_dir().join(format!("acos-settle5-wake-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let path = dir.join("wake-probe");
+        std::fs::write(&path, b"").expect("scratch file");
+
+        // A read-only handle is the shape of a channel that cannot accept a
+        // wake (a dead reader): the write fails and must be counted.
+        let read_only = std::fs::File::open(&path).expect("open read-only");
+        let mut dead = Some(GuestProbeChannel::Fifo(read_only));
+        let state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+        assert!(!request_guest_probe(&mut dead, &state));
+        {
+            let state = state.lock().unwrap();
+            assert_eq!(state.wake_failures, 1, "a refused wake is counted");
+            assert_eq!(state.wakes_sent, 0);
+        }
+
+        // A writable handle is the real channel: the wake is delivered and the
+        // sent counter moves.
+        let writable = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("open writable");
+        let mut live = Some(GuestProbeChannel::Fifo(writable));
+        assert!(request_guest_probe(&mut live, &state));
+        {
+            let state = state.lock().unwrap();
+            assert_eq!(state.wakes_sent, 1);
+            assert_eq!(state.wake_failures, 1);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SETTLE5: when the demand channel's control thread ends, no wake can ever
+    /// arrive again. The guest must then poll at a strict-settle useful cadence
+    /// instead of the 5 s idle fallback — otherwise every later settle times out
+    /// on a healthy, idle screen. The sample is still a real probe sample under
+    /// the same settle rule, so this can only remove false timeouts, never
+    /// produce a pass.
+    #[test]
+    fn a_dead_demand_channel_switches_the_guest_fallback_to_a_fast_poll() {
+        let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        assert!(
+            src.contains("sProbeControlDead = true;"),
+            "the control thread must record that the demand channel ended"
+        );
+        assert!(
+            src.matches("Math.min(fallbackMs, deadChannelMs)").count() >= 2,
+            "both the emit decision and the wait must use the fast dead-channel fallback"
+        );
+        assert!(
+            src.contains("probe-control-exit reason="),
+            "an ended control thread must be named"
+        );
+        assert!(
+            src.contains("probe-stalled"),
+            "a starved probe must be named with its pending age"
+        );
     }
 }
 
@@ -7397,6 +7694,7 @@ mod skipped_traversal_tests {
             );
         }
     }
+
 }
 
 /// ABIGATE: the pre-guest ABI refusal is structured, carries its inventory, and

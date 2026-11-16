@@ -78,10 +78,16 @@ fn every_probe_wake_reaches_the_zygote_child_side_of_the_fifo() {
     });
 
     // Two wakes at settle entry and one during the wait: all three must arrive.
-    request_guest_probe(&mut channel);
-    request_guest_probe(&mut channel);
+    let state = std::sync::Arc::new(std::sync::Mutex::new(ProbeState::default()));
+    request_guest_probe(&mut channel, &state);
+    request_guest_probe(&mut channel, &state);
     std::thread::sleep(Duration::from_millis(20));
-    request_guest_probe(&mut channel);
+    request_guest_probe(&mut channel, &state);
+    assert_eq!(
+        state.lock().unwrap().wakes_sent,
+        3,
+        "every wake that reached the FIFO is counted"
+    );
 
     let seen = rx
         .recv_timeout(Duration::from_secs(5))
