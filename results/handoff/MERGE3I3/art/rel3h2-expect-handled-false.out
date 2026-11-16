@@ -1,0 +1,5 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-879b7c7c-6dfb08dd82494c49/scenarios/rel3h2-expect-handled-false.yaml (sha 36c57eb492e0), apk /home/Qui/.t3/worktrees/acos/t3-879b7c7c-6dfb08dd82494c49/fixtures/build/apps/tap-targets.apk (sha f463154456d5), engine art, fidelity art-reference
+  artifacts: results/handoff/MERGE3I3/art/rel3h2-expect-handled-false
+  steps: 4
