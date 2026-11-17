@@ -4352,7 +4352,12 @@ public final class LaunchMain {
         java.lang.reflect.Constructor<?> modeCtor = modeCls.getDeclaredConstructor(
                 int.class, int.class, int.class, float.class);
         modeCtor.setAccessible(true);
-        Object mode = modeCtor.newInstance(1, PANEL_W, PANEL_H, 60.0f);
+        // MERGEMPROC: the Mode carries the display's **real** refresh rate, not a
+        // rounded 60.0. `DisplayInfo.getRefreshRate()` answers from this mode
+        // (`supportedModes[0].getRefreshRate()`), and an accessibility service
+        // samples `dispatchGesture` against it — a 60.0 here made the app report
+        // `refresh_rate=60.0` where the framework's own constant is 60.000004.
+        Object mode = modeCtor.newInstance(1, PANEL_W, PANEL_H, REFRESH_RATE_HZ);
         Object modes = java.lang.reflect.Array.newInstance(modeCls, 1);
         java.lang.reflect.Array.set(modes, 0, mode);
         setField(cls, info, "supportedModes", modes);

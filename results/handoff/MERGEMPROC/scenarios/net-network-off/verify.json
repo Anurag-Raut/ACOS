@@ -1,0 +1,52 @@
+{
+  "request_id": "req_7faf2_18e8c59725eb35f9",
+  "ok": false,
+  "status": "error",
+  "backend": "acos-native",
+  "fidelity": "static-analysis",
+  "capabilities_used": [],
+  "error": {
+    "code": "GUEST_EXITED",
+    "class": "harness",
+    "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: 127)",
+    "hint": "The guest process ended before the requested stage. Read error.details.session_exit for guest_exit, guest_signal, stage and the guest's own ACOSLAUNCH crash line: exit 126/signal 31 with a guard ERR is a host isolation condition; a guest SIGSEGV/abort or a fatal ART log is an app crash. Do not retry unchanged until the cause is named.",
+    "retryable": false,
+    "details": {
+      "art_code": "GUEST_EXITED",
+      "session_exit": {
+        "abi": null,
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=1MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p523004-i429216.scope)",
+        "code": "GUEST_EXITED",
+        "disk_free_bytes": 266076495872,
+        "guest_crash": null,
+        "guest_exit": 127,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "crash",
+        "panic": null,
+        "path": "out/net-network-offline/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": "teardown-evidence"
+      },
+      "session_exit_path": "out/net-network-offline/art-frames/session-exit.json",
+      "stderr_tail": "acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000\nacos-art: build-cache HIT 6b1a5f698439 /home/Qui/.t3/worktrees/acos/t3-fa8a32f6-453f27f7bc3b0878/.cache/art/build-cache/6b1a5f69843990e89dd9edcd17bd81651829684f4e186b37b1cd3b063edca4b4\nacos-art: build-cache HIT 4d6cffa95a5d /home/Qui/.t3/worktrees/acos/t3-fa8a32f6-453f27f7bc3b0878/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4\nacos-art: build-cache HIT 4e00d96a26e2 /home/Qui/.t3/worktrees/acos/t3-fa8a32f6-453f27f7bc3b0878/.cache/art/build-cache/4e00d96a26e26b7350c2eeb1d15f05911b0fc6f95493452f1b23d46080d6db0f (2 file(s), tree)\nacos-art: launch: static overlays: 1 applied (0 idmaps generated, 1 from the image cache, 1084 B)\nacos-art: launch: resume budget=12000ms (dex=1 native_bytes=0 default=12000ms)\nacos-art: launch: app flags=0x10883e46 (source=manifest; installed=true)\nacos-art: launch: shared-boot-image: /home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff (ACOS_ART_BOOT_IMAGE=shared-fixed; -Ximage:/data/img/boot.art -Xnorelocate; fixed base 0x70000000, no image ASLR; cache hit)\nacos-art: launch: boot_image: mode=shared-fixed cache=hit dir=/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff input=ff39b037f1d6b9ff base=0x70000000\nacos-art: launch: shared-boot-image: /home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff (ACOS_ART_BOOT_IMAGE=shared-fixed; -Ximage:/data/img/boot.art -Xnorelocate; fixed base 0x70000000, no image ASLR; cache hit)\nacos-art: build-cache HIT b4d7b18ebb0f /home/Qui/.t3/worktrees/acos/t3-fa8a32f6-453f27f7bc3b0878/.cache/art/build-cache/b4d7b18ebb0f0994edc4520d6be770418e174b01fc1fec198dd52f9c1782e75f\nacos-art: launch: guest RLIMIT_NICE 0 < init.rc 40: Process.setThreadPriority(THREAD_PRIORITY_DISPLAY) will throw SecurityException (start the runner with a stock nice limit >= 24 / CAP_SYS_RESOURCE in the initial userns)"
+    }
+  },
+  "result": {
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "trust": "trusted"
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

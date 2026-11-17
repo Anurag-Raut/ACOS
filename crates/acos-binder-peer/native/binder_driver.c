@@ -459,20 +459,24 @@ static pthread_mutex_t g_slab_mu = PTHREAD_MUTEX_INITIALIZER;
 // that is parked waiting for an incoming transaction still wakes up for it: the
 // kernel's `binder_wakeup_proc_ilocked` does the same for BINDER_WORK_NODE.
 static volatile int g_node_pending;
-// One thread at a time drains the incoming queue.
+// One thread at a time *owns* the incoming queue.
 //
 // The kernel gives a node **one** active async transaction at a time
 // (`binder_node.has_async_transaction`): its queued work is executed in FIFO
 // order by whichever thread is reading, and no second thread interleaves. A
-// userspace driver that let two reader threads pop one transaction each would
-// lose that order once the receiver posts both to its own looper thread from
-// two different binder threads — measured with MPROC8: `scheduleCreateService`
-// and `scheduleBindService` (sent create-first) reached `ActivityThread` as
+// userspace driver that let two reader threads pop one transaction each lost
+// that order once the receiver posted both to its own looper thread from two
+// different binder threads — measured with MPROC8: `scheduleCreateService` and
+// `scheduleBindService` (sent create-first) reached `ActivityThread` as
 // BIND_SERVICE then CREATE_SERVICE, so `Service.onBind` ran for a service that
-// did not exist yet. Holding this flag while draining restores the kernel's
-// single-consumer rule; a thread that finds the drain in progress returns and
-// lets libbinder retry.
-static volatile int g_in_delivery;
+// did not exist yet.
+//
+// The owner delivers one transaction per read (libbinder reads commands into a
+// small fixed parcel, so two deliveries in one write leave the first one's tail
+// unread and it never runs — measured with two ACTION_FOUND broadcasts queued in
+// one turn) and keeps ownership until the queue is empty. Any other thread that
+// finds work queued returns and lets the owner continue.
+static volatile pid_t g_queue_owner;
 
 struct tstate {
     int is_looper;
@@ -633,9 +637,43 @@ static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
 // wire handle stops naming anything, so a transaction that is already in flight
 // answers DEAD_OBJECT instead of reaching a stale object, and a later
 // re-export creates a fresh node and roots the object that carries it then.
+// A release the kernel defers: `binder_dec_node` runs `BR_RELEASE`/`BR_DECREFS`
+// on the node's own thread **after** the transactions already queued for it.
+// A userspace driver that dropped the node as soon as the peer's `F_REF`
+// arrived would answer a delivery that is still queued with `DEAD_OBJECT`
+// (measured: the geocoder's one-shot `IGeocodeListener.onResults` was released
+// in the same turn, and the app never got the answer). Deferred releases are
+// retried once the inbound queue no longer names that wire.
+static struct { uint32_t wire; uint32_t op; } g_deferred_refs[64];
+static int g_n_deferred_refs;
+
+// Is a queued inbound transaction addressed at `wire`? (caller holds `g.mu`)
+static int inbound_names_wire(uint32_t wire) {
+    for (struct inq* q = g.in_head; q; q = q->next)
+        if ((uint32_t)q->target == wire) return 1;
+    return 0;
+}
+
 static void node_apply_ref(uint32_t wire, uint32_t op) {
     struct nodework work;
     int have_work = 0;
+    pthread_mutex_lock(&g.mu);
+    int inbound = inbound_names_wire(wire);
+    pthread_mutex_unlock(&g.mu);
+    if (op == REF_RELEASE && inbound) {
+        // Keep the node rooted until the queued delivery has run.
+        pthread_mutex_lock(&g_obj_mu);
+        if (g_n_deferred_refs < (int)(sizeof(g_deferred_refs) / sizeof(g_deferred_refs[0]))) {
+            g_deferred_refs[g_n_deferred_refs].wire = wire;
+            g_deferred_refs[g_n_deferred_refs].op = op;
+            g_n_deferred_refs++;
+            pthread_mutex_unlock(&g_obj_mu);
+            TRACE("tid=%d node release wire=%u deferred (delivery queued)",
+                  (int)syscall(__NR_gettid), wire);
+            return;
+        }
+        pthread_mutex_unlock(&g_obj_mu);
+    }
     pthread_mutex_lock(&g_obj_mu);
     for (int i = 0; i < g.n_nodes; i++) {
         struct node* n = &g.nodes[i];
@@ -670,6 +708,25 @@ static void node_apply_ref(uint32_t wire, uint32_t op) {
         pthread_mutex_lock(&g.mu);
         pthread_cond_broadcast(&g.cv_txn);
         pthread_mutex_unlock(&g.mu);
+    }
+}
+
+// Retry the releases that were deferred because a delivery was still queued for
+// the node. Called on the reader side once the queue no longer names them.
+static void drain_deferred_refs(void) {
+    for (;;) {
+        uint32_t wire = 0, op = 0;
+        int have = 0;
+        pthread_mutex_lock(&g_obj_mu);
+        if (g_n_deferred_refs > 0) {
+            g_n_deferred_refs--;
+            wire = g_deferred_refs[g_n_deferred_refs].wire;
+            op = g_deferred_refs[g_n_deferred_refs].op;
+            have = 1;
+        }
+        pthread_mutex_unlock(&g_obj_mu);
+        if (!have) return;
+        node_apply_ref(wire, op);
     }
 }
 
@@ -1855,26 +1912,28 @@ static int e3g_write_read(struct binder_write_read* bwr) {
         bwr->read_consumed = 0;
         return 0;
     }
-    int have = g.in_head != NULL;
-    int delivered = -1;
-    if (have) {
-        if (g_in_delivery) {
-            // Another thread owns the queue and is draining it in order.
-            pthread_mutex_unlock(&g.mu);
-            bwr->read_consumed = 0;
-            return 0;
-        }
-        g_in_delivery = 1;
-        // Drain everything queued now, in order, into this thread's output: the
-        // receiver sees one FIFO stream, never two interleaved ones.
-        while (g.in_head != NULL) {
-            if (deliver_incoming() < 0) break;
-            delivered = 0;
-        }
-        g_in_delivery = 0;
-        pthread_cond_broadcast(&g.cv_txn);
+    // A deferred node release is retried only when nothing queued names it any
+    // more; `drain_deferred_refs` re-checks each entry.
+    if (g.in_head == NULL) {
+        pthread_mutex_unlock(&g.mu);
+        drain_deferred_refs();
+        pthread_mutex_lock(&g.mu);
     }
+    pid_t self_tid = (pid_t)syscall(__NR_gettid);
+    if (g_queue_owner != 0 && g_queue_owner != self_tid) {
+        // Another thread owns the queue and delivers its transactions in order.
+        pthread_mutex_unlock(&g.mu);
+        bwr->read_consumed = 0;
+        return 0;
+    }
+    g_queue_owner = self_tid;
+    int delivered = -1;
+    if (g.in_head != NULL) delivered = deliver_incoming();
+    if (g.in_head == NULL) g_queue_owner = 0;
     pthread_mutex_unlock(&g.mu);
+    // The delivery is in libbinder's hands now, so a release that was held back
+    // for that node may run.
+    drain_deferred_refs();
     if (delivered == 0) flush_pend(bwr);
     else bwr->read_consumed = 0;
     return 0;
