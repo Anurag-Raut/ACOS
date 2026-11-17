@@ -71,4 +71,11 @@ steps:
         # `Bitmap.getAllocationByteCount` -> libhwui -> libui's
         # `GraphicBufferMapper::getAllocationSize` -> the shim: 1080*2400*4.
         - "wrap_hardware_buffer allocation=10368000"
+        # GLSPIKE: with no software GLES provider staged, the two GL-only paths
+        # (drawing the wrapped HARDWARE bitmap, decoding a PNG to HARDWARE) are
+        # not taken — they abort the process in libEGL. The skip is *asserted*,
+        # so the gap stays visible on every default run instead of being
+        # silently absent; `scenarios/gles-software.yaml` is the arm that takes
+        # them (`ACOS_GUEST_GLES=angle`).
+        - "gles_draw skipped=no_software_gles"
   - assert_no_crash: {}

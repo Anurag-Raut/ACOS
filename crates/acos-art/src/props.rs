@@ -493,6 +493,18 @@ impl Props {
         let heap = HeapConfig::from_env().map_err(|e| Error::InvalidHeapConfig(e.to_string()))?;
         let mut p = Self::android34();
         heap.apply(&mut p);
+        // GLSPIKE: the image's own EGL loader appends `ro.hardware.egl` to the
+        // driver name it looks for in `/vendor/lib64/egl` (`Loader.cpp`,
+        // `HAL_SUBNAME_KEY_PROPERTIES`). Default: the property stays unset, so
+        // libEGL keeps its own "couldn't find an OpenGL ES implementation"
+        // fatal — exactly today's guest. With `ACOS_GUEST_GLES=<tag>` the run
+        // opted into a staged provider and the loader can find it.
+        if let Some(tag) = crate::gles::tag_from_env()? {
+            p.set("ro.hardware.egl", &tag);
+            // The probe fixtures read this to decide whether to take the GL
+            // path at all; an app on a device never needs it (it just draws).
+            p.set("acos.guest.gles", &tag);
+        }
         Ok(p)
     }
 
