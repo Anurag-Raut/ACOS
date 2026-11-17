@@ -1809,9 +1809,11 @@ impl<'a> Sandbox<'a> {
                     gles::staged_bytes(&provider)
                 );
             }
-            // One bind, two lookups: `/vendor/lib64/egl/libEGL_<tag>.so` is
-            // what `Loader::findLibrary` opens, and `/vendor/lib64` is where
-            // the linker resolves that driver's own NEEDED entries.
+            // One bind, three lookups: `/vendor/lib64/egl/libEGL_<tag>.so` is
+            // what `Loader::findLibrary` opens, `/vendor/lib64` is where
+            // the linker resolves that driver's own NEEDED entries, and
+            // `/vendor/lib64/hw/vulkan.<tag>.so` (GLSPIKE2) is the ICD the
+            // image's `libvulkan.so` opens when the provider carries one.
             a.push("--ro-bind".into());
             a.push(provider.lib_dir(r).into());
             a.push("/vendor/lib64".into());

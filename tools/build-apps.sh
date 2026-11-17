@@ -315,12 +315,13 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
-for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager sensor-probe notif-perm-probe; do
 # looper-wake is the LOOPERWAKE fixture: an idle Activity changed from a
 # non-main thread (plain Thread + runOnUiThread, HandlerThread + main Handler,
 # and View.postInvalidate from a plain thread). Nothing here needs input, so a
 # scenario can prove the main looper is woken by the post itself.
-for app in counter todo-list multi-activity finish-start form-validation settle-lab thread-heavy svg-viewbox offscreen-pager looper-wake; do
+# sensor-probe (MODSENS) and notif-perm-probe (MODNOTIF5) are the native-feed
+# fixtures; finish-start is the finish()/start() activity pair.
+for app in counter todo-list multi-activity finish-start form-validation settle-lab thread-heavy svg-viewbox offscreen-pager sensor-probe notif-perm-probe looper-wake; do
     build_apk "$app"
 done
 

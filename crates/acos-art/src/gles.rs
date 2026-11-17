@@ -88,6 +88,15 @@ pub struct GlesFile {
 pub struct GlesManifest {
     /// `ro.hardware.egl` value, e.g. `angle`.
     pub tag: String,
+    /// `ro.hardware.vulkan` value when the provider also carries a Vulkan ICD
+    /// (`lib64/hw/vulkan.<vulkan_tag>.so`), e.g. `pastel` for SwiftShader.
+    ///
+    /// GLSPIKE2: ANGLE's Vulkan backend is only as good as the ICD the image's
+    /// `libvulkan.so` can find, and `libvulkan.so` names that ICD from this
+    /// property (`hwvulkan module open`, `vulkan.<tag>`, measured in the
+    /// sysroot's own libvulkan). `None` = no ICD, i.e. GLSPIKE's arm.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vulkan_tag: Option<String>,
     /// Human name of the provider, e.g. `ANGLE on gfxstream (emulator 34.1.9)`.
     pub provider: String,
     /// Where the bytes came from (URL or local image path), for the report.
@@ -127,6 +136,22 @@ impl Provider {
     #[must_use]
     pub fn tag(&self) -> &str {
         &self.manifest.tag
+    }
+
+    /// The `ro.hardware.vulkan` value, when the provider stages a Vulkan ICD.
+    #[must_use]
+    pub fn vulkan_tag(&self) -> Option<&str> {
+        self.manifest.vulkan_tag.as_deref()
+    }
+
+    /// `<provider>/lib64/hw/vulkan.<vulkan_tag>.so`, the ICD the image's
+    /// `libvulkan.so` opens through `hw_get_module("vulkan", tag)`. It lives in
+    /// the same `lib64/` the launcher binds at `/vendor/lib64`, so no second
+    /// bind is needed.
+    #[must_use]
+    pub fn icd_path(&self, root: &ArtRoot) -> Option<PathBuf> {
+        let tag = self.vulkan_tag()?;
+        Some(self.lib_dir(root).join("hw").join(format!("vulkan.{tag}.so")))
     }
 
     /// The host directory the guest's `/vendor/lib64` is bound to.
@@ -229,17 +254,37 @@ pub fn load(root: &ArtRoot, name: &str) -> Result<Provider> {
             manifest.tag
         )));
     }
-    if manifest.tag != name {
-        return Err(Error::Layout(format!(
-            "ACOS_GUEST_GLES={name}: the provider's manifest tag is {:?}; the loader looks for \
-             libEGL_<ACOS_GUEST_GLES>.so, so the directory name and the tag must be the same",
-            manifest.tag
-        )));
+    if let Some(vt) = manifest.vulkan_tag.as_deref() {
+        if vt.is_empty() || vt.contains('/') || vt.contains('.') {
+            return Err(Error::Layout(format!(
+                "ACOS_GUEST_GLES={name}: manifest vulkan_tag {vt:?} is not a ro.hardware.vulkan value"
+            )));
+        }
     }
     if manifest.files.is_empty() {
         return Err(Error::Layout(format!(
             "ACOS_GUEST_GLES={name}: manifest lists no files"
         )));
+    }
+    // The provider directory name is a label (`angle-swiftshader`), the tag is
+    // the property the loader appends. What must agree is the tag and the
+    // staged file names, or the loader would open a file that is not the one
+    // the report describes. Checked here, and again over every file by
+    // [`verify`].
+    let egl_name = format!("lib64/egl/libEGL_{}.so", manifest.tag);
+    if !manifest.files.iter().any(|f| f.path == egl_name) {
+        return Err(Error::Layout(format!(
+            "ACOS_GUEST_GLES={name}: manifest tag is {:?} but it stages no {egl_name}",
+            manifest.tag
+        )));
+    }
+    if let Some(vt) = manifest.vulkan_tag.as_deref() {
+        let icd = format!("lib64/hw/vulkan.{vt}.so");
+        if !manifest.files.iter().any(|f| f.path == icd) {
+            return Err(Error::Layout(format!(
+                "ACOS_GUEST_GLES={name}: manifest vulkan_tag is {vt:?} but it stages no {icd}"
+            )));
+        }
     }
     Ok(Provider {
         name: name.to_string(),
@@ -309,14 +354,37 @@ pub fn lib_dir_ready(provider: &Provider, root: &ArtRoot) -> bool {
 /// A one-line description for the run log.
 #[must_use]
 pub fn describe(provider: &Provider) -> String {
+    let vulkan = match provider.vulkan_tag() {
+        Some(tag) => format!(" vulkan={tag}"),
+        None => String::new(),
+    };
     format!(
-        "gles: provider={} tag={} version={} licence={} source={}",
+        "gles: provider={} tag={}{vulkan} version={} licence={} source={}",
         provider.name,
         provider.manifest.tag,
         provider.manifest.version,
         provider.manifest.licence,
         provider.manifest.source
     )
+}
+
+/// The `ro.hardware.vulkan` value the selected provider stages, if any.
+///
+/// `Props::for_launch()` runs in several places that do not hold an [`ArtRoot`]
+/// (main's `props print`, the session/app writers), so this resolves the root
+/// the same way [`ArtRoot::resolve`] does. A missing sysroot is not an error
+/// here: a run with the flag on fails loudly in `Sandbox::command` (the bind
+/// source check) before any guest starts, and this is only the property table.
+pub fn selected_vulkan_tag() -> Result<Option<String>> {
+    let Some(name) = provider_name_from_env()? else {
+        return Ok(None);
+    };
+    let root = match ArtRoot::resolve(None, None) {
+        Ok(r) => r,
+        Err(_) => return Ok(None),
+    };
+    let provider = load(&root, &name)?;
+    Ok(provider.vulkan_tag().map(ToString::to_string))
 }
 
 /// Total staged bytes (the on-disk cost of the provider, shared by all runs).
@@ -368,22 +436,47 @@ mod tests {
     }
 
     fn install(dir: &Path, name: &str, body: &[u8], tag: &str) -> Provider {
+        install_with(dir, name, body, tag, None)
+    }
+
+    fn install_with(
+        dir: &Path,
+        name: &str,
+        body: &[u8],
+        tag: &str,
+        vulkan: Option<(&str, &[u8])>,
+    ) -> Provider {
         let base = dir.join("sysroot/gles").join(name);
         let egl = base.join("lib64/egl");
         fs::create_dir_all(&egl).expect("dirs");
         let f = egl.join(format!("libEGL_{tag}.so"));
         fs::write(&f, body).expect("write");
+        let mut files = vec![GlesFile {
+            path: "lib64/egl/".to_string() + &format!("libEGL_{tag}.so"),
+            sha256: crate::build_cache::sha256_hex(body),
+            size: body.len() as u64,
+        }];
+        let mut vulkan_tag = None;
+        if let Some((vt, icd_body)) = vulkan {
+            let hw = base.join("lib64/hw");
+            fs::create_dir_all(&hw).expect("dirs");
+            let icd = hw.join(format!("vulkan.{vt}.so"));
+            fs::write(&icd, icd_body).expect("icd");
+            files.push(GlesFile {
+                path: format!("lib64/hw/vulkan.{vt}.so"),
+                sha256: crate::build_cache::sha256_hex(icd_body),
+                size: icd_body.len() as u64,
+            });
+            vulkan_tag = Some(vt.to_string());
+        }
         let manifest = GlesManifest {
             tag: tag.to_string(),
+            vulkan_tag,
             provider: "test".into(),
             source: "unit test".into(),
             version: "0".into(),
             licence: "Apache-2.0".into(),
-            files: vec![GlesFile {
-                path: "lib64/egl/".to_string() + &format!("libEGL_{tag}.so"),
-                sha256: crate::build_cache::sha256_hex(body),
-                size: body.len() as u64,
-            }],
+            files,
         };
         fs::write(
             base.join(MANIFEST),
@@ -471,14 +564,101 @@ mod tests {
             r#"{"tag":"empty","provider":"x","source":"y","version":"0","licence":"z","files":[]}"#,
         )
         .expect("manifest");
-        assert!(load(&r, "empty").expect_err("no files").to_string().contains("no files"));
+        assert!(load(&r, "empty")
+            .expect_err("no files")
+            .to_string()
+            .contains("no files"));
         fs::write(
             base.join(MANIFEST),
             r#"{"tag":"","provider":"x","source":"y","version":"0","licence":"z","files":[
                 {"path":"a","sha256":"00","size":1}]}"#,
         )
         .expect("manifest");
-        assert!(load(&r, "empty").expect_err("no tag").to_string().contains("tag"));
+        assert!(load(&r, "empty")
+            .expect_err("no tag")
+            .to_string()
+            .contains("tag"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_manifest_without_the_tagged_driver_is_rejected() {
+        let dir = scratch("wrongname");
+        let r = root(&dir);
+        let base = r.sysroot.join("gles/wrong");
+        fs::create_dir_all(&base).expect("dirs");
+        // The provider directory is `wrong`, the manifest claims `angle`, but
+        // the staged file is `libEGL_other.so`: the loader would open nothing.
+        fs::write(
+            base.join(MANIFEST),
+            r#"{"tag":"angle","provider":"x","source":"y","version":"0","licence":"z","files":[
+                {"path":"lib64/egl/libEGL_other.so","sha256":"00","size":1}]}"#,
+        )
+        .expect("manifest");
+        let e = load(&r, "wrong").expect_err("must fail");
+        assert!(e.to_string().contains("lib64/egl/libEGL_angle.so"), "{e}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_vulkan_tag_without_its_icd_is_rejected() {
+        let dir = scratch("noicd");
+        let r = root(&dir);
+        let base = r.sysroot.join("gles/angle-swiftshader");
+        fs::create_dir_all(&base).expect("dirs");
+        fs::write(
+            base.join(MANIFEST),
+            r#"{"tag":"angle","vulkan_tag":"pastel","provider":"x","source":"y",
+                "version":"0","licence":"z","files":[
+                {"path":"lib64/egl/libEGL_angle.so","sha256":"00","size":1}]}"#,
+        )
+        .expect("manifest");
+        let e = load(&r, "angle-swiftshader").expect_err("must fail");
+        assert!(e.to_string().contains("lib64/hw/vulkan.pastel.so"), "{e}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_provider_dir_name_is_a_label_and_the_tag_names_the_files() {
+        let dir = scratch("label");
+        let r = root(&dir);
+        let p = install_with(
+            &dir,
+            "angle-swiftshader",
+            b"driver bytes",
+            "angle",
+            Some(("pastel", b"icd bytes")),
+        );
+        assert_eq!(p.tag(), "angle", "the loader appends the *tag*, not the label");
+        assert_eq!(p.vulkan_tag(), Some("pastel"));
+        verify(&p, &r).expect("verified");
+        assert_eq!(
+            p.icd_path(&r).expect("icd"),
+            dir.join("sysroot/gles/angle-swiftshader/lib64/hw/vulkan.pastel.so"),
+            "the ICD lands in the same lib64 that is bound at /vendor/lib64"
+        );
+        assert!(p.icd_path(&r).expect("icd").is_file());
+        let described = describe(&p);
+        assert!(described.contains("tag=angle"), "{described}");
+        assert!(described.contains("vulkan=pastel"), "{described}");
+        assert_eq!(staged_bytes(&p), 12 + 9);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_drifted_icd_fails_loudly() {
+        let dir = scratch("icd-stale");
+        let r = root(&dir);
+        let p = install_with(
+            &dir,
+            "angle-swiftshader",
+            b"driver bytes",
+            "angle",
+            Some(("pastel", b"icd bytes")),
+        );
+        fs::write(p.icd_path(&r).expect("icd"), b"ICD BYTES").expect("rewrite");
+        let e = verify(&p, &r).expect_err("must fail");
+        assert!(e.to_string().contains("vulkan.pastel.so"), "{e}");
         let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -24,7 +24,20 @@
 #                                   /vendor/${LIB}/egl in the default namespace)
 #
 # and `acos-art` (crates/acos-art/src/gles.rs) bind-mounts lib64 at
-# /vendor/lib64/egl and sets ro.hardware.egl=<tag> when ACOS_GUEST_GLES=<tag>.
+# /vendor/lib64 and sets ro.hardware.egl=<egl-tag> when ACOS_GUEST_GLES=<tag>.
+#
+# GLSPIKE2 adds the Vulkan ICD an ANGLE build needs to *initialize* (ANGLE has
+# no software rasteriser of its own; `EGL_NOT_INITIALIZED` in GLSPIKE was the
+# missing ICD). A provider may carry
+#
+#   lib64/hw/vulkan.<vulkan-tag>.so   the ICD, at the path the image's own
+#                                     libvulkan.so opens
+#                                     (`hwvulkan module open`, `vulkan.<tag>`,
+#                                     named by ro.hardware.vulkan)
+#
+# and then the manifest also carries vulkan_tag=<vulkan-tag>, which the launcher
+# turns into ro.hardware.vulkan. `--egl-tag` lets the provider directory be a
+# label (`angle-swiftshader`) while the EGL library names stay `..._angle.so`.
 # It verifies every file against the manifest on every launch with the flag on.
 # lib64/ is bound at /vendor/lib64, so `lib64/egl/libEGL_<tag>.so` (what the
 # loader opens) and `lib64/libGLESv2_<tag>.so` (what the driver NEEDs) both
@@ -35,6 +48,8 @@
 #       [--provider NAME] [--version V] [--licence SPDX] [--source URL] \
 #       [--sysroot DIR]
 #   tools/art-gles.sh --tag mesa --from-dir <dir with libEGL_mesa.so ...> ...
+#   tools/art-gles.sh --tag angle-swiftshader --from-dir <dir> \
+#       --egl-tag angle --vulkan-icd <vulkan.pastel.so> --vulkan-tag pastel ...
 #
 # The provider lives next to the guest's shared, read-only inputs — the *sysroot*
 # (`<sysroot>/gles/<tag>`, the same add-on path as `<sysroot>/shim/`), which is
@@ -53,6 +68,9 @@ set -euo pipefail
 
 WT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TAG=""
+EGL_TAG=""
+VULKAN_ICD=""
+VULKAN_TAG="pastel"
 FROM_DIR=""
 FROM_EMULATOR_VENDOR=""
 PROVIDER=""
@@ -67,6 +85,9 @@ die() { echo "art-gles: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --tag) TAG="$2"; shift 2 ;;
+    --egl-tag) EGL_TAG="$2"; shift 2 ;;
+    --vulkan-icd) VULKAN_ICD="$2"; shift 2 ;;
+    --vulkan-tag) VULKAN_TAG="$2"; shift 2 ;;
     --from-dir) FROM_DIR="$2"; shift 2 ;;
     --from-emulator-vendor) FROM_EMULATOR_VENDOR="$2"; shift 2 ;;
     --provider) PROVIDER="$2"; shift 2 ;;
@@ -79,8 +100,16 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[ -n "$TAG" ] || die "--tag is required (it is the ro.hardware.egl value and the provider name)"
+[ -n "$TAG" ] || die "--tag is required (the provider name; the ro.hardware.egl value is --egl-tag, default the same)"
 case "$TAG" in */*|.|..) die "--tag must be a plain name, not a path: $TAG" ;; esac
+EGL_TAG="${EGL_TAG:-$TAG}"
+case "$EGL_TAG" in */*|.|..|"") die "--egl-tag must be a plain name, not a path: $EGL_TAG" ;; esac
+case "$VULKAN_TAG" in */*|.|..|"") die "--vulkan-tag must be a plain name, not a path: $VULKAN_TAG" ;; esac
+VT_ARG=""
+if [ -n "$VULKAN_ICD" ]; then
+  [ -f "$VULKAN_ICD" ] || die "--vulkan-icd is not a file: $VULKAN_ICD"
+  VT_ARG="$VULKAN_TAG"
+fi
 [ -n "$FROM_DIR" ] || [ -n "$FROM_EMULATOR_VENDOR" ] || \
   die "--from-dir or --from-emulator-vendor is required"
 
@@ -133,7 +162,7 @@ PY
     SRC_DIR="$SCRATCH/from-img"
     mkdir -p "$SRC_DIR"
     for base in "${DRIVER_FILES[@]}"; do
-      name="${base}_${TAG}.so"
+      name="${base}_${EGL_TAG}.so"
       debugfs -R "dump /lib64/egl/$name $SRC_DIR/$name" "$SCRATCH/vendor-part.img" 2>/dev/null || true
     done
   fi
@@ -150,7 +179,7 @@ fi
 # not what any Android GL driver does).
 missing=()
 for base in "${DRIVER_FILES[@]}"; do
-  [ -f "$SRC_DIR/${base}_${TAG}.so" ] || missing+=("${base}_${TAG}.so")
+  [ -f "$SRC_DIR/${base}_${EGL_TAG}.so" ] || missing+=("${base}_${EGL_TAG}.so")
 done
 if [ ${#missing[@]} -gt 0 ]; then
   echo "art-gles: $SRC_DIR lacks: ${missing[*]}" >&2
@@ -164,20 +193,27 @@ mkdir -p "$SYSROOT/gles"
 tmp="$STAGE.tmp.$$"
 rm -rf "$tmp"
 mkdir -p "$tmp/lib64/egl"
+if [ -n "$VULKAN_ICD" ]; then
+  # The ICD is used only through its own path (`/vendor/lib64/hw/...`), so a
+  # copy is enough; it is not dlopened by soname.
+  mkdir -p "$tmp/lib64/hw"
+  cp "$VULKAN_ICD" "$tmp/lib64/hw/vulkan.${VULKAN_TAG}.so"
+fi
 for base in "${DRIVER_FILES[@]}"; do
-  cp "$SRC_DIR/${base}_${TAG}.so" "$tmp/lib64/egl/"
+  cp "$SRC_DIR/${base}_${EGL_TAG}.so" "$tmp/lib64/egl/"
   # The same file again one level up, as a hardlink: the guest's generated
   # ld.config.txt gives the default namespace `/vendor/${LIB}` but not
   # `/vendor/${LIB}/egl` (there is no vendor partition and no sphal namespace),
   # so a driver that NEEDs its GLES lib must be resolvable from /vendor/lib64.
   # One inode, two names: no extra disk, and the launcher binds lib64/ once.
-  ln "$tmp/lib64/egl/${base}_${TAG}.so" "$tmp/lib64/${base}_${TAG}.so"
+  ln "$tmp/lib64/egl/${base}_${EGL_TAG}.so" "$tmp/lib64/${base}_${EGL_TAG}.so"
 done
 
-python3 - "$tmp" "$TAG" "${PROVIDER:-$TAG}" "${SOURCE:-$SRC_DIR}" \
-         "${VERSION:-unknown}" "${LICENCE:-unknown}" <<'PY'
+python3 - "$tmp" "$EGL_TAG" "${PROVIDER:-$TAG}" "${SOURCE:-$SRC_DIR}" \
+         "${VERSION:-unknown}" "${LICENCE:-unknown}" \
+         "$VT_ARG" <<'PY'
 import hashlib, json, os, sys
-stage, tag, provider, source, version, licence = sys.argv[1:7]
+stage, tag, provider, source, version, licence, vulkan_tag = sys.argv[1:8]
 files = []
 for root, _dirs, names in os.walk(os.path.join(stage, 'lib64')):
     for name in sorted(names):
@@ -200,6 +236,8 @@ manifest = {
     'licence': licence,
     'files': files,
 }
+if vulkan_tag:
+    manifest['vulkan_tag'] = vulkan_tag
 with open(os.path.join(stage, 'manifest.json'), 'w') as f:
     json.dump(manifest, f, indent=2, sort_keys=True)
     f.write('\n')

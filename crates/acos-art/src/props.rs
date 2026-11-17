@@ -505,6 +505,16 @@ impl Props {
             // path at all; an app on a device never needs it (it just draws).
             p.set("acos.guest.gles", &tag);
         }
+        // GLSPIKE2: a provider that also stages a Vulkan ICD (ANGLE needs one)
+        // declares `ro.hardware.vulkan`, and the image's own `libvulkan.so`
+        // opens `/vendor/lib64/hw/vulkan.<tag>.so` from it (`hwvulkan module
+        // open`, `vulkan.`, measured in the sysroot's libvulkan). Absent when
+        // the provider carries no ICD: the property stays unset, exactly as in
+        // the image today.
+        if let Some(vulkan) = crate::gles::selected_vulkan_tag()? {
+            p.set("ro.hardware.vulkan", &vulkan);
+            p.set("acos.guest.gles.vulkan", &vulkan);
+        }
         Ok(p)
     }
 
