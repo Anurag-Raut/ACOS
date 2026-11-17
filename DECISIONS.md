@@ -1263,3 +1263,80 @@ evidence instead of trusting the verdict.
 fails with one of them is a `correct_negative`, never an `unclassified` row (v0.3.0 gate F2). The
 matrix's default fixture set is built on demand (`tools/run-matrix.sh` → `tools/build-apps.sh
 ACOS_APP_ONLY=<missing>`) so a stale `fixtures/build` cannot produce an `APK_IO` row (F3).
+ADR-0030 note (SPIKE-NET2): the guest has no path to netfilter at all: `AF_NETLINK`, raw `AF_INET`
+and `SO_MARK` are denied by seccomp, CapEff is 0, and the guest userns is not the netns owner; a
+session whose drop rules cannot be installed fails closed. Session 1's AF_INET seccomp branch was dead
+code; the fixed program has an interpreter test.
+
+**ADR-0030 amendment 2 (owner, 2026-11-16, after SPIKE-NET3).** Real internet is proven in-app
+(HTTP 200 via dnsproxyd, validated network, LinkProperties parity; host loopback and LAN blocked).
+A per-session pasta costs ~28 MiB RSS, so the default is `off` (owner rule: on only if metrics do not
+worsen). Owner decision: use **one shared network relay** for all sessions instead of one pasta per
+session. The shared design must keep per-session isolation (no session can see or reach another's
+traffic, per-session online/offline, latency and HAR controls), keep the host-loopback/LAN boundary and
+fail-closed behaviour, and cost near zero per session; it needs its own design note and a security
+review before implementation. Per-session pasta remains the proven fallback.
+
+**ADR-0029/0030/0031 amendment (owner, 2026-11-16): security takes a back seat.** ACOS is a tool
+agents use while developing apps, not an OS end users run. The mandatory security reviews in
+ADR-0030 and ADR-0031 are dropped. The shared network relay needs no inter-session traffic isolation
+beyond correctness (sessions must not disturb each other's results or controls). Cheap safeguards
+stay: no default guest route to host localhost services (it also protects the MCP daemon and
+`acos view`), explicit host-port opt-in (Metro), and fail-closed where it costs nothing. Any hardening
+that costs RAM or latency is out. Verdict honesty (0 false passes) is unaffected.
+
+**ADR-0030 amendment 3 (owner, 2026-11-16, after NETSHARE).** Owner chose design **B2**: one relay
+netns per host served by one pasta (26 MiB once), each session keeps its own netns joined to it by a
+veth pair (~0 MiB per session, 2 ms attach floor); per-session online/offline and latency/loss are
+rules/netem on that session's veth. Measured: BASE 24 MiB per session (494 MiB at N=20, 887 ms
+attach), B2 flat 26 MiB from N=1 to 20; aggregate ~15–18 MB/s through one pasta (accepted for a dev
+tool). Orchestrator decisions on the open questions: the LAN/host-loopback drop rules live in the relay
+netns (guest has no capability there); a dead relay is fail-closed (every session reports the network
+unavailable, never a silent offline) and the supervisor restarts it; host ports (Metro) are opened per
+session on request by a REDIRECT on that session's veth; the relay supervisor and `acos-netd`
+(dnsproxyd) live in the existing host broker; per-session pasta (BASE) stays as a fallback arm for
+one release. Option A (own userspace stack) remains the upgrade path if the throughput ceiling bites.
+ADR-0030 note (NET1, orchestrator): the relay supervisor is its own lazily started process
+(`acos-netd`), not code inside the MCP broker, because it must own the user namespace that holds the
+relay netns and every session netns, and plain CLI use has no broker. Host-port opt-in is pasta
+`-t <port>` plus a per-session DROP for sessions that did not opt in (simpler than an fd-passing
+REDIRECT proxy). Attach cost 15–49 ms (exec-based) is accepted for v0.4.0; rtnetlink (~2 ms) moves to
+the v0.5.0 density work.
+ADR-0030 correction (NET3, measured on the pinned pasta): the `-t <port>` + DROP shape above is
+superseded. `pasta -T <port>` serves only the target netns, never a relay-joined session, and pasta
+rejects address-qualified `-T` (`Listening address not allowed`). Host-port opt-in is therefore the
+gated `--map-host-loopback` address plus a per-session `ACCEPT` for an opted-in port, with a small
+`acos-netd forward` binding the session's own `127.0.0.1:<port>`; sessions that did not opt in get a
+tcp-reset (that is what "refused" means), not a `DROP` (a DROP stalled guest boot ~4.5 s). Evidence:
+`results/handoff/NET3.md`, branch `net3`.
+
+ADR-0031 note (WVB, orchestrator): the broker is one shared chrome-headless-shell 157.0.8103.78 per
+host (sha256-verified into `.cache/webview/engine`), DevTools over `--remote-debugging-pipe` only, one
+browser context per session. Engine sandbox: bwrap with the host root read-only and `/home`, `/root`,
+`/run/user` masked by tmpfs (profile + engine re-bound); an empty-root layout makes the engine die
+with SIGTRAP before logging, and full root minimisation is not pursued (security takes a back seat for
+this tool). Chromium's own namespace sandbox stays on. Measured: fixed 130 MiB PSS, +3.9 MiB per extra
+session context, frame p95 15.6 ms at 1080x2400. Activation is lazy (no Chromium for sessions that
+never create a WebView); the per-session socket lives in a short per-session dir mounted at `/run/acos`.
+
+ADR-0029 amendment (owner, 2026-11-16, after MPROC4): **the host builds launch transactions.** A
+launch into an already-running process (and every later launch flavour: extras, results, flags,
+singleTop/onNewIntent) is a `ClientTransaction` with `LaunchActivityItem` (+ lifecycle items) encoded by
+the ACOS activity manager from the image dex shape and delivered on the existing host transport, the
+way system_server does; no ACOS helper inside the app builds launches (option B rejected). Codecs are
+checked byte-for-byte against real Java (the MODNOTIF4 differential). MPROC4's guest-marshalled first
+launch of a freshly spawned process is migrated onto the same encoder.
+
+**ADR-0029 amendment (owner, 2026-11-16, after MODNOTIF): system UI comes from system apps in the
+guest.** The permission dialog and the notification shade are provided by small ACOS system apps
+installed in the session image and run as their own ART process (multi-process foundation): a
+`com.android.permissioncontroller` package with `GrantPermissionsActivity` answering the framework's own
+`buildRequestPermissionsIntent`, and an ACOS shade/system-UI app. The same mechanism later provides the
+launcher, Settings targets and the share chooser. ACOS does not paint host-side windows (option A
+rejected). The `notifications` and `permissions` service layers (state, control ops) are built now;
+names a module replaces (`notification`, `statusbar`, `permission`) move out of `core` into their
+modules so detach restores the core answer (orchestrator).
+ADR-0029 note (MODSENS, orchestrator): for a service whose framework client caches the proxy
+(sensorservice, location), `core` publishes the binder node and the module fills it
+(`core_module::FILLED_BY_MODULE` + `ServiceHost::dynamic_object_mut`); detach empties the node back to
+the honest off answer. This is the framework pattern for such names.

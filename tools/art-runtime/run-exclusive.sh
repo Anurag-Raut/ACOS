@@ -7,7 +7,7 @@
 #
 # Slots (2026-11-14). The host has room for more than one guarded ART run, and a
 # single global lock made agents queue 4-8 min per acquisition. So there are
-# ACOS_ART_SLOTS (default 2) slot files; slot 0 is the historical `art.lock`, so
+# ACOS_ART_SLOTS slot files (default 256 = no fixed cap since 2026-11-16, owner: run as many as resources allow; admission is by free memory and live --mem reservations <= 90% of RAM); slot 0 is the historical `art.lock`, so
 # older copies of this script (which flock only art.lock) still interlock.
 #
 #   * default (shared): correctness runs (gates, scenarios, crate tests, corpus).
@@ -35,7 +35,7 @@ done
 root=/home/Qui/Projects/acos
 lockdir=${ACOS_ART_LOCKDIR:-$root/.cache/art-locks}; mkdir -p "$lockdir"
 log=$lockdir/runs.log
-slots=${ACOS_ART_SLOTS:-2}
+slots=${ACOS_ART_SLOTS:-256}   # no fixed cap: admission is by memory (below)
 headroom=${ACOS_ART_SLOT_HEADROOM_GIB:-12}
 t0=$(date +%s); u0=$(date -u +%FT%TZ)
 
@@ -50,6 +50,23 @@ for a in "$@"; do
 done
 
 mem_avail_gib() { awk '/^MemAvailable:/{print int($2/1048576)}' /proc/meminfo; }
+mem_total_gib() { awk '/^MemTotal:/{print int($2/1048576)}' /proc/meminfo; }
+# Sum of the --mem reservations of live shared holders (resv.<pid> files).
+reserved_gib() {
+  local f pid sum=0
+  for f in "$lockdir"/resv.*; do
+    [ -e "$f" ] || continue
+    pid=${f##*.}
+    if kill -0 "$pid" 2>/dev/null; then sum=$((sum + $(cat "$f" 2>/dev/null || echo 0))); else rm -f "$f"; fi
+  done
+  echo "$sum"
+}
+# Admit another shared run only while resources allow: free memory covers it plus
+# headroom, and all live reservations plus this one stay under 90% of RAM.
+fits() {
+  [ "$(mem_avail_gib)" -ge $((need_gib + headroom)) ] &&
+  [ $(( ($(reserved_gib) + need_gib) * 10 )) -le $(( $(mem_total_gib) * 9 )) ]
+}
 
 # Is the current holder of slot 0 a benchmark/probe? (legacy holders included)
 slot0_holder_is_bench() {
@@ -93,8 +110,7 @@ else
     exec {fd}>"$(slot_file 0)"
     if flock -n "$fd"; then slot=0; break; fi
     exec {fd}>&-
-    if [ "$slots" -gt 1 ] && ! slot0_holder_is_bench \
-       && [ "$(mem_avail_gib)" -ge $((need_gib + headroom)) ]; then
+    if [ "$slots" -gt 1 ] && ! slot0_holder_is_bench && fits; then
       for ((i = 1; i < slots; i++)); do
         exec {fd}>"$(slot_file "$i")"
         if flock -n "$fd"; then slot=$i; break 2; fi
@@ -105,6 +121,7 @@ else
   done
 fi
 t1=$(date +%s)
+if [ "$slot" != all ]; then echo "$need_gib" > "$lockdir/resv.$$"; trap 'rm -f "$lockdir/resv.$$"' EXIT; fi
 export ACOS_ART_DATA="$lockdir/data-$task-$$"; mkdir -p "$ACOS_ART_DATA"
 export ACOS_ART_LOCK_SLOT=$slot
 rc=0; "$@" || rc=$?
