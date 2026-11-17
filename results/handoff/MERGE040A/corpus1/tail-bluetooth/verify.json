@@ -1,0 +1,64 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 17539072,
+    "wall_ms": 3457
+  },
+  "ok": true,
+  "request_id": "req_10e06f_18e8e76b40e6befd",
+  "result": {
+    "artifacts_dir": "out/tail-bluetooth",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794937486161146096,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/fixtures/build/apps/tail-probe.apk",
+        "sha256": "fffc7596a86e5fc060417e4b0c02289d169030f8f685d05ba9ded32c8709726e",
+        "sha256_12": "fffc7596a86e",
+        "size_bytes": 20883
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794936715475257300,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MODTAIL/tail-bluetooth.yaml",
+        "sha256": "7c9aee0ee1e44f9bd0b932df6e202aa621ca135b54dba7968c0ba1ec35a36d7d",
+        "sha256_12": "7c9aee0ee1e4",
+        "size_bytes": 2437
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "out/tail-bluetooth/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_tail-probe",
+  "status": "pass"
+}

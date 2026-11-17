@@ -1,0 +1,121 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 15761408,
+    "wall_ms": 903
+  },
+  "ok": true,
+  "request_id": "req_13065d_18e8e8c604fe3223",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/touchdisp-gesture/art",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794937493079297561,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/fixtures/build/apps/touch-probe.apk",
+        "sha256": "16280810f1aadf2a31298b5951a957a49b439ccf36a511855e611d673fcca95d",
+        "sha256_12": "16280810f1aa",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794939542407994079,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/scenarios/touchdisp-gesture.yaml",
+        "sha256": "a0cfe6059f6d7688b0cdb9eb1949a95348fe40941ab30182acceb46d016a088c",
+        "sha256_12": "a0cfe6059f6d",
+        "size_bytes": 1456
+      },
+      "scenario_engine": "art",
+      "warnings": [
+        {
+          "acked": 44,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+          "message": "step 1 (swipe): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 44,
+          "step": 1,
+          "step_kind": "swipe",
+          "target": null,
+          "unhandled": [
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46
+          ]
+        }
+      ]
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/touchdisp-gesture/art/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_touch-probe",
+  "status": "pass"
+}

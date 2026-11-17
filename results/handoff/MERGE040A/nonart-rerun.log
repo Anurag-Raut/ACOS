@@ -1,0 +1,1743 @@
+   Compiling num-traits v0.2.19
+   Compiling acos-mcp v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/crates/acos-mcp)
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:574:13
+    |
+574 |         let mut r = self.request(&Request::KillPasta { hold })?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:584:13
+    |
+584 |         let mut r = self.request(&Request::Shutdown)?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-netd-ctl` (lib) generated 2 warnings (run `cargo fix --lib -p acos-netd-ctl` to apply 2 suggestions)
+   Compiling acos-protocol v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/crates/acos-protocol)
+   Compiling proptest v1.12.0
+   Compiling acos-wm v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/crates/acos-wm)
+   Compiling acos-services v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/crates/acos-services)
+warning: unreachable pattern
+   --> crates/acos-services/src/intents.rs:151:21
+    |
+146 |                     Extra::Short(number) => serde_json::json!(number),
+    |                     -------------------- matches all the relevant values
+...
+151 |                     Extra::Short(short) => serde_json::json!(short),
+    |                     ^^^^^^^^^^^^^^^^^^^ no value can reach this
+    |
+    = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-services/src/modules/notifications.rs:341:13
+    |
+341 |         let mut store = store
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2741:9
+     |
+2721 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+2741 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3167:9
+     |
+3105 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+3167 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3246:9
+     |
+3229 |         FieldOp::Icon => {
+     |         ------------- matches all the relevant values
+...
+3246 |         FieldOp::Icon => {
+     |         ^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3250:9
+     |
+3233 |         FieldOp::ArraySet => match value {
+     |         ----------------- matches all the relevant values
+...
+3250 |         FieldOp::ArraySet => match value {
+     |         ^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5086:9
+     |
+5032 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         -------------------- matches all the relevant values
+...
+5086 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         ^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5169:9
+     |
+5127 |         FieldOp::BoolCond(inner) => {
+     |         ------------------------ matches all the relevant values
+...
+5169 |         FieldOp::BoolCond(inner) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unused variable: `intent`
+   --> crates/acos-services/src/service_bind.rs:292:13
+    |
+292 |         let intent = bind_intent(package, class);
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_intent`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: constant `ACTION_MASK` is never used
+   --> crates/acos-services/src/a11y_native.rs:102:7
+    |
+102 | const ACTION_MASK: i32 = 0xff;
+    |       ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:693:7
+    |
+693 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SERVICE_MANAGER_DESCRIPTOR` is never used
+  --> crates/acos-services/src/host.rs:82:7
+   |
+82 | const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   Compiling acos-netd v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/crates/acos-netd)
+   Compiling acos-runtime v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/crates/acos-runtime)
+warning: unused variable: `net`
+   --> crates/acos-netd/src/plan.rs:270:29
+    |
+270 | pub fn session_offline_cmds(net: &SessionNet, netns_pid: u32) -> Vec<String> {
+    |                             ^^^ help: if this is intentional, prefix it with an underscore: `_net`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+  --> crates/acos-netd/src/lib.rs:99:16
+   |
+99 |         let Ok(mut conn) = conn else { continue };
+   |                ----^^^^
+   |                |
+   |                help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: function `handle` is never used
+   --> crates/acos-netd/src/lib.rs:215:4
+    |
+215 | fn handle(relay: &Arc<Mutex<supervisor::Relay>>, req: Request) -> Reply {
+    |    ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `cgroup` is never read
+  --> crates/acos-netd/src/supervisor.rs:69:5
+   |
+49 | struct Session {
+   |        ------- field in this struct
+...
+69 |     cgroup: Option<String>,
+   |     ^^^^^^
+
+warning: methods `start_forwarder` and `restart_pasta` are never used
+   --> crates/acos-netd/src/supervisor.rs:949:8
+    |
+127 | impl Relay {
+    | ---------- methods in this implementation
+...
+949 |     fn start_forwarder(&mut self, s: &mut Session, port: u16) -> Result<(), ProtoError> {
+    |        ^^^^^^^^^^^^^^^
+...
+984 |     fn restart_pasta(&mut self) -> Result<(), ProtoError> {
+    |        ^^^^^^^^^^^^^
+
+warning: `acos-netd` (lib) generated 5 warnings (run `cargo fix --lib -p acos-netd` to apply 1 suggestion)
+warning: `acos-services` (lib) generated 12 warnings (run `cargo fix --lib -p acos-services` to apply 1 suggestion)
+warning: unused import: `AmsState`
+  --> crates/acos-services/tests/w38_activity_token.rs:20:26
+   |
+20 | use acos_services::ams::{AmsState, IntentFacts};
+   |                          ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `ModuleManifest`
+  --> crates/acos-services/tests/network_module.rs:27:63
+   |
+27 | use acos_services::module::{AttachMode, Module, ModuleConfig, ModuleManifest, Profile};
+   |                                                               ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `EXTRA_REQUEST_PERMISSIONS_NEVER_ASK_AGAIN`
+  --> crates/acos-services/tests/sysui1_permission_dialog.rs:21:5
+   |
+21 |     EXTRA_REQUEST_PERMISSIONS_NEVER_ASK_AGAIN, EXTRA_REQUEST_PERMISSIONS_RESULTS,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: `acos-services` (test "w38_activity_token") generated 1 warning (run `cargo fix --test "w38_activity_token"` to apply 1 suggestion)
+warning: `acos-services` (test "network_module") generated 1 warning (run `cargo fix --test "network_module"` to apply 1 suggestion)
+warning: variable does not need to be mutable
+   --> crates/acos-services/tests/module_kit.rs:393:9
+    |
+393 |     let mut registry = module::install_standard(&mut host);
+    |         ----^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: `acos-services` (test "sysui1_permission_dialog") generated 1 warning (run `cargo fix --test "sysui1_permission_dialog"` to apply 1 suggestion)
+warning: unused `Result` that must be used
+   --> crates/acos-services/tests/parcelable.rs:932:5
+    |
+932 |     parcel.write_string16_array(Some(&[])); // tags
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+932 |     let _ = parcel.write_string16_array(Some(&[])); // tags
+    |     +++++++
+
+warning: unused `Result` that must be used
+   --> crates/acos-services/tests/parcelable.rs:970:5
+    |
+970 |     original.write_string16_array(Some(&[]));
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+970 |     let _ = original.write_string16_array(Some(&[]));
+    |     +++++++
+
+warning: unused `Result` that must be used
+   --> crates/acos-services/tests/parcelable.rs:988:5
+    |
+988 |     parcel.write_string16("a;b");
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+988 |     let _ = parcel.write_string16("a;b");
+    |     +++++++
+
+warning: unused `Result` that must be used
+    --> crates/acos-services/tests/parcelable.rs:1019:5
+     |
+1019 |     body.write_string16(class);
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1019 |     let _ = body.write_string16(class);
+     |     +++++++
+
+warning: `acos-services` (test "module_kit") generated 1 warning (run `cargo fix --test "module_kit"` to apply 1 suggestion)
+warning: `acos-services` (test "parcelable") generated 4 warnings
+warning: variable does not need to be mutable
+  --> crates/acos-services/tests/mproc8_service_bind.rs:90:9
+   |
+90 |     let mut state = atms.shared_state();
+   |         ----^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: `acos-services` (lib test) generated 12 warnings (12 duplicates)
+warning: `acos-services` (test "mproc8_service_bind") generated 1 warning (run `cargo fix --test "mproc8_service_bind"` to apply 1 suggestion)
+warning: unused import: `acos_mcp::help::MODULES_MARKER`
+   --> crates/acos-mcp/tests/guide.rs:629:9
+    |
+629 |     use acos_mcp::help::MODULES_MARKER;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` on by default
+
+warning: field `file` is never read
+  --> crates/acos-mcp/tests/documentation_args.rs:37:5
+   |
+34 | struct Found {
+   |        ----- field in this struct
+...
+37 |     file: PathBuf,
+   |     ^^^^
+   |
+   = note: `Found` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-mcp` (test "documentation_args") generated 1 warning
+warning: `acos-mcp` (test "guide") generated 1 warning (run `cargo fix --test "guide"` to apply 1 suggestion)
+    Finished `test` profile [unoptimized] target(s) in 8.97s
+     Running unittests src/lib.rs (.cache/merge040a-target/debug/deps/acos_mcp-9668df508ac25acd)
+
+running 94 tests
+test backend::tests::a_cli_version_mismatch_is_detected ... ok
+test args::tests::edit_distance_is_capped ... ok
+test args::tests::known_arguments_pass ... ok
+test backend::tests::cli_error_envelope_gets_hint_and_status ... ok
+test args::tests::a_far_off_name_is_still_rejected_without_a_guess ... ok
+test args::tests::an_unknown_argument_names_itself_and_the_valid_ones ... ok
+test backend::tests::unsupported_backend_envelope_is_never_a_pass ... ok
+test backend::tests::cli_pass_envelope_is_rebuilt ... ok
+test base64::tests::rfc4648_vectors ... ok
+test backend::tests::help_parsing_finds_clap_commands ... ok
+test bound::tests::short_strings_are_untouched ... ok
+test backend::tests::the_installed_cli_beside_this_binary_wins_over_path ... ok
+test bound::tests::repeated_short_strings_are_not_deduplicated ... ok
+test backend::tests::discovery_order_is_bin_then_home_then_sibling_then_path ... ok
+test bound::tests::a_huge_message_is_capped_and_names_its_artifacts ... ok
+test bound::tests::the_cap_is_configurable_and_zero_disables_it ... ok
+test daemon::tests::the_fallback_base_is_per_uid_never_a_shared_tmp_acos ... ok
+test daemon::tests::ensure_private_dir_creates_0700_and_refuses_foreign_modes ... ok
+test bound::tests::the_help_guide_is_exempt_but_an_error_tail_is_not ... ok
+test descriptors::tests::command_lookup_round_trips ... ok
+test daemon::tests::symlinked_private_dirs_are_refused_and_never_chmodded ... ok
+test bound::tests::a_reply_keeps_the_full_text_once_and_back_references_repeats ... ok
+test flutter_backend::tests::unknown_session_is_a_setup_error ... ok
+test gate::tests::cancelled_waiter_stops ... ok
+test jsonrpc::tests::malformed_inputs_are_reported ... ok
+test flutter_backend::tests::all_commands_run_on_one_stable_worker_thread ... ok
+test preview::preview_tests::preview_size_keeps_the_aspect_ratio ... ok
+test private_daemon::tests::legacy_is_opt_in_only ... ok
+test preview::preview_tests::a_small_image_is_inlined_losslessly_and_unscaled ... ok
+test private_daemon::tests::private_dir_is_per_process_and_under_the_runtime_dir ... ok
+test rn_backend::tests::all_commands_run_on_one_stable_worker_thread ... ok
+test jsonrpc::tests::id_key_is_stable ... ok
+test paths::tests::installed_boot_dir_is_the_home_copy ... ok
+test paths::tests::empty_acos_home_is_unset ... ok
+test safety::tests::arg_limits_apply_recursively ... ok
+test safety::tests::accepts_paths_under_a_root ... ok
+test safety::tests::rejects_parent_dir_and_outside_paths ... ok
+test server::tests::busy_envelope_is_blocked_not_pass ... ok
+test server::tests::a_screenshot_is_inlined_only_from_an_allowed_root ... ok
+test server::tests::tool_lookup_resolves_meta_and_commands ... ok
+test server::tests::a_result_screenshot_is_inlined_as_a_bounded_preview ... ok
+test jsonrpc::tests::request_and_notification_are_distinguished ... ok
+test paths::tests::unset_keeps_the_legacy_developer_lookup ... ok
+test paths::tests::acos_home_wins_over_the_checkout ... ok
+test rn_backend::tests::detection_is_structural ... ok
+test rn_backend::tests::unknown_session_is_a_setup_error ... ok
+test preview::preview_tests::a_non_png_file_is_not_inlined ... ok
+test session_backend::tests::guest_rss_reads_the_guest_not_the_tree ... ok
+test server::tests::server_constructs_with_defaults ... ok
+test session_backend::tests::ladder_reports_ms_on_every_rung ... ok
+test process::tests::captures_stdout ... ok
+test backend::tests::capabilities_are_generated_from_the_service_module_registry ... ok
+test session_backend::tests::absolute_paths_are_left_alone ... ok
+test session_backend::tests::a_guard_of_a_replaced_launch_does_not_touch_the_new_record ... ok
+test session_backend::tests::an_expired_session_names_the_ttl_it_missed ... ok
+test session_backend::tests::in_flight_calls_protect_a_session_and_mid_destroy_calls_get_the_reason ... ok
+test server::tests::evidence_becomes_image_and_resource_link ... ok
+test session_backend::tests::idle_ttl_defaults_and_overrides ... ok
+test session_backend::tests::relative_path_args_are_refused_with_the_resolved_path ... ok
+test session_backend::tests::session_root_is_private_unpredictable_and_symlink_safe ... ok
+test session_backend::tests::session_list_ignores_a_default_session_tombstone ... ok
+test session_backend::tests::observe_without_a_frame_is_not_ready ... ok
+test signals::tests::termination_signals_are_blocked_after_install_block ... ok
+test transport::tests::crlf_is_tolerated ... ok
+test session_backend::tests::logs_on_an_unlaunched_session_carry_the_stage ... ok
+test transport::tests::reads_lines_and_reports_eof ... ok
+test transport::tests::oversized_line_is_drained ... ok
+test help::tests::help_lists_supported_and_unsupported ... ok
+test process::tests::output_limit_is_enforced ... ok
+test help::tests::compatibility_summary_is_read_when_present ... ok
+test descriptors::tests::availability_reflects_capabilities ... ok
+test session_backend::tests::oversized_child_frame_is_rejected_by_the_parent ... ok
+test descriptors::tests::every_protocol_tool_is_mapped_to_a_command ... ok
+test backend::tests::verify_relays_the_explicit_overwrite_choice ... ok
+test session_backend::tests::idle_expiry_tries_to_destroy_and_never_marks_a_live_guest_expired ... ok
+test session_backend::tests::teardown_never_respawns_a_dead_private_daemon ... ok
+test gate::tests::permits_are_bounded_and_released ... ok
+test session::tests::sessions_expire_after_ttl ... ok
+test process::tests::timeout_kills_child ... ok
+test process::tests::cancellation_kills_child ... ok
+test session::tests::get_touches_idle_timer ... ok
+test identity::tests::a_different_build_is_a_build_mismatch_even_at_another_path ... ok
+test identity::tests::a_structuring_helper_is_used_by_the_docs_example ... ok
+test identity::tests::version_and_protocol_mismatches_name_their_rule ... ok
+test identity::tests::an_unknown_git_sha_or_binary_hash_never_false_matches ... ok
+test identity::tests::the_same_path_with_different_bytes_is_a_binary_mismatch ... ok
+test identity::tests::the_local_identity_names_the_build_and_the_binary ... ok
+test identity::tests::the_warning_is_structured_and_carries_both_identities ... ok
+test signals::tests::a_second_signal_wait_is_bounded_when_the_teardown_hangs ... ok
+test preview::preview_tests::an_impossible_cap_yields_no_inline_image ... ok
+test signals::tests::main_waits_for_a_running_teardown_and_not_for_an_idle_one ... ok
+test preview::preview_tests::a_full_frame_is_inlined_as_a_bounded_preview ... ok
+test flutter_backend::tests::a_slow_command_times_out_without_hanging_the_caller ... ok
+test preview::preview_tests::a_noisy_frame_is_bounded_by_the_byte_cap ... ok
+
+test result: ok. 94 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s
+
+     Running unittests src/main.rs (.cache/merge040a-target/debug/deps/acos_mcp-be1416c5a0b68838)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/args.rs (.cache/merge040a-target/debug/deps/args-56b172a96624de95)
+
+running 5 tests
+test the_near_miss_that_started_this_is_named_in_one_retry ... ok
+test an_unknown_argument_is_invalid_argument_not_a_silent_no_op ... ok
+test a_valid_call_reaches_the_tool_and_a_meta_tool_rejects_a_stray_argument ... ok
+test every_advertised_tool_schema_is_a_closed_object ... ok
+test the_verify_default_engine_schema_is_the_one_constant ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/art_default.rs (.cache/merge040a-target/debug/deps/art_default-acccd9a37016e72f)
+
+running 5 tests
+test verify_schema_advertises_engine_and_defaults_to_art ... ok
+test private_daemon_is_reaped_when_the_server_exits ... ok
+test default_session_tools_use_the_private_art_daemon ... ok
+test acos_key_back_goes_to_the_art_daemon_and_reports_handled ... ok
+test default_session_ids_are_unique_per_server ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/bounded.rs (.cache/merge040a-target/debug/deps/bounded-4620865e8ad605bd)
+
+running 3 tests
+test a_huge_error_tail_is_capped_once_with_the_full_text_on_disk ... ok
+test the_cap_is_configurable_and_zero_disables_it ... ok
+test flags_are_name_value_metadata_and_malformed_ones_are_invalid_argument ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/compact_reply.rs (.cache/merge040a-target/debug/deps/compact_reply-2120d96c47a0bc77)
+
+running 1 test
+test a_large_tree_is_compact_bounded_paged_and_fully_written ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/docs.rs (.cache/merge040a-target/debug/deps/docs-a8b896494b0b2fcf)
+
+running 1 test
+test docs_tool_table_matches_descriptors ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/documentation_args.rs (.cache/merge040a-target/debug/deps/documentation_args-336c2d3e5019bfc7)
+
+running 4 tests
+test the_scanner_reads_both_json_and_flow_style_arguments ... ok
+test the_engine_argument_documents_the_reference_default ... ok
+test the_three_arguments_this_test_was_written_for_are_in_their_schemas ... ok
+test every_documented_argument_is_accepted_by_its_tool_schema ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/e2e.rs (.cache/merge040a-target/debug/deps/e2e-7361781044bf799e)
+
+running 1 test
+test end_to_end_mcp_session_over_stdio ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/fb5_hygiene.rs (.cache/merge040a-target/debug/deps/fb5_hygiene-b4f86bb5f2d22772)
+
+running 8 tests
+test l1_status_ignores_a_session_another_client_relaunched ... ok
+test external_daemon_list_failure_never_falls_back_to_destroy_by_id ... ok
+test idle_ttl_destroys_the_session_and_later_calls_name_the_ttl ... ok
+test m2_tokenless_sessions_are_never_expired_on_the_external_daemon ... ok
+test h1_a_relaunched_foreign_session_with_the_same_id_is_never_destroyed ... ok
+test h1_a_failed_listing_destroys_nothing_on_the_external_daemon ... ok
+test m1_a_slow_call_in_flight_is_not_idleness ... ok
+test h1_default_session_expiry_does_not_break_the_next_sweeps_listing ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.79s
+
+     Running tests/flutter_session.rs (.cache/merge040a-target/debug/deps/flutter_session-cfc6830a14527f15)
+
+running 1 test
+test flutter_launch_observe_tap_round_trip ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/guide.rs (.cache/merge040a-target/debug/deps/guide-8ef5b1c067b78337)
+
+running 14 tests
+test the_cli_topic_documents_the_stdout_stderr_contract ... ok
+test the_default_help_reply_is_a_bounded_skeleton ... ok
+test embedded_guide_matches_the_checked_in_file ... ok
+test every_topic_slices_a_real_section ... ok
+test the_guide_covers_the_contract ... ok
+test the_limits_section_is_generated_from_the_module_registry ... ok
+test verify_android_flow_prompt_is_usable ... ok
+test the_mcp_topic_is_served_as_a_resource ... ok
+test resources_serve_the_same_guide_text ... ok
+test meta_tools_report_fidelity_not_applicable ... ok
+test the_service_module_tools_advertise_closed_schemas ... ok
+test the_mcp_topic_is_generated_from_the_advertised_tools ... ok
+test help_tool_serves_the_guide_and_its_topics ... ok
+test no_help_topic_mentions_internal_tooling ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/native_session.rs (.cache/merge040a-target/debug/deps/native_session-04b17005c7f244c3)
+
+running 1 test
+acos-mcp: confined child active=true
+acos-services: keychars: /home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/crates/acos-services/../../.cache/art/sysroot/system/usr/keychars/Generic.kcm: Permission denied (os error 13)
+acos-services: keychars: /home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/crates/acos-services/../../.cache/art/sysroot/system/usr/keychars/Virtual.kcm: Permission denied (os error 13)
+test native_launch_runs_in_a_confined_child_session ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.23s
+
+     Running tests/net_ctl_parity.rs (.cache/merge040a-target/debug/deps/net_ctl_parity-8b253c3678eee1c1)
+
+running 4 tests
+test every_advertised_argument_parses_and_nothing_else_does ... ok
+test the_advertised_schema_is_the_session_apis_schema ... ok
+test mcp_advertises_the_modules_verb_under_its_own_name ... ok
+test the_tool_list_renders_the_same_schema ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/protocol.rs (.cache/merge040a-target/debug/deps/protocol-497a41495d84413f)
+
+running 20 tests
+test invalid_params_are_rejected ... ok
+test initialize_handshake_negotiates_and_describes_server ... ok
+test unknown_protocol_version_falls_back_to_latest ... ok
+test malformed_json_reports_parse_error ... ok
+test unknown_method_reports_method_not_found ... ok
+test missing_required_argument_is_invalid_argument ... ok
+test help_tool_returns_the_agent_workflow ... ok
+test oversized_request_is_rejected_without_crashing ... ok
+test capabilities_tool_reports_available_commands ... ok
+test inspect_fixture_returns_pass_with_static_fidelity ... ok
+test run_dex_fixture_matches_expected_stdout ... ok
+test verify_returns_the_same_truthful_envelope_as_the_cli ... ok
+test path_escape_attempts_are_rejected ... ok
+test unimplemented_command_returns_unsupported_never_a_pass ... ok
+test structured_content_is_only_sent_for_2025_06_18 ... ok
+test tools_list_advertises_only_what_this_build_can_run ... ok
+test doctor_tool_returns_the_preflight_report ... ok
+test cancellation_kills_a_long_running_child ... ok
+test wall_clock_budget_produces_timeout ... ok
+test concurrency_limit_serialises_calls ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+     Running tests/rn_session.rs (.cache/merge040a-target/debug/deps/rn_session-d3b05ee4c40a4b89)
+
+running 1 test
+test rn_launch_observe_tree_tap_round_trip ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/serveleak2_ownership.rs (.cache/merge040a-target/debug/deps/serveleak2_ownership-8c791549ee81dfad)
+
+running 1 test
+test a_default_id_does_not_let_one_server_destroy_another_servers_session ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+     Running tests/serveleak_shutdown.rs (.cache/merge040a-target/debug/deps/serveleak_shutdown-c8723834c8a924aa)
+
+running 1 test
+test stdin_eof_destroys_the_sessions_the_server_launched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/session.rs (.cache/merge040a-target/debug/deps/session-10535ecd6a87822f)
+
+running 3 tests
+test launch_without_apk_is_invalid_argument ... ok
+test launch_non_apk_is_an_error_not_a_pass ... ok
+test session_tools_round_trip_in_process ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (.cache/merge040a-target/debug/deps/acos_services-2481d3feb3cdc01f)
+
+running 177 tests
+test ams::tests::an_ordered_broadcast_is_a_structured_unsupported ... ok
+test ams::tests::implicit_intent_resolves_by_action_and_category ... ok
+test ams::tests::authorities_ports_and_paths_match_like_intent_filter ... ok
+test ams::tests::implicit_intent_with_no_match_is_a_structured_error ... ok
+test ams::tests::explicit_intent_resolves_to_the_declared_component ... ok
+test ams::tests::reset_task_if_needed_is_accepted_and_launches ... ok
+test ams::tests::package_targeting_and_registered_only_follow_the_broadcast_queue ... ok
+test ams::tests::manifest_and_dynamic_receivers_both_get_the_broadcast ... ok
+test ams::tests::service_start_stop_and_bind_round_trip ... ok
+test ams::tests::start_activity_queues_a_launch_and_creates_a_task ... ok
+test ams::tests::the_action_and_category_rules_are_aosp_intent_filter_match ... ok
+test ams::tests::single_task_reuses_the_existing_instance ... ok
+test ams::tests::the_data_and_type_rules_follow_intent_filter_match_data ... ok
+test ams::tests::unknown_authority_returns_null_and_publish_registers_it ... ok
+test ams::tests::unsupported_launch_flags_are_a_structured_error ... ok
+test compositor_client::tests::image_codes_are_pinned ... ok
+test compositor_client::tests::method_names_cover_every_implemented_code ... ok
+test compositor_client::tests::reference_display_is_the_one_display_manager_reports ... ok
+test connectivity::link_properties_tests::flag_off_keeps_every_list_empty ... ok
+test connectivity::link_properties_tests::flag_on_reports_the_namespaces_interface_addresses_dns_and_route ... ok
+test connectivity::link_properties_tests::validated_capability_follows_the_flag ... ok
+test cursor::tests::oversized_window_is_a_structured_error_not_a_truncation ... ok
+test display_events::tests::event_size_matches_the_image ... ok
+test cursor::tests::window_round_trips_through_the_framework_layout ... ok
+test display_events::tests::fourcc_values_match_display_event_receiver_h ... ok
+test display_events::tests::vsync_event_data_parcelable_round_trips ... ok
+test display_events::tests::vsync_event_data_parcelable_wire_form_starts_with_the_present_flag ... ok
+test display_events::tests::vsync_event_round_trips_through_the_encoder ... ok
+test exception::tests::codes_are_stable ... ok
+test exception::tests::no_exception_writes_zero ... ok
+test exception::tests::every_framework_exception_code_round_trips ... ok
+test exception::tests::service_specific_round_trips_message ... ok
+test fill_in::tests::a_null_stored_extras_bundle_takes_the_fill_in_bundle_whole ... ok
+test fill_in::tests::data_and_type_are_one_field_and_the_fill_in_type_clears_the_stored_data ... ok
+test fill_in::tests::the_content_user_hint_follows_a_copied_uri_only ... ok
+test fill_in::tests::an_empty_target_takes_every_fillable_field_but_never_the_component ... ok
+test fill_in::tests::extras_merge_key_by_key_and_the_stored_value_wins ... ok
+test fill_in::tests::the_fill_in_flags_allow_overwriting_a_defined_field ... ok
+test intents::tests::a_view_https_is_captured_but_a_typo_component_is_not ... ok
+test intents::tests::scripting_without_a_capture_is_a_structured_error ... ok
+test keychars::tests::the_comment_stripper_leaves_quoted_hashes_alone ... ok
+test keychars::tests::the_keycode_labels_are_the_image_values ... ok
+test keychars::tests::a_character_map_parses_the_stock_property_shapes ... ok
+test input_channel::tests::focus_and_touch_mode_match_the_image_publisher_body ... ok
+test keychars::tests::unknown_or_truncated_stock_syntax_is_a_structured_error ... ok
+test manifest_resolve::tests::activity_alias_inherits_the_targets_config_changes ... ok
+test manifest_resolve::tests::alias_resolves_to_its_target_and_keeps_the_alias_component ... ok
+test input::tests::a_failing_writer_is_a_structured_error_and_leaves_no_pending ... ok
+test input::tests::key_requires_focus_and_ack_is_exactly_once ... ok
+test manifest_resolve::tests::alias_label_overrides_target_label_and_falls_back_to_it ... ok
+test input::tests::injection_is_deterministic ... ok
+test manifest_resolve::tests::alias_to_missing_target_and_alias_without_target_are_structured_errors ... ok
+test manifest_resolve::tests::budget_thresholds_are_documented_and_env_boundary_is_explicit ... ok
+test manifest_resolve::tests::all_four_rotation_bits_keep_the_activity_and_no_declaration_relaunches ... ok
+test manifest_resolve::tests::application_enabled_false_disables_every_component ... ok
+test fill_in::tests::the_package_is_not_filled_in_while_a_selector_is_set_and_the_selector_needs_its_flag ... ok
+test intents::tests::a_scripted_pick_result_round_trips_and_is_delivered_once ... ok
+test manifest_resolve::tests::config_changes_are_parsed_from_the_binary_manifest_int_bits ... ok
+test manifest_resolve::tests::disabled_alias_is_skipped_and_the_enabled_one_wins ... ok
+test manifest_resolve::tests::multiple_launchers_choose_aliases_first_then_declaration_order ... ok
+test intents::tests::a_share_is_captured_with_its_payload_and_reported_as_captured ... ok
+test input_channel::tests::sizes_match_the_image ... ok
+test misc::tests::a_paced_gesture_is_due_on_its_declared_timeline ... ok
+test manifest_resolve::tests::no_launcher_filter_is_a_structured_no_launcher_error ... ok
+test module::tests::a_spec_parses_the_cli_spelling_and_refuses_a_typo ... ok
+test module::tests::every_gap_name_has_a_decision_and_a_reason ... ok
+test module::tests::profiles_round_trip ... ok
+test module::tests::a_spec_parses_the_object_and_config_spellings ... ok
+test manifest_resolve::tests::only_disabled_launchers_is_a_structured_disabled_error ... ok
+test input_channel::tests::pointer_coords_pack_in_axis_order ... ok
+test keychars::tests::the_parcel_is_the_native_read_from_parcel_layout ... ok
+test input::tests::the_topmost_touchable_window_at_the_point_gets_the_touch ... ok
+test module::tests::the_standard_registry_manifests_are_valid_and_unique ... ok
+test modules::accessibility::tests::settings_default_is_off ... ok
+test modules::location::tests::a_coarse_caller_gets_a_gridded_fix_without_bearing_speed_or_altitude ... ok
+test input::tests::tap_outside_every_window_is_structured_and_writes_nothing ... ok
+test input::tests::tap_hits_the_window_and_writes_down_up ... ok
+test modules::location::tests::a_disabled_location_setting_delivers_nothing_and_keeps_the_last_fix ... ok
+test modules::location::tests::providers_follow_the_location_setting_except_passive ... ok
+test modules::telephony::tests::the_pdu_round_trips_through_the_gsm7_packing ... ok
+test modules::location::tests::the_no_geocoder_path_answers_none_and_a_scripted_one_answers_addresses ... ok
+test network::tests::the_module_profile_is_the_gate_and_off_is_the_default ... ok
+test modules::location::tests::a_fused_listener_mirrors_every_provider ... ok
+test modules::location::tests::an_address_parcel_matches_the_framework_field_order ... ok
+test modules::telephony::tests::a_sms_deliver_pdu_has_the_gsm_layout_for_a_short_ascii_body ... ok
+test modules::location::tests::a_registered_listener_receives_each_fix_once_in_order ... ok
+test modules::telephony::tests::a_hex_pdu_override_round_trips ... ok
+test modules::permissions::tests::the_manifest_is_valid_and_declares_the_takeover ... ok
+test modules::notifications::tests::the_manifest_is_valid_and_declares_the_takeover ... ok
+test modules::telephony::tests::a_body_outside_the_default_alphabet_is_refused_not_mis_encoded ... ok
+test modules::location::tests::a_fix_round_trips_through_the_location_parcel_layout ... ok
+test parcel_dump::tests::dump_writes_the_written_data_bytes_and_indexes_them ... ok
+test pending_intent::tests::a_fill_in_on_an_immutable_sender_is_ignored_and_named ... ok
+test pending_intent::tests::an_unreadable_fill_in_is_ignored_by_an_immutable_sender_and_refused_by_a_mutable_one ... ok
+test pending_intent::tests::a_fill_in_on_a_mutable_sender_is_merged_and_delivered ... ok
+test modules::accessibility::tests::a_bare_package_is_refused ... ok
+test modules::accessibility::tests::an_empty_enable_attaches_with_accessibility_off ... ok
+test pending_intent::tests::the_sender_types_are_the_frameworks ... ok
+test pending_intent::tests::the_same_key_returns_the_same_sender_and_no_create_never_creates ... ok
+test pending_intent::tests::cancel_and_one_shot_are_evidence_not_silence ... ok
+test pending_intent::tests::update_current_replaces_the_extras_and_cancel_current_replaces_the_record ... ok
+test pending_intent::tests::the_pool_refuses_to_hand_out_more_senders_than_it_has_nodes ... ok
+test permission_catalog::tests::the_dialog_permissions_have_aosp_labels_and_groups ... ok
+test permission_catalog::tests::every_catalog_permission_belongs_to_a_catalog_group ... ok
+test permissions::tests::a_manifest_permission_is_install_time_granted_and_a_runtime_one_is_not ... ok
+test permission_catalog::tests::every_row_carries_a_label_and_a_source ... ok
+test permissions::tests::all_granted_is_false_for_an_empty_request_list ... ok
+test permissions::tests::grant_deny_never_ask_again_and_revoke_follow_the_documented_contract ... ok
+test pms::tests::application_info_flags_include_has_code ... ok
+test pms::tests::label_specs_follow_package_parser ... ok
+test pms::tests::provider_round_trips_through_the_prefix_codec ... ok
+test pms::tests::from_apk_reads_provider_authorities ... ok
+test pms::tests::resolve_content_provider_answers_the_declared_authority ... ok
+test pms::tests::service_round_trips_through_the_full_codec ... ok
+test modules::accessibility::tests::detach_clears_the_settings_and_the_state ... ok
+test provider::tests::change_count_is_exactly_one_per_real_change ... ok
+test provider::tests::get_returns_value_bundle_and_generation_memintarray ... ok
+test provider::tests::injected_generation_backing_is_used ... ok
+test provider::tests::list_config_filters_by_prefix ... ok
+test provider::tests::list_config_returns_an_empty_hash_map_bundle ... ok
+test modules::accessibility::tests::attaching_writes_the_two_secure_settings ... ok
+test provider::tests::put_updates_value_and_bumps_generation ... ok
+test provider::tests::seeded_keys_match_settings_keys_tsv ... ok
+test refs::tests::detach_releases_everything_the_handler_still_held ... ok
+test provider::tests::unknown_provider_method_is_structured ... ok
+test refs::tests::release_all_does_not_report_a_reference_twice ... ok
+test refs::tests::a_registration_is_one_reference_and_a_repeat_registration_is_not_two ... ok
+test registry::t21_tests::names_map_to_descriptors_and_unknowns_are_none ... ok
+test extras::tests::power_is_awake_and_accounts_are_empty ... ok
+test ams::tests::start_activity_argument_indices_match_android_14_aidl ... ok
+test extras::tests::shortcut_limits_and_job_schedule_are_the_platform_answers ... ok
+test ams::tests::add_package_dependency_is_recorded_and_replies_void ... ok
+test refs::tests::releasing_a_registration_that_was_never_made_is_not_reported ... ok
+test ams::tests::dispatch_resolves_start_service_through_the_decoded_table ... ok
+test ams::tests::dispatch_start_activity_reads_request_code_and_flags_at_the_atms_indices ... ok
+test extras::tests::storage_get_volume_list_is_one_mounted_emulated_volume ... ok
+test module::tests::a_session_modules_object_attaches_and_reports_the_verdict_rows ... ok
+test modules::accessibility::tests::the_list_transactions_are_answered_not_unsupported ... ok
+test misc::tests::the_input_device_reply_round_trips_through_the_codec ... ok
+test misc::tests::the_virtual_keyboard_input_device_matches_the_image_field_order ... ok
+test modules::accessibility::tests::adding_a_client_returns_the_state_in_the_high_word ... ok
+test trace::tests::memory_trace_records ... ok
+test trace::tests::summaries_are_bounded ... ok
+test service_bind::tests::a_bind_to_an_unattached_package_waits_for_its_attach ... ok
+test modules::accessibility::tests::an_event_reaches_the_record_through_the_transaction_path ... ok
+test pms::tests::webview_feature_follows_the_provider_package ... ok
+test service_bind::tests::the_table_is_disabled_for_the_in_process_runtime ... ok
+test webview::tests::current_package_and_multi_process_answers_are_typed_and_honest ... ok
+test service_bind::tests::a_cross_process_bind_schedules_create_then_bind_and_answers_connected ... ok
+test window_session::input_dispatch::swipe_stream_tests::a_short_swipe_still_publishes_one_move_and_ends_at_the_lift_time ... ok
+test service_bind::tests::a_dead_process_disconnects_its_callers ... ok
+test window_session::input_dispatch::ack_accounting_tests::focus_messages_follow_the_policy_target_and_only_on_change ... ok
+test service_bind::tests::unbind_schedules_unbind_and_stop_for_the_last_connection ... ok
+test webview::tests::unimplemented_methods_are_structured_unsupported_never_a_silent_success ... ok
+test webview::tests::without_the_provider_package_the_answer_is_no_provider ... ok
+test window_session::input_dispatch::focus_target_tests::keys_go_to_the_focused_window_not_the_newest ... ok
+test webview::tests::wait_for_and_get_provider_writes_the_frameworks_expected_shape ... ok
+test window_session::tests::the_image_codes_are_the_implemented_ones ... ok
+test window_session::input_dispatch::window_removal_tests::only_the_delivered_windows_removal_counts ... ok
+test window_session::input_dispatch::window_removal_tests::a_removal_before_the_mark_is_not_evidence ... ok
+test wms::tests::default_inset_model_is_report ... ok
+test wms::tests::null_window_is_bad_app_token ... ok
+test wms::tests::add_relayout_and_finish_drawing_are_recorded ... ok
+test wms::tests::scalar_window_manager_facts ... ok
+test wms::tests::open_session_returns_a_fresh_session_binder ... ok
+test wms::tests::closing_a_session_drops_its_windows_and_keeps_the_others ... ok
+test wms::tests::a_second_session_cannot_relayout_the_first_ones_window ... ok
+test wms::tests::duplicate_add_is_structured ... ok
+test window_session::input_dispatch::swipe_stream_tests::swipe_samples_interpolate_the_path_at_the_refresh_cadence ... ok
+test registry::t21_tests::add_service_through_the_host_is_not_reachable_from_an_app ... ok
+test registry::t21_tests::check_service_returns_a_binder_for_a_known_name_and_none_otherwise ... ok
+test window_session::input_dispatch::window_removal_tests::no_removal_means_no_evidence ... ok
+test wms::tests::report_model_gives_the_app_the_full_display ... ok
+test window_session::input_dispatch::ack_accounting_tests::stale_focus_and_touch_mode_acks_are_never_counted_as_the_taps ... ok
+test window_session::input_dispatch::swipe_stream_tests::input_host_swipe_reports_every_events_handled_bit ... ok
+test window_session::input_dispatch::swipe_stream_tests::publish_swipe_sends_down_moves_and_up_with_real_event_times ... ok
+test manifest_resolve::tests::real_apks_resolve_like_aapt2_could_not ... ok
+
+test result: ok. 177 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.16s
+
+     Running tests/a11ynative.rs (.cache/merge040a-target/debug/deps/a11ynative-10b97cb6d342d998)
+
+running 12 tests
+test a_remote_retriever_slice_is_refused_rather_than_half_read ... ok
+test a_frame_whose_pixels_disagree_with_its_size_is_refused ... ok
+test a_swipe_step_stream_becomes_down_move_move_up ... ok
+test a_slice_of_the_wrong_element_class_is_a_structured_refusal ... ok
+test the_failure_bundle_carries_the_error_code_the_callback_reads ... ok
+test the_failure_bundle_decodes_with_the_framework_bundle_reader ... ok
+test the_screenshot_and_gesture_gates_read_the_services_own_declaration ... ok
+test the_memfd_behind_the_hardware_buffer_holds_the_composited_pixels ... ok
+test an_unbound_host_has_no_gesture_target_and_no_screenshot_frame ... ok
+test the_captured_gesture_parcel_decodes_exactly ... ok
+test an_empty_slice_is_an_empty_gesture_not_a_failure ... ok
+test the_success_bundle_carries_a_flattened_graphic_buffer_over_a_memfd ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/apk_facts_cache.rs (.cache/merge040a-target/debug/deps/apk_facts_cache-4392e1cfc3b582f3)
+
+running 1 test
+test cache_matches_fresh_reads_and_invalidates_on_change ... FAILED
+
+failures:
+
+---- cache_matches_fresh_reads_and_invalidates_on_change stdout ----
+
+thread 'cache_matches_fresh_reads_and_invalidates_on_change' panicked at crates/acos-services/tests/apk_facts_cache.rs:71:32:
+called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    cache_matches_fresh_reads_and_invalidates_on_change
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p acos-services --test apk_facts_cache`
+     Running tests/b1b_kernel_placement.rs (.cache/merge040a-target/debug/deps/b1b_kernel_placement-771605ee335426ca)
+
+running 2 tests
+test the_dialog_rect_is_identical_for_both_buffer_widths ... ok
+test a_recorded_dialog_transaction_lands_in_one_466x400_rect_for_776_and_1024 ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/binder_refs.rs (.cache/merge040a-target/debug/deps/binder_refs-7d8a4979c2e8df01)
+
+running 9 tests
+test a_registered_phone_state_listener_is_referenced_until_listen_none ... ok
+test a_telephony_module_detach_releases_the_listeners_it_rooted ... ok
+test a_location_pending_intent_registration_references_its_sender ... ok
+test a_location_module_detach_releases_the_listeners_it_rooted ... ok
+test a_location_listener_is_referenced_and_unregister_releases_it ... ok
+test releasing_everything_leaves_no_reference_behind_for_a_dead_guest ... ok
+test the_a11y_manager_references_its_client_and_its_interaction_connections ... ok
+test a_registered_broadcast_receiver_is_referenced_until_unregister ... ok
+test a_network_callback_messenger_is_referenced_until_the_request_is_released ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/client_transaction.rs (.cache/merge040a-target/debug/deps/client_transaction-2a46fb997de2647a)
+
+running 9 tests
+test an_extra_without_a_recorded_value_is_refused ... ok
+test a_bundle_extra_keeps_the_frameworks_array_map_order ... ok
+test intent_extras_and_the_component_survive_the_encoder ... ok
+test the_process_configuration_matches_the_bind_application_values ... ok
+test single_top_to_the_top_activity_records_a_new_intent_not_a_launch ... ok
+test a_launch_for_a_running_process_is_delivered_as_a_client_transaction ... ok
+test a_client_transaction_carries_its_lifecycle_request_and_callbacks ... ok
+test a_launch_without_a_running_process_or_record_is_not_delivered ... ok
+test every_item_round_trips_through_the_codec ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/declared_honesty.rs (.cache/merge040a-target/debug/deps/declared_honesty-522c5a5f48d7c594)
+
+running 2 tests
+test restricted_op_without_a_grant_is_not_mode_allowed ... ok
+test restricted_op_with_grant_is_mode_allowed_again ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/display_events.rs (.cache/merge040a-target/debug/deps/display_events-28e911de79c8ec55)
+
+running 11 tests
+test a_bit_tube_is_a_seqpacket_pair_with_two_distinct_ends ... ok
+test the_event_struct_is_the_images_216_bytes ... ok
+test create_connection_answers_a_routable_surface_client_node ... ok
+test latest_vsync_event_data_is_the_parcelable_wire_form_byte_for_byte ... ok
+test steal_receive_channel_carries_two_descriptors_and_nothing_else ... ok
+test create_display_event_connection_answers_a_routable_connection_binder ... ok
+test latest_vsync_event_data_decodes_in_the_frameworks_read_order ... ok
+test surfaceflinger_resolves_and_answers_the_display_queries_the_image_makes ... ok
+test a_clock_writes_only_when_asked_and_stops_on_drop ... ok
+test set_vsync_rate_makes_the_clock_continuous_until_it_is_zeroed ... ok
+test requested_vsyncs_arrive_at_sixty_hertz_and_only_when_requested ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/displayinfo_api34.rs (.cache/merge040a-target/debug/deps/displayinfo_api34-768d1d2045384515)
+
+running 6 tests
+test displayinfo_spec_is_the_api34_write_order ... ok
+test served_value_matches_the_codec_table_field_count ... ok
+test variant_1_cutout_is_written_in_write_cutout_to_parcel_order ... ok
+test unknown_display_id_is_a_null_reply ... ok
+test host_reply_decodes_with_the_framework_read_order_and_leaves_no_bytes ... ok
+test host_serves_display_info_in_the_api34_write_order ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/gate1_bounds.rs (.cache/merge040a-target/debug/deps/gate1_bounds-4ac3f7f803441475)
+
+running 4 tests
+test a_cursor_window_larger_than_the_parcel_is_refused ... ok
+test a_val_map_length_beyond_the_parcel_is_refused ... ok
+test a_hostile_val_map_count_is_refused_without_allocating ... ok
+test a_val_map_that_fits_still_decodes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/gatenboot2_a11y_settings.rs (.cache/merge040a-target/debug/deps/gatenboot2_a11y_settings-5a05f53bbbd9adc0)
+
+running 4 tests
+test a_settings_write_binds_the_enabled_service ... ok
+test the_modules_disable_op_unbinds_through_the_same_reconciliation ... ok
+test removing_the_component_unbinds_the_bound_service ... ok
+test only_a_real_change_rebinds ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/gatenboot_keyguard.rs (.cache/merge040a-target/debug/deps/gatenboot_keyguard-0dffe43b6ebe03b2)
+
+running 3 tests
+test an_unsupported_window_manager_method_names_its_own_interface ... ok
+test is_keyguard_locked_answers_false ... ok
+test is_keyguard_secure_answers_false ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/host.rs (.cache/merge040a-target/debug/deps/host-a3eb7e83a1e05903)
+
+running 10 tests
+test not_owned_interfaces_name_the_owner ... ok
+test trace_off_by_default ... ok
+test unknown_service_name_returns_none ... ok
+test services_are_constructed_lazily ... ok
+test unknown_transaction_is_structured_error ... ok
+test interface_token_mismatch_is_rejected ... ok
+test trace_records_calls_when_enabled ... ok
+test installing_a_package_from_apk_repoints_the_package_manager ... ok
+test random_bytes_never_panic ... ok
+test random_args_never_panic ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/ime_wire.rs (.cache/merge040a-target/debug/deps/ime_wire-c6ff42301e73b76b)
+
+running 13 tests
+test a_non_null_bind_result_channel_is_unsupported_not_silently_written ... ok
+test a_typed_object_class_with_no_verified_codec_is_unsupported ... ok
+test the_no_ime_bind_result_payload_matches_the_image_writer_order ... ok
+test back_with_the_soft_input_shown_hides_it_and_finishes_handled ... ok
+test the_captured_editor_info_decodes_to_the_live_fields ... ok
+test the_image_ime_tracker_token_is_binder_then_string8_not_int_then_string16 ... ok
+test a_garbage_request_is_refused_without_panicking ... ok
+test every_truncation_inside_the_editor_info_is_a_structured_error ... ok
+test a_text_field_editor_info_with_spanned_surrounding_text_is_consumed_in_full ... ok
+test show_soft_input_with_the_image_token_and_result_receiver_is_answered_false ... ok
+test each_bound_channel_carries_its_own_token ... ok
+test the_captured_live_start_input_request_is_answered_with_a_bound_ime_and_channel ... ok
+test without_an_attached_session_the_manager_stays_the_null_ime ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/input_channel.rs (.cache/merge040a-target/debug/deps/input_channel-7ae5a11fb030742c)
+
+running 21 tests
+test decode_rejects_bad_bodies ... ok
+test bad_pointer_count_is_rejected_before_the_write ... ok
+test closing_the_peer_is_a_structured_error_not_a_silent_write ... ok
+test consumer_replies_decode_from_hand_built_bytes ... ok
+test acks_may_arrive_out_of_order ... ok
+test key_encodes_to_hand_built_image_bytes ... ok
+test encode_decode_round_trips_every_field ... ok
+test key_press_publishes_down_and_up_in_the_key_layout ... ok
+test gesture_is_configurable_and_shares_one_downtime ... ok
+test message_sizes_are_the_image_sizes ... ok
+test motion_encodes_to_hand_built_image_bytes ... ok
+test forget_client_end_keeps_the_publisher_usable_until_the_guest_leaves ... ok
+test parcel_body_is_the_w2_shape_and_round_trips ... ok
+test registry_keys_channels_by_window_token ... ok
+test open_pair_creates_a_real_seqpacket_channel ... ok
+test timeline_reply_is_consumed_and_exposed ... ok
+test two_pointer_motion_uses_the_variable_pointer_array ... ok
+test tap_publishes_down_then_up_with_shared_downtime_and_both_acks ... ok
+test sequences_and_event_ids_are_monotonic_across_gestures ... ok
+test untracked_finished_is_returned_without_latency ... ok
+test latency_is_measured_on_the_host_clock ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/input_dispatch.rs (.cache/merge040a-target/debug/deps/input_dispatch-2b86b7d9cb7d8b44)
+
+running 10 tests
+test a_character_with_no_key_fails_before_anything_is_published ... ok
+test a_wrong_token_is_a_structured_error_and_publishes_nothing ... ok
+test inject_key_publishes_the_key_layout ... ok
+test a_closed_channel_is_peer_closed_not_a_silent_success ... ok
+test inject_tap_publishes_down_then_up_and_records_the_acks_out_of_order ... ok
+test text_is_encoded_as_the_us_keys_the_guest_will_resolve ... ok
+test inject_text_publishes_one_key_stroke_per_character_on_the_virtual_keyboard ... ok
+test remove_closes_the_guest_end ... ok
+test registration_publishes_touch_mode_and_the_policy_focus_follows ... ok
+test add_to_display_writes_the_producer_registry_fd_which_carries_focus ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/k2_notification.rs (.cache/merge040a-target/debug/deps/k2_notification-6dd1f2e15110659d)
+
+running 5 tests
+test an_unknown_channel_is_null_not_an_error ... ok
+test create_then_get_returns_the_same_channel ... ok
+test a_channel_with_audio_attributes_round_trips ... ok
+test created_channel_list_is_a_parceled_list_slice_with_the_image_layout ... ok
+test create_request_decodes_or_falls_back_without_rejecting ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/k2_r3.rs (.cache/merge040a-target/debug/deps/k2_r3-b9410b71b97ebfbe)
+
+running 3 tests
+test install_source_info_has_the_image_field_order ... ok
+test permission_controller_name_is_the_aosp_module_package ... ok
+test memory_info_has_the_image_field_order ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/k3_walls.rs (.cache/merge040a-target/debug/deps/k3_walls-234317ac005ca0e5)
+
+running 4 tests
+test an_empty_bundle_is_one_zero_int_not_a_magic_error ... ok
+test publish_content_providers_decodes_the_typed_list ... ok
+test unknown_package_is_a_null_package_info_not_an_exception ... ok
+test the_known_package_still_answers ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/k4_metadata.rs (.cache/merge040a-target/debug/deps/k4_metadata-cc67c2fd03a04bdc)
+
+running 8 tests
+test a_meta_data_bundle_round_trips_through_the_bundle_codec ... ok
+test from_apk_carries_the_manifest_meta_data ... ok
+test the_flag_value_is_the_one_in_the_image ... ok
+test provider_meta_data_survives_the_parcel_round_trip ... ok
+test a_component_without_meta_data_replies_null_even_with_the_flag ... ok
+test package_meta_data_carries_the_nested_application_bundle ... ok
+test application_meta_data_follows_get_meta_data ... ok
+test provider_meta_data_follows_get_meta_data_on_every_provider_reply ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/keychars_stock.rs (.cache/merge040a-target/debug/deps/keychars_stock-9f9cac7a98330e1e)
+
+running 4 tests
+test a_missing_stock_map_encodes_has_map_false ... ok
+test the_virtual_keyboard_map_is_the_stock_full_qwerty ... ok
+test every_injectable_ascii_character_resolves_through_the_stock_map ... ok
+test the_stock_parcel_is_consumed_by_the_images_native_reader_shape ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/launch_one_open.rs (.cache/merge040a-target/debug/deps/launch_one_open-5dc7a66a2904e7e9)
+
+running 1 test
+test a_launch_opens_its_source_apk_once ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/leash_binder_nonnull.rs (.cache/merge040a-target/debug/deps/leash_binder_nonnull-871539bacbe95dd2)
+
+running 3 tests
+test a_null_client_binder_is_unexpected_null_and_aborts_the_parse ... ok
+test every_surface_control_body_writes_the_placeholder_binders ... ok
+test the_leash_client_and_handle_are_non_null_and_the_reply_ends_clean ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/lifecycle.rs (.cache/merge040a-target/debug/deps/lifecycle-c8f1105039419a91)
+
+running 7 tests
+test a_stopped_activity_can_be_started_and_resumed_again ... ok
+test illegal_transitions_are_rejected ... ok
+test launch_mode_decisions_match_android ... ok
+test stop_emits_save_state_after_stop ... ok
+test replay_lifecycle_summary_order ... ok
+test transition_table_never_returns_uncreated ... ok
+test random_walk_is_total ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/location_module.rs (.cache/merge040a-target/debug/deps/location_module-b4baeb3c0c02d238)
+
+running 9 tests
+test an_unknown_provider_is_a_null_location_and_provider_queries_follow_the_setting ... ok
+test a_location_request_with_a_real_work_source_keeps_the_listener_aligned ... ok
+test get_last_known_location_writes_the_location_parcel_layout ... ok
+test a_coarse_grant_gets_a_coarsened_fix_and_a_missing_grant_gets_a_security_exception ... ok
+test get_all_providers_lists_the_four_phone_providers ... ok
+test the_pending_intent_form_keeps_the_sender_and_fires_the_fix_as_a_fill_in ... ok
+test a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest ... ok
+test the_geocoder_answers_the_scripted_addresses_and_the_no_geocoder_path_sends_on_error ... ok
+test play_track_delivers_at_real_timing_and_the_session_records_each_fix ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/manifest_launch_timing.rs (.cache/merge040a-target/debug/deps/manifest_launch_timing-fbf02ec5355e2193)
+
+running 1 test
+test manifest_parses_are_correct_and_timed_per_call ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 24.91s
+
+     Running tests/moda11y2_bind.rs (.cache/merge040a-target/debug/deps/moda11y2_bind-f226dbf37adbcd8c)
+
+running 4 tests
+test the_installed_list_is_read_from_the_package_manager ... ok
+test add_client_creates_and_binds_the_enabled_service ... ok
+test a_foreign_publish_service_is_refused ... ok
+test publish_service_answers_init_with_a_connection_node ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/moda11y3_windows.rs (.cache/merge040a-target/debug/deps/moda11y3_windows-91506119285be5f8)
+
+running 7 tests
+test a_direct_state_without_a_window_source_reports_no_windows ... ok
+test a_window_without_a_connection_is_not_routed ... ok
+test a_find_by_text_request_uses_the_text_connection_code ... ok
+test a_perform_action_request_is_relayed_with_the_action_payload ... ok
+test a_find_request_is_relayed_to_the_window_connection ... ok
+test the_report_names_the_window_stack ... ok
+test get_windows_reports_the_layer1_stack_topmost_first ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/moda11y4_back.rs (.cache/merge040a-target/debug/deps/moda11y4_back-1fc93d2f21bd813a)
+
+running 4 tests
+test back_without_a_live_window_is_a_structured_refusal ... ok
+test other_global_actions_stay_structured_refusals ... ok
+test back_is_a_real_key_on_the_focused_window_without_a_tracking_flag ... ok
+test back_goes_to_the_focused_window_not_the_newest_one ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/moda11y5_overlay.rs (.cache/merge040a-target/debug/deps/moda11y5_overlay-a0173980b0ac5ed5)
+
+running 1 test
+test the_bind_registers_the_overlay_window_token_and_wms_honours_it ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/moda11y6_gate.rs (.cache/merge040a-target/debug/deps/moda11y6_gate-51e8452b57f54387)
+
+running 6 tests
+test a_service_with_no_meta_data_has_no_capabilities ... ok
+test the_bare_service_declares_no_window_content_capability ... ok
+test the_probe_service_declares_window_content_and_interactive_windows ... ok
+test a_service_with_the_capability_gets_the_window_list ... ok
+test the_content_capability_without_the_interactive_windows_flag_hides_the_list ... ok
+test a_service_without_the_capability_gets_aosp_null_not_an_exception ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/moda11y6_windows_changed.rs (.cache/merge040a-target/debug/deps/moda11y6_windows_changed-319528002095bc60)
+
+running 3 tests
+test no_service_no_window_change_delivery ... ok
+test a_window_add_and_remove_deliver_type_windows_changed_to_the_bound_service ... ok
+test a_stalled_window_change_sink_does_not_block_the_window_snapshot ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/modnotif2_permissions.rs (.cache/merge040a-target/debug/deps/modnotif2_permissions-59fde00788fb67bd)
+
+running 4 tests
+test the_launch_config_pre_grants_and_pre_denies ... ok
+test a_module_that_takes_over_a_core_name_restores_core_on_detach ... ok
+test request_permissions_resolves_to_a_structured_permission_ui_unavailable ... ok
+test both_check_permission_paths_read_the_one_store ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/modnotif3_notify.rs (.cache/merge040a-target/debug/deps/modnotif3_notify-0f290ebf5c92b3ea)
+
+running 2 tests
+test the_decoded_notification_re_encodes_byte_for_byte ... ok
+test a_real_notify_request_decodes_into_the_service ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/modnotif4_notifications.rs (.cache/merge040a-target/debug/deps/modnotif4_notifications-7228b590ec3baeb2)
+
+running 5 tests
+test get_intent_sender_returns_a_sender_whose_send_starts_the_activity ... ok
+test get_intent_sender_decodes_the_framework_wire_form ... ok
+test attaching_the_module_takes_the_name_over_and_detach_restores_core ... ok
+test tap_and_dismiss_drive_the_posted_notification ... ok
+test a_real_notify_request_posts_through_the_module_and_the_gate_follows_the_permission ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/module_kit.rs (.cache/merge040a-target/debug/deps/module_kit-c81f93aa3d2536ba)
+
+running 18 tests
+test quiet_process_child ... ok
+test attaching_the_vibrator_serves_the_name_and_the_report_says_which_profile ... ok
+test a_live_attach_of_an_at_launch_module_is_refused_with_the_launch_call ... ok
+test a_gap_name_answers_a_structured_tombstone_naming_the_module_and_the_attach_call ... ok
+test every_gap_name_is_reported_with_its_decision ... ok
+test the_standard_install_attaches_core_and_tombstones_the_gaps ... ok
+test detaching_core_removes_its_registrations ... ok
+test a_null_decided_name_keeps_android_s_missing_path_and_is_reported_off ... ok
+test the_telephony_module_passes_the_conformance_kit ... ok
+test the_vibrator_module_passes_the_conformance_kit ... ok
+test the_webview_module_passes_the_conformance_kit ... ok
+test the_location_module_passes_the_conformance_kit ... ok
+test the_notifications_module_passes_the_conformance_kit ... ok
+test the_permissions_module_passes_the_conformance_kit ... ok
+test the_network_module_passes_the_conformance_kit ... ok
+test the_accessibility_module_passes_the_conformance_kit ... ok
+test the_bluetooth_and_biometric_modules_pass_the_conformance_kit ... ok
+test core_passes_the_conformance_kit ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/mproc5_top_of_task.rs (.cache/merge040a-target/debug/deps/mproc5_top_of_task-4430bc895144c276)
+
+running 6 tests
+test a_same_process_resume_queues_nothing ... ok
+test finishing_the_new_top_resumes_the_activity_below_in_the_other_process ... ok
+test a_cross_process_resume_pauses_then_stops_the_previous_top ... ok
+test the_status_is_data_not_a_guess ... ok
+test an_adopted_token_resumes_through_create_start_and_resume ... ok
+test the_lifecycle_transaction_parcels_exactly_like_the_image ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mproc5c_idle_kill.rs (.cache/merge040a-target/debug/deps/mproc5c_idle_kill-dc3faa48124b00d7)
+
+running 7 tests
+test a_bound_service_keeps_its_process_alive ... ok
+test a_dead_foreground_process_moves_the_published_top_below_it ... ok
+test a_dead_background_process_does_not_move_the_published_top ... ok
+test a_lazily_spawned_process_with_nothing_started_is_idle_after_the_timeout ... ok
+test process_death_drops_the_record_and_its_activities ... ok
+test a_started_activity_keeps_its_process_alive ... ok
+test the_foreground_transition_restarts_the_idle_clock ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mproc8_service_bind.rs (.cache/merge040a-target/debug/deps/mproc8_service_bind-bd9b38830c82870b)
+
+running 2 tests
+test a_dead_service_process_reaches_its_caller_as_a_disconnect ... ok
+test a_bind_to_a_running_second_process_is_served_by_the_host ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mproc_intents.rs (.cache/merge040a-target/debug/deps/mproc_intents-09193a741ed96e9d)
+
+running 5 tests
+test a_clip_data_item_with_a_payload_is_a_structured_refusal ... ok
+test the_real_clip_data_body_is_consumed_exactly ... ok
+test a_pick_is_captured_with_its_request_code_and_result_round_trips ... ok
+test an_unresolved_explicit_component_is_not_captured ... ok
+test an_unresolved_share_is_captured_and_reported_as_captured ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mproc_pms.rs (.cache/merge040a-target/debug/deps/mproc_pms-e1c4f8bb94db72f1)
+
+running 9 tests
+test a_duplicate_install_is_a_structured_error ... ok
+test resolve_content_provider_searches_every_package ... ok
+test unknown_package_is_the_wire_null_not_an_error ... ok
+test get_application_info_is_per_package ... ok
+test query_intent_activities_honours_the_intent ... ok
+test uids_are_per_package ... ok
+test resolve_intent_returns_one_match_for_an_explicit_component ... ok
+test query_intent_activities_matches_every_installed_package ... ok
+test get_package_info_answers_the_second_package_activities ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/native_libs_install.rs (.cache/merge040a-target/debug/deps/native_libs_install-373f32f190e16fb1)
+
+running 4 tests
+test an_apk_without_native_code_installs_nothing ... ok
+test an_arm64_only_apk_is_structured_unsupported_abi ... ok
+test traversal_entries_are_never_installed_or_written_outside_dest ... ok
+test x86_64_libraries_are_installed_into_the_per_run_tree ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/net1_connectivity.rs (.cache/merge040a-target/debug/deps/net1_connectivity-2b667f1093382252)
+
+running 11 tests
+test net_capabilities_and_link_properties_round_trip_through_their_specs ... ok
+test pending_intent_registrations_stay_a_structured_refusal ... ok
+test a_request_without_a_messenger_queues_no_callbacks ... ok
+test state_counters_record_each_registration_and_release ... ok
+test listen_for_network_is_a_listen_request ... ok
+test request_network_answers_a_network_request_and_queues_the_aosp_callbacks ... ok
+test register_default_network_callback_sends_null_capabilities ... ok
+test release_network_request_drops_the_registration_and_unknown_ids_fail ... ok
+test the_same_network_request_is_echoed_in_every_callback_message ... ok
+test network_queries_describe_the_emulated_default_network ... ok
+test the_connectivity_specs_match_the_boot_images_write_to_parcel ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.07s
+
+     Running tests/network_module.rs (.cache/merge040a-target/debug/deps/network_module-7407b92b160f22f5)
+
+running 5 tests
+test a_detached_module_refuses_its_controls ... ok
+test child_framework_view ... ok
+test the_manifest_declares_the_real_arm_only ... ok
+test the_control_ops_are_the_acos_net_actions ... ok
+test the_framework_view_is_off_until_the_module_attaches ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/parcel_dynamic_golden.rs (.cache/merge040a-target/debug/deps/parcel_dynamic_golden-f82c7c2b8683e6da)
+
+running 16 tests
+test a_length_beyond_the_parcel_is_refused_before_allocating ... ok
+test a_body_that_disagrees_with_its_length_word_is_refused ... ok
+test a_val_map_without_the_api34_length_word_is_refused ... ok
+test val_bytearray_is_tag_then_length_and_padded_bytes ... ok
+test val_ibinder_is_tag_then_the_flat_binder_object ... ok
+test every_written_type_round_trips_through_the_same_bytes ... ok
+test val_integer_is_tag_then_int32 ... ok
+test val_intarray_is_tag_then_count_and_words ... ok
+test val_long_is_tag_then_little_endian_int64 ... ok
+test val_float_and_double_are_tag_then_ieee_bits ... ok
+test val_boolean_and_byte_are_tag_then_int32 ... ok
+test val_map_is_tag_length_size_then_pairs ... ok
+test val_null_is_one_tag_word ... ok
+test val_string_is_tag_then_string16 ... ok
+test val_parcelable_is_tag_length_then_class_name_and_payload ... ok
+test val_stringarray_is_tag_then_count_and_string16s ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/parcelable.rs (.cache/merge040a-target/debug/deps/parcelable-b887c03996e77f22)
+
+running 14 tests
+test a_value_length_prefix_counts_the_stripped_stability_records ... ok
+test audio_attributes_reads_the_flattened_tag_form ... ok
+test application_info_writes_label_res_before_label_and_logo_after_icon ... ok
+test application_info_split_arrays_are_string8 ... ok
+test icon_payload_round_trips ... ok
+test bundle_reader_consumes_a_sparse_array_and_checks_its_length ... ok
+test audio_attributes_reads_the_image_wire_form ... ok
+test task_description_reads_the_api34_conditional_layout ... ok
+test package_info_reply_reads_back_in_the_framework_order ... ok
+test notification_all_pending_intents_array_set_round_trips ... ok
+test typed_array_elements_round_trip_with_their_presence_marker ... ok
+test every_spec_round_trips_through_a_parcel ... ok
+test parcel_exception_constants_match_the_framework ... ok
+test codec_field_orders_match_the_framework_dex ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 38.27s
+
+     Running tests/primary_package.rs (.cache/merge040a-target/debug/deps/primary_package-a5a0d6b80c78297f)
+
+running 3 tests
+test an_attach_without_a_package_keeps_the_seeded_primary_name ... ok
+test the_seed_names_an_existing_record_and_never_overwrites_a_different_one ... ok
+test the_service_host_seam_names_the_primary_record_the_peer_asks_about ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/process_initializers.rs (.cache/merge040a-target/debug/deps/process_initializers-c3407c0e5e7067ad)
+
+running 8 tests
+test an_unusable_initializer_fails_manifest_validation ... ok
+test the_wire_form_is_class_hash_method_hash_manager ... ok
+test no_standard_module_declares_a_process_initializer ... ok
+test modules_that_need_no_initializer_declare_none ... ok
+test a_session_without_such_a_module_forwards_no_initializer ... ok
+test telephony_and_bluetooth_do_not_reinstall_the_frameworks_managers ... ok
+test the_manifest_json_carries_the_initializer_list ... ok
+test attach_and_detach_forward_an_empty_list ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/provider_holder.rs (.cache/merge040a-target/debug/deps/provider_holder-05bc777fd2aae3a9)
+
+running 8 tests
+test unknown_provider_method_is_unsupported_not_an_empty_bundle ... ok
+test settings_query_answers_a_framework_cursor_window ... ok
+test get_config_answers_one_device_config_value ... ok
+test unknown_authority_is_a_null_holder_with_a_recorded_miss ... ok
+test get_content_provider_returns_the_framework_holder_for_settings ... ok
+test remove_and_ref_content_provider_resolve_the_connection_token ... ok
+test settings_config_list_call_answers_the_ime_namespace_map ... ok
+test get_secure_call_answers_a_key_and_leaves_an_unset_key_null ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/replay.rs (.cache/merge040a-target/debug/deps/replay-bc1b408a7ae063a4)
+
+running 4 tests
+test get_content_provider_resolves_the_authority_from_the_name_argument ... ok
+test replay_all_measured_outgoing_calls ... ok
+test replay_launch_sequence_is_order_stable ... ok
+test wm_replay_is_deterministic_across_runs ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/rot7_back.rs (.cache/merge040a-target/debug/deps/rot7_back-0e11c347ce990d6d)
+
+running 5 tests
+test back_on_an_unknown_or_zero_token_still_errors ... ok
+test back_without_a_finish_callback_is_a_bad_request ... ok
+test a_second_activity_below_stays_untouched_by_the_press ... ok
+test a_back_press_asks_the_client_to_finish ... ok
+test the_client_finish_after_the_callback_flips_finished ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/rot8_resume.rs (.cache/merge040a-target/debug/deps/rot8_resume-f13ca057b7de5a57)
+
+running 1 test
+test back_from_the_second_activity_leaves_the_first_as_the_task_top ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/rot8b_task_finished.rs (.cache/merge040a-target/debug/deps/rot8b_task_finished-97bf6b32bcebc299)
+
+running 7 tests
+test an_unnamed_record_fails_closed ... ok
+test a_finished_record_ends_before_its_destroy_callback_arrives ... ok
+test all_records_destroyed_and_nothing_pending_is_finished ... ok
+test a_paused_or_stopped_record_is_still_live ... ok
+test an_unstarted_record_fails_closed ... ok
+test live_record_is_not_finished ... ok
+test pending_start_blocks_the_proof_even_with_every_record_destroyed ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/sandbox_c1.rs (.cache/merge040a-target/debug/deps/sandbox_c1-8f7293455b12342d)
+
+running 9 tests
+test a_socket_fd_is_not_a_frame ... ok
+test a_linked_file_fd_is_not_a_frame ... ok
+test a_callback_id_count_bomb_is_refused_before_with_capacity ... ok
+test composer_display_uncache_and_listener_counts_are_bounded ... ok
+test an_oversized_graphic_buffer_header_is_refused_not_allocated ... ok
+test a_graphic_buffer_fd_count_bomb_is_refused ... ok
+test a_short_anonymous_fd_never_becomes_a_partial_frame ... ok
+test hostile_buffer_geometry_is_rejected_before_it_is_an_allocation ... ok
+test a_valid_anonymous_frame_is_still_accepted_and_capturable ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/sensors_module.rs (.cache/merge040a-target/debug/deps/sensors_module-3471c249132462cf)
+
+running 15 tests
+test a_step_counter_event_carries_a_u64_not_a_float ... ok
+test quiet_kit_child ... ok
+test the_event_packet_is_the_image_s_asensor_event ... ok
+test the_off_state_is_the_stock_device_without_sensors ... ok
+test stub_refuses_every_scripted_control ... ok
+test flush_delivers_the_flush_complete_meta_event ... ok
+test the_scripted_list_is_the_framework_sensor_table ... ok
+test detach_returns_the_honest_empty_sensor_list ... ok
+test the_launch_config_selects_sensors_and_values ... ok
+test there_is_no_real_profile_and_the_report_is_honest ... ok
+test a_scripted_value_arrives_over_the_real_event_channel_at_the_requested_rate ... ok
+test the_sensors_module_passes_the_conformance_kit ... ok
+test an_on_change_sensor_reports_on_change_only ... ok
+test disabling_stops_the_stream_and_destroy_ends_the_connection ... ok
+test play_delivers_the_timeline_and_shake_alternates ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/service_manager_notifications.rs (.cache/merge040a-target/debug/deps/service_manager_notifications-bf5154554c13f4a8)
+
+running 7 tests
+test the_declared_set_is_the_module_set ... ok
+test a_registration_for_a_registered_name_answers_at_once ... ok
+test a_name_nothing_can_provide_is_refused_with_the_reason ... ok
+test a_declared_module_name_is_declared_but_not_resolved ... ok
+test a_registered_module_name_resolves_without_a_notification ... ok
+test unregistering_a_pending_callback_answers_ok_and_an_unknown_one_is_an_error ... ok
+test a_declared_name_fires_the_callback_when_the_module_attaches ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/smoke.rs (.cache/merge040a-target/debug/deps/smoke-937d37caec2f4f68)
+
+running 5 tests
+test activity_check_permission ... ok
+test package_application_info_from_apk ... ok
+test service_manager_checks_activity ... ok
+test settings_read_and_generation ... ok
+test display_info_round_trip ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/surface_client.rs (.cache/merge040a-target/debug/deps/surface_client-04bf7284819c78a6)
+
+running 12 tests
+test an_image_blast_transaction_without_a_buffer_decodes_to_the_last_byte ... ok
+test a_tag_shaped_frame_rate_group_is_rejected ... ok
+test an_image_blast_transaction_with_a_buffer_decodes_to_the_last_byte ... ok
+test a_legacy_transaction_on_the_aidl_node_dispatches_by_interface_token ... ok
+test create_connection_and_surface_produce_a_routable_layer_handle ... ok
+test a_hand_built_transaction_decodes_to_the_last_byte ... ok
+test an_image_shaped_window_info_decodes_to_the_last_byte ... ok
+test the_image_timeline_size_word_that_counts_itself_decodes ... ok
+test a_buffer_transaction_without_callbacks_releases_via_on_release_buffer ... ok
+test two_buffer_transactions_release_the_first_and_keep_the_latest ... ok
+test a_client_cached_buffer_reference_stores_the_frame_it_names ... ok
+test the_live_capture_reads_the_newest_c1_buffer_and_reports_its_generation ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/sysui1_permission_dialog.rs (.cache/merge040a-target/debug/deps/sysui1_permission_dialog-98a60e51aa67bee7)
+
+running 8 tests
+test the_never_ask_again_result_extra_is_a_bool_extra ... ok
+test the_grant_results_extra_is_a_val_intarray_on_the_wire ... ok
+test no_installed_controller_keeps_the_structured_refusal ... ok
+test a_normal_result_intent_is_not_a_permission_answer ... ok
+test dialogs_off_keeps_the_structured_refusal ... ok
+test the_dialog_result_updates_the_one_table ... ok
+test the_request_launches_a_real_dialog_recording_the_resolved_component_and_result_who ... ok
+test the_permissions_module_declares_the_controller_and_defaults_dialogs_on ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/sysui3b_permission_info.rs (.cache/merge040a-target/debug/deps/sysui3b_permission_info-4bf7138c1b93eceb)
+
+running 5 tests
+test a_declared_custom_permission_is_described_from_the_manifest ... ok
+test an_unknown_permission_is_null_rather_than_a_guess ... ok
+test get_permission_info_answers_the_platform_label_group_and_description ... ok
+test get_permission_group_info_answers_the_group_title ... ok
+test query_permissions_by_group_and_get_all_groups_answer_from_one_catalog ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/tail_modules.rs (.cache/merge040a-target/debug/deps/tail_modules-49a034a61ad7329e)
+
+running 8 tests
+test can_authenticate_answers_the_script_and_auth_delivers_the_scripted_result ... ok
+test the_vibrator_scripted_profile_records_pattern_identity ... ok
+test a_cancelled_prompt_answers_the_receiver_with_biometric_error_canceled ... ok
+test get_bonded_devices_answers_a_real_list_of_bluetooth_device_parcels ... ok
+test get_remote_name_answers_the_scripted_device_name ... ok
+test both_modules_report_their_gaps_and_refuse_an_unsupported_profile ... ok
+test a_scripted_scan_broadcasts_action_found_with_the_device_parcel ... ok
+test the_manager_hands_out_the_adapter_and_the_scripted_state_answers ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/telephony_module.rs (.cache/merge040a-target/debug/deps/telephony_module-5d5e876805f0ecdd)
+
+running 7 tests
+test an_unsupported_telephony_method_is_a_structured_error_naming_the_module ... ok
+test send_text_for_subscriber_is_recorded_with_the_destination_and_body ... ok
+test the_scripted_answers_are_the_ones_the_framework_asks_for ... ok
+test the_scripted_config_sets_the_initial_state ... ok
+test sms_injects_a_real_sms_received_broadcast_that_reaches_a_registered_receiver ... ok
+test a_call_state_change_reaches_a_phone_state_listener_and_a_telephony_callback ... ok
+test detach_leaves_no_registration_and_control_refuses_a_detached_module ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/user_manager_honesty.rs (.cache/merge040a-target/debug/deps/user_manager_honesty-3b7bda0a2cfd51d6)
+
+running 1 test
+test unknown_user_is_not_reported_unlocked ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/w26_services.rs (.cache/merge040a-target/debug/deps/w26_services-192f4ed8f9d1497d)
+
+running 10 tests
+test notify_dex_load_null_map_records_zero_dex_files ... ok
+test notify_dex_load_rejects_impossible_counts_and_truncation ... ok
+test the_crash_info_codec_is_registered_under_the_image_class_name ... ok
+test sensor_event_connection_is_a_named_gap_not_a_fabricated_queue ... ok
+test sensor_server_rejects_truncated_and_garbage_requests_without_hanging ... ok
+test sensorservice_resolves_the_first_time_and_serves_an_empty_sensor_list ... ok
+test handle_application_wtf_rejects_a_truncated_crash_info ... ok
+test notify_dex_load_with_31_dex_files_decodes_instead_of_underflowing ... ok
+test the_package_manager_records_the_dex_files_it_was_told_about ... ok
+test handle_application_wtf_is_decoded_logged_and_does_not_kill_the_guest ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/w28_intent_filter.rs (.cache/merge040a-target/debug/deps/w28_intent_filter-26ab69a8c6b48a62)
+
+running 12 tests
+test a_dropped_presence_word_does_not_silently_decode ... ok
+test a_present_marker_with_a_null_list_is_legal_and_records_no_entries ... ok
+test the_intent_filter_codec_matches_the_image_spec ... ok
+test the_image_dev_support_filter_decodes_to_exactly_its_bytes ... ok
+test a_rich_intent_filter_round_trips_byte_for_byte ... ok
+test a_request_truncated_inside_the_action_string_is_a_structured_error ... ok
+test a_null_filter_is_recorded_as_an_empty_filter_not_an_error ... ok
+test hostile_counts_are_refused_before_allocating ... ok
+test unregister_receiver_drops_the_registration ... ok
+test register_receiver_with_feature_records_the_receiver_and_answers_null ... ok
+test register_receiver_code_18_uses_the_same_codec_and_records_the_full_filter ... ok
+test broadcast_intent_delivers_to_a_matching_dynamic_receiver ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/w32_dialog_window.rs (.cache/merge040a-target/debug/deps/w32_dialog_window-c2682c7c55d682c4)
+
+running 2 tests
+test a_duplicate_or_null_dialog_add_is_a_typed_refusal ... ok
+test a_dialog_window_is_added_relayouted_and_drawn_as_its_own_top_level_window ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/w32_pms_component.rs (.cache/merge040a-target/debug/deps/w32_pms_component-9f1c5e485bc6c43f)
+
+running 5 tests
+test query_property_answers_the_empty_stock_result ... ok
+test get_component_enabled_setting_answers_the_stock_default ... ok
+test hostile_or_truncated_requests_are_structured_errors ... ok
+test set_then_get_round_trips_and_is_per_component ... ok
+test an_out_of_range_state_is_rejected_and_changes_nothing ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/w35_composite.rs (.cache/merge040a-target/debug/deps/w35_composite-1500acaf1e592117)
+
+running 8 tests
+test an_empty_registry_has_no_frame ... ok
+test a_visible_flag_secure_window_is_reported_so_the_live_view_can_blank_frames ... ok
+test a_single_full_window_layer_passes_through_with_its_own_stride ... ok
+test two_layers_at_different_z_and_positions_composite_to_exact_pixels ... ok
+test layers_far_apart_are_clipped_to_the_display_not_a_huge_canvas ... ok
+test the_window_managers_dim_layer_darkens_what_is_below_it ... ok
+test a_translucent_window_blends_over_the_layer_below ... ok
+test more_visible_layers_than_the_cap_are_refused ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/w35_intent.rs (.cache/merge040a-target/debug/deps/w35_intent-cc1f404e9736f591)
+
+running 7 tests
+test a_non_null_data_uri_is_refused_structured_not_guessed ... ok
+test a_null_component_is_one_null_string16_with_no_presence_word ... ok
+test a_full_intent_round_trips_field_for_field ... ok
+test a_selector_and_an_original_intent_both_round_trip ... ok
+test the_intent_wire_is_string8_for_its_own_fields_and_string16_for_the_component ... ok
+test the_shared_payload_entry_dispatches_to_the_intent_codec ... ok
+test hostile_intents_are_refused_not_panicked ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/w35_start_activity.rs (.cache/merge040a-target/debug/deps/w35_start_activity-e7300a813488c94c)
+
+running 2 tests
+test a_flag_the_host_does_not_honour_stays_a_structured_refusal ... ok
+test the_start_activity_request_decodes_and_is_recorded ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/w38_activity_token.rs (.cache/merge040a-target/debug/deps/w38_activity_token-dc806e959fea685f)
+
+running 3 tests
+test an_unknown_or_zero_token_still_errors ... ok
+test a_guest_token_is_adopted_and_finish_resolves ... ok
+test a_recorded_launch_is_rebound_to_the_real_token ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/w42_layer_lifetime.rs (.cache/merge040a-target/debug/deps/w42_layer_lifetime-591e37e5988acc48)
+
+running 4 tests
+test destroyed_layer_is_not_drawn_and_its_memfd_is_released ... ok
+test a_late_transaction_cannot_resurrect_a_destroyed_layer ... ok
+test window_surface_destroy_drops_its_blast_child ... ok
+test hidden_layer_is_not_drawn_until_it_is_shown_again ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/w54_dialog_surface_insets.rs (.cache/merge040a-target/debug/deps/w54_dialog_surface_insets-cf9d7ae978418991)
+
+running 2 tests
+test composite_clips_a_layer_to_the_display_viewport ... ok
+test window_surface_grows_by_surface_insets_and_the_layer_moves_by_them ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/webview_module.rs (.cache/merge040a-target/debug/deps/webview_module-52315ede8b3f1491)
+
+running 6 tests
+test only_the_real_profile_asks_for_the_session_gate ... ok
+test a_live_attach_is_refused_with_the_launch_call ... ok
+test the_status_op_reports_the_host_published_gate_and_broker ... ok
+test the_real_profile_contributes_the_provider_apk_to_the_launch ... ok
+test every_advertised_control_op_is_dispatched_and_unknown_ops_are_refused ... ok
+test attach_resolves_the_provider_apk_and_refuses_a_profile_it_has_not_got ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/window_session_api34.rs (.cache/merge040a-target/debug/deps/window_session_api34-7abd23addf7e5a10)
+
+running 6 tests
+test open_session_answers_a_routable_iwindow_session_node ... ok
+test unknown_methods_are_structured_unsupported_naming_the_descriptor ... ok
+test add_to_display_as_user_reply_is_api_34_exact ... ok
+test the_traversal_calls_after_relayout_are_served_in_order ... ok
+test a_relayout_on_the_wrong_session_node_is_refused ... ok
+test relayout_reply_is_api_34_exact_and_routable ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/window_session_framework_order.rs (.cache/merge040a-target/debug/deps/window_session_framework_order-c1c699538c9add8b)
+
+running 2 tests
+test add_to_display_as_user_reply_reads_exactly_in_the_framework_order ... ok
+test relayout_reply_reads_exactly_in_the_framework_order ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/window_surface_layer.rs (.cache/merge040a-target/debug/deps/window_surface_layer-38b74ba109c72a24)
+
+running 1 test
+test relayout_binds_the_window_surface_to_the_compositor_client ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/window_visibility_delivery.rs (.cache/merge040a-target/debug/deps/window_visibility_delivery-a0e093ba9aafce56)
+
+running 4 tests
+test a_null_window_add_delivers_nothing ... ok
+test add_to_display_delivers_one_dispatch_app_visibility_to_the_window_binder ... ok
+test no_delivery_ever_uses_the_replay_only_window_focus_code ... ok
+test relayout_delivers_nothing_and_a_repeated_add_does_not_re_deliver ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_mcp
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_services
+
+running 2 tests
+test crates/acos-services/src/module.rs - module::SessionModules (line 2092) ... ignored
+test crates/acos-services/src/refs.rs - refs (line 29) ... ignored
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 1 target failed:
+    `-p acos-services --test apk_facts_cache`

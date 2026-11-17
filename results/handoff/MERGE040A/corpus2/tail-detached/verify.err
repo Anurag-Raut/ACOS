@@ -1,0 +1,1 @@
+verify: INVALID_SCENARIO (harness): cannot read scenario scenarios/tail-detached.yaml: No such file or directory (os error 2) [class=harness, retryable=false]
