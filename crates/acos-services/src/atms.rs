@@ -498,6 +498,15 @@ pub struct AtmsState {
     /// which case a granted permission answers from `granted_permissions`.
     pub runtime_permissions:
         Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    /// SYSUI2: the result seam for a **system-UI app** (the notification
+    /// shade). Published by the module that owns the app's records
+    /// ([`crate::host::SystemUiResultSink`]); called from
+    /// [`AtmsState::finish_activity`] with the result Intent the app set, and
+    /// answers the content/action `PendingIntent` sender binders the system must
+    /// fire — exactly what systemui's own controller does in its process. The
+    /// module applies its own record changes; the sender table and the activity
+    /// start stay here.
+    pub system_ui_result_sink: crate::host::SystemUiResultSinkSlot,
     /// Logical clock (ms) advanced per event; the VM supplies the real clock.
     clock_ms: u64,
     /// Next event seq.
@@ -540,6 +549,7 @@ impl AtmsState {
             top_process: None,
             granted_permissions: vec!["android.permission.INTERNET".into()],
             runtime_permissions: None,
+            system_ui_result_sink: crate::host::SystemUiResultSinkSlot::default(),
             clock_ms: 1,
             next_seq: 1,
             controller_binder: 0,
@@ -1393,6 +1403,43 @@ impl AtmsState {
         );
     }
 
+    /// SYSUI2: apply the result a **system-UI app** answered.
+    ///
+    /// The module published the sink (see
+    /// [`crate::host::SystemUiResultSink`]); it decides what the result means and
+    /// mutates its own records, and answers the sender binders to fire. Firing
+    /// them is this state's job: `IIntentSender.send` is the AMS path, and the
+    /// started activity then follows the same launch/spawn route a guest
+    /// `startActivity` takes.
+    fn apply_system_ui_result(&mut self, token: u64, facts: &crate::ams::IntentFacts) {
+        let Some(sink) = self.system_ui_result_sink.get() else {
+            return;
+        };
+        let senders = sink(facts);
+        if senders.is_empty() {
+            return;
+        }
+        for sender in senders {
+            let outcome = self
+                .ams
+                .send_pending_intent_with_fill_in(sender, 0, crate::pending_intent::FillIn::None);
+            self.log_event(
+                "NotificationShade",
+                acos_protocol::LogLevel::Info,
+                format!(
+                    "shade tap token={token:#x} fired sender={sender}: {}",
+                    match &outcome {
+                        Ok(evidence) => match &evidence.outcome {
+                            Ok(status) => format!("start_result={status}"),
+                            Err(error) => format!("error={error}"),
+                        },
+                        Err(error) => format!("error={error}"),
+                    }
+                ),
+            );
+        }
+    }
+
     /// `finishActivity` (the app asked to finish), with the result the app set.
     ///
     /// `IClientController.finishActivity(IBinder token, int resultCode, Intent
@@ -1436,6 +1483,11 @@ impl AtmsState {
         // controller does.
         if let Some(facts) = self.activities[index].result_data.clone() {
             self.apply_permission_dialog_result(&facts);
+            // SYSUI2: a result a **system-UI app** answered (the shade's row
+            // tap). The module decides what the key means and which record
+            // leaves the list; firing the sender is the system's own work, done
+            // here with the sender table this state owns (no second path).
+            self.apply_system_ui_result(token, &facts);
         }
         // Keep `AmsState`'s task stack in step: the finished Activity leaves the
         // task, so the record below it is the new top (what the guest's

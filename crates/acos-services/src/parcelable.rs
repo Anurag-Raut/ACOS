@@ -1045,6 +1045,29 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int],
         verification: Verification::Curated,
     },
+    // `AbsSavedState.writeToParcel` (API 34, `AbsSavedState.java:79`; the
+    // image's `classes3.dex` write sequence is one `writeParcelable`, checked
+    // with `examples/scan_parcelables.rs`): exactly one super-state parcelable.
+    // `View.onSaveInstanceState` answers the `EMPTY_STATE` singleton for a view
+    // with nothing to save, whose class is the anonymous
+    // `android.view.AbsSavedState$1`; that payload is the one **null**
+    // parcelable, which is why both entries share this op list.
+    //
+    // The framework writes these into the saved-instance-state `Bundle` that
+    // `IActivityClientController.activityStopped` carries, so without a codec a
+    // *finishing* Activity's stop report was refused
+    // (`no parcelable codec for android.view.AbsSavedState$1`, SYSUI1
+    // pre-granted finding) and the caller never received its result.
+    ParcelableSpec {
+        class: "android.view.AbsSavedState",
+        fields: &[FieldOp::Named("android.view.AbsSavedState")],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        class: "android.view.AbsSavedState$1",
+        fields: &[FieldOp::Named("android.view.AbsSavedState")],
+        verification: Verification::Curated,
+    },
     ParcelableSpec {
         class: "android.view.textservice.SpellCheckerInfo",
         fields: &[FieldOp::Str16],

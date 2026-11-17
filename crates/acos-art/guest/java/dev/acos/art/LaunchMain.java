@@ -514,6 +514,7 @@ public final class LaunchMain {
         String result = "{\"outcome\":\"ok\",\"package\":\"" + esc(sPkg) + "\",\"apk\":\""
                 + esc(sApk) + "\",\"application_created\":true,\"until\":\"" + esc(sUntil)
                 + "\",\"activity_launched\":" + (sActivityResumed ? "true" : "false")
+                + ",\"finish_during_create\":" + (sFinishDuringCreate ? "true" : "false")
                 + ",\"wall_ms\":" + wall + "}";
         write(new File(sOut, "launch.json"), result);
         System.out.println("ACOSLAUNCH " + result);
@@ -2781,6 +2782,8 @@ public final class LaunchMain {
     }
 
     static volatile boolean sActivityResumed;
+    /** SYSUI2: the launch resolved to an Activity that finished inside onCreate. */
+    static volatile boolean sFinishDuringCreate;
     /**
      * S3a: why the last completed first traversal did not draw (null = it drew).
      * Recorded in the `POST_RESUME_NOT_READY` failure so a no-frame relaunch
@@ -3149,11 +3152,23 @@ public final class LaunchMain {
             System.out.println("ACOSLAUNCH MARK waiting-for-host-transaction activity="
                     + sActivity);
             System.out.flush();
+            // The milestone is the **host's launch having executed**, not
+            // `mResumed`: `ActivityThread.handleResumeActivity` skips
+            // `performResumeActivity` for an `mFinished` Activity
+            // (`ActivityThread.java:5290` "Skipping resume of ... activity is
+            // finishing"), so an Activity that answers and finishes inside
+            // `onCreate` (the already-granted permission request,
+            // `GrantPermissionsActivity`'s short-circuit) never sets
+            // `mResumed`. Waiting for `mResumed` here timed that *legitimate*
+            // launch out (`host-transaction-timeout`, SYSUI1 finding) and the
+            // `halt(0)` cut the finish/result handshake before the caller got
+            // its result. `mCalled` is the framework's own onCreate/onStart
+            // completion flag on the record the transaction created.
             Object launched = null;
             long hostDeadline = System.currentTimeMillis() + sResumeMs;
             while (launched == null && System.currentTimeMillis() < hostDeadline) {
                 Thread.sleep(5);
-                launched = resumedActivity(thread);
+                launched = launchedActivity(thread);
             }
             if (launched == null) {
                 System.out.println("ACOSLAUNCH MARK host-transaction-timeout activity="
@@ -3169,6 +3184,29 @@ public final class LaunchMain {
             Object hostToken = get(launched, "mToken");
             if (hostToken instanceof IBinder) {
                 sCurrentToken = (IBinder) hostToken;
+            }
+            boolean resumed = Boolean.TRUE.equals(get(launched, "mResumed"));
+            boolean finishedDuringCreate = !resumed
+                    && Boolean.TRUE.equals(get(launched, "mFinished"));
+            if (finishedDuringCreate) {
+                // AOSP's own outcome for an Activity that finishes in onCreate:
+                // created (and started), never resumed, then paused/stopped/
+                // destroyed by the server. Report exactly that, and keep the
+                // real main looper alive: the server drives the rest of the
+                // lifecycle and the caller's `ActivityResultItem` follows the
+                // destroy — a halt here is what lost the result.
+                sActivityResumed = true;
+                sFinishDuringCreate = true;
+                writeResumeMarker(thread, launched,
+                        "finish_during_create=true\n"
+                                + "resume_skipped=finishing-in-onCreate "
+                                + "(ActivityThread.handleResumeActivity)");
+                System.out.println("ACOSLAUNCH MARK activity-resumed activity="
+                        + launched.getClass().getName() + " window=" + get(launched, "mWindow")
+                        + " finish_during_create=true");
+                System.out.flush();
+                return;
+            } else if (hostToken instanceof IBinder) {
                 // ROT6: the host delivered the launch, so the server side owns
                 // the rest of the lifecycle; the finish watcher reports it.
                 startTopFinishWatcher(sCurrentToken);
@@ -3530,6 +3568,27 @@ public final class LaunchMain {
                 + " window=" + get(activity, "mWindow") + " recorded_after=looper-threw");
         System.out.flush();
         return true;
+    }
+
+    /**
+     * SYSUI2: the Activity the host's launch transaction created.
+     *
+     * <p>`mCalled` is what `Instrumentation.callActivityOnCreate`/
+     * `callActivityOnStart` set on the Activity itself, so a record whose
+     * Activity has it is a record whose `onCreate`/`onStart` ran — the proof
+     * the host's `LaunchActivityItem` executed. It is deliberately *not*
+     * `mResumed`: an Activity that finishes inside `onCreate` never reaches
+     * resume (see the call site).
+     */
+    static Object launchedActivity(Object thread) {
+        Object activities = get(thread, "mActivities");
+        if (!(activities instanceof java.util.Map)) return null;
+        for (Object rec : ((java.util.Map<?, ?>) activities).values()) {
+            Object a = get(rec, "activity");
+            if (a == null) continue;
+            if (Boolean.TRUE.equals(get(a, "mCalled"))) return a;
+        }
+        return null;
     }
 
     static Object resumedActivity(Object thread) {
