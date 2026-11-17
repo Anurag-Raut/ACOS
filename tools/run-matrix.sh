@@ -18,7 +18,14 @@
 #                          NOT_VERDICT_ELIGIBLE.
 #   --target-dir DIR       cargo target dir (default $CARGO_TARGET_DIR or target)
 #   --allow-debug          permit a debug build, labelled
-#   --no-build             reuse existing binaries
+#   --allow-contaminated   run even when the host gate refuses (loadavg1 > 4 /
+#                          MemAvailable < 30 GiB), for CORRECTNESS classification
+#                          only: every row and the provenance are labelled
+#                          verdict_eligible=false, so no timing numbers may be
+#                          claimed from it. Also ACOS_MATRIX_ALLOW_CONTAMINATED=1.
+#   --no-build             reuse existing binaries (the fixture APKs a selected
+#                          scenario needs are still built on demand from
+#                          fixtures/apps via tools/build-apps.sh)
 #   --sample-ms MS         cgroup/PSS sampling period (default 100)
 #   --settle-s S           seconds after first frame at which the legacy-comparable
 #                          cgroup anon+shmem value is read (default 0 = not read;
@@ -54,6 +61,7 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 PROFILE="${ACOS_BENCH_PROFILE:-release}"
 TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 ALLOW_DEBUG=0
+ALLOW_CONTAMINATED="${ACOS_MATRIX_ALLOW_CONTAMINATED:-0}"
 NO_BUILD=0
 ENGINE="auto"
 REPS=1
@@ -78,6 +86,7 @@ while [ $# -gt 0 ]; do
         --profile)      PROFILE="$2"; shift 2 ;;
         --target-dir)   TARGET_DIR="$2"; shift 2 ;;
         --allow-debug)  ALLOW_DEBUG=1; shift ;;
+        --allow-contaminated) ALLOW_CONTAMINATED=1; shift ;;
         --no-build)     NO_BUILD=1; shift ;;
         --sample-ms)    SAMPLE_MS="$2"; shift 2 ;;
         --settle-s)     SETTLE_S="$2"; shift 2 ;;
@@ -128,7 +137,61 @@ fi
 [ -n "$ARTIFACTS" ] || ARTIFACTS="$ROOT/.cache/bench-matrix/$STAMP"
 mkdir -p "$ARTIFACTS" "$(dirname "$OUT")"
 
+# ---- scenario fixtures: build what the selected scenarios need --------------
+# The default matrix set runs the fixtures under fixtures/build/apps (counter,
+# finish-start, form-validation, offscreen-pager, ...). A `fixtures/build` copied
+# from another worktree can be stale: the v0.3.0 release gate lost
+# `negative/finish-start-wrong-home` to `APK_IO` because `finish-start.apk` was
+# not in the main checkout's fixture build (gate finding F3), which reads as an
+# unclassified row even though nothing is wrong. Build the missing ones from
+# their `fixtures/apps/<name>` sources (guarded) before the run starts, and
+# refuse with an actionable message when a fixture has no builder here.
+missing_fixtures=()
+while IFS= read -r app; do
+    [ -n "$app" ] || continue
+    case "$app" in fixtures/build/apps/*.apk) ;; *) continue ;; esac
+    [ -f "$ROOT/$app" ] && continue
+    name="$(basename "$app" .apk)"
+    missing_fixtures+=("$name")
+done < <(sed -n 's/^app:[[:space:]]*//p' "${SCENARIOS[@]}" | tr -d '"\047' | sort -u)
+if [ "${#missing_fixtures[@]}" -gt 0 ]; then
+    buildable=()
+    for name in "${missing_fixtures[@]}"; do
+        if [ -d "$ROOT/fixtures/apps/$name" ]; then
+            buildable+=("$name")
+        fi
+    done
+    if [ "${#buildable[@]}" -gt 0 ]; then
+        echo "run-matrix: building missing fixture APK(s): ${buildable[*]}" >&2
+        if ! ACOS_APP_ONLY="${buildable[*]}" "$ROOT/tools/build-apps.sh"; then
+            echo "run-matrix: fixture build failed; no run" >&2
+            exit 7
+        fi
+    fi
+    unresolved=()
+    for name in "${missing_fixtures[@]}"; do
+        case " ${buildable[*]-} " in *" $name "*) ;; *) unresolved+=("$name") ;; esac
+    done
+    if [ "${#unresolved[@]}" -gt 0 ]; then
+        echo "run-matrix: missing fixture APK(s) with no tools/build-apps.sh source:" \
+             "${unresolved[*]}" >&2
+        echo "run-matrix: build them first (see fixtures/README.md; e.g." \
+             "fixtures/build-hostile-probe.sh for hostile-*.apk) or run a" \
+             "--scenarios subset that does not need them." >&2
+        exit 7
+    fi
+    still_missing=()
+    for name in "${buildable[@]}"; do
+        [ -f "$ROOT/fixtures/build/apps/$name.apk" ] || still_missing+=("$name")
+    done
+    if [ "${#still_missing[@]}" -gt 0 ]; then
+        echo "run-matrix: fixture build did not produce: ${still_missing[*]}" >&2
+        exit 7
+    fi
+fi
+
 # ---- host gate before the build (loadavg1 <= 4.0, MemAvailable >= 30 GiB) ----
+CONTAMINATED=0
 if ! python3 -I - "$ROOT" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1] + "/tools")
@@ -143,7 +206,13 @@ if not g["ok"]:
     sys.exit(1)
 PY
 then
-    exit 4
+    if [ "$ALLOW_CONTAMINATED" != "1" ]; then
+        exit 4
+    fi
+    CONTAMINATED=1
+    echo "run-matrix: --allow-contaminated: continuing on a busy host for" \
+         "CORRECTNESS classification only; every row is verdict_eligible=false" \
+         "(no timing claim may be made from this run)." >&2
 fi
 
 # ---- build (guarded, release unless --profile debug) ----
@@ -177,13 +246,14 @@ import time
 import uuid
 
 (ROOT, OUT, PROFILE, ACOS, ACOS_ART, ENGINE, REPS, SAMPLE_MS, SETTLE_S,
- TIMEOUT_S, ARTIFACTS, APK_OVERRIDE) = sys.argv[1:13]
-SCENARIOS = sys.argv[13:]
+ TIMEOUT_S, ARTIFACTS, APK_OVERRIDE, CONTAMINATED) = sys.argv[1:14]
+SCENARIOS = sys.argv[14:]
 REPS, SAMPLE_MS, SETTLE_S, TIMEOUT_S = int(REPS), int(SAMPLE_MS), int(SETTLE_S), int(TIMEOUT_S)
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import benchlib  # noqa: E402
 
-VERDICT_ELIGIBLE = PROFILE == "release"
+# A run on a host that failed the gate is a CORRECTNESS run, never a timing one.
+VERDICT_ELIGIBLE = PROFILE == "release" and CONTAMINATED != "1"
 MIB = 1024.0 * 1024.0
 GIB = 1024.0 ** 3
 
@@ -623,4 +693,4 @@ exec "$ROOT/tools/art-runtime/run-exclusive.sh" --task "W29-matrix" -- \
     "$ROOT/tools/guarded.sh" --mem 8G --time 900 -- \
     python3 -I "$ARTIFACTS/driver.py" "$ROOT" "$OUT" "$PROFILE" "$ACOS" "$ACOS_ART" \
     "$ENGINE" "$REPS" "$SAMPLE_MS" "$SETTLE_S" "$TIMEOUT_S" "$ARTIFACTS" \
-    "$APK_OVERRIDE" "${SCENARIOS[@]}"
+    "$APK_OVERRIDE" "$CONTAMINATED" "${SCENARIOS[@]}"

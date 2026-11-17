@@ -48,6 +48,16 @@ Regenerate everything with:
     tools/build-apps.sh
 
 Both scripts are idempotent and never touch the read-only legacy tree.
+`tools/build-apps.sh` builds the full scenario corpus below (counter, todo-list,
+multi-activity, **finish-start**, form-validation, settle-lab, thread-heavy,
+svg-viewbox, offscreen-pager, ...); `ACOS_APP_ONLY="finish-start"` builds just
+one, which is what `tools/run-matrix.sh` uses when a selected scenario's APK is
+missing (see "Scenario fixtures" there: a `fixtures/build` copied from another
+worktree may be stale, and a missing APK must not turn into an unclassified
+`APK_IO` matrix row).
+
+Non-build-apps fixtures keep their own builder: `fixtures/build-hostile-probe.sh`
+for `hostile-*.apk`.
 
 
 ## S8 hostile fixture
