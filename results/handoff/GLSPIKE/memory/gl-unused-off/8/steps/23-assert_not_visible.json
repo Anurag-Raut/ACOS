@@ -1,0 +1,65 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "present": false,
+        "visible": null
+      },
+      "expected": {
+        "selector": {
+          "id": "count"
+        },
+        "visible": false
+      },
+      "kind": "not_visible",
+      "matched_node_ids": [],
+      "message": "node absent",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/12.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/12.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/23-assert_not_visible.json"
+    }
+  ],
+  "frame_seq": 12,
+  "index": 23,
+  "provenance": {
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 0,
+    "bound": "window-gone",
+    "first_change_ms": 15,
+    "frame_ms": null,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "strict",
+    "pixels_changed": false,
+    "reason": "window-gone",
+    "settled": true,
+    "state_changed": false,
+    "strict_rule": "event",
+    "task_finished": true,
+    "waited_ms": 0,
+    "waited_ms_source": "step",
+    "window_gone": true
+  },
+  "status": "pass",
+  "step": "assert_not_visible",
+  "trust": "trusted"
+}
