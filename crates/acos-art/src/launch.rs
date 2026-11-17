@@ -127,6 +127,12 @@ pub struct LaunchOpts {
     /// manifest table, exactly as the launched APK is. Empty (and then free)
     /// for every single-package launch: nothing is staged, bound or installed.
     pub extra_apks: Vec<PathBuf>,
+    /// LAUNCHEXTRAS: the launch `Intent` the caller declared (action, data URI
+    /// and typed extras). The host encodes it with the exact
+    /// `Intent.writeToParcel` bytes and the guest's first launch transaction
+    /// carries that Intent, so `Activity.getIntent()` observes it unchanged.
+    /// Empty (the default) keeps the guest-built `ACTION_MAIN` Intent.
+    pub intent: acos_protocol::LaunchIntent,
     /// MPROC5c: idle kill. A **lazily spawned** secondary process that has held
     /// nothing for this long — no started activity, no started/bound service,
     /// no visible window — is killed (stock
@@ -152,6 +158,7 @@ impl Default for LaunchOpts {
             animations: Animations::On,
             services: Vec::new(),
             extra_apks: Vec::new(),
+            intent: acos_protocol::LaunchIntent::default(),
             idle_kill_secs: 30,
         }
     }
@@ -1962,6 +1969,40 @@ pub(crate) fn launch_session(
         .as_ref()
         .map(|l| l.label.clone())
         .unwrap_or_default();
+    // LAUNCHEXTRAS: the host builds the launch Intent (ADR-0029 amendment). The
+    // bytes come from `Intent.writeToParcel` as this image writes it (the
+    // parcelable codec, real-Java differential in acos-runtime); the guest
+    // unmarshals them with the framework's own `Intent.CREATOR` and hands the
+    // Intent to the real `LaunchActivityItem`. A `Parcelable` extra is refused
+    // by name before any guest exists.
+    let launch_intent_hex = if opts.intent.is_empty() {
+        None
+    } else {
+        if let Some(detail) = opts.intent.unsupported_detail() {
+            return Err(Error::Layout(format!("UNSUPPORTED_ANDROID_API: {detail}")));
+        }
+        let Some(activity_class) = activity.as_deref() else {
+            return Err(Error::Layout(
+                "intent_action/data/extras need `--until activity-resumed`: a launch that stops \
+                 before an Activity cannot carry an Intent"
+                    .to_string(),
+            ));
+        };
+        let bytes = acos_services::client_transaction::encode_launch_intent(
+            &package,
+            activity_class,
+            &opts.intent,
+        )
+        .map_err(|error| Error::Layout(format!("launch Intent: {error}")))?;
+        eprintln!(
+            "acos-art: launch: host-built launch Intent action={} data={} extras={} bytes={}",
+            opts.intent.action.as_deref().unwrap_or("android.intent.action.MAIN"),
+            opts.intent.data.as_deref().unwrap_or("none"),
+            opts.intent.extras.len(),
+            bytes.len()
+        );
+        Some(hex_bytes(&bytes))
+    };
     // W31: `ApplicationInfo.flags` from the parsed manifest. `PmsState::from_apk`
     // is the host's `PackageParser` equivalent (`acos-apk`'s typed manifest);
     // its `AppInfo.flags` is what a package manager hands the framework, and
@@ -2317,6 +2358,11 @@ pub(crate) fn launch_session(
     sb.env("ACOS_PROCESS_TAG", "0");
     sb.env("ACOS_PROCESS_NAME", &package);
     sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
+    // LAUNCHEXTRAS: the host-built Intent bytes, unmarshalled by the guest's
+    // first `LaunchActivityItem` (never rebuilt there from loose fields).
+    if let Some(hex) = &launch_intent_hex {
+        sb.env("ACOSLAUNCH_INTENT_BYTES", hex);
+    }
     // ADR-0029 item 1: the framework initializers the attached modules declare
     // (`ModuleManifest::process_initializers`). On a device the mainline
     // module's own process installs them before any app starts; ACOS has no such
@@ -9456,6 +9502,18 @@ fn apk_launcher_activity(apk: &Path) -> Result<acos_services::manifest_resolve::
             e.code()
         ))
     })
+}
+
+/// Lowercase hex of `bytes`: the `ACOSLAUNCH_INTENT_BYTES` spelling (the guest
+/// unmarshals the Intent payload from it, so an env value never carries a NUL
+/// byte or a quoting hazard).
+fn hex_bytes(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
 }
 
 /// Read one `key=value` field from a marker file's lines. The guest writes one

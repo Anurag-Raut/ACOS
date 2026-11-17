@@ -35,8 +35,13 @@ USAGE:
                      [--panel-height PX] [--status-inset PX] [--nav-inset PX]
                      [--density DPI] [--insets carve|report]
                      [--animations on|off]
+                     [--intent-action ACTION] [--data URI]
+                     [--extra KEY=VALUE]... # typed launch Intent extras
+                                            # (JSON value or {type,value})
                      [--extra-apk FILE]...  # install more packages in this
                                             # session (repeatable)
+                     # `ACOSLAUNCH_INTENT` carries the same Intent as one JSON
+                     # object (the engine's spelling).
   acos-art session --apk FILE [--out DIR] [--package PKG] [--activity CLASS]
                      [--width PX] [--panel-height PX] [--status-inset PX]
                      [--nav-inset PX] [--density DPI] [--session-id ID]
@@ -67,6 +72,26 @@ COMMON OPTIONS:
   --image DIR        boot image dir (contains x86_64/boot.art); `none` disables
   --json             print the structured RunResult instead of a summary
 ";
+
+/// Parse one `--extra KEY=VALUE`: JSON first (`42`, `true`, `0.5`, `[..]`,
+/// `{"type":"long","value":7}`), then a bare string.
+fn parse_extra_arg(raw: &str) -> std::result::Result<(String, acos_protocol::ExtraValue), String> {
+    let (key, value) = raw
+        .split_once('=')
+        .ok_or_else(|| format!("--extra needs KEY=VALUE (got {raw:?})"))?;
+    if key.is_empty() {
+        return Err(format!("--extra {raw:?} has an empty key"));
+    }
+    let parsed = match serde_json::from_str::<acos_protocol::ExtraValue>(value) {
+        Ok(value) => value,
+        // A bare word is a string, not a JSON error the caller has to quote.
+        Err(_) if !value.starts_with(['{', '[', '"']) => {
+            acos_protocol::ExtraValue::String(value.to_string())
+        }
+        Err(error) => return Err(format!("--extra {key}: {error}")),
+    };
+    Ok((key.to_string(), parsed))
+}
 
 fn main() -> ExitCode {
     match real_main() {
@@ -142,6 +167,18 @@ fn real_main() -> Result<ExitCode> {
     let mut session_id: Option<String> = None;
     let mut socket: Option<PathBuf> = None;
     let mut services: Vec<serde_json::Value> = Vec::new();
+    // LAUNCHEXTRAS: the launch Intent. `ACOSLAUNCH_INTENT` is the engine's
+    // spelling (one JSON `LaunchIntent`, so a caller never assembles several
+    // flags); the flags below are the direct `acos-art launch` spelling and
+    // override the same field of the env value.
+    let mut intent: acos_protocol::LaunchIntent = match std::env::var("ACOSLAUNCH_INTENT") {
+        Ok(raw) if !raw.trim().is_empty() => serde_json::from_str(&raw)
+            .map_err(|error| Error::Layout(format!("ACOSLAUNCH_INTENT: {error}")))?,
+        _ => acos_protocol::LaunchIntent::default(),
+    };
+    let mut flag_action: Option<String> = None;
+    let mut flag_data: Option<String> = None;
+    let mut flag_extras: Vec<(String, acos_protocol::ExtraValue)> = Vec::new();
 
     let mut i = 1;
     while i < args.len() {
@@ -205,6 +242,16 @@ fn real_main() -> Result<ExitCode> {
             // MPROC1: repeatable; each APK is installed into the session beside
             // the launched one, at its own uid, with its own guest paths.
             "--extra-apk" => extra_apks.push(PathBuf::from(next(&mut i)?)),
+            // LAUNCHEXTRAS: the caller's Intent fields. `--extra KEY=VALUE`
+            // takes a JSON value (`42`, `true`, `0.5`, `["a","b"]`) or the
+            // explicit `{"type":"long","value":7}` form; a bare word is a
+            // string (`--extra greeting=hello`).
+            "--intent-action" => flag_action = Some(next(&mut i)?),
+            "--data" => flag_data = Some(next(&mut i)?),
+            "--extra" => {
+                let raw = next(&mut i)?;
+                flag_extras.push(parse_extra_arg(&raw).map_err(Error::Layout)?);
+            }
             // MPROC5c: the idle kill's timeout (0 disables it; tests set small).
             "--idle-kill-seconds" => idle_kill_secs = next(&mut i)?.parse().unwrap_or(30),
             "--package" => package = Some(next(&mut i)?),
@@ -395,6 +442,15 @@ fn real_main() -> Result<ExitCode> {
         }
         "launch" => {
             let apk = apk.ok_or_else(|| Error::Layout("launch needs --apk FILE".into()))?;
+            if let Some(action) = flag_action {
+                intent.action = Some(action);
+            }
+            if let Some(data) = flag_data {
+                intent.data = Some(data);
+            }
+            for (key, value) in flag_extras {
+                intent.extras.insert(key, value);
+            }
             let opts = acos_art::launch::LaunchOpts {
                 apk,
                 until,
@@ -410,6 +466,7 @@ fn real_main() -> Result<ExitCode> {
 
                 services,
                 extra_apks,
+                intent,
                 idle_kill_secs,
             };
             let res = acos_art::launch::launch(&root, &opts)?;

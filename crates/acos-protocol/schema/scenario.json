@@ -243,6 +243,50 @@
       ],
       "type": "object"
     },
+    "ExtraValue": {
+      "anyOf": [
+        {
+          "description": "a string extra",
+          "type": "string"
+        },
+        {
+          "description": "an int extra (a long when it does not fit)",
+          "type": "integer"
+        },
+        {
+          "description": "a double extra (a plain YAML float)",
+          "type": "number"
+        },
+        {
+          "description": "a boolean extra",
+          "type": "boolean"
+        },
+        {
+          "description": "a string array extra (String[])",
+          "items": {
+            "description": "a string array extra (String[])",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "description": "explicit form: {type: <java type>, value: <value>}; pins long vs int, float vs double, and names a refused parcelable extra",
+          "properties": {
+            "type": {
+              "description": "the Java type: string, int, long, float, double, boolean, string_array, parcelable",
+              "type": "string"
+            },
+            "value": true
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "A launch extra: a plain scalar (string, int, long when it does not fit an int, boolean, double for a plain float) or string array, or the explicit {type, value} form."
+    },
     "FallbackPolicy": {
       "description": "What to do when the preferred engine cannot run a step.",
       "oneOf": [
@@ -484,9 +528,9 @@
         },
         "extras": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/definitions/ExtraValue"
           },
-          "description": "String extras.",
+          "description": "Typed extras (`String`, `int`, `long`, `float`, `double`, `boolean`, `String[]`; see [`ExtraValue`] for the YAML spelling). A `parcelable` extra is a legal declaration that the ART launcher refuses by name.",
           "type": "object"
         },
         "idle_kill_seconds": {

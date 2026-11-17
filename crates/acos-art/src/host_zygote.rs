@@ -259,6 +259,13 @@ pub fn run_template(root: &ArtRoot, plan_dir: &Path, shims: SessionShims) -> Res
                 extra_apks: std::env::var_os(crate::launch::ENV_EXTRA_APKS)
                     .map(|value| std::env::split_paths(&value).collect())
                     .unwrap_or_default(),
+                // LAUNCHEXTRAS: a planned slot's launch Intent, the same
+                // `ACOSLAUNCH_INTENT` JSON a direct launcher reads.
+                intent: match std::env::var("ACOSLAUNCH_INTENT") {
+                    Ok(raw) if !raw.trim().is_empty() => serde_json::from_str(&raw)
+                        .map_err(|error| Error::Layout(format!("ACOSLAUNCH_INTENT: {error}")))?,
+                    _ => acos_protocol::LaunchIntent::default(),
+                },
                 // MPROC5c: a planned slot's idle kill, same env spelling the
                 // plan documents for the other launcher options.
                 idle_kill_secs: std::env::var("ACOSLAUNCH_IDLE_KILL_SECS")

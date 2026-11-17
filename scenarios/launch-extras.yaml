@@ -1,0 +1,72 @@
+# launch-extras: the launch Intent a scenario declares reaches the Activity.
+#
+# Until LAUNCHEXTRAS a scenario's `launch.extras:` (and `intent_action:` /
+# `data:`) were accepted and then dropped silently by the live launcher, which
+# built its own ACTION_MAIN/CATEGORY_LAUNCHER Intent (WVFAIR finding). They are
+# now carried through the session-start launch: the host encodes the real
+# `Intent` with the parcelable codec (byte-compared with real Java) and the
+# guest unmarshals it with the framework's own `Intent.CREATOR` before the
+# `LaunchActivityItem` runs. What the Activity's `getIntent()` reports is what
+# the scenario declared, not what the engine felt like building.
+#
+# One extra per supported Java type (string, int, long, boolean, float, double,
+# String[]), each read with the matching `Bundle.get*Extra` so a type written
+# with the wrong wire tag would surface as the framework's default instead of
+# the declared value.
+version: 1
+name: launch-extras
+description: >-
+  Launch the Intent probe with an explicit action, a data URI and one typed
+  extra of every supported Java type; verify the Activity's own getIntent()
+  reports the action, the data string and every extra with its declared type.
+app: fixtures/build/apps/launch-extras-probe.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 60000}
+steps:
+  - launch:
+      activity: dev.acos.fixtures.launchextras/.MainActivity
+      intent_action: dev.acos.fixtures.launchextras.ACTION
+      data: acos://launch/extras?source=scenario
+      extras:
+        probe_string: hello
+        probe_int: 42
+        # Does not fit a Java int: a plain YAML integer infers `long`.
+        probe_long: 5000000000
+        probe_boolean: true
+        # A plain YAML float infers `double`; the explicit form pins `float`.
+        probe_float: {type: float, value: 1.5}
+        probe_double: 0.25
+        probe_string_array: [alpha, beta]
+      clear_state: true
+
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "action=dev.acos.fixtures.launchextras.ACTION data=acos://launch/extras?source=scenario"}
+
+  # The app's own reading of getIntent(): one line per fact, in its order.
+  - assert_log:
+      tag: AcosLaunchExtras
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^ACOSPROBE launch-extras action=dev\.acos\.fixtures\.launchextras\.ACTION$'
+        - '^ACOSPROBE launch-extras data=acos://launch/extras\?source=scenario$'
+        - '^ACOSPROBE launch-extras string=hello$'
+        - '^ACOSPROBE launch-extras int=42$'
+        - '^ACOSPROBE launch-extras long=5000000000$'
+        - '^ACOSPROBE launch-extras boolean=true$'
+        - '^ACOSPROBE launch-extras float=1\.5$'
+        - '^ACOSPROBE launch-extras double=0\.25$'
+        - '^ACOSPROBE launch-extras string_array=\[alpha, beta\]$'

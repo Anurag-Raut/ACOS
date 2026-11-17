@@ -718,6 +718,24 @@ impl ServeEngine {
             }
         };
         let idle_kill_requested = idle_kill_seconds.is_some();
+        // LAUNCHEXTRAS: `intent_action`, `data` and typed `extras` are
+        // launch-time like `animations`/`extra_apks`. A `parcelable` extra is
+        // refused by name here, before a guest exists (the encoder cannot send
+        // it and silently dropping it would be the WVFAIR bug again).
+        let (launch_intent, intent_requested) = match launch_intent_arg(args) {
+            Ok(value) => value,
+            Err(error) => return art_error(request_id, Some(id), trust, &error),
+        };
+        if let Some(detail) = launch_intent.unsupported_detail() {
+            return art_failure(
+                request_id,
+                Some(id),
+                trust,
+                ErrorCode::UnsupportedAndroidApi,
+                detail,
+                json!({"field": "extras", "extra_type": "parcelable"}),
+            );
+        }
         let apk = match acos_mcp::safety::validate_path(apk_arg, &ctx.allowed_roots) {
             Ok(path) => path,
             Err(reason) => {
@@ -824,6 +842,24 @@ impl ServeEngine {
                         ),
                         "idle_kill_seconds is launch-time: call acos_destroy for this session id, \
                          then acos_launch with the value you want.",
+                    );
+                }
+                if intent_requested && session.intent() != &launch_intent {
+                    return with_hint(
+                        art_failure(
+                            request_id,
+                            Some(id),
+                            held.trust,
+                            ErrorCode::InvalidArgument,
+                            format!(
+                                "session `{id}` was launched with a different Intent and a live                                  session cannot replace it (the activity already received it)"
+                            ),
+                            json!({
+                                "held_intent": session.intent(),
+                                "requested_intent": launch_intent,
+                            }),
+                        ),
+                        "intent_action/data/extras are launch-time: call acos_destroy for this                          session id, then acos_launch with the Intent you want.",
                     );
                 }
                 if args.get("insets").is_some() && session.insets() != insets {
@@ -954,6 +990,7 @@ impl ServeEngine {
             // addresses the network of the session the caller holds.
             Some(id),
             &services,
+            &launch_intent,
         ) {
             Ok(mut session) => {
                 session.set_settle_timeout(settle_timeout_ms);
@@ -3228,6 +3265,79 @@ fn idle_kill_seconds_arg(args: &Value) -> Result<Option<u64>, Value> {
             _ => Err(value.clone()),
         },
     }
+}
+
+/// LAUNCHEXTRAS: parse one `--extra KEY=VALUE` (the CLI spelling).
+///
+/// `VALUE` is JSON first (`42`, `true`, `0.5`, `["a","b"]`,
+/// `{"type":"long","value":7}`), then a bare string (`greeting=hello`). The same
+/// parser the MCP `extras` map uses through serde, so the two surfaces cannot
+/// disagree about what a value means.
+pub fn parse_extra_argument(
+    raw: &str,
+) -> Result<(String, acos_protocol::ExtraValue), String> {
+    let (key, value) = raw
+        .split_once('=')
+        .ok_or_else(|| format!("--extra needs KEY=VALUE (got {raw:?})"))?;
+    if key.is_empty() {
+        return Err(format!("--extra {raw:?} has an empty key"));
+    }
+    let parsed = match serde_json::from_str::<acos_protocol::ExtraValue>(value) {
+        Ok(value) => value,
+        Err(_) if !value.starts_with(['{', '[', '"']) => {
+            acos_protocol::ExtraValue::String(value.to_string())
+        }
+        Err(error) => return Err(format!("--extra {key}: {error}")),
+    };
+    Ok((key.to_string(), parsed))
+}
+
+/// LAUNCHEXTRAS: read the launch `Intent` arguments (`intent_action`, `data`,
+/// `extras`).
+///
+/// Returns the Intent and whether the caller named any of the three (a live
+/// session cannot replace an Intent it already delivered). An argument of the
+/// wrong JSON type is `INVALID_ARGUMENT` naming the field and the type that
+/// arrived; a malformed extra is the same error, never a silently dropped key.
+fn launch_intent_arg(
+    args: &Value,
+) -> Result<(acos_protocol::LaunchIntent, bool), BackendError> {
+    let field = |name: &str| -> Result<Option<&str>, BackendError> {
+        match args.get(name) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(value)) => Ok(Some(value.as_str())),
+            Some(other) => Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: format!("`{name}` must be a string (got {})", json_kind(other)),
+            }),
+        }
+    };
+    let action = field("intent_action")?;
+    let data = field("data")?;
+    let extras = match args.get("extras") {
+        None | Some(Value::Null) => std::collections::BTreeMap::new(),
+        Some(value) => match serde_json::from_value::<
+            std::collections::BTreeMap<String, acos_protocol::ExtraValue>,
+        >(value.clone())
+        {
+            Ok(extras) => extras,
+            Err(error) => {
+                return Err(BackendError::Failed {
+                    code: ErrorCode::InvalidArgument,
+                    detail: format!("`extras` is not a typed extra map: {error}"),
+                })
+            }
+        },
+    };
+    let requested = action.is_some() || data.is_some() || !extras.is_empty();
+    Ok((
+        acos_protocol::LaunchIntent {
+            action: action.map(str::to_string),
+            data: data.map(str::to_string),
+            extras,
+        },
+        requested,
+    ))
 }
 
 /// The JSON type of an argument, for an error that names what arrived instead of

@@ -549,7 +549,7 @@ pub enum DataPolicy {
 }
 
 /// `run`: launch an app and create a session.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RunRequest {
     /// Identity fields; `isolation` and `display` are honoured here.
     pub base: RequestBase,
@@ -564,9 +564,9 @@ pub struct RunRequest {
     /// Intent data URI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
-    /// String extras.
+    /// Typed extras (see [`crate::launch::ExtraValue`]).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub extras: BTreeMap<String, String>,
+    pub extras: BTreeMap<String, crate::launch::ExtraValue>,
     /// Data lifetime policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_policy: Option<DataPolicy>,

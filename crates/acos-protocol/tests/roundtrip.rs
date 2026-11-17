@@ -601,7 +601,10 @@ fn command_requests_and_responses_round_trip() {
             activity: Some(".MainActivity".to_string()),
             intent_action: Some("android.intent.action.MAIN".to_string()),
             data: Some("https://example.test".to_string()),
-            extras: BTreeMap::from([("k".to_string(), "v".to_string())]),
+            extras: BTreeMap::from([(
+                "k".to_string(),
+                acos_protocol::ExtraValue::String("v".to_string()),
+            )]),
             data_policy: Some(DataPolicy::Ephemeral),
             name: Some("login".to_string()),
         }),

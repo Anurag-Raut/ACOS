@@ -114,6 +114,10 @@ pub struct ArtSession {
     /// ADR-0029 item 4: the `services:` specs this session was launched with,
     /// kept so a `reset`/relaunch attaches the same modules.
     services: Vec<serde_json::Value>,
+    /// LAUNCHEXTRAS: the launch `Intent` this session was started with (action,
+    /// data URI, typed extras). Kept so a `reset` relaunch carries the same
+    /// Intent the scenario declared.
+    intent: acos_protocol::LaunchIntent,
     /// The modules the guest's ready line reported as attached (verdict rows).
     modules: Vec<serde_json::Value>,
     /// The same rows, shared with `EngineBackend` so the verdict can cite the
@@ -1629,6 +1633,7 @@ impl ArtSession {
             None,
             None,
             &[],
+            &acos_protocol::LaunchIntent::default(),
         )
     }
 
@@ -1684,6 +1689,7 @@ impl ArtSession {
             zygote,
             session_id,
             services,
+            &acos_protocol::LaunchIntent::default(),
         )
     }
 
@@ -1704,6 +1710,7 @@ impl ArtSession {
         zygote: Option<Arc<ZygoteHost>>,
         session_id: Option<&str>,
         services: &[serde_json::Value],
+        intent: &acos_protocol::LaunchIntent,
     ) -> Result<ArtSession, BackendError> {
         let start = zygote.map(|host| ZygoteStart {
             key: zygote_key_of(apk, insets, animations, extra_apks),
@@ -1720,6 +1727,7 @@ impl ArtSession {
             start,
             session_id,
             services,
+            intent,
         )
     }
 
@@ -1733,6 +1741,7 @@ impl ArtSession {
         zygote: Option<ZygoteStart>,
         session_id: Option<&str>,
         services: &[serde_json::Value],
+        intent: &acos_protocol::LaunchIntent,
     ) -> Result<ArtSession, BackendError> {
         // NET4: every session has an id. `acos serve` supplies its own (the id
         // a client addresses); a one-shot run gets one from this process, which
@@ -1868,6 +1877,20 @@ impl ArtSession {
                     detail: format!(
                         "extra APK paths cannot be forwarded in one environment value: {error}"
                     ),
+                })?,
+            );
+        }
+        // LAUNCHEXTRAS: the caller's launch Intent, one JSON `LaunchIntent`. The
+        // launcher encodes it (the host builds the launch transaction) and the
+        // guest unmarshals the framework's own `Intent`. Omitted when the
+        // caller declared nothing, so a plain launch is byte-identical to
+        // before.
+        if !intent.is_empty() {
+            command.env(
+                "ACOSLAUNCH_INTENT",
+                serde_json::to_string(intent).map_err(|error| BackendError::Failed {
+                    code: acos_protocol::ErrorCode::InvalidArgument,
+                    detail: format!("launch Intent cannot be forwarded: {error}"),
                 })?,
             );
         }
@@ -2159,6 +2182,7 @@ impl ArtSession {
             height: 2400,
             density: 420,
             services: services.to_vec(),
+            intent: intent.clone(),
             modules: Vec::new(),
             module_rows: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             boot_image: None,
@@ -2641,6 +2665,12 @@ impl ArtSession {
     #[must_use]
     pub fn idle_kill_seconds(&self) -> Option<u64> {
         self.idle_kill_seconds
+    }
+
+    /// LAUNCHEXTRAS: the launch `Intent` this session was started with.
+    #[must_use]
+    pub fn intent(&self) -> &acos_protocol::LaunchIntent {
+        &self.intent
     }
 
     /// MPROC1: run one session control op (`acos_service_ctl`).
@@ -5123,6 +5153,10 @@ fn content_capture_refusal(settle: Option<&serde_json::Value>) -> Option<Backend
 }
 
 impl SessionBackend for ArtSession {
+    fn launch_intent(&self) -> Option<&acos_protocol::LaunchIntent> {
+        Some(&self.intent)
+    }
+
     fn engine(&self) -> Engine {
         Engine::Art
     }
@@ -5749,6 +5783,7 @@ impl SessionBackend for ArtSession {
                 // the relay session name) the client already holds.
                 Some(&self.session_id),
                 &self.services,
+                &self.intent,
             ) {
                 Ok(session) => {
                     fresh = Some(session);

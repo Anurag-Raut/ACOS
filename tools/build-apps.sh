@@ -328,7 +328,7 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # insets-probe, …) silently stopped being built. One list, the union of both.
 for app in counter todo-list multi-activity finish-start form-validation settle-lab \
            thread-heavy svg-viewbox offscreen-pager looper-wake sensor-probe \
-           notif-perm-probe; do
+           notif-perm-probe launch-extras-probe; do
     build_apk "$app"
 done
 

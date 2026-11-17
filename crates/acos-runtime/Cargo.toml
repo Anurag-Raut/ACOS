@@ -21,6 +21,9 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+# LAUNCHEXTRAS: the launch-Intent differential builds the same protocol value
+# the host receives from a scenario.
+acos-protocol = { path = "../acos-protocol" }
 acos-gles = { path = "../acos-gles" }
 acos-native-loader = { path = "../acos-native-loader" }
 acos-sandbox = { path = "../acos-sandbox" }
