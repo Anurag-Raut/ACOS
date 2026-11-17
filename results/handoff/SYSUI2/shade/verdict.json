@@ -5,6 +5,7 @@
     "path": "fixtures/build/apps/notif-perm-probe.apk",
     "sha256": "72a670c39b93a5a0832d1a736fa127248a39b39b4fbffb60d984d2145eff92ed"
   },
+  "artifacts_overwrote_run": "req_a690f_18e8e352d945129f",
   "backend": "acos-native",
   "certification": "certified-with-limits",
   "certification_limits": {
@@ -70,7 +71,7 @@
     "summary": "step 9 (tap) timeout"
   },
   "fidelity": "art-reference",
-  "finished_at": "2026-11-17T16:43:02.688Z",
+  "finished_at": "2026-11-17T16:56:12.199Z",
   "insets": "report",
   "isolation": "process",
   "mode": "live",
@@ -278,7 +279,8 @@
     "stopped at step 9 (tap): timeout; later steps were not executed",
     "scenario expected `pass`, engine produced `timeout` — result is a truthful partial",
     "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
-    "artifacts: referenced (keep-all): 29 file(s) / 0.8 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json",
+    "artifacts: referenced (keep-all): 29 file(s) / 0.9 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json",
+    "artifacts: --overwrite replaced the evidence of run req_a690f_18e8e352d945129f",
     "fidelity: module `accessibility` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `sensors` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `feedback.vibrator` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
@@ -317,15 +319,15 @@
     "scenario_path": "scenarios/sysui1-shade.yaml",
     "scenario_sha256": "9dd515f6614338200312284d53f1ed73d0f8e4ec751d048f3339c7994e356709"
   },
-  "request_id": "req_9d394_18e8e2c2bdaa3234",
+  "request_id": "req_a7e1d_18e8e37a8ad5e4be",
   "resources": {
     "events": 177,
     "frames_captured": 7,
     "memory_mib": 15,
-    "peak_rss_bytes": 16338944,
+    "peak_rss_bytes": 16351232,
     "sessions": 1,
     "steps": 10,
-    "wall_ms": 5003
+    "wall_ms": 5046
   },
   "scenario": {
     "name": "sysui1-shade",
@@ -335,9 +337,9 @@
   "schema_version": 1,
   "session_exit": {
     "abi": null,
-    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=57MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p644023-i696831.scope)",
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=59MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p687658-i730930.scope)",
     "code": null,
-    "disk_free_bytes": 235633815552,
+    "disk_free_bytes": 231186411520,
     "guest_crash": null,
     "guest_exit": 0,
     "guest_signal": null,
@@ -350,12 +352,12 @@
     "stage": "teardown-evidence"
   },
   "session_id": "s_art_notif-perm-probe",
-  "started_at": "2026-11-17T16:42:57.685Z",
+  "started_at": "2026-11-17T16:56:07.153Z",
   "status": "timeout",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 114,
+      "duration_ms": 116,
       "evidence": [
         {
           "kind": "step",
@@ -374,7 +376,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 53,
+      "duration_ms": 54,
       "evidence": [
         {
           "kind": "tree",
@@ -401,7 +403,7 @@
         "probe_seq": 4,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 40
+        "tree_age_ms": 39
       },
       "status": "pass",
       "step": "wait_for"
@@ -464,7 +466,7 @@
         "probe_seq": 4,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 40
+        "tree_age_ms": 39
       },
       "status": "pass",
       "step": "assert_text"
@@ -1034,7 +1036,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 267,
+      "duration_ms": 308,
       "evidence": [
         {
           "kind": "tree",
@@ -1058,10 +1060,10 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 9,
+        "probe_seq": 10,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 38
+        "tree_age_ms": 35
       },
       "status": "pass",
       "step": "wait_for"
@@ -1087,7 +1089,7 @@
                   2400
                 ],
                 "focus": true,
-                "id": "b86c7bd",
+                "id": "dd1ae3a",
                 "kind": "application",
                 "label": "main",
                 "touchable": true,
@@ -1132,10 +1134,10 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 9,
+        "probe_seq": 10,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 38
+        "tree_age_ms": 35
       },
       "status": "pass",
       "step": "assert_windows"
@@ -1195,10 +1197,10 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 9,
+        "probe_seq": 10,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 38
+        "tree_age_ms": 35
       },
       "status": "pass",
       "step": "assert_text"
@@ -1258,17 +1260,17 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 9,
+        "probe_seq": 10,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 38
+        "tree_age_ms": 35
       },
       "status": "pass",
       "step": "assert_text"
     },
     {
       "assertions": [],
-      "duration_ms": 4542,
+      "duration_ms": 4540,
       "error": {
         "class": "infra_timeout",
         "code": "TIMEOUT",

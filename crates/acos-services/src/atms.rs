@@ -679,7 +679,20 @@ impl AtmsState {
     /// is the same event at the same point (before any attach). A record that
     /// already exists keeps its pid/uid (a re-attach is not a new process).
     pub fn process_started(&mut self, tag: u32, package: &str, uid: i32) {
-        if self.process(tag).is_some() {
+        if let Some(existing) = self.process_mut(tag) {
+            // SYSUI2: the record can exist before the handshake that names the
+            // package (`attachApplication` carries no package argument, so the
+            // attach path creates the record with an empty name). The peer's
+            // connection handshake is the event that knows it, and a record with
+            // an empty package cannot answer "does this package already run?"
+            // (`Peer::package_of` -> the pending launch of an Activity started in
+            // the running process).
+            if existing.package_name.is_empty() && !package.is_empty() {
+                existing.package_name = package.to_string();
+            }
+            if existing.uid == 0 {
+                existing.uid = uid;
+            }
             return;
         }
         self.processes.push(ProcessRecord {

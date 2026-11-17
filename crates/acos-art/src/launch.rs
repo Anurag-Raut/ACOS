@@ -859,6 +859,9 @@ struct SecondaryPool {
     /// thread blocked in a service handler, a suppressed close, an immediate
     /// respawn under the same tag).
     atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+    /// SYSUI2: the session's **primary** package (tag 0). A spawn request for it
+    /// is a start into a process that already runs, not a package to start.
+    primary_package: String,
     started: Instant,
 }
 
@@ -867,6 +870,7 @@ impl SecondaryPool {
         specs: Vec<SecondarySpec>,
         shared: SecondaryShared,
         atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+        primary_package: String,
     ) -> Self {
         Self {
             specs,
@@ -877,6 +881,7 @@ impl SecondaryPool {
             failures: Vec::new(),
             kills: Vec::new(),
             atms,
+            primary_package,
             started: Instant::now(),
         }
     }
@@ -897,6 +902,22 @@ impl SecondaryPool {
         probe_state: &Arc<std::sync::Mutex<ProbeState>>,
         compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
     ) {
+        // SYSUI2: the session's own app **is** a running process (`tag 0`). A
+        // start of one of its Activities (the notification's content sender, an
+        // app's own second Activity) records the launch and the peer delivers it
+        // to that process (`Peer::take_host_transactions`); the launcher must not
+        // try to start a package it never installed as a secondary.
+        if !self.primary_package.is_empty() && request.package == self.primary_package {
+            self.records.push(serde_json::json!({
+                "package": request.package,
+                "component": request.component,
+                "reason": request.reason,
+                "tag": 0,
+                "spawned": false,
+                "note": "the session's primary process (tag 0); the launch goes to it",
+            }));
+            return;
+        }
         if let Some(tag) = self.running_tag(&request.package) {
             self.records.push(serde_json::json!({
                 "package": request.package,
@@ -2182,7 +2203,12 @@ pub(crate) fn launch_session(
         live_probe: interactive,
     };
     let mut secondary_pool =
-        SecondaryPool::new(secondary_specs, secondary_shared, Arc::clone(&live.atms));
+        SecondaryPool::new(
+            secondary_specs,
+            secondary_shared,
+            Arc::clone(&live.atms),
+            package.clone(),
+        );
     if !interactive && !secondary_pool.specs.is_empty() {
         eprintln!(
             "acos-art: launch: {} secondary package(s) installed; a non-interactive session has \

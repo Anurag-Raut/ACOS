@@ -43,7 +43,7 @@
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 644023,
+      "guest_process_group": 687658,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -249,7 +249,7 @@
       "ok": true,
       "package": "dev.acos.fixtures.notifpermprobe",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-643993-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-687647-1/view.sock",
       "width": 1080
     },
     {
@@ -814,7 +814,7 @@
       "frame_seq": 4,
       "ok": true,
       "png": "results/handoff/SYSUI2/shade/art-frames/live-frames/acos-c1-layer7-frame-7-g8-c4.png",
-      "probe_seq": 9
+      "probe_seq": 10
     },
     {
       "cmd": "logs",
@@ -849,7 +849,7 @@
       "frame_seq": 5,
       "ok": true,
       "pixels": false,
-      "probe_seq": 9
+      "probe_seq": 10
     },
     {
       "bound": "timeout",
@@ -864,12 +864,12 @@
         "acks": [
           {
             "handled": true,
-            "latency_us": 5068,
+            "latency_us": 5089,
             "seq": 3
           },
           {
             "handled": true,
-            "latency_us": 5067,
+            "latency_us": 5090,
             "seq": 4
           }
         ],
@@ -888,8 +888,8 @@
       "pixels_fnv1a": "c9d9abd0d08af763",
       "png": "results/handoff/SYSUI2/shade/art-frames/live-frames/acos-c1-layer3-frame-1-g1-c6.png",
       "png_bytes": 84299,
-      "probe_at_ms": 1794933779697,
-      "probe_seq": 11,
+      "probe_at_ms": 1794934569214,
+      "probe_seq": 12,
       "producer_id": 1,
       "settle": {
         "ack_ms": 5,
@@ -907,7 +907,7 @@
       },
       "settled": false,
       "tree": {
-        "emit_us": 255,
+        "emit_us": 434,
         "node_budget": 2000,
         "nodes": [
           {

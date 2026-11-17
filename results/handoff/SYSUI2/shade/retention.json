@@ -3,7 +3,7 @@
   "decision": "keep-all",
   "reason": "status `timeout` is not a pass: a non-pass run keeps all of its artifacts",
   "kept_files": 29,
-  "kept_bytes": 885512,
+  "kept_bytes": 892596,
   "pruned_files": 0,
   "pruned_bytes": 0,
   "pruned": []
