@@ -127,6 +127,16 @@ fn the_network_module_passes_the_conformance_kit() {
     run_in_quiet_process("network");
 }
 
+/// WV8: the `webview` module's kit row. It provides no `ServiceManager` name
+/// (`webviewupdate` and `hasSystemFeature` are `core`'s, answered from the
+/// package table the provider install writes), so the names half of the kit is
+/// empty; what it owes is the attach/detach cycle (nothing bound, nothing left),
+/// the honest report, the refusals and the budget.
+#[test]
+fn the_webview_module_passes_the_conformance_kit() {
+    run_in_quiet_process("webview");
+}
+
 #[test]
 fn the_permissions_module_passes_the_conformance_kit() {
     run_in_quiet_process("system.permissions");

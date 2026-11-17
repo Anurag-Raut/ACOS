@@ -415,8 +415,26 @@ pub struct ServiceHost {
     /// start live in the AMS, so the registry publishes the delivery here
     /// instead of a module reaching into the ATMS state.
     pending_intent_fire: Option<FireSender>,
+    /// The host paths of this session's WebView endpoints, published by the
+    /// launcher (WV8 `webview` module). The module answers `status` from them
+    /// instead of recomputing a path the launcher already decided, so the two
+    /// cannot name different sockets.
+    webview_gate: Option<WebviewGate>,
     /// Overwrite logs, one per open [`RegistrationScope`].
     overwrites: Vec<Vec<(&'static str, BinderId, Factory)>>,
+}
+
+/// The host endpoints the launcher bound for a session's WebView (ADR-0031).
+///
+/// `socket` is the per-session gate the guest connects to (mounted at
+/// `/run/acos/webview.sock`); `broker_socket` is the shared daemon's endpoint,
+/// which exists only while a broker runs (one Chromium per host).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WebviewGate {
+    /// The session's gate socket (host path).
+    pub socket: Option<std::path::PathBuf>,
+    /// The shared broker's endpoint (host path), if the launcher named one.
+    pub broker_socket: Option<std::path::PathBuf>,
 }
 
 impl core::fmt::Debug for ServiceHost {
@@ -465,6 +483,7 @@ impl ServiceHost {
             a11y_window_token: None,
             permission_store: None,
             pending_intent_fire: None,
+            webview_gate: None,
             overwrites: Vec::new(),
         }
     }
@@ -1002,6 +1021,18 @@ impl ServiceHost {
         &self,
     ) -> Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>> {
         self.permission_store.as_ref().map(std::sync::Arc::clone)
+    }
+
+    /// Publish this session's WebView endpoints (WV8: the launcher binds the
+    /// gate socket, so it is the one that knows the paths).
+    pub fn set_webview_gate(&mut self, gate: WebviewGate) {
+        self.webview_gate = Some(gate);
+    }
+
+    /// The WebView endpoints, when the launcher published them.
+    #[must_use]
+    pub fn webview_gate(&self) -> Option<&WebviewGate> {
+        self.webview_gate.as_ref()
     }
 
     /// Enable the per-call trace.

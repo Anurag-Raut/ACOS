@@ -4541,8 +4541,13 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::Str16 => call == "writeString" || call == "writeString16",
         // The scanner records `TextUtils.writeToParcel` as a single
         // `writeString` op, so a `CharSequence` field matches that one call
-        // even though the wire form is `int + writeString8`.
-        FieldOp::CharSequence => call == "writeString",
+        // even though the wire form is `int + writeString8`. `Parcel
+        // .writeCharSequence` is that same call one level up
+        // (`Parcel.java`: `writeCharSequence` -> `TextUtils.writeToParcel`), and
+        // the API-34 image's own dex records it under its own name
+        // (`AccessibilityWindowAttributes.writeToParcel` = `writeCharSequence`,
+        // `writeParcelable`), so both names are the one op.
+        FieldOp::CharSequence => call == "writeString" || call == "writeCharSequence",
         FieldOp::Str8 => call == "writeString8",
         FieldOp::StringArray => call == "writeStringArray",
         // `writeString8Array` and `writeStringArray` are different wire

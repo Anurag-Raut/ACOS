@@ -11,3 +11,4 @@ pub mod sensors;
 pub mod tail_stubs;
 pub mod telephony;
 pub mod vibrator;
+pub mod webview;
