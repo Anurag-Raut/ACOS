@@ -2300,6 +2300,8 @@ public final class LaunchMain {
             }
         }
         return sb.toString();
+    }
+
     /**
      * ROT8: is the app's task finished? True only when (a) `activity` was
      * finished and destroyed by the framework (`mFinished` + `isDestroyed()`),

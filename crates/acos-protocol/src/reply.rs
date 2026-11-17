@@ -690,6 +690,41 @@ fn enforce_cap_measured(
         }
         string_cap /= 2;
     }
+    // 3b. A capabilities answer: `commands[]` is the answer an agent acts on
+    //     (what this build can do), while `modules[]` is the ADR-0029 catalog
+    //     with its own query paths (`acos_services {"op": "list"}`, `acos_help
+    //     topic: "limits"`). The catalog is the bulk — dropping it (naming the
+    //     pointer) keeps every command row, which step 4 would otherwise replace
+    //     wholesale with `reply_capped`.
+    if value.pointer("/result/commands").is_some()
+        && value
+            .pointer_mut("/result")
+            .and_then(Value::as_object_mut)
+            .is_some_and(|result| {
+                let had = result.remove("modules");
+                if let Some(modules) = had {
+                    result.insert("modules_omitted".into(), Value::Bool(true));
+                    result.insert(
+                        "modules_note".into(),
+                        Value::String(
+                            "the module catalog was omitted to keep this reply under the cap; \
+                             ask `acos_services {\"op\": \"list\"}` or `acos_help {\"topic\": \
+                             \"limits\"}` for the same rows"
+                                .to_string(),
+                        ),
+                    );
+                    if let Some(count) = modules.as_array().map(Vec::len) {
+                        result.insert("modules_total".into(), json!(count));
+                    }
+                    true
+                } else {
+                    false
+                }
+            })
+        && measure(value) <= max_bytes
+    {
+        return before - measure(value);
+    }
     // 4. Anything else: keep the envelope, the diagnosis and the pointer to the
     //    artifacts, and drop only the *bulk*. A silent cut is worse than an
     //    honest "read it from here", but a pointer that says nothing about the

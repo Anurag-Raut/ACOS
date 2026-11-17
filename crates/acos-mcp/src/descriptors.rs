@@ -1086,7 +1086,9 @@ pub fn capabilities_tool() -> ToolInfo {
             "pass `refresh: true` to re-probe the backend after a rebuild."
         )
         .to_string(),
-        input_schema: json!({
+        // ADR-0029 item 4/6: a named session adds its attached modules to the
+        // answer (`docs/MCP.md`), so the closed schema must accept the name.
+        input_schema: with_session_id(json!({
             "type": "object",
             "properties": {
                 "refresh": {
@@ -1095,7 +1097,7 @@ pub fn capabilities_tool() -> ToolInfo {
                 }
             },
             "additionalProperties": false
-        }),
+        })),
         available: true,
         fidelity: Fidelity::NotApplicable,
         reason: None,
