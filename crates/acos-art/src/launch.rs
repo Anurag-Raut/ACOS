@@ -384,6 +384,10 @@ pub struct SessionShims {
     pub substrate: PathBuf,
     pub art_shim: PathBuf,
     pub driver: PathBuf,
+    /// The software gralloc interposer this binary was built with
+    /// ([`crate::gralloc_shim`]): the sysroot's copy when it matches the
+    /// embedded source, else a cached build of it.
+    pub gralloc: PathBuf,
 }
 
 /// A service graph built before the fork (ZM2 prototype C).
@@ -493,10 +497,13 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     crate::stage("art-shim");
     let driver = build_driver(root)?;
     crate::stage("binder-driver");
+    let gralloc = crate::gralloc_shim(root)?;
+    crate::stage("gralloc-shim");
     let shims = SessionShims {
         substrate,
         art_shim,
         driver,
+        gralloc,
     };
     // ZM2 prototype C (research seam, off by default): with a plan, this
     // process is the warm host template that forks one launcher per session.
@@ -603,6 +610,8 @@ struct SecondaryShared {
     substrate: PathBuf,
     art_shim: PathBuf,
     driver: PathBuf,
+    /// The software gralloc interposer (see [`SessionShims::gralloc`]).
+    gralloc: PathBuf,
     /// The session's extracted native-library root (`/data/app-lib`).
     native_lib_root: PathBuf,
     /// Session socket directory (bound at `/dev/socket`; both guests share it,
@@ -670,10 +679,7 @@ impl SecondaryShared {
         sb.ro_bind(&self.substrate, "/data/app/libacosart.so");
         sb.ro_bind(&spec.staged, &spec.guest_apk);
         sb.ro_bind(&spec.lib_root, &spec.guest_lib_root);
-        sb.ro_bind(
-            &self.root.sysroot.join("shim/libacoshw.so"),
-            "/data/libacoshw.so",
-        );
+        sb.ro_bind(&self.gralloc, "/data/libacoshw.so");
         sb.ro_bind(&self.driver, "/data/lib/libacos_binder_driver.so");
         sb.ro_bind(&self.root.data.join("seccomp"), "/data/seccomp");
         // The **same** sockets directory as the primary (both guests write to
@@ -2179,6 +2185,7 @@ pub(crate) fn launch_session(
         substrate: shims.substrate.clone(),
         art_shim: shims.art_shim.clone(),
         driver: shims.driver.clone(),
+        gralloc: shims.gralloc.clone(),
         native_lib_root: native_lib_root.clone(),
         sockets: sockets.0.clone(),
         sock: sock.clone(),
@@ -2246,10 +2253,7 @@ pub(crate) fn launch_session(
         sb.ro_bind(&extra.staged, &extra.guest_path);
         sb.ro_bind(&extra.lib_root, &extra.guest_lib_root);
     }
-    sb.ro_bind(
-        &root.sysroot.join("shim/libacoshw.so"),
-        "/data/libacoshw.so",
-    );
+    sb.ro_bind(&shims.gralloc, "/data/libacoshw.so");
     sb.ro_bind(&shims.driver, "/data/lib/libacos_binder_driver.so");
     if let Some(dir) = &zygote_app {
         // Z3 research guest dex + the raw-syscall fork shim (Z1/Z2). bwrap

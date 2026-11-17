@@ -607,13 +607,27 @@ pub struct TapStep {
     /// Settle rule for this input (`strict` default, `fast` navigation).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle: Option<StepSettle>,
-    /// SE1: fail the step when the settled frame's pixels are unchanged.
+    /// SE1: fail the step when the settled frame's pixels are unchanged;
+    /// A11YPACE: `expect_change: false` says the tap's effect is transient (a
+    /// hide/re-show, an asynchronous worker) and **no** change is claimed.
     ///
-    /// Opt-in and strict-only: `expect_change: true` with `settle: fast` is
-    /// rejected at scenario-validation time, because a fast frame may be
-    /// mid-animation and can never back a claim.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub expect_change: bool,
+    /// The tap's own `state_change` assertion (the UI tree + screenshot rule a
+    /// tap runs even when the scenario says nothing) needs a tree that differs
+    /// between the pre- and post-action frames. That is wrong for a control
+    /// whose effect is transient: Gaten's bubble hides for its lookup and
+    /// re-shows a moment later, so two probe samples can land on the same tree
+    /// and a sampling race would fail the step. An explicit `false` turns the
+    /// assertion into the "input delivered, no change claimed" form (the same
+    /// `input_delivery` assertion a `handled: false` tap gets) and is recorded
+    /// as `input.expect_change: false` in the step and verdict, so it can never
+    /// read as a silent pass of a missing effect: only `true` or the default
+    /// ("auto") still require the change.
+    ///
+    /// `true` is strict-only: with `settle: fast`/`content` the pixel claim has
+    /// no evidence, so validation rejects it. `false` is not a claim and may
+    /// combine with any settle rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_change: Option<bool>,
     /// REL3H2: the scenario's own claim about the app's handling of this input.
     ///
     /// `true` fails the step with `INPUT_NOT_HANDLED` when the app window
@@ -1437,13 +1451,18 @@ fn validate_regex(validation: &mut ScenarioValidation, path: &str, pattern: &str
 fn validate_expect_change(
     validation: &mut ScenarioValidation,
     path: &str,
-    expect_change: bool,
+    expect_change: Option<bool>,
     settle: Option<StepSettle>,
 ) {
-    // SE2: `expect_change` is a pixel claim. A content-stable frame is never
-    // pixel evidence (the pixels may still be animating), so the combination
-    // is rejected at parse time exactly like fast.
-    if expect_change && matches!(settle, Some(StepSettle::Fast | StepSettle::Content)) {
+    // SE2: `expect_change: true` is a pixel claim. A content-stable frame is
+    // never pixel evidence (the pixels may still be animating), so the
+    // combination is rejected at parse time exactly like fast.
+    //
+    // A11YPACE: only `true` is a claim. `expect_change: false` (a tap whose
+    // effect is transient) asks for *no* evidence, so it may combine with any
+    // settle rule; the tap then reports `input_delivery` with "no change
+    // claimed" instead of running the tree/pixel comparison.
+    if expect_change == Some(true) && matches!(settle, Some(StepSettle::Fast | StepSettle::Content)) {
         let mode = if matches!(settle, Some(StepSettle::Content)) {
             "content"
         } else {
@@ -1756,7 +1775,7 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     swipe.duration_ms,
                     swipe.settle_timeout_ms,
                 );
-                validate_expect_change(&mut v, &path, swipe.expect_change, swipe.settle);
+                validate_expect_change(&mut v, &path, Some(swipe.expect_change), swipe.settle);
             }
             StepRef::ScrollUntil(scroll) => {
                 validate_swipe_geometry(
@@ -1793,10 +1812,10 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 if ty.text.is_empty() && !ty.clear {
                     v.push(&path, "type needs non-empty `text` (or `clear: true`)");
                 }
-                validate_expect_change(&mut v, &path, ty.expect_change, ty.settle);
+                validate_expect_change(&mut v, &path, Some(ty.expect_change), ty.settle);
             }
             StepRef::Key(key) => {
-                validate_expect_change(&mut v, &path, key.expect_change, key.settle)
+                validate_expect_change(&mut v, &path, Some(key.expect_change), key.settle)
             }
             StepRef::Back(_) | StepRef::Rotate(_) => {}
             StepRef::AssertText(assertion) => {
@@ -2253,13 +2272,15 @@ steps:
   - back: {expect_change: true}
 "#;
 
-    /// SE1: the flag is a bool on the action payloads and defaults to false
-    /// (so every existing scenario keeps the P12 rule).
+    /// SE1: the flag on the action payloads. A tap's is tri-state
+    /// (`None` = the implicit "auto" tree rule, `true` = a change claim,
+    /// `false` = A11YPACE's "transient effect, no change claimed"); the other
+    /// actions keep the bool (default `false`, no claim).
     #[test]
     fn expect_change_parses_as_a_bool_and_defaults_false() {
         let scenario = Scenario::from_yaml_str(EXPECT_CHANGE).expect("valid scenario");
         assert!(scenario.validate().is_ok(), "{:?}", scenario.validate());
-        assert!(scenario.steps[1].tap.as_ref().unwrap().expect_change);
+        assert_eq!(scenario.steps[1].tap.as_ref().unwrap().expect_change, Some(true));
         assert!(scenario.steps[2].back.as_ref().unwrap().expect_change);
 
         let plain = Scenario::from_yaml_str(
@@ -2267,10 +2288,38 @@ steps:
         )
         .expect("valid scenario");
         assert!(plain.validate().is_ok(), "{:?}", plain.validate());
-        assert!(!plain.steps[0].tap.as_ref().unwrap().expect_change);
+        assert_eq!(plain.steps[0].tap.as_ref().unwrap().expect_change, None);
         assert!(!plain.steps[1].back.as_ref().unwrap().expect_change);
-        // A false flag is not written back: the wire form is unchanged.
+        // An unset flag is not written back: the wire form is unchanged.
         assert!(!plain.to_yaml_string().unwrap().contains("expect_change"));
+    }
+
+    /// A11YPACE: `expect_change: false` on a tap is a first-class value: it
+    /// says "the effect is transient, no change claimed", it survives a
+    /// round-trip (so a replayed scenario keeps it), and it is *not* subject to
+    /// the pixel-claim rule that rejects `true` with fast/content.
+    #[test]
+    fn a11ypace_tap_expect_change_false_is_an_explicit_no_change_claim() {
+        for settle in ["", ", settle: fast", ", settle: content"] {
+            let yaml = format!(
+                "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {{mode: offscreen, width: 8, height: 8, density_dpi: 420}}\nsteps:\n  - tap: {{x: 1, y: 2, expect_change: false{settle}}}\n"
+            );
+            let scenario = Scenario::from_yaml_str(&yaml).expect("valid scenario");
+            assert!(
+                scenario.validate().is_ok(),
+                "expect_change: false{settle} is not a pixel claim: {:?}",
+                scenario.validate()
+            );
+            assert_eq!(
+                scenario.steps[0].tap.as_ref().unwrap().expect_change,
+                Some(false)
+            );
+            assert!(scenario.to_yaml_string().unwrap().contains("expect_change: false"));
+        }
+        // The pixel claim keeps its strict-only rule.
+        let yaml = "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nsteps:\n  - tap: {x: 1, y: 2, settle: fast, expect_change: true}\n";
+        let scenario = Scenario::from_yaml_str_unvalidated(yaml).expect("parses");
+        assert!(!scenario.validate().is_ok());
     }
 
     const EXPECT_HANDLED: &str = r#"

@@ -1,0 +1,24 @@
+{
+  "frame": {
+    "frame_seq": 124,
+    "produced_at": "2026-11-17T16:59:31.366Z",
+    "cause_id": "art",
+    "width": 1080,
+    "height": 2400,
+    "density": 420,
+    "content_hash": "",
+    "meaningful": true,
+    "display_origin": [
+      0,
+      0
+    ],
+    "display_size": [
+      1080,
+      2400
+    ]
+  },
+  "package": "dev.acos.fixtures.backlayers",
+  "nodes": [],
+  "truncated": false,
+  "text_available": true
+}

@@ -1,0 +1,74 @@
+# a11y-screenshot-wrap: the app wraps the screenshot HardwareBuffer in a Bitmap.
+#
+# A11YPACE item 3. `takeScreenshot` hands the service a `HardwareBuffer` over a
+# memfd copy of the composited frame (MODA11YNATIVE), and the only app-side way
+# to use it is `Bitmap.wrapHardwareBuffer`. That call asks libhwui for the
+# buffer's byte size through `GraphicBufferMapper::getAllocationSize` (libui),
+# whose HAL mapper object is null in a gralloc-less guest; the software gralloc
+# shim owns the memory and answers from the handle's own geometry.
+#
+# Teeth: with a sysroot whose prebuilt shim predates that entry point, the guest
+# died with `Fatal signal 11 (SIGSEGV)` in
+# `android::GraphicBufferMapper::getAllocationSize+3` (libui's own copy — the
+# `.so` in the sysroot was older than the shim source, so the interposition was
+# not there at all). `acos-art` now verifies the sysroot stamp against its
+# embedded shim source and rebuilds a stale shim from those bytes, so a session
+# can never run a shim that is missing entry points.
+#
+# This scenario asserts the *working* outcome: a HARDWARE bitmap with the frame's
+# geometry, and `getAllocationByteCount()` = 1080 * 2400 * 4 = 10 368 000, which
+# is the shim's answer (the call that used to crash). No crash is claimed
+# implicitly: `assert_no_crash` is the last step, and a native crash ends the
+# run before it.
+#
+# What this does NOT cover, and why: *drawing* that HARDWARE bitmap needs an
+# OpenGL ES driver. This image has none, so libhwui's GL path makes libEGL abort
+# the process (`results/handoff/A11YPACE/README.md` §4 keeps the stack). A GPU
+# is the graphics track, not the shim's; the app-side wrap call is what a host
+# without a GPU can still make work.
+version: 1
+name: a11y-screenshot-wrap
+description: >-
+  takeScreenshot's memfd HardwareBuffer survives Bitmap.wrapHardwareBuffer: the
+  app gets a HARDWARE bitmap with the frame geometry and the shim-reported
+  allocation size, and the guest takes no signal.
+app: fixtures/build/apps/a11y-probe.apk
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+services:
+  - id: accessibility
+    profile: real
+    config:
+      enable:
+        - dev.acos.fixtures.a11yprobe/.A11yProbeService
+steps:
+  - launch:
+      activity: dev.acos.fixtures.a11yprobe/.MainActivity
+      clear_state: true
+  # The probe takes the screenshot on its own worker, so the lines arrive after
+  # the launch step: the assertion waits for them (`timeout_ms`) instead of
+  # sampling once.
+  - assert_log:
+      tag: AcosA11yProbe
+      ordered: false
+      timeout_ms: 30000
+      patterns:
+        - "screenshot_result kind=capture status=0 width=1080 height=2400 format=1"
+        - "screenshot_result kind=capture status=0 .* usage=257"
+        # `Bitmap.wrapHardwareBuffer(buffer, colorSpace)` returned a bitmap; the
+        # config is `HARDWARE` because the buffer is a GPU-samplable gralloc
+        # buffer, exactly as on a device.
+        - "wrap_hardware_buffer ok=true width=1080 height=2400 config=HARDWARE"
+        # `Bitmap.getAllocationByteCount` -> libhwui -> libui's
+        # `GraphicBufferMapper::getAllocationSize` -> the shim: 1080*2400*4.
+        - "wrap_hardware_buffer allocation=10368000"
+  - assert_no_crash: {}

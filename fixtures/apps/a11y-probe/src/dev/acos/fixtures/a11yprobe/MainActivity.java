@@ -8,6 +8,7 @@ import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.graphics.Color;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -41,6 +42,8 @@ public class MainActivity extends Activity {
     private int gestureTaps;
     /** MODA11YNATIVE: the list's scroll offset after the service's swipe. */
     private int swipeY;
+    /** A11YPACE: how many MOVE events the paced drag delivered. */
+    private int dragSteps;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,6 +73,33 @@ public class MainActivity extends Activity {
             gestureTaps++;
             Log.i(TAG, "gesture_target_pressed count=" + gestureTaps);
             updateStatus();
+        });
+
+        // A11YPACE: the drag target. The service drags it with a paced
+        // `dispatchGesture` stroke; this listener logs the delta the *app* saw,
+        // so "the gesture travelled the commanded distance" is the app's own
+        // observation (a slow drag has no fling to hide behind).
+        View dragTarget = findViewById(R.id.drag_target);
+        float[] down = new float[2];
+        dragTarget.setOnTouchListener((v, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    down[0] = event.getX();
+                    down[1] = event.getY();
+                    break;
+                case MotionEvent.ACTION_UP:
+                    Log.i(TAG, "drag_end dx=" + Math.round(event.getX() - down[0])
+                            + " dy=" + Math.round(event.getY() - down[1])
+                            + " steps=" + dragSteps);
+                    dragSteps = 0;
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    dragSteps++;
+                    break;
+                default:
+                    break;
+            }
+            return true;
         });
 
         list = (ScrollView) findViewById(R.id.gesture_list);

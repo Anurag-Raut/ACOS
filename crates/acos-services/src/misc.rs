@@ -247,10 +247,70 @@ pub struct A11yGestureRecord {
     pub sequence: i32,
     /// How many `MotionEvent`s the `ParceledListSlice` carried.
     pub events: usize,
+    /// The boolean `dispatchGesture` answered: the request was accepted and its
+    /// events will be published on the stroke's own timeline.
+    pub accepted: bool,
+    /// How many of those events have been published so far. The stroke is
+    /// paced over its declared duration (AOSP's `MotionEventInjector` shape),
+    /// so this trails `events` until the last one is due.
+    pub published: usize,
     /// `true` when every event was published on the session input channel.
     pub delivered: bool,
     /// Why delivery failed (only when `delivered` is false).
     pub reason: Option<String>,
+}
+
+/// One `dispatchGesture` in flight, paced over its declared timeline.
+///
+/// AOSP's `MotionEventInjector` posts every sampled `MotionEvent` on its handler
+/// with `delay = eventTime - now`, so the stroke keeps its *arrival* cadence:
+/// `VelocityTracker`, touch slop and `OverScroller` see what a finger produces.
+/// Publishing the whole stream in one turn does not: the guest's
+/// `InputEventReceiver` batches it and a `ScrollView` applies only the
+/// slop-crossing delta (measured: 11 px of a 400 px stroke).
+///
+/// ACOS keeps AOSP's shape on the peer's deadline-driven idle turn instead of a
+/// handler thread: [`crate::a11y_bind::A11yConnectionNode::next_delivery_deadline`]
+/// answers the next event's arrival instant and `advance_timed` publishes the
+/// events that are due, so an idle session wakes exactly at the stroke's sample
+/// times and never polls.
+#[derive(Debug)]
+pub struct PacedGesture {
+    /// `AccessibilityService.mSequence`.
+    pub sequence: i32,
+    /// The window input channel the stroke goes to.
+    pub token: acos_parcel::BinderId,
+    /// The service whose `onPerformGestureResult` answers when the last event
+    /// has gone out.
+    pub bound: A11yBoundService,
+    /// The guest's own sampled events, `eventTime` anchored at [`Self::base_ns`].
+    pub events: Vec<crate::input_channel::MotionEvent>,
+    /// Index of the next event to publish.
+    pub next: usize,
+    /// Host `Instant` the stroke's `downTime` was stamped at.
+    pub started: std::time::Instant,
+    /// `eventTime` of the first event (the stroke's `downTime`).
+    pub base_ns: i64,
+}
+
+impl PacedGesture {
+    /// The host instant event `index` is due: the stroke's start plus the
+    /// event's own offset, which is the guest's declared timeline unchanged.
+    #[must_use]
+    pub fn due(&self, index: usize) -> std::time::Instant {
+        let offset = self.events[index]
+            .event_time
+            .saturating_sub(self.base_ns)
+            .max(0);
+        self.started
+            + std::time::Duration::from_nanos(u64::try_from(offset).unwrap_or(u64::MAX / 2))
+    }
+
+    /// The next arrival instant, or `None` once every event is published.
+    #[must_use]
+    pub fn next_due(&self) -> Option<std::time::Instant> {
+        (self.next < self.events.len()).then(|| self.due(self.next))
+    }
 }
 
 /// One `takeScreenshot` request, as the module served it.
@@ -537,6 +597,18 @@ impl A11yState {
             })
     }
 
+    /// `true` when `token`'s input channel still has a live guest end.
+    ///
+    /// `dispatchGesture` checks this before it answers `true`: a paced stroke
+    /// whose first event would land on a dead channel had to fail at the
+    /// request, not after the app was told it was accepted.
+    #[must_use]
+    pub fn gesture_channel_is_live(&self, token: acos_parcel::BinderId) -> bool {
+        self.input
+            .as_ref()
+            .is_some_and(|input| input.is_live(token))
+    }
+
     /// Publish a decoded gesture on the session's input channel.
     ///
     /// The events are the guest's own samples (the framework's
@@ -558,6 +630,36 @@ impl A11yState {
             .inject_motion_series(token, events)
             .map(|_gesture| ())
             .map_err(|error| error.to_string())
+    }
+
+    /// Note that one more event of `sequence`'s stroke was published.
+    pub fn note_gesture_published(&mut self, sequence: i32, published: usize) {
+        if let Some(record) = self
+            .gestures
+            .iter_mut()
+            .find(|record| record.sequence == sequence)
+        {
+            record.published = published;
+        }
+    }
+
+    /// Finish a stroke: every event published (`delivered`) or a failure named
+    /// by `reason`. The record is the host-side half of the answer; the
+    /// service's own `onPerformGestureResult` is the other.
+    pub fn finish_gesture(&mut self, sequence: i32, delivered: bool, reason: Option<String>) {
+        if let Some(record) = self
+            .gestures
+            .iter_mut()
+            .find(|record| record.sequence == sequence)
+        {
+            record.delivered = delivered;
+            if delivered {
+                record.published = record.events;
+            }
+            if reason.is_some() {
+                record.reason = reason;
+            }
+        }
     }
 
     /// Record one event (bounded).
@@ -801,6 +903,10 @@ impl A11yState {
             .state()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        crate::trace::line(format!(
+            "ACOSA11Y performGlobalAction back -> key on input channel {:#x}",
+            token.0
+        ));
         dispatch
             .inject_key(token, crate::input_channel::KEYCODE_BACK)
             .map(|_gesture| ())
@@ -2264,6 +2370,62 @@ pub fn empty_bundle() -> Bundle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A11YPACE: a paced stroke's arrival instants are its own declared
+    /// timeline — the first event at the stroke's start, every later one at its
+    /// guest `eventTime` offset. `next_due` is what the peer's idle turn sleeps
+    /// on, so this is the whole schedule contract.
+    #[test]
+    fn a_paced_gesture_is_due_on_its_declared_timeline() {
+        let base = 1_000_000_000i64;
+        let events = (0..4)
+            .map(|i| {
+                crate::input_channel::MotionEvent::touch(
+                    i,
+                    crate::input_channel::ACTION_MOVE,
+                    base,
+                    base + i as i64 * 16_000_000,
+                    0.0,
+                    0.0,
+                )
+            })
+            .collect();
+        let started = std::time::Instant::now();
+        let mut gesture = PacedGesture {
+            sequence: 7,
+            token: acos_parcel::BinderId(0x10),
+            bound: A11yBoundService {
+                component: "pkg/.Svc".into(),
+                package: "pkg".into(),
+                class: "Svc".into(),
+                token: 0x40,
+                binder: 0x20,
+                connection_id: 1,
+                connection: 1,
+                window_token: 0x30,
+                service_info: None,
+                bind_info: crate::value::Parcelable::Null,
+            },
+            events,
+            next: 0,
+            started,
+            base_ns: base,
+        };
+        assert_eq!(gesture.due(0), started, "the DOWN is due immediately");
+        assert_eq!(
+            gesture.due(3),
+            started + std::time::Duration::from_millis(48),
+            "the fourth sample is 3 x 16 ms into the stroke"
+        );
+        assert_eq!(gesture.next_due(), Some(started));
+        gesture.next = 3;
+        assert_eq!(
+            gesture.next_due(),
+            Some(started + std::time::Duration::from_millis(48))
+        );
+        gesture.next = 4;
+        assert_eq!(gesture.next_due(), None, "nothing left to publish");
+    }
 
     /// W16: the `IInputManager.getInputDevice` reply carries the image's native
     /// `KeyCharacterMap` payload (from the stock `Virtual.kcm`) and the field

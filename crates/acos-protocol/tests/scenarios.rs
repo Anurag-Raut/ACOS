@@ -351,7 +351,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 timeout_ms: None,
                 settle_timeout_ms: None,
                 settle: None,
-                expect_change: false,
+                expect_change: None,
                 expect_handled: None,
             }),
             ..Step::default()
@@ -367,7 +367,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 timeout_ms: None,
                 settle_timeout_ms: None,
                 settle: None,
-                expect_change: false,
+                expect_change: None,
                 expect_handled: None,
             }),
             ..Step::default()
@@ -383,7 +383,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 timeout_ms: None,
                 settle_timeout_ms: None,
                 settle: None,
-                expect_change: false,
+                expect_change: None,
                 expect_handled: None,
             }),
             ..Step::default()
@@ -399,7 +399,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 timeout_ms: Some(0),
                 settle_timeout_ms: None,
                 settle: None,
-                expect_change: false,
+                expect_change: None,
                 expect_handled: None,
             }),
             ..Step::default()

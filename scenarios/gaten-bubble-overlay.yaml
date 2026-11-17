@@ -148,7 +148,19 @@ steps:
   # after the bubble appears: Gaten's idle fade hides the bubble a few seconds
   # after the last interaction, and a hidden bubble is not a selector target.
 
-  - tap: {selector: {content_desc: {exact: "Screen lookup"}}, settle: fast}
+  # A11YPACE: the tap's effect is *transient* — the lookup hides the bubble and
+  # re-shows it a moment later, and the lookup itself cannot finish in this
+  # image (no ML Kit recognition pack), so the post-settle tree can look exactly
+  # like the pre-tap tree. The tap therefore claims delivery only
+  # (`expect_change: false`, the same spelling `expect_change: true` uses for a
+  # pixel claim): the assertion that the tap reached the service is the
+  # screenshot record below, which does not depend on how long the bubble hid.
+  # Without this, the tap's implicit "the tree changed" rule sampled a
+  # hide/re-show and failed 1 run in 20 (GATENBOOT2 §5).
+  - tap:
+      selector: {content_desc: {exact: "Screen lookup"}}
+      settle: fast
+      expect_change: false
   - service_ctl:
       module: accessibility
       op: status

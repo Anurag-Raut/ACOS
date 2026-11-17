@@ -481,7 +481,7 @@ A step is a **one-key map**. Valid keys:
 |---|---|
 | `launch` | `activity` / `intent_action` / `data` / `extras` / `clear_state`, `settle`, `settle_timeout_ms` |
 | `wait_for` | `selector`, `timeout_ms`, `require_visible`, `settle`, `settle_timeout_ms` |
-| `tap` | `selector` or `x`+`y`, optional `timeout_ms`, `settle`, `settle_timeout_ms`, `expect_change`, `expect_handled` |
+| `tap` | `selector` or `x`+`y`, optional `timeout_ms`, `settle`, `settle_timeout_ms`, `expect_change` (`true` = must change, `false` = transient effect / no change claimed, unset = the auto tree rule), `expect_handled` |
 | `type` | optional `selector`, `text`, `clear`, `settle`, `settle_timeout_ms`, `expect_change`, `expect_handled` |
 | `key` | `key` (`back`, `home`, `enter`, `tab`, `delete`, `escape`, `menu`, `dpad_*`), `settle`, `settle_timeout_ms`, `expect_change`, `expect_handled` |
 | `back` | `{}`, `{expect_change: true}` or `{expect_handled: false}` |
@@ -788,6 +788,21 @@ frame), so a `bounds` claim — an assertion's own `bounds` **or**
   explanatory message — the auto rule never asks a no-op tap to repaint. Set
   `expect_change: true` when you want "this tap must change something" to be a
   hard requirement; `input.expect_change` then reads `true`.
+* **A tap whose effect is transient says so: `expect_change: false`.** Some
+  taps really do change the screen, but not by the time the settle ends: a
+  control that hides and re-shows itself (Gaten's bubble while its lookup
+  runs), or a handler that posts its work to another thread (an accessibility
+  `performGlobalAction` that lands as a Back key later). The auto tree rule then
+  samples the tree on either side of the transient and can see it unchanged, so
+  the step is a sampling race. An explicit `expect_change: false` makes the
+  assertion an `input_delivery` claim instead — "the input was delivered, no
+  change is claimed" — and the step JSON carries
+  `input.expect_change: false` plus `change_claimed: false` in the assertion's
+  actual. It is never a silent pass: `true` *and* the default still require the
+  change, and the event that really matters is then asserted on its own
+  (`assert_log` with `timeout_ms`, or a `wait_for`). Combine it with
+  `settle: fast` when the wait for a settle would only burn the budget, as
+  `scenarios/a11y-probe.yaml`'s async Back tap does.
 * Strict settle does *not* require pixels to change. `expect_change: true` on a
   `tap`/`type`/`key`/`back` step is the opt-in that does: `pixels_changed:false`
   then fails with `ASSERTION_FAILED` / `details.reason: "expect_change"`.
