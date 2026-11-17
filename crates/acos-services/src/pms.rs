@@ -2039,10 +2039,10 @@ impl ServiceObject for PmsService {
                     .runtime_permissions
                     .as_ref()
                     .map(|store| {
-                        store
+                        let store = store
                             .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .check_uid_permission(uid as u32, permission)
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        store.check_uid_permission(uid as u32, permission)
                     })
                     .unwrap_or_else(|| state.check_permission_for(None, permission));
                 vec![Value::Int(answer)]

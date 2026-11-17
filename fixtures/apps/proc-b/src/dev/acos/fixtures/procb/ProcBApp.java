@@ -25,11 +25,29 @@ public class ProcBApp extends Application {
         // BINDERPID: B's own uid is its package's (a second uid in one session),
         // and the per-uid permission answer must be B's, not A's.
         int uid = Process.myUid();
+        String owner;
+        try {
+            owner = String.valueOf(getPackageManager().getNameForUid(uid));
+        } catch (Throwable t) {
+            owner = "EX:" + t.getClass().getSimpleName();
+        }
+        String perm;
+        try {
+            perm = String.valueOf(checkCallingPermission("android.permission.INTERNET"));
+        } catch (Throwable t) {
+            perm = "EX:" + t.getClass().getSimpleName();
+        }
+        String self;
+        try {
+            self = String.valueOf(checkSelfPermission("android.permission.INTERNET"));
+        } catch (Throwable t) {
+            self = "EX:" + t.getClass().getSimpleName();
+        }
         Log.i(TAG, "ACOSPROBE b identity pkg=" + getPackageName()
                 + " uid=" + uid + " pid=" + Process.myPid()
                 + " calling-uid=" + Binder.getCallingUid()
                 + " calling-pid=" + Binder.getCallingPid()
-                + " uid-pkg=" + getPackageManager().getNameForUid(uid)
-                + " internet=" + checkCallingPermission("android.permission.INTERNET"));
+                + " uid-pkg=" + owner
+                + " internet=" + perm + " self=" + self);
     }
 }

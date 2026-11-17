@@ -132,13 +132,39 @@ public class ProcAActivity extends Activity {
         int pid = Process.myPid();
         int callingUid = Binder.getCallingUid();
         int callingPid = Binder.getCallingPid();
-        String owner = getPackageManager().getNameForUid(uid);
-        int perm = checkCallingPermission("android.permission.INTERNET");
+        // Both host answers are reported by their real result: a value, or the
+        // framework's exception class when the service could not answer. Never a
+        // fabricated grant.
+        String owner;
+        try {
+            owner = String.valueOf(getPackageManager().getNameForUid(uid));
+        } catch (Throwable t) {
+            owner = "EX:" + t.getClass().getSimpleName();
+        }
+        String perm;
+        try {
+            perm = String.valueOf(checkCallingPermission("android.permission.INTERNET"));
+        } catch (Throwable t) {
+            perm = "EX:" + t.getClass().getSimpleName();
+        }
+        String self;
+        try {
+            self = String.valueOf(checkSelfPermission("android.permission.INTERNET"));
+        } catch (Throwable t) {
+            self = "EX:" + t.getClass().getSimpleName();
+        }
+        String byName;
+        try {
+            byName = String.valueOf(getPackageManager()
+                    .checkPermission("android.permission.INTERNET", getPackageName()));
+        } catch (Throwable t) {
+            byName = "EX:" + t.getClass().getSimpleName();
+        }
         Log.i(TAG, "ACOSPROBE a identity pkg=" + getPackageName()
                 + " uid=" + uid + " pid=" + pid
                 + " calling-uid=" + callingUid + " calling-pid=" + callingPid
                 + " uid-pkg=" + owner
-                + " internet=" + perm);
+                + " internet=" + perm + " self=" + self + " by-name=" + byName);
     }
 
     @Override

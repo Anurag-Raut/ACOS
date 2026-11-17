@@ -290,3 +290,52 @@ fn a_runtime_grant_applies_to_its_uid_only() {
         "another app's uid must not inherit it"
     );
 }
+
+/// The launcher's order: `system.permissions` attaches **before** the launched
+/// APK is installed into the package manager. The runtime grant must survive
+/// that install, or `checkCallingPermission` answers from the previous APK's
+/// manifest (this is how the ART probe first failed: `internet=-1` for an app
+/// the scenario had granted the permission to).
+#[test]
+fn a_session_grant_survives_the_launch_install() {
+    let mut host = ServiceHost::standard();
+    let mut registry = acos_services::module::ModuleRegistry::standard();
+    registry
+        .attach(
+            &mut host,
+            "system.permissions",
+            acos_services::module::Profile::Real,
+            &acos_services::module::ModuleConfig::from_json(
+                "system.permissions",
+                &serde_json::json!({"grant": ["android.permission.INTERNET"]}),
+            )
+            .expect("config"),
+        )
+        .expect("system.permissions attaches");
+    // Now the launch: the package manager is re-pointed at the real APK.
+    host.install_package_from_apk_as(&fixture("proc-a.apk"), Some("/data/app/proc-a.apk"))
+        .expect("install proc-a");
+    let uid = pms(&mut host)
+        .shared_state()
+        .lock()
+        .unwrap()
+        .lookup(Some("dev.acos.fixtures.proca"))
+        .expect("proc-a")
+        .app
+        .uid;
+    let answer = service_q(
+        &mut host,
+        "package",
+        "android.content.pm.IPackageManager",
+        "checkUidPermission",
+        &[
+            Value::Str(Some("android.permission.INTERNET".into())),
+            Value::Int(uid),
+        ],
+    );
+    assert_eq!(
+        answer,
+        vec![Value::Int(PERMISSION_GRANTED)],
+        "the scenario's grant must apply after the launch install"
+    );
+}

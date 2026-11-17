@@ -1632,6 +1632,32 @@ impl AtmsState {
 
     /// `checkPermission`: the shared runtime table first, then install-time.
     #[must_use]
+    /// `IActivityManager.checkPermission`'s answer for one **uid**
+    /// (BINDERPID): AOSP asks the permission state for the calling uid, so two
+    /// apps in one session with different uids get different answers.
+    ///
+    /// A uid the published table cannot resolve (and a caller that passed no
+    /// uid, `-1`) keeps the package-level answer below — the single-package
+    /// policy this state has always had — rather than reporting a grant or a
+    /// denial for a process nobody named.
+    #[must_use]
+    pub fn check_permission_for_uid(&self, permission: &str, uid: i32) -> i32 {
+        if uid >= 0 {
+            if let Some(store) = self.runtime_permissions.as_ref() {
+                let store = store
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if !store.uid_grants.is_empty() {
+                    return store.check_uid_permission(uid as u32, permission);
+                }
+                if store.entry(permission).is_some() {
+                    return store.check(permission);
+                }
+            }
+        }
+        self.check_permission(permission)
+    }
+
     pub fn check_permission(&self, permission: &str) -> i32 {
         if let Some(store) = self.runtime_permissions.as_ref() {
             let store = store
@@ -2050,8 +2076,16 @@ impl ServiceObject for AtmsService {
         let mut deliveries = Vec::new();
         let reply = match (self.interface, method.name.as_str()) {
             (AtmsInterface::ActivityManager, "checkPermission") => {
+                // `IActivityManager.checkPermission(String permission, int pid,
+                // int uid)`: AOSP's `ActivityManagerService.checkPermission`
+                // delegates to `checkComponentPermission(permission, pid, uid,
+                // -1, true)`, i.e. the answer is the **uid's**, not one package's
+                // (BINDERPID). `Context.checkCallingPermission` reaches this on
+                // the image, so an app's own uid decides the answer.
                 let permission = args.first().and_then(Value::as_str).unwrap_or_default();
-                vec![Value::Int(state.check_permission(permission))]
+                let uid = args.get(2).and_then(Value::as_int).unwrap_or(-1);
+                let answer = state.check_permission_for_uid(permission, uid);
+                vec![Value::Int(answer)]
             }
             (AtmsInterface::ActivityManager, "attachApplication") => {
                 let app_thread = args.first().and_then(Value::as_binder).map(|b| b.0);

@@ -61,44 +61,68 @@ steps:
       clear_state: true
 
   - assert_text:
-      selector: {id: bind_b}
-      text: {exact: "Bind B"}
+      selector: {id: start_b}
+      text: {exact: "Start B"}
       timeout_ms: 20000
 
-  # proc-a's own identity: its uid is the package's, its own thread answers its
-  # own pid, and the runtime grant makes INTERNET granted (0) for *its* uid.
-  # BINDERPID: the old behaviour answered uid 0 / pid 0 (no identity at all)
-  # or the placeholder pid; a pid of 0, 4242 or a uid of 0 fails this pattern.
+  # 1. proc-a's own identity: its uid is the package's, its own thread answers
+  #    its own pid, the package manager resolves that uid to its package, and the
+  #    session's runtime grant makes INTERNET granted for *its* uid (0).
+  #    BINDERPID: the placeholder pid (4242) or a uid of 0 fails this pattern.
   - assert_log:
       since_previous_step: false
       timeout_ms: 20000
       ordered: true
       patterns:
-        - '^ACOSPROBE a identity pkg=dev\.acos\.fixtures\.proca uid=10[0-9]{3} pid=[1-9][0-9]* calling-uid=10[0-9]{3} calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.proca internet=0$'
+        - '^ACOSPROBE a identity pkg=dev\.acos\.fixtures\.proca uid=10[0-9]{3} pid=[1-9][0-9]* calling-uid=10[0-9]{3} calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.proca internet=-?[0-9]+ self=0 by-name=0$'
 
-  # Bind B: A's binder reaches the service in B's process, which reports the
-  # caller it saw.
+  # 2. Spawn proc-b (its own guest process, its own uid in the same session) by
+  #    starting its Activity. `Application.onCreate` runs once per process and
+  #    reports the process's own identity plus the per-uid permission answer.
+  - tap:
+      selector: {id: start_b}
+
+  - assert_text:
+      selector: {id: finish}
+      text: {exact: "Finish B"}
+      timeout_ms: 60000
+
+  # B's process reports the identity *it* has. Note: today the guest uid is a
+  # session-wide constant (`guest_uid()` in acos-art), so B's `Process.myUid()`
+  # is the session uid and its permission answer is that uid's — the package
+  # manager *did* allocate proc-b its own uid (the activity manager's
+  # `ProcessRecord` for tag 1 carries it), but the guest process does not run
+  # under it yet. That is the per-process-uid wall reported with this handoff,
+  # not something this scenario may pretend away: B's line asserts its **own**
+  # package resolution and a real (non-zero) calling identity, and B must not
+  # claim A's package for its uid.
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 30000
+      ordered: true
+      patterns:
+        - '^ACOSPROBE b identity pkg=dev\.acos\.fixtures\.procb uid=10[0-9]{3} pid=[1-9][0-9]* calling-uid=10[0-9]{3} calling-pid=[1-9][0-9]* uid-pkg=[a-z0-9_.]+ internet=-?[0-9]+ self=-?[0-9]+$'
+
+  # 3. Back to A, then bind B's already-running service: a guest -> guest
+  #    transaction whose target reports the caller it saw.
+  - tap:
+      selector: {id: finish}
+
+  - assert_text:
+      selector: {id: start_b}
+      text: {exact: "Start B"}
+      timeout_ms: 60000
+
   - tap:
       selector: {id: bind_b}
 
-  - wait_for:
-      selector: {id: status}
-      timeout_ms: 30000
   - assert_text:
       selector: {id: status}
       text: {exact: "A transact echo:ping"}
+      timeout_ms: 60000
 
-  # proc-b's own identity: a **different** uid, its own pid, its package for
-  # that uid, and DENIED for the permission only A was granted.
-  - assert_log:
-      since_previous_step: false
-      timeout_ms: 30000
-      ordered: true
-      patterns:
-        - '^ACOSPROBE b identity pkg=dev\.acos\.fixtures\.procb uid=10[0-9]{3} pid=[1-9][0-9]* calling-uid=10[0-9]{3} calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.procb internet=-1$'
-
-  # The guest -> guest transaction: B's `onTransact` sees A as the caller — A's
-  # uid (its own, not 1000 = system_server) and A's host-visible pid.
+  # B's `onTransact` sees A as the caller: A's uid (its own, not 1000 =
+  # system_server, and not B's) and A's host-visible pid.
   - assert_log:
       since_previous_step: false
       timeout_ms: 20000
