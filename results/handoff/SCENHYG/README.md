@@ -199,6 +199,12 @@ orchestrator decision (it is a ~600-line broker change reviewed in that track).
 | Gaten negatives + the new extras scenario after the launch-intent fix | `probe3/` | `ASSERTION_FAILED/content_settle_pixel` ×2, `/content_settle_geometry`, `ASSERTION_FAILED`; extras → `UNSUPPORTED_ANDROID_API` |
 | webview 30 runs | `webview-run*.json` | table §5 |
 
+Scratch deleted at the end per the disk budget (host at 85 %): `target/`,
+`fixtures/build` (the `cp -al` copy), `.cache/matrix-scenhyg` (the per-row
+artifacts named in `matrix.json`), `.cache/rt-scenhyg`, `.cache/lv`. The
+committed JSON/TSV/log files are the evidence; the
+`artifacts` path in each matrix row pointed into that scratch.
+
 ## 7. One more found-while-here bug: `tools/build-apps.sh` was a syntax error
 
 The v0.4.0 merge left two `for app in …; do` headers back to back with one
