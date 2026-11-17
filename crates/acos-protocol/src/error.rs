@@ -185,6 +185,25 @@ pub enum ErrorCode {
     /// (`UiTree::truncated`, any window). The node may exist beyond the
     /// sampled prefix, so this is not proof of absence.
     TreeTruncated,
+    /// A bounded `scroll_until` search reached the end of the list: a swipe
+    /// moved nothing (the settled tree is identical before and after it), so
+    /// the selector is not reachable by scrolling further.
+    ///
+    /// This is the honest end of a search, not a guess: `details.attempts` says
+    /// how many gestures it took, `details.last_tree_texts` what the last
+    /// settled tree actually showed. Before this the search burned every
+    /// remaining attempt and reported `ELEMENT_NOT_FOUND`, which an agent could
+    /// not tell from "the selector names a node that never renders".
+    EndOfList,
+    /// REL3H2: an input step declared `expect_handled: true` (the scenario
+    /// claims the app must consume this gesture) and the app window
+    /// acknowledged every event `finishInputEvent(handled) = false`.
+    ///
+    /// The gesture was delivered; nothing consumed it. That is a failed claim
+    /// about the flow - the press missed the control, or the control is not
+    /// pressable - never a pass and never "unknown": the app's own window said
+    /// so. `details` names the injected target, the acks and the settle record.
+    InputNotHandled,
     /// A UI node reference is no longer valid.
     StaleRef,
     /// A tree-only assertion ran on an untrusted APK run, where the tree is
@@ -284,6 +303,13 @@ pub enum ErrorCode {
     /// (fail closed, ADR-0030 amendment 3). The supervisor restarts `pasta`
     /// itself, so a retry after the relay is back succeeds.
     NetworkUnavailable,
+    /// The session daemon answered (or refused to identify itself) from a
+    /// **different build** than the caller: crate version, build id (git sha +
+    /// source digest) or the binary at the same path differ. The client never
+    /// mixes builds — it replaces an idle auto-started daemon or runs its own
+    /// private one; `error.details` carries both identities. Never retry against
+    /// the same daemon; never read its answer as this build's behaviour.
+    DaemonVersionMismatch,
 
     // ---- harness ----------------------------------------------------------
     /// ACOS itself failed (distinct from an app crash).
@@ -426,6 +452,8 @@ impl ErrorCode {
             ErrorCode::ElementOffscreen => "ELEMENT_OFFSCREEN",
             ErrorCode::AmbiguousSelector => "AMBIGUOUS_SELECTOR",
             ErrorCode::TreeTruncated => "TREE_TRUNCATED",
+            ErrorCode::EndOfList => "END_OF_LIST",
+            ErrorCode::InputNotHandled => "INPUT_NOT_HANDLED",
             ErrorCode::StaleRef => "STALE_REF",
             ErrorCode::InsufficientHostEvidence => "INSUFFICIENT_HOST_EVIDENCE",
             ErrorCode::UnsupportedAssertion => "UNSUPPORTED_ASSERTION",
@@ -460,6 +488,7 @@ impl ErrorCode {
             ErrorCode::GuestExited => "GUEST_EXITED",
             ErrorCode::ZygoteDead => "ZYGOTE_DEAD",
             ErrorCode::NetworkUnavailable => "NETWORK_UNAVAILABLE",
+            ErrorCode::DaemonVersionMismatch => "DAEMON_VERSION_MISMATCH",
             ErrorCode::Internal => "INTERNAL",
         }
     }
@@ -617,6 +646,12 @@ impl ErrorCode {
             ErrorCode::TreeTruncated => {
                 "The tree was truncated at the node budget (2000 nodes per window by default), so the node may exist beyond the sampled prefix. Raise the probe node budget or narrow the selector (id/class/bounds); this is not proof the node is absent."
             }
+            ErrorCode::EndOfList => {
+                "The scroll_until search stopped at the end of the list: two gestures in a row moved nothing, so the selector is not below the current position. Read `details.last_tree_texts` for what the last settled tree showed. If the node is genuinely on the screen, scroll the other way (`direction: down`) or fix the selector. A list that is still loading also moves nothing for a gesture, so rule out a slow feed before concluding the list ended."
+            }
+            ErrorCode::InputNotHandled => {
+                "An input step declared `expect_handled: true` and the app window answered `finishInputEvent(handled) = false`: the gesture was delivered and nothing consumed it. Read `input.target` (what the point hit) and `input.handled_hint` (the clickable neighbour, when there is one): tap the pressable control, or drop `expect_handled` when a no-op press is intended."
+            }
             ErrorCode::StaleRef => {
                 "Re-run observe/assert to obtain fresh node ids; never reuse node refs across a mutation."
             }
@@ -707,6 +742,9 @@ impl ErrorCode {
             ErrorCode::NetworkUnavailable => {
                 "The shared network relay (`acos-netd`) is down, so this session has no network. This is a host condition, not app behaviour: the guest's own failure (an exception in the app) is a different code. The relay supervisor restarts `pasta` on its next tick, so retry once it is back; `acos net status` reports `up`."
             }
+            ErrorCode::DaemonVersionMismatch => {
+                "Do not use that daemon's answer: it runs a different build (error.details carries rule, client and daemon identities). `acos session …` and the MCP server replace an idle auto-started daemon and otherwise start a build-private one, so rerunning the same command is safe. An operator-started `acos serve` must be restarted after an upgrade; `acos doctor` prints its identity next to the CLI's."
+            }
             ErrorCode::Internal => {
                 "ACOS harness failure, not app behaviour. Capture request/scenario/artifacts and report it; do not count it as a pass."
             }
@@ -779,6 +817,8 @@ impl ErrorCode {
             | ErrorCode::ElementOffscreen
             | ErrorCode::AmbiguousSelector
             | ErrorCode::TreeTruncated
+            | ErrorCode::EndOfList
+            | ErrorCode::InputNotHandled
             | ErrorCode::InsufficientHostEvidence => ErrorClass::Assertion,
 
             // Deadlines.
@@ -820,6 +860,8 @@ impl ErrorCode {
             | ErrorCode::ElementOffscreen
             | ErrorCode::AmbiguousSelector
             | ErrorCode::TreeTruncated
+            | ErrorCode::EndOfList
+            | ErrorCode::InputNotHandled
             | ErrorCode::InsufficientHostEvidence => Status::Fail,
             ErrorCode::AppCrashed => Status::Crash,
             ErrorCode::AppNotResponding | ErrorCode::Timeout => Status::Timeout,
@@ -1039,6 +1081,8 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::ElementOffscreen,
     ErrorCode::AmbiguousSelector,
     ErrorCode::TreeTruncated,
+    ErrorCode::EndOfList,
+    ErrorCode::InputNotHandled,
     ErrorCode::StaleRef,
     ErrorCode::InsufficientHostEvidence,
     ErrorCode::UnsupportedAssertion,
@@ -1073,6 +1117,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::GuestExited,
     ErrorCode::ZygoteDead,
     ErrorCode::NetworkUnavailable,
+    ErrorCode::DaemonVersionMismatch,
     ErrorCode::Internal,
 ];
 

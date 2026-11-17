@@ -308,12 +308,11 @@ impl ReplayHarness {
                     .insets_state(self.window.0)
                     .cloned()
                     .unwrap_or_else(|| crate::wms::empty_insets_state(&self.wm.display));
-                Ok(
-                    self.callback_shape(crate::WmCallback::InsetsControlChanged {
-                        state: Box::new(state),
-                        controls: Box::new(InsetsSourceControlArray(vec![])),
-                    })?,
-                )
+                Ok(self.callback_shape(crate::WmCallback::InsetsControlChanged {
+                    state: Box::new(state),
+                    controls: Box::new(InsetsSourceControlArray(vec![])),
+                    ime: false,
+                })?)
             }
             ("android.view.IWindow", "resized") => {
                 self.ensure_window()?;

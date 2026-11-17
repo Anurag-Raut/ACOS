@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/service-provider.apk",
+  "apk_sha256": "dc843065f47d28845b7f0bd8b1ae1ea4c083c963451f2906358bb84118ce2c00",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w15-service-provider.yaml",
+  "scenario_sha256": "654dfd1800b3cbefb8afaa7f1503f2ca9d5dd1d545a693d71a0902cd8ec31092",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

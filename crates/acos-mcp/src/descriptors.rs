@@ -230,11 +230,12 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
                 ),
                 None => (false, Some("unrecognised protocol command".to_string())),
             };
+            let input_schema = protocol_tool_schema(&descriptor.name, descriptor.input_schema);
             ToolInfo {
                 tool_name: descriptor.name,
                 command,
                 description: descriptor.description,
-                input_schema: descriptor.input_schema,
+                input_schema,
                 available,
                 fidelity: command
                     .map(command_fidelity)
@@ -247,6 +248,126 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
     tools.push(help_tool());
     tools.extend(session_tools());
     tools
+}
+
+/// Protocol tools the session backend addresses by session id.
+///
+/// `SessionBackend` resolves the session from `base.session_id` **or** a
+/// top-level `session_id` (`session_backend::session_id`, and
+/// `forward_session_tool` copies the top-level form into `base` before any
+/// daemon sees it). The typed protocol request structs carry the id in `base`
+/// only, so the published schema is extended here — one helper used by both the
+/// tool list and the dispatcher's argument check, so the two cannot drift and a
+/// documented call (`tools/release/mcp_smoke.py`'s
+/// `acos_destroy {"session_id": sid}`) is not rejected by our own schema.
+pub const SESSION_ADDRESSED_PROTOCOL_TOOLS: &[&str] =
+    &["acos_observe", "acos_reset", "acos_destroy", "acos_run"];
+
+/// The `settle_timeout_ms` property the session verbs publish.
+///
+/// The daemon applies a per-request settle deadline to **every** session verb
+/// (`ArtSession::set_settle_timeout` before the verb runs), and `acos session
+/// key`/`acos session text` forward it. The schemas for those two verbs did not
+/// declare it, so REL3B's unknown-argument rule turned the CLI's own documented
+/// call into `INVALID_ARGUMENT`. One property, one description.
+fn settle_timeout_property() -> Value {
+    json!({
+        "type": "integer", "minimum": 1, "maximum": 600000,
+        "description": "P12b: bound this verb's strict/fast settle wait. On timeout the reply \
+                        still carries the latest tree and frame identity with `settled:false` \
+                        and `bound:timeout`; a timeout is never assertion evidence."
+    })
+}
+
+/// The `session_id` property every session-addressed tool publishes.
+fn session_id_property() -> Value {
+    json!({
+        "type": "string",
+        "description": "Session to address, the same value as `base.session_id` (the \
+                        documented short form: `acos_observe_tree {\"session_id\": \
+                        \"mcp-1234\", \"screenshot\": true}`). Omit it for this server \
+                        process's default session."
+    })
+}
+
+/// Add the top-level `session_id` to a closed schema (idempotent).
+fn with_session_id(mut schema: Value) -> Value {
+    if let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) {
+        properties
+            .entry("session_id".to_string())
+            .or_insert_with(session_id_property);
+    }
+    schema
+}
+
+/// Protocol tools whose reply REL3C shapes with `full`/`cursor`, and/or whose
+/// verb honours a per-request settle deadline.
+///
+/// REL3C added the compact/paged reply (`full`, `cursor`) and the daemon applies
+/// `settle_timeout_ms` to *every* session verb (`set_settle_timeout` before the
+/// verb runs), but only the session-tool schemas learned about them. The
+/// protocol tools kept the schema generated from their request struct, so
+/// callers that use the documented arguments were rejected by REL3B's
+/// unknown-argument rule: the REL3C reply test's own `acos_verify {cursor: 200}`
+/// and the CLI's own `acos session observe` (`full`, `cursor`,
+/// `settle_timeout_ms`) both came back `INVALID_ARGUMENT`. Publishing them here
+/// is the honest side of that contract: the arguments exist and do work, so the
+/// schema must not deny them.
+pub const PAGED_REPLY_PROTOCOL_TOOLS: &[&str] = &["acos_observe", "acos_verify"];
+
+/// Protocol tools that honour `settle_timeout_ms`.
+///
+/// The daemon sets the per-request settle deadline before every session verb, so
+/// the tools that can be pointed at a live session take it. `acos_verify` is a
+/// whole run, not a verb on a held session, so it does not.
+pub const SETTLE_PROTOCOL_TOOLS: &[&str] = &["acos_observe"];
+
+/// Add the reply-shaping (`full`, `cursor`) and/or settle arguments the server
+/// layer accepts on top of a protocol tool's own request (idempotent).
+fn with_reply_arguments(mut schema: Value, paging: bool, settle: bool) -> Value {
+    let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) else {
+        return schema;
+    };
+    if paging {
+        properties.entry("full".to_string()).or_insert_with(|| {
+            json!({
+                "type": "boolean",
+                "description": "REL3C: include the full tree inline instead of the compact \
+                                screen (default false). The full tree is always written to \
+                                `tree_path`; a full tree over the reply cap is replaced by the \
+                                compact view and the path."
+            })
+        });
+        properties.entry("cursor".to_string()).or_insert_with(|| {
+            json!({
+                "type": "integer", "minimum": 0,
+                "description": "REL3C: compact-screen page cursor from a previous reply's \
+                                `tree_next_cursor`."
+            })
+        });
+    }
+    if settle {
+        properties
+            .entry("settle_timeout_ms".to_string())
+            .or_insert_with(settle_timeout_property);
+    }
+    schema
+}
+
+/// The schema a protocol tool publishes: its own, plus the arguments this
+/// server layer adds on top of the protocol request (top-level `session_id`, the
+/// reply-shaping/settle pair). One helper for both `tools/list` and the
+/// dispatcher's argument check, so the two cannot drift.
+fn protocol_tool_schema(tool_name: &str, mut schema: Value) -> Value {
+    if SESSION_ADDRESSED_PROTOCOL_TOOLS.contains(&tool_name) {
+        schema = with_session_id(schema);
+    }
+    let paging = PAGED_REPLY_PROTOCOL_TOOLS.contains(&tool_name);
+    let settle = SETTLE_PROTOCOL_TOOLS.contains(&tool_name);
+    if paging || settle {
+        schema = with_reply_arguments(schema, paging, settle);
+    }
+    schema
 }
 
 /// The tools `tools/list` advertises: every tool this build can actually run.
@@ -297,6 +418,50 @@ pub fn session_tools() -> Vec<ToolInfo> {
     out
 }
 
+/// The published argument schema of one tool, for the dispatcher's
+/// unknown-argument check.
+///
+/// It is the same schema `tools/list` publishes (protocol command, session tool,
+/// `acos_capabilities`, `acos_help`), so the rule a client validates against and
+/// the rule the server enforces cannot drift.
+#[must_use]
+pub fn tool_schema(tool_name: &str) -> Option<Value> {
+    if tool_name == CAPABILITIES_TOOL {
+        return Some(capabilities_tool().input_schema);
+    }
+    if tool_name == HELP_TOOL {
+        return Some(help_tool().input_schema);
+    }
+    if SESSION_TOOL_NAMES.contains(&tool_name) {
+        return Some(session_tool_spec(tool_name).1);
+    }
+    // ARGS: the protocol descriptors already close their object
+    // (`McpToolDescriptor::new`), so the schema a client validates and the
+    // schema this check enforces are the same document — including the
+    // top-level `session_id` the session backend accepts (see
+    // [`SESSION_ADDRESSED_PROTOCOL_TOOLS`]).
+    acos_protocol::mcp_tools()
+        .tools
+        .into_iter()
+        .find(|tool| tool.name == tool_name)
+        .map(|tool| protocol_tool_schema(&tool_name, tool.input_schema))
+}
+
+/// The tool names `tools/list` may advertise: protocol commands plus
+/// `acos_capabilities`, `acos_help` and the session tools.
+#[must_use]
+pub fn known_tool_names() -> Vec<String> {
+    let mut names: Vec<String> = acos_protocol::mcp_tools()
+        .tools
+        .into_iter()
+        .map(|tool| tool.name)
+        .collect();
+    names.push(CAPABILITIES_TOOL.to_string());
+    names.push(HELP_TOOL.to_string());
+    names.extend(SESSION_TOOL_NAMES.iter().map(|name| (*name).to_string()));
+    names
+}
+
 fn session_tool_spec(name: &str) -> (&'static str, Value) {
     let base = json!({
         "type": "object",
@@ -306,15 +471,37 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             "session_id": {"type": "string"}
         }
     });
-    let with_base = |properties: Value| {
+    // ARGS: a closed object. An unknown argument is a caller error, not a flag
+    // to ignore: `acos_observe_tree {"screenshot": true}` on a build without it
+    // read as a success (feedback 2026-11-15). The server enforces the same rule
+    // in `crate::args::check`, so a client that does not validate still cannot
+    // get a silent no-op.
+    //
+    // The published schema names **every** argument the session backend reads.
+    // The backend accepts `session_id` at the top level as well as in `base`
+    // (older clients and `tools/release/mcp_smoke.py` send it there), and a
+    // closed schema that rejected it would be lying about what works — the
+    // exact failure this module was created to stop, from the other side. The
+    // test `tests/documentation_args.rs` walks every documented call in
+    // `docs/*.md`, `tools/**/*mcp*.py` and `tests/` and fails when a documented
+    // argument is not in the schema.
+    let closed = |properties: Value| {
         let mut schema = json!({
             "type": "object",
             "properties": properties,
-            "additionalProperties": true
+            "additionalProperties": false
         });
         schema["properties"]["base"] = base.clone();
         schema
     };
+    let with_base = |properties: Value| {
+        let mut schema = closed(properties);
+        schema["properties"]["session_id"] = session_id_property();
+        schema
+    };
+    // `acos_doctor` is a host preflight, not a session operation: it has no
+    // session to address, so it does not publish `session_id`.
+    let host_only = closed;
     match name {
         // NET4: the network module's controls, on the session's own netns.
         // The argument schema is *not* written here: it is
@@ -346,7 +533,24 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              framework native the engine does not implement yet, naming `details.api`).",
             with_base(json!({
                 "apk": {"type": "string", "description": "Path to the .apk, under ACOS_ALLOWED_ROOTS."},
+                "full": {
+                    "type": "boolean",
+                    "description": "Include the full tree inline instead of the compact screen (default false). \
+                                    The full tree is always written to `tree_path`; a full tree that would \
+                                    exceed the reply cap is replaced by the compact view and the path."
+                },
+                "cursor": {
+                    "type": "integer", "minimum": 0,
+                    "description": "Compact-screen page cursor from a previous reply's `tree_next_cursor`."
+                },
                 "timeout_ms": {"type": "integer", "minimum": 1, "description": "Wall-clock ceiling for the launch (defaults to the server call budget)."},
+                "display": {
+                    "type": "string",
+                    "description": "Display override for the in-process session, `WIDTHxHEIGHT@DPI` (for \
+                                    example `1080x2400@400`). This argument is accepted by the \
+                                    in-process engine; the ART daemon route reports the display it \
+                                    used instead of overriding it."
+                },
                 "settle": {
                     "type": "string", "enum": ["fast", "strict", "content"],
                     "description": "How the launch reply binds its tree. `strict` (default) keeps the \
@@ -409,6 +613,23 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     sandbox before launching; later observe/action calls are \
                                     proxied to that confined child."
                 },
+                "flutter": {
+                    "type": "boolean",
+                    "description": "Declare this APK a Flutter app: forces the native \
+                                    (confined child) route even before the structural check \
+                                    sees libflutter.so/flutter_assets, and picks the Flutter \
+                                    engine session when the APK really is Flutter. Detection \
+                                    is otherwise structural, never a manifest guess; the \
+                                    reply's `engine` says which engine actually ran."
+                },
+                "rn": {
+                    "type": "boolean",
+                    "description": "Declare this APK a React Native app: forces the native \
+                                    (confined child) route and picks the React Native bridge \
+                                    session when the APK really is RN. Detection is otherwise \
+                                    structural (libreactnativejni.so / index.android.bundle); \
+                                    the reply's `engine` says which engine actually ran."
+                },
                 "label": {
                     "type": "string",
                     "description": "FB5: a name for this session, echoed in the launch reply and in \
@@ -448,13 +669,25 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         ),
         "acos_observe_tree" => (
             "Walk the live framework View hierarchy of the held session (WindowManagerGlobal -> \
-             ViewRootImpl -> ViewGroup) and return the structured node tree (class, bounds, text, \
-             resource_id, clickable/enabled/focused/scrollable, children). Call it after \
+             ViewRootImpl -> ViewGroup) and return a COMPACT screen by default: the visible \
+             text/content_desc nodes in reading order with bounds, clickable flag and ids, paged \
+             with `cursor` (never head/tail-cut). The full tree is always written to `tree_path`; \
+             `full:true` returns it inline when it fits the reply cap. Call it after \
              `acos_launch`, before any selector-based tap. Before the app adds a window it returns \
              `UNSUPPORTED_BACKEND` with `details.reason=not_ready` and `details.stage_reached`, \
              never an empty tree. Common errors: UNSUPPORTED_BACKEND (not_ready), TIMEOUT.",
             with_base(json!({
                 "max_nodes": {"type": "integer", "minimum": 1, "description": "Truncate the walk after this many nodes."},
+                "full": {
+                    "type": "boolean",
+                    "description": "Include the full tree inline instead of the compact screen (default false). \
+                                    The full tree is always written to `tree_path`; a full tree that would \
+                                    exceed the reply cap is replaced by the compact view and the path."
+                },
+                "cursor": {
+                    "type": "integer", "minimum": 0,
+                    "description": "Compact-screen page cursor from a previous reply's `tree_next_cursor`."
+                },
                 "settle": {
                     "type": "string", "enum": ["fast", "strict", "content"],
                     "description": "`strict` (default) is the event-settled rule and assertion evidence. \
@@ -570,6 +803,7 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     pre-action tree (no diff is invented)."
                 },
                 "code": {"type": ["integer", "string"], "description": "Numeric key code or name."},
+                "settle_timeout_ms": settle_timeout_property(),
                 "expect_change": {
                     "type": "boolean",
                     "description": "SE1: opt-in verification of the action's effect. After the \
@@ -615,6 +849,7 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     pre-action tree (no diff is invented)."
                 },
                 "text": {"type": "string", "description": "Text to type into the focused field."},
+                "settle_timeout_ms": settle_timeout_property(),
                 "mask": {"type": "boolean", "description": "Withhold the typed text from the reply (`target.text_masked`, `target.chars`). Use it for a secret whose field the tree does not report as focused. Without it, a focused non-password field is echoed and any other target is masked."},
                 "expect_change": {
                     "type": "boolean",
@@ -631,12 +866,59 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             })),
         ),
         "acos_swipe" => (
-            "Swipe in the held session from `from` to `to`; each point is an object with integer \
-             `x` and `y`. `duration_ms` defaults to 300. The ART engine has no swipe command \
-             (UNSUPPORTED_BACKEND, `input.swipe`), so it returns no `changes` there. `changes` \
-             (the `diff` argument) applies when the engine supports the action. Common errors: ELEMENT_NOT_FOUND with \
-             `details.kind=NoWindowAtPoint` (no frame yet), INVALID_ARGUMENT (a point missing x/y).",
+            "Swipe/scroll in the held session: `from`+`to` points (objects with integer `x` and \
+             `y`), or `direction` (`up`/`down`/`left`/`right`) plus an optional `distance` in \
+             pixels (default 60% of the display along that axis). The ART engine publishes a real \
+             interpolated MotionEvent stream (DOWN, MOVEs at the display refresh cadence with real \
+             timestamps, UP) through the same input channel a tap uses, so a ListView/RecyclerView/ \
+             RN FlatList flings with its own physics; `duration_ms` defaults to 400 (120 when \
+             `fling: true`). `handled` is the window's own `finishInputEvent` bit per event \
+             (REL3E), and `changes` is the settled tree diff (FB3).\n\n`until` (a selector object, \
+             e.g. `{\"text\": \"Row 80\"}`) turns the call into a bounded `scroll_until` search: it \
+             swipes, takes a fresh **settled** traversal and repeats up to `max_attempts` (default \
+             6, 10 with `fling`). `until.found` is only ever reported from such a traversal; a miss \
+             is ELEMENT_NOT_FOUND with `details.attempts` and `details.last_tree_texts`.\n\nCommon \
+             errors: ELEMENT_NOT_FOUND `details.kind=NoWindowAtPoint` (no frame yet), \
+             INVALID_ARGUMENT (missing point/direction, or `until` with a non-strict settle).",
             with_base(json!({
+                "from": {
+                    "type": "object",
+                    "description": "Gesture start point `{x,y}` in display pixels.",
+                    "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}
+                },
+                "to": {
+                    "type": "object",
+                    "description": "Gesture end point `{x,y}` in display pixels.",
+                    "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": ["up", "down", "left", "right"],
+                    "description": "Direction-based gesture used when `from`/`to` are absent: `up` \
+                                    moves the finger up, i.e. the content scrolls up and later rows \
+                                    come into view."
+                },
+                "distance": {
+                    "type": "integer",
+                    "description": "Direction-based gesture length in pixels (default 60% of the \
+                                    display along the direction's axis)."
+                },
+                "fling": {
+                    "type": "boolean",
+                    "description": "A fast gesture (short duration, high velocity) instead of a slow \
+                                    drag. The list's own fling physics decide how far it coasts."
+                },
+                "until": {
+                    "type": "object",
+                    "description": "Selector to scroll into view (`id`/`content_desc`/`text`); the \
+                                    call repeats the swipe up to `max_attempts` and reports \
+                                    `until.found` only from a settled observation."
+                },
+                "max_attempts": {
+                    "type": "integer",
+                    "description": "Bound for an `until` search (1..50; default 6, or 10 with \
+                                    `fling`)."
+                },
                 "diff": {
                     "type": "boolean",
                     "description": "FB3: include `changes`, the settled UI-tree diff of this action \
@@ -738,7 +1020,7 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              keystore, the boot-classpath cache, and host memory. Each failing check carries a \
              concrete `fix` string. The tool returns `fail` with `ASSERTION_FAILED` when any \
              required check fails, with the full report under `result.checks`.",
-            with_base(json!({})),
+            host_only(json!({})),
         ),
         _ => ("In-process session tool.", with_base(json!({}))),
     }

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/hello-jni.apk",
+  "apk_sha256": "913877c64fd4f114c4aeee46b239850f70863c3fe0b4c2410c887cabe26ba4db",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/missing-jni-line.yaml",
+  "scenario_sha256": "7ae1a984daafde6b533dd1204480282c71a08accda3df74314c6a921841cdbfa",
+  "flags": [],
+  "isolation": "sandbox",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

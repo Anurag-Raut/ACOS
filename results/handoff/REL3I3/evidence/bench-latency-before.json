@@ -1,0 +1,1404 @@
+{
+  "acos": "/home/Qui/.t3/worktrees/acos/t3-2f0977d6-8a0d91192c03988c/.cache/rel3i3-base/.cache/rel3i3-base-target/release/acos",
+  "binary_sha256": "30350c068e89b2c90ecf23dc24418d20c6a1edc05d80cf87afa2590bb0e449fb",
+  "checks": {
+    "failed_by_code": {
+      "GUEST_EXITED": 1
+    },
+    "failed_steps": 1,
+    "m4_fast": 5,
+    "m4_strict": 4,
+    "m5_good": 5,
+    "m7_fast_good": 5,
+    "m7_strict_good": 5,
+    "m8_counter_expected_count": "12",
+    "m8_counter_final_count": "12",
+    "m8_form_error_text": "Name is required",
+    "mode_wall_s": {
+      "m4-fast": 1.985,
+      "m4-strict": 2.135,
+      "m6-fast": 7.81,
+      "m6-strict": 8.102,
+      "m8-counter-fast": 0.31,
+      "m8-counter-strict": 5.697,
+      "m8-form-fast": 6.695,
+      "m8-form-strict": 7.638
+    },
+    "reference_md5": "7218b3ae7e51e4035c89fd96646d72d7",
+    "reps": {
+      "fast": 5,
+      "other": 5
+    },
+    "teardown_lifecycles": [
+      "lifecycle"
+    ],
+    "teardown_verified": 13
+  },
+  "env": {
+    "ACOS_STRICT_SETTLE": "default",
+    "animations": "on"
+  },
+  "errors": [
+    "1 failed launch/reset/step(s) with codes {'GUEST_EXITED': 1}"
+  ],
+  "failures": {
+    "failed_by_code": {
+      "GUEST_EXITED": 1
+    },
+    "failed_steps": 1,
+    "rows": [
+      {
+        "code": "GUEST_EXITED",
+        "detail": {
+          "settled": null,
+          "verify_ok": false
+        },
+        "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: 1)",
+        "step": "launch",
+        "task": "m4-strict-4",
+        "wall_ms": 143.533
+      }
+    ]
+  },
+  "host_after": {
+    "loadavg1": 16.39,
+    "loadavg15": 10.02,
+    "loadavg5": 11.6,
+    "mem_available_gib": 45.21,
+    "mem_available_mib": 46299.5,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-0b368dd6-9a124dd69c65fd18 && export CARGO_TARGET_DIR=$PWD/.cache/flakewin-target CARGO_PROFILE_DEV_DEBUG=0 CARGO",
+        "comm": "bash",
+        "pid": 2821104
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task FLAKEWIN -- tools/guarded.sh --mem 16G --time 580 -- cargo test --release --offline -p acos-services -p acos-art",
+        "comm": "bash",
+        "pid": 2821107
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-9ec72121-100347c09632a1c7 && rm -rf .cache/wv6-run/ev && mkdir -p .cache/wv6-run/ev && ACOS_FONT_DIR=/home/Qui/P",
+        "comm": "bash",
+        "pid": 2822493
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-9ec72121-100347c09632a1c7/.cache/wv6-target/release/acos-art launch --apk fixtures/build/apps/webview-probe.apk --until activity",
+        "comm": "acos-art",
+        "pid": 2822549
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 2823253
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 2823258
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 16G --time 580 -- cargo test --release --offline -p acos-services -p acos-art",
+        "comm": "bash",
+        "pid": 2824180
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 580 cargo test --release --offline -p acos-services -p acos-art",
+        "comm": "timeout",
+        "pid": 2824189
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --release --offline -p acos-services -p acos-art",
+        "comm": "cargo",
+        "pid": 2824190
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-ba8936f8-e31a438bba670ddc && export CARGO_TARGET_DIR=$PWD/.cache/net5-target CARGO_PROFILE_DEV_DEBUG=0 CARGO_PRO",
+        "comm": "bash",
+        "pid": 2824882
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 14G --time 1800 -- cargo build --release --offline -p acos-netd -p acos-art -p acos-cli -p acos-mcp",
+        "comm": "bash",
+        "pid": 2824883
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 1800 cargo build --release --offline -p acos-netd -p acos-art -p acos-cli -p acos-mcp",
+        "comm": "timeout",
+        "pid": 2824893
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-netd -p acos-art -p acos-cli -p acos-mcp",
+        "comm": "cargo",
+        "pid": 2824894
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-ffc15311-cbc05ec393ae4c1e && df -h / | tail -1 && nohup env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/an",
+        "comm": "bash",
+        "pid": 2827838
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task TOUCHDISP -- tools/guarded.sh --mem 12G --time 2400 -- cargo test --offline --release -p acos-art -p acos-verify ",
+        "comm": "bash",
+        "pid": 2827843
+      }
+    ],
+    "runnable": "6/2447",
+    "used_mib": 15609.2,
+    "used_pct": 25.21,
+    "utc": "2026-11-16T08:14:19+00:00"
+  },
+  "host_before": {
+    "loadavg1": 16.39,
+    "loadavg15": 10.02,
+    "loadavg5": 11.6,
+    "mem_available_gib": 45.21,
+    "mem_available_mib": 46299.5,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-0b368dd6-9a124dd69c65fd18 && export CARGO_TARGET_DIR=$PWD/.cache/flakewin-target CARGO_PROFILE_DEV_DEBUG=0 CARGO",
+        "comm": "bash",
+        "pid": 2821104
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task FLAKEWIN -- tools/guarded.sh --mem 16G --time 580 -- cargo test --release --offline -p acos-services -p acos-art",
+        "comm": "bash",
+        "pid": 2821107
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-9ec72121-100347c09632a1c7 && rm -rf .cache/wv6-run/ev && mkdir -p .cache/wv6-run/ev && ACOS_FONT_DIR=/home/Qui/P",
+        "comm": "bash",
+        "pid": 2822493
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-9ec72121-100347c09632a1c7/.cache/wv6-target/release/acos-art launch --apk fixtures/build/apps/webview-probe.apk --until activity",
+        "comm": "acos-art",
+        "pid": 2822549
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 2823253
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 2823258
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 16G --time 580 -- cargo test --release --offline -p acos-services -p acos-art",
+        "comm": "bash",
+        "pid": 2824180
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 580 cargo test --release --offline -p acos-services -p acos-art",
+        "comm": "timeout",
+        "pid": 2824189
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --release --offline -p acos-services -p acos-art",
+        "comm": "cargo",
+        "pid": 2824190
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-ba8936f8-e31a438bba670ddc && export CARGO_TARGET_DIR=$PWD/.cache/net5-target CARGO_PROFILE_DEV_DEBUG=0 CARGO_PRO",
+        "comm": "bash",
+        "pid": 2824882
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 14G --time 1800 -- cargo build --release --offline -p acos-netd -p acos-art -p acos-cli -p acos-mcp",
+        "comm": "bash",
+        "pid": 2824883
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 1800 cargo build --release --offline -p acos-netd -p acos-art -p acos-cli -p acos-mcp",
+        "comm": "timeout",
+        "pid": 2824893
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-netd -p acos-art -p acos-cli -p acos-mcp",
+        "comm": "cargo",
+        "pid": 2824894
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-ffc15311-cbc05ec393ae4c1e && df -h / | tail -1 && nohup env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/an",
+        "comm": "bash",
+        "pid": 2827838
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task TOUCHDISP -- tools/guarded.sh --mem 12G --time 2400 -- cargo test --offline --release -p acos-art -p acos-verify ",
+        "comm": "bash",
+        "pid": 2827843
+      }
+    ],
+    "runnable": "7/2447",
+    "used_mib": 15609.2,
+    "used_pct": 25.21,
+    "utc": "2026-11-16T08:14:19+00:00"
+  },
+  "ok": false,
+  "phase": "latency",
+  "samples": {
+    "cpu_active_tap_strict_pct": {
+      "bad": 0,
+      "extra": [
+        {
+          "cpu_pct": 65.818,
+          "cpu_s": 3.75,
+          "pids": 5,
+          "seconds": 5.698,
+          "wake_pids": 5,
+          "wakeups": 933,
+          "wakeups_per_s": 163.755
+        }
+      ],
+      "median": 65.818,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 65.818,
+        "mean": 65.818,
+        "median": 65.818,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 65.818,
+        "n": 1,
+        "p5": 65.818,
+        "p50": 65.818,
+        "p95": 65.818,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core",
+      "values": [
+        65.818
+      ]
+    },
+    "m4_launch_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 178.775,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 213.389,
+        "ci95_low": 151.185,
+        "cv": 0.1540142229946973,
+        "max": 213.389,
+        "mean": 183.7946,
+        "median": 178.775,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 151.185,
+        "n": 5,
+        "p5": 153.5942,
+        "p50": 178.775,
+        "p95": 213.1898,
+        "resamples": 2000,
+        "spread": 0.3333553349181932,
+        "spread_pct": 33.33553349181932,
+        "stdev": 28.306982509621193
+      },
+      "unit": "ms",
+      "values": [
+        212.393,
+        213.389,
+        163.231,
+        178.775,
+        151.185
+      ]
+    },
+    "m4_launch_strict_ms": {
+      "bad": 1,
+      "bad_values": [
+        {
+          "extra": {
+            "animations": null,
+            "bound": null,
+            "nodes": 0,
+            "pixels_changed": null,
+            "settled": null,
+            "verify_ok": false
+          },
+          "value": 143.533
+        }
+      ],
+      "extra": [
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 313.48900000000003,
+      "n": 4,
+      "ok": 4,
+      "stats": {
+        "ci95_high": 349.709,
+        "ci95_low": 308.089,
+        "cv": 0.05975519882766554,
+        "max": 349.709,
+        "mean": 321.194,
+        "median": 313.48900000000003,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 308.089,
+        "n": 4,
+        "p5": 308.7676,
+        "p50": 313.48900000000003,
+        "p95": 344.4074,
+        "resamples": 2000,
+        "spread": 0.11368756160503232,
+        "spread_pct": 11.368756160503231,
+        "stdev": 19.193011332253207
+      },
+      "unit": "ms",
+      "values": [
+        349.709,
+        314.365,
+        308.089,
+        312.613
+      ]
+    },
+    "m5_screenshot_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        }
+      ],
+      "median": 12.939,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 15.451,
+        "ci95_low": 12.666,
+        "cv": 0.10306825269711242,
+        "max": 15.451,
+        "mean": 13.833000000000002,
+        "median": 12.939,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 12.666,
+        "n": 5,
+        "p5": 12.688600000000001,
+        "p50": 12.939,
+        "p95": 15.4268,
+        "resamples": 2000,
+        "spread": 0.21162377308911037,
+        "spread_pct": 21.162377308911037,
+        "stdev": 1.4257431395591564
+      },
+      "unit": "ms",
+      "values": [
+        12.666,
+        12.939,
+        12.779,
+        15.33,
+        15.451
+      ]
+    },
+    "m6_reset_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 196.911,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 228.66899999999998,
+        "ci95_low": 162.322,
+        "cv": 0.12113468160791845,
+        "max": 228.669,
+        "mean": 197.2558,
+        "median": 196.911,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 162.322,
+        "n": 5,
+        "p5": 168.52020000000002,
+        "p50": 196.911,
+        "p95": 223.948,
+        "resamples": 2000,
+        "spread": 0.2814865599179324,
+        "spread_pct": 28.14865599179324,
+        "stdev": 23.89451852831524
+      },
+      "unit": "ms",
+      "values": [
+        205.064,
+        228.669,
+        193.313,
+        162.322,
+        196.911
+      ]
+    },
+    "m6_reset_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 320.717,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 382.972,
+        "ci95_low": 308.433,
+        "cv": 0.10550290763149563,
+        "max": 382.972,
+        "mean": 339.9432,
+        "median": 320.717,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 308.433,
+        "n": 5,
+        "p5": 309.339,
+        "p50": 320.717,
+        "p95": 381.30379999999997,
+        "resamples": 2000,
+        "spread": 0.22438723235749888,
+        "spread_pct": 22.438723235749887,
+        "stdev": 35.864996029555044
+      },
+      "unit": "ms",
+      "values": [
+        312.963,
+        374.631,
+        308.433,
+        382.972,
+        320.717
+      ]
+    },
+    "m7_tree_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        }
+      ],
+      "median": 0.81,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 3.092,
+        "ci95_low": 0.75,
+        "cv": 0.821897828311625,
+        "max": 3.092,
+        "mean": 1.2524000000000002,
+        "median": 0.81,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.75,
+        "n": 5,
+        "p5": 0.7504000000000001,
+        "p50": 0.81,
+        "p95": 2.6451999999999996,
+        "resamples": 2000,
+        "spread": 2.3392592592592587,
+        "spread_pct": 233.92592592592587,
+        "stdev": 1.0293448401774792
+      },
+      "unit": "ms",
+      "values": [
+        0.75,
+        0.81,
+        0.752,
+        3.092,
+        0.858
+      ]
+    },
+    "m7_tree_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        }
+      ],
+      "median": 41.801,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 41.923,
+        "ci95_low": 41.563,
+        "cv": 0.0031563404390280406,
+        "max": 41.923,
+        "mean": 41.778800000000004,
+        "median": 41.801,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 41.563,
+        "n": 5,
+        "p5": 41.608000000000004,
+        "p50": 41.801,
+        "p95": 41.90220000000001,
+        "resamples": 2000,
+        "spread": 0.007038109136145153,
+        "spread_pct": 0.7038109136145153,
+        "stdev": 0.13186811593406472
+      },
+      "unit": "ms",
+      "values": [
+        41.819,
+        41.563,
+        41.801,
+        41.788,
+        41.923
+      ]
+    },
+    "m8_tap_counter_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 24,
+          "frame_ms": 38,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 29,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 23,
+          "frame_ms": 36,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 0,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 12,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 54.484,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 61.645,
+        "ci95_low": 38.46,
+        "cv": 0.20333209983263975,
+        "max": 61.645,
+        "mean": 50.2862,
+        "median": 54.484,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 38.46,
+        "n": 5,
+        "p5": 38.8728,
+        "p50": 54.484,
+        "p95": 60.5796,
+        "resamples": 2000,
+        "spread": 0.3984068717421628,
+        "spread_pct": 39.840687174216285,
+        "stdev": 10.224798638604089
+      },
+      "unit": "ms",
+      "values": [
+        61.645,
+        56.318,
+        54.484,
+        38.46,
+        40.524
+      ]
+    },
+    "m8_tap_counter_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 87,
+          "frame_ms": 933,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 100,
+          "frame_ms": 919,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 80,
+          "frame_ms": 950,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 80,
+          "frame_ms": 931,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 79,
+          "frame_ms": 911,
+          "pixels_changed": true,
+          "settled": true
+        }
+      ],
+      "median": 949.824,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 967.505,
+        "ci95_low": 931.801,
+        "cv": 0.014515542079789964,
+        "max": 967.505,
+        "mean": 947.6754000000001,
+        "median": 949.824,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 931.801,
+        "n": 5,
+        "p5": 933.0354000000001,
+        "p50": 949.824,
+        "p95": 964.2588,
+        "resamples": 2000,
+        "spread": 0.03287282696583773,
+        "spread_pct": 3.287282696583773,
+        "stdev": 13.756022146681786
+      },
+      "unit": "ms",
+      "values": [
+        951.274,
+        937.973,
+        967.505,
+        949.824,
+        931.801
+      ]
+    },
+    "m8_tap_form_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 32.971,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 34.71,
+        "ci95_low": 32.879,
+        "cv": 0.027822466698096793,
+        "max": 34.71,
+        "mean": 33.602199999999996,
+        "median": 32.971,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 32.879,
+        "n": 5,
+        "p5": 32.886,
+        "p50": 32.971,
+        "p95": 34.675399999999996,
+        "resamples": 2000,
+        "spread": 0.05427193594370791,
+        "spread_pct": 5.427193594370791,
+        "stdev": 0.934896090482788
+      },
+      "unit": "ms",
+      "values": [
+        34.71,
+        34.537,
+        32.914,
+        32.879,
+        32.971
+      ]
+    },
+    "m8_tap_form_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 46,
+          "frame_ms": 910,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 77,
+          "frame_ms": 907,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 67,
+          "frame_ms": 914,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 57,
+          "frame_ms": 902,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 907,
+          "pixels_changed": true,
+          "settled": true
+        }
+      ],
+      "median": 925.551,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 934.987,
+        "ci95_low": 916.866,
+        "cv": 0.007496330013501392,
+        "max": 934.987,
+        "mean": 925.9838,
+        "median": 925.551,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 916.866,
+        "n": 5,
+        "p5": 917.9932,
+        "p50": 925.551,
+        "p95": 933.9921999999999,
+        "resamples": 2000,
+        "spread": 0.017285919414489218,
+        "spread_pct": 1.7285919414489217,
+        "stdev": 6.941480151956069
+      },
+      "unit": "ms",
+      "values": [
+        930.013,
+        925.551,
+        934.987,
+        916.866,
+        922.502
+      ]
+    },
+    "tap_ack_ms": {
+      "bad": 0,
+      "median": 5.0,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 5.0,
+        "ci95_low": 5.0,
+        "cv": 0.0,
+        "max": 5.0,
+        "mean": 5.0,
+        "median": 5.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 5.0,
+        "n": 20,
+        "p5": 5.0,
+        "p50": 5.0,
+        "p95": 5.0,
+        "resamples": 2000,
+        "spread": 0.0,
+        "spread_pct": 0.0,
+        "stdev": 0.0
+      },
+      "unit": "ms",
+      "values": [
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ]
+    },
+    "teardown_ms": {
+      "bad": 0,
+      "median": 26.0,
+      "n": 13,
+      "ok": 13,
+      "stats": {
+        "ci95_high": 31.0,
+        "ci95_low": 24.0,
+        "cv": 0.3154530371575029,
+        "max": 55.0,
+        "mean": 29.23076923076923,
+        "median": 26.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 21.0,
+        "n": 13,
+        "p5": 21.6,
+        "p50": 26.0,
+        "p95": 44.799999999999976,
+        "resamples": 2000,
+        "spread": 0.8923076923076914,
+        "spread_pct": 89.23076923076914,
+        "stdev": 9.220934932296238
+      },
+      "unit": "ms",
+      "values": [
+        24.0,
+        29.0,
+        26.0,
+        21.0,
+        35.0,
+        38.0,
+        25.0,
+        22.0,
+        23.0,
+        31.0,
+        25.0,
+        55.0,
+        26.0
+      ]
+    },
+    "teardown_wall_ms": {
+      "bad": 0,
+      "median": 26.366,
+      "n": 14,
+      "ok": 14,
+      "stats": {
+        "ci95_high": 31.664,
+        "ci95_low": 23.932,
+        "cv": 0.42845512091949806,
+        "max": 55.801,
+        "mean": 27.872285714285713,
+        "median": 26.366,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.035,
+        "n": 14,
+        "p5": 14.00155,
+        "p50": 26.366,
+        "p95": 44.869949999999996,
+        "resamples": 2000,
+        "spread": 1.1707653796556168,
+        "spread_pct": 117.07653796556168,
+        "stdev": 11.942023546017083
+      },
+      "unit": "ms",
+      "values": [
+        24.979,
+        29.791,
+        26.724,
+        21.522,
+        0.035,
+        35.377,
+        38.984,
+        26.129,
+        22.608,
+        23.932,
+        31.664,
+        26.063,
+        55.801,
+        26.603
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "survivors": [
+    {
+      "cmd": "bash tools/art-runtime/run-exclusive.sh --task REL3I3-B -- tools/guarded.sh --mem 12G --time 1500 -- python3 tools/bench/acos_bench.py --phase latency --reps 5 --fast-reps 5 --out .cache/bench-before/latency-before.json --scratch /home/Qui/",
+      "comm": "bash",
+      "pid": 2810092
+    },
+    {
+      "cmd": "bash tools/guarded.sh --mem 12G --time 1500 -- python3 tools/bench/acos_bench.py --phase latency --reps 5 --fast-reps 5 --out .cache/bench-before/latency-before.json --scratch /home/Qui/.t3/worktrees/acos/t3-2f0977d6-8a0d91192c03988c/.cache",
+      "comm": "bash",
+      "pid": 2819053
+    },
+    {
+      "cmd": "/usr/bin/timeout -k 5 1500 python3 tools/bench/acos_bench.py --phase latency --reps 5 --fast-reps 5 --out .cache/bench-before/latency-before.json --scratch /home/Qui/.t3/worktrees/acos/t3-2f0977d6-8a0d91192c03988c/.cache/bench-scratch-befor",
+      "comm": "timeout",
+      "pid": 2819067
+    }
+  ],
+  "teardowns": [
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.979
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 29,
+      "verified": true,
+      "wall_ms": 29.791
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 26,
+      "verified": true,
+      "wall_ms": 26.724
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.522
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": null,
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": null,
+      "verified": null,
+      "wall_ms": 0.035
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 35,
+      "verified": true,
+      "wall_ms": 35.377
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 38,
+      "verified": true,
+      "wall_ms": 38.984
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 26.129
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.608
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.932
+    },
+    {
+      "code": null,
+      "label": "m6-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 31,
+      "verified": true,
+      "wall_ms": 31.664
+    },
+    {
+      "code": null,
+      "label": "m6-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 26.063
+    },
+    {
+      "code": null,
+      "label": "m8-counter",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 55,
+      "verified": true,
+      "wall_ms": 55.801
+    },
+    {
+      "code": null,
+      "label": "m8-form",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 26,
+      "verified": true,
+      "wall_ms": 26.603
+    }
+  ],
+  "utc": "2026-11-16T08:14:19+00:00"
+}

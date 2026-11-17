@@ -1,0 +1,1 @@
+verify: INSUFFICIENT_HOST_EVIDENCE (assertion): UNTRUSTED_TREE_ASSERTION: this run is untrusted, so the UI tree is guest-asserted and cannot justify a pass. Use a host-observed assertion (assert_region / assert_screenshot / capture); the tree is still used to resolve tap targets for navigation. [class=assertion, retryable=false]

@@ -36,6 +36,7 @@ fn activity(tag: u32, token: u64, lifecycle: ActivityLifecycle) -> ActivityRecor
         result_code: 0,
         result_data: None,
         result_delivered: false,
+        back_pressed: false,
     }
 }
 

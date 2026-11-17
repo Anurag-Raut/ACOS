@@ -11,6 +11,7 @@ mod doctor;
 mod engine;
 mod failure;
 mod frame_diff;
+mod guide;
 mod launch;
 mod live_registry;
 mod native_inventory;
@@ -48,7 +49,14 @@ use serde_json::{json, Value};
 
 /// ACOS — agent-native Android execution OS (static analysis front-end).
 #[derive(Debug, Parser)]
-#[command(name = "acos", version, about, long_about = None)]
+#[command(
+    name = "acos",
+    version,
+    about,
+    long_about = None,
+    after_help = "Run `acos guide [topic]` for the agent guide — the same text as the MCP `acos_help` tool \
+                  (`workflow`, `cli`, `scenarios`, `errors`, `limits`, `mcp`, or `all`)."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -101,6 +109,8 @@ enum Command {
     Bench(bench::BenchArgs),
     /// Probe confinement capabilities and report which layers are active (JSON).
     SandboxProbe,
+    /// Print the agent guide (same text as the MCP `acos_help` tool).
+    Guide(guide::GuideArgs),
     /// Preflight the host toolchain (SDK, JDK, helper, memory) before building.
     Doctor(doctor::DoctorArgs),
     /// Serve a 127.0.0.1-only, token-gated, view-only live view of live sessions.
@@ -217,6 +227,7 @@ fn main() -> ExitCode {
             Command::Bench(args) => bench::run(args),
             Command::NativeInventory(args) => native_inventory::run(args),
             Command::SandboxProbe => sandbox_probe::run(),
+            Command::Guide(args) => guide::run(args),
             Command::Doctor(args) => doctor::run(args),
             Command::View(args) => view::run(args),
         }
@@ -757,10 +768,65 @@ fn vm_error_details(e: &VmError) -> Option<Value> {
 }
 
 pub(crate) fn print_json<T: Serialize>(envelope: &T) {
-    match serde_json::to_string_pretty(envelope) {
+    let value = prepare_reply(envelope);
+    match serde_json::to_string_pretty(&value) {
         Ok(s) => println!("{s}"),
         Err(e) => eprintln!("error: failed to serialize JSON envelope: {e}"),
     }
+}
+
+/// REL3C: the CLI's `--json` output uses exactly the MCP reply rule.
+///
+/// A tree-bearing reply is compacted to the visible `text`/`content_desc` nodes
+/// in reading order, paged with `cursor` when long, and the full tree is
+/// written under the per-session artifacts directory named by `tree_path`. The
+/// hard cap is the same [`acos_protocol::reply::MAX_REPLY_BYTES`] used by every
+/// MCP tool; the CLI has no separate "print everything" mode because an agent
+/// reading `--json` is the consumer that overflows. A caller that needs the
+/// whole tree reads the path; a caller that needs the whole verdict reads
+/// `verdict.json`.
+fn prepare_reply<T: Serialize>(envelope: &T) -> Value {
+    let mut value = match serde_json::to_value(envelope) {
+        Ok(value) => value,
+        Err(e) => {
+            eprintln!("error: failed to serialize JSON envelope: {e}");
+            return Value::Null;
+        }
+    };
+    let session = value
+        .get("session_id")
+        .and_then(Value::as_str)
+        .or_else(|| value.pointer("/result/session_id").and_then(Value::as_str))
+        .unwrap_or("cli");
+    let safe: String = session
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let root = std::env::var_os("ACOS_ARTIFACTS_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("out"));
+    let full = value
+        .pointer("/result/full_tree")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let cursor = value
+        .pointer("/result/cursor")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize;
+    let opts = acos_protocol::reply::TreeShapeOptions {
+        cursor,
+        full,
+        artifacts_dir: Some(root.join("sessions").join(if safe.is_empty() {
+            "cli".to_string()
+        } else {
+            safe
+        })),
+        session: Some(session.to_string()),
+        ..acos_protocol::reply::TreeShapeOptions::default()
+    };
+    acos_protocol::reply::shape_result_tree(&mut value, None, &opts);
+    acos_protocol::reply::enforce_cap_pretty(&mut value, acos_protocol::reply::MAX_REPLY_BYTES);
+    value
 }
 
 fn print_text(result: &Value) {

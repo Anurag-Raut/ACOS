@@ -13,6 +13,7 @@
 #   fixtures/build/apps/counter.apk
 #   fixtures/build/apps/todo-list.apk
 #   fixtures/build/apps/multi-activity.apk
+#   fixtures/build/apps/finish-start.apk
 #   fixtures/build/apps/form-validation.apk
 #   fixtures/build/apps/svg-viewbox.apk
 #   fixtures/build/apps/offscreen-pager.apk
@@ -22,6 +23,10 @@
 #   fixtures/build/apps/notif-perm-probe.apk (MODNOTIF5: notifications + POST_NOTIFICATIONS gate)
 #   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
 #
+#
+# `tools/run-matrix.sh` calls this script with ACOS_APP_ONLY for any scenario
+# APK under fixtures/build/apps that is missing, so a stale fixtures/build can
+# never turn a correct matrix row into `APK_IO` (v0.3.0 gate finding F3).
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -92,6 +97,9 @@ fi
 #   Compiles resources + java + dex, appends extra payload, aligns and signs.
 build_apk() {
     local name="$1"; shift
+    # ROT8b: ACOS_BUILD_ONLY=<app> rebuilds a single fixture (other APKs keep
+    # their bytes).
+    if [ -n "${ACOS_BUILD_ONLY:-}" ] && [ "$name" != "$ACOS_BUILD_ONLY" ]; then return 0; fi
     local app_dir="$APPS_DIR/$name"
     local work="$BUILD_DIR/$name"
     local out="$BUILD_DIR/$name.apk"
@@ -308,6 +316,11 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
 for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager sensor-probe notif-perm-probe; do
+# looper-wake is the LOOPERWAKE fixture: an idle Activity changed from a
+# non-main thread (plain Thread + runOnUiThread, HandlerThread + main Handler,
+# and View.postInvalidate from a plain thread). Nothing here needs input, so a
+# scenario can prove the main looper is woken by the post itself.
+for app in counter todo-list multi-activity finish-start form-validation settle-lab thread-heavy svg-viewbox offscreen-pager looper-wake; do
     build_apk "$app"
 done
 
@@ -345,6 +358,27 @@ build_apk location-probe
 # MPROC4: the two-process pair (proc-a starts/binds components of proc-b).
 build_apk proc-a
 build_apk proc-b
+# scroll-list is the REL3S swipe/scroll fixture: a ListView of 100 rows
+# ("Row 0".."Row 99"). A real swipe on it moves the list, so a test can prove
+# row 0 left the viewport and a later row arrived, and `until` can search for
+# a deep row.
+build_apk scroll-list
+# back-layers is the REL3K2 Back-ordering fixture: an AlertDialog and an
+# EditText (whose focus raises the soft input) are the two layers above the
+# Activity. `scenarios/back-layers.yaml` asserts which layer consumed Back.
+build_apk back-layers
+# tap-targets is the REL3E input-handling fixture: a non-clickable label whose
+# clickable switch sits beside it (a tap there is a press the app never
+# consumes: `finishInputEvent(handled) = false`) and a clickable button that
+# changes state (handled = true). See fixtures/apps/tap-targets/res/layout/main.xml.
+build_apk tap-targets
+
+# touch-probe is the TOUCHDISP fixture: a non-clickable custom View whose
+# OnTouchListener returns false and posts a setText 100 ms later, a
+# GestureDetector on a non-clickable View, and a screen-filling root whose own
+# OnTouchListener proves the ViewGroup fallback path. See
+# fixtures/apps/touch-probe/res/layout/main.xml.
+build_apk touch-probe
 
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from

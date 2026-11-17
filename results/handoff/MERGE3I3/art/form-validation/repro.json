@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.3",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-879b7c7c-6dfb08dd82494c49/fixtures/build/apps/form-validation.apk",
+  "apk_sha256": "d8c277d7476a54f8a09288962fd3d9a864ad53b934350721af81725cb3ba7aa9",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-879b7c7c-6dfb08dd82494c49/scenarios/form-validation.yaml",
+  "scenario_sha256": "a74b24cfd8987ae92d132863c76657660f45a948ec1485eed7d6c4d0a248c802",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

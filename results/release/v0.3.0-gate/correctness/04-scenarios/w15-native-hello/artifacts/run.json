@@ -1,0 +1,7 @@
+{
+  "request_id": "req_33772d_18e87bcbf68fa38e",
+  "started_at": "2026-11-16T09:16:07.452Z",
+  "scenario": "scenarios/w15-native-hello.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

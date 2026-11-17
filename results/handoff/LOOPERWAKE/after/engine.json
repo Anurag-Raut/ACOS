@@ -1,0 +1,152 @@
+{
+  "engine": {
+    "animations": "off",
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "swipe",
+        "type_text",
+        "key",
+        "rotate",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/handoff/LOOPERWAKE/after",
+      "engine_report": "results/handoff/LOOPERWAKE/after/engine.json",
+      "pruned_session_captures": 2,
+      "retention": "results/handoff/LOOPERWAKE/after/retention.json",
+      "verdict": "results/handoff/LOOPERWAKE/after/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": false,
+    "insets": "report",
+    "mode": "live",
+    "session_exit": {
+      "abi": null,
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=66MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p115320-i76630.scope)",
+      "code": null,
+      "disk_free_bytes": 255223521280,
+      "guest_crash": null,
+      "guest_exit": 0,
+      "guest_signal": null,
+      "native_crash": null,
+      "native_crash_path": null,
+      "outcome": "ok",
+      "panic": null,
+      "path": "results/handoff/LOOPERWAKE/after/art-frames/session-exit.json",
+      "retryable": false,
+      "stage": "teardown-evidence"
+    },
+    "timing": {
+      "attributed_ms": 2400,
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "hit",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-603be500fc8fe2a5",
+        "input_hash": "603be500fc8fe2a5",
+        "mode": "shared-fixed"
+      },
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 203,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 115
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "step": "assert_log",
+          "wall_ms": 1357
+        },
+        {
+          "index": 3,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 77
+        },
+        {
+          "index": 4,
+          "status": "pass",
+          "step": "assert_log",
+          "wall_ms": 252
+        },
+        {
+          "index": 5,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 167
+        },
+        {
+          "index": 6,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 7,
+          "status": "pass",
+          "step": "assert_log",
+          "wall_ms": 1
+        },
+        {
+          "index": 8,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 177
+        },
+        {
+          "index": 9,
+          "status": "pass",
+          "step": "assert_log",
+          "wall_ms": 254
+        },
+        {
+          "index": 10,
+          "status": "pass",
+          "step": "assert_no_crash",
+          "wall_ms": 0
+        }
+      ],
+      "unattributed_ms": 0,
+      "unit": "ms",
+      "verdict_wall_ms": 2400
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": null,
+  "request_id": "req_1c26d_18e8c0ae9d403d66",
+  "verdict_status": "pass"
+}

@@ -89,7 +89,7 @@ pub fn serve_with_spawns(
     stop: &AtomicBool,
     spawns: Option<SpawnSink<'_>>,
 ) -> io::Result<ServeOutcome> {
-    serve_with_control(peer, listener, stop, spawns, None, None)
+    serve_with_control(peer, listener, stop, spawns, None, None, None, None)
 }
 
 /// [`serve_with_spawns`] plus the launcher's live-control channel.
@@ -100,6 +100,8 @@ pub fn serve_with_control(
     mut spawns: Option<SpawnSink<'_>>,
     control_fd: Option<RawFd>,
     mut control: Option<ControlPump<'_>>,
+    delivery_fd: Option<RawFd>,
+    change: Option<&dyn Fn()>,
 ) -> io::Result<ServeOutcome> {
     let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
     unsafe {
@@ -116,18 +118,20 @@ pub fn serve_with_control(
         if stop.load(Ordering::Acquire) && conns.is_empty() {
             return Ok(outcome);
         }
-        // The poll set: the listener, the optional control pipe, then one entry
+        // The poll set: the listener, the optional wake pipes (the launcher's
+        // live-control channel and the session's delivery wake), then one entry
         // per connection. `base` is where the connections start.
-        let base = 1 + usize::from(control_fd.is_some());
+        let wake_fds: Vec<RawFd> = [control_fd, delivery_fd].into_iter().flatten().collect();
+        let base = 1 + wake_fds.len();
         let mut fds: Vec<libc::pollfd> = Vec::with_capacity(conns.len() + base);
         fds.push(libc::pollfd {
             fd: listener,
             events: libc::POLLIN,
             revents: 0,
         });
-        if let Some(fd) = control_fd {
+        for fd in &wake_fds {
             fds.push(libc::pollfd {
-                fd,
+                fd: *fd,
                 events: libc::POLLIN,
                 revents: 0,
             });
@@ -142,18 +146,20 @@ pub fn serve_with_control(
         // The idle turn is deadline-driven: a module with a timed feed (a
         // scripted location track, a sensor/camera feed) publishes the instant
         // its next `system -> app` delivery is due, and the loop sleeps exactly
-        // that long — or until the guest speaks. A session with no timed module
-        // sleeps `IDLE_POLL_MS` (evidence/teardown housekeeping, no wakeup
-        // storm).
-        let timeout = peer
-            .next_timed_deadline()
-            .map(|deadline| {
-                deadline
-                    .saturating_duration_since(std::time::Instant::now())
-                    .as_millis()
-                    .min(i32::MAX as u128) as i32
-            })
-            .unwrap_or(IDLE_POLL_MS);
+        // that long — or until the guest speaks, a producer wakes it, or the
+        // launcher stops the session. With nothing queued the wait is
+        // **unbounded** (REL3I3): an idle session has zero wakeups, instead of
+        // the fixed poll tick that used to be its only drain.
+        let timeout = match peer.next_timed_deadline() {
+            None => -1,
+            Some(deadline) => {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                // Round **up**: waking 1 ms early ticks before the deadline and
+                // then sleeps again, which is the poll the deadline replaces.
+                let ms = remaining.as_micros().saturating_add(999) / 1000;
+                i32::try_from(ms).unwrap_or(i32::MAX)
+            }
+        };
         let n = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, timeout) };
         if n < 0 {
             let e = io::Error::last_os_error();
@@ -165,33 +171,66 @@ pub fn serve_with_control(
             }
             return Err(e);
         }
-        // A live-control request (ADR-0029 item 4) is served before any guest
-        // frame of this turn: the request mutates the service table, and a
-        // transaction must never run against a table that is mid-attach.
-        if let (Some(fd), Some(pump)) = (control_fd, control.as_mut()) {
-            let ready = fds
-                .iter()
-                .find(|p| p.fd == fd)
-                .is_some_and(|p| p.revents & libc::POLLIN != 0);
-            if ready {
-                // Drain the wake byte(s): the queued requests are the signal.
+        // A wake is the launcher (stop, or a live-control request) or a
+        // producer that queued a `system -> app` delivery no transaction will
+        // carry (the in-process IME's insets, REL3I3). The queue is the state,
+        // the byte is only the edge: drain it, then serve the queue.
+        let woke = wake_fds.iter().any(|fd| {
+            fds.iter()
+                .find(|p| p.fd == *fd)
+                .is_some_and(|p| p.revents & libc::POLLIN != 0)
+        });
+        if woke {
+            for fd in &wake_fds {
                 let mut byte = 0u8;
                 loop {
-                    let r =
-                        unsafe { libc::read(fd, (&mut byte as *mut u8).cast::<libc::c_void>(), 1) };
+                    let r = unsafe {
+                        libc::read(*fd, (&mut byte as *mut u8).cast::<libc::c_void>(), 1)
+                    };
                     if r <= 0 {
                         break;
                     }
                 }
-                let frames = pump(peer);
-                write_tagged(peer, &conns, frames, &mut outcome, dbg);
             }
-        }
-        if n == 0 {
-            // The deadline (or the idle poll) expired: hand out whatever the
-            // modules produced while the guest was quiet.
+            if stop.load(Ordering::Acquire) {
+                for c in &conns {
+                    unsafe { libc::close(c.fd) };
+                }
+                return Ok(outcome);
+            }
+            // A live-control request (ADR-0029 item 4) is served before any
+            // guest frame of this turn: the request mutates the service table,
+            // and a transaction must never run against a table that is
+            // mid-attach.
+            if let (Some(fd), Some(pump)) = (control_fd, control.as_mut()) {
+                let ready = fds
+                    .iter()
+                    .find(|p| p.fd == fd)
+                    .is_some_and(|p| p.revents & libc::POLLIN != 0);
+                if ready {
+                    let frames = pump(peer);
+                    write_tagged(peer, &conns, frames, &mut outcome, dbg);
+                }
+            }
+            let flushed = peer.flush_deliveries();
+            write_tagged(peer, &conns, flushed, &mut outcome, dbg);
             let ticked = peer.tick();
             write_tagged(peer, &conns, ticked, &mut outcome, dbg);
+            if let Some(notify) = change {
+                notify();
+            }
+            continue;
+        }
+        if n == 0 {
+            // The deadline expired: hand out whatever the modules produced
+            // while the guest was quiet.
+            let flushed = peer.flush_deliveries();
+            write_tagged(peer, &conns, flushed, &mut outcome, dbg);
+            let ticked = peer.tick();
+            write_tagged(peer, &conns, ticked, &mut outcome, dbg);
+            if let Some(notify) = change {
+                notify();
+            }
             continue;
         }
 
@@ -316,6 +355,16 @@ pub fn serve_with_control(
                 },
             };
             let outs = peer.handle_tagged(tag, frame);
+            // PERF4: a guest transaction may have changed live state — a
+            // `Surface` transaction is the C1 store a settle binds, and a
+            // service call can move window/insets state. Signal the
+            // settle/observation waiters after every handled frame so they read
+            // the new state now rather than on their next poll. With no waiter
+            // this is one uncontended mutex and a futex wake with no waiters,
+            // inside a binder call that just parsed a parcel.
+            if let Some(notify) = change {
+                notify();
+            }
             // MPROC4 step 3b: a resolution to a package with no process is a
             // spawn request. The launcher decides (it owns the processes and
             // their tags), so nothing is started from here.
@@ -373,13 +422,6 @@ pub fn serve_with_control(
         }
     }
 }
-
-/// The idle-turn timeout when no module has a timed feed.
-///
-/// Not a poll: with a timed module the loop sleeps exactly until its next
-/// delivery ([`Peer::next_timed_deadline`]); this ceiling only bounds how long
-/// the loop waits before it re-checks whether the session is stopping.
-const IDLE_POLL_MS: i32 = 100;
 
 /// Write frames the peer produced outside a frame turn (the idle tick) to the
 /// connection their tag names.

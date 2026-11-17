@@ -11,6 +11,8 @@ regex = "1"
 schemars = "0.8"
 serde = { workspace = true }
 serde_json = { workspace = true }
+# PROVENANCE: the SHA-256 of the APK and scenario an envelope/verdict names.
+sha2 = "0.10"
 # YAML crate choice: serde_yaml is archived/unmaintained and serde_yml is
 # deprecated by its own release notes. serde_yaml_ng is the maintained fork of
 # serde_yaml with the same API, used only to parse the agent-facing scenario

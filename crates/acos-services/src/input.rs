@@ -125,12 +125,20 @@ pub struct PendingEvent {
 }
 
 /// An acknowledged event.
+///
+/// `handled` is the app window's answer, not ours: the runtime's
+/// `nativeFinishInputEvent` hook carries the `handled` bit the real
+/// `InputEventReceiver` passed to `finishInputEvent`, and it is recorded
+/// verbatim. A press the app never consumed acks `handled: false`, which is the
+/// only honest way to tell "nothing there" from "handled, nothing changed".
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AckRecord {
     /// Sequence number.
     pub seq: u32,
     /// Target window.
     pub window: WindowId,
+    /// The app window's `finishInputEvent(handled)` answer.
+    pub handled: bool,
 }
 
 /// The service-side input dispatcher.
@@ -391,7 +399,7 @@ impl InputDispatcher {
     }
 
     /// `finishInputEvent`: acknowledge exactly one dispatched sequence.
-    pub fn finish_event(&mut self, seq: u32) -> Result<AckRecord, InputError> {
+    pub fn finish_event(&mut self, seq: u32, handled: bool) -> Result<AckRecord, InputError> {
         let p = self
             .pending
             .remove(&seq)
@@ -399,6 +407,7 @@ impl InputDispatcher {
         let rec = AckRecord {
             seq,
             window: p.window,
+            handled,
         };
         self.acks.push(rec.clone());
         Ok(rec)
@@ -602,10 +611,20 @@ mod tests {
             other => panic!("unexpected frames {other:?}"),
         }
         assert_eq!(d.pending().len(), 2);
-        d.finish_event(1).unwrap();
-        d.finish_event(2).unwrap();
+        // The app window's own `finishInputEvent(handled)` answers, recorded
+        // verbatim: this is what tells "nothing consumed the press" apart from
+        // "handled, nothing changed".
+        assert!(!d.finish_event(1, false).unwrap().handled);
+        assert!(d.finish_event(2, true).unwrap().handled);
         assert!(d.is_idle());
         assert_eq!(d.acks().len(), 2);
+        assert_eq!(
+            d.acks()
+                .iter()
+                .map(|ack| (ack.seq, ack.handled))
+                .collect::<Vec<_>>(),
+            vec![(1, false), (2, true)]
+        );
     }
 
     #[test]
@@ -632,12 +651,12 @@ mod tests {
         let seqs = d.inject_key(4).unwrap();
         assert_eq!(seqs.len(), 2);
         assert!(matches!(
-            d.finish_event(999),
+            d.finish_event(999, true),
             Err(InputError::UnknownSequence(999))
         ));
-        d.finish_event(seqs[0]).unwrap();
+        assert!(d.finish_event(seqs[0], true).unwrap().handled);
         assert!(matches!(
-            d.finish_event(seqs[0]),
+            d.finish_event(seqs[0], true),
             Err(InputError::UnknownSequence(_))
         ));
     }

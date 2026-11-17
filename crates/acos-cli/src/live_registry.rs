@@ -468,22 +468,98 @@ fn sanitize(session_id: &str) -> String {
     }
 }
 
+/// Root for the small files (and Unix sockets) the viewer tests create.
+///
+/// The rule lives in [`acos_test_support::short_scratch_root`] because it is one
+/// class, not one test: a `sun_path` is 108 bytes including the terminating NUL,
+/// and `<worktree>/.cache/lv/<pid>-frames-and-events-stream/producer.sock` is
+/// over that in any long checkout (agent worktrees, CI job dirs). The root is
+/// short by construction:
+///
+/// 1. `ACOS_VIEW_TEST_DIR` when it fits the socket budget;
+/// 2. `<cwd>/.cache/lv` when the checkout is short enough for it (the normal
+///    case; the scratch stays inside the workspace);
+/// 3. `/dev/shm/acos-lv-tests`, a fixed short RAM-backed path, otherwise (these
+///    tests write a handful of bytes each, never real artifacts);
+/// 4. the system temp dir as the last resort.
+///
+/// A too-long `ACOS_VIEW_TEST_DIR` is reported once and ignored, so a caller
+/// with a long scratch directory still gets a runnable test instead of a `bind`
+/// failure (or a failing budget assert) deep in a test. The budget itself is
+/// derived from the deepest name these tests bind, so it cannot be "generous"
+/// and still overflow.
+#[cfg(test)]
+pub(crate) fn test_scratch_root() -> PathBuf {
+    let candidates: Vec<PathBuf> = std::env::current_dir()
+        .ok()
+        .map(|cwd| vec![cwd.join(".cache/lv")])
+        .unwrap_or_default();
+    acos_test_support::short_scratch_root("ACOS_VIEW_TEST_DIR", &candidates, "acos-lv-tests")
+}
+
+/// A fresh per-process subdirectory of `root`, named `<pid>-<tag>`.
+#[cfg(test)]
+pub(crate) fn short_scratch(root: PathBuf, tag: &str) -> PathBuf {
+    let dir = root.join(format!("{}-{tag}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    dir
+}
+
+#[cfg(test)]
+mod scratch_tests {
+    use super::*;
+
+    /// The deepest name these tests bind below the root; the budget is sized
+    /// from exactly this shape (see `acos_test_support::SCRATCH_ROOT_BUDGET`).
+    fn deepest_path(root: &Path) -> PathBuf {
+        root.join(format!("{}-frames-and-events-stream", std::process::id()))
+            .join("producer.sock")
+    }
+
+    #[test]
+    fn the_test_scratch_root_leaves_room_for_a_unix_socket() {
+        // The class of bug this fixes: the root plus a deep socket name must fit
+        // `sun_path` (108 bytes with the NUL) in any checkout, however long.
+        let deepest = deepest_path(&test_scratch_root());
+        let len = deepest.as_os_str().as_encoded_bytes().len();
+        assert!(
+            len <= acos_test_support::SUN_PATH_MAX,
+            "{} is {len} bytes, too long for sun_path ({} with the NUL)",
+            deepest.display(),
+            acos_test_support::SUN_PATH_MAX + 1
+        );
+    }
+
+    #[test]
+    fn a_long_view_test_dir_narrows_to_a_root_that_still_fits() {
+        // `ACOS_VIEW_TEST_DIR` set to a long path (the SETTLE5 case: a 114-byte
+        // socket path from a 67-byte root) must not fail the socket budget: the
+        // rule picks the short root instead and says so. Decided without
+        // touching the process environment, which parallel tests share.
+        let long = PathBuf::from(format!("/tmp/{}", "x".repeat(70)));
+        let checkout = PathBuf::from("/home/agent/wt/.cache/lv");
+        let (root, ignored) = acos_test_support::pick_scratch_root(
+            Some(&long),
+            std::slice::from_ref(&checkout),
+            "acos-lv-tests",
+        );
+        assert_eq!(ignored.as_deref(), Some(long.as_path()));
+        let deepest = deepest_path(&root);
+        assert!(
+            deepest.as_os_str().as_encoded_bytes().len() <= acos_test_support::SUN_PATH_MAX,
+            "{} is too long for sun_path",
+            deepest.display()
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn scratch(tag: &str) -> PathBuf {
-        let root = std::env::var_os("ACOS_VIEW_TEST_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(".cache/live-registry-test")
-            });
-        let dir = root.join(format!("{}-{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("scratch dir");
-        dir
+        short_scratch(test_scratch_root(), tag)
     }
 
     fn entry(session: &str) -> LiveEntry {

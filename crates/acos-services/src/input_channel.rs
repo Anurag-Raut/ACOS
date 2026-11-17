@@ -221,6 +221,61 @@ pub const KEYCODE_DPAD_CENTER: i32 = 23;
 /// Default DOWN→UP hold for a synthesized tap/key (`50 ms`, as `acos-wm` uses).
 pub const DEFAULT_TAP_HOLD_NANOS: i64 = 50_000_000;
 
+/// The display refresh cadence an interpolated gesture is published at
+/// (`16 ms` ≈ 60 Hz, the `Choreographer` vsync period a real touchscreen
+/// samples at).
+pub const GESTURE_SAMPLE_INTERVAL_NANOS: i64 = 16_000_000;
+
+/// One sample of an interpolated touch gesture.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GestureSample {
+    /// Sample position (window-local, carried in the message transform).
+    pub x: f32,
+    /// Sample position (window-local).
+    pub y: f32,
+    /// `eventTime` offset from the stream's `downTime`, in nanoseconds.
+    pub offset_nanos: i64,
+}
+
+/// Interpolate a swipe/scroll into the samples a real touchscreen would have
+/// produced: one sample at the down point, one `MOVE` per display refresh
+/// interval (`interval_nanos`, 16 ms by default), and a final sample at the up
+/// point whose offset is exactly `duration_nanos`.
+///
+/// This is the shape the framework's own gesture generators use (equidistant
+/// motion events over the gesture duration), and it is what lets
+/// `VelocityTracker`/`OverScroller` see a real velocity: the timestamps are
+/// monotonic, evenly spaced and end at the lift, so the last few samples carry
+/// the gesture's speed. A duration shorter than one refresh interval still
+/// produces one interpolated `MOVE` — never a synthetic "up with no motion".
+#[must_use]
+pub fn swipe_samples(
+    from: (f32, f32),
+    to: (f32, f32),
+    duration_nanos: i64,
+    interval_nanos: i64,
+) -> Vec<GestureSample> {
+    let duration = duration_nanos.max(1);
+    let interval = interval_nanos.max(1);
+    // At least one MOVE, at most 1000 (a bounded stream the receiver can drain).
+    let moves = usize::try_from((duration / interval).max(1)).unwrap_or(1).min(1000);
+    let mut samples = Vec::with_capacity(moves + 1);
+    samples.push(GestureSample {
+        x: from.0,
+        y: from.1,
+        offset_nanos: 0,
+    });
+    for i in 1..=moves {
+        let t = i as f64 / moves as f64;
+        samples.push(GestureSample {
+            x: from.0 + (to.0 - from.0) * t as f32,
+            y: from.1 + (to.1 - from.1) * t as f32,
+            offset_nanos: duration * i as i64 / moves as i64,
+        });
+    }
+    samples
+}
+
 // ---------------------------------------------------------------------------
 // errors
 // ---------------------------------------------------------------------------
@@ -1475,17 +1530,62 @@ pub struct InputChannelPair {
 /// The descriptors are left **blocking** (as in AOSP): the guest's looper
 /// blocks on its end, while both sides pass `MSG_DONTWAIT` per call.
 pub fn open_input_channel_pair(name: &str) -> Result<InputChannelPair> {
-    let (server, client) = rustix::net::socketpair(
+    let (server, client) = open_channel_fds()?;
+    Ok(InputChannelPair {
+        publisher: InputPublisher::new(server, format!("{name} (server)")),
+        client_fd: Some(client),
+    })
+}
+
+/// Create the raw `socketpair(AF_UNIX, SOCK_SEQPACKET, 0, ...)` pair, without
+/// wrapping either end in a producer.
+///
+/// [`open_input_channel_pair`] is the window-shaped caller (server end = the
+/// dispatcher's [`InputPublisher`]). The IME bind result needs the opposite
+/// direction: the **app** is the producer (`ImeInputEventSender` sends the key
+/// into its end, exactly like `InputMethodManager.mCurChannel`) and ACOS's IME
+/// service is the consumer, so it keeps this pair's server end in a
+/// [`LoopbackConsumer`] and hands the client end to the app.
+///
+/// Both descriptors are left blocking (AOSP's `InputChannel` contract); every
+/// call passes `MSG_DONTWAIT` explicitly.
+pub fn open_channel_fds() -> Result<(OwnedFd, OwnedFd)> {
+    rustix::net::socketpair(
         rustix::net::AddressFamily::UNIX,
         SocketType::SEQPACKET,
         SocketFlags::CLOEXEC,
         None,
     )
-    .map_err(|e| io_err("socketpair", e))?;
-    Ok(InputChannelPair {
-        publisher: InputPublisher::new(server, format!("{name} (server)")),
-        client_fd: Some(client),
-    })
+    .map_err(|e| io_err("socketpair", e))
+}
+
+/// Write one `InputChannel` body exactly as the image's
+/// `InputChannel.nativeWriteToParcel` does, **without** a `writeTypedObject`
+/// presence word:
+///
+/// ```text
+/// int32 isInitialized   1 with an fd, 0 for an unknown token
+/// strong binder token
+/// String16 name         "<window> (client)"
+/// fd                    dup of the client end
+/// ```
+///
+/// One encoder for both callers: `addToDisplayAsUser`'s `out InputChannel`
+/// (which prefixes the AIDL presence word) and `InputBindResult.channel`
+/// (whose `writeToParcel` writes the non-null `int32 1` itself).
+pub fn write_channel_body(
+    p: &mut Parcel,
+    token: BinderId,
+    name: &str,
+    fd: BorrowedFd<'_>,
+) -> Result<()> {
+    p.write_int32(1);
+    p.write_strong_binder_opt(Some(token));
+    p.write_string16_opt(Some(name))
+        .map_err(|e| ChannelError::Parcel(e.to_string()))?;
+    p.write_file_descriptor(fd)
+        .map_err(|e| ChannelError::Parcel(e.to_string()))?;
+    Ok(())
 }
 
 /// One live input channel, keyed by the window token the session layer has.
@@ -1606,15 +1706,7 @@ impl InputChannelRegistry {
             reply.write_int32(0);
             return Ok(());
         };
-        reply.write_int32(1);
-        reply.write_strong_binder_opt(Some(entry.token));
-        reply
-            .write_string16_opt(Some(&entry.name))
-            .map_err(|e| ChannelError::Parcel(e.to_string()))?;
-        reply
-            .write_file_descriptor(client_fd.as_fd())
-            .map_err(|e| ChannelError::Parcel(e.to_string()))?;
-        Ok(())
+        write_channel_body(reply, entry.token, &entry.name, client_fd.as_fd())
     }
 
     /// Release a channel (window removed). Dropping the server end makes the
@@ -1645,13 +1737,20 @@ impl InputChannelRegistry {
 // test consumer (loopback proof)
 // ---------------------------------------------------------------------------
 
-/// A minimal `InputConsumer` over the client end: decode messages and answer
-/// `FINISHED`.
+/// A minimal `InputConsumer`: decode messages and answer `FINISHED`.
 ///
-/// This is the test-side proof that the bytes are readable and that the ack
-/// path works. It is deliberately not a second dispatcher: it decodes the same
-/// bytes the image's `InputChannel::receiveMessage` would, using only this
-/// module's decoder.
+/// The direction inverts depending on which end it wraps:
+///
+/// * over a window channel's client end it is the test-side proof that the
+///   bytes are readable and that the ack path works;
+/// * over the **server** end of the IME `InputBindResult` channel it is the
+///   real consumer: the app's `ImeInputEventSender` is the producer there, and
+///   ACOS's IME service reads the `KEY` messages and answers
+///   `FINISHED(handled)` (see `crate::ime`).
+///
+/// It is deliberately not a second dispatcher: it decodes the same bytes the
+/// image's `InputChannel::receiveMessage` would, using only this module's
+/// decoder.
 #[derive(Debug)]
 pub struct LoopbackConsumer {
     fd: OwnedFd,

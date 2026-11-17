@@ -37,3 +37,10 @@ tag change and diff the output against the transcribed table).
   start. `Location.writeToParcel` in this image has no mock bit (bit 4 is
   vertical accuracy), and `ActivityManager$PendingIntentInfo.writeToParcel` is
   `(String, int, boolean, int)` — the reply `getInfoForIntentSender` must carry.
+Sparse checkouts: add more paths with `git -C <dir> sparse-checkout add <path>` (blobs are fetched on demand, partial clone).
+
+## Known differences between the image and the r75 source cache
+The image's framework dex is authoritative (see the wire-format rule in agent briefs). Measured differences so far:
+- `ILocationManager` geocoder ABI is pre-r75 in the image: `getFromLocation(GeocoderParams, IGeocodeListener)` / `getFromLocationName(...)`, not r75's `reverseGeocode`/`forwardGeocode` (MODLOC).
+- `IActivityManager.addPackageDependency` takes one `String` in the image (code 96), not `(String,int)` (WV3).
+- Three parcelable fields differ from r75 (WV2 `results/handoff/WV2/WALLS.md` §2); `Icon` resource branch and `Notification.allPendingIntents` follow the image (MODNOTIF4).

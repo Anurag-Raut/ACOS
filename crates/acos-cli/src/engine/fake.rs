@@ -288,6 +288,7 @@ impl SessionBackend for FakeSession {
             screenshot: true,
             tap: true,
             tap_text: true,
+            swipe: false,
             type_text: self.supports_type,
             key: true,
             // The fake session has no display-rotation command.
@@ -469,14 +470,16 @@ impl SessionBackend for FakeSession {
     }
 
     fn last_input_delivery(&self) -> Option<acos_verify::backend::InputDelivery> {
-        self.settle_json
-            .as_ref()
-            .map(|settle| acos_verify::backend::InputDelivery {
-                delivered: true,
-                visual_change: false,
-                acks: Vec::new(),
-                settle: Some(settle.clone()),
-            })
+        self.settle_json.as_ref().map(|settle| acos_verify::backend::InputDelivery {
+            delivered: true,
+            visual_change: false,
+            handled: None,
+            published: 0,
+            acks: Vec::new(),
+            window_removed: false,
+            target: None,
+            settle: Some(settle.clone()),
+        })
     }
 
     fn input_settle_timeout(&self) -> Option<serde_json::Value> {

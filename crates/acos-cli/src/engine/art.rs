@@ -239,6 +239,13 @@ pub struct ArtSession {
     /// P1: `"fast"` or `"strict"` for the next input command. Serve sets it per
     /// verb; the default is strict.
     settle_mode: &'static str,
+    /// REL3A: the settle rule the next **observation** (`frame()`) binds with.
+    /// `"strict"` (default) or `"content"` (ADR-0026 decision 3). The verifier
+    /// sets it per step (`set_observation_settle`); the rule is one-shot - `frame()`
+    /// consumes it and restores `strict`, so a content observation can never leak
+    /// into a later capture/pixel claim. Serve's own verbs never ask for content
+    /// observations and reset this to `strict` at the start of every call.
+    observation_settle: &'static str,
     /// P3b: the guest's `settle` block for the most recent tree request
     /// (`mode`, `settled`, `probe_seq`, `tree_age_ms`, `bound`). Copied into
     /// the `acos_observe_tree` result; never synthesised.
@@ -802,6 +809,10 @@ struct CachedFrame {
     signature: u64,
     captured_at_ms: u64,
     captured_at: String,
+    /// ROT8b: this observation is the task-finished (`window-gone`) state: an
+    /// empty window forest with NO pixels. It carries no PNG and never becomes
+    /// `last_pixel`; only the state proof is claimed.
+    gone: bool,
 }
 
 impl CachedFrame {
@@ -828,7 +839,11 @@ impl CachedFrame {
             captured_at_ms: self.captured_at_ms,
             captured_at: self.captured_at.clone(),
             md5: self.md5.clone(),
-            png: self.png_bytes()?,
+            png: if self.gone && self.png.is_none() {
+                Vec::new()
+            } else {
+                self.png_bytes()?
+            },
         })
     }
 
@@ -950,12 +965,59 @@ fn acks_from_reply(reply: &serde_json::Value) -> Vec<InputAck> {
 /// tree with the pre-action one (see [`tree_signature`]). The acks are copied
 /// verbatim and remain guest-asserted.
 fn delivery(reply: &serde_json::Value, visual_change: bool) -> InputDelivery {
+    let (handled, published) = handled_from_reply(reply);
+    // REL3I3: the host's own record that the window this input went to was
+    // removed during the step. A dismissed dialog's `InputEventReceiver` is
+    // disposed before it can finish the event, so there is no ack to wait for;
+    // the removal *is* the proof that the press acted on that window.
+    let window_removed = reply
+        .pointer("/gesture/window_removed")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    // REL3I3/MERGE3I3: the same precedence `handled_source` applies - the
+    // delivered window's removal answers `true` unless a guest ack already
+    // claimed the event.
+    let any_handled = acks_from_reply(reply).iter().any(|ack| ack.handled);
+    let handled =
+        acos_protocol::ui::handled_answer(handled, published, any_handled, window_removed);
     InputDelivery {
         delivered: true,
         visual_change,
+        handled,
+        published,
         acks: acks_from_reply(reply),
+        window_removed,
+        target: reply.get("target").cloned(),
         settle: reply.get("settle").cloned(),
     }
+}
+
+/// REL3E: the app window's own answer, read from the guest's `gesture` record.
+///
+/// The guest acks every published `InputMessage` with the `handled` bit its
+/// `InputEventReceiver.finishInputEvent` was called with (AOSP `ViewRootImpl`
+/// passes `FLAG_FINISHED_HANDLED`, and drops with `false`), so this is the
+/// framework's verdict, never a heuristic:
+///
+/// * **any** unhandled ack proves nothing consumed that event → `Some(false)`;
+/// * every published event acked handled → `Some(true)`;
+/// * a short or missing ack list → `None` (unknown; the reply says so, it never
+///   claims "not handled" for an event the guest never answered).
+fn handled_from_reply(reply: &serde_json::Value) -> (Option<bool>, usize) {
+    let published = reply
+        .pointer("/gesture/seqs")
+        .and_then(|value| value.as_array())
+        .map(Vec::len)
+        .unwrap_or(0);
+    let acks = acks_from_reply(reply);
+    let handled = if acks.iter().any(|ack| !ack.handled) {
+        Some(false)
+    } else if published > 0 && acks.len() == published {
+        Some(true)
+    } else {
+        None
+    };
+    (handled, published)
 }
 
 /// P1: the guest's own fast-mode verdict, when it reported one. `None` means
@@ -1014,6 +1076,14 @@ pub(crate) struct FirstFrameReport {
     pub pixels_changed: bool,
     /// The budget the content wait was allowed (`ACOS_ART_FIRST_FRAME_MS`).
     pub budget_ms: u64,
+    /// GATEFIX (F1): the content window the wait had to cover before a
+    /// placeholder verdict (the budget, from the end of the launch's own
+    /// traversal).
+    pub window_ms: u64,
+    /// GATEFIX (F1): did the wait observe the skeleton for that whole window?
+    /// `false` means the wait ended early (guest error / protocol failure), so
+    /// neither a placeholder nor a pass may be claimed from it.
+    pub window_spent: bool,
 }
 
 impl Default for FirstFrameReport {
@@ -1034,6 +1104,8 @@ impl Default for FirstFrameReport {
             pixels_compared: false,
             pixels_changed: false,
             budget_ms: 0,
+            window_ms: 0,
+            window_spent: false,
         }
     }
 }
@@ -1076,6 +1148,8 @@ impl FirstFrameReport {
             "frames_advanced": self.frames_advanced,
             "pixels_compared": self.pixels_compared,
             "pixels_changed": self.pixels_changed,
+            "window_ms": self.window_ms,
+            "window_spent": self.window_spent,
         })
     }
 }
@@ -1102,6 +1176,12 @@ struct FirstFrameEvidence {
     pixels_compared: bool,
     /// The digest changed (the frame's pixels are not the skeleton's).
     pixels_changed: bool,
+    /// GATEFIX (F1): did the wait give the app its whole chance — the content
+    /// window (`ACOS_ART_FIRST_FRAME_MS`) elapsed while the skeleton was
+    /// observed? A placeholder is a claim about the app ("it never mounted"),
+    /// so it may only be made after the app had that window to run; samples
+    /// taken within the first few milliseconds are not evidence of absence.
+    window_spent: bool,
 }
 
 fn frame_identity(frame: Option<&CachedFrame>) -> FrameIdentity {
@@ -1119,6 +1199,7 @@ fn frame_evidence(
     baseline: &FrameIdentity,
     current: &FrameIdentity,
     frames: usize,
+    window_spent: bool,
 ) -> FirstFrameEvidence {
     let seq_advanced = match (baseline.seq, current.seq) {
         (Some(before), Some(after)) => after > before,
@@ -1138,6 +1219,7 @@ fn frame_evidence(
         frames_advanced: seq_advanced || number_advanced,
         pixels_compared,
         pixels_changed,
+        window_spent,
     }
 }
 
@@ -1151,8 +1233,17 @@ fn frame_evidence(
 /// * a skeleton whose frame identity advanced but whose pixels are the same is
 ///   *still* the window (the launcher re-published the same buffer), so the
 ///   pixels decide when they are comparable;
-/// * a skeleton that nothing moved is the placeholder: the app never mounted.
-fn first_frame_placeholder_verdict(tree: &UiTree, evidence: &FirstFrameEvidence) -> (bool, bool) {
+/// * a skeleton that nothing moved **for the whole content window** is the
+///   placeholder: the app never mounted. The window is what makes it evidence:
+///   the launch's own traversal plus a burst of samples taken within a few
+///   milliseconds of the window mount is exactly how a fast host produced a
+///   false `PLACEHOLDER_CONTENT` on a launch whose app did mount 300 ms later
+///   (v0.3.0 gate F1). `window_spent == false` therefore yields neither a
+///   placeholder nor a pass; the caller fails closed instead.
+fn first_frame_placeholder_verdict(
+    tree: &UiTree,
+    evidence: &FirstFrameEvidence,
+) -> (bool, bool) {
     if !first_frame_is_bare_skeleton(tree) {
         return (false, false);
     }
@@ -1161,7 +1252,7 @@ fn first_frame_placeholder_verdict(tree: &UiTree, evidence: &FirstFrameEvidence)
     } else {
         evidence.frames_advanced
     };
-    (!moved, moved)
+    (!moved && evidence.window_spent, moved)
 }
 
 /// FB2c: what the launch actually measured, in one sentence.
@@ -1183,12 +1274,14 @@ pub(crate) fn placeholder_evidence_sentence(report: &FirstFrameReport) -> String
         (false, _) => facts.push("no pixel digest was comparable".to_string()),
     }
     format!(
-        "{} frame(s) over {} traversal(s)/{} ms ({} event wait(s), budget ACOS_ART_FIRST_FRAME_MS={} ms): {}",
+        "{} frame(s) over {} traversal(s)/{} ms ({} event wait(s), budget ACOS_ART_FIRST_FRAME_MS={} ms, window {} ms spent: {}): {}",
         report.frames,
         report.traversals,
         report.waited_ms,
         report.event_waits,
         report.budget_ms,
+        report.window_ms,
+        report.window_spent,
         facts.join(", ")
     )
 }
@@ -1232,13 +1325,17 @@ fn ui_tree_has_app_text(nodes: &[UiNode]) -> bool {
 /// reaching a mounted app screen.
 const FIRST_FRAME_SKELETON_MAX_NODES: usize = 40;
 
-/// G3c: how many traversals a launch may spend waiting for app content.
+/// GATEFIX (F1): how long the mount wait sleeps between two observations when
+/// the guest answered *before* the window ran out.
 ///
-/// G3f1: this is now only a runaway guard, not the binding budget — a content
-/// wait is an *event* request that returns when the guest commits its next tree
-/// state, so the wall-clock budget below is what decides. Kept generous so a
-/// pathologically repainting screen cannot loop forever.
-const FIRST_FRAME_MAX_ATTEMPTS: usize = 8;
+/// G3f1 made the wait event-driven and G3c capped it at a traversal count
+/// (`FIRST_FRAME_MAX_ATTEMPTS = 8`). The cap was the bug: on a quiet host eight
+/// samples of the guest's *cached* skeleton cost ~0 ms, so the launch concluded
+/// `placeholder` before the app ever got CPU time (v0.3.0 gate F1). The window
+/// is now the binding budget and this pace only keeps a fast-answering guest
+/// (an old launcher, a fake) from burning it in a burst; the placeholder
+/// verdict requires the whole window (see `first_frame_placeholder_verdict`).
+const FIRST_FRAME_PROBE_PACE_MS: u64 = 25;
 
 /// G3c: at or below this node count a text-free tree is the *bare* window
 /// skeleton measured on Gaten (1–10 nodes), so a launch frame that never grew
@@ -2096,6 +2193,7 @@ impl ArtSession {
             last_phase: None,
             last_input_settle: None,
             settle_mode: "strict",
+            observation_settle: "strict",
             last_tree_settle: None,
             last_tree_json: None,
             first_frame_report: None,
@@ -2352,16 +2450,30 @@ impl ArtSession {
         if self.closed {
             return Ok(None);
         }
-        let Some(cached) = self.last_pixel.as_ref() else {
+        // ROT8b: a task-finished observation is the newest state (no pixels);
+        // otherwise the last frame that really drew.
+        let source = match self.cached.as_ref() {
+            Some(gone) if gone.gone => Some(gone),
+            _ => self.last_pixel.as_ref(),
+        };
+        let Some(cached) = source else {
             return Ok(None);
         };
         let previous = self.seen_seq.min(cached.seq.saturating_sub(1));
         cached.observed(previous).map(Some)
     }
 
+    /// REL3E: attach the resolved-target/hit-test block to the action's own
+    /// delivery record, so `verify` publishes the same `target` the MCP reply
+    /// carries instead of re-deriving it.
+    pub fn attach_input_target(&mut self, target: serde_json::Value) {
+        if let Some(input) = self.last_input.as_mut() {
+            input.target = Some(target);
+        }
+    }
+
     /// The bound tree of the most recent completed traversal, without issuing a
     /// command.
-    #[allow(dead_code)]
     pub fn bound_tree(&self) -> Option<UiTree> {
         self.cached.as_ref().map(|frame| frame.tree.clone())
     }
@@ -2481,6 +2593,24 @@ impl ArtSession {
     /// SE2: the settle rule the bound frame was proven by, as reported.
     pub fn bound_settle(&self) -> Option<&serde_json::Value> {
         self.bound_settle.as_ref()
+    }
+
+    /// REL3A: the settle rule the next observation binds with
+    /// (`"strict"` default, `"content"` for a screen that animates forever).
+    ///
+    /// It is deliberately separate from [`Self::settle_mode`]: an input's rule
+    /// (`strict`/`fast`/`content`) and an observation's rule are chosen per step
+    /// by the caller, and a `settle: content` tap must not silently make every
+    /// later `frame()` content-settled (or the reverse). Only `strict` and
+    /// `content` are observation rules; `fast` is navigation-only and never
+    /// backs an observation, so anything else falls back to `strict`.
+    pub fn set_observation_settle(&mut self, mode: &str) {
+        self.observation_settle = if mode == "content" { "content" } else { "strict" };
+    }
+
+    /// The observation settle rule in force (`"strict"`/`"content"`).
+    pub fn observation_settle(&self) -> &'static str {
+        self.observation_settle
     }
 
     /// SE2: ask the next input action for the content-stable rule instead of
@@ -3158,12 +3288,9 @@ impl ArtSession {
         if self.last_input_settle.is_none() {
             self.last_input_settle = reply.get("settle").cloned();
         }
-        self.last_input = Some(InputDelivery {
-            delivered: true,
-            visual_change,
-            acks: acks_from_reply(reply),
-            settle: reply.get("settle").cloned(),
-        });
+        // One constructor for both paths: the host facts (including REL3I3's
+        // window-removal evidence) are read in exactly one place.
+        self.last_input = Some(delivery(reply, visual_change));
         Ok(())
     }
 
@@ -3204,11 +3331,23 @@ impl ArtSession {
             Some(raw) => raw.saturating_add(self.seq_offset),
             None => self.cached.as_ref().map(|frame| frame.seq).unwrap_or(0),
         };
+        // ROT8: the guest proved the app's task finished (its last Activity
+        // is destroyed, no window root remains). Nothing draws then, so the
+        // reply carries no frame: the observation is the empty window forest
+        // bound to the LAST COMMITTED pixels (the display keeps its last frame;
+        // ACOS has no launcher to draw). `settle.task_finished` and
+        // `pixels_changed:false` say so; no frame is invented.
+        // ROT8b: the destroyed window's PNG is NOT rebound under the new
+        // frame sequence; the gone observation carries no PNG and `last_pixel`
+        // stays what it was (the last frame that really drew).
+        let window_gone = reply.get("window_gone").and_then(|v| v.as_bool()) == Some(true)
+            && reply.get("tree").is_some()
+            && reply.get("png").is_none();
         let md5 = reply
             .get("md5")
             .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+            .map(str::to_string)
+            .unwrap_or_default();
         let digest = FrameDigest::from_reply(reply, &md5);
         let buffer_generation = reply.get("buffer_generation").and_then(|v| v.as_u64());
         let frame_number = reply.get("frame_number").and_then(|v| v.as_u64());
@@ -3284,6 +3423,7 @@ impl ArtSession {
             signature,
             captured_at_ms,
             captured_at: rfc3339(captured_at_ms),
+            gone: window_gone,
         };
         if frame.png.is_some() {
             self.last_pixel = Some(frame.clone());
@@ -4531,16 +4671,29 @@ impl ArtSession {
     /// description anywhere and at most [`FIRST_FRAME_SKELETON_MAX_NODES`] nodes
     /// — the app's own mounting work is still in flight (measured on Gaten: 10
     /// nodes at the launch frame, 243 two seconds later). The launch then waits
-    /// for an **event**, not a traversal count: it sends the skeleton back as
-    /// `baseline_tree` and the guest's strict settle rule only accepts a sample
-    /// whose tree differs from it (one real draw, its own confirmation window,
-    /// no pending framework work — the same signal the launch's own traversal
-    /// uses), bounded by the `ACOS_ART_FIRST_FRAME_MS` wall clock (default
-    /// 3000 ms, measured from the end of the launch's own traversal). The
-    /// request is repeated only while the guest keeps committing *further*
-    /// still-unmounted states inside that budget (a cap of
-    /// [`FIRST_FRAME_MAX_ATTEMPTS`] traversals is a runaway guard, never the
-    /// budget).
+    /// for an **event**, not a traversal count and not a fixed number of samples:
+    /// it sends the current tree back as `baseline_tree` and the guest's strict
+    /// settle rule only accepts a sample whose tree differs from it (one real
+    /// draw, its own confirmation window, no pending framework work — the same
+    /// signal the launch's own traversal uses), bounded by the
+    /// `ACOS_ART_FIRST_FRAME_MS` window (default 5000 ms, measured from the end
+    /// of the launch's own traversal).
+    ///
+    /// GATEFIX (F1): the mount wait is a **change** wait for every settle rule.
+    /// The caller's rule (`content`) is proven *after* the app mounted; the
+    /// question here is only "did the guest commit the app's own frame yet?". A
+    /// `fast` first traversal has no gate, and the old wait inherited that: its
+    /// eight samples of the guest's cached skeleton cost ~0 ms, so a launch
+    /// concluded `placeholder` before the app could draw (v0.3.0 gate F1, 2/32
+    /// matrix negatives). Two rules follow from that and are enforced here:
+    ///
+    /// * the wait is bounded by the **window**, never by a traversal count, and
+    ///   a guest that answers before the window has run out (an old launcher, a
+    ///   fake, a timeout that returned early) is simply observed again after
+    ///   [`FIRST_FRAME_PROBE_PACE_MS`];
+    /// * `placeholder` is only claimed once the skeleton was observed for that
+    ///   whole window (see [`first_frame_placeholder_verdict`]). A wait that
+    ///   ended early (guest error) yields neither a placeholder nor a pass.
     ///
     /// Every guarantee of the pre-G3f1 wait is preserved:
     ///
@@ -4553,11 +4706,6 @@ impl ArtSession {
     ///   into a `TIMEOUT`;
     /// * the launch step's P9 contract is untouched: the caller restores the
     ///   pre-launch settle block, so the launch step is judged exactly as before.
-    ///
-    /// `fast` mode (navigation, never assertion evidence) has no change gate —
-    /// the guest's fast path already binds the first probe sample newer than the
-    /// request — so it keeps a plain re-traversal bounded by the same wall
-    /// clock.
     fn bind_first_frame(
         &mut self,
         settle: &'static str,
@@ -4593,67 +4741,83 @@ impl ArtSession {
             self.last_tree_settle.clone(),
         );
 
-        // 2. The content wait. Only an unmounted skeleton reaches it.
+        // 2. The mount wait. Only an unmounted skeleton reaches it.
+        let mut wait_error: Option<BackendError> = None;
+        let mut window_spent = false;
         if first_frame_is_unmounted(&tree) {
             let deadline = Instant::now() + Duration::from_millis(budget_ms);
-            while first_frame_is_unmounted(&tree) && traversals < FIRST_FRAME_MAX_ATTEMPTS {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
+            loop {
+                if !first_frame_is_unmounted(&tree) {
                     break;
                 }
+                let now = Instant::now();
+                if now >= deadline {
+                    // The app had its whole window and the guest never committed
+                    // anything else: that is what a placeholder is.
+                    window_spent = true;
+                    break;
+                }
+                let remaining = deadline.saturating_duration_since(now);
                 let budget = match self.settle_timeout_ms {
                     // A caller's own settle deadline is a ceiling on the wait.
                     Some(caller) => (remaining.as_millis() as u64).min(caller),
                     None => remaining.as_millis().max(1) as u64,
                 };
-                // The raw probe tree this engine holds. `strict` hands it to the
-                // guest as the change baseline; `fast` has no gate.
-                let baseline = if settle == "strict" {
-                    self.last_tree_json.clone()
-                } else {
-                    None
-                };
+                // GATEFIX (F1): hand the guest the tree it just published, so
+                // the request waits for the app's *next committed state* whatever
+                // the caller's settle rule is. A `fast` request ignores a
+                // baseline, so the gated wait asks with `strict` (tree-only when
+                // the launch is tree-only); the caller's own rule is proven on
+                // the mounted tree afterwards.
+                let baseline = self.last_tree_json.clone();
+                let wait_settle: &'static str = if baseline.is_some() { "strict" } else { settle };
                 let gated = baseline.is_some();
                 let started = Instant::now();
                 let result = match baseline {
-                    Some(baseline) => self.request_tree_after(settle, pixels, baseline, budget),
-                    None => self.request_tree_params(settle, pixels, None, Some(budget)),
+                    Some(baseline) => {
+                        self.request_tree_after(wait_settle, pixels, baseline, budget)
+                    }
+                    None => self.request_tree_params(wait_settle, pixels, None, Some(budget)),
                 };
                 traversals += 1;
                 if gated {
                     event_waits += 1;
                 }
                 waited_ms += started.elapsed().as_millis() as u64;
-                if result.is_err() {
-                    // Never a new failure mode: keep the last settled binding.
+                if let Err(error) = result {
+                    // The guest stopped answering. Keep the last settled binding
+                    // (never a new failure mode) but do not pretend the window
+                    // ran: the verdict below fails closed instead.
+                    wait_error = Some(error);
                     break;
                 }
                 let settled_now = tree_settle_settled(&self.last_tree_settle);
-                let draw_commit = tree_bound_draw_commit(&self.last_tree_settle);
                 tree = self.require_cached_tree()?;
                 if settled_now {
                     settled_binding = (
                         self.require_cached_frame()?.clone(),
                         self.last_tree_settle.clone(),
                     );
-                } else if draw_commit {
-                    // G3f1: a fresh draw-committed content frame. It is accepted
-                    // as the launch frame (P9's contract is a *fresh* frame, and
-                    // the guest's settle verdict stays in the reply as
-                    // `settled:false`), so an animating screen stops producing a
-                    // skeleton placeholder. `settled_binding` intentionally keeps
-                    // the last *settled* traversal: if a later wait commits
-                    // nothing, the rollback target is unchanged.
-                    if !first_frame_is_unmounted(&tree) {
-                        break;
-                    }
-                } else {
-                    // The wait hit its budget (or the guest kept reporting the
-                    // same tree): the rollback below restores the last settled
-                    // traversal, so the wait can never turn a pass into a
-                    // TIMEOUT.
+                }
+                // G3f1: a draw-committed frame is accepted as the launch frame
+                // (P9's contract is a *fresh* frame, and the guest's settle
+                // verdict stays in the reply as `settled:false`).
+                if !first_frame_is_unmounted(&tree) {
                     break;
                 }
+                // Still the skeleton: keep observing the rest of the window.
+                // A guest that answered before the window ran out (an early
+                // timeout, an old launcher, a fake) is paced, so a burst of
+                // immediate samples can never decide the verdict.
+                let now = Instant::now();
+                if now >= deadline {
+                    window_spent = true;
+                    break;
+                }
+                let pause = deadline
+                    .saturating_duration_since(now)
+                    .min(Duration::from_millis(FIRST_FRAME_PROBE_PACE_MS));
+                std::thread::sleep(pause);
             }
         }
 
@@ -4675,10 +4839,38 @@ impl ArtSession {
             settled = tree_settle_settled(&self.last_tree_settle);
             bound = settle_bound(&self.last_tree_settle);
         }
-        let unmounted = first_frame_is_unmounted(&tree);
         let current_identity = self.verdict_identity(&tree);
-        let evidence = frame_evidence(&baseline_identity, &observed_identity, traversals);
+        let evidence = frame_evidence(
+            &baseline_identity,
+            &observed_identity,
+            traversals,
+            window_spent,
+        );
         let (placeholder, suspect) = first_frame_placeholder_verdict(&tree, &evidence);
+        if !placeholder && !suspect && first_frame_is_unmounted(&tree) && !evidence.window_spent {
+            // GATEFIX (F1): a window skeleton the wait could not observe for the
+            // whole window is neither a placeholder (unproven) nor a pass. The
+            // guest error that ended the wait is the honest answer; without one,
+            // the launch still fails closed rather than claim a first frame it
+            // never observed.
+            if let Some(error) = wait_error {
+                return Err(error);
+            }
+            return Err(BackendError::Protocol {
+                code: ErrorCode::Timeout,
+                detail: format!(
+                    "launch bound only the window skeleton and the first-frame window ({} ms) did \
+                     not run out, so neither the app's content nor a placeholder can be claimed",
+                    budget_ms
+                ),
+                hint: Some(
+                    "Re-run the launch; a window that is not observed for the whole \
+                     ACOS_ART_FIRST_FRAME_MS window is not evidence of an unmounted app."
+                        .to_string(),
+                ),
+                details: Some(serde_json::json!({ "reason": "first_frame_window_unproven" })),
+            });
+        }
         self.first_frame_bound = Some((settled, bound.clone()));
         let report = FirstFrameReport {
             traversals,
@@ -4696,6 +4888,8 @@ impl ArtSession {
             pixels_compared: evidence.pixels_compared,
             pixels_changed: evidence.pixels_changed,
             budget_ms,
+            window_ms: budget_ms,
+            window_spent: evidence.window_spent,
         };
         if suspect {
             eprintln!(
@@ -4712,14 +4906,15 @@ impl ArtSession {
         if report.placeholder && warn_placeholder {
             eprintln!(
                 "acos serve: launch first frame is a window skeleton ({} nodes, no app text) \
-                 after {} traversal(s)/{} ms ({} event wait(s), budget {} ms); nothing about the \
-                 frame moved (identity advanced: {}, pixels compared: {}, pixels changed: {}), so \
-                 it is reported as a placeholder, never as app content",
+                 after {} traversal(s)/{} ms ({} event wait(s), budget {} ms, window spent: {}); \
+                 nothing about the frame moved (identity advanced: {}, pixels compared: {}, pixels \
+                 changed: {}), so it is reported as a placeholder, never as app content",
                 report.nodes,
                 report.traversals,
                 report.waited_ms,
                 report.event_waits,
                 report.budget_ms,
+                report.window_spent,
                 report.frames_advanced,
                 report.pixels_compared,
                 report.pixels_changed
@@ -4729,7 +4924,6 @@ impl ArtSession {
         // verbs read it, `reset` replaces it). Storing it here means every route
         // that binds a first frame — serve, verify, reset — keeps it honest.
         self.first_frame_report = Some(report.clone());
-        let _ = unmounted;
         Ok((tree, report))
     }
 
@@ -4894,6 +5088,40 @@ impl ArtSession {
     }
 }
 
+/// REL3A: refuse a capture whose bound frame was only content-settled.
+///
+/// `settle: content` proves the UI tree's text/nodes/state stopped changing; it
+/// says nothing about the pixels, which may still be animating. A capture is
+/// pixel evidence, so it may never be bound by a content record. The executor
+/// resets the observation rule to strict before a capture and `frame()` is
+/// one-shot; this refuses the remaining case (a caller that asked for content
+/// and then captured) with the same `content_settle_pixel` reason the pixel
+/// assertions use.
+fn content_capture_refusal(settle: Option<&serde_json::Value>) -> Option<BackendError> {
+    let settle = settle?;
+    if settle.get("mode").and_then(serde_json::Value::as_str) != Some("content") {
+        return None;
+    }
+    Some(BackendError::Protocol {
+        code: ErrorCode::UnsupportedAssertion,
+        detail: "capture: the frame was bound by `settle: content` (UI tree content stable), \
+                 which is not pixel evidence - the pixels may still be animating"
+            .to_string(),
+        hint: Some(
+            "A capture needs a pixel-settled frame: use `settle: strict` (the default) and let \
+             the screen stop animating, or assert on the UI tree (assert_text/assert_visible/\
+             assert_state) which content settle may back."
+                .to_string(),
+        ),
+        details: Some(serde_json::json!({
+            "reason": "content_settle_pixel",
+            "step_kind": "capture",
+            "settle": settle,
+            "pixel_evidence": false,
+        })),
+    })
+}
+
 impl SessionBackend for ArtSession {
     fn engine(&self) -> Engine {
         Engine::Art
@@ -4928,10 +5156,22 @@ impl SessionBackend for ArtSession {
         Some(self.module_rows())
     }
 
+    fn bound_tree(&self) -> Option<UiTree> {
+        ArtSession::bound_tree(self)
+    }
+
+    fn attach_input_target(&mut self, target: serde_json::Value) {
+        ArtSession::attach_input_target(self, target);
+    }
+
     fn mode(&self) -> Mode {
         // This engine launches a real Activity; `render-app` (offline preview)
         // is a different command and never reaches this adapter.
         Mode::Live
+    }
+
+    fn display_size(&self) -> Option<(u32, u32)> {
+        Some(ArtSession::display_size(self))
     }
 
     fn capabilities(&self) -> SessionCapabilities {
@@ -4946,6 +5186,10 @@ impl SessionBackend for ArtSession {
             // key stroke per character (ASCII / US layout).
             type_text: true,
             key: true,
+            // REL3S: a real interpolated MotionEvent stream on the live input
+            // channel (DOWN, MOVEs at the refresh cadence, UP), the same
+            // delivery path a tap uses. Scroll/fling physics are the app's own.
+            swipe: true,
             // ROT4: a real display rotation through the guest's
             // `ActivityThread` configuration path (WMS DisplaySpec + the
             // manifest's `configChanges` decide relaunch vs
@@ -5094,6 +5338,10 @@ impl SessionBackend for ArtSession {
         self.settle_mode = mode;
     }
 
+    fn set_observation_settle(&mut self, mode: acos_verify::settle::ObservationSettle) {
+        ArtSession::set_observation_settle(self, mode.as_str());
+    }
+
     fn bound_settle(&self) -> Option<&serde_json::Value> {
         self.bound_settle.as_ref()
     }
@@ -5103,14 +5351,47 @@ impl SessionBackend for ArtSession {
         // the tree and the PNG of that frame. The PNG bytes are loaded from the
         // artifact now (and hash-verified); the session retains only the
         // descriptor between calls.
+        //
+        // REL3A: an observation asked for the content-stable rule binds the
+        // content window's own pixel-bound traversal (a strict capture of the
+        // frame the stable content was proven on), so `refresh()`/`capture()`
+        // report the rule they actually applied. A content settle that cannot
+        // prove stability is a structured TIMEOUT, never an observation.
+        //
+        // The rule is **one-shot**: it is consumed here and restored to strict
+        // before any command runs, so an error or an early return cannot leave
+        // the session content-sticky for the next step's capture/pixel claim.
+        let content = self.observation_settle == "content";
+        self.observation_settle = "strict";
         let previous = self.seen_seq;
-        self.request_tree()?;
+        if content {
+            self.content_settle()?;
+        } else {
+            self.request_tree()?;
+        }
         let cached = self.require_cached_frame()?;
         let observed = cached.observed(previous)?;
         if observed.png().is_empty() {
             return Err(live_frame_unavailable(
                 "the ART tree reply carried no PNG; refusing to bind a tree to absent pixels",
             ));
+        }
+        Ok(observed)
+    }
+
+    /// REL3A: a fresh capture is pixel evidence; it may never be bound by the
+    /// content-stable rule. The executor resets the observation rule to strict
+    /// before a capture, and `frame()` is one-shot, so this refuses the remaining
+    /// case (a caller that asked for content and then captured): a content
+    /// record says the *tree* was stable while the pixels may still animate.
+    fn capture(&mut self) -> Result<ObservedFrame, BackendError> {
+        let previous = self.last_frame_seq();
+        let observed = self.frame()?;
+        if let Some(error) = content_capture_refusal(self.bound_settle.as_ref()) {
+            return Err(error);
+        }
+        if observed.frame_seq() <= previous {
+            return Err(stale_frame(previous, observed.frame_seq(), "capture"));
         }
         Ok(observed)
     }
@@ -5240,6 +5521,34 @@ impl SessionBackend for ArtSession {
         // point the policy sends to another window is a real disagreement, not
         // something this layer hides).
         self.tap(x, y)
+    }
+
+    /// REL3S: one real swipe/scroll gesture through the guest's live input
+    /// channel, delivered exactly like a tap (same channel, same ack
+    /// collection, same settle rule).
+    ///
+    /// `from`/`to` are display coordinates; the input channel's transform is
+    /// window-local, so both ends are shifted by the first window's measured
+    /// origin (the single-window rule `tap` uses).
+    fn swipe(
+        &mut self,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        _fling: bool,
+    ) -> Result<(), BackendError> {
+        let (dx, dy) = self.input_offset;
+        self.input_command(
+            serde_json::json!({
+                "cmd": "swipe",
+                "x1": from.0.round() as i64 - dx as i64,
+                "y1": from.1.round() as i64 - dy as i64,
+                "x2": to.0.round() as i64 - dx as i64,
+                "y2": to.1.round() as i64 - dy as i64,
+                "duration_ms": duration_ms.max(1),
+            }),
+            "input.swipe",
+        )
     }
 
     fn tap_text(&mut self, text: &str) -> Result<(), BackendError> {
@@ -5568,6 +5877,13 @@ impl SessionBackend for ArtSession {
 
     fn tree_settle_timeout(&self) -> Option<serde_json::Value> {
         timed_out_settle(self.last_tree_settle.as_ref())
+    }
+
+    /// REL3H2: the guest's own settle record for the most recent traversal,
+    /// settled or not. `None` means the reply carried no `settle` block at all,
+    /// which a `scroll_until` hit must not treat as settled.
+    fn tree_settle_record(&self) -> Option<serde_json::Value> {
+        self.last_tree_settle.clone()
     }
 }
 /// P12b: did this reply's settle block time out?
@@ -6143,6 +6459,46 @@ fn processes_mentioning(dir: &Path) -> Vec<u32> {
 mod tests {
     use super::*;
 
+    /// REL3H2: the guest and the verifier must name the same settle reason. The
+    /// verifier reads it to refuse an end-of-list inference from a gesture the
+    /// app never consumed; `acos-art` cannot depend on `acos-protocol` (it is the
+    /// guest side of the wire), so the two literals are pinned equal here - in
+    /// the one crate that sees both.
+    #[test]
+    fn the_unhandled_input_settle_reason_is_one_string() {
+        assert_eq!(
+            acos_art::launch::SETTLE_UNHANDLED_INPUT,
+            acos_protocol::SETTLE_UNHANDLED_INPUT_REASON,
+            "a renamed settle reason would silently stop the end-of-list refusal"
+        );
+    }
+
+    /// REL3A: a capture is pixel evidence and may never be bound by a content
+    /// settle record. The refusal is the same fail-closed reason the pixel
+    /// assertions use (`content_settle_pixel`), with no frame handed back.
+    #[test]
+    fn a_content_settled_frame_is_refused_as_capture_evidence() {
+        let content = serde_json::json!({
+            "mode": "content",
+            "settled": true,
+            "window_ms": 300,
+            "traversals": 3,
+            "pixel_evidence": false,
+        });
+        let error = content_capture_refusal(Some(&content)).expect("content is refused");
+        let protocol = error.to_protocol_error();
+        assert_eq!(protocol.code, ErrorCode::UnsupportedAssertion);
+        let details = protocol.details.expect("details");
+        assert_eq!(details["reason"], "content_settle_pixel");
+        assert_eq!(details["pixel_evidence"], false);
+        assert_eq!(details["settle"]["mode"], "content");
+
+        // Strict and absent records are not refused.
+        let strict = serde_json::json!({"mode": "strict", "settled": true});
+        assert!(content_capture_refusal(Some(&strict)).is_none());
+        assert!(content_capture_refusal(None).is_none());
+    }
+
     /// G3c: the launch first-frame predicate must reject the *window skeleton*
     /// (decor + `action_bar_root` + `content` + an empty app root, no text) and
     /// must never touch a mounted screen — including a small, text-free one.
@@ -6298,8 +6654,12 @@ mod tests {
             frame_number: Some(seq),
             md5: Some(md5.to_string()),
         };
-        let evidence =
-            |before: &FrameIdentity, after: &FrameIdentity| frame_evidence(before, after, 2);
+        // GATEFIX (F1): a placeholder verdict also needs the wait to have
+        // observed the skeleton for the whole content window, so the evidence of
+        // a wait that actually ran carries `window_spent: true`.
+        let evidence = |before: &FrameIdentity, after: &FrameIdentity| {
+            frame_evidence(before, after, 2, true)
+        };
 
         // Skeleton, same pixels, no newer frame: the placeholder.
         let still = evidence(&identity(1, "aa"), &identity(1, "aa"));
@@ -6362,6 +6722,22 @@ mod tests {
             first_frame_placeholder_verdict(&tree(painted), &still),
             (false, false)
         );
+        // GATEFIX (F1): the same unchanged skeleton observed for less than the
+        // window is NOT a placeholder. A launch may only claim that the app never
+        // mounted after the app had the whole `ACOS_ART_FIRST_FRAME_MS` window to
+        // mount; eight cached samples in ~0 ms are not that evidence.
+        let premature = frame_evidence(&identity(1, "aa"), &identity(1, "aa"), 8, false);
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &premature),
+            (false, false),
+            "an unproven skeleton is neither a placeholder nor a pass"
+        );
+        // …and moving pixels are still the app's frame, window or not.
+        let animating_early = frame_evidence(&identity(1, "aa"), &identity(2, "bb"), 2, false);
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &animating_early),
+            (false, true)
+        );
     }
 
     #[test]
@@ -6372,6 +6748,7 @@ mod tests {
             screenshot: true,
             tap: true,
             tap_text: true,
+            swipe: true,
             type_text: true,
             key: true,
             rotate: true,
@@ -8042,7 +8419,7 @@ mod tests {
         let mut body = String::new();
         body.push_str("#!/bin/sh\n");
         body.push_str("echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"activity\":\"dev.test/.Main\",\"width\":1080,\"height\":2400,\"density\":420}'\n");
-        body.push_str("seq=0\ngated=0\n");
+        body.push_str("seq=0\ngated=0\nstartns=$(date +%s%N)\n");
         body.push_str(&format!("requests='{}'\n", requests.display()));
         body.push_str(&format!("png='{}'\n", png.display()));
         // The mode lives in a file so a test can change the app's behaviour
@@ -8064,6 +8441,13 @@ mod tests {
         body.push_str("      fseq=$seq\n");
         body.push_str("      fmd5=m$seq\n");
         body.push_str("      if [ \"$mode\" = never ]; then fseq=1; fmd5=m1; fi\n");
+        // GATEFIX (F1): the real launcher answers with its *cached* frame while
+        // the app is still booting, so the frame identity does not move until the
+        // app draws. `slow-mount` reproduces that: a constant skeleton identity
+        // for the first 400 ms, then the app's content.
+        body.push_str("      elapsed=0\n");
+        body.push_str("      if [ \"$mode\" = slow-mount ]; then now=$(date +%s%N); elapsed=$(( (now - startns) / 1000000 )); fi\n");
+        body.push_str("      if [ \"$mode\" = slow-mount ] && [ \"$elapsed\" -lt 400 ]; then fseq=1; fmd5=m1; fi\n");
         body.push_str("      case \"$line\" in\n");
         body.push_str("        *'baseline_tree'*)\n");
         body.push_str("          gated=$((gated+1))\n");
@@ -8083,6 +8467,16 @@ mod tests {
         body.push_str("            unsettled-first)\n");
         body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
+        body.push_str("            slow-mount)\n");
+        body.push_str("              if [ \"$elapsed\" -ge 400 ]; then\n");
+        body.push_str("                echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              else\n");
+        body.push_str("                echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"tree-unchanged\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              fi\n");
+        body.push_str("              ;;\n");
+        body.push_str("            wait-dies)\n");
+        body.push_str("              echo '{\"ok\":false,\"cmd\":\"tree\",\"code\":\"INTERNAL\",\"error\":\"the guest stopped answering\"}'\n");
+        body.push_str("              ;;\n");
         body.push_str("            unsettled-change)\n");
         body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
@@ -8091,6 +8485,11 @@ mod tests {
         body.push_str("        *)\n");
         body.push_str("          tree=$skeleton\n");
         body.push_str("          [ \"$mode\" = content-first ] && tree=$content\n");
+        body.push_str("          if [ \"$mode\" = slow-mount ] && [ \"$elapsed\" -ge 400 ]; then tree=$content; fi\n");
+        body.push_str("          if [ \"$mode\" = wait-dies ]; then\n");
+        body.push_str("            echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"fast\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"probe-fresh\\\"}}\"\n");
+        body.push_str("            continue\n");
+        body.push_str("          fi\n");
         body.push_str("          if [ \"$mode\" = unsettled-first ]; then\n");
         body.push_str("            echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$tree,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("          else\n");
@@ -8185,12 +8584,15 @@ mod tests {
             .expect("launch binds a placeholder");
         std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
         let report = session.first_frame_report().expect("report");
-        assert!(
-            report.placeholder,
-            "an unmounted frame is a placeholder: {report:?}"
-        );
-        assert_eq!(report.traversals, 2, "{report:?}");
-        assert_eq!(report.event_waits, 1, "{report:?}");
+        assert!(report.placeholder, "an unmounted frame is a placeholder: {report:?}");
+        // GATEFIX (F1): the wait is bounded by the content *window*, so a fake
+        // that answers instantly is observed again (paced) until the window has
+        // run out. Every observation after the launch's own traversal is a gated
+        // change request, and the verdict rests on the whole window.
+        assert!(report.traversals >= 2, "{report:?}");
+        assert_eq!(report.event_waits, report.traversals - 1, "{report:?}");
+        assert!(report.window_spent, "{report:?}");
+        assert_eq!(report.window_ms, 60, "{report:?}");
         assert!(
             report.settled,
             "the rolled-back frame is the settled skeleton: {report:?}"
@@ -8289,6 +8691,106 @@ mod tests {
             "the bound tree is the app's content, not the splash skeleton"
         );
         assert_eq!(report.budget_ms, first_frame_budget_ms(), "{report:?}");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// GATEFIX (F1, the v0.3.0 release-blocker): on a quiet host a `launch` step
+    /// that carried `settle: content` answered `PLACEHOLDER_CONTENT` (2 of 32
+    /// matrix negatives passed on a busy host and failed here). The launch's own
+    /// traversal is `fast`, and the mount wait inherited the fast rule's missing
+    /// gate: eight samples of the guest's stale skeleton cost ~0 ms, so the
+    /// window was declared a placeholder before the app ever ran.
+    ///
+    /// The rule (ADR-0032 amendment): a placeholder needs the skeleton to be
+    /// stable over the whole content **window**, confirmed by the guest's change
+    /// signal — not N traversals. This test mounts the app 400 ms after the
+    /// launch frame: before the fix the launch bound the skeleton in <1 ms and
+    /// reported `placeholder`; now the wait asks the guest for its next committed
+    /// tree state, keeps observing until content arrives, and binds it.
+    #[test]
+    fn gatefix_a_slow_mount_is_never_called_a_placeholder() {
+        let dir = g3f1_scratch("slow-mount");
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "3000");
+        let mut session = start_fake_first_frame(&dir, "slow-mount");
+        let started = Instant::now();
+        let tree = session
+            .ensure_launch_tree("fast", false)
+            .expect("a slow mount binds the app's frame");
+        let elapsed = started.elapsed();
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        let report = session.first_frame_report().expect("report");
+        assert!(
+            ui_tree_has_app_text(&tree.nodes),
+            "the app's content is the frame, not the skeleton: {report:?}"
+        );
+        assert!(
+            !report.placeholder && !report.suspect,
+            "content that mounted inside the window is never a placeholder: {report:?}"
+        );
+        assert!(report.event_waits >= 1, "the wait is a change request: {report:?}");
+        assert!(
+            elapsed >= Duration::from_millis(300),
+            "the wait has to give the app time to draw (was {elapsed:?}): {report:?}"
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The other half of the same rule: a launch that really never mounts is
+    /// still a placeholder, but only after the whole window was observed — never
+    /// from a burst of samples taken within a millisecond of the window mount.
+    #[test]
+    fn gatefix_a_real_placeholder_still_blocks_after_the_window() {
+        let dir = g3f1_scratch("never-window");
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "150");
+        let mut session = start_fake_first_frame(&dir, "never");
+        let started = Instant::now();
+        let tree = session
+            .ensure_launch_tree("fast", false)
+            .expect("the launch binds the window it observed");
+        let elapsed = started.elapsed();
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        let report = session.first_frame_report().expect("report");
+        assert!(!ui_tree_has_app_text(&tree.nodes));
+        assert!(report.placeholder, "a skeleton that never mounted is a placeholder: {report:?}");
+        assert!(!report.suspect, "{report:?}");
+        assert!(
+            report.window_spent && report.window_ms >= 150,
+            "the verdict rests on the whole window: {report:?}"
+        );
+        assert!(
+            elapsed >= Duration::from_millis(100),
+            "the verdict cannot come from a burst (was {elapsed:?}): {report:?}"
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A wait whose guest stops answering cannot prove either outcome. It is the
+    /// guest's error, never a `placeholder` claim about an app that had no
+    /// window — the fail-closed half of the F1 rule.
+    #[test]
+    fn gatefix_a_wait_that_cannot_observe_the_window_is_not_a_placeholder() {
+        let dir = g3f1_scratch("wait-dies");
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "3000");
+        let mut session = start_fake_first_frame(&dir, "wait-dies");
+        let error = session
+            .ensure_launch_tree("fast", false)
+            .expect_err("a guest that stops answering must not become a placeholder");
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        let text = error.to_string();
+        assert!(
+            text.contains("INTERNAL") || text.contains("guest stopped answering"),
+            "the guest's own failure is reported: {error}"
+        );
+        assert!(
+            session.first_frame_report().is_none(),
+            "no verdict may be published from a wait that could not observe"
+        );
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -1,0 +1,157 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "pixels_changed": false
+      },
+      "diff": {
+        "actual": {
+          "pixels_changed": false
+        },
+        "detail": "the settled frame did not change from the pre-action frame",
+        "expected": {
+          "pixels_changed": true
+        },
+        "path": "settle.pixels_changed"
+      },
+      "expected": {
+        "pixels_changed": true
+      },
+      "kind": "expect_change",
+      "matched_node_ids": [],
+      "passed": false
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 110,
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "details": {
+      "after": {
+        "frame": "frames/3.png",
+        "frame_seq": 3
+      },
+      "before": null,
+      "diff": {
+        "actual": {
+          "pixels_changed": false
+        },
+        "detail": "the settled frame did not change from the pre-action frame",
+        "expected": {
+          "pixels_changed": true
+        },
+        "path": "settle.pixels_changed"
+      },
+      "pixels_changed": false,
+      "reason": "expect_change",
+      "step_kind": "tap"
+    },
+    "hint": "The action was delivered and settled, but nothing on screen changed, so anything asserted afterwards would describe state this step never produced (GR4 G4c). Target the control that really writes the state, or drop `expect_change` if this action legitimately changes no pixels.",
+    "message": "tap: the settled frame is pixel-identical to the pre-action frame (`settle.pixels_changed:false`); the step proved no visual change",
+    "retryable": false
+  },
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/3.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/3.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/01-tap.json"
+    }
+  ],
+  "frame_seq": 3,
+  "index": 1,
+  "input": {
+    "expect_change": true,
+    "handled": false,
+    "handled_evidence": {
+      "acked": 2,
+      "published": 2,
+      "source": "finishInputEvent",
+      "unhandled": [
+        3,
+        4
+      ]
+    },
+    "handled_hint": "nothing tappable there: the node at this point is android.widget.TextView \"Floating button\" at [42,342][669,405], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` (no handler consumed the input); tap the nearest clickable android.widget.Switch \"Floating button\" at [669,338][1038,409] (centre 853,373) instead",
+    "target": {
+      "hit": {
+        "clickable": false,
+        "consumer": null,
+        "method": "tree-geometry",
+        "node": {
+          "bounds": "[42,342][669,405]",
+          "class": "android.widget.TextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n5_dev.acos.fixtures.taptargets:id/title",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.taptargets:id/title",
+          "scrollable": false,
+          "text": "Floating button",
+          "visible_bounds": "[42,342][669,405]",
+          "window": "main"
+        },
+        "suggest": {
+          "bounds": "[669,338][1038,409]",
+          "class": "android.widget.Switch",
+          "clickable": true,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n5_dev.acos.fixtures.taptargets:id/toggle",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.taptargets:id/toggle",
+          "scrollable": false,
+          "text": "Floating button",
+          "visible_bounds": "[669,338][1038,409]",
+          "window": "main"
+        }
+      },
+      "point": {
+        "x": 355,
+        "y": 373
+      },
+      "selector": {
+        "selector": "id==\"title\""
+      }
+    }
+  },
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 5,
+    "animating": false,
+    "bound": "unhandled-input",
+    "first_change_ms": null,
+    "frame_ms": null,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "strict",
+    "pixels_changed": false,
+    "reason": "unhandled_input",
+    "settled": true,
+    "state_changed": null,
+    "strict_rule": "event",
+    "waited_ms": 110,
+    "waited_ms_source": "step"
+  },
+  "status": "fail",
+  "step": "tap",
+  "trust": "trusted"
+}

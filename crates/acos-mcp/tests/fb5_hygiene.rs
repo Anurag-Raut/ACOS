@@ -105,7 +105,20 @@ fn fake_daemon(path: &std::path::Path, mode: Mode) -> FakeDaemon {
                 .to_string();
             let _ = tx.send(json!({"tool": tool, "session_id": session, "args": args}));
 
-            let envelope = if tool == "session_list" {
+            let envelope = if tool == "hello" {
+                // REL3D: the daemon identity handshake (same build as the test).
+                Envelope::pass(
+                    "req_hello",
+                    ProtocolBackend::AcosNative,
+                    Fidelity::NativeRuntime,
+                    Metrics::wall_ms(0),
+                )
+                .with_value_result(json!({
+                    "identity": acos_mcp::identity::Identity::local(),
+                    "engine": "art",
+                    "sessions": live.lock().unwrap().len(),
+                }))
+            } else if tool == "session_list" {
                 if mode == Mode::ListFails {
                     Envelope::failure(
                         "req_list",

@@ -1,0 +1,1414 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.helloviews",
+    "path": "fixtures/build/apps/hello-views.apk",
+    "sha256": "25d0615792c4c3c74624e33c2d492e8e646b807a806a1b7b3403e73baf6e30a1"
+  },
+  "backend": "acos-native",
+  "captures": {
+    "after-click-1": "frames/8-after-click-1.png"
+  },
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios-baseline022/hello-views/artifacts",
+    "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios-baseline022/hello-views/artifacts/engine.json",
+    "retention": "results/release/v0.3.0-gate/correctness/04-scenarios-baseline022/hello-views/artifacts/retention.json",
+    "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios-baseline022/hello-views/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "failure": {
+    "code": "TIMEOUT",
+    "error": {
+      "class": "infra_timeout",
+      "code": "TIMEOUT",
+      "details": {
+        "animating": false,
+        "backend": "acos-art-session",
+        "context": "back",
+        "frame_seq": 13,
+        "reason": "no-draw-after-action",
+        "settle": {
+          "ack_ms": 5,
+          "animating": false,
+          "bound": "timeout",
+          "first_change_ms": null,
+          "frame_ms": null,
+          "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+          "mode": "strict",
+          "pixels_changed": false,
+          "reason": "no-draw-after-action",
+          "settled": false,
+          "state_changed": null,
+          "strict_rule": "event"
+        }
+      },
+      "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure; use wait_for for a later event, or `animations:off` for a functional check. The latest tree/frame is kept in the step evidence.",
+      "message": "back: strict settle timed out (no-draw-after-action); the step is a non-pass because the screen was still changing when the deadline elapsed",
+      "retryable": true
+    },
+    "step_index": 23,
+    "summary": "step 23 (back) timeout"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T09:26:17.628Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "stopped at step 23 (back): timeout; later steps were not executed",
+    "scenario expected `pass`, engine produced `timeout` — result is a truthful partial",
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (keep-all): 58 file(s) / 1.8 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+  ],
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.2.2",
+    "apk_path": "fixtures/build/apps/hello-views.apk",
+    "apk_sha256": "25d0615792c4c3c74624e33c2d492e8e646b807a806a1b7b3403e73baf6e30a1",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "scenarios/hello-views.yaml",
+    "scenario_sha256": "65ad3f83ae3ca82dcca35448d0970782f46a132dc3c312f49444960adab0d00d"
+  },
+  "request_id": "req_34b9f6_18e87c589d47ceb4",
+  "resources": {
+    "events": 235,
+    "frames_captured": 18,
+    "memory_mib": 13,
+    "peak_rss_bytes": 14540800,
+    "sessions": 1,
+    "steps": 24,
+    "wall_ms": 5926
+  },
+  "scenario": {
+    "name": "hello-views",
+    "path": "scenarios/hello-views.yaml",
+    "sha256": "65ad3f83ae3ca82dcca35448d0970782f46a132dc3c312f49444960adab0d00d"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=107MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3455489-i3514573.scope)",
+    "code": null,
+    "disk_free_bytes": 232745713664,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/release/v0.3.0-gate/correctness/04-scenarios-baseline022/hello-views/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_hello-views",
+  "started_at": "2026-11-16T09:26:11.702Z",
+  "status": "timeout",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 155,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 54,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 7,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              317,
+              231,
+              368
+            ],
+            "hint": "",
+            "node": "n4_dev.acos.fixtures.helloviews:id/title",
+            "text": "Hello ACOS",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              317,
+              231,
+              368
+            ],
+            "selector": {
+              "id": "title"
+            },
+            "text": {
+              "exact": "Hello ACOS"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_dev.acos.fixtures.helloviews:id/title"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 2,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 7,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              368,
+              1038,
+              486
+            ],
+            "hint": "Enter your name",
+            "node": "n4_dev.acos.fixtures.helloviews:id/input",
+            "text": "Enter your name",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              368,
+              1038,
+              486
+            ],
+            "selector": {
+              "id": "input"
+            },
+            "text": {
+              "exact": "Enter your name"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_dev.acos.fixtures.helloviews:id/input"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 3,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 7,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              486,
+              273,
+              612
+            ],
+            "hint": "",
+            "node": "n4_dev.acos.fixtures.helloviews:id/btn",
+            "text": "Greet",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              486,
+              273,
+              612
+            ],
+            "selector": {
+              "id": "btn"
+            },
+            "text": {
+              "exact": "Greet"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_dev.acos.fixtures.helloviews:id/btn"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/04-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 4,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 7,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              612,
+              175,
+              663
+            ],
+            "hint": "",
+            "node": "n4_dev.acos.fixtures.helloviews:id/result",
+            "text": "clicks: 0",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              612,
+              175,
+              663
+            ],
+            "selector": {
+              "id": "result"
+            },
+            "text": {
+              "exact": "clicks: 0"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_dev.acos.fixtures.helloviews:id/result"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/05-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 5,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 7,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 3,
+            "sample": [
+              "AcosFixture: onCreate",
+              "AcosFixture: onStart",
+              "AcosFixture: onResume"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^onCreate$",
+              "^onStart$",
+              "^onResume$"
+            ],
+            "since_previous_step": false,
+            "tag": "AcosFixture"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/06-assert_log.json"
+        }
+      ],
+      "index": 6,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "acks": 2,
+            "delivered": true,
+            "visual_change": false
+          },
+          "expected": {
+            "delivered": true
+          },
+          "kind": "input_delivery",
+          "matched_node_ids": [],
+          "message": "host-observed input delivery (2 guest ack(s)); no visual change; no state change claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 139,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/07-tap.json"
+        }
+      ],
+      "frame_seq": 4,
+      "index": 7,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 45,
+        "frame_ms": 85,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": false,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 77,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/5.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/5.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/08-type.json"
+        }
+      ],
+      "frame_seq": 5,
+      "index": 8,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 24,
+        "frame_ms": 64,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "type"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1016,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/7.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/7.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/09-tap.json"
+        }
+      ],
+      "frame_seq": 7,
+      "index": 9,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 55,
+        "frame_ms": 962,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 1,
+            "sample": [
+              "AcosFixture: greet name=World clicks=1"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^greet name=World clicks=1$"
+            ],
+            "since_previous_step": true,
+            "tag": "AcosFixture"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/10-assert_log.json"
+        }
+      ],
+      "index": 10,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              612,
+              392,
+              663
+            ],
+            "hint": "",
+            "node": "n4_dev.acos.fixtures.helloviews:id/result",
+            "text": "Hello, World! clicks: 1",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              612,
+              392,
+              663
+            ],
+            "selector": {
+              "id": "result"
+            },
+            "text": {
+              "exact": "Hello, World! clicks: 1"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_dev.acos.fixtures.helloviews:id/result"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/7.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/7.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/11-assert_text.json"
+        }
+      ],
+      "frame_seq": 7,
+      "index": 11,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 55,
+        "frame_ms": 962,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 53,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/8.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/8.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/8-after-click-1.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/12-capture.json"
+        }
+      ],
+      "frame_seq": 8,
+      "index": 12,
+      "name": "after-click-1",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 51,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 989,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/10.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/10.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/13-tap.json"
+        }
+      ],
+      "frame_seq": 10,
+      "index": 13,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 56,
+        "frame_ms": 935,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 1,
+            "sample": [
+              "AcosFixture: greet name=World clicks=2"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^greet name=World clicks=2$"
+            ],
+            "since_previous_step": true,
+            "tag": "AcosFixture"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/14-assert_log.json"
+        }
+      ],
+      "index": 14,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              612,
+              392,
+              663
+            ],
+            "hint": "",
+            "node": "n4_dev.acos.fixtures.helloviews:id/result",
+            "text": "Hello, World! clicks: 2",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              612,
+              392,
+              663
+            ],
+            "selector": {
+              "id": "result"
+            },
+            "text": {
+              "exact": "Hello, World! clicks: 2"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_dev.acos.fixtures.helloviews:id/result"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/10.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/10.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/15-assert_text.json"
+        }
+      ],
+      "frame_seq": 10,
+      "index": 15,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 56,
+        "frame_ms": 935,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 191,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/11.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/11.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/16-rotate.json"
+        }
+      ],
+      "frame_seq": 11,
+      "index": 16,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 56,
+        "frame_ms": 935,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "rotate"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 7,
+            "sample": [
+              "AcosFixture: onPause",
+              "AcosFixture: onStop",
+              "AcosFixture: onSaveInstanceState clicks=2",
+              "AcosFixture: onDestroy",
+              "AcosFixture: onCreate"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^onPause$",
+              "^onStop$",
+              "^onSaveInstanceState clicks=2$",
+              "^onDestroy$",
+              "^onCreate$",
+              "^onStart$",
+              "^onResume$"
+            ],
+            "since_previous_step": true,
+            "tag": "AcosFixture"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/17-assert_log.json"
+        }
+      ],
+      "index": 17,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              170,
+              282,
+              2358,
+              400
+            ],
+            "hint": "Enter your name",
+            "node": "n4_dev.acos.fixtures.helloviews:id/input",
+            "text": "World",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              170,
+              282,
+              2358,
+              400
+            ],
+            "selector": {
+              "id": "input"
+            },
+            "text": {
+              "exact": "World"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_dev.acos.fixtures.helloviews:id/input"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/11.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/11.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/18-assert_text.json"
+        }
+      ],
+      "frame_seq": 11,
+      "index": 18,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 94,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 35
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              170,
+              526,
+              303,
+              577
+            ],
+            "hint": "",
+            "node": "n4_dev.acos.fixtures.helloviews:id/result",
+            "text": "clicks: 2",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              170,
+              526,
+              303,
+              577
+            ],
+            "selector": {
+              "id": "result"
+            },
+            "text": {
+              "exact": "clicks: 2"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_dev.acos.fixtures.helloviews:id/result"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/11.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/11.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/19-assert_text.json"
+        }
+      ],
+      "frame_seq": 11,
+      "index": 19,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 94,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 35
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 206,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/12.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/12.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/20-rotate.json"
+        }
+      ],
+      "frame_seq": 12,
+      "index": 20,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 56,
+        "frame_ms": 935,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "rotate"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 7,
+            "sample": [
+              "AcosFixture: onPause",
+              "AcosFixture: onStop",
+              "AcosFixture: onSaveInstanceState clicks=2",
+              "AcosFixture: onDestroy",
+              "AcosFixture: onCreate"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^onPause$",
+              "^onStop$",
+              "^onSaveInstanceState clicks=2$",
+              "^onDestroy$",
+              "^onCreate$",
+              "^onStart$",
+              "^onResume$"
+            ],
+            "since_previous_step": true,
+            "tag": "AcosFixture"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/21-assert_log.json"
+        }
+      ],
+      "index": 21,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              612,
+              175,
+              663
+            ],
+            "hint": "",
+            "node": "n4_dev.acos.fixtures.helloviews:id/result",
+            "text": "clicks: 2",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              612,
+              175,
+              663
+            ],
+            "selector": {
+              "id": "result"
+            },
+            "text": {
+              "exact": "clicks: 2"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_dev.acos.fixtures.helloviews:id/result"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/12.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/12.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/22-assert_text.json"
+        }
+      ],
+      "frame_seq": 12,
+      "index": 22,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 101,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 36
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 3033,
+      "error": {
+        "class": "infra_timeout",
+        "code": "TIMEOUT",
+        "details": {
+          "animating": false,
+          "backend": "acos-art-session",
+          "context": "back",
+          "frame_seq": 13,
+          "reason": "no-draw-after-action",
+          "settle": {
+            "ack_ms": 5,
+            "animating": false,
+            "bound": "timeout",
+            "first_change_ms": null,
+            "frame_ms": null,
+            "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+            "mode": "strict",
+            "pixels_changed": false,
+            "reason": "no-draw-after-action",
+            "settled": false,
+            "state_changed": null,
+            "strict_rule": "event"
+          }
+        },
+        "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure; use wait_for for a later event, or `animations:off` for a functional check. The latest tree/frame is kept in the step evidence.",
+        "message": "back: strict settle timed out (no-draw-after-action); the step is a non-pass because the screen was still changing when the deadline elapsed",
+        "retryable": true
+      },
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/23-back.json"
+        }
+      ],
+      "index": 23,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "timeout",
+      "step": "back"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "timeout"
+}

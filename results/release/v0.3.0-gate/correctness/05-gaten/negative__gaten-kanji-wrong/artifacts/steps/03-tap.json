@@ -1,0 +1,131 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "screenshot_changed": true,
+        "tree_changed": true
+      },
+      "expected": {
+        "screenshot_changed": true,
+        "tree_changed": true
+      },
+      "kind": "state_change",
+      "matched_node_ids": [],
+      "message": "UI tree and screenshot both changed",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 120,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/5.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/5.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/03-tap.json"
+    }
+  ],
+  "frame_seq": 5,
+  "index": 3,
+  "input": {
+    "expect_change": "auto",
+    "handled": true,
+    "handled_evidence": {
+      "acked": 2,
+      "published": 2,
+      "source": "guest"
+    },
+    "target": {
+      "hit": {
+        "clickable": false,
+        "consumer": null,
+        "method": "tree-geometry",
+        "node": {
+          "bounds": "[0,0][1080,2400]",
+          "class": "b5.g",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n10_",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "text": "",
+          "visible_bounds": "[0,0][1080,2400]",
+          "window": "main"
+        },
+        "suggest": {
+          "bounds": "[58,2127][1022,2253]",
+          "class": "b5.g",
+          "clickable": true,
+          "content_desc": "Skip lookup mode setup",
+          "enabled": false,
+          "focused": false,
+          "id": "n17_",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "text": "",
+          "visible_bounds": "[58,2127][1022,2253]",
+          "window": "main"
+        }
+      },
+      "node": {
+        "bounds": "[498,2163][582,2216]",
+        "class": "X4.e",
+        "clickable": false,
+        "content_desc": "",
+        "enabled": true,
+        "focused": false,
+        "id": "n18_",
+        "password": false,
+        "resource_id": "",
+        "scrollable": false,
+        "text": "Skip",
+        "visible_bounds": "[498,2163][582,2216]",
+        "window": "main"
+      },
+      "point": {
+        "x": 540,
+        "y": 2189
+      },
+      "selector": {
+        "selector": "text==\"Skip\""
+      }
+    }
+  },
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 20,
+    "bound": "state-commit",
+    "first_change_ms": 44,
+    "frame_ms": 68,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "fast",
+    "pixels_changed": null,
+    "reason": "state-commit",
+    "settled": true,
+    "state_changed": true,
+    "waited_ms": 120,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "tap",
+  "trust": "trusted"
+}

@@ -907,3 +907,175 @@ fn a_driver_without_the_handshake_never_gets_a_reference_frame() {
     );
     assert_eq!(peer.ref_frames_suppressed(), 1);
 }
+// REL3I3: the delivery wake (`wait_for_idle` + `flush_deliveries`)
+//
+// The IME's hide is driven by a key on the input channel, so its `IWindow`
+// insets callbacks are queued by the *launcher's* thread while the peer is
+// idle. Before this change the peer blocked in `recvmsg` on a 1 s
+// `SO_RCVTIMEO` and used that timeout as its only drain, so the app learned the
+// soft input was gone up to a second later — longer than any step budget. These
+// tests pin both halves of the replacement: a queued delivery reaches the guest
+// in milliseconds with no incoming transaction, and an idle peer with nothing
+// queued does not wake at all.
+mod delivery_wake {
+    use super::*;
+    use acos_binder_peer::{wait_for_idle, IdleWake};
+    use acos_services::host::{CallResult, PendingDelivery, ServiceObject};
+    use acos_services::{DeliveryWake, ServiceHost};
+    use std::os::unix::io::AsRawFd;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    /// A service object that parks `system -> app` deliveries in its own queue:
+    /// exactly what the WMS does with the IME's `IWindow` insets callbacks.
+    struct DeliverySource {
+        pending: Arc<Mutex<Vec<PendingDelivery>>>,
+    }
+
+    impl ServiceObject for DeliverySource {
+        fn call(
+            &mut self,
+            _interface: &str,
+            _method: &acos_aidl::MethodInfo,
+            _args: &[Value],
+        ) -> acos_services::Result<CallResult> {
+            Ok(CallResult::default())
+        }
+
+        fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
+            std::mem::take(&mut *self.pending.lock().expect("delivery queue"))
+        }
+    }
+
+    fn delivery() -> PendingDelivery {
+        PendingDelivery {
+            // A Java local binder (the app's `IWindow`), which is what a
+            // `system -> app` frame needs.
+            target: java(0x21),
+            interface: "android.view.IWindow".into(),
+            code: 9,
+            method: "hideInsets".into(),
+            data: Parcel::new(),
+        }
+    }
+
+    /// The launcher's serve loop, minus the parts these tests do not exercise:
+    /// wait on `[guest, wake]`, flush on a wake, write the frames out.
+    fn serve_loop(
+        mut peer: Peer,
+        guest_fd: std::os::unix::io::RawFd,
+        wake: Arc<DeliveryWake>,
+        ticks: Arc<AtomicU64>,
+        stop: Arc<std::sync::atomic::AtomicBool>,
+    ) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || loop {
+            let deadline = peer
+                .next_timed_deadline()
+                .map(|due| due.saturating_duration_since(Instant::now()));
+            match wait_for_idle(guest_fd, wake.read_fd(), deadline).expect("poll") {
+                IdleWake::Wake => {
+                    wake.drain();
+                    if stop.load(Ordering::Acquire) {
+                        return;
+                    }
+                    ticks.fetch_add(1, Ordering::AcqRel);
+                    for (_tag, out) in peer.flush_deliveries() {
+                        acos_binder_peer::write_frame(guest_fd, &out).expect("write frame");
+                        acos_binder_peer::close_frame_fds(&out);
+                    }
+                }
+                IdleWake::Deadline => {
+                    ticks.fetch_add(1, Ordering::AcqRel);
+                    for (_tag, out) in peer.flush_deliveries() {
+                        acos_binder_peer::write_frame(guest_fd, &out).expect("write frame");
+                        acos_binder_peer::close_frame_fds(&out);
+                    }
+                }
+                IdleWake::Frame => {}
+            }
+        })
+    }
+
+    fn host_with_source() -> (ServiceHost, Arc<Mutex<Vec<PendingDelivery>>>) {
+        let pending = Arc::new(Mutex::new(Vec::new()));
+        let mut host = ServiceHost::new();
+        host.register_dynamic(
+            "android.view.IWindow",
+            Box::new(DeliverySource {
+                pending: Arc::clone(&pending),
+            }),
+        );
+        (host, pending)
+    }
+
+    #[test]
+    fn a_queued_delivery_is_flushed_within_five_ms_with_no_incoming_transaction() {
+        let (host, pending) = host_with_source();
+        let wake = Arc::new(DeliveryWake::new().expect("wake pipe"));
+        let (guest, peer_end) = std::os::unix::net::UnixStream::pair().expect("socketpair");
+        let peer = Peer::with_host(host, None);
+        let ticks = Arc::new(AtomicU64::new(0));
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let handle = serve_loop(
+            peer,
+            peer_end.as_raw_fd(),
+            Arc::clone(&wake),
+            Arc::clone(&ticks),
+            Arc::clone(&stop),
+        );
+        // Let the loop park in `poll(2)` before anything is queued.
+        std::thread::sleep(Duration::from_millis(50));
+
+        // The producer: queue the delivery, then signal the wake. Nothing is
+        // written to the guest socket, so only the wake can end the wait.
+        pending.lock().expect("queue").push(delivery());
+        let published = Instant::now();
+        wake.wake();
+
+        let frame = acos_binder_peer::read_frame(guest.as_raw_fd()).expect("the flushed frame");
+        let elapsed = published.elapsed();
+        assert_eq!(frame.ty, F_TXN, "a delivery is a system -> app transaction");
+        // The wire carries the driver's Java handle, not the tagged host id.
+        assert_eq!(frame.target, 0x21);
+        assert_eq!(frame.code, 9);
+        assert!(
+            elapsed < Duration::from_millis(5),
+            "the delivery must be flushed within 5 ms of the producer's wake, took {elapsed:?}"
+        );
+
+        stop.store(true, Ordering::Release);
+        wake.wake();
+        handle.join().expect("the loop ends on the stop wake");
+    }
+
+    #[test]
+    fn an_idle_peer_with_nothing_queued_has_no_wakeups() {
+        let (host, _pending) = host_with_source();
+        let wake = Arc::new(DeliveryWake::new().expect("wake pipe"));
+        let (guest, peer_end) = std::os::unix::net::UnixStream::pair().expect("socketpair");
+        let peer = Peer::with_host(host, None);
+        let ticks = Arc::new(AtomicU64::new(0));
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let handle = serve_loop(
+            peer,
+            peer_end.as_raw_fd(),
+            Arc::clone(&wake),
+            Arc::clone(&ticks),
+            Arc::clone(&stop),
+        );
+        // Two idle seconds: the old 1 s receive timeout woke the peer twice and
+        // ran a full drain each time.
+        std::thread::sleep(Duration::from_secs(2));
+        assert_eq!(
+            ticks.load(Ordering::Acquire),
+            0,
+            "an idle peer with nothing queued must not wake (the fixed 1 s tick it replaces \
+             woke it twice in this window)"
+        );
+        stop.store(true, Ordering::Release);
+        wake.wake();
+        handle.join().expect("the loop ends on the stop wake");
+        drop(guest);
+    }
+}

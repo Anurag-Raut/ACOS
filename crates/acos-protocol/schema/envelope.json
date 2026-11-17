@@ -554,6 +554,20 @@
           "type": "string"
         },
         {
+          "description": "A bounded `scroll_until` search reached the end of the list: a swipe moved nothing (the settled tree is identical before and after it), so the selector is not reachable by scrolling further.\n\nThis is the honest end of a search, not a guess: `details.attempts` says how many gestures it took, `details.last_tree_texts` what the last settled tree actually showed. Before this the search burned every remaining attempt and reported `ELEMENT_NOT_FOUND`, which an agent could not tell from \"the selector names a node that never renders\".",
+          "enum": [
+            "END_OF_LIST"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "REL3H2: an input step declared `expect_handled: true` (the scenario claims the app must consume this gesture) and the app window acknowledged every event `finishInputEvent(handled) = false`.\n\nThe gesture was delivered; nothing consumed it. That is a failed claim about the flow - the press missed the control, or the control is not pressable - never a pass and never \"unknown\": the app's own window said so. `details` names the injected target, the acks and the settle record.",
+          "enum": [
+            "INPUT_NOT_HANDLED"
+          ],
+          "type": "string"
+        },
+        {
           "description": "A UI node reference is no longer valid.",
           "enum": [
             "STALE_REF"
@@ -788,6 +802,13 @@
           "description": "The network relay (`acos-netd`) is down, so the session has **no** network: reported instead of a silent offline session or a fake success (fail closed, ADR-0030 amendment 3). The supervisor restarts `pasta` itself, so a retry after the relay is back succeeds.",
           "enum": [
             "NETWORK_UNAVAILABLE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The session daemon answered (or refused to identify itself) from a **different build** than the caller: crate version, build id (git sha + source digest) or the binary at the same path differ. The client never mixes builds — it replaces an idle auto-started daemon or runs its own private one; `error.details` carries both identities. Never retry against the same daemon; never read its answer as this build's behaviour.",
+          "enum": [
+            "DAEMON_VERSION_MISMATCH"
           ],
           "type": "string"
         },

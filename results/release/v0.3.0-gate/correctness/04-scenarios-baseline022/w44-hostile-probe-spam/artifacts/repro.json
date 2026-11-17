@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/hostile-spam.apk",
+  "apk_sha256": "798d3e96b6220c0ac5bb57ea73d34afa04e68382305d53a2d06d7b3f3d450615",
+  "scenario_path": "scenarios/w44-hostile-probe-spam.yaml",
+  "scenario_sha256": "180f010ec3dacad6736b48a0df7a91932f31bdccf1d8c7e49d43b1786ce4e9bf",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

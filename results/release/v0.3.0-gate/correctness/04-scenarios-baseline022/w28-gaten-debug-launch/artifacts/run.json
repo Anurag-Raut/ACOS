@@ -1,0 +1,7 @@
+{
+  "request_id": "req_34c59e_18e87c62a448deba",
+  "started_at": "2026-11-16T09:26:54.612Z",
+  "scenario": "scenarios/w28-gaten-debug-launch.yaml",
+  "apk": "",
+  "acos_version": "0.2.2"
+}

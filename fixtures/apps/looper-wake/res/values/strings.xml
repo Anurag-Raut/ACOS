@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Looper Wake</string>
+    <string name="idle">idle</string>
+    <string name="go">Background Handler</string>
+    <string name="invalidate">Background Invalidate</string>
+    <string name="bg_update">bg-update</string>
+    <string name="go_update">go-update</string>
+</resources>

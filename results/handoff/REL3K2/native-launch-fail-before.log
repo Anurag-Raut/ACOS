@@ -1,0 +1,213 @@
+warning: acos-binder-peer@0.2.3: built /home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/.cache/rel3k2-target/release/build/acos-binder-peer-9fa86cf568476bad/out/libacos_binder_driver.so
+   Compiling acos-protocol v0.2.3 (/home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/crates/acos-protocol)
+   Compiling acos-wm v0.2.3 (/home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/crates/acos-wm)
+   Compiling acos-services v0.2.3 (/home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/crates/acos-services)
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+   Compiling acos-runtime v0.2.3 (/home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/crates/acos-runtime)
+   Compiling acos-binder-peer v0.2.3 (/home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/crates/acos-binder-peer)
+   Compiling acos-art v0.2.3 (/home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/crates/acos-art)
+warning: unused variable: `started`
+   --> crates/acos-art/src/boot_image.rs:801:13
+    |
+801 |         let started = Instant::now();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_started`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+   Compiling acos-verify v0.2.3 (/home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/crates/acos-verify)
+   Compiling acos-mcp v0.2.3 (/home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/crates/acos-mcp)
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:1034:21
+     |
+1034 |             let mut unsettled: Option<BackendError> = None;
+     |                     ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: method `cache_str` is never used
+   --> crates/acos-art/src/boot_image.rs:540:8
+    |
+539 | impl CacheOutcome {
+    | ----------------- method in this implementation
+540 |     fn cache_str(&self) -> &'static str {
+    |        ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `animations_on` is never read
+    --> crates/acos-art/src/launch.rs:2066:5
+     |
+2043 | struct ProbeSample {
+     |        ----------- field in this struct
+...
+2066 |     animations_on: Option<bool>,
+     |     ^^^^^^^^^^^^^
+     |
+     = note: `ProbeSample` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `adler32` is never used
+    --> crates/acos-art/src/launch.rs:6389:4
+     |
+6389 | fn adler32(data: &[u8]) -> u32 {
+     |    ^^^^^^^
+
+warning: function `tail` is never used
+    --> crates/acos-art/src/launch.rs:6832:4
+     |
+6832 | fn tail(s: &str, max: usize) -> String {
+     |    ^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/acos-art/src/lib.rs:836:20
+    |
+836 |     pub fn sandbox(&self) -> Sandbox {
+    |                    ^^^^^     ------- the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+836 |     pub fn sandbox(&self) -> Sandbox<'_> {
+    |                                     ++++
+
+warning: `acos-services` (lib) generated 1 warning
+warning: `acos-verify` (lib) generated 1 warning
+warning: `acos-art` (lib) generated 6 warnings
+   Compiling acos-cli v0.2.3 (/home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/crates/acos-cli)
+warning: unused import: `AtomicBool`
+  --> crates/acos-cli/src/serve.rs:33:25
+   |
+33 | use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+   |                         ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: value assigned to `tap_target` is never read
+   --> crates/acos-cli/src/engine/mod.rs:999:25
+    |
+999 |                 let mut tap_target: Option<serde_json::Value> = None;
+    |                         ^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` on by default
+
+warning: method `label` is never used
+   --> crates/acos-cli/src/engine/mod.rs:252:12
+    |
+245 | impl FrameEvidence {
+    | ------------------ method in this implementation
+...
+252 |     pub fn label(&self) -> String {
+    |            ^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `start`, `start_with_animations`, `start_with_options`, `zygote_facts`, and `zygote_previous_child_pid` are never used
+    --> crates/acos-cli/src/engine/art.rs:1497:12
+     |
+1479 | impl ArtSession {
+     | --------------- associated items in this implementation
+...
+1497 |     pub fn start(apk: &Path, artifacts: &Path) -> Result<ArtSession, BackendError> {
+     |            ^^^^^
+...
+1505 |     pub fn start_with_animations(
+     |            ^^^^^^^^^^^^^^^^^^^^^
+...
+1520 |     pub fn start_with_options(
+     |            ^^^^^^^^^^^^^^^^^^
+...
+2092 |     pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+     |            ^^^^^^^^^^^^
+...
+2097 |     pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `first_frame_bound` is never used
+    --> crates/acos-cli/src/engine/art.rs:4209:19
+     |
+3880 | impl ArtSession {
+     | --------------- method in this implementation
+...
+4209 |     pub(crate) fn first_frame_bound(&self) -> Option<(bool, Option<String>)> {
+     |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `read_png` is never used
+    --> crates/acos-cli/src/engine/art.rs:5549:4
+     |
+5549 | fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {
+     |    ^^^^^^^^
+
+warning: function `kill_group_signals` is never used
+    --> crates/acos-cli/src/engine/art.rs:5668:15
+     |
+5668 | pub(crate) fn kill_group_signals() -> usize {
+     |               ^^^^^^^^^^^^^^^^^^
+
+warning: function `flat_text` is never used
+    --> crates/acos-cli/src/engine/serve.rs:3403:4
+     |
+3403 | fn flat_text(tree: &UiTree) -> String {
+     |    ^^^^^^^^^
+
+warning: associated items `disabled`, `keeper_count`, and `keeper_pids` are never used
+   --> crates/acos-cli/src/engine/zygote_host.rs:164:12
+    |
+ 93 | impl ZygoteHost {
+    | --------------- associated items in this implementation
+...
+164 |     pub fn disabled() -> Self {
+    |            ^^^^^^^^
+...
+179 |     pub fn keeper_count(&self) -> usize {
+    |            ^^^^^^^^^^^^
+...
+184 |     pub fn keeper_pids(&self) -> Vec<u32> {
+    |            ^^^^^^^^^^^
+
+warning: associated function `at` is never used
+   --> crates/acos-cli/src/live_registry.rs:123:12
+    |
+ 95 | impl LiveRegistry {
+    | ----------------- associated function in this implementation
+...
+123 |     pub fn at(dir: PathBuf) -> Self {
+    |            ^^
+
+warning: `acos-cli` (bin "acos") generated 10 warnings (run `cargo fix --bin "acos"` to apply 1 suggestion)
+    Finished `release` profile [optimized + debuginfo] target(s) in 18.76s
+     Running tests/native_launch.rs (.cache/rel3k2-target/release/deps/native_launch-4bba62b8b3ab33f6)
+
+running 4 tests
+test wrong_abi_apk_is_rejected_before_any_execution ... ok
+test native_launch_without_native_reports_unsupported_with_hint ... FAILED
+test native_hostile_actions_are_denied_by_confinement ... ok
+test native_hello_loads_and_runs_apk_library ... ok
+
+failures:
+
+---- native_launch_without_native_reports_unsupported_with_hint stdout ----
+
+thread 'native_launch_without_native_reports_unsupported_with_hint' panicked at crates/acos-cli/tests/native_launch.rs:164:5:
+assertion `left == right` failed: without --native the native call must not run
+  left: "<missing>"
+ right: "blocked"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    native_launch_without_native_reports_unsupported_with_hint
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.31s
+
+error: test failed, to rerun pass `-p acos-cli --test native_launch`

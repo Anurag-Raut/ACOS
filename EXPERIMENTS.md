@@ -4965,3 +4965,477 @@ nothing in this change is on the tap path).
 - **Fidelity / evidence:** art-reference, 15/15 steps pass on the merged tree. `results/handoff/A11YNATIVE2/merged-tree-run/` (verdict, logcat, steps, `art-frames/unsupported.jsonl` without any `REVERSE_DELIVERY_EXCEPTION`) and `results/handoff/A11YNATIVE2/host-trace.log`.
 - **Regression / false pass:** `cargo test -p acos-services -p acos-wm` green; `tests/a11ynative.rs` 12/12 including a `parcelable::read_bundle` (framework-reader) regression test that fails on the old magic. Label case: `AccessibilityNodeInfo.getText()` and the drawn (transformed) text are both `Click target` on this image, so the case-insensitive pattern was removed and both APIs are logged side by side.
 - **Conclusion / next:** remaining items are walls/design, not wire formats — (a) an app-side pixel read needs a GPU/EGL shim (options in the README §4), (b) a paced gesture producer (per-event publish at `event_time`, `onPerformGestureResult` after the last event) needs the module's delivery queue to be reachable from that thread.
+## E14.1 — BENCHFIX: the A/B gate runs again, and it says one thing regressed (M8 form fast +3.6 ms) — MEASURED
+
+- **Date / commit:** 2026-11-16, `benchfix` (base rel-030 `b8c30224`); harness commit `b545b1e4`.
+  Arm A tag `v0.2.2` (`ce14b888`, binary sha256 `50537b60…`), arm B rel-030 HEAD
+  (binary sha256 `7f16d333…`).
+- **Question / goal:** ADR-0028's gate could not run on main or rel-030
+  (`phase_latency`: `two consecutive settled captures differ: [None, None]`;
+  `phase_cold`: `reference tree is not the count-0 screen: count='0' nodes=14`).
+  Fix the harness to read the reply the product documents and produce the v0.2.2 vs rel-030 table.
+- **Method:** 3 interleaved reps, `--reps 20 --fast-reps 40` (ADR-0028 defaults), every
+  acquisition through `run-exclusive.sh --task BENCHFIX --exclusive` + `guarded.sh`
+  (8G/540 s latency+cold, 16G/600 s memory); `ab-compare.py` lattice view. Host: 9950X, 60 GiB,
+  load 1.5–4.5, no phase marked noisy.
+- **Inputs:** `fixtures/build/apps/counter.apk`, `form-validation.apk` (hardlinked from the shared
+  fixture build); sysroot `.cache/art/sysroot`.
+- **Result:** 33 metrics per arm (M1/M2 anon+shmem and Pss N=1/5/10, M3, M4 strict/fast, M5,
+  M6 strict/fast, M7, M8 counter+form strict/fast, ack, GL1 teardown, idle CPU/wakeups).
+  Gate: **one lattice regression — M8 tap→settled form fast +3.64 ms / +11.1 %** (first-slot
+  98 %→85 %, −13 pp), consistent across all three reps (32.4/32.5/32.8 vs 34.4/34.0/36.7 ms);
+  old median gate: +5.8 %, within ±14 % / 2 ms. M4 launch fast −9.8 % (+29 pp first-slot),
+  M6 reset fast −11.3 % (+16 pp), M4 strict −6.0 %, everything else parity (M3 +3.0 %, M5 +1.6 %,
+  M7 flat, memory +2..4 %, CPU/wakeups flat). Evidence:
+  `results/bench/BENCHFIX-AB.md`, raw JSON under `results/bench/BENCHFIX-AB/`.
+- **Root causes (proved with `results/bench/BENCHFIX-AB/shape-probe/*.json`):** (1) the reference
+  asked for `screenshot: <scratch>/ref-N.png`; FB2c confines that destination to the session's
+  artifacts directory, so both captures were `INVALID_ARGUMENT` with **no** `result.frame` — the
+  frame md5 was never lost (launch and both frame-only captures carry the same
+  `frame.md5 = 7218b3ae…` on both arms). (2) P7/P9's reference rule was `len(nodes) == 12`; the
+  same verified count-0 screen is 14 nodes on both arms, and on rel-030 the launch tree is a REL3C
+  compact page (4 visible nodes + `tree_path`) — the bench walked a page. Also found:
+  `phase_memory` ended on a copy-pasted `mode_wall` `NameError` after all samples were taken (so the
+  memory group was rc=1 every run), and the M8 tap check read `settle.state_changed`, which is
+  `null` in strict mode (`None is not False` — the check never checked).
+- **Finding:** the harness now fails loudly instead of scoring `None`: `tools/bench/bench_reply.py`
+  + `tools/bench/test_bench_reply.py` (26 tests) pin both reply shapes (v0.2.2 inline full tree,
+  rel-030 compact page + `tree_path`) and refuse a compact page without a path, an empty frame md5,
+  `[None, None]`, a missing `screenshot.path`, and a wrong/truncated/skeleton reference screen. No
+  product code changed; no check was weakened (the reference rule is now semantic: count text 0,
+  fixture ids laid out, untruncated, more than a skeleton, plus the byte-identical capture pair).
+- **Fidelity / evidence:** measured, release binaries, owned daemons only; `host-pixel` frames.
+- **Regression / false pass:** M8 form fast is a real, reproducible +3.6 ms regression under the
+  lattice gate — reported, not fixed here (product path, out of BENCHFIX scope). One launch of 60
+  failed per arm in one rep (GUEST_EXITED / NO_FRESH_FRAME, the queued flake); recorded as a failed
+  step, never as a sample.
+- **Conclusion / next:** the release gate can run again; the remaining work is the M8 form fast
+  path (REL3C/REL3F reply work on the submit tap) before v0.3.0 is claimed green.
+## E9.5 — ROT7: the server half of `Activity.onBackPressed` (a `back` now destroys the Activity), and the "task finished" screen that does not exist yet — PARTIAL (the framework path is proven end to end; the strict settle still cannot bind the step)
+
+- **Date / commit:** 2026-11-15, branch `art-back-1` off `int-021` `52beccf`.
+  Report: `results/handoff/ROT7.md`.
+- **Question / goal:** make `back` on real ART reach the framework's real back
+  path — `IActivityClientController.onBackPressed` → `finish` → previous Activity
+  resumes / the app's task finishes, as on API 34 — and answer which stage claimed
+  back's UP while ROT6 believed `Activity.mDefaultBackCallback == null`.
+- **Method:** `ACOS_ATMS_TRACE` moved from stderr (which the CLI engine keeps only
+  as an 8 KiB ring buffer, surfaced on errors) to a file sink
+  (`ACOS_ATMS_TRACE=<path>`, `…=1` keeps stderr). That alone reversed two ROT6
+  readings. Runs: `counter.yaml --engine art` through
+  `tools/art-runtime/run-exclusive.sh --task ROT7` + `tools/guarded.sh`;
+  `cargo test -p acos-services`. The AOSP cache
+  (`.cache/aosp/base/core/java/android/app/Activity.java`,
+  `…/servertransaction/{TransactionExecutor,ResumeActivityItem}.java`,
+  `…/view/ViewRootImpl.java`, `…/policy/DecorView.java`) and the image's decoded
+  AIDL tables (`crates/acos-aidl`, regenerated) were the ground truth.
+- **Inputs:** `fixtures/build/apps/counter.apk` (sha256
+  `8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39`),
+  `fixtures/build/apps/hello-views.apk`, `multi-activity.apk`; API-34
+  `android.jar` for the guest compile; boot classpath `.cache/boot/android-34`.
+- **Result:**
+  - The ATMS **does** adopt the guest's token (ROT6 said it never does):
+    `activityResumed token=0x100000003 known=false` →
+    `adopted … guest_tagged=true`. The ROT6 trace was invisible because
+    `acos verify` runs the `acos-art` named by `ACOS_ART_BIN`; a rebuilt `acos`
+    does not rebuild it (measured twice: a stale binary shows zero ATMS calls).
+  - `back` reaches the framework's own back path and the host refused the last
+    step of it: the peer's unsupported log has
+    `IActivityClientController onBackPressed code 62 UNSUPPORTED_ANDROID_API`.
+    API 34's `Activity.onBackPressed()` only *asks* the server
+    (`ActivityClient.onBackPressed(mToken, RequestFinishCallback)`, code 62,
+    one-way — hence ROT6's 5 ms "handled" ack with no finish).
+  - Implemented `AtmsState::on_back_pressed` + `pending_reverse_calls` (encoded
+    into `CallResult::deliveries`, an `F_TXN` to the guest's callback binder) and
+    decoded `android.app.IRequestFinishCallback` (`requestFinish`, code 1,
+    one-way) from the image. Measured on `counter.yaml`:
+    `back-pressed token=0x100000003 callback=0x10000001a` →
+    `finishActivity` → `finish-request` → and the app's own log
+    `onPause / onStop / onSaveInstanceState count=2 / onDestroy`.
+  - Step 3 answer: the UP is claimed by
+    `ViewRootImpl$NativePreImeInputStage.doOnBackKeyEvent` (ahead-of-time back),
+    not by ACOS and not by the legacy `Activity.onKeyUp` branch — `Activity.onCreate`
+    registers `mDefaultBackCallback` because
+    `WindowOnBackInvokedDispatcher.isOnBackInvokedCallbackEnabled` is true at
+    targetSdk 34. ROT6's `mDefaultBackCallback == null` came from bytecode, not a
+    measurement; a `back_dispatcher=` marker now records it per Activity.
+  - **Still failing:** the `back` *step* now ends
+    `TIMEOUT (detached)`: after the last window is removed the guest probe
+    (`LaunchMain.checkSettle`) can never publish a settled sample, and the strict
+    settle binds a step to a guest draw at/after the gesture — a window removal
+    draws nothing. On a phone the screen is the launcher; ACOS has no launcher and
+    no second layer, so "the app's task finished" has no screen. `handled=true`
+    for `back` was never evidence of a finish; `onDestroy` is.
+  - *Tests:* `cargo test --release --offline -p acos-services -p acos-art
+    -p acos-cli -p acos-verify` green — 34 targets, 0 failures (1 pre-existing
+    `#[ignore]`); `acos-services` = 86 lib tests + every integration target,
+    incl. the new `tests/rot7_back.rs` (5:
+    the press queues exactly one `requestFinish` to the callback binder with the
+    image's code/one-way shape and fabricates no finish; the client's
+    `finishActivity` after it flips `finished`; zero/unknown tokens still error;
+    a null callback is a `BadRequest`; a press on the top of a two-Activity task
+    leaves the record below untouched) and the untouched W38
+    `an_unknown_or_zero_token_still_errors` (3/3).
+- **Decision:** the ATMS answers `onBackPressed` the AOSP way — record the press,
+  ask the client through the callback it was handed, and let the client's own
+  `Activity.finish()` be the only thing that sets `mFinished`. No host-side
+  "finish by token" shortcut was added (it would skip the framework's path, which
+  is the whole point of the rung). `ACOS_ATMS_TRACE` may now name a file.
+- **Not done:** hello-views / multi-activity / v1-recreate / counter `back` steps do
+  not pass yet (the settle wall above), so there is no "wrong expectation →
+  `ASSERTION_FAILED`" negative yet, and the 15 gates / 5 Gaten flows / 5 negatives
+  were not re-run (unaffected by an added one-way method; the ART lock was held by
+  two foreign `--exclusive` benchmark loops for most of the window).
+- **Left open (pre-existing, measured):** `reportSizeConfigurations` fails in the
+  codec (`SizeConfigurationBuckets`, "parcel underflow: need 4 bytes at 124",
+  3 records in one `counter` run) — a separate row, unrelated to back.
+
+## E9.6 — ROT8: a `back` that finishes the last window binds on STATE (`window-gone`), and Back from B resumes A before B stops — PASS (acceptance in `results/handoff/ROT7.md` §ROT8)
+
+- **Branch/worktree:** `art-back-1` (`.cache/wt-rot7`), commits after `99a65f1`.
+  Report: `results/handoff/ROT7.md` §ROT8.
+- **Hypothesis:** the `back` step failed only because the strict settle needs a
+  guest draw and a destroyed last window draws nothing. Orchestrator decision
+  (option a): bind the step on the guest's *state* proof — every Activity
+  destroyed + the finishing one `mFinished` + no attached window root — never a
+  timeout, never an invented frame.
+- **Result:** `LaunchMain.emitProbe`→`taskFinished()` reports `settle.window_gone`
+  / `task_finished` with an empty window forest; the host
+  (`window_gone_binds`) binds `bound:"window-gone"`, `pixels_changed:false`,
+  `task_finished:true` (step evidence), the reply carries no PNG and a logical
+  `frame_seq`, and the CLI engine binds the empty tree to the last committed
+  pixels. `assert_not_visible` then passes, `assert_text` fails.
+  hello-views 27/27, counter, v1-recreate, multi-activity, multi-activity-finish
+  pass on `--engine art`; the negative "wrong text after Back" → `ASSERTION_FAILED`.
+- **Decision (scenario correction):** the old `onSaveInstanceState` pattern on the
+  *back* step was written before back worked and contradicts AOSP:
+  `ActivityThread.performStopActivityInner` computes
+  `shouldSaveState = saveState && !r.activity.mFinished && …`, so a FINISHING
+  Activity is never asked to save. The patterns are now `onPause → onStop →
+  onDestroy` (rotate keeps `onSaveInstanceState`).
+- **Back from B resumes A:** it already resumed once `onBackPressed` landed, but
+  in the wrong order (Pause → Destroy → Resume A). The finish watcher now sends
+  the AOSP order: `Pause(finished)` B → `Resume` A (onStart/onResume, A relaid out
+  and drawn: new frame, `pixels_changed:true`) → `Stop` B → `Destroy` B.
+- **Row (pre-existing, found here, NOT fixed):** a **second** SecondActivity
+  cycle (B2 up, then back/finish) followed by a relaunch (rotate) — or a B2
+  start after the rotations — SIGABRTs the guest (`__android_log_assert`,
+  `ISurfaceComposerClient code 1: unknown binder handle 0x1001011` in
+  `unsupported.jsonl`). Reproduces with the legacy watcher order, so it is not
+  the ROT8 reorder; suspect the bounded, never-recycled 16-handle layer pool
+  (`surface_client::LAYER_HANDLE_POOL`). `multi-activity.yaml` therefore uses ONE
+  B cycle (hardware Back); the Finish-button path is kept in
+  `multi-activity-finish.yaml`.
+- **Row (pre-existing, NOT fixed): `reportSizeConfigurations`** still dies in the
+  codec (`SizeConfigurationBuckets`, parcel underflow "need 4 bytes at 124"). The
+  curated spec in `acos-services/src/parcelable.rs` starts with a `Byte` before
+  four `IntArray`s; the AOSP source is not in the cache to verify, so it was not
+  touched (the real layout is probably four int arrays, no leading byte).
+
+## E9.7 — REL3K: Back on real ART is complete and merged onto rel-030 — PASS (acceptance in `results/handoff/REL3K/REPORT.md`)
+
+- **Date / branch:** 2026-11-16, `rel3k` = `art-back-1` (`15c6a111`) + the
+  finished ROT8b WIP (`361470bb`) merged with `rel-030` (`2022d89c`, merge
+  `332d2c5a`). Report: `results/handoff/REL3K/REPORT.md`.
+- **Question:** can Back ship? Every Back case must be a real observation on
+  ART: B→A in AOSP order, root Back finishes the task with an honest verdict,
+  no stale frame, an app-handled Back stays on screen, a `finish()`+`start`
+  tap never binds an empty "finished" screen, and the MCP `acos_key back` and
+  scenario `back` are one path.
+- **The fix (task-finished proof):** `AtmsState::task_finished_proof` is
+  positive — a record is ended by `finished` **or** `Destroyed` (plus a named
+  record and no pending launch). The old negative predicate (`!is_alive()`) was
+  both a false pass (an `Uncreated` record counted as ended) and a false stall
+  (a finished record whose destroy callback had not arrived kept the proof
+  false until the settle deadline). Seven unit tests; the two changed
+  behaviours fail on the old predicate (`rot8b-fail-before.log`).
+- **Merge:** textual conflicts were none; the merge exposed four rel-030
+  defects that had to be fixed for a green integration branch: the 5-argument
+  `tool_result` call site (acos-mcp did not compile), the compact tree dropping
+  `focused`/`password` (fb1's typing contract), `cursor`/`full` missing from
+  `acos_verify`/`acos_observe` schemas (paging a reply was impossible), and
+  `settle_timeout_ms` sent to `acos_observe` (no settle rule). Details and the
+  design choices are in the report §1.2.
+- **Result (ART, `--engine art`, artifacts under
+  `results/handoff/REL3K/artifacts/`):** `multi-activity` 22 steps pass —
+  back #1 binds `strict-event`, `handled:true` (2/2 acks), pixels changed, the
+  ordered log is Pause B → Start/Resume A → Stop B → Destroy B; back #2 binds
+  `window-gone`, `task_finished:true`, `pixels_changed:false`, no PNG, and
+  `assert_not_visible` passes. `hello-views` 27, `counter` 24,
+  `multi-activity-finish` 19, `v1-recreate` 18, `w42-back-frame` (gate) 17 and
+  `finish-start` 7 pass; the w42 region hashes equal Main's post-Back pixels
+  (no stale destroyed-window buffer). Negatives fail as designed:
+  wrong text after Back (`ASSERTION_FAILED`), `onSaveInstanceState` after a
+  finishing Back (`ASSERTION_FAILED`), text after a finished task
+  (`ELEMENT_NOT_FOUND`), wrong Home after `finish()`+start (`ASSERTION_FAILED`).
+- **MCP:** `acos_key {"code":"back"}` and the scenario `back` both reach the ART
+  daemon's `key` command (code 4 → the framework's own
+  `IActivityClientController.onBackPressed`); a new `art_default` test pins the
+  MCP route and that the REL3E `handled` bit and the `window-gone` settle cross
+  the MCP boundary verbatim.
+- **Crate tests:** all targets green except `acos-art --test cleanup`'s
+  `leak_scan_…` (fails only in the full parallel run, 8/8 alone — same load
+  class as the E9.4 LHFLAKE note) and `acos-cli --test native_launch`'s
+  `…_without_native_…` (the frozen Rust VM returns a top-level
+  `UNSUPPORTED_JAVA_API` with an empty ladder; sources identical to rel-030).
+- **Not done:** no dialog/IME-first Back scenario yet (the framework claims
+  Back before the IME on API 34, but the app-visible case should be asserted);
+  the MCP Back was not executed against a live guest (only its daemon wiring);
+  `hello-views`'s root-Back `state_changed` under-claims `false` when the
+  pre-action probe sample was empty (never over-claims).
+
+## E14.2 — PERF3: the M8 form-fast regression is REL3C's full-tree file write, and a content cache fixes it — PASS (lattice gate: +0.5 % / +0.18 ms, first slot 92 %→99 %)
+
+- **Question:** BENCHFIX measured M8 tap→settled form fast +3.64 ms / +11.1 % on rel-030
+  (v0.2.2 32.74 vs 36.38 ms trimmed, first slot 98 %→85 %). Which commit on the tap/reply path
+  causes it, and can it be fixed without dropping the REL3C full-tree artifact?
+- **Method:** reproduce with the bench's own driver in a 60 s form loop (reset fast → tap fast →
+  observe strict), then toggle the REL3C write in one rel-030 binary
+  (`ACOS_PERF3_WRITE_MODE=full|nowrite`) in interleaved blocks. Final proof: 3 interleaved reps,
+  `--bundle latency --reps 20 --fast-reps 40`, every acquisition through
+  `run-exclusive --task PERF3 --exclusive` + `guarded.sh --mem 8G --time 540`; `ab-compare.py`
+  lattice gate. Host 9950X, load 2–9 (other agents' builds).
+- **Inputs:** `fixtures/build/apps/form-validation.apk` and `counter.apk` (hardlinked from the
+  shared fixture build); sysroot `.cache/art/sysroot`. Arms: v0.2.2 tag
+  (`50537b60…`) and the PERF3 fix (`cacf5e28…`).
+- **Root cause (measured):** the extra time is all inside `guest_command_ms`; the tap reply itself
+  has `timing.input.absorb_ms = 0` and carries no tree. REL3C's `shape_tree` pretty-serialized and
+  synchronously wrote `tree/<frame_seq>.json` (plus `create_dir_all`/`canonicalize`) on every
+  reset/observation; the same form screen was rewritten under a new sequence every iteration, just
+  before the next tap. With the write disabled on the same rel-030 binary, rel-030 is at parity
+  with v0.2.2 (trimmed 32.744 vs 32.723 ms, +0.06 %); with the write on it is 35.58 vs 34.12 ms
+  (+1.46 ms) in the same block run. REL3F/int-022/REL3P are not on this loop.
+- **Fix:** `reply::write_full_tree` caches byte-identical full trees per artifacts directory and
+  returns the existing complete artifact instead of writing another one; a missing file is
+  rewritten, a different tree for a reused sequence gets `tree/<seq>-<hash>.json` (never replaces
+  a named artifact), and writes are temp+rename. Every tree-bearing reply still names a full tree;
+  no field removed, no test weakened. Two new unit tests pin reuse and sequence-collision
+  preservation.
+- **Result:** M8 form fast trimmed 33.57 (v0.2.2) vs 33.75 (fix): +0.18 ms / +0.5 %, first slot
+  92 %→99 % — PASS under ADR-0028 (+5 % / +2 ms). M8 counter fast +0.87 ms / +2.2 % (within-noise;
+  the old median gate flips because one rep per arm landed a frame later: v0.2.2 rep p50s
+  32.48/32.86/50.56, fix 49.39/33.06/47.56). M4 launch fast −10.2 %, M6 reset fast −2.3 %
+  (within-noise). Strict metrics flat.
+- **Fidelity / evidence:** measured, release binaries, owned daemons only; `host-pixel` frames.
+  `results/bench/PERF3/REPORT.md`, raw `run-{v022,fix}/rep-*`, merged `v022.json`/`fix.json`,
+  `ab-compare.json|txt`, and `diagnosis/` (loop reproduction, write on/off blocks, parity blocks,
+  scripts).
+- **Regression / false pass:** none. REL3C tests pass: `acos-protocol reply::tests` 7/7,
+  `acos-mcp --test compact_reply` 1/1, `acos-cli engine::serve::tests::shaped_tree` 1/1.
+- **Conclusion / next:** the BENCHFIX regression is closed. v0.3.0's remaining gate work is the
+  other tracks, not this reply path.
+
+## TOUCHDISP — does a touch reach a non-clickable view's `OnTouchListener` on the real ART guest?
+
+**Question.** REL3H2 measured that a tap on a non-clickable view with an
+`OnTouchListener` is acked `finishInputEvent(handled) = false` within 5 ms and
+that the listener "never runs" (no log, no posted `setText`), and concluded the
+guest hit-tests *clickable* nodes instead of running a real
+`ViewGroup.dispatchTouchEvent` chain. That would be an emulation-fidelity gap, so
+this track instrumented the app from the inside to find where the path diverges.
+
+**Result (negative, and it corrects the record).** The guest runs the real chain.
+`fixtures/apps/touch-probe` (a non-clickable custom `ProbeView`, a `GestureDetector`
+view, and a listener on the root `LinearLayout`) logs at
+`Activity.dispatchTouchEvent`, `View.dispatchTouchEvent`, the listener and
+`View.onTouchEvent`. A tap on the non-clickable `probe` produces, in order:
+`activity.dispatchTouchEvent DOWN x=540 y=960 src=0x1002` →
+`probe.dispatchTouchEvent DOWN x=498 y=210 raw=540,960 src=0x1002 toolType=1
+enabled=true clickable=false` → `probe.onTouch DOWN` → `probe.onTouchEvent DOWN` →
+`root.onTouch DOWN x=540 y=685`. Coordinates are window-local and per-view
+transformed, the source is `SOURCE_TOUCHSCREEN`, and the ancestors' fallback runs.
+
+**The UP is the whole story.** It reaches `Activity.dispatchTouchEvent` and stops:
+AOSP `ViewGroup.dispatchTouchEvent` (`ViewGroup.java:2665`) sets
+`intercepted = true` when `mFirstTouchTarget == null` and the action is not an
+initial down — *"There are no touch targets and this action is not an initial down
+so this view group continues to intercept touches."* A DOWN that nobody consumed
+never creates a `TouchTarget`, so the descendants are not offered the UP (or any
+MOVE). A listener that returns false and posts its side effect from `ACTION_UP`
+therefore never runs it: that is exactly REL3H2's "no listener log, no posted
+`setText`, `count` stayed 0", measured on a real Android rule, not an ACOS gap.
+
+**What it unblocks.** The posted-side-effect fixture is back, posting from the
+DOWN — the only shape an app can write for a tap it does not consume — with an
+ART proof of REL3H2 finding 1: `scenarios/touchdisp-posted-side-effect.yaml` taps
+`probe` with `expect_change: true`; the window acks both events
+`handled=false` (`ack_ms: 5`), the listener's 100 ms `postDelayed(setText)` draws,
+and the step binds `settle.bound: strict-event`, `first_change_ms: 127`,
+`pixels_changed: true`, tree `status = "touched-delayed"` — the **change**, never
+the pre-state. The negative twin still fails honestly
+(`rel3h-unhandled-input-expect-change.yaml`: `bound: unhandled-input`,
+`pixels_changed: false`, `expect_change` fails). A `GestureDetector` on a
+non-clickable view (`scenarios/touchdisp-gesture.yaml`, a 700 ms held press)
+publishes 44 events, acks all 44, fires `onLongPress` and writes
+`status = long-pressed`. ART tests:
+`crates/acos-cli/tests/touchdisp_dispatch.rs` (3, `--ignored`).
+
+**Also rechecked while there.** A tap on the same fixture's clickable `Button`
+still acks `handled: true` and increments; `rel3h-unhandled-input`,
+`rel3h2-expect-handled-false`, `counter` (24 steps) and `hello-views` (typing, 27
+steps) all pass with `--engine art`; `cargo test -p acos-art -p acos-verify
+-p acos-cli` is 657 passed / 0 failed.
+
+**Residual limit (unchanged, documented).** The unhandled shortcut and the normal
+strict rule both bind the newest draw, and the probe reports pending main-Looper
+work only when the next message is due inside its horizon. An app that posts a
+side effect later than the window *and* draws something in between can still be
+reported as settled before that side effect lands. With a pure 100 ms
+`postDelayed` no sample is taken in between, so the change is captured; widening
+the horizon would make every tap on a screen with periodic housekeeping wait for
+it (owner decision).
+
+**Conclusion / next.** No dispatch-path change: the ART touch path is faithful and
+the REL3H2 "emulation gap" was a fixture that waited for an event Android does not
+deliver. Evidence in `results/handoff/TOUCHDISP/`.
+
+## REL3H2 — can a fixture produce "unhandled ack, but the screen changes a moment later"?
+
+> **Superseded by TOUCHDISP** (entry above): the "emulation gap" below was a fixture that posted its side effect from `ACTION_UP`, which AOSP never offers to a view that did not consume the `DOWN`. The real view chain runs on ART.
+
+**Question.** MEDIUM review finding #1 says REL3H's unhandled-input shortcut could
+bind a probe sample taken after the publish but before the UI thread ran the
+handler (or before the handler's posted side effect ran and drew). To pin the fix
+end-to-end I built a fixture whose press answers `finishInputEvent(handled) =
+false` and then posts a `setText` 60 ms later, and ran a scenario with
+`expect_change: true` on it.
+
+**Result (negative, and useful).** The ART guest never called the app's touch
+listener on that screen. Measured on `unhandled-post.apk` (a screen-filling
+`LinearLayout#root` with `setOnTouchListener` logging every action and returning
+false): a tap on a non-clickable child resolved to the right node and point
+(`target.hit.point = {540, 369}`, the label at `[42,317][1038,422]`), the window
+acked all 2 published events `handled = false` in 5 ms, and the app log contained
+only `onCreate` - no `onTouch`, no posted `setText`, and `count` stayed `0`. A tap
+on a clickable `Button` in the same guest does dispatch and change state.
+
+So the ART guest's dispatch path acks "unhandled" without consulting a
+non-clickable view's `OnTouchListener`: it looks like a hit test on clickable
+nodes rather than a real `ViewGroup.dispatchTouchEvent` chain. That is an
+emulation-fidelity question, not a settle question, so the fixture and its ART
+test were **removed** rather than committed as a failing/ignored test; the gate
+itself is pinned by `acos-art`'s `launch::rel3h_unhandled_input_tests::gate`
+unit tests (ack floor, confirmation window, posted-draw restart, pending-work
+reset). Follow-up (not this track): dispatch touches through the real view chain
+so a non-clickable listener runs.
+
+## E2.24 — FLAKEWIN: the launch `Adding window failed` flake is the binder driver's unlocked transaction-buffer allocator — MEASURED (defect proven; end-to-end flake not re-observed)
+
+- **Date / commit:** 2026-11-16, branch `flakewin` off `rel-030` `0e3719bf` (fix commit `a8bf0f42`).
+- **Question / goal:** the v0.3.0 candidate's launch flake — guest
+  `LOOPER_THREW: java.lang.RuntimeException: Adding window failed` →
+  `GUEST_EXIT_AFTER_RESUME` at launch, passing on re-run. What did
+  `IWindowSession.addToDisplayAsUser` actually answer, and why?
+- **Method:** decoded the guest's own crash report from
+  `results/handoff/REL3H2/rel3-art-tests-run1.log` and the preserved S3ab
+  occurrence (`results/bench/S3ab-evidence/repro-n20-binder-parcel/`) against
+  AOSP `Parcel.readException`/`createException` (`.cache/aosp`, r75) and
+  libbinder `ipcSetDataReference`; killed `Frame`/`Parcel` offsets against the
+  shim's writer (`crates/acos-services/src/window_session.rs`); audited the
+  guest driver (`crates/acos-binder-peer/native/binder_driver.c`) for every
+  writer of a delivered buffer; launched 4 800 fresh ART guests (counter +
+  hello-views, concurrency 1 and 4, `results/handoff/FLAKEWIN/launch-loop.sh`)
+  against the pre-fix and the fixed driver; plus a host-side two-thread race
+  through the real allocator.
+- **Inputs:** `fixtures/build/apps/counter.apk`, `hello-views.apk`; image API-34;
+  NDK 27.1 clang; shared boot image `fixed-c3663021f50cd4c5`.
+- **Result — the reply was not a reply.** The guest read exception code
+  `-1040187388` = `0xC2000004` (a `writeInterfaceToken` prelude, not a
+  `Parcel.EX_*` code), message `null` (the token's `-1` workSourceUid read as a
+  String16 length), remote-stack size `20`, "stack" `android.view.IWindow`, and
+  `ipcSetDataReference: unsupported type object (7209057) at offset 16`
+  (`0x006E0061` = `'a','n'` of `android.…`). Object offset **16** is the add
+  reply's own first object (`exception header, result, presence,
+  isInitialized`, then the `InputChannel` token); offset 16 is also where an
+  `IWindow` request's token body starts. So the guest held the add reply's
+  **object table** with another transaction's **data** — the
+  `IWindow.dispatchAppVisibility` request the shim sends right after the add
+  reply.
+- **Result — the cause.** `binder_driver.c`'s `mm_alloc` was a **lock-free** bump
+  heap, and the driver allocates concurrently by design: `build_reply` (the
+  reply, on the thread blocked in `transact`) and `deliver_incoming` (a
+  peer-initiated `BR_TRANSACTION`, on the looper thread) both call it with
+  `g.mu` released. Two callers read the same `g_bump`, got the same offset, and
+  the second `memcpy` overwrote the first parcel in place — data from one
+  transaction, object table from the other, exactly §1. AOSP's `binder_alloc`
+  takes `alloc->mutex` for the same reason.
+- **Result — the regression test.** 4 threads × 50 000 allocations through the
+  real `native/txn_heap.c`: pre-fix `duplicates=7979 overlaps=101657` of 200 000
+  (`results/handoff/FLAKEWIN/regression-before-fix.log`); fixed
+  `duplicates=0 overlaps=0`. Committed as
+  `crates/acos-binder-peer/tests/txn_heap.rs`.
+- **Result — launch loops.** Fixed driver: 1 600/1 600 launches (800 at
+  concurrency 1, 800 at concurrency 4) plus 400/400 on the final tree. Pre-fix
+  driver: **0 failures in 3 800 launches** (800 at concurrency 1, 3 000 at
+  concurrency 4). That is the honest caveat: the real rate is ~1e-3 per launch
+  (2 in ~3 000 resets, S3ab) and the collision needs a ~2 ns window, so a
+  launch loop cannot resolve it — P(0 failures in 3 800) ≈ e^-2.5. The loop
+  confirms no regression, not the fix's e2e effect. A 2 ms widened allocation
+  window (fault injection, never shipped) also passed 6/6 because in that
+  ordering the *delivery* (later writer) is the corrupted parcel, not the reply.
+- **Implementation:** `native/txn_heap.{c,h}` (new, leaf-mutex heap,
+  host-compilable), `binder_driver.c` uses it, heap exhaustion is named
+  (`ART_RESOURCE_LIMIT`) and yields `BR_FAILED_REPLY` instead of a hang,
+  `build.rs` + `acos-art` `build_driver` compile the unit and hash it into the
+  driver stamp and the build-cache key (`v3`), so no cached `.so` can carry the
+  old allocator.
+- **Trade-offs / regressions:** one `pthread_mutex_lock`/`unlock` pair per
+  delivered transaction (both call sites were already off the `g.mu` path, so no
+  lock ordering change). No gate or test changed. `cargo test --release -p
+  acos-services -p acos-art` 575 passed / 0 failed; `-p acos-binder-peer` 17/17.
+- **Fidelity / evidence:** real ART, release; `results/handoff/FLAKEWIN/REPORT.md`
+  (analysis, cohort table `launch-loops-summary.txt`, `loops/*.jsonl`,
+  `cargo-test-services-art.log`, `regression-before-fix.log`, `launch-loop.sh`).
+- **Open:** the flake is fixed by cause, not by reproduction. Smallest next
+  action: a guest-side assert on every `addToDisplayAsUser` reply
+  (`table[0] == 16 && data[0..4] == 0`) so the next occurrence is caught with
+  its parcel, and a safe block re-use policy for the still-monotonic heap.
+
+## LOOPERWAKE — is a background-thread handler post invisible on an idle screen? — NOT ON rel-030 (guest-measured wake is 0–17 ms); one real settle defect found and fixed
+
+- **Hypothesis (NET6 §4, WV7 §4a):** a `runOnUiThread`/`Handler.post`/
+  `View.postInvalidate` from a non-main thread does not wake ACOS's idle main
+  looper, so the UI update appears only on the next input.
+- **Fixture:** `fixtures/apps/looper-wake` (new). Idle Activity; a *plain Java
+  thread* posts `runOnUiThread(setText)` 1500 ms after the first frame, then
+  calls `View.postInvalidate()` from the same thread; a `HandlerThread` (a
+  non-main Looper thread, the shape of a framework/binder callback) posts to the
+  main `Handler` on demand. Every mark carries `SystemClock.uptimeMillis()`, so
+  the post→drain and invalidate→draw latencies are the **guest's own**
+  measurements; `PulseView.onDraw` reports `since_invalidate_ms`.
+- **Scenario:** `scenarios/looperwake-bg-post.yaml` (`engine: art`). The decisive
+  step is an `assert_log` (log-stream read only: no PROBE, no input, no capture,
+  nothing that could wake the looper on the app's behalf) requiring
+  `ui-drain latency_ms=<0..999>` and `pulse.draw ... since_invalidate_ms=<0..999>`.
+- **Result — rel-030 (5a912d4b):** PASS, 11/11 steps; the reported defect is
+  **not present**. Guest log
+  (`results/handoff/LOOPERWAKE/after/logs/logcat.txt`): `bg-post t=1714502` →
+  `ui-drain latency_ms=1 t=1714503` (1 ms), `bg-invalidate t=1714753` →
+  `pulse.draw n=3 since_invalidate_ms=16` (16 ms), `bg2-post` → `ui2-drain
+  latency_ms=15` (15 ms, HandlerThread), on-demand background `postInvalidate`
+  → draw 16 ms. A prior run measured 0 ms / 17 ms / 14 ms / 17 ms. So on this
+  branch the stock `libandroid_runtime.so` the ART guest loads
+  (`crates/acos-art/src/launch.rs:1145`; stock 2.4 MB image library) really does
+  `MessageQueue.enqueueMessage -> nativeWake` (eventfd write) and the host
+  `display_events` clock really does deliver the vsync event that
+  `Choreographer` registered on the same looper.
+- **Result — a real defect in the settle path:** with
+  `assert_log since_previous_step: false` + `timeout_ms`, the *wait* judged the
+  per-step window while the *assertion* judged the whole stream, so a line
+  already present (e.g. from the previous step) never satisfied the wait: the
+  step polled for its whole deadline (measured 4069 ms) and only then passed —
+  exactly the "the effect arrived late" shape. Fixed in
+  `crates/acos-verify/src/executor.rs` (the wait now uses the same slice as the
+  assertion); regression test
+  `assert_log_wait_judges_the_same_scope_as_the_assertion` fails before it
+  (`25 fetches`, 2.06 s) and passes after (`3 fetches`, 0.00 s). The scenario's
+  step 7 went 4069 ms → 1 ms.
+- **Trade-offs / regressions:** none; `cargo test -p acos-vm -p acos-verify`
+  green (35 test binaries), `-p acos-art` green (166 + suites).
+- **Open:** the *modules*-branch reports (a callback on a guest binder thread,
+  a WebView frame decoded in another process) were not reproduced here — this
+  branch has neither the network module nor the WebView module, so a binder-thread
+  callback cannot be produced in a rel-030 fixture. Smallest next action: run
+  `looperwake-bg-post` plus a NET6-style `netcb` TextView assertion on `modules`
+  (and WV8); if it reproduces there, diff the module delivery thread against the
+  plain-thread case before touching the guest runtime.

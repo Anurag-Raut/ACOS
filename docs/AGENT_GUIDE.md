@@ -32,9 +32,10 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 1. `acos_doctor` — host preflight; fix every failing check's `fix:` first.
 2. `acos_inspect {"apk": ...}` — static: package, launcher, SDK, DEX/native.
 3. `acos_launch {"apk": ...}` — boot it (**absolute** paths only), read
-   `reached_stage`; the first non-ok rung carries the blocker. Idle sessions
-   expire after 600 s (`idle_ttl_s`; see `workflow`).
-4. `acos_observe_tree` — nodes with `id`/`text`/`bounds`; act on those.
+   `reached_stage`; the first non-ok rung carries the blocker. The launch reply
+   is compact (`tree_path` = full tree). Idle sessions expire after 600 s.
+4. `acos_observe_tree` — visible text/desc nodes with `id`/`bounds`/`clickable`;
+   long lists page with `cursor`.
 5. `acos_tap` / `acos_text` / `acos_key` / `acos_swipe` — then re-observe.
 6. `acos_logs` — the app's own words; `launched`/`stage_reached` included.
 7. `acos_verify {"apk","scenario"}` — the verdict and its artifacts are the
@@ -108,6 +109,7 @@ the next call on an expired one returns `SESSION_NOT_FOUND` with
 `assert_visible` / `assert_not_visible` (collapsed content stays in the tree with
 `visible: false`, so assert visibility, never presence) and `assert_log` turn a
 visual claim into a machine check with a diff.
+A step settles on the screen its action produced; a change the app makes **later** (a delayed post, a worker thread, a timer) may land after the step settled. Check such an effect with `assert_text` + `timeout_ms` (a real wait), not with the action step's result.
 
 ## The loop
 
@@ -163,7 +165,7 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    `acos_tap {"id": "inc"}`, `acos_tap {"x":.., "y":..}`,
    `acos_key {"code": "back"}`, `acos_text {"text": "hello"}` (types into the
    focused editor — the same guest `type_text` command a scenario `type` step
-   sends), `acos_swipe {"from":[x1,y1], "to":[x2,y2]}`. `text` names a node the
+   sends), `acos_swipe {"from":{"x":x1,"y":y1}, "to":{"x":x2,"y":y2}}`. `text` names a node the
    way the platform does — its text, else its content description — so a React
    Native pressable (`accessibilityLabel`, e.g. a bottom tab) is reachable by the
    label you read on screen. `content_desc` and `id` are the *explicit* fields:
@@ -183,14 +185,126 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    or bounds you have not seen (`diff: false` restores the old reply).
    `state_changed: false` with `accepted: true` means the event was delivered
    but the screen did not change — read the in-band `note` and `changes`.
+
+   **Scrolling a list (REL3S).** The ART engine publishes a real gesture, not a
+   jump: `DOWN`, one `MOVE` every ~16 ms (the display refresh cadence) with real
+   event timestamps, then `UP`, on the same input channel a tap uses. The app's
+   own `VelocityTracker`/`OverScroller` therefore decide the fling, so a
+   `ListView`/`RecyclerView`/RN `FlatList` scrolls exactly as it does on a phone.
+   Three ways to name the gesture:
+
+   ```
+   acos_swipe {"from": {"x": 300, "y": 1100}, "to": {"x": 300, "y": 400},
+               "duration_ms": 300, "fling": true}
+   acos_swipe {"direction": "up", "distance": 900, "duration_ms": 300}
+   acos_swipe {"direction": "up", "fling": true, "until": {"text": "Row 80"}}
+   ```
+
+   `direction` (`up`/`down`/`left`/`right`) gestures across the display centre;
+   `up` moves the finger up, which scrolls the content up and brings later rows
+   into view. `duration_ms` defaults to 400 (120 with `fling: true`); a slow
+   drag follows the finger, a fling coasts on the list's own physics.
+
+   **`until` is `scroll_until`.** With a selector, the call repeats the swipe
+   (bounded by `max_attempts`, default 6, 10 with `fling`) and after **every**
+   swipe takes a fresh **settled** traversal and looks for the node. `until.found`
+   is only ever reported from such a traversal (`until.attempts`,
+   `until.frame_seq` name it). **Two consumed swipes that move nothing end the
+   search** (REL3H2): when the settled tree before and after two *consumed*
+   gestures in a row is identical, the list has reached its end and the call
+   fails with `END_OF_LIST` (`error.details.end_of_list: true`, `attempts`,
+   `max_attempts`, `unchanged_gestures`, `last_tree_texts`) instead of spending
+   the remaining attempts. One unchanged gesture is deliberately not enough: a
+   list that is still loading is unchanged for a gesture too. **A swipe the app
+   did not consume** (`finishInputEvent(handled) = false`, or a settle with
+   `reason: unhandled_input`) moved nothing because it missed the scroller — that
+   is `ELEMENT_NOT_FOUND` with the hint "gesture not consumed (swipe missed the
+   scroller?)", never `END_OF_LIST`. Otherwise a node that never appears fails
+   with `ELEMENT_NOT_FOUND`, `error.details.attempts`,
+   `error.details.max_attempts` and `error.details.last_tree_texts` (what the
+   list actually showed at the end) — never a pass, and never a guess from a
+   cached tree. `until` requires the
+   strict settle; `settle: fast`/`content` is refused because neither can prove a
+   settled observation.
+
+   `handled` works per event: a scrolling gesture reports
+   `handled_evidence.published` equal to `acked` (a 300 ms swipe is ~20 events,
+   not 2) and `unhandled` lists any event the window dropped — e.g. a gesture
+   that lands on a non-scrollable view.
+
+   **The same two steps in a scenario (REL3S).** A scenario scrolls with the
+   same gesture and the same search:
+
+   ```yaml
+   - swipe: {direction: up, distance: 900, duration_ms: 300, fling: true}
+   - scroll_until: {selector: {text: {exact: "Row 80"}}, fling: true, max_attempts: 12}
+   - tap: {selector: {text: {exact: "Row 80"}}}
+   ```
+
+   `swipe` takes `from`/`to` points or `direction` (+ `distance`), `duration_ms`,
+   `fling`, the per-step `settle`/`settle_timeout_ms` rules and SE1's
+   `expect_change`. `scroll_until` takes the same geometry plus the `selector`
+   to find and `max_attempts` (1..50); it always runs strict. Both report REL3E's
+   `input` block (`handled`, `handled_evidence`, `target`), and `scroll_until`
+   also reports `input.until {selector, found, end_of_list, attempts, frame_seq}`;
+   a miss fails the step with `ELEMENT_NOT_FOUND` (every attempt used, or the
+   swipe was not consumed) or `END_OF_LIST` (two consumed swipes moved nothing:
+   the list ended) plus `details.attempts` / `details.last_tree_texts`. The next
+   `assert_*` binds to the swipe/search's own settled frame.
    Identity rule, compared fields and the 40-entry cap: `docs/MCP.md` §1c.
+   **`handled` is the app's own answer, and it is the one you branch on.**
+   Every `acos_tap`/`acos_key`/`acos_text`/`acos_swipe` reply (and every
+   scenario `tap`/`type`/`key`/`back` step JSON, under `input`) carries
+   `handled`: the bit the app window passed to Android's
+   `InputEventReceiver.finishInputEvent(handled)`. It is the framework's
+   verdict, not a guess from pixels:
+
+   - `handled: false` — **nothing in the app consumed the input.** A tap on a
+     label whose row is not pressable (the switch beside it is) is exactly this:
+     `state_changed: false` is then the correct, expected outcome, not a broken
+     tap. The same reply's `target` names what happened: `target.node` is the
+     node the selector resolved to, `target.hit.node` is what the injected point
+     actually hit (its `class`, `text`/`content_desc`, `bounds`, `clickable`),
+     `target.hit.consumer` is the nearest clickable ancestor-or-self (`null`
+     when there is none), and `target.hit.suggest` is the nearest clickable node
+     off that branch — the switch, the row's pressable, the button. A
+     `handled_hint` spells it out: *"nothing tappable there … tap the nearest
+     clickable android.widget.Switch … instead"*.
+   - `handled: true` + `state_changed: false` — the app **did** consume it and
+     the settled frame still shows no change: the handler may be asynchronous,
+     or the control already had that state. `handled_hint` says so. Assert on
+     the state you expect rather than expecting a change.
+   - `handled: true` + `state_changed: true` — the press was consumed and the
+     screen changed; `changes` says what.
+   - `handled: null` — the guest did not ack every event
+     (`handled_evidence.acked` < `published`): **unknown**, never reported as
+     "not handled". `handled_evidence` always travels with the boolean
+     (`source`, `published`, `acked`, `unhandled` seqs).
+   - `handled: true` + `handled_evidence.source: "host_window_removed"` — the
+     window the input was delivered to was removed during the step (a dialog
+     dismissed by `back`). Its `InputEventReceiver` is disposed before it can
+     finish the event, so the host's removal is the proof and it outranks an
+     all-unhandled ack set (`source` is then `host_window_removed`, never
+     `guest`, and the step carries no `INPUT_UNHANDLED` warning). `source` is
+     `guest` when an ack answered, `none` when nothing was delivered.
+
+   Two consequences worth knowing. (a) `state_changed` is evidence about the
+   screen; `handled` is evidence about the app. An agent that only reads
+   `state_changed` cannot tell "nothing tappable there" from "handled, nothing
+   changed" — read `handled` first. (b) The hit-test in `target.hit` is
+   computed from the tree the tap resolved against (visible rects, deepest
+   node first); it tells you *what is there*. `handled` tells you *whether the
+   app took it*. When they disagree (`hit.clickable: true`, `handled: false`)
+   the control was hit but refused the press — disabled, or a parent
+   intercepted it.
 6. **Read the app's own words.** `acos_logs` returns the guest log buffer and
    also `launched` / `stage_reached`, so an empty buffer is only clean if the
    app actually reached `onCreate`. The **default view is `min_priority: "W"`
    plus the app's own package** (records at warning or above, plus anything that
    names the app), which keeps SoLoader/framework noise out of the reply. The
-   full buffer stays on disk (`logs/logcat.txt` in a verify run), `"all": true`
-   or `min_priority: "V"` returns all of it, and `tag` narrows further.
+   full buffer stays in `logs/logcat.txt` (a live reply names `log_path`),
+   `"all": true` or `min_priority: "V"` returns all of it, and `tag` narrows
+   further.
 7. **Prove the flow.** `acos_verify {"apk": ..., "scenario": ...}` (or
    `acos verify <scenario.yaml> --artifacts out/<name>`) runs a YAML scenario and
    writes `verdict.json`, per-step JSON and the frames. The tool runs **real
@@ -249,11 +363,15 @@ search flow no longer has to become a scenario. In four calls:
 ## CLI reference (runnable examples)
 
 ```
+acos guide                                    # the agent guide (same text as MCP acos_help)
+acos guide workflow                           # one topic: workflow|cli|scenarios|errors|limits|mcp
+acos guide all                                # the whole guide
 acos doctor --json
 acos inspect fixtures/build/apps/counter.apk --json
 acos launch fixtures/build/apps/counter.apk --engine art --json
 acos launch fixtures/build/apps/counter.apk --engine art --keep --json   # session survives in the daemon
 acos launch fixtures/build/apps/counter.apk --engine art --service feedback.vibrator:stub --json
+acos launch fixtures/build/apps/counter.apk --engine art --keep --label counter --json  # session survives in the daemon
 acos observe --tree --json                        # the daemon's live session
 acos observe --tree --apk fixtures/build/apps/counter.apk --json         # one-shot: launch then observe
 acos observe --screenshot out/counter.png --json
@@ -302,11 +420,16 @@ Notes that save a run:
   MCP tools `acos_reset` / `acos_destroy`. There is no top-level `acos reset`.
 * `acos run-dex <path> --main Main` executes a DEX `main` on the Rust
   interpreter: console-tier checks only, not UI evidence.
+* `acos guide [topic]` prints the agent guide from the same source as the MCP
+  `acos_help` tool (`docs/AGENT_GUIDE.md`); `acos guide all` is the whole text.
+  A CLI-only agent does not need the checkout to read the scenario schema.
+* **Human output contract:** with `--json`, stdout is the JSON document and
+  nothing else; the human summary (status line, warnings, the next action) goes
+  to stderr. In text mode the human summary is stdout. Never parse text mode to
+  get a verdict, and never mix the streams (`2>&1`) when the output is JSON.
 * Every command takes `--json` and prints the same envelope the MCP tools
-  return. With `--json`, **stdout carries only the JSON document**; progress,
-  warnings and the one-line failure summary go to **stderr**. So
-  `acos verify … --json > out.json 2>&1` is *not* JSON — send stderr elsewhere
-  (`2>err.txt`). Text mode prints the human summary on stdout.
+  return. So `acos verify … --json > out.json 2>&1` is *not* JSON — send stderr
+  elsewhere (`2>err.txt`).
 * `acos verify --artifacts <dir>` gives one run ownership of that directory. A
   non-empty dir written by another run is refused (`INVALID_ARGUMENT` naming the
   previous run id); use a fresh dir, or `--overwrite` to replace that evidence
@@ -324,7 +447,7 @@ A scenario is YAML with `version: 1`. Minimal, runnable shape:
 version: 1
 name: counter-increment
 app: fixtures/build/apps/counter.apk
-engine: native-preferred        # native-preferred | native-only | reference-only (see note)
+engine: rust-vm                 # art | rust-vm (the same names --engine takes)
 fallback: report-and-escalate   # report-and-escalate | report-only | forbid
 api_level: 34
 isolation: process              # shared-task | process | sandbox | core | vm
@@ -341,27 +464,31 @@ steps:
   - assert_no_crash: {}
 ```
 
-`engine:` and `fallback:` above are the legacy **native-vs-reference** preference
-(`native-preferred` | `native-only` | `reference-only`) and are **not** the
-execution engine. The execution engine is `acos verify --engine art|rust-vm`
-(CLI) or the `engine` argument of the `acos_verify` tool (default: `art`, real
-ART). ART verification does not read the YAML field.
+`engine:` and `fallback:` are **metadata** about what the scenario was written
+for; the execution engine is chosen by `acos verify --engine art|rust-vm` (CLI)
+or the `engine` argument of `acos_verify` (MCP). Both use the **same two words**:
+`art` (real ART) and `rust-vm` (the frozen Rust VM). The default is `art` in
+both front doors, from one constant, so `--help` cannot disagree with behaviour.
+
+The pre-v0.3 YAML spellings still parse and are reported as a warning that names
+the current word: `native-preferred` and `native-only` mean `rust-vm`,
+`reference-only` means `art`. `engine: art` is accepted, not
+`INVALID_SCENARIO: unknown variant 'art'`.
 
 A step is a **one-key map**. Valid keys:
 
 | step key | payload |
 |---|---|
-| `launch` | `activity` / `intent_action` / `data` / `extras` / `clear_state` |
-| `wait_for` | `selector`, `timeout_ms`, `require_visible` |
-| `wait` | `ms` — a fixed **timeline** delay, never a synchronisation primitive (see below) |
-| `tap` | `selector` or `x`+`y`, optional `timeout_ms`, `settle`, `settle_timeout_ms`, `expect_change` |
-| `type` | optional `selector`, `text`, `clear`, `settle`, `settle_timeout_ms`, `expect_change` |
-| `key` | `key` (`back`, `home`, `enter`, `tab`, `delete`, `escape`, `menu`, `dpad_*`), `settle`, `settle_timeout_ms`, `expect_change` |
-| `back` | `{}` or `{expect_change: true}` |
+| `launch` | `activity` / `intent_action` / `data` / `extras` / `clear_state`, `settle`, `settle_timeout_ms` |
+| `wait_for` | `selector`, `timeout_ms`, `require_visible`, `settle`, `settle_timeout_ms` |
+| `tap` | `selector` or `x`+`y`, optional `timeout_ms`, `settle`, `settle_timeout_ms`, `expect_change`, `expect_handled` |
+| `type` | optional `selector`, `text`, `clear`, `settle`, `settle_timeout_ms`, `expect_change`, `expect_handled` |
+| `key` | `key` (`back`, `home`, `enter`, `tab`, `delete`, `escape`, `menu`, `dpad_*`), `settle`, `settle_timeout_ms`, `expect_change`, `expect_handled` |
+| `back` | `{}`, `{expect_change: true}` or `{expect_handled: false}` |
 | `rotate` | `orientation: portrait\|landscape` — **unsupported on the ART session channel** (see Limits) |
-| `assert_text` | `selector`, `text` matcher, optional `bounds`, `timeout_ms` |
-| `assert_visible` / `assert_not_visible` | `selector`, optional `bounds`, `timeout_ms` |
-| `assert_state` | `selector` + at least one of `visible/enabled/focused/clickable/scrollable/checked` |
+| `assert_text` | `selector`, `text` matcher, optional `bounds`, `timeout_ms`, `settle` |
+| `assert_visible` / `assert_not_visible` | `selector`, optional `bounds`, `timeout_ms`, `settle` |
+| `assert_state` | `selector` + at least one of `visible/enabled/focused/clickable/scrollable/checked`, `timeout_ms`, `settle` |
 | `assert_log` | `tag`, `patterns` (regex list), `ordered`, `since_previous_step`, `timeout_ms`, `min_matches` |
 | `assert_no_crash` | optional `since_seq` |
 | `assert_screenshot` | `baseline`, `tolerance` (0..1), `region_masks` (display pixels) |
@@ -586,25 +713,146 @@ A scenario step is a fixed document: it keeps first-match-plus-`index`.)
 
 **Settle modes (the part that decides whether a pass is real).**
 
-* `settle: "strict"` (the default) waits for a *settled* observation after the
-  action — a frame/tree that satisfied the strict rule — and every assertion
-  runs on it. Timeout is `TIMEOUT`, never a pass.
+There are four settle rules. Every step's JSON states the rule it used and how it
+ended: `settle: {mode, settled, waited_ms, reason}` (`bound`, `window_ms`,
+`traversals`, `pixels_changed` and `fallback_from` join it when they apply).
+
+* `settle: "strict"` waits for a *settled* observation — a frame/tree where the
+guest reports no pending framework UI work. Timeout is `TIMEOUT`, never a pass.
+* `settle: "content"` is the **content-stable** rule: settled when the UI tree's
+content signature (text, classes, ids, content-desc, state flags, window and
+node structure/order — every field a selector or assertion reads, except
+geometry) is unchanged across at least two *fresh, distinct* traversals spanning
+at least 300 ms, **whether or not the pixels keep animating**. That is the rule
+for a screen that animates forever: a React Native `Animated` timeline, a
+spinner, an indefinite `ProgressBar`, a splash that never stops drawing.
 * `settle: "fast"` returns the first fresh sample immediately. It is for
   latency-sensitive probing only: it may be mid-animation, it is **never**
-  assertion evidence, and `acos_assert` rejects it with `INVALID_ARGUMENT`.
-  Scenarios cannot request fast for an assertion step at all.
+  assertion evidence, and `acos_assert`, `wait_for` and every `assert_*` reject it
+  with `INVALID_SCENARIO` (scenario) / `INVALID_ARGUMENT` (live channel).
+* **No `settle:` at all** is the documented default per step kind:
+  * `wait_for` and `assert_text`/`assert_visible`/`assert_not_visible`/`assert_state`
+    are **auto**: strict first, then content-stable when strict proves it cannot
+    settle. So a text wait/assertion on an animating screen passes on the stable
+    tree instead of spending its whole timeout on a rule that can never win, and
+    the step's `settle` record says `mode: content` with `fallback_from: strict`,
+    `pixels_evidence: false`.
+  * `tap`/`type`/`key`/`back`/`swipe`/`launch`/`reset` are **strict** (an action's frame
+    is evidence; an endless animation there is a real `TIMEOUT`). Pass
+    `settle: content` on the action when you only need the tree to be stable.
+    `scroll_until` takes no `settle` option: every attempt is one real gesture
+    followed by its own fresh settled traversal.
+  * `capture`, `assert_screenshot` and `assert_region` are **pixels**: they take
+    their own fresh capture and need pixel settle. They never accept content
+    stability as evidence.
+
+Never weakened: an assertion still requires its condition on a *settled*
+observation, of the mode it reports.
+
+* **A content pass needs two observations.** Under `settle: content` — explicit
+  or the automatic fallback — the condition must hold on **two consecutive
+  content-settled observations at least one content window apart** (>= 300 ms)
+  before the step passes. One stable-looking sample is not a verdict. A poll
+  that is not satisfied (or never settles) resets the confirmation, so an
+  intermittent condition cannot slip through on unrelated stable samples.
+* **The residual hazard.** Content stability is *not* proof that the app
+  finished loading. A stalled JS thread, a paused renderer or a loading state
+  that simply has not updated the tree yet can look perfectly stable for a whole
+  window. `settle: content` answers "the readable content is not changing", not
+  "the app is ready". For a screen whose text arrives in a later phase, wait for
+  a **post-transition marker** (the destination screen's unique id/text, or a
+  ready flag the app sets) instead of the start button or the spinner, and only
+  then assert. Two observations reduce this window; they cannot eliminate it.
+* **The rule never leaks.** A content observation is scoped to the step that
+  asked for it. `capture`, `assert_screenshot` and `assert_region` always take
+  their own strict pixel capture; a capture whose frame is somehow bound by a
+  content record is refused with `details.reason: "content_settle_pixel"` rather
+  than reported as pixel evidence.
+
+* **Content settle backs UI/text/state claims only.** The content signature does
+not hash geometry (a view translated by an animation changes its `bounds` every
+frame), so a `bounds` claim — an assertion's own `bounds` **or**
+`selector.bounds` — on a content-settled frame fails closed with
+`details.reason: "content_settle_geometry"`, and a pixel claim
+(`assert_region`/`assert_screenshot`/`capture`) fails with
+`"content_settle_pixel"`. Assert the text/state instead, or settle strictly.
+* **A `tap` step always runs its own state-change check**
+  (`expect_change: "auto"`). The step JSON's `input` block says
+  `expect_change: "auto"` for every tap, so this is no longer hidden: when the
+  tap's settled frame differs from the previous observation, the step
+  additionally requires the change to be visible in **both** the UI tree and the
+  screenshot (`state_change` assertion), and fails with `ASSERTION_FAILED` if
+  only one moved. A tap that the app did
+  not handle (`input.handled: false`) or that changed nothing
+  (`state_changed: false`) passes with an `input_delivery` assertion and an
+  explanatory message — the auto rule never asks a no-op tap to repaint. Set
+  `expect_change: true` when you want "this tap must change something" to be a
+  hard requirement; `input.expect_change` then reads `true`.
 * Strict settle does *not* require pixels to change. `expect_change: true` on a
   `tap`/`type`/`key`/`back` step is the opt-in that does: `pixels_changed:false`
   then fails with `ASSERTION_FAILED` / `details.reason: "expect_change"`.
-  `expect_change: true` + `settle: fast` is rejected at parse time. Use it for
-  any flow whose point is that a control did something.
-* A step that provokes no draw at all cannot settle and ends as `TIMEOUT`
-  (`reason: "no-draw-after-action"`). Both are non-passes.
+  `expect_change: true` + `settle: fast`/`content` is rejected at parse time. Use
+  it for any flow whose point is that a control did something.
+* **Unhandled input is a settled observation, not a timeout (REL3H).** When
+  *every* event of an action was delivered and acknowledged
+  `finishInputEvent(handled) = false` and the app drew nothing, the strict settle
+  ends immediately with `settle: {mode: "strict", settled: true, reason:
+  "unhandled_input", bound: "unhandled-input", pixels_changed: false}` (the live
+  reply and every step JSON carry it; REL3E's `handled: false` hint still names
+  the clickable neighbour). Nothing consumed the input, so the unchanged screen
+  *is* the outcome - a pass for the delivery rule only: an assertion after it
+  still sees the unchanged screen, and `expect_change: true` fails on
+  `pixels_changed: false`. If any event was handled, or the ack list is short
+  (unknown, never "not handled"), the normal settle applies. The shortcut binds
+  only a sample taken *after* the gesture's last ack (so the handler had
+  finished) that stays on the same draw for one confirmation window, so a
+  handler's posted side effect (`post()` + `setText`) is caught by the normal
+  rule instead of settling on the pre-change screen (REL3H2).
+* **An unhandled input is never a *silent* pass (REL3H2).** A step that
+  passes with `input.handled: false` also carries a structured warning -
+  `INPUT_UNHANDLED` in the step JSON's `warnings[]` **and** in the verdict's
+  `provenance.warnings[]` - naming the step, the acked events and (when there is
+  one) the clickable neighbour. The status stays `pass`: the warning says the
+  step made no change claim, not that it failed. Two scenario fields decide what
+  you get instead:
+  * `expect_handled: true` - a claim: the app must consume this gesture. An
+    unhandled ack fails the step with `INPUT_NOT_HANDLED` (error class
+    `assertion`, `details.reason: "expect_handled"`, plus the target and the
+    settle record). Use it on every tap whose point is that a control reacts; a
+    green `pass` then means the control really took the press. If the guest acks
+    no complete set of events the claim cannot be verified and the step is
+    `unsupported` (`UNSUPPORTED_ASSERTION`), never a silent pass.
+  * `expect_handled: false` - the annotation "this press is a no-op on purpose":
+    it silences `INPUT_UNHANDLED` and changes nothing else (a handled event is
+    still fine).
+* A step that provokes no draw at all *and was handled* (or whose acks are
+  unknown) cannot settle and ends as `TIMEOUT`
+  (`reason: "no-draw-after-action"`). A content settle whose signature keeps
+  changing ends as `TIMEOUT` (`reason: "content-not-stable"`). Both are
+  non-passes.
+* **A settle that timed out is never a pass.** In a scenario the step is
+  `status: timeout` with `error.code: TIMEOUT` (error class `infra_timeout`);
+  on the live channel (`acos_tap` & co.) the reply is `status: timeout` with
+  `details.reason: "settle_timeout"`, `details.settle` and the delivered facts in
+  `details.delivery`. `settle_timeout_ms` moves the deadline; it never turns a
+  still-changing screen into a pass.
+* `animations: off` is *not* the answer for an app that animates in its own code
+  (RN `Animated`, a custom `ValueAnimator`, a spinner). It only zeroes Android's
+  three framework animation scales. Use `settle: content` for those screens.
 
-**Assertions are always strict.** `assert_text`, `assert_visible`,
-`assert_state`, `assert_log`, `assert_no_crash`, `assert_screenshot` and
-`assert_region` never take a settle option; a scenario that cannot prove its
-claim this way must fail.
+**Assertions and `timeout_ms`.** `assert_text`, `assert_visible`,
+`assert_not_visible` and `assert_state` honour `timeout_ms`: with it they poll
+fresh settled observations until the condition holds or the deadline passes;
+without it they evaluate the frame the previous step bound (one observation, no
+extra traversal). A scenario that cannot prove its claim must fail.
+
+`settle` on an assertion therefore takes effect **only together with
+`timeout_ms`**: without a timeout there is no second observation to make, so the
+assertion reads the already-bound frame exactly as before (its `settle` record
+reports the rule that frame was bound with, not the one the step named). We keep
+that shape because it adds no default latency to the common case; spell out
+`timeout_ms` whenever you need `settle: content` (or want the assertion to wait
+at all).
 
 **Two coordinate spaces.** Tree bounds, `tap` `x`/`y`, `assert_region` and
 `region_masks` are **display** pixels (1080x2400 on the API-34 profile). A
@@ -672,6 +920,7 @@ On a placeholder frame (window exists, app content never mounted) the answer is
 | `UNSAFE_PATH` | a path (or a symlink it names) escaped `ACOS_ALLOWED_ROOTS` | move the file under an allowed root, or add that root to `ACOS_ALLOWED_ROOTS` and restart; see Limits → Paths |
 | `INVALID_ARGUMENT`, `INVALID_SCENARIO` | bad request or bad YAML | read `details`/the validation `path` and fix it |
 | `INTERNAL`, `HOST_PANIC`, `GUEST_EXITED` | ACOS harness failure, needs triage | capture request/scenario/artifacts, report the harness bug; do not count it as a pass |
+| `DAEMON_VERSION_MISMATCH` | the `acos serve` daemon (or the MCP server's private daemon) is **another build** — an older daemon left over from before an upgrade, or a second checkout. Its answer would be that build's behaviour, not yours | nothing to fix in the app: the CLI never uses that daemon. `acos session …` replaces an idle auto-started daemon and otherwise runs a build-private one (stderr carries `{"code":"DAEMON_VERSION_MISMATCH","client":…,"daemon":…,"action":…}` with both identities, and the tool call that follows runs on *your* build). An operator-started `acos serve` is never signalled, so after an upgrade restart it (`acos doctor` prints its pid and build id next to the CLI's) |
 
 Two session-specific hints worth memorising:
 

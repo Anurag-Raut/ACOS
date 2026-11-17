@@ -1,0 +1,7 @@
+{
+  "request_id": "req_32ec1b_18e87bbdd0036e54",
+  "started_at": "2026-11-16T09:15:06.676Z",
+  "scenario": "scenarios/negative/w44-hostile-forest-trusted.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

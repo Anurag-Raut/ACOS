@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.3",
+  "apk_path": "fixtures/build/apps/settle-lab.apk",
+  "apk_sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4",
+  "scenario_path": "scenarios/rel3a-content-settle.yaml",
+  "scenario_sha256": "26765f816cdc61567de779b53d47d9530f0233c6be2892c5923e1352413bbed0",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

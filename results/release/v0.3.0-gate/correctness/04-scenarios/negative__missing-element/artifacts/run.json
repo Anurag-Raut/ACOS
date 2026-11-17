@@ -1,0 +1,7 @@
+{
+  "request_id": "req_32e587_18e87bbbe376a9d1",
+  "started_at": "2026-11-16T09:14:58.412Z",
+  "scenario": "scenarios/negative/missing-element.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

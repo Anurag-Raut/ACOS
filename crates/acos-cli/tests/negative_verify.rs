@@ -12,9 +12,10 @@
 //! convention as the other fixture-gated tests), instead of reporting a green
 //! run that never executed anything.
 //!
-//! W14: these cases run the product command's **frozen Rust-VM** default (the
-//! ART engine rejects `--native`, and the V1 scenarios use `assert_log`, a
-//! command the ART engine honestly does not have). That VM currently cannot
+//! W14: these cases run the product command's **frozen Rust VM** (`--engine
+//! rust-vm`; the ART engine rejects `--native`, and the V1 scenarios use
+//! `assert_log`, a command the ART engine honestly does not have). `art` is the
+//! product default, so the VM route is named explicitly. That VM currently cannot
 //! publish a frame: the W2/W3/W5 `SurfaceControlInfo` full-body encoding makes
 //! the guest reject the `insetsControlChanged` callback parcel
 //! (`BadParcelableException: unread size: 796`), so `launch` stops at
@@ -138,11 +139,20 @@ fn broken_fixtures_never_false_pass() {
             .arg(apps.join(case.apk))
             .arg("--scenario")
             .arg(workspace().join(case.scenario))
+            // This suite exercises the **frozen Rust VM**'s honest failures
+            // (its `--native` loader and `assert_log`); the product default is
+            // now `--engine art` (the one default constant), so the VM route is
+            // requested explicitly rather than by relying on a stale default.
+            .arg("--engine")
+            .arg("rust-vm")
             .arg("--json")
             .arg("--artifacts")
             .arg(&artifacts)
             .env("ACOS_BOOT_DIR", &boot)
             .env("ACOS_RUNTIME_DIR", scratch("runtime"))
+            // The suite may export ACOS_SESSION_SOCKET; it wins over the runtime
+            // dir, so this test must not inherit it.
+            .env_remove("ACOS_SESSION_SOCKET")
             .env("ACOS_SESSION_ROOT", &session_root)
             .env("ACOS_NO_BOOT_CACHE", "1");
         if case.native {

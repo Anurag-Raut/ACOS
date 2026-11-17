@@ -29,56 +29,34 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
+mod common;
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// Root for the daemon scratch (its `serve.sock` lives below it).
+/// Scenario/runtime scratch under the worktree.
 ///
-/// It must stay **short**: `sun_path` is 108 bytes including the NUL, and
-/// `<worktree>/.cache/fb1-test-<tag>-<pid>/serve.sock` is over that in an agent
-/// worktree (the checkout path alone is ~70 bytes), so `bind(2)` answered
-/// "AF_UNIX path too long" and the test failed with "serve socket never
-/// appeared" before touching an assertion. Same class as the `acos-art`
-/// `live_view` tests (INTEG030 `b8dba361`): the root is chosen short —
-/// `ACOS_FB1_TEST_DIR` when it fits the budget, else a fixed RAM-backed
-/// directory (these tests write a few KB), else the checkout when it is short
-/// enough.
-fn scratch_root() -> PathBuf {
-    /// Leaves room for `/fb1-test-<tag>-<pid>` and `/serve.sock` below that.
-    const BUDGET: usize = 64;
-    let fits = |dir: &Path| dir.as_os_str().as_encoded_bytes().len() <= BUDGET;
-
-    if let Some(dir) = std::env::var_os("ACOS_FB1_TEST_DIR") {
-        let dir = PathBuf::from(dir);
-        let len = dir.as_os_str().as_encoded_bytes().len();
-        assert!(
-            fits(&dir),
-            "ACOS_FB1_TEST_DIR is {len} bytes, which leaves no room for the serve \
-             socket path (sun_path is 108 bytes with the NUL); use at most {BUDGET} \
-             bytes: {}",
-            dir.display()
-        );
-        return dir;
-    }
-    let shm = Path::new("/dev/shm");
-    if shm.is_dir() {
-        return shm.join("acos-fb1-tests");
-    }
-    let dir = repo_root().join(".cache");
-    assert!(
-        fits(&dir),
-        "the checkout path {} is too long for a Unix socket scratch root; set \
-         ACOS_FB1_TEST_DIR to a directory of at most {BUDGET} bytes",
-        dir.display()
-    );
-    dir
-}
-
+/// The `serve.sock` in here used to be a plain child of it:
+/// `<worktree>/.cache/fb1-test-<tag>-<pid>/serve.sock` is 108+ bytes in an
+/// agent worktree (the checkout path alone is ~70), so `acos serve` could not
+/// bind it and the test failed with "serve socket never appeared" for a reason
+/// that had nothing to do with what it asserts. The socket now lives in
+/// `common::ShortSocketDir` (short, checkout-independent, `sun_path`-checked);
+/// everything that is not a socket stays under the worktree.
 fn scratch(tag: &str) -> PathBuf {
-    let root = scratch_root();
-    std::fs::create_dir_all(&root).unwrap();
-    let dir = root.join(format!("fb1-test-{tag}-{}", std::process::id()));
+    // The daemon's `serve.sock` lives in here, so the directory name is part of
+    // a unix-socket path and must fit `sun_path` (108 bytes) even from a long
+    // worktree root. A short stable digest of the tag keeps the tests distinct
+    // without spending the budget on prose.
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    tag.hash(&mut hasher);
+    let dir = repo_root().join(".cache").join(format!(
+        "fb1-{:08x}-{}",
+        hasher.finish() as u32,
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("runtime")).unwrap();
     std::fs::create_dir_all(dir.join("cache")).unwrap();
@@ -209,6 +187,8 @@ struct Daemon {
     dir: PathBuf,
     socket: PathBuf,
     art_home: PathBuf,
+    // Kept alive for the daemon's lifetime: the socket's parent directory.
+    socket_dir: common::ShortSocketDir,
 }
 
 impl Daemon {
@@ -216,7 +196,8 @@ impl Daemon {
         let dir = scratch(tag);
         let art_home = dir.join("art-home");
         let fake = fake_art(&art_home);
-        let socket = dir.join("serve.sock");
+        let socket_dir = common::ShortSocketDir::new(tag);
+        let socket = socket_dir.socket("serve.sock");
         let child = Command::new(env!("CARGO_BIN_EXE_acos"))
             .arg("serve")
             .arg("--socket")
@@ -224,6 +205,9 @@ impl Daemon {
             .arg("--idle-timeout")
             .arg("120")
             .env("ACOS_RUNTIME_DIR", dir.join("runtime"))
+            // The suite may export ACOS_SESSION_SOCKET; it wins over the runtime
+            // dir, so this test must not inherit it.
+            .env_remove("ACOS_SESSION_SOCKET")
             .env("ACOS_CACHE_DIR", dir.join("cache"))
             .env("ACOS_ART_BIN", &fake)
             .env("FAKE_ART_OUT", &art_home)
@@ -241,6 +225,7 @@ impl Daemon {
             dir,
             socket,
             art_home,
+            socket_dir,
         }
     }
 

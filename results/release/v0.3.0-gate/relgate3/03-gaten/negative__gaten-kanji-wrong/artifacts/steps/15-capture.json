@@ -1,0 +1,48 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 75,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/19.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/19.png"
+    },
+    {
+      "kind": "capture",
+      "path": "frames/19-kanji-wanikani-selected.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/15-capture.json"
+    }
+  ],
+  "frame_seq": 19,
+  "index": 15,
+  "name": "kanji-wanikani-selected",
+  "provenance": {
+    "frame": "host-observed"
+  },
+  "settle": {
+    "bound": "strict-event",
+    "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+    "mode": "strict",
+    "probe_seq": 352,
+    "reason": "strict-event",
+    "settled": true,
+    "strict_rule": "event",
+    "tree_age_ms": 34,
+    "waited_ms": 75,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "capture",
+  "trust": "trusted"
+}

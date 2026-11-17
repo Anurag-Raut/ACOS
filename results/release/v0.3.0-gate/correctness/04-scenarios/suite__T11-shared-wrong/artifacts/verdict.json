@@ -1,0 +1,457 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.fragmentsnav",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/fragments-nav.apk",
+    "sha256": "7636339889eab262f92e6d476043f76a5e58513082d2393bbea2ddf953c7a790"
+  },
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/suite__T11-shared-wrong/artifacts",
+    "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/suite__T11-shared-wrong/artifacts/engine.json",
+    "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/suite__T11-shared-wrong/artifacts/retention.json",
+    "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/suite__T11-shared-wrong/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "failure": {
+    "code": "ASSERTION_FAILED",
+    "error": {
+      "class": "assertion",
+      "code": "ASSERTION_FAILED",
+      "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+      "message": "expected text exactly \"Beta taps=2\", got text \"Beta taps=1\" / hint \"\"",
+      "retryable": false
+    },
+    "step_index": 3,
+    "summary": "step 3 (assert_text) fail"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T09:15:51.553Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "stopped at step 3 (assert_text): fail; later steps were not executed",
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 3 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (keep-all): 18 file(s) / 0.6 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794359987508998915,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/fragments-nav.apk",
+      "sha256": "7636339889eab262f92e6d476043f76a5e58513082d2393bbea2ddf953c7a790",
+      "sha256_12": "7636339889ea",
+      "size_bytes": 16988
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794819964136509737,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/suite/T11-shared-wrong.yaml",
+      "sha256": "5b585bfb76ddcb0b2c2265d0d6cc166398ec9cac7026bc90ea18aa3efdb1ef31",
+      "sha256_12": "5b585bfb76dd",
+      "size_bytes": 708
+    },
+    "scenario_engine": "rust-vm",
+    "warnings": [
+      {
+        "code": "SCENARIO_ENGINE_MISMATCH",
+        "engine": "art",
+        "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+        "scenario_engine": "rust-vm"
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/fragments-nav.apk",
+    "apk_sha256": "7636339889eab262f92e6d476043f76a5e58513082d2393bbea2ddf953c7a790",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/suite/T11-shared-wrong.yaml",
+    "scenario_sha256": "5b585bfb76ddcb0b2c2265d0d6cc166398ec9cac7026bc90ea18aa3efdb1ef31"
+  },
+  "request_id": "req_336483_18e87bc7ee4c1b70",
+  "resources": {
+    "events": 142,
+    "frames_captured": 4,
+    "memory_mib": 14,
+    "peak_rss_bytes": 15032320,
+    "sessions": 1,
+    "steps": 4,
+    "wall_ms": 1269
+  },
+  "scenario": {
+    "name": "T11-shared-wrong",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/suite/T11-shared-wrong.yaml",
+    "sha256": "5b585bfb76ddcb0b2c2265d0d6cc166398ec9cac7026bc90ea18aa3efdb1ef31"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=68MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3368084-i3412625.scope)",
+    "code": null,
+    "disk_free_bytes": 249019953152,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/release/v0.3.0-gate/correctness/04-scenarios/suite__T11-shared-wrong/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_fragments-nav",
+  "started_at": "2026-11-16T09:15:50.284Z",
+  "status": "fail",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 155,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "previous_observation": false
+          },
+          "expected": {
+            "compared": false
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "no previous observation to compare; change not claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 996,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-tap.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 1,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[42,494][279,620]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.fragmentsnav:id/show_b",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.fragmentsnav:id/show_b",
+              "scrollable": false,
+              "text": "Show Beta",
+              "visible_bounds": "[42,494][279,620]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,494][279,620]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.fragmentsnav:id/show_b",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.fragmentsnav:id/show_b",
+              "scrollable": false,
+              "text": "Show Beta",
+              "visible_bounds": "[42,494][279,620]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 160,
+            "y": 557
+          },
+          "selector": {
+            "selector": "id==\"show_b\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 76,
+        "frame_ms": 943,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 996,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 117,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/5.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/5.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-tap.json"
+        }
+      ],
+      "frame_seq": 5,
+      "index": 2,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": {
+              "bounds": "[42,872][1038,2295]",
+              "class": "android.widget.LinearLayout",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[42,872][1038,2295]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[84,914][996,977]",
+              "class": "android.widget.TextView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n6_dev.acos.fixtures.fragmentsnav:id/frag_text",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.fragmentsnav:id/frag_text",
+              "scrollable": false,
+              "text": "Beta taps=0",
+              "visible_bounds": "[84,914][996,977]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 540,
+            "y": 945
+          },
+          "selector": {
+            "selector": "id==\"frag_text\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 25,
+        "frame_ms": 64,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 117,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "hint": "",
+            "text": "Beta taps=1"
+          },
+          "diff": {
+            "actual": {
+              "hint": "",
+              "text": "Beta taps=1"
+            },
+            "detail": "text/hint did not match (exactly \"Beta taps=2\")",
+            "expected": {
+              "exact": "Beta taps=2"
+            },
+            "path": "nodes[11].text"
+          },
+          "expected": {
+            "exact": "Beta taps=2"
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n6_dev.acos.fixtures.fragmentsnav:id/frag_text"
+          ],
+          "passed": false
+        }
+      ],
+      "duration_ms": 0,
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Beta taps=2\", got text \"Beta taps=1\" / hint \"\"",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/5.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/5.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-assert_text.json"
+        }
+      ],
+      "frame_seq": 5,
+      "index": 3,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 25,
+        "frame_ms": 64,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "fail",
+      "step": "assert_text"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "fail"
+}

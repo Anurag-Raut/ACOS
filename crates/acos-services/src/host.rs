@@ -113,6 +113,75 @@ fn registration_delivery(callback: BinderId, name: &str, binder: BinderId) -> Pe
     }
 }
 
+/// The wakeup a `system -> app` delivery needs when it is queued **outside**
+/// the binder peer's turn.
+///
+/// A delivery produced while the peer is answering a transaction rides the
+/// reply: `Peer::handle` drains the queue at the end of its turn. A delivery
+/// produced by another thread (the launcher injecting a key that makes the
+/// in-process IME hide itself, a compositor callback) has no turn to ride, and
+/// the peer is blocked in `poll(2)` on its socket. `DeliveryWake` is that
+/// missing edge: the producer writes one byte, the peer's idle wait returns and
+/// it drains the queue.
+///
+/// This is a self-pipe, not a timer: an idle session with nothing queued never
+/// wakes (the 1 s receive timeout this replaces only noticed `stop`).
+#[derive(Debug)]
+pub struct DeliveryWake {
+    reader: std::os::unix::net::UnixStream,
+    writer: std::os::unix::net::UnixStream,
+}
+
+impl DeliveryWake {
+    /// Create the pair. The owner keeps it for the session's lifetime.
+    ///
+    /// A `SOCK_STREAM` socketpair is `CLOEXEC`-like (Rust creates it with
+    /// `SOCK_CLOEXEC`, so no fd leaks into the guest) and a non-blocking write
+    /// of one byte can never park a producer.
+    ///
+    /// # Errors
+    ///
+    /// `socketpair(2)`'s error, or the one from setting non-blocking mode.
+    pub fn new() -> std::io::Result<Self> {
+        use std::os::unix::net::UnixStream;
+        let (reader, writer) = UnixStream::pair()?;
+        reader.set_nonblocking(true)?;
+        writer.set_nonblocking(true)?;
+        Ok(Self { reader, writer })
+    }
+
+    /// The end the peer's idle wait polls.
+    #[must_use]
+    pub fn read_fd(&self) -> std::os::unix::io::RawFd {
+        use std::os::unix::io::AsRawFd as _;
+        self.reader.as_raw_fd()
+    }
+
+    /// Signal that a delivery is queued. Coalescing is intentional: one byte
+    /// means "drain the queue", and the drain empties it.
+    pub fn wake(&self) {
+        use std::io::Write as _;
+        let byte = 1u8;
+        // A failed write means the peer is gone; the delivery is then moot and
+        // this must never become a producer-side error.
+        let mut writer = &self.writer;
+        let _ = writer.write(&[byte]);
+    }
+
+    /// Consume every pending wakeup byte (the queue, not the count, is the
+    /// state).
+    pub fn drain(&self) {
+        use std::io::Read as _;
+        let mut buf = [0u8; 64];
+        let mut reader = &self.reader;
+        while let Ok(read) = reader.read(&mut buf) {
+            if read == 0 {
+                return;
+            }
+        }
+    }
+}
+
 /// The result of one service handler call.
 #[derive(Debug, Default)]
 pub struct CallResult {
@@ -432,6 +501,11 @@ struct ServiceEntry {
 
 /// The dispatcher.
 pub struct ServiceHost {
+    /// `Arc` because a service that must mint a **fresh** binder handle while
+    /// answering a transaction cannot reach `&mut ServiceHost`: the IME's
+    /// `InputBindResult` channel token is one `openInputChannelPair`'s own
+    /// `BBinder` (see [`crate::ime::ImeState::start_input`]), so the IME state
+    /// holds an `Arc` of the same registry the host allocates from.
     registry: Arc<BinderRegistry>,
     /// One entry per registered descriptor.
     entries: HashMap<&'static str, ServiceEntry>,
@@ -528,6 +602,10 @@ pub struct ServiceHost {
     webview_gate: Option<WebviewGate>,
     /// Overwrite logs, one per open [`RegistrationScope`].
     overwrites: Vec<Vec<(&'static str, BinderId, Factory)>>,
+    /// Where a producer signals that it queued a `system -> app` delivery with
+    /// no transaction to ride (see [`DeliveryWake`]). `None` keeps the host
+    /// synchronous-only: the VM transport never has an idle peer to wake.
+    delivery_wake: Option<Arc<DeliveryWake>>,
 }
 
 /// The host endpoints the launcher bound for a session's WebView (ADR-0031).
@@ -605,6 +683,7 @@ impl ServiceHost {
             pending_intent_fire: None,
             webview_gate: None,
             overwrites: Vec::new(),
+            delivery_wake: None,
         }
     }
 
@@ -647,6 +726,21 @@ impl ServiceHost {
         self.binder_descriptors.remove(&binder.0);
         self.registry.remove(binder);
         self.dynamic.remove(&binder.0).is_some()
+    }
+
+    /// Attach the session's delivery wakeup (ART transport).
+    ///
+    /// Services that queue deliveries from outside a transaction get the same
+    /// handle through the registry, so the queue and the wake can never
+    /// disagree about which session they belong to.
+    pub fn set_delivery_wake(&mut self, wake: Arc<DeliveryWake>) {
+        self.delivery_wake = Some(wake);
+    }
+
+    /// The session's delivery wakeup, when the transport has one.
+    #[must_use]
+    pub fn delivery_wake(&self) -> Option<Arc<DeliveryWake>> {
+        self.delivery_wake.clone()
     }
 
     /// Register a service name and descriptor.
@@ -893,6 +987,13 @@ impl ServiceHost {
     #[must_use]
     pub fn binder_registry(&self) -> &BinderRegistry {
         &self.registry
+    }
+
+    /// The binder registry, shareable with a service that must mint a new
+    /// handle per object (the IME's per-pair `InputChannel` token).
+    #[must_use]
+    pub fn binder_registry_arc(&self) -> Arc<BinderRegistry> {
+        Arc::clone(&self.registry)
     }
 
     /// Every binder handle this host knows, as `(id, descriptor, kind)` sorted
@@ -2612,6 +2713,26 @@ impl ServiceHost {
             reply: trace::summary_args(&reply_values),
         };
         Ok((info, reply_values))
+    }
+
+    /// Drain the raw (`raw_transact`-owned) deliveries of **every** live
+    /// service object.
+    ///
+    /// The binder peer calls this on its idle tick so a delivery that was not
+    /// caused by a transaction still reaches the guest — the in-process IME's
+    /// hide is driven by a key on the input channel, and its `IWindow` insets
+    /// callbacks are what make the app relayout for that key.
+    pub fn drain_raw_deliveries_all(&mut self) -> Vec<PendingDelivery> {
+        let mut out = Vec::new();
+        for entry in self.entries.values_mut() {
+            if let Some(object) = entry.object.as_mut() {
+                out.extend(object.drain_raw_deliveries());
+            }
+        }
+        for object in self.dynamic.values_mut() {
+            out.extend(object.drain_raw_deliveries());
+        }
+        out
     }
 
     /// Drain `system -> app` deliveries queued by service handlers.

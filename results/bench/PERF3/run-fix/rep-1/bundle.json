@@ -1,0 +1,105 @@
+{
+  "host_after": {
+    "loadavg1": 4.38,
+    "loadavg15": 7.17,
+    "loadavg5": 4.97,
+    "mem_available_gib": 45.97,
+    "mem_available_mib": 47074.7,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-82287ccb-3a5c5b00dcfc246d && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && tools/",
+        "comm": "bash",
+        "pid": 1923607
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task REL3H -- tools/guarded.sh --mem 10G --time 900 -- env CARGO_TARGET_DIR=/home/Qui/.t3/worktrees/acos/t3-82287ccb-3",
+        "comm": "bash",
+        "pid": 1923608
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-097510c6-7a5c6d7485a5a530/.cache/bindercb-target/release/acos serve --socket /run/user/1000/bindercb/mcp-1984992-1fec96400/sessi",
+        "comm": "acos",
+        "pid": 1985004
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-097510c6-7a5c6d7485a5a530/.cache/bindercb-target/release/acos-art launch --apk /home/Qui/.t3/worktrees/acos/t3-097510c6-7a5c6d74",
+        "comm": "acos-art",
+        "pid": 1985010
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 1985093
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 1985099
+      }
+    ],
+    "runnable": "4/2506",
+    "used_mib": 14834.1,
+    "used_pct": 23.96,
+    "utc": "2026-11-16T06:34:32+00:00"
+  },
+  "host_before": {
+    "loadavg1": 2.6,
+    "loadavg15": 7.78,
+    "loadavg5": 5.35,
+    "mem_available_gib": 46.41,
+    "mem_available_mib": 47521.3,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-82287ccb-3a5c5b00dcfc246d && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && tools/",
+        "comm": "bash",
+        "pid": 1923607
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task REL3H -- tools/guarded.sh --mem 10G --time 900 -- env CARGO_TARGET_DIR=/home/Qui/.t3/worktrees/acos/t3-82287ccb-3",
+        "comm": "bash",
+        "pid": 1923608
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-097510c6-7a5c6d7485a5a530/.cache/bindercb-target/release/acos serve --socket /run/user/1000/bindercb/mcp-1948730-00ff00db0/sessi",
+        "comm": "acos",
+        "pid": 1948747
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-097510c6-7a5c6d7485a5a530/.cache/bindercb-target/release/acos-art launch --apk /home/Qui/.t3/worktrees/acos/t3-097510c6-7a5c6d74",
+        "comm": "acos-art",
+        "pid": 1948772
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 1948791
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 1948793
+      }
+    ],
+    "runnable": "1/2376",
+    "used_mib": 14387.4,
+    "used_pct": 23.24,
+    "utc": "2026-11-16T06:31:13+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "latency": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 198.762
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-16T06:31:13+00:00",
+  "wall_s": 198.762
+}

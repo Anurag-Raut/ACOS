@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/todo-list.apk",
+  "apk_sha256": "1d94c4c9806be2f3a9e6dd4f9699c1923459e8e09dcdef2b776de8b522b375eb",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/suite/T10-isolation-wrong.yaml",
+  "scenario_sha256": "dee876191237b6f3e5a106a473aa82cd36766d3d786123b0140a7fcbfb4a64fd",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

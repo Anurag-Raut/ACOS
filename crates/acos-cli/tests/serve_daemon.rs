@@ -44,6 +44,9 @@ fn run(args: &[&str]) -> Output {
     command
         .current_dir(repo_root())
         .env("ACOS_RUNTIME_DIR", runtime_dir())
+        // The suite may export ACOS_SESSION_SOCKET; it wins over the runtime
+        // dir, so this test must not inherit it.
+        .env_remove("ACOS_SESSION_SOCKET")
         .env("ACOS_SESSION_IDLE_SECS", "2")
         .env("ACOS_MCP_QUIET", "1")
         .args(args);

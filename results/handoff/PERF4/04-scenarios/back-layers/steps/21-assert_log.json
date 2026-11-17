@@ -1,0 +1,55 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 5,
+        "sample": [
+          "AcosBack: dispatchKeyBack action=0 ime accepting=true active=true",
+          "AcosBack: dispatchKeyBack action=1 ime accepting=true active=true",
+          "AcosBack: onBackPressed",
+          "AcosBack: onPause",
+          "AcosBack: onDestroy"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "dispatchKeyBack action=0",
+          "dispatchKeyBack action=1",
+          "onBackPressed$",
+          "onPause$",
+          "onDestroy$"
+        ],
+        "since_previous_step": false,
+        "tag": "AcosBack"
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/21-assert_log.json"
+    }
+  ],
+  "index": 21,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

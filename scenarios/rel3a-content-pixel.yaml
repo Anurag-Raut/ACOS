@@ -1,0 +1,53 @@
+# REL3A negative twin of rel3a-content-settle.yaml.
+#
+# The same forever-animating screen. Content stability backs text/tree/state
+# claims only: the pixels are still moving, so a **pixel** assertion backed by the
+# content-settled frame must fail closed (`details.reason: content_settle_pixel`),
+# and - because the screen never pixel-settles - a fresh strict capture cannot
+# rescue it either. A pass here would be a false green.
+version: 1
+name: rel3a-content-pixel
+description: >-
+  On an endlessly animating screen the content-stable rule backs text claims but
+  never a pixel claim: assert_region after a content-settled wait fails closed.
+app: fixtures/build/apps/settle-lab.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+animations: on
+expectation: non_pass
+budgets:
+  memory_mib: 512
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.settletab/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: progress_start}
+      timeout_ms: 20000
+  - tap:
+      selector: {id: progress_start}
+      settle: content
+      settle_timeout_ms: 15000
+  - wait_for:
+      selector: {id: progress_stop}
+      timeout_ms: 15000
+  # The pixel claim: content settle proved the tree, never the pixels.
+  - assert_region:
+      x: 0
+      y: 0
+      w: 200
+      h: 200
+      min_distinct_colors: 1

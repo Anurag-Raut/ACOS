@@ -18,7 +18,7 @@ use crate::assertion::{
     LogAssertion, NoCrashAssertion, RegionAssertion, ScreenshotAssertion, StateAssertion,
     TextAssertion, VisibilityAssertion,
 };
-use crate::commands::{CaptureFormat, KeyName, Orientation, ResetScope};
+use crate::commands::{CaptureFormat, KeyName, Orientation, Point, ResetScope};
 use crate::error::ErrorCode;
 use crate::identity::{DisplaySpec, IsolationLevel, ResourceBudget};
 use crate::ui::{Bounds, Selector};
@@ -26,24 +26,44 @@ use crate::ui::{Bounds, Selector};
 /// The only scenario format version this crate accepts.
 pub const SCENARIO_VERSION: u32 = 1;
 
-/// Which engine should run the scenario.
+/// Which engine the scenario is written for.
+///
+/// **One vocabulary: the CLI/MCP one.** `art` (real ART, or recorded ART
+/// evidence) and `rust-vm` (the frozen Rust VM) are the names the `--engine`
+/// flag and the MCP `engine` argument use; the YAML field says the same thing
+/// with the same words. A scenario written for the pre-v0.3 names still parses:
+///
+/// | legacy value | same meaning as |
+/// |---|---|
+/// | `native-preferred` | `rust-vm` (the native runtime was preferred) |
+/// | `native-only` | `rust-vm` (pair it with `fallback: forbid` if no fallback is meant) |
+/// | `reference-only` | `art` (recorded ART reference evidence) |
+///
+/// A legacy value is accepted and reported as a [`ScenarioWarning`] naming its
+/// new name, so an old scenario keeps running while its author learns the
+/// current spelling (feedback 2026-11-14: `INVALID_SCENARIO: unknown variant
+/// 'art'`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum Engine {
-    /// Use the native runtime when it can, otherwise fall back per policy.
+    /// Real ART (or recorded ART reference evidence) — the CLI's `--engine art`.
     #[default]
-    NativePreferred,
-    /// Only the native runtime; never fall back.
-    NativeOnly,
-    /// Only the reference backend.
-    ReferenceOnly,
-    /// Real Google ART, driven through `acos-art session` (MPROC5c).
-    ///
-    /// The scenario only means something on the real framework: a second guest
-    /// process, its own `IWindowSession`, and the host's process/window teardown
-    /// have no Rust-VM equivalent. The runner must execute it with
-    /// `--engine art`; there is no silent fallback to another engine.
+    #[serde(alias = "reference-only")]
     Art,
+    /// The frozen Rust VM / native runtime — the CLI's `--engine rust-vm`.
+    #[serde(alias = "native-preferred", alias = "native-only")]
+    RustVm,
+}
+
+impl Engine {
+    /// The canonical name, the same string `--engine` takes.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Engine::Art => "art",
+            Engine::RustVm => "rust-vm",
+        }
+    }
 }
 
 /// What to do when the preferred engine cannot run a step.
@@ -92,6 +112,12 @@ pub struct Step {
     /// Tap a selector or point.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tap: Option<TapStep>,
+    /// Swipe/scroll the screen with a real touch gesture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swipe: Option<SwipeStep>,
+    /// Swipe until a selector is visible (a bounded search).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scroll_until: Option<ScrollUntilStep>,
     /// Type text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r#type: Option<TypeStep>,
@@ -193,6 +219,10 @@ pub enum StepRef<'a> {
     Wait(&'a WaitStep),
     /// See [`Step::tap`].
     Tap(&'a TapStep),
+    /// See [`Step::swipe`].
+    Swipe(&'a SwipeStep),
+    /// See [`Step::scroll_until`].
+    ScrollUntil(&'a ScrollUntilStep),
     /// See [`Step::r#type`].
     Type(&'a TypeStep),
     /// See [`Step::key`].
@@ -249,6 +279,8 @@ impl StepRef<'_> {
             StepRef::WaitFor(_) => "wait_for",
             StepRef::Wait(_) => "wait",
             StepRef::Tap(_) => "tap",
+            StepRef::Swipe(_) => "swipe",
+            StepRef::ScrollUntil(_) => "scroll_until",
             StepRef::Type(_) => "type",
             StepRef::Key(_) => "key",
             StepRef::Back(_) => "back",
@@ -284,6 +316,8 @@ impl Step {
             self.wait_for.is_some(),
             self.wait.is_some(),
             self.tap.is_some(),
+            self.swipe.is_some(),
+            self.scroll_until.is_some(),
             self.r#type.is_some(),
             self.key.is_some(),
             self.back.is_some(),
@@ -326,6 +360,12 @@ impl Step {
         }
         if self.tap.is_some() {
             return self.tap.as_ref().map(StepRef::Tap);
+        }
+        if self.swipe.is_some() {
+            return self.swipe.as_ref().map(StepRef::Swipe);
+        }
+        if self.scroll_until.is_some() {
+            return self.scroll_until.as_ref().map(StepRef::ScrollUntil);
         }
         if self.r#type.is_some() {
             return self.r#type.as_ref().map(StepRef::Type);
@@ -439,6 +479,9 @@ pub struct BackStep {
     /// SE1: fail the step when the settled frame's pixels are unchanged.
     #[serde(default, skip_serializing_if = "is_false")]
     pub expect_change: bool,
+    /// REL3H2: see [`TapStep::expect_handled`]. `- back: {}` keeps parsing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_handled: Option<bool>,
 }
 
 /// `launch`.
@@ -494,6 +537,12 @@ pub struct WaitStep {
 }
 
 /// `wait_for`.
+///
+/// REL3A: `wait_for` accepts a settle rule like every other observation step.
+/// Its default (no `settle`) is *auto*: strict first, then the content-stable
+/// rule when strict never settles but the tree is stable (the always-animating
+/// RN/Gaten screen). A `wait_for` that passed on a content-settled tree says so
+/// in its `settle` record.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct WaitForStep {
     /// Selector to wait for.
@@ -504,6 +553,15 @@ pub struct WaitForStep {
     /// Require the matched node to be visible.
     #[serde(default = "default_true")]
     pub require_visible: bool,
+    /// Settle rule for the observation this wait binds (REL3A). Absent = auto
+    /// (strict, then content); `content` = content-stable only; `strict` =
+    /// event settle only. `fast` is rejected: it is navigation-only and can
+    /// never back a wait or an assertion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
+    /// P12b: settle deadline for each observation attempt (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
 }
 
 /// The settle rule an input step asks for. `strict` is the default and
@@ -556,6 +614,146 @@ pub struct TapStep {
     /// mid-animation and can never back a claim.
     #[serde(default, skip_serializing_if = "is_false")]
     pub expect_change: bool,
+    /// REL3H2: the scenario's own claim about the app's handling of this input.
+    ///
+    /// `true` fails the step with `INPUT_NOT_HANDLED` when the app window
+    /// acknowledged every event `finishInputEvent(handled) = false` (the gesture
+    /// was delivered and nothing consumed it). `false` says "this press is
+    /// expected to be a no-op" and silences the `INPUT_UNHANDLED` warning that
+    /// REL3H2 attaches to every unhandled input. Unset: the step passes as
+    /// measured and carries the warning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_handled: Option<bool>,
+}
+
+/// The direction of a swipe gesture (the direction the **finger** travels).
+///
+/// `up` moves the finger toward the top of the screen, so the content scrolls
+/// up and later rows come into view; this is the same word the CLI/MCP
+/// `acos_swipe` takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum SwipeDirection {
+    /// Finger up: content scrolls up (later rows).
+    Up,
+    /// Finger down: content scrolls down (earlier rows).
+    Down,
+    /// Finger left: content scrolls left.
+    Left,
+    /// Finger right: content scrolls right.
+    Right,
+}
+
+impl SwipeDirection {
+    /// The two gesture endpoints, centred on the display.
+    ///
+    /// `distance` defaults to 60 % of the axis (the same rule as the CLI/MCP
+    /// `acos_swipe`); the two points are symmetric around the display centre so
+    /// the gesture never starts outside the screen for a normal distance.
+    #[must_use]
+    pub fn endpoints(self, distance: Option<u32>, width: u32, height: u32) -> ((f32, f32), (f32, f32)) {
+        let (w, h) = (width as f32, height as f32);
+        let (cx, cy) = (w / 2.0, h / 2.0);
+        let axis = if matches!(self, SwipeDirection::Up | SwipeDirection::Down) {
+            h * 0.6
+        } else {
+            w * 0.6
+        };
+        let distance = distance.map_or(axis, |d| d as f32);
+        let half = distance / 2.0;
+        match self {
+            SwipeDirection::Up => ((cx, cy + half), (cx, cy - half)),
+            SwipeDirection::Down => ((cx, cy - half), (cx, cy + half)),
+            SwipeDirection::Left => ((cx + half, cy), (cx - half, cy)),
+            SwipeDirection::Right => ((cx - half, cy), (cx + half, cy)),
+        }
+    }
+}
+
+/// `swipe`.
+///
+/// One real touch gesture: `DOWN`, interpolated `MOVE`s at the display refresh
+/// cadence, `UP`, delivered through the same live input channel a tap uses. The
+/// list's own physics decides whether it scrolls/flings; the engine only
+/// publishes the finger stream. The step settles with the scenario's settle
+/// rule (strict by default) and reports the app's `finishInputEvent(handled)`
+/// answer like every other input step (REL3E).
+///
+/// Geometry: explicit `from`/`to` points, or `direction` (+ optional `distance`)
+/// over the display. Exactly one form is accepted.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct SwipeStep {
+    /// Gesture start (finger down), in display pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<Point>,
+    /// Gesture end (finger up), in display pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<Point>,
+    /// Gesture direction (alternative to `from`/`to`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<SwipeDirection>,
+    /// Gesture length in pixels with `direction` (default 60 % of the axis).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance: Option<u32>,
+    /// Gesture duration in milliseconds (default 400; 120 with `fling`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// A quick gesture: default duration 120 ms (the framework's own velocity
+    /// tracker decides the fling; this only changes the timing).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fling: bool,
+    /// P12b: strict/fast settle deadline for this swipe (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
+    /// Settle rule for this input (`strict` default, `fast`/`content` opt-in).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
+    /// SE1: fail the step when the settled frame's pixels are unchanged.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub expect_change: bool,
+    /// REL3H2: `true` fails the step with `INPUT_NOT_HANDLED` when nothing
+    /// consumed the gesture; `false` silences the `INPUT_UNHANDLED` warning (see
+    /// [`TapStep::expect_handled`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_handled: Option<bool>,
+}
+
+/// `scroll_until`.
+///
+/// Swipe repeatedly until `selector` is visible in a **settled** observation.
+/// Every attempt is one real gesture followed by a fresh traversal (never a
+/// cached tree), so a found node is always backed by a frame the framework was
+/// showing after the gesture settled. The search is bounded by `max_attempts`;
+/// a miss is a structured `ELEMENT_NOT_FOUND` naming the attempts and the last
+/// tree's texts - never a pass.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ScrollUntilStep {
+    /// The node to scroll into view.
+    pub selector: Selector,
+    /// Gesture start (finger down), in display pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<Point>,
+    /// Gesture end (finger up), in display pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<Point>,
+    /// Gesture direction (alternative to `from`/`to`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<SwipeDirection>,
+    /// Gesture length in pixels with `direction` (default 60 % of the axis).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance: Option<u32>,
+    /// Gesture duration in milliseconds (default 400; 120 with `fling`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// A quick gesture: default duration 120 ms and 10 attempts.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fling: bool,
+    /// Swipes to try before failing (default 6; 10 with `fling`; max 50).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_attempts: Option<usize>,
+    /// P12b: strict settle deadline for each attempt (milliseconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle_timeout_ms: Option<u64>,
 }
 
 /// `type`.
@@ -578,6 +776,11 @@ pub struct TypeStep {
     /// SE1: fail the step when the settled frame's pixels are unchanged.
     #[serde(default, skip_serializing_if = "is_false")]
     pub expect_change: bool,
+    /// REL3H2: `true` fails the step with `INPUT_NOT_HANDLED` when nothing
+    /// consumed the input; `false` silences the `INPUT_UNHANDLED` warning (see
+    /// [`TapStep::expect_handled`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_handled: Option<bool>,
 }
 
 /// `key`.
@@ -594,6 +797,11 @@ pub struct KeyStep {
     /// SE1: fail the step when the settled frame's pixels are unchanged.
     #[serde(default, skip_serializing_if = "is_false")]
     pub expect_change: bool,
+    /// REL3H2: `true` fails the step with `INPUT_NOT_HANDLED` when nothing
+    /// consumed the key; `false` silences the `INPUT_UNHANDLED` warning (see
+    /// [`TapStep::expect_handled`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_handled: Option<bool>,
 }
 
 /// `rotate`.
@@ -950,7 +1158,13 @@ impl Scenario {
                 format!("YAML/format parse failed: {e}"),
             ))
         })?;
-        let validation = scenario.validate();
+        let mut validation = scenario.validate();
+        // The legacy `engine:` spellings are serde aliases, so the parsed value
+        // no longer knows which spelling it came from; the raw YAML does. One
+        // warning names the canonical word instead of failing the scenario.
+        if let Some(warning) = legacy_engine_warning(yaml) {
+            validation.warnings.push(warning);
+        }
         if validation.is_ok() {
             Ok(scenario)
         } else {
@@ -1122,6 +1336,92 @@ fn validate_timeout(validation: &mut ScenarioValidation, path: &str, timeout: Op
     }
 }
 
+/// Validate a swipe's geometry: explicit `from`/`to` points **or** a
+/// `direction` (+ optional `distance`), never both and never half a pair.
+///
+/// `step_name` is the YAML step key (`swipe` / `scroll_until`), so the error
+/// path names the exact field an author has to fix.
+fn validate_swipe_geometry(
+    validation: &mut ScenarioValidation,
+    path: &str,
+    step_name: &str,
+    from: Option<Point>,
+    to: Option<Point>,
+    direction: Option<SwipeDirection>,
+    distance: Option<u32>,
+    duration_ms: Option<u64>,
+    settle_timeout_ms: Option<u64>,
+) {
+    match (from, to) {
+        (Some(from), Some(to)) => {
+            if from == to {
+                validation.push(
+                    format!("{path}.{step_name}.to"),
+                    "a swipe's `from` and `to` points must differ (a zero-length gesture is not a swipe)",
+                );
+            }
+            if direction.is_some() || distance.is_some() {
+                validation.push(
+                    format!("{path}.{step_name}"),
+                    "accepts `from`/`to` points or `direction`/`distance`, not both",
+                );
+            }
+        }
+        (None, None) => {
+            if direction.is_none() {
+                validation.push(
+                    format!("{path}.{step_name}"),
+                    "needs `from` and `to` points, or a `direction` (up/down/left/right)",
+                );
+            }
+        }
+        _ => validation.push(
+            format!("{path}.{step_name}"),
+            "needs both `from` and `to` (one point is not a gesture)",
+        ),
+    }
+    if distance == Some(0) {
+        validation.push(
+            format!("{path}.{step_name}.distance"),
+            "distance must be > 0 pixels",
+        );
+    }
+    if duration_ms == Some(0) {
+        validation.push(
+            format!("{path}.{step_name}.duration_ms"),
+            "duration_ms must be > 0",
+        );
+    }
+    if settle_timeout_ms == Some(0) {
+        validation.push(
+            format!("{path}.{step_name}.settle_timeout_ms"),
+            "settle_timeout_ms must be > 0",
+        );
+    }
+}
+
+/// REL3A: `settle` on a wait or an assertion is `strict`, `content` or absent.
+///
+/// `fast` is a navigation rule and is never assertion/wait evidence (ADR-0026
+/// decision 5), so it is rejected at parse time with a stable path instead of
+/// producing a frame an assertion may not describe. Absent means *auto*: strict
+/// first, then the content-stable rule when strict never settles.
+fn validate_observation_settle(
+    validation: &mut ScenarioValidation,
+    path: &str,
+    settle: Option<StepSettle>,
+) {
+    if matches!(settle, Some(StepSettle::Fast)) {
+        validation.push(
+            path,
+            "`settle: fast` is navigation-only and can never back a wait or an assertion: use \
+             `settle: strict` (event settle), `settle: content` (content-stable, for a screen that \
+             animates forever in pixels), or omit it (auto: strict, then content when strict never \
+             settles)",
+        );
+    }
+}
+
 fn validate_regex(validation: &mut ScenarioValidation, path: &str, pattern: &str) {
     if let Err(e) = regex::Regex::new(pattern) {
         validation.push(path, format!("invalid regex: {e}"));
@@ -1187,6 +1487,77 @@ fn validate_action_like(
         &format!("{path}.{step_name}.timeout_ms"),
         step.timeout_ms,
     );
+}
+
+/// The top-level `engine:` value a scenario document actually declares.
+///
+/// The parsed [`Scenario`] cannot answer this: `#[serde(default)]` gives `art`
+/// to a document that says nothing, and the legacy names are serde aliases, so
+/// an explicit `engine: native-only` is indistinguishable from an omitted one.
+/// This deserializes the raw spelling through the same YAML parser the scenario
+/// itself uses — not a text scan — so an inline comment (`engine: native-only #
+/// pinned`), quotes, and a nested `observe: {engine: ...}` all read exactly as
+/// serde reads them.
+///
+/// `None` means "the document has no top-level `engine:` key" (an omitted key,
+/// not a default).
+#[must_use]
+pub fn declared_engine(yaml: &str) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct TopLevel {
+        #[serde(default)]
+        engine: Option<String>,
+    }
+    let top: TopLevel = serde_yaml_ng::from_str(yaml).ok()?;
+    top.engine
+}
+
+/// The warning for a scenario whose declared `engine:` is a pre-v0.3 spelling.
+///
+/// The three legacy names are serde aliases of the canonical `art` / `rust-vm`
+/// values, so a parsed [`Scenario`] cannot tell which spelling it came from;
+/// [`declared_engine`] reads the source spelling and this names the current word
+/// (feedback 2026-11-14: `INVALID_SCENARIO: unknown variant 'art'` from two
+/// vocabularies for one concept).
+fn legacy_engine_warning(yaml: &str) -> Option<ScenarioWarning> {
+    let value = declared_engine(yaml)?;
+    let canonical = match value.as_str() {
+        "native-preferred" => "rust-vm",
+        "native-only" => "rust-vm",
+        "reference-only" => "art",
+        _ => return None,
+    };
+    Some(ScenarioWarning {
+        path: "engine".to_string(),
+        message: format!(
+            "`engine: {value}` is the legacy name for `engine: {canonical}`; the scenario \
+             format and the `--engine` flag use one vocabulary: `art` (real ART / recorded ART \
+             evidence) or `rust-vm` (the frozen Rust VM). The run is unaffected."
+        ),
+    })
+}
+
+/// The warning for a scenario that pins one engine while another one ran.
+///
+/// The scenario's `engine:` never selects the engine — the CLI `--engine` flag /
+/// the MCP `engine` argument do, and they stay authoritative. But a document
+/// written for `rust-vm` that silently ran on `art` is a fact the reader of the
+/// verdict must see, so the mismatch is a structured warning (never a status
+/// change, never a silent engine switch).
+#[must_use]
+pub fn engine_mismatch_warning(declared: &str, ran: &str) -> Option<ScenarioWarning> {
+    if declared == ran {
+        return None;
+    }
+    Some(ScenarioWarning {
+        path: "engine".to_string(),
+        message: format!(
+            "the scenario declares `engine: {declared}` but this run used `{ran}`: the \
+             scenario field records the engine the scenario was written for, it does not select \
+             one (`--engine {ran}` / the MCP `engine` argument do). The verdict is about the \
+             `{ran}` run; pass `--engine {declared}` to run the engine the scenario names."
+        ),
+    })
 }
 
 /// Validate a scenario and return every problem.
@@ -1357,6 +1728,12 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 if wait.timeout_ms == 0 {
                     v.push(format!("{path}.timeout_ms"), "timeout_ms must be > 0");
                 }
+                validate_observation_settle(&mut v, &format!("{path}.settle"), wait.settle);
+                validate_timeout(
+                    &mut v,
+                    &format!("{path}.settle_timeout_ms"),
+                    wait.settle_timeout_ms,
+                );
             }
             StepRef::Wait(wait) => {
                 if wait.ms == 0 || wait.ms > 600_000 {
@@ -1366,6 +1743,42 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
             StepRef::Tap(tap) => {
                 validate_action_like(&mut v, &format!("steps[{index}]"), tap, "tap");
                 validate_expect_change(&mut v, &path, tap.expect_change, tap.settle);
+            }
+            StepRef::Swipe(swipe) => {
+                validate_swipe_geometry(
+                    &mut v,
+                    &format!("steps[{index}]"),
+                    "swipe",
+                    swipe.from,
+                    swipe.to,
+                    swipe.direction,
+                    swipe.distance,
+                    swipe.duration_ms,
+                    swipe.settle_timeout_ms,
+                );
+                validate_expect_change(&mut v, &path, swipe.expect_change, swipe.settle);
+            }
+            StepRef::ScrollUntil(scroll) => {
+                validate_swipe_geometry(
+                    &mut v,
+                    &format!("steps[{index}]"),
+                    "scroll_until",
+                    scroll.from,
+                    scroll.to,
+                    scroll.direction,
+                    scroll.distance,
+                    scroll.duration_ms,
+                    scroll.settle_timeout_ms,
+                );
+                validate_selector(&mut v, &path, &scroll.selector, "selector");
+                if let Some(max_attempts) = scroll.max_attempts {
+                    if max_attempts == 0 || max_attempts > 50 {
+                        v.push(
+                            format!("{path}.max_attempts"),
+                            "max_attempts must be in 1..=50",
+                        );
+                    }
+                }
             }
             StepRef::Type(ty) => {
                 if ty.selector.is_none() {
@@ -1395,6 +1808,11 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     validate_bounds(&mut v, &format!("{path}.bounds"), bounds);
                 }
                 validate_timeout(&mut v, &format!("{path}.timeout_ms"), assertion.timeout_ms);
+                validate_observation_settle(
+                    &mut v,
+                    &format!("{path}.settle"),
+                    assertion.settle,
+                );
             }
             StepRef::AssertVisible(assertion) | StepRef::AssertNotVisible(assertion) => {
                 validate_selector(&mut v, &path, &assertion.selector, "selector");
@@ -1402,6 +1820,11 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     validate_bounds(&mut v, &format!("{path}.bounds"), bounds);
                 }
                 validate_timeout(&mut v, &format!("{path}.timeout_ms"), assertion.timeout_ms);
+                validate_observation_settle(
+                    &mut v,
+                    &format!("{path}.settle"),
+                    assertion.settle,
+                );
             }
             StepRef::AssertState(assertion) => {
                 validate_selector(&mut v, &path, &assertion.selector, "selector");
@@ -1418,6 +1841,11 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     );
                 }
                 validate_timeout(&mut v, &format!("{path}.timeout_ms"), assertion.timeout_ms);
+                validate_observation_settle(
+                    &mut v,
+                    &format!("{path}.settle"),
+                    assertion.settle,
+                );
             }
             StepRef::AssertLog(assertion) => {
                 if assertion.patterns.is_empty() {
@@ -1845,6 +2273,78 @@ steps:
         assert!(!plain.to_yaml_string().unwrap().contains("expect_change"));
     }
 
+    const EXPECT_HANDLED: &str = r#"
+version: 1
+name: expect-handled
+app: fixtures/build/apps/counter.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+steps:
+  - launch: {activity: .MainActivity}
+  - tap: {selector: {id: title}, expect_handled: false}
+  - tap: {selector: {id: inc}, expect_handled: true}
+  - key: {key: back, expect_handled: false}
+  - back: {expect_handled: true}
+  - swipe: {direction: up, expect_handled: false}
+"#;
+
+    /// REL3H2: `expect_handled` is an optional tri-state on every input step -
+    /// unset (the step passes as measured, with the warning), `true` (the claim
+    /// that is enforced) and `false` (the annotation that silences the warning).
+    #[test]
+    fn expect_handled_parses_and_defaults_to_unset() {
+        let scenario = Scenario::from_yaml_str(EXPECT_HANDLED).expect("valid scenario");
+        assert!(scenario.validate().is_ok(), "{:?}", scenario.validate());
+        assert_eq!(
+            scenario.steps[1].tap.as_ref().unwrap().expect_handled,
+            Some(false)
+        );
+        assert_eq!(
+            scenario.steps[2].tap.as_ref().unwrap().expect_handled,
+            Some(true)
+        );
+        assert_eq!(
+            scenario.steps[3].key.as_ref().unwrap().expect_handled,
+            Some(false)
+        );
+        assert_eq!(
+            scenario.steps[4].back.as_ref().unwrap().expect_handled,
+            Some(true)
+        );
+        assert_eq!(
+            scenario.steps[5].swipe.as_ref().unwrap().expect_handled,
+            Some(false)
+        );
+
+        let plain = Scenario::from_yaml_str(
+            "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nsteps:\n  - tap: {x: 1, y: 2}\n  - back: {}\n",
+        )
+        .expect("valid scenario");
+        assert_eq!(plain.steps[0].tap.as_ref().unwrap().expect_handled, None);
+        assert_eq!(plain.steps[1].back.as_ref().unwrap().expect_handled, None);
+        // Unset is not written back: the wire form of an existing scenario is
+        // byte-identical (the same rule `expect_change: false` follows).
+        assert!(!plain.to_yaml_string().unwrap().contains("expect_handled"));
+    }
+
+    /// REL3H2: a non-bool `expect_handled` is a parse error, never a silently
+    /// ignored field that would turn the claim into a no-op.
+    #[test]
+    fn expect_handled_rejects_a_non_bool() {
+        for value in ["yes", "1", "\"true\"", "[true]"] {
+            let yaml = format!(
+                "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {{mode: offscreen, width: 8, height: 8, density_dpi: 420}}\nsteps:\n  - tap: {{x: 1, y: 2, expect_handled: {value}}}\n"
+            );
+            let error = Scenario::from_yaml_str(&yaml)
+                .err()
+                .unwrap_or_else(|| panic!("expect_handled: {value} must not parse"));
+            assert!(error
+                .errors
+                .iter()
+                .all(|e| e.code == ErrorCode::InvalidScenario));
+        }
+    }
+
     /// SE1: a non-bool is a parse error, never a silently ignored field.
     #[test]
     fn expect_change_rejects_a_non_bool() {
@@ -1892,5 +2392,90 @@ steps:
                 .iter()
                 .all(|e| e.code == ErrorCode::InvalidScenario));
         }
+    }
+
+    /// REL3S: `swipe` and `scroll_until` are first-class steps. Geometry is
+    /// either two points or a direction (+ distance), and a scroll search never
+    /// accepts a non-strict settle (a found node must come from a settled
+    /// observation).
+    #[test]
+    fn swipe_and_scroll_until_parse_and_validate() {
+        let yaml = r#"
+version: 1
+name: swipe
+app: fixtures/build/apps/scroll-list.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+steps:
+  - launch: {activity: .MainActivity}
+  - swipe: {from: {x: 540, y: 1800}, to: {x: 540, y: 600}, duration_ms: 300, fling: true}
+  - swipe: {direction: up, distance: 900}
+  - scroll_until: {selector: {text: {exact: "Row 80"}}, direction: up, fling: true, max_attempts: 12}
+  - scroll_until: {selector: {text: {exact: "Row 90"}}, from: {x: 540, y: 1900}, to: {x: 540, y: 500}}
+"#;
+        let scenario = Scenario::from_yaml_str(yaml).expect("parses");
+        assert!(scenario.validate().is_ok(), "{:?}", scenario.validate());
+        assert_eq!(scenario.steps[1].kind(), "swipe");
+        assert_eq!(scenario.steps[3].kind(), "scroll_until");
+        let swipe = scenario.steps[2].swipe.as_ref().expect("direction swipe");
+        assert_eq!(swipe.direction, Some(SwipeDirection::Up));
+        assert_eq!(swipe.distance, Some(900));
+        let scroll = scenario.steps[3]
+            .scroll_until
+            .as_ref()
+            .expect("scroll_until");
+        assert_eq!(scroll.max_attempts, Some(12));
+        // The default form still serializes the fields it was given only.
+        let text = scenario.to_yaml_string().unwrap();
+        assert!(text.contains("scroll_until"), "{text}");
+    }
+
+    /// REL3S: half a gesture, both geometry forms at once, a zero-length
+    /// gesture and an unbounded search are all scenario bugs, reported with a
+    /// stable path before anything runs.
+    #[test]
+    fn swipe_geometry_errors_have_paths() {
+        for (body, expected_path) in [
+            ("{from: {x: 1, y: 2}}", "steps[1].swipe"),
+            (
+                "{from: {x: 1, y: 2}, to: {x: 1, y: 900}, direction: up}",
+                "steps[1].swipe",
+            ),
+            ("{from: {x: 5, y: 5}, to: {x: 5, y: 5}}", "steps[1].swipe.to"),
+            ("{}", "steps[1].swipe"),
+        ] {
+            let yaml = format!(
+                "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {{mode: offscreen, width: 8, height: 8, density_dpi: 420}}\nsteps:\n  - launch: {{activity: .MainActivity}}\n  - swipe: {body}\n"
+            );
+            let scenario = Scenario::from_yaml_str_unvalidated(&yaml).expect("parses");
+            let validation = scenario.validate();
+            assert!(!validation.is_ok(), "swipe {body} must be rejected");
+            assert!(
+                validation.errors.iter().any(|e| e.path == expected_path),
+                "swipe {body}: expected {expected_path}, got {:?}",
+                validation.errors
+            );
+        }
+        let yaml = "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nsteps:\n  - scroll_until: {selector: {text: {exact: \"x\"}}, direction: up, max_attempts: 0}\n";
+        let scenario = Scenario::from_yaml_str_unvalidated(yaml).expect("parses");
+        let validation = scenario.validate();
+        assert!(validation
+            .errors
+            .iter()
+            .any(|e| e.path == "steps[0].scroll_until.max_attempts"));
+    }
+
+    /// REL3S: `up` is the direction the finger travels. The gesture starts at
+    /// the bottom half and ends in the top half, so the content scrolls up and
+    /// later rows come into view (the same rule the CLI uses).
+    #[test]
+    fn swipe_direction_up_moves_the_finger_toward_the_top() {
+        let ((x1, y1), (x2, y2)) = SwipeDirection::Up.endpoints(Some(1000), 1080, 2400);
+        assert_eq!((x1, x2), (540.0, 540.0));
+        assert_eq!((y1, y2), (1700.0, 700.0));
+        let ((x1, _), (x2, _)) = SwipeDirection::Left.endpoints(None, 1000, 2000);
+        assert!(x1 > x2, "left moves the finger toward x=0");
+        let ((_, y1), (_, y2)) = SwipeDirection::Down.endpoints(Some(400), 1000, 2000);
+        assert!(y1 < y2, "down moves the finger toward the bottom");
     }
 }

@@ -1,0 +1,388 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "retention": {
+    "note": "passing run: intermediate C1 captures were pruned; the frames a step declared are in frames/<seq>.png",
+    "policy": "referenced",
+    "pruned_captures": 2
+  },
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.looperwake.MainActivity",
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "hit",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-603be500fc8fe2a5",
+        "input_hash": "603be500fc8fe2a5",
+        "mode": "shared-fixed"
+      },
+      "buffer_generation": 2,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "guest_process_group": 115320,
+      "height": 2400,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "ok": true,
+      "package": "dev.acos.fixtures.looperwake",
+      "probe_seq": 1,
+      "stream_socket": "/run/user/1000/acos-view-115311-1/view.sock",
+      "width": 1080
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "buffer_generation": 2,
+      "cmd": "tree",
+      "frame_number": 2,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "results/handoff/LOOPERWAKE/after/art-frames/live-frames/acos-c1-layer3-frame-2-g2-c1.png",
+      "probe_seq": 3
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 87,
+      "ok": true,
+      "total": 87
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 87,
+      "ok": true,
+      "total": 87
+    },
+    {
+      "buffer_generation": 3,
+      "cmd": "tree",
+      "frame_number": 3,
+      "frame_seq": 2,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 5
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 87,
+      "ok": true,
+      "total": 87
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 87,
+      "ok": true,
+      "total": 87
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 87,
+      "ok": true,
+      "total": 87
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 87,
+      "ok": true,
+      "total": 87
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 87,
+      "ok": true,
+      "total": 87
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 89,
+      "ok": true,
+      "total": 89
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 89,
+      "ok": true,
+      "total": 89
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 3,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 7
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tap",
+      "frame_number": 7,
+      "frame_seq": 4,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 10,
+      "x": 240.0,
+      "y": 797.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 98,
+      "ok": true,
+      "total": 98
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 98,
+      "ok": true,
+      "total": 98
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 98,
+      "ok": true,
+      "total": 98
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 5,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 11
+    },
+    {
+      "buffer_generation": 10,
+      "cmd": "tap",
+      "frame_number": 10,
+      "frame_seq": 6,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png": "results/handoff/LOOPERWAKE/after/art-frames/live-frames/acos-c1-layer3-frame-10-g10-c6.png",
+      "probe_seq": 14,
+      "x": 255.0,
+      "y": 923.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 101,
+      "ok": true,
+      "total": 101
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 101,
+      "ok": true,
+      "total": 101
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 101,
+      "ok": true,
+      "total": 101
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 101,
+      "ok": true,
+      "total": 101
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 101,
+      "ok": true,
+      "total": 101
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 103,
+      "ok": true,
+      "total": 103
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 103,
+      "ok": true,
+      "total": 103
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 6,
+      "ok": true
+    }
+  ]
+}

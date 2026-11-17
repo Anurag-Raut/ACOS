@@ -1,0 +1,439 @@
+{
+  "animations": "off",
+  "app": {
+    "package": "dev.acos.fixtures.taptargets",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-f60da836-954ca1c9bc8aad24/fixtures/build/apps/tap-targets.apk",
+    "sha256": "92218c4ed2b48caec7d8955bcaf155c9ccc8fd58c7fa6969f3a6f421a63ef39c"
+  },
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/handoff/REL3H2/rel3h2-expect-handled-true",
+    "engine_report": "results/handoff/REL3H2/rel3h2-expect-handled-true/engine.json",
+    "retention": "results/handoff/REL3H2/rel3h2-expect-handled-true/retention.json",
+    "verdict": "results/handoff/REL3H2/rel3h2-expect-handled-true/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "failure": {
+    "code": "INPUT_NOT_HANDLED",
+    "error": {
+      "class": "assertion",
+      "code": "INPUT_NOT_HANDLED",
+      "details": {
+        "acked": 2,
+        "diff": {
+          "actual": {
+            "handled": false
+          },
+          "detail": "the app window's own finishInputEvent(handled) answer for this gesture",
+          "expected": {
+            "handled": true
+          },
+          "path": "input.handled"
+        },
+        "handled": false,
+        "published": 2,
+        "reason": "expect_handled",
+        "settle": {
+          "ack_ms": 5,
+          "animating": false,
+          "bound": "unhandled-input",
+          "first_change_ms": null,
+          "frame_ms": null,
+          "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+          "mode": "strict",
+          "pixels_changed": false,
+          "reason": "unhandled_input",
+          "settled": true,
+          "state_changed": null,
+          "strict_rule": "event"
+        },
+        "step_kind": "tap",
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,342][669,405]",
+              "class": "android.widget.TextView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.taptargets:id/title",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.taptargets:id/title",
+              "scrollable": false,
+              "text": "Floating button",
+              "visible_bounds": "[42,342][669,405]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[669,338][1038,409]",
+              "class": "android.widget.Switch",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.taptargets:id/toggle",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.taptargets:id/toggle",
+              "scrollable": false,
+              "text": "Floating button",
+              "visible_bounds": "[669,338][1038,409]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 355,
+            "y": 373
+          },
+          "selector": {
+            "selector": "id==\"title\""
+          }
+        }
+      },
+      "hint": "An input step declared `expect_handled: true` and the app window answered `finishInputEvent(handled) = false`: the gesture was delivered and nothing consumed it. Read `input.target` (what the point hit) and `input.handled_hint` (the clickable neighbour, when there is one): tap the pressable control, or drop `expect_handled` when a no-op press is intended.",
+      "message": "tap: `expect_handled: true` and the app window acknowledged the gesture `finishInputEvent(handled) = false` (2/2 event(s) acked, every one unhandled) - the input was delivered and nothing consumed it",
+      "retryable": false
+    },
+    "step_index": 1,
+    "summary": "step 1 (tap) fail"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T07:51:00.225Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "stopped at step 1 (tap): fail; later steps were not executed",
+    "negative control failed exactly as declared (INPUT_NOT_HANDLED / Some(\"expect_handled\"))",
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 3 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (keep-all): 13 file(s) / 0.3 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794814069363601113,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-f60da836-954ca1c9bc8aad24/fixtures/build/apps/tap-targets.apk",
+      "sha256": "92218c4ed2b48caec7d8955bcaf155c9ccc8fd58c7fa6969f3a6f421a63ef39c",
+      "sha256_12": "92218c4ed2b4",
+      "size_bytes": 12756
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794814380125513176,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-f60da836-954ca1c9bc8aad24/scenarios/rel3h2-expect-handled-true.yaml",
+      "sha256": "f284aedb7510de9186baf71eda4093bd54437f0b01e3ba4cd869608cfb4b55a4",
+      "sha256_12": "f284aedb7510",
+      "size_bytes": 1281
+    },
+    "scenario_engine": "art",
+    "warnings": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.2.3",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-f60da836-954ca1c9bc8aad24/fixtures/build/apps/tap-targets.apk",
+    "apk_sha256": "92218c4ed2b48caec7d8955bcaf155c9ccc8fd58c7fa6969f3a6f421a63ef39c",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-f60da836-954ca1c9bc8aad24/scenarios/rel3h2-expect-handled-true.yaml",
+    "scenario_sha256": "f284aedb7510de9186baf71eda4093bd54437f0b01e3ba4cd869608cfb4b55a4"
+  },
+  "request_id": "req_2879e2_18e87726c4a1012c",
+  "resources": {
+    "events": 83,
+    "frames_captured": 2,
+    "memory_mib": 14,
+    "peak_rss_bytes": 14712832,
+    "sessions": 1,
+    "steps": 2,
+    "wall_ms": 174
+  },
+  "scenario": {
+    "name": "rel3h2-expect-handled-true",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-f60da836-954ca1c9bc8aad24/scenarios/rel3h2-expect-handled-true.yaml",
+    "sha256": "f284aedb7510de9186baf71eda4093bd54437f0b01e3ba4cd869608cfb4b55a4"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=57MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2652651-i2596140.scope)",
+    "code": null,
+    "disk_free_bytes": 248867053568,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/handoff/REL3H2/rel3h2-expect-handled-true/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_tap-targets",
+  "started_at": "2026-11-16T07:51:00.051Z",
+  "status": "fail",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 64,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "handled": false
+          },
+          "diff": {
+            "actual": {
+              "handled": false
+            },
+            "detail": "the app window's own finishInputEvent(handled) answer for this gesture",
+            "expected": {
+              "handled": true
+            },
+            "path": "input.handled"
+          },
+          "expected": {
+            "handled": true
+          },
+          "kind": "expect_handled",
+          "matched_node_ids": [],
+          "passed": false
+        }
+      ],
+      "duration_ms": 110,
+      "error": {
+        "class": "assertion",
+        "code": "INPUT_NOT_HANDLED",
+        "details": {
+          "acked": 2,
+          "diff": {
+            "actual": {
+              "handled": false
+            },
+            "detail": "the app window's own finishInputEvent(handled) answer for this gesture",
+            "expected": {
+              "handled": true
+            },
+            "path": "input.handled"
+          },
+          "handled": false,
+          "published": 2,
+          "reason": "expect_handled",
+          "settle": {
+            "ack_ms": 5,
+            "animating": false,
+            "bound": "unhandled-input",
+            "first_change_ms": null,
+            "frame_ms": null,
+            "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+            "mode": "strict",
+            "pixels_changed": false,
+            "reason": "unhandled_input",
+            "settled": true,
+            "state_changed": null,
+            "strict_rule": "event"
+          },
+          "step_kind": "tap",
+          "target": {
+            "hit": {
+              "clickable": false,
+              "consumer": null,
+              "method": "tree-geometry",
+              "node": {
+                "bounds": "[42,342][669,405]",
+                "class": "android.widget.TextView",
+                "clickable": false,
+                "content_desc": "",
+                "enabled": true,
+                "focused": false,
+                "id": "n5_dev.acos.fixtures.taptargets:id/title",
+                "password": false,
+                "resource_id": "dev.acos.fixtures.taptargets:id/title",
+                "scrollable": false,
+                "text": "Floating button",
+                "visible_bounds": "[42,342][669,405]",
+                "window": "main"
+              },
+              "suggest": {
+                "bounds": "[669,338][1038,409]",
+                "class": "android.widget.Switch",
+                "clickable": true,
+                "content_desc": "",
+                "enabled": true,
+                "focused": false,
+                "id": "n5_dev.acos.fixtures.taptargets:id/toggle",
+                "password": false,
+                "resource_id": "dev.acos.fixtures.taptargets:id/toggle",
+                "scrollable": false,
+                "text": "Floating button",
+                "visible_bounds": "[669,338][1038,409]",
+                "window": "main"
+              }
+            },
+            "point": {
+              "x": 355,
+              "y": 373
+            },
+            "selector": {
+              "selector": "id==\"title\""
+            }
+          }
+        },
+        "hint": "An input step declared `expect_handled: true` and the app window answered `finishInputEvent(handled) = false`: the gesture was delivered and nothing consumed it. Read `input.target` (what the point hit) and `input.handled_hint` (the clickable neighbour, when there is one): tap the pressable control, or drop `expect_handled` when a no-op press is intended.",
+        "message": "tap: `expect_handled: true` and the app window acknowledged the gesture `finishInputEvent(handled) = false` (2/2 event(s) acked, every one unhandled) - the input was delivered and nothing consumed it",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-tap.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 1,
+      "input": {
+        "expect_change": "auto",
+        "handled": false,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "finishInputEvent",
+          "unhandled": [
+            3,
+            4
+          ]
+        },
+        "handled_hint": "nothing tappable there: the node at this point is android.widget.TextView \"Floating button\" at [42,342][669,405], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` (no handler consumed the input); tap the nearest clickable android.widget.Switch \"Floating button\" at [669,338][1038,409] (centre 853,373) instead",
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,342][669,405]",
+              "class": "android.widget.TextView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.taptargets:id/title",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.taptargets:id/title",
+              "scrollable": false,
+              "text": "Floating button",
+              "visible_bounds": "[42,342][669,405]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[669,338][1038,409]",
+              "class": "android.widget.Switch",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.taptargets:id/toggle",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.taptargets:id/toggle",
+              "scrollable": false,
+              "text": "Floating button",
+              "visible_bounds": "[669,338][1038,409]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 355,
+            "y": 373
+          },
+          "selector": {
+            "selector": "id==\"title\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "animating": false,
+        "bound": "unhandled-input",
+        "first_change_ms": null,
+        "frame_ms": null,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": false,
+        "reason": "unhandled_input",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 110,
+        "waited_ms_source": "step"
+      },
+      "status": "fail",
+      "step": "tap"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "fail"
+}

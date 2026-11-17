@@ -1,0 +1,74 @@
+{
+  "host_after": {
+    "loadavg1": 1.2,
+    "loadavg15": 1.9,
+    "loadavg5": 2.1,
+    "mem_available_gib": 42.62,
+    "mem_available_mib": 43643.4,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [],
+    "runnable": "7/2655",
+    "used_mib": 18265.3,
+    "used_pct": 29.5,
+    "utc": "2026-11-17T07:36:34+00:00"
+  },
+  "host_before": {
+    "loadavg1": 3.93,
+    "loadavg15": 1.9,
+    "loadavg5": 2.45,
+    "mem_available_gib": 41.7,
+    "mem_available_mib": 42705.2,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-fa8a32f6-453f27f7bc3b0878 && export ACOS_VIEW_TEST_DIR=$PWD/.cache/lv ACOS_FONT_DIR=/home/Qui/Projects/acos/.cac",
+        "comm": "bash",
+        "pid": 454142
+      },
+      {
+        "cmd": "timeout 1500 tools/art-runtime/run-exclusive.sh --task MERGEMPROC -- tools/guarded.sh --mem 12G --time 1400 -- cargo test -p acos-art",
+        "comm": "timeout",
+        "pid": 454143
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task MERGEMPROC -- tools/guarded.sh --mem 12G --time 1400 -- cargo test -p acos-art",
+        "comm": "bash",
+        "pid": 454146
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 12G --time 1400 -- cargo test -p acos-art",
+        "comm": "bash",
+        "pid": 454154
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 1400 cargo test -p acos-art",
+        "comm": "timeout",
+        "pid": 454167
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test -p acos-art",
+        "comm": "cargo",
+        "pid": 454168
+      }
+    ],
+    "runnable": "1/2848",
+    "used_mib": 19203.5,
+    "used_pct": 31.02,
+    "utc": "2026-11-17T07:33:15+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "latency": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 198.927
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-17T07:33:15+00:00",
+  "wall_s": 198.927
+}

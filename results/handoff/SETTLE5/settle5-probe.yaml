@@ -1,0 +1,58 @@
+# SETTLE5: the smallest scenario that exercises the strict settle on an idle,
+# non-animating screen: launch, one wait, one assertion, three pixel captures.
+# No network module, no rotation, no animation: a probe-floor timeout here is
+# the settle path itself, not the app.
+version: 1
+name: settle5-probe
+description: >-
+  Launch counter and take three settled captures of an idle screen, so a
+  concurrent-session settle failure is attributable to the probe channel.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+
+  - capture:
+      name: s5-a
+      format: png
+      fresh: true
+
+  - capture:
+      name: s5-b
+      format: png
+      fresh: true
+
+  - assert_visible:
+      selector: {id: inc}
+
+  - capture:
+      name: s5-c
+      format: png
+      fresh: true

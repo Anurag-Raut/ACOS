@@ -436,8 +436,7 @@ impl WindowManager {
             id,
             WmCallback::InsetsControlChanged {
                 state: Box::new(insets_state.clone()),
-                controls: Box::new(insets_controls.clone()),
-            },
+                controls: Box::new(insets_controls.clone()), ime: false, },
         );
 
         let result = AddWindowResult {
@@ -578,8 +577,7 @@ impl WindowManager {
             window,
             WmCallback::InsetsControlChanged {
                 state: Box::new(insets_state.clone()),
-                controls: Box::new(insets_controls.clone()),
-            },
+                controls: Box::new(insets_controls.clone()), ime: false, },
         );
         // LAYER1: `relayout` carries the current `LayoutParams.flags`, so a
         // window that just became/stopped being `FLAG_NOT_FOCUSABLE` changes
@@ -735,10 +733,77 @@ impl WindowManager {
                 window,
                 WmCallback::InsetsControlChanged {
                     state: Box::new(state),
-                    controls: Box::new(controls),
+                    controls: Box::new(controls), ime: false, },
+            );
+        }
+        Ok(())
+    }
+
+    /// The in-process IME showed or hid its (null) surface.
+    ///
+    /// The IMMS side of `InputMethodManagerService.showSoftInput` /
+    /// `hideSoftInput`: the IME bit of the focused window's requested-visible
+    /// types follows the IME, the window's `InsetsState` is recomputed, and the
+    /// app-visible `IWindow.showInsets`/`hideInsets` + `insetsControlChanged`
+    /// callbacks are queued in **both** directions (a phone's app sees the IME
+    /// insets appear and disappear, which is what triggers its relayout).
+    pub fn set_ime_visible(&mut self, window: WindowId, visible: bool) -> Result<()> {
+        let display = self.display;
+        let (state, controls) = {
+            let record = self
+                .windows
+                .get_mut(&window)
+                .ok_or(WmError::UnknownWindow(window))?;
+            let types = if visible {
+                record.requested_visible_types | inset_type::IME
+            } else {
+                record.requested_visible_types & !inset_type::IME
+            };
+            record.requested_visible_types = types;
+            let state = reference_insets_state(&display, visible);
+            let mut controls = record.insets_controls.clone();
+            // The control is what the app's `InsetsController` reads first: an
+            // IME control that says `initially_visible=false` while the state
+            // says visible makes the framework request `hideSoftInput` right
+            // back (measured: two `hideSoftInput` calls per show). Keep the
+            // control's flag in step with the state.
+            for control in &mut controls.0 {
+                if control.type_ == inset_type::IME {
+                    control.initially_visible = visible;
+                }
+            }
+            record.insets_controls = controls.clone();
+            record.insets_state = state.clone();
+            (state, controls)
+        };
+        let token = None;
+        if visible {
+            self.callbacks.push(
+                window,
+                WmCallback::ShowInsets {
+                    types: inset_type::IME,
+                    from_ime: true,
+                    token,
+                },
+            );
+        } else {
+            self.callbacks.push(
+                window,
+                WmCallback::HideInsets {
+                    types: inset_type::IME,
+                    from_ime: true,
+                    token,
                 },
             );
         }
+        self.callbacks.push(
+            window,
+            WmCallback::InsetsControlChanged {
+                state: Box::new(state),
+                controls: Box::new(controls),
+                ime: true,
+            },
+        );
         Ok(())
     }
 
@@ -1743,7 +1808,7 @@ mod tests {
         let third = wm.callbacks.pop().unwrap();
         assert!(matches!(
             third.callback,
-            WmCallback::InsetsControlChanged { .. }
+            WmCallback::InsetsControlChanged { ime: false, .. }
         ));
     }
 

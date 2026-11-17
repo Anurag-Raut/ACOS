@@ -38,6 +38,7 @@
 //! returns; the framework then proceeds with the window focused, so key events
 //! reach the focused view. It is a declared divergence, not a fake success.
 
+use std::os::fd::AsFd;
 use std::sync::{Arc, Mutex};
 
 use acos_aidl::WireOp;
@@ -46,7 +47,7 @@ use acos_parcel::{BinderId, Parcel};
 use crate::codec;
 use crate::error::{Result, ServiceError};
 use crate::exception::write_no_exception;
-use crate::host::{CallResult, ServiceObject};
+use crate::host::{CallResult, PendingDelivery, ServiceObject};
 use crate::ime::{ImeService, ImeState};
 
 /// The `IInputMethodManager` AIDL descriptor.
@@ -539,15 +540,26 @@ impl ImeWireService {
                 }
             }
         }
-        let (recorded, _method, _session) = self
+        let (recorded, _method, session) = self
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .start_input(client, sequence, remote);
+        let channel = {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if recorded == crate::ime::BIND_SUCCESS {
+                state.take_bind_channel()
+            } else {
+                None
+            }
+        };
         eprintln!(
             "ACOSW13 ime startInput sequence={sequence} client={:?} recorded={recorded} \
              editor={{inputType={} imeOptions={} package={:?} fieldId={} hint={:?} autofill={:?} \
-             extras={} surrounding={} mime={:?}}} -> NO_IME",
+             extras={} surrounding={} mime={:?}}} -> {}",
             client.map(|b| b.0),
             editor.as_ref().map(|e| e.input_type).unwrap_or(-1),
             editor.as_ref().map(|e| e.ime_options).unwrap_or(-1),
@@ -561,11 +573,62 @@ impl ImeWireService {
                 .map(|e| e.has_initial_surrounding_text)
                 .unwrap_or(false),
             editor.as_ref().and_then(|e| e.content_mime_types.clone()),
+            if recorded == crate::ime::BIND_SUCCESS {
+                "SUCCESS"
+            } else {
+                "NO_IME"
+            },
         );
         reply.reset();
         write_no_exception(reply);
         reply.write_int32(1); // writeTypedObject presence
-        InputBindResult::no_ime(sequence).write_payload(reply)?;
+        if recorded == crate::ime::BIND_SUCCESS {
+            // The bound result: the session binder (`IInputMethodSession`), no
+            // accessibility sessions, the real `InputChannel` pair and the id
+            // the framework keys `mCurBindState` on. Field order is the image's
+            // `InputBindResult.writeToParcel` (see
+            // `results/wm/parcelable_layouts.txt`).
+            reply.write_int32(crate::ime::BIND_SUCCESS);
+            reply.write_strong_binder_opt(session);
+            reply.write_int32(-1); // accessibilitySessions == null
+            match channel {
+                Some((token, name, fd)) => {
+                    // `InputBindResult.writeToParcel`: a non-null channel is an
+                    // `int 1` followed by `InputChannel.writeToParcel`, whose
+                    // own first word is `isInitialized`.
+                    reply.write_int32(1);
+                    crate::input_channel::write_channel_body(
+                        reply,
+                        token,
+                        &name,
+                        fd.as_fd(),
+                    )
+                    .map_err(|e| {
+                        crate::error::ServiceError::Internal(format!(
+                            "InputBindResult channel: {e}"
+                        ))
+                    })?;
+                    // The descriptor leaves this process in the reply; keeping
+                    // a copy would make the channel never observe the app's
+                    // dispose.
+                    drop(fd);
+                }
+                None => reply.write_int32(0),
+            }
+            let id = {
+                self.state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .session_id
+                    .clone()
+            };
+            reply.write_string16_opt(id.as_deref())?;
+            reply.write_int32(sequence);
+            reply.write_float_array(None)?;
+            reply.write_bool(false);
+        } else {
+            InputBindResult::no_ime(sequence).write_payload(reply)?;
+        }
         Ok(())
     }
 
@@ -629,6 +692,15 @@ impl ServiceObject for ImeWireService {
         args: &[crate::value::Value],
     ) -> Result<CallResult> {
         self.generic.call(interface, method, args)
+    }
+
+    /// Return the `IWindow` insets callbacks a `showSoftInput`/`hideSoftInput`
+    /// just queued: the app's IME visibility change, delivered with the reply.
+    fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take_ime_deliveries()
     }
 
     fn raw_transact(

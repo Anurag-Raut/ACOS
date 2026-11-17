@@ -39,6 +39,7 @@ use acos_vm::vm::{CoreLib, VmOptions};
 
 use crate::frame_handoff::{install_frame_handoff, FrameStore};
 use crate::input_java;
+use crate::wms_java::with_wms;
 use crate::lifecycle::LifecycleReport;
 use crate::view_tree::{ViewNode, ViewTree};
 use crate::Runtime;
@@ -160,6 +161,12 @@ pub struct InputReport {
     /// (the view tree's text/visibility summary differs from before). `false`
     /// is honest: the event was accepted but nothing was observed to change.
     pub state_changed: bool,
+    /// REL3E: the app window's own `finishInputEvent(handled)` answer for every
+    /// event of the gesture. `Some(false)` proves the window consumed nothing,
+    /// `Some(true)` proves it consumed all of it, `None` means the guest did not
+    /// ack every dispatched event, so the answer is unknown and is reported as
+    /// such instead of guessed.
+    pub handled: Option<bool>,
 }
 
 /// One guest log line.
@@ -806,6 +813,7 @@ fn finish_input(
         Ok(ack_seqs) => Ok(InputReport {
             kind: kind.to_string(),
             accepted: true,
+            handled: handling(&ack_seqs).0,
             ack_seqs,
             path: None,
             state_changed: false,
@@ -843,6 +851,7 @@ fn do_text(state: &mut WorkerState, text: &str) -> Result<InputReport, SessionEr
             Ok(InputReport {
                 kind: "text".to_string(),
                 accepted: true,
+                handled: handling(&report.ack_seqs).0,
                 ack_seqs: report.ack_seqs,
                 path: Some(report.path.as_str().to_string()),
                 state_changed: after != before,
@@ -1119,6 +1128,7 @@ fn do_relaunch(state: &mut WorkerState, orientation: i32) -> Result<InputReport,
     let mut report = InputReport {
         kind: "rotate".to_string(),
         accepted: true,
+        handled: None,
         ack_seqs: Vec::new(),
         path: None,
         state_changed: false,
@@ -1167,7 +1177,33 @@ fn input_after_pump(
             .unwrap_or(false);
     }
     report.state_changed = changed;
+    // The acks (and the app's own `handled` bit) land while the pump drains the
+    // receiver, so the answer is read after the pump, never before it.
+    report.handled = handling(&report.ack_seqs).0;
     report
+}
+
+/// The app window's `finishInputEvent(handled)` answers for `seqs`, folded the
+/// way the dispatcher reads them: one unhandled event proves the window
+/// consumed nothing; every event handled proves it consumed the gesture; a
+/// short ack list is *unknown*, never "false".
+fn handling(seqs: &[u32]) -> (Option<bool>, usize) {
+    let acks = with_wms(|s| {
+        s.input
+            .acks()
+            .iter()
+            .filter(|ack| seqs.contains(&ack.seq))
+            .map(|ack| ack.handled)
+            .collect::<Vec<_>>()
+    });
+    let handled = if acks.iter().any(|handled| !*handled) {
+        Some(false)
+    } else if !acks.is_empty() && acks.len() == seqs.len() {
+        Some(true)
+    } else {
+        None
+    };
+    (handled, seqs.len())
 }
 
 /// A stable summary of a view tree used to detect a visible state change.

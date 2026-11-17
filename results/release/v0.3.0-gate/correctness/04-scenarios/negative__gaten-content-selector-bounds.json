@@ -1,0 +1,509 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "details": {
+      "bounds_claim": {
+        "assertion": false,
+        "selector": true
+      },
+      "diff": {
+        "actual": {
+          "geometry_hashed": false,
+          "settle": "content"
+        },
+        "detail": "content settle proves the tree's text/nodes/state stopped changing; a translated view's bounds keep changing with the pixels",
+        "expected": {
+          "geometry_evidence": true,
+          "settle": "strict"
+        },
+        "path": "frame.settle"
+      },
+      "geometry_evidence": false,
+      "reason": "content_settle_geometry",
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 363,
+        "frame_seq": 21,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 23,
+        "probe_seq_first": 5,
+        "probe_seq_floor": 4,
+        "settled": true,
+        "signature": "80d3b609b3b2d6fa",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 19,
+        "window_ms": 300
+      },
+      "signature_geometry_fields": [
+        "bounds",
+        "visible_bounds"
+      ],
+      "step_kind": "assert_not_visible"
+    },
+    "hint": "A bounds claim needs a geometry-settled frame: use `settle: strict` (the default) and wait for the animation to stop. Assert text/state instead, which content settle may back. A `bounds` inside the selector is a geometry claim too - drop it (the text/id/class match is enough) or settle strictly.",
+    "message": "assert_not_visible: the bound frame was settled by `settle: content` (UI tree content stable), which is not geometry evidence - an animating view's reported bounds change every frame",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 251740160,
+    "wall_ms": 442
+  },
+  "ok": false,
+  "request_id": "req_32d152_18e87bb35adea529",
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-selector-bounds/artifacts",
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794503846699559546,
+        "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+        "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+        "sha256_12": "e04c7ffcf012",
+        "size_bytes": 114751344
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794819964135509721,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/gaten-content-selector-bounds.yaml",
+        "sha256": "5bef8de1d91c2fd87b9c5f7381a63909789c64a5790b25e9120ad460d8cd26fc",
+        "sha256_12": "5bef8de1d91c",
+        "size_bytes": 2530
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        }
+      ]
+    },
+    "trust": "trusted",
+    "verdict": {
+      "animations": "off",
+      "app": {
+        "package": "com.gaten",
+        "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+        "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29"
+      },
+      "backend": "acos-native",
+      "certification": "certified-with-limits",
+      "certification_limits": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "section": "§8.7"
+      },
+      "certification_policy": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+        "section": "§8.8"
+      },
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-selector-bounds/artifacts",
+        "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-selector-bounds/artifacts/engine.json",
+        "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-selector-bounds/artifacts/retention.json",
+        "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-selector-bounds/artifacts/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "failure": {
+        "code": "ASSERTION_FAILED",
+        "error": {
+          "class": "assertion",
+          "code": "ASSERTION_FAILED",
+          "details": {
+            "bounds_claim": {
+              "assertion": false,
+              "selector": true
+            },
+            "diff": {
+              "actual": {
+                "geometry_hashed": false,
+                "settle": "content"
+              },
+              "detail": "content settle proves the tree's text/nodes/state stopped changing; a translated view's bounds keep changing with the pixels",
+              "expected": {
+                "geometry_evidence": true,
+                "settle": "strict"
+              },
+              "path": "frame.settle"
+            },
+            "geometry_evidence": false,
+            "reason": "content_settle_geometry",
+            "settle": {
+              "bound": "content-stable",
+              "elapsed_ms": 363,
+              "frame_seq": 21,
+              "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+              "mode": "content",
+              "pixel_evidence": false,
+              "probe_seq": 23,
+              "probe_seq_first": 5,
+              "probe_seq_floor": 4,
+              "settled": true,
+              "signature": "80d3b609b3b2d6fa",
+              "signature_fields": [
+                "class",
+                "resource_id",
+                "text",
+                "content_desc",
+                "hint",
+                "visible",
+                "enabled",
+                "focused",
+                "clickable",
+                "scrollable",
+                "checked",
+                "selected",
+                "window",
+                "package"
+              ],
+              "signature_tree_fields": [
+                "package",
+                "truncated",
+                "text_available"
+              ],
+              "traversals": 19,
+              "window_ms": 300
+            },
+            "signature_geometry_fields": [
+              "bounds",
+              "visible_bounds"
+            ],
+            "step_kind": "assert_not_visible"
+          },
+          "hint": "A bounds claim needs a geometry-settled frame: use `settle: strict` (the default) and wait for the animation to stop. Assert text/state instead, which content settle may back. A `bounds` inside the selector is a geometry claim too - drop it (the text/id/class match is enough) or settle strictly.",
+          "message": "assert_not_visible: the bound frame was settled by `settle: content` (UI tree content stable), which is not geometry evidence - an animating view's reported bounds change every frame",
+          "retryable": false
+        },
+        "step_index": 1,
+        "summary": "step 1 (assert_not_visible) fail"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-16T09:14:23.033Z",
+      "insets": "report",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "stopped at step 1 (assert_not_visible): fail; later steps were not executed",
+        "negative control failed exactly as declared (ASSERTION_FAILED / Some(\"content_settle_geometry\"))",
+        "artifacts: referenced (keep-all): 10 file(s) / 0.2 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+      ],
+      "provenance": {
+        "apk": {
+          "mtime_ns": 1794503846699559546,
+          "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+          "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+          "sha256_12": "e04c7ffcf012",
+          "size_bytes": 114751344
+        },
+        "engine": "art",
+        "fidelity": "art-reference",
+        "scenario": {
+          "mtime_ns": 1794819964135509721,
+          "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/gaten-content-selector-bounds.yaml",
+          "sha256": "5bef8de1d91c2fd87b9c5f7381a63909789c64a5790b25e9120ad460d8cd26fc",
+          "sha256_12": "5bef8de1d91c",
+          "size_bytes": 2530
+        },
+        "scenario_engine": "rust-vm",
+        "warnings": [
+          {
+            "code": "SCENARIO_ENGINE_MISMATCH",
+            "engine": "art",
+            "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+            "scenario_engine": "rust-vm"
+          }
+        ]
+      },
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.3.0",
+        "apk_path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+        "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 400,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/gaten-content-selector-bounds.yaml",
+        "scenario_sha256": "5bef8de1d91c2fd87b9c5f7381a63909789c64a5790b25e9120ad460d8cd26fc"
+      },
+      "request_id": "req_32d152_18e87bb35adea529",
+      "resources": {
+        "events": 241,
+        "frames_captured": 1,
+        "memory_mib": 240,
+        "peak_rss_bytes": 251740160,
+        "sessions": 1,
+        "steps": 2,
+        "wall_ms": 442
+      },
+      "scenario": {
+        "name": "gaten-content-selector-bounds",
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/gaten-content-selector-bounds.yaml",
+        "sha256": "5bef8de1d91c2fd87b9c5f7381a63909789c64a5790b25e9120ad460d8cd26fc"
+      },
+      "schema_version": 1,
+      "session_exit": {
+        "abi": null,
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=207MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3330401-i3263511.scope)",
+        "code": null,
+        "disk_free_bytes": 253434023936,
+        "guest_crash": null,
+        "guest_exit": 0,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "ok",
+        "panic": null,
+        "path": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-selector-bounds/artifacts/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": "teardown-evidence"
+      },
+      "session_id": "s_art_gaten-dev-f344272-x86_64-release-unsigned",
+      "started_at": "2026-11-16T09:14:22.591Z",
+      "status": "fail",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 440,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "settle": {
+            "bound": "content-stable",
+            "elapsed_ms": 363,
+            "frame_seq": 21,
+            "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+            "mode": "content",
+            "pixel_evidence": false,
+            "probe_seq": 23,
+            "probe_seq_first": 5,
+            "probe_seq_floor": 4,
+            "reason": "content-stable",
+            "settled": true,
+            "signature": "80d3b609b3b2d6fa",
+            "signature_fields": [
+              "class",
+              "resource_id",
+              "text",
+              "content_desc",
+              "hint",
+              "visible",
+              "enabled",
+              "focused",
+              "clickable",
+              "scrollable",
+              "checked",
+              "selected",
+              "window",
+              "package"
+            ],
+            "signature_tree_fields": [
+              "package",
+              "truncated",
+              "text_available"
+            ],
+            "traversals": 19,
+            "waited_ms": 363,
+            "window_ms": 300
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [
+            {
+              "actual": {
+                "geometry_hashed": false,
+                "settle": "content"
+              },
+              "diff": {
+                "actual": {
+                  "geometry_hashed": false,
+                  "settle": "content"
+                },
+                "detail": "content settle proves the tree's text/nodes/state stopped changing; a translated view's bounds keep changing with the pixels",
+                "expected": {
+                  "geometry_evidence": true,
+                  "settle": "strict"
+                },
+                "path": "frame.settle"
+              },
+              "expected": {
+                "geometry_evidence": true,
+                "settle": "strict"
+              },
+              "kind": "frame_binding",
+              "matched_node_ids": [],
+              "passed": false
+            }
+          ],
+          "duration_ms": 0,
+          "error": {
+            "class": "assertion",
+            "code": "ASSERTION_FAILED",
+            "details": {
+              "bounds_claim": {
+                "assertion": false,
+                "selector": true
+              },
+              "diff": {
+                "actual": {
+                  "geometry_hashed": false,
+                  "settle": "content"
+                },
+                "detail": "content settle proves the tree's text/nodes/state stopped changing; a translated view's bounds keep changing with the pixels",
+                "expected": {
+                  "geometry_evidence": true,
+                  "settle": "strict"
+                },
+                "path": "frame.settle"
+              },
+              "geometry_evidence": false,
+              "reason": "content_settle_geometry",
+              "settle": {
+                "bound": "content-stable",
+                "elapsed_ms": 363,
+                "frame_seq": 21,
+                "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+                "mode": "content",
+                "pixel_evidence": false,
+                "probe_seq": 23,
+                "probe_seq_first": 5,
+                "probe_seq_floor": 4,
+                "settled": true,
+                "signature": "80d3b609b3b2d6fa",
+                "signature_fields": [
+                  "class",
+                  "resource_id",
+                  "text",
+                  "content_desc",
+                  "hint",
+                  "visible",
+                  "enabled",
+                  "focused",
+                  "clickable",
+                  "scrollable",
+                  "checked",
+                  "selected",
+                  "window",
+                  "package"
+                ],
+                "signature_tree_fields": [
+                  "package",
+                  "truncated",
+                  "text_available"
+                ],
+                "traversals": 19,
+                "window_ms": 300
+              },
+              "signature_geometry_fields": [
+                "bounds",
+                "visible_bounds"
+              ],
+              "step_kind": "assert_not_visible"
+            },
+            "hint": "A bounds claim needs a geometry-settled frame: use `settle: strict` (the default) and wait for the animation to stop. Assert text/state instead, which content settle may back. A `bounds` inside the selector is a geometry claim too - drop it (the text/id/class match is enough) or settle strictly.",
+            "message": "assert_not_visible: the bound frame was settled by `settle: content` (UI tree content stable), which is not geometry evidence - an animating view's reported bounds change every frame",
+            "retryable": false
+          },
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/01-assert_not_visible.json"
+            }
+          ],
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "status": "fail",
+          "step": "assert_not_visible"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "fail"
+    },
+    "verdict_path": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-selector-bounds/artifacts/verdict.json"
+  },
+  "session_id": "s_art_gaten-dev-f344272-x86_64-release-unsigned",
+  "status": "fail"
+}

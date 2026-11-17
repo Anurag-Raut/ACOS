@@ -1,0 +1,187 @@
+=== 2026-11-17T06:56:43Z rep=1 arm=v022 mem=8G load1=1.84
+acos-bench: bundle phase latency ok=True wall=200.8s -> /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/run-v022/rep-1/latency.json
+=== 2026-11-17T07:00:05Z rep=1 arm=v022 rc=0 load1=0.82
+=== 2026-11-17T07:00:05Z rep=1 arm=fix mem=8G load1=0.82
+acos-bench: bundle phase latency ok=True wall=195.1s -> /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/run-fix/rep-1/latency.json
+=== 2026-11-17T07:03:20Z rep=1 arm=fix rc=0 load1=1.09
+=== 2026-11-17T07:03:20Z rep=2 arm=v022 mem=8G load1=1.09
+acos-bench: bundle phase latency ok=True wall=201.1s -> /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/run-v022/rep-2/latency.json
+=== 2026-11-17T07:06:42Z rep=2 arm=v022 rc=0 load1=0.89
+=== 2026-11-17T07:06:42Z rep=2 arm=fix mem=8G load1=0.89
+acos-bench: bundle phase latency ok=True wall=194.4s -> /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/run-fix/rep-2/latency.json
+=== 2026-11-17T07:09:57Z rep=2 arm=fix rc=0 load1=0.45
+=== 2026-11-17T07:09:57Z rep=3 arm=v022 mem=8G load1=0.45
+acos-bench: bundle phase latency ok=True wall=201.0s -> /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/run-v022/rep-3/latency.json
+=== 2026-11-17T07:13:18Z rep=3 arm=v022 rc=0 load1=0.51
+=== 2026-11-17T07:13:18Z rep=3 arm=fix mem=8G load1=0.51
+acos-bench: bundle phase latency ok=True wall=193.4s -> /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/run-fix/rep-3/latency.json
+=== 2026-11-17T07:16:32Z rep=3 arm=fix rc=0 load1=0.99
+=== 2026-11-17T07:16:32Z rep=4 arm=v022 mem=8G load1=0.99
+acos-bench: bundle phase latency ok=True wall=200.7s -> /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/run-v022/rep-4/latency.json
+=== 2026-11-17T07:19:53Z rep=4 arm=v022 rc=0 load1=0.85
+=== 2026-11-17T07:19:53Z rep=4 arm=fix mem=8G load1=0.85
+acos-bench: bundle phase latency ok=True wall=194.4s -> /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/run-fix/rep-4/latency.json
+=== 2026-11-17T07:23:08Z rep=4 arm=fix rc=0 load1=0.47
+=== 2026-11-17T07:23:08Z rep=5 arm=v022 mem=8G load1=0.47
+acos-bench: bundle phase latency ok=False wall=200.8s -> /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/run-v022/rep-5/latency.json
+=== 2026-11-17T07:26:29Z rep=5 arm=v022 rc=1 load1=0.93
+=== 2026-11-17T07:26:29Z rep=5 arm=fix mem=8G load1=0.93
+acos-bench: bundle phase latency ok=True wall=193.7s -> /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/run-fix/rep-5/latency.json
+=== 2026-11-17T07:29:43Z rep=5 arm=fix rc=0 load1=1.60
+# ACOS bench baseline -- 2026-11-17T07:29:45+00:00
+
+Command: `tools/bench/acos-bench.sh --reps 5` (branch `perf4`, commit `0a088f6739aa`).
+
+Mode `full`; `ACOS_STRICT_SETTLE=default`; `animations=on`; binary sha256 `3b9af34baff2d791`.
+
+Host: AMD Ryzen 9 9950X, 32 threads, 61908 MiB. Noisy phases: 0/5 (load1 > 4 or MemAvailable < 20 GiB; recorded, not deleted).
+
+## Metrics (p50 / p95, pooled across reps)
+
+| metric | label | p50 | p95 | n | threshold | prev best | method |
+|---|---|---:|---:|---:|---:|---|---|
+| `m4_launch_strict_ms` | M4 warm launch (strict) | 304.6 ms | 319.4 | 100 | ±10% / 2.000 | 440 (P9) | warm daemon, app not running -> acos_launch settle=strict -> reply tree count=0 + post-frame strict tree count |
+| `m4_launch_fast_ms` | M4 warm launch (fast) | 167.8 ms | 172.7 | 199 | ±16% / 2.000 | 184 (P9) | acos_launch settle=fast (probe-fresh label recorded) -> reply tree count=0 + post-frame strict tree count=0 |
+| `m5_screenshot_ms` | M5 fresh screenshot (PNG) | 11.70 ms | 12.69 | 100 | ±12% / 2.000 | 24.4 (P2/W1) | acos_observe {png:true} on a held session; PNG magic + newer frame_seq + meaningful frame required |
+| `m6_reset_strict_ms` | M6 reset -> first correct screen (strict) | 344.3 ms | 361.5 | 100 | ±5.0% / 2.000 | 463 (P9) | count=1 strictly read -> acos_reset settle=strict -> reply tree count=0 + following strict tree count=0 |
+| `m6_reset_fast_ms` | M6 reset -> first correct screen (fast) | 209.3 ms | 220.3 | 200 | ±5.0% / 2.000 | 195 (P9) | acos_reset settle=fast; state_reset + data_cleared + count=0 in the reply and in a following strict tree |
+| `m7_tree_strict_ms` | M7 UI tree with text (strict) | 41.33 ms | 41.71 | 100 | ±5.0% / 2.000 | 151 (P10) | acos_observe_tree settle=strict on a held session; tree has nodes and text, not truncated |
+| `m7_tree_fast_ms` | M7 UI tree with text (fast) | 0.543 ms | 0.869 | 100 | ±40.0% / 2.000 | 0.2 (P10) | acos_observe_tree settle=fast; the fast tree must show the same count text as a strict read (no stale tree) |
+| `m8_tap_counter_strict_ms` | M8 tap -> settled, counter (strict) | 951.6 ms | 965.0 | 100 | ±5.0% / 2.000 | 955 (P11 event) | acos_tap {id:inc} settle=strict on counter, one session; every tap must report state_changed and the final str |
+| `m8_tap_counter_fast_ms` | M8 tap -> settled, counter (fast) | 50.20 ms | 52.34 | 200 | ±40.0% / 2.000 | 70.9 (P1) | acos_tap settle=fast; same state_changed/final-count checks |
+| `m8_tap_form_strict_ms` | M8 tap -> settled, form (strict) | 932.0 ms | 940.2 | 100 | ±5.0% / 2.000 | - | empty form, tap submit settle=strict; following strict tree must read error='Name is required'; fast reset (un |
+| `m8_tap_form_fast_ms` | M8 tap -> settled, form (fast) | 32.26 ms | 33.16 | 200 | ±5.0% / 2.000 | - | empty form, tap submit settle=fast; same strict post-check |
+| `tap_ack_ms` | tap acknowledgement (settle.ack_ms) | 5.000 ms | 5.000 | 600 | ±5.0% / 2.000 | 5 (P1) | input ack latency reported in the tap reply's settle block (counter + form, strict and fast) |
+| `teardown_ms` | acos_destroy teardown_ms (GL1) | 20.00 ms | 23.00 | 319 | ±15% / 2.000 | 18-20 (GL1) | reply teardown.teardown_ms for a live counter session (lifecycle label recorded); 20 samples |
+| `teardown_wall_ms` | acos_destroy wall | 21.11 ms | 23.90 | 320 | ±11% / 2.000 | - | client wall of acos_destroy incl. teardown evidence |
+| `cpu_active_tap_strict_pct` | active CPU, 20 strict counter taps | 44.99 % of one core | 45.40 | 5 | ±10.0% / 0.200 | - | utime+stime delta over the serve tree during the M8 strict counter cohort (20 taps, ~20 s) |
+
+## Fast-settle lattice (PERF-REL3)
+
+Every fast-settle sample waits for the compositor, so it lands on a frame-period lattice: a rep's p50 is whichever slot holds the middle sample. These numbers do not flip.
+
+| metric | n | frame ms (source) | median | 5%-trimmed mean | first-slot share | slot shares |
+|---|---:|---:|---:|---:|---:|---|
+| `m4_launch_fast_ms` | 199 | 16.37 (measured) | 167.8 | 162.8 | 39% | 0:39%, 1:56%, 2:4%, 3:0%, 4:0% |
+| `m6_reset_fast_ms` | 200 | 16.67 (fallback) | 209.3 | 204.6 | 5% | 0:5%, 1:19%, 2:53%, 3:22%, 4:1% |
+| `m8_tap_counter_fast_ms` | 200 | 16.67 (fallback) | 50.20 | 45.96 | 10% | 0:10%, 1:13%, 2:72%, 3:5% |
+| `m8_tap_form_fast_ms` | 200 | 16.67 (fallback) | 32.26 | 32.25 | 100% | 0:100%, 1:0% |
+
+## Phases and host load
+
+| rep | phase | ok | load1 before -> after | MemAvailable | queue wait s | wall s | noisy |
+|---:|---|---|---:|---:|---:|---:|---|
+| 1 | latency | yes | 0.820 -> 0.820 | 42.22 GiB | - | 200.8 | no |
+| 2 | latency | yes | 0.890 -> 0.890 | 42.31 GiB | - | 201.1 | no |
+| 3 | latency | yes | 0.510 -> 0.510 | 42.27 GiB | - | 201.0 | no |
+| 4 | latency | yes | 0.850 -> 0.850 | 42.61 GiB | - | 200.7 | no |
+| 5 | latency | **no** | 0.930 -> 0.930 | 42.65 GiB | - | 200.8 | no |
+
+## Notes
+
+* value = p50 pooled over every sample in every rep; p95 pooled the same way; per-rep p50s are kept for the threshold derivation.
+* threshold = max(category floor, 2 x worst rep-to-rep deviation), capped at 40 %; a delta must exceed both the relative and the absolute threshold to be called a regression.
+* memory rows are label-matched (cgroup anon+shmem vs Pss); they are never mixed.
+* M3 is measured with the launch working set evicted per rep; the warm-cache variant is M4 + daemon spawn (P7).
+* PERF-REL3: every metric now carries its raw `samples`; the fast-settle metrics (M4 launch fast, M6 reset fast, M8 tap fast) also carry `lattice`: a 5 %-trimmed mean, the frame period measured from the samples (phase coherence), and the share of samples per frame slot (slot = round((x - origin) / period), origin = the fastest observed sample). p50/p95 and the p50 compare gate are unchanged; the lattice fields are additive.
+
+merge v022 rc=1
+# ACOS bench baseline -- 2026-11-17T07:29:47+00:00
+
+Command: `tools/bench/acos-bench.sh --reps 5` (branch `perf4`, commit `0a088f6739aa`).
+
+Mode `full`; `ACOS_STRICT_SETTLE=default`; `animations=on`; binary sha256 `1272ef7a72b56629`.
+
+Host: AMD Ryzen 9 9950X, 32 threads, 61908 MiB. Noisy phases: 0/5 (load1 > 4 or MemAvailable < 20 GiB; recorded, not deleted).
+
+## Metrics (p50 / p95, pooled across reps)
+
+| metric | label | p50 | p95 | n | threshold | prev best | method |
+|---|---|---:|---:|---:|---:|---|---|
+| `m4_launch_strict_ms` | M4 warm launch (strict) | 279.1 ms | 296.2 | 100 | ±5.0% / 2.000 | 440 (P9) | warm daemon, app not running -> acos_launch settle=strict -> reply tree count=0 + post-frame strict tree count |
+| `m4_launch_fast_ms` | M4 warm launch (fast) | 143.5 ms | 160.6 | 200 | ±5.0% / 2.000 | 184 (P9) | acos_launch settle=fast (probe-fresh label recorded) -> reply tree count=0 + post-frame strict tree count=0 |
+| `m5_screenshot_ms` | M5 fresh screenshot (PNG) | 12.04 ms | 14.84 | 100 | ±10% / 2.000 | 24.4 (P2/W1) | acos_observe {png:true} on a held session; PNG magic + newer frame_seq + meaningful frame required |
+| `m6_reset_strict_ms` | M6 reset -> first correct screen (strict) | 317.2 ms | 333.2 | 100 | ±6% / 2.000 | 463 (P9) | count=1 strictly read -> acos_reset settle=strict -> reply tree count=0 + following strict tree count=0 |
+| `m6_reset_fast_ms` | M6 reset -> first correct screen (fast) | 188.7 ms | 198.0 | 200 | ±9% / 2.000 | 195 (P9) | acos_reset settle=fast; state_reset + data_cleared + count=0 in the reply and in a following strict tree |
+| `m7_tree_strict_ms` | M7 UI tree with text (strict) | 31.87 ms | 32.29 | 100 | ±5.0% / 2.000 | 151 (P10) | acos_observe_tree settle=strict on a held session; tree has nodes and text, not truncated |
+| `m7_tree_fast_ms` | M7 UI tree with text (fast) | 0.562 ms | 0.890 | 100 | ±27% / 2.000 | 0.2 (P10) | acos_observe_tree settle=fast; the fast tree must show the same count text as a strict read (no stale tree) |
+| `m8_tap_counter_strict_ms` | M8 tap -> settled, counter (strict) | 948.9 ms | 951.2 | 100 | ±6% / 2.000 | 955 (P11 event) | acos_tap {id:inc} settle=strict on counter, one session; every tap must report state_changed and the final str |
+| `m8_tap_counter_fast_ms` | M8 tap -> settled, counter (fast) | 24.50 ms | 33.52 | 200 | ±5.0% / 2.000 | 70.9 (P1) | acos_tap settle=fast; same state_changed/final-count checks |
+| `m8_tap_form_strict_ms` | M8 tap -> settled, form (strict) | 931.2 ms | 933.4 | 100 | ±5.0% / 2.000 | - | empty form, tap submit settle=strict; following strict tree must read error='Name is required'; fast reset (un |
+| `m8_tap_form_fast_ms` | M8 tap -> settled, form (fast) | 30.09 ms | 31.44 | 200 | ±14% / 2.000 | - | empty form, tap submit settle=fast; same strict post-check |
+| `tap_ack_ms` | tap acknowledgement (settle.ack_ms) | 5.000 ms | 5.000 | 600 | ±5.0% / 2.000 | 5 (P1) | input ack latency reported in the tap reply's settle block (counter + form, strict and fast) |
+| `teardown_ms` | acos_destroy teardown_ms (GL1) | 21.00 ms | 23.00 | 320 | ±10% / 2.000 | 18-20 (GL1) | reply teardown.teardown_ms for a live counter session (lifecycle label recorded); 20 samples |
+| `teardown_wall_ms` | acos_destroy wall | 21.66 ms | 23.90 | 320 | ±7% / 2.000 | - | client wall of acos_destroy incl. teardown evidence |
+| `cpu_active_tap_strict_pct` | active CPU, 20 strict counter taps | 65.81 % of one core | 66.36 | 5 | ±10.0% / 0.200 | - | utime+stime delta over the serve tree during the M8 strict counter cohort (20 taps, ~20 s) |
+
+## Fast-settle lattice (PERF-REL3)
+
+Every fast-settle sample waits for the compositor, so it lands on a frame-period lattice: a rep's p50 is whichever slot holds the middle sample. These numbers do not flip.
+
+| metric | n | frame ms (source) | median | 5%-trimmed mean | first-slot share | slot shares |
+|---|---:|---:|---:|---:|---:|---|
+| `m4_launch_fast_ms` | 200 | 16.45 (measured) | 143.5 | 145.1 | 4% | 0:4%, 1:80%, 2:16% |
+| `m6_reset_fast_ms` | 200 | 8.42 (measured) | 188.7 | 183.8 | 2% | 0:2%, 1:11%, 2:10%, 3:26%, 4:40%, 5:10%, 6:1% |
+| `m8_tap_counter_fast_ms` | 200 | 15.36 (measured) | 24.50 | 24.85 | 50% | 0:50%, 1:50% |
+| `m8_tap_form_fast_ms` | 200 | 16.67 (fallback) | 30.09 | 29.72 | 100% | 0:100%, 1:0% |
+
+## Phases and host load
+
+| rep | phase | ok | load1 before -> after | MemAvailable | queue wait s | wall s | noisy |
+|---:|---|---|---:|---:|---:|---:|---|
+| 1 | latency | yes | 1.090 -> 1.090 | 43.46 GiB | - | 195.1 | no |
+| 2 | latency | yes | 0.450 -> 0.450 | 42.27 GiB | - | 194.4 | no |
+| 3 | latency | yes | 0.990 -> 0.990 | 41.84 GiB | - | 193.4 | no |
+| 4 | latency | yes | 0.470 -> 0.470 | 43.32 GiB | - | 194.4 | no |
+| 5 | latency | yes | 1.600 -> 1.600 | 41.80 GiB | - | 193.7 | no |
+
+## Notes
+
+* value = p50 pooled over every sample in every rep; p95 pooled the same way; per-rep p50s are kept for the threshold derivation.
+* threshold = max(category floor, 2 x worst rep-to-rep deviation), capped at 40 %; a delta must exceed both the relative and the absolute threshold to be called a regression.
+* memory rows are label-matched (cgroup anon+shmem vs Pss); they are never mixed.
+* M3 is measured with the launch working set evicted per rep; the warm-cache variant is M4 + daemon spawn (P7).
+* PERF-REL3: every metric now carries its raw `samples`; the fast-settle metrics (M4 launch fast, M6 reset fast, M8 tap fast) also carry `lattice`: a 5 %-trimmed mean, the frame period measured from the samples (phase coherence), and the share of samples per frame slot (slot = round((x - origin) / period), origin = the fastest observed sample). p50/p95 and the p50 compare gate are unchanged; the lattice fields are additive.
+
+merge fix rc=0
+
+| metric | v0.2.2 (tag) | perf4 | delta | delta % | threshold | verdict |
+|---|---:|---:|---:|---:|---:|---|
+| M4 warm launch (strict) | 304.34 | 278.82 | -25.53 | -8.4% | ±5.00% / 2.00 | improved |
+| M4 warm launch (fast) | 167.36 | 143.49 | -23.87 | -14.3% | ±5.00% / 2.00 | improved |
+| M5 fresh screenshot (PNG) | 11.69 | 11.99 | 0.30 | +2.6% | ±10% / 2.00 | within-noise |
+| M6 reset -> first correct screen (strict) | 344.84 | 316.90 | -27.94 | -8.1% | ±6% / 2.00 | improved |
+| M6 reset -> first correct screen (fast) | 208.09 | 189.21 | -18.88 | -9.1% | ±9% / 2.00 | improved |
+| M7 UI tree with text (strict) | 41.34 | 31.87 | -9.47 | -22.9% | ±5.00% / 2.00 | improved |
+| M7 UI tree with text (fast) | 0.58 | 0.58 | 0.00 | +0.4% | ±27% / 2.00 | within-noise |
+| M8 tap -> settled, counter (strict) | 951.89 | 949.34 | -2.55 | -0.3% | ±6% / 2.00 | within-noise |
+| M8 tap -> settled, counter (fast) | 50.27 | 24.50 | -25.77 | -51.3% | ±5.00% / 2.00 | improved |
+| M8 tap -> settled, form (strict) | 931.08 | 930.78 | -0.31 | -0.0% | ±5.00% / 2.00 | within-noise |
+| M8 tap -> settled, form (fast) | 32.25 | 30.46 | -1.80 | -5.6% | ±14% / 2.00 | within-noise |
+| tap acknowledgement | 5.00 | 5.00 | 0.00 | +0.0% | ±5.00% / 2.00 | within-noise |
+| acos_destroy teardown_ms | 20.50 | 21.00 | 0.50 | +2.4% | ±10% / 2.00 | within-noise |
+| cpu_active_tap_strict_pct | 44.99 | 65.81 | 20.82 | +46.3% | ±10.00% / 0.20 | REGRESSION |
+| teardown_wall_ms | 21.17 | 21.74 | 0.57 | +2.7% | ±7% / 2.00 | within-noise |
+
+## 2. Pooled 5 %-trimmed mean, and 3. frame-slot shares
+
+| metric | n v0.2.2 (tag)/perf4 | v0.2.2 (tag) trimmed | perf4 trimmed | delta | delta % | frame ms | first slot v0.2.2 (tag)/perf4 | slot shares v0.2.2 (tag) | slot shares perf4 | verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|
+| M4 warm launch (fast) | 199/200 | 162.85 | 145.05 | -17.79 | -10.9% | 16.67 | 0%/4% | 2:47% 3:49% 4:4% 5:0% | 0:4% 1:80% 2:16% | improved |
+| M6 reset -> first correct screen (fast) | 200/200 | 204.60 | 183.82 | -20.78 | -10.2% | 16.67 | 0%/6% | 1:10% 2:24% 3:58% 4:8% 5:0% | 0:6% 1:26% 2:62% 3:6% | improved |
+| M8 tap -> settled, counter (fast) | 200/200 | 45.96 | 24.85 | -21.11 | -45.9% | 16.67 | 10%/50% | 0:10% 1:13% 2:72% 3:5% | 0:50% 1:50% | improved (slot-shift +40 pp) |
+| M8 tap -> settled, form (fast) | 200/200 | 32.25 | 29.72 | -2.54 | -7.9% | 16.67 | 100%/100% | 0:100% 1:0% | 0:100% 1:0% | improved |
+
+## 4. Verdict
+
+Lattice gate (proposal): pooled 5 percent-trimmed mean worse by > 5 percent and > 2 ms; a first-slot share shift >= 10 pp is flagged separately.
+
+* M4 warm launch (fast): improved -- trimmed 162.85 vs 145.05 (-17.79 ms, -10.9%), first-slot 0% vs 4%
+* M6 reset -> first correct screen (fast): improved -- trimmed 204.60 vs 183.82 (-20.78 ms, -10.2%), first-slot 0% vs 6%
+* M8 tap -> settled, counter (fast): improved -- trimmed 45.96 vs 24.85 (-21.11 ms, -45.9%), first-slot 10% vs 50% (SLOT-SHIFT +40 pp)
+* M8 tap -> settled, form (fast): improved -- trimmed 32.25 vs 29.72 (-2.54 ms, -7.9%), first-slot 100% vs 100%
+
+Old gate regressions: cpu_active_tap_strict_pct
+
+JSON: /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/ab-compare.json
+=== DRIVER DONE 2026-11-17T07:29:47Z

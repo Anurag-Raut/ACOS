@@ -92,20 +92,33 @@ fn fake_daemon(path: &Path) -> FakeDaemon {
                     .unwrap_or("")
                     .to_string();
                 let mut result = json!({"server": "fake-daemon"});
-                match tool.as_str() {
-                    "acos_launch" => {
-                        let seq = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-                        let token = format!("tok-{seq}");
-                        table.lock().unwrap().insert(session.clone(), token.clone());
-                        result = json!({
-                            "session_id": session,
-                            "session_token": token,
-                            "launched": true,
-                        });
-                    }
-                    "session_list" => {
-                        let held = table.lock().unwrap();
-                        let list: Vec<Value> = held
+                    match tool.as_str() {
+                        "acos_launch" => {
+                            let seq =
+                                counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                            let token = format!("tok-{seq}");
+                            table
+                                .lock()
+                                .unwrap()
+                                .insert(session.clone(), token.clone());
+                            result = json!({
+                                "session_id": session,
+                                "session_token": token,
+                                "launched": true,
+                            });
+                        }
+                        // REL3D: the identity handshake every daemon answers.
+                        "hello" => {
+                            let held = table.lock().unwrap();
+                            result = json!({
+                                "identity": acos_mcp::identity::Identity::local(),
+                                "engine": "art",
+                                "sessions": held.len(),
+                            });
+                        }
+                        "session_list" => {
+                            let held = table.lock().unwrap();
+                            let list: Vec<Value> = held
                                 .iter()
                                 .map(|(id, token)| {
                                     json!({"session_id": id, "session_token": token, "engine": "art"})

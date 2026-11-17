@@ -1,0 +1,109 @@
+== run-matrix 2026-11-17T13:49:19Z load1=1.03
+run-matrix: host gate ok (loadavg1 1.03, MemAvailable 49.34 GiB)
+run-matrix: [1] scenarios/v2-art-counter.yaml rep 1/1
+run-matrix: [1] verdict=pass class=- wall=3637 ms cg_peak=21.68 MiB
+run-matrix: [2] scenarios/negative/counter-wrong-count.yaml rep 1/1
+run-matrix: [2] verdict=fail class=assertion wall=422 ms cg_peak=9.03 MiB
+run-matrix: [3] scenarios/negative/finish-start-wrong-home.yaml rep 1/1
+run-matrix: [3] verdict=fail class=assertion wall=623 ms cg_peak=17.79 MiB
+run-matrix: [4] scenarios/negative/form-wrong-error.yaml rep 1/1
+run-matrix: [4] verdict=fail class=assertion wall=522 ms cg_peak=8.7 MiB
+run-matrix: [5] scenarios/negative/gaten-backstack-wrong.yaml rep 1/1
+run-matrix: [5] verdict=fail class=assertion wall=12295 ms cg_peak=426.46 MiB
+run-matrix: [6] scenarios/negative/gaten-content-assert-screenshot.yaml rep 1/1
+run-matrix: [6] verdict=fail class=assertion wall=1228 ms cg_peak=416.06 MiB
+run-matrix: [7] scenarios/negative/gaten-content-pixel.yaml rep 1/1
+run-matrix: [7] verdict=fail class=assertion wall=3140 ms cg_peak=371.62 MiB
+run-matrix: [8] scenarios/negative/gaten-content-selector-bounds.yaml rep 1/1
+run-matrix: [8] verdict=fail class=assertion wall=1227 ms cg_peak=418.14 MiB
+run-matrix: [9] scenarios/negative/gaten-content-welcome-wrong.yaml rep 1/1
+run-matrix: [9] verdict=fail class=assertion wall=1228 ms cg_peak=387.9 MiB
+run-matrix: [10] scenarios/negative/gaten-content-window-impossible.yaml rep 1/1
+run-matrix: [10] verdict=error class=infra_timeout wall=522 ms cg_peak=7.96 MiB
+run-matrix: [11] scenarios/negative/gaten-home-wrong.yaml rep 1/1
+run-matrix: [11] verdict=fail class=assertion wall=8375 ms cg_peak=407.72 MiB
+run-matrix: [12] scenarios/negative/gaten-kanji-wrong.yaml rep 1/1
+run-matrix: [12] verdict=fail class=assertion wall=12708 ms cg_peak=412.24 MiB
+run-matrix: [13] scenarios/negative/gaten-lesson-wrong.yaml rep 1/1
+run-matrix: [13] verdict=fail class=assertion wall=9379 ms cg_peak=414.52 MiB
+run-matrix: [14] scenarios/negative/gaten-recognition-wrong.yaml rep 1/1
+run-matrix: [14] verdict=fail class=assertion wall=13217 ms cg_peak=374.08 MiB
+run-matrix: [15] scenarios/negative/gaten-search-wrong.yaml rep 1/1
+run-matrix: [15] verdict=fail class=assertion wall=11193 ms cg_peak=421.24 MiB
+run-matrix: [16] scenarios/negative/gaten-settings-wrong.yaml rep 1/1
+run-matrix: [16] verdict=fail class=assertion wall=9782 ms cg_peak=421.05 MiB
+run-matrix: [17] scenarios/negative/gaten-support-wrong.yaml rep 1/1
+run-matrix: [17] verdict=fail class=assertion wall=10590 ms cg_peak=421.08 MiB
+run-matrix: [18] scenarios/negative/gaten-tabs-wrong.yaml rep 1/1
+run-matrix: [18] verdict=fail class=assertion wall=8469 ms cg_peak=416.75 MiB
+run-matrix: [19] scenarios/negative/hello-views-back-text-gone.yaml rep 1/1
+run-matrix: [19] verdict=fail class=assertion wall=522 ms cg_peak=9.2 MiB
+run-matrix: [20] scenarios/negative/missing-element.yaml rep 1/1
+run-matrix: [20] verdict=fail class=assertion wall=422 ms cg_peak=9.51 MiB
+run-matrix: [21] scenarios/negative/missing-jni-line.yaml rep 1/1
+run-matrix: [21] verdict=fail class=assertion wall=422 ms cg_peak=8.78 MiB
+run-matrix: [22] scenarios/negative/multi-back-save-state.yaml rep 1/1
+run-matrix: [22] verdict=fail class=assertion wall=523 ms cg_peak=9.8 MiB
+run-matrix: [23] scenarios/negative/multi-wrong-after-back.yaml rep 1/1
+run-matrix: [23] verdict=error class=infra_timeout wall=4842 ms cg_peak=19.59 MiB
+run-matrix: [24] scenarios/negative/multi-wrong-message.yaml rep 1/1
+run-matrix: [24] verdict=fail class=assertion wall=422 ms cg_peak=8.01 MiB
+run-matrix: [25] scenarios/negative/offscreen-pager-visible.yaml rep 1/1
+run-matrix: [25] verdict=fail class=assertion wall=422 ms cg_peak=18.21 MiB
+run-matrix: [26] scenarios/negative/offscreen-pager-wait.yaml rep 1/1
+run-matrix: [26] verdict=error class=infra_timeout wall=1527 ms cg_peak=10.29 MiB
+run-matrix: [27] scenarios/negative/rot1-rotate-wrong.yaml rep 1/1
+run-matrix: [27] verdict=fail class=assertion wall=623 ms cg_peak=7.82 MiB
+run-matrix: [28] scenarios/negative/se1-expect-change-noop.yaml rep 1/1
+run-matrix: [28] verdict=fail class=assertion wall=623 ms cg_peak=8.81 MiB
+run-matrix: [29] scenarios/negative/todo-missing-item.yaml rep 1/1
+run-matrix: [29] verdict=fail class=assertion wall=422 ms cg_peak=16.92 MiB
+run-matrix: [30] scenarios/negative/w44-hostile-forest-trusted.yaml rep 1/1
+run-matrix: [30] verdict=fail class=assertion wall=3231 ms cg_peak=8.58 MiB
+run-matrix: [31] scenarios/negative/wrong-bounds.yaml rep 1/1
+run-matrix: [31] verdict=fail class=assertion wall=422 ms cg_peak=7.68 MiB
+run-matrix: [32] scenarios/negative/wrong-lifecycle-order.yaml rep 1/1
+run-matrix: [32] verdict=fail class=assertion wall=422 ms cg_peak=8.73 MiB
+run-matrix: [33] scenarios/negative/wrong-text.yaml rep 1/1
+run-matrix: [33] verdict=fail class=assertion wall=422 ms cg_peak=8.19 MiB
+run-matrix: summary {"classes": {"assertion": 29, "infra_timeout": 3, "pass": 1}, "errors": 3, "failed": 29, "false_fail": 0, "false_pass": 0, "gates": {"false_pass_zero": true, "harness_timeout_within_2pct": false, "negative_all_correct": false, "unclassified_zero": true}, "harness_or_timeout": 3, "negative_correct": 29, "negative_runs": 32, "passed": 1, "total_runs": 33, "unclassified": 0, "verdict_eligible": true}
+run-matrix: rows results/release/v0.3.0-gate/relgate3/02-matrix/matrix.json
+run-matrix: tsv  results/release/v0.3.0-gate/relgate3/02-matrix/matrix.tsv
+run-matrix: verdict_eligible=True profile=release engine=art
+
+| run | scenario | variant | expected | verdict | false_pass | error class | wall ms | cg peak MiB | GiB-min | PSS MiB |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 01-v2-art-counter-r1 | v2-art-counter.yaml | good | pass | pass | False | - | 3637 | 21.68 | 0.000827 | 29.28 |
+| 02-negative-counter-wrong-count-r1 | counter-wrong-count.yaml | negative | fail | fail | False | assertion | 422 | 9.03 | 3.9e-05 | 18.17 |
+| 03-negative-finish-start-wrong-home-r1 | finish-start-wrong-home.yaml | negative | fail | fail | False | assertion | 623 | 17.79 | 6.6e-05 | 28.38 |
+| 04-negative-form-wrong-error-r1 | form-wrong-error.yaml | negative | fail | fail | False | assertion | 522 | 8.7 | 4.7e-05 | 17.68 |
+| 05-gaten-backstack-wrong-r1 | gaten-backstack-wrong.yaml | negative | fail | fail | False | assertion | 12295 | 426.46 | 0.064862 | 167.42 |
+| 06-gaten-content-assert-screenshot-r1 | gaten-content-assert-screenshot.yaml | negative | fail | fail | False | assertion | 1228 | 416.06 | 0.004235 | 240.79 |
+| 07-gaten-content-pixel-r1 | gaten-content-pixel.yaml | negative | fail | fail | False | assertion | 3140 | 371.62 | 0.010572 | 203.54 |
+| 08-gaten-content-selector-bounds-r1 | gaten-content-selector-bounds.yaml | negative | fail | fail | False | assertion | 1227 | 418.14 | 0.004282 | 241.08 |
+| 09-gaten-content-welcome-wrong-r1 | gaten-content-welcome-wrong.yaml | negative | fail | fail | False | assertion | 1228 | 387.9 | 0.004176 | 219.55 |
+| 10-gaten-content-window-impossible-r1 | gaten-content-window-impossible.yaml | negative | fail | error | False | infra_timeout | 522 | 7.96 | 4.5e-05 | 18.11 |
+| 11-gaten-home-wrong-r1 | gaten-home-wrong.yaml | negative | fail | fail | False | assertion | 8375 | 407.72 | 0.028456 | 232.21 |
+| 12-gaten-kanji-wrong-r1 | gaten-kanji-wrong.yaml | negative | fail | fail | False | assertion | 12708 | 412.24 | 0.044335 | 240.42 |
+| 13-gaten-lesson-wrong-r1 | gaten-lesson-wrong.yaml | negative | fail | fail | False | assertion | 9379 | 414.52 | 0.03204 | 241.34 |
+| 14-gaten-recognition-wrong-r1 | gaten-recognition-wrong.yaml | negative | fail | fail | False | assertion | 13217 | 374.08 | 0.046234 | 203.37 |
+| 15-gaten-search-wrong-r1 | gaten-search-wrong.yaml | negative | fail | fail | False | assertion | 11193 | 421.24 | 0.038761 | 246.0 |
+| 16-gaten-settings-wrong-r1 | gaten-settings-wrong.yaml | negative | fail | fail | False | assertion | 9782 | 421.05 | 0.033798 | 245.65 |
+| 17-gaten-support-wrong-r1 | gaten-support-wrong.yaml | negative | fail | fail | False | assertion | 10590 | 421.08 | 0.036584 | 245.81 |
+| 18-gaten-tabs-wrong-r1 | gaten-tabs-wrong.yaml | negative | fail | fail | False | assertion | 8469 | 416.75 | 0.02861 | 241.24 |
+| 19-negative-hello-views-back-text-gone-r1 | hello-views-back-text-gone.yaml | negative | fail | fail | False | assertion | 522 | 9.2 | 4.7e-05 | 18.5 |
+| 20-negative-missing-element-r1 | missing-element.yaml | negative | fail | fail | False | assertion | 422 | 9.51 | 4e-05 | 18.23 |
+| 21-negative-missing-jni-line-r1 | missing-jni-line.yaml | negative | fail | fail | False | assertion | 422 | 8.78 | 3.7e-05 | 19.33 |
+| 22-negative-multi-back-save-state-r1 | multi-back-save-state.yaml | negative | fail | fail | False | assertion | 523 | 9.8 | 5.5e-05 | 20.01 |
+| 23-negative-multi-wrong-after-back-r1 | multi-wrong-after-back.yaml | negative | fail | error | False | infra_timeout | 4842 | 19.59 | 0.000776 | 28.98 |
+| 24-negative-multi-wrong-message-r1 | multi-wrong-message.yaml | negative | fail | fail | False | assertion | 422 | 8.01 | 3.5e-05 | 17.82 |
+| 25-negative-offscreen-pager-visible-r1 | offscreen-pager-visible.yaml | negative | fail | fail | False | assertion | 422 | 18.21 | 4.1e-05 | 27.42 |
+| 26-negative-offscreen-pager-wait-r1 | offscreen-pager-wait.yaml | negative | fail | error | False | infra_timeout | 1527 | 10.29 | 0.000211 | 19.58 |
+| 27-negative-rot1-rotate-wrong-r1 | rot1-rotate-wrong.yaml | negative | fail | fail | False | assertion | 623 | 7.82 | 5.5e-05 | 18.76 |
+| 28-se1-expect-change-noop-r1 | se1-expect-change-noop.yaml | negative | fail | fail | False | assertion | 623 | 8.81 | 6.4e-05 | 18.33 |
+| 29-negative-todo-missing-item-r1 | todo-missing-item.yaml | negative | fail | fail | False | assertion | 422 | 16.92 | 3.8e-05 | 27.67 |
+| 30-w44-hostile-forest-trusted-r1 | w44-hostile-forest-trusted.yaml | negative | fail | fail | False | assertion | 3231 | 8.58 | 0.000414 | 18.62 |
+| 31-negative-wrong-bounds-r1 | wrong-bounds.yaml | negative | fail | fail | False | assertion | 422 | 7.68 | 3.1e-05 | 18.2 |
+| 32-negative-wrong-lifecycle-order-r1 | wrong-lifecycle-order.yaml | negative | fail | fail | False | assertion | 422 | 8.73 | 3.6e-05 | 18.93 |
+| 33-negative-wrong-text-r1 | wrong-text.yaml | negative | fail | fail | False | assertion | 422 | 8.19 | 3.6e-05 | 17.93 |
+MATRIX_RC=0

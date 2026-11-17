@@ -1,0 +1,99 @@
+{
+  "engine": {
+    "animations": "off",
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "swipe",
+        "type_text",
+        "key",
+        "rotate",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/handoff/REL3H/verify-expect-change",
+      "engine_report": "results/handoff/REL3H/verify-expect-change/engine.json",
+      "retention": "results/handoff/REL3H/verify-expect-change/retention.json",
+      "verdict": "results/handoff/REL3H/verify-expect-change/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "insets": "report",
+    "mode": "live",
+    "session_exit": {
+      "abi": null,
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=62MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1704263-i1706038.scope)",
+      "code": null,
+      "disk_free_bytes": 192161247232,
+      "guest_crash": null,
+      "guest_exit": 0,
+      "guest_signal": null,
+      "native_crash": null,
+      "native_crash_path": null,
+      "outcome": "ok",
+      "panic": null,
+      "path": "results/handoff/REL3H/verify-expect-change/art-frames/session-exit.json",
+      "retryable": false,
+      "stage": "teardown-evidence"
+    },
+    "timing": {
+      "attributed_ms": 146,
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "built",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff1d00ed8bd2f511",
+        "input_hash": "ff1d00ed8bd2f511",
+        "mode": "shared-fixed",
+        "prep_ms": 4425,
+        "reason": "no usable manifest at /home/Qui/.cache/acos/art/boot-images/fixed-ff1d00ed8bd2f511/manifest.json: No such file or directory (os error 2)"
+      },
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 4683,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 66
+        },
+        {
+          "index": 1,
+          "status": "fail",
+          "step": "tap",
+          "wall_ms": 80
+        }
+      ],
+      "unattributed_ms": 0,
+      "unit": "ms",
+      "verdict_wall_ms": 146
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": null,
+  "request_id": "req_19ff70_18e871447e6fea91",
+  "verdict_status": "fail"
+}

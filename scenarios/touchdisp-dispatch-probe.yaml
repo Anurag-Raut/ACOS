@@ -1,0 +1,29 @@
+version: 1
+name: touchdisp-dispatch-probe
+description: >-
+  Evidence probe (not a gate): does a touch reach a non-clickable view's
+  OnTouchListener / onTouchEvent through the real view chain? The app logs
+  Activity.dispatchTouchEvent -> View.dispatchTouchEvent -> listener ->
+  onTouchEvent -> the ancestor ViewGroup fallback; the run's logcat is the
+  artifact results/handoff/TOUCHDISP/dispatch-probe-logcat.txt is taken from.
+  A tap on the GestureDetector view is deliberately absent: it claims the DOWN
+  and changes nothing on a short tap, so it has no settled outcome.
+app: fixtures/build/apps/touch-probe.apk
+engine: art
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+animations: off
+expectation: pass
+steps:
+  - launch:
+      activity: dev.acos.fixtures.touchprobe/.MainActivity
+  - tap:
+      selector: {id: label}
+  - tap:
+      selector: {id: probe}
+  - tap:
+      selector: {id: inc}

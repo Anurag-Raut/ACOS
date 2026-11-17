@@ -1,0 +1,887 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.hellojni",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/hello-jni.apk",
+    "sha256": "913877c64fd4f114c4aeee46b239850f70863c3fe0b4c2410c887cabe26ba4db"
+  },
+  "backend": "acos-native",
+  "captures": {
+    "initial-report": "frames/3-initial-report.png"
+  },
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/hello-jni/artifacts",
+    "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/hello-jni/artifacts/engine.json",
+    "pruned_session_captures": 1,
+    "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/hello-jni/artifacts/retention.json",
+    "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/hello-jni/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T09:14:01.924Z",
+  "insets": "report",
+  "isolation": "sandbox",
+  "mode": "live",
+  "notes": [
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (prune-unreferenced): 27 file(s) / 0.8 MiB kept, 1 file(s) / 0.1 MiB pruned; see retention.json"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794521204393049533,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/hello-jni.apk",
+      "sha256": "913877c64fd4f114c4aeee46b239850f70863c3fe0b4c2410c887cabe26ba4db",
+      "sha256_12": "913877c64fd4",
+      "size_bytes": 16932
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794819964133509690,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/hello-jni.yaml",
+      "sha256": "0e2285b8cbb33e47d7c0b3c547a3ed8b517a173d36a74378d1d56352cade3798",
+      "sha256_12": "0e2285b8cbb3",
+      "size_bytes": 2796
+    },
+    "scenario_engine": "rust-vm",
+    "warnings": [
+      {
+        "code": "SCENARIO_ENGINE_MISMATCH",
+        "engine": "art",
+        "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+        "scenario_engine": "rust-vm"
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/hello-jni.apk",
+    "apk_sha256": "913877c64fd4f114c4aeee46b239850f70863c3fe0b4c2410c887cabe26ba4db",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "sandbox",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/hello-jni.yaml",
+    "scenario_sha256": "0e2285b8cbb33e47d7c0b3c547a3ed8b517a173d36a74378d1d56352cade3798"
+  },
+  "request_id": "req_32c4c0_18e87baea61231b3",
+  "resources": {
+    "events": 94,
+    "frames_captured": 11,
+    "memory_mib": 15,
+    "peak_rss_bytes": 16158720,
+    "sessions": 1,
+    "steps": 13,
+    "wall_ms": 238
+  },
+  "scenario": {
+    "name": "hello-jni",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/hello-jni.yaml",
+    "sha256": "0e2285b8cbb33e47d7c0b3c547a3ed8b517a173d36a74378d1d56352cade3798"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=55MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3327179-i3337059.scope)",
+    "code": null,
+    "disk_free_bytes": 254692638720,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/release/v0.3.0-gate/correctness/04-scenarios/hello-jni/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_hello-jni",
+  "started_at": "2026-11-16T09:14:01.686Z",
+  "status": "pass",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 116,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 56,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 55,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              166,
+              261,
+              237
+            ],
+            "hint": "",
+            "node": "n4_",
+            "text": "Hello JNI",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              166,
+              261,
+              237
+            ],
+            "selector": {
+              "text": {
+                "exact": "Hello JNI"
+              }
+            },
+            "text": {
+              "exact": "Hello JNI"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 2,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              0,
+              275,
+              1080,
+              2337
+            ],
+            "hint": "",
+            "node": "n3_",
+            "text": "stringFromJNI=Hello from native C\nadd(20,22)=42\nsumArray([1,2,3,4,5])=15\njavaCallbackResult=42\nvoidCallback=from-native\nregisteredEcho=echo!\nthrowFromJNI caught=thrown from native\n",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "class": "android.widget.TextView"
+            },
+            "text": {
+              "contains": "stringFromJNI=Hello from native C"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n3_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 3,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              0,
+              275,
+              1080,
+              2337
+            ],
+            "hint": "",
+            "node": "n3_",
+            "text": "stringFromJNI=Hello from native C\nadd(20,22)=42\nsumArray([1,2,3,4,5])=15\njavaCallbackResult=42\nvoidCallback=from-native\nregisteredEcho=echo!\nthrowFromJNI caught=thrown from native\n",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "class": "android.widget.TextView"
+            },
+            "text": {
+              "contains": "add(20,22)=42"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n3_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/04-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 4,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              0,
+              275,
+              1080,
+              2337
+            ],
+            "hint": "",
+            "node": "n3_",
+            "text": "stringFromJNI=Hello from native C\nadd(20,22)=42\nsumArray([1,2,3,4,5])=15\njavaCallbackResult=42\nvoidCallback=from-native\nregisteredEcho=echo!\nthrowFromJNI caught=thrown from native\n",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "class": "android.widget.TextView"
+            },
+            "text": {
+              "contains": "sumArray([1,2,3,4,5])=15"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n3_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/05-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 5,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              0,
+              275,
+              1080,
+              2337
+            ],
+            "hint": "",
+            "node": "n3_",
+            "text": "stringFromJNI=Hello from native C\nadd(20,22)=42\nsumArray([1,2,3,4,5])=15\njavaCallbackResult=42\nvoidCallback=from-native\nregisteredEcho=echo!\nthrowFromJNI caught=thrown from native\n",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "class": "android.widget.TextView"
+            },
+            "text": {
+              "contains": "javaCallbackResult=42"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n3_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/06-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 6,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              0,
+              275,
+              1080,
+              2337
+            ],
+            "hint": "",
+            "node": "n3_",
+            "text": "stringFromJNI=Hello from native C\nadd(20,22)=42\nsumArray([1,2,3,4,5])=15\njavaCallbackResult=42\nvoidCallback=from-native\nregisteredEcho=echo!\nthrowFromJNI caught=thrown from native\n",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "class": "android.widget.TextView"
+            },
+            "text": {
+              "contains": "voidCallback=from-native"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n3_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/07-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 7,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              0,
+              275,
+              1080,
+              2337
+            ],
+            "hint": "",
+            "node": "n3_",
+            "text": "stringFromJNI=Hello from native C\nadd(20,22)=42\nsumArray([1,2,3,4,5])=15\njavaCallbackResult=42\nvoidCallback=from-native\nregisteredEcho=echo!\nthrowFromJNI caught=thrown from native\n",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "class": "android.widget.TextView"
+            },
+            "text": {
+              "contains": "registeredEcho=echo!"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n3_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/08-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 8,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              0,
+              275,
+              1080,
+              2337
+            ],
+            "hint": "",
+            "node": "n3_",
+            "text": "stringFromJNI=Hello from native C\nadd(20,22)=42\nsumArray([1,2,3,4,5])=15\njavaCallbackResult=42\nvoidCallback=from-native\nregisteredEcho=echo!\nthrowFromJNI caught=thrown from native\n",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "class": "android.widget.TextView"
+            },
+            "text": {
+              "contains": "throwFromJNI caught=thrown from native"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n3_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/09-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 9,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 3,
+            "sample": [
+              "AcosJniFixture: onCreate",
+              "AcosJniFixture: javaCallback x=21",
+              "AcosJniFixture: voidCallback s=from-native"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^onCreate$",
+              "^javaCallback x=21$",
+              "^voidCallback s=from-native$"
+            ],
+            "since_previous_step": false,
+            "tag": "AcosJniFixture"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/10-assert_log.json"
+        }
+      ],
+      "index": 10,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 58,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/3-initial-report.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/11-capture.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 11,
+      "name": "initial-report",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 5,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 58,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "crashes": 0
+          },
+          "expected": "no crash",
+          "kind": "no_crash",
+          "matched_node_ids": [],
+          "message": "no crash recorded",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/12-assert_no_crash.json"
+        }
+      ],
+      "index": 12,
+      "provenance": {
+        "crash_reports": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_no_crash"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "pass"
+}

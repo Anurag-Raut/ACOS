@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/native-hello.apk",
+  "apk_sha256": "940e169c3bd5fec2c2d34bc73a287d276fcb55320ecb9299c49d24a35777aa37",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w21-native-hello.yaml",
+  "scenario_sha256": "bf8f4e2e7951554817f9b9f8d064dff1512defc0918b549800171ea58549095a",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

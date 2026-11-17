@@ -564,6 +564,13 @@ impl Inner {
         subscribers.push(subscriber);
         self.subscriber_count.fetch_add(1, Ordering::AcqRel);
         drop(subscribers);
+        // A viewer that arrives after another one left (or joins a running
+        // stream) must see the screen *now*, not at the next redraw: the encoder
+        // only sends a frame newer than the last one it sent, so on an idle
+        // screen the newcomer would stare at black until something repainted.
+        // Forgetting the last encoded `seq` makes the next capture go out once
+        // (a duplicate for existing viewers, never a new capture rate).
+        self.last_encoded_seq.store(0, Ordering::Relaxed);
         self.notify();
         // The tap thread exists only while someone watches: with no subscriber
         // the session runs exactly as it did before the viewer existed.
@@ -1876,15 +1883,52 @@ mod tests {
             .collect()
     }
 
+    /// Root for the small files and Unix sockets these tests create.
+    ///
+    /// It must stay **short**: a `sun_path` is 108 bytes including the NUL, and
+    /// `<worktree>/.cache/live-view-test/<pid>-<tag>/stream.sock` is over that in
+    /// an agent worktree (the checkout path alone is ~70 bytes), so six of these
+    /// tests failed with "stream socket path ... is too long for a unix socket"
+    /// before reaching an assertion. The rule is the shared one
+    /// ([`acos_test_support::short_scratch_root`]): `ACOS_VIEW_TEST_DIR` when it
+    /// fits the socket budget, else the checkout path when that is short enough,
+    /// else a fixed short RAM-backed directory - these tests write a few KB,
+    /// never artifacts. A `ACOS_VIEW_TEST_DIR` too long for a socket is reported
+    /// once and ignored instead of failing every test that binds a socket.
+    fn scratch_root() -> PathBuf {
+        let candidates: Vec<PathBuf> = crate::repo_root()
+            .ok()
+            .map(|root| vec![root.join(".cache/live-view-test")])
+            .unwrap_or_default();
+        acos_test_support::short_scratch_root(
+            "ACOS_VIEW_TEST_DIR",
+            &candidates,
+            "acos-live-view-tests",
+        )
+    }
+
+    /// The deepest socket these tests bind below the scratch root; the shared
+    /// budget is sized from this shape (see
+    /// `acos_test_support::SCRATCH_ROOT_BUDGET`).
+    fn deepest_stream_socket(root: &Path) -> PathBuf {
+        root.join(format!("{}-maskdetach", std::process::id()))
+            .join("stream.sock")
+    }
+
+    #[test]
+    fn the_scratch_root_leaves_room_for_the_stream_socket() {
+        let deepest = deepest_stream_socket(&scratch_root());
+        let len = deepest.as_os_str().as_encoded_bytes().len();
+        assert!(
+            len <= acos_test_support::SUN_PATH_MAX,
+            "{} is {len} bytes, too long for sun_path ({} with the NUL)",
+            deepest.display(),
+            acos_test_support::SUN_PATH_MAX + 1
+        );
+    }
+
     fn scratch_dir(tag: &str) -> PathBuf {
-        let root = std::env::var_os("ACOS_VIEW_TEST_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                crate::repo_root()
-                    .unwrap_or_else(|_| std::env::temp_dir())
-                    .join(".cache/live-view-test")
-            });
-        let dir = root.join(format!("{}-{tag}", std::process::id()));
+        let dir = scratch_root().join(format!("{}-{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("scratch dir");
         dir
@@ -2106,6 +2150,64 @@ mod tests {
         let stats = view.stats();
         assert!(stats.encodes >= 2);
         assert_eq!(stats.subscribers_dropped, 0);
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_viewer_that_arrives_on_an_idle_screen_still_gets_the_current_frame() {
+        // The screen never changes (constant store `seq`): the second viewer
+        // must still be sent a frame on attach, not wait for a repaint.
+        let dir = scratch_dir("idle-attach");
+        let path = dir.join("stream.sock");
+        let source: Arc<dyn Fn() -> Option<SourceFrame> + Send + Sync> = Arc::new(|| {
+            Some(SourceFrame {
+                seq: 7,
+                generation: 1,
+                width: 108,
+                height: 240,
+                stride: 108,
+                rgba: vec![200u8; 108 * 240 * 4],
+                secure: false,
+            })
+        });
+        let view = LiveView::bind(
+            &path,
+            LiveViewConfig::default(),
+            (108, 240),
+            78,
+            source,
+            Arc::new(TestWake::new()),
+        )
+        .expect("bind");
+        let mut first_frame_for = |label: &str| -> bool {
+            let mut client = UnixStream::connect(&path).expect("connect");
+            client
+                .write_all(b"{\"v\":1,\"subscribe\":{\"frames\":true,\"events\":false,\"max_fps\":30,\"scale\":0.5,\"format\":\"jpeg\"}}\n")
+                .expect("subscribe");
+            client
+                .set_read_timeout(Some(Duration::from_millis(200)))
+                .expect("timeout");
+            let deadline = Instant::now() + Duration::from_secs(8);
+            let mut got = false;
+            while !got && Instant::now() < deadline {
+                view.tick();
+                if let Ok((TYPE_FRAME, _)) = read_message(&mut client) {
+                    got = true;
+                }
+            }
+            // The viewer leaves. A dead subscriber is only noticed by the next
+            // failed send, and an idle screen sends nothing, so it may linger:
+            // the next attach's re-send is what clears it.
+            let _ = label;
+            drop(client);
+            got
+        };
+        assert!(first_frame_for("first viewer"), "first viewer gets a frame");
+        assert!(
+            first_frame_for("second viewer"),
+            "a second viewer on an unchanged screen must still get a frame"
+        );
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -10,6 +10,7 @@
 //! `ACOS_REQUIRE_FIXTURES=1`, so their runs now hard-fail on a missing fixture.
 
 use std::path::{Path, PathBuf};
+use std::sync::Once;
 
 /// The workspace root (the parent of `crates/`).
 pub fn repo_root() -> PathBuf {
@@ -54,5 +55,154 @@ pub fn require_all(rels: &[&str]) {
             "ACOS_REQUIRE_FIXTURES is set but {rel} is missing; CI must build the \
              fixtures instead of skipping"
         );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Short roots for test scratch that holds a Unix socket (SUN_LEN, class rule)
+// ---------------------------------------------------------------------------
+
+/// Bytes a pathname `AF_UNIX` address may use on Linux: `sun_path` is 108 bytes
+/// including the terminating NUL, so a socket path may be at most this long.
+pub const SUN_PATH_MAX: usize = 107;
+
+/// The longest pid a Linux host can print (`/proc/sys/kernel/pid_max` is capped
+/// at 4194304), used to size the scratch budget below.
+const PID_MAX_LEN: usize = 7;
+
+/// The deepest name the viewer tests put below their scratch root. The budget
+/// is derived from it, so a root that "looks short" cannot still overflow.
+const DEEPEST_BELOW_ROOT: &str = "-frames-and-events-stream/producer.sock";
+
+/// Longest accepted test scratch root: everything below it
+/// (`/<pid>-frames-and-events-stream/producer.sock`) must still fit
+/// [`SUN_PATH_MAX`].
+pub const SCRATCH_ROOT_BUDGET: usize = SUN_PATH_MAX - 1 - PID_MAX_LEN - DEEPEST_BELOW_ROOT.len();
+
+static NARROWED: Once = Once::new();
+
+/// The root for test scratch that has to hold a Unix socket.
+///
+/// `sun_path` is 108 bytes with the NUL and a checkout path is not something a
+/// test controls (agent worktrees, CI job dirs are long), so a test that binds
+/// `registry/v.sock` under `<checkout>/.cache/...` used to fail with "path must
+/// be shorter than SUN_LEN" instead of testing what it asserts. There is one
+/// rule for all of them:
+///
+/// 1. `$env_var` when it fits [`SCRATCH_ROOT_BUDGET`] - a caller's explicit
+///    choice is honoured;
+/// 2. the first of `candidates` (the checkout's own `.cache/...`) that fits;
+/// 3. `/dev/shm/<fallback_name>`, a fixed short RAM-backed path (these tests
+///    write a handful of bytes, never real artifacts);
+/// 4. the system temp dir as the last resort.
+///
+/// A too-long `$env_var` is **not** an error: it is reported once on stderr with
+/// its length and the budget, and the rule falls through to a short root, so a
+/// caller's long scratch directory degrades to a short one instead of failing
+/// tests that have nothing to do with it.
+pub fn short_scratch_root(env_var: &str, candidates: &[PathBuf], fallback_name: &str) -> PathBuf {
+    let from_env = std::env::var_os(env_var).map(PathBuf::from);
+    let (root, ignored) = pick_scratch_root(from_env.as_deref(), candidates, fallback_name);
+    if let Some(ignored) = ignored {
+        let len = ignored.as_os_str().as_encoded_bytes().len();
+        NARROWED.call_once(|| {
+            eprintln!(
+                "{env_var} is {len} bytes ({}), which leaves no room for a Unix socket \
+                 path (sun_path is {} bytes with the NUL, at most {} bytes for a root); \
+                 test scratch goes to {} instead",
+                ignored.display(),
+                SUN_PATH_MAX + 1,
+                SCRATCH_ROOT_BUDGET,
+                root.display()
+            );
+        });
+    }
+    root
+}
+
+/// The decision [`short_scratch_root`] makes, without touching the environment
+/// (so it is testable in a parallel test run): returns the root and, when the
+/// requested one was too long, the value that was not used.
+pub fn pick_scratch_root(
+    requested: Option<&Path>,
+    candidates: &[PathBuf],
+    fallback_name: &str,
+) -> (PathBuf, Option<PathBuf>) {
+    let fits = |dir: &Path| dir.as_os_str().as_encoded_bytes().len() <= SCRATCH_ROOT_BUDGET;
+    if let Some(requested) = requested {
+        if fits(requested) {
+            return (requested.to_path_buf(), None);
+        }
+    }
+    let root = candidates
+        .iter()
+        .find(|candidate| fits(candidate))
+        .cloned()
+        .unwrap_or_else(|| {
+            let shm = Path::new("/dev/shm");
+            if shm.is_dir() {
+                shm.join(fallback_name)
+            } else {
+                std::env::temp_dir().join(fallback_name)
+            }
+        });
+    (
+        root,
+        requested.filter(|dir| !fits(dir)).map(Path::to_path_buf),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_root_that_cannot_hold_a_socket_falls_through_to_a_short_one() {
+        // The SETTLE5 failure, as a unit: a 114-byte root plus
+        // `/<pid>-frames-and-events-stream/producer.sock` is 161 bytes.
+        let long = PathBuf::from(format!("/tmp/{}", "x".repeat(70)));
+        assert!(long.as_os_str().as_encoded_bytes().len() > SCRATCH_ROOT_BUDGET);
+        let checkout = PathBuf::from("/home/agent/wt/.cache/lv");
+        let (root, ignored) = pick_scratch_root(Some(&long), &[checkout.clone()], "acos-lv-tests");
+        assert_eq!(root, checkout);
+        assert_eq!(ignored.as_deref(), Some(long.as_path()));
+    }
+
+    #[test]
+    fn the_budget_is_derived_from_the_deepest_name_and_not_a_round_number() {
+        // A root of exactly the budget still fits the deepest socket name; one
+        // byte more does not. (The old 72-byte budget passed its own assert and
+        // still overflowed: 67 bytes of root made a 114-byte socket path.)
+        let deepest = |root: &str| {
+            // `<root>/<pid>-frames-and-events-stream/producer.sock`
+            format!("{root}/{}{DEEPEST_BELOW_ROOT}", 9_999_999)
+                .as_bytes()
+                .len()
+        };
+        let exact = "r".repeat(SCRATCH_ROOT_BUDGET);
+        assert!(
+            deepest(&exact) <= SUN_PATH_MAX,
+            "a root of exactly the budget must fit: {} bytes",
+            deepest(&exact)
+        );
+        assert!(deepest(&format!("r{}", exact)) > SUN_PATH_MAX);
+    }
+
+    #[test]
+    fn a_short_requested_root_is_honoured() {
+        let short = PathBuf::from("/tmp/lv");
+        let checkout = PathBuf::from("/home/agent/wt/.cache/lv");
+        let (root, ignored) = pick_scratch_root(Some(&short), &[checkout], "acos-lv-tests");
+        assert_eq!(root, short);
+        assert!(ignored.is_none());
+    }
+
+    #[test]
+    fn no_usable_candidate_falls_back_to_a_short_ram_disk_root() {
+        let long = PathBuf::from(format!("/tmp/{}", "y".repeat(70)));
+        let (root, ignored) = pick_scratch_root(Some(&long), &[long.clone()], "acos-lv-tests");
+        assert!(root.as_os_str().as_encoded_bytes().len() <= SCRATCH_ROOT_BUDGET);
+        assert!(root.ends_with("acos-lv-tests"));
+        assert_eq!(ignored.as_deref(), Some(long.as_path()));
     }
 }

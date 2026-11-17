@@ -1,0 +1,38 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [],
+  "error": {
+    "class": "harness",
+    "code": "INVALID_ARGUMENT",
+    "details": {
+      "artifacts": "results/release/v0.3.0-gate/correctness/05-gaten-lesson-ime/two-back",
+      "fix": "--overwrite",
+      "overwrite": false,
+      "previous_run_id": "req_34d111_18e87c6b4e207dfd",
+      "run_id": "req_34d1be_18e87c6cf52c6709"
+    },
+    "hint": "A run owns its artifacts directory (req_34d111_18e87c6b4e207dfd). Pass a fresh --artifacts <dir>, or --overwrite to replace the existing evidence deliberately.",
+    "message": "artifacts directory results/release/v0.3.0-gate/correctness/05-gaten-lesson-ime/two-back already holds run req_34d111_18e87c6b4e207dfd, so this run may not write into it",
+    "retryable": false
+  },
+  "fidelity": "static-analysis",
+  "metrics": {
+    "wall_ms": 0
+  },
+  "ok": false,
+  "request_id": "req_34d1be_18e87c6cf52c6709",
+  "result": {
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "trust": "unresolved"
+  },
+  "status": "error"
+}

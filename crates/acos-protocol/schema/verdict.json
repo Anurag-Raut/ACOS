@@ -733,6 +733,20 @@
           "type": "string"
         },
         {
+          "description": "A bounded `scroll_until` search reached the end of the list: a swipe moved nothing (the settled tree is identical before and after it), so the selector is not reachable by scrolling further.\n\nThis is the honest end of a search, not a guess: `details.attempts` says how many gestures it took, `details.last_tree_texts` what the last settled tree actually showed. Before this the search burned every remaining attempt and reported `ELEMENT_NOT_FOUND`, which an agent could not tell from \"the selector names a node that never renders\".",
+          "enum": [
+            "END_OF_LIST"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "REL3H2: an input step declared `expect_handled: true` (the scenario claims the app must consume this gesture) and the app window acknowledged every event `finishInputEvent(handled) = false`.\n\nThe gesture was delivered; nothing consumed it. That is a failed claim about the flow - the press missed the control, or the control is not pressable - never a pass and never \"unknown\": the app's own window said so. `details` names the injected target, the acks and the settle record.",
+          "enum": [
+            "INPUT_NOT_HANDLED"
+          ],
+          "type": "string"
+        },
+        {
           "description": "A UI node reference is no longer valid.",
           "enum": [
             "STALE_REF"
@@ -971,6 +985,13 @@
           "type": "string"
         },
         {
+          "description": "The session daemon answered (or refused to identify itself) from a **different build** than the caller: crate version, build id (git sha + source digest) or the binary at the same path differ. The client never mixes builds — it replaces an idle auto-started daemon or runs its own private one; `error.details` carries both identities. Never retry against the same daemon; never read its answer as this build's behaviour.",
+          "enum": [
+            "DAEMON_VERSION_MISMATCH"
+          ],
+          "type": "string"
+        },
+        {
           "description": "ACOS itself failed (distinct from an app crash).",
           "enum": [
             "INTERNAL"
@@ -1068,6 +1089,72 @@
           "description": "Not applicable: a meta reply about ACOS itself (help/capabilities/doctor).",
           "enum": [
             "n/a"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "HandledEvidence": {
+      "description": "The delivery evidence behind [`StepInputResult::handled`].",
+      "properties": {
+        "acked": {
+          "description": "`FINISHED` acks the guest returned for them.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "published": {
+          "description": "`InputMessage`s the host published for the gesture.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "source": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/HandledSource"
+            }
+          ],
+          "description": "Which fact the `handled` verdict rests on."
+        },
+        "unhandled": {
+          "description": "Sequence numbers the guest answered `handled: false`.",
+          "items": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "acked",
+        "published",
+        "source"
+      ],
+      "type": "object"
+    },
+    "HandledSource": {
+      "description": "Where an input step's `handled` answer came from (REL3I3).\n\nThe field exists because \"the app handled it\" has two honest proofs that are *not* interchangeable:\n\n* [`HandledSource::Guest`] — the app window's own `InputEventReceiver.finishInputEvent(handled)` bit, one per acknowledged `InputMessage`; * [`HandledSource::HostWindowRemoved`] — the host's own record that the window this input was delivered to was removed during the step, so its receiver was destroyed before it could finish the event. That is what AOSP sees when a dialog's Back dismisses the dialog: the press *did* act (the window it acted on is gone), but no ack can exist.",
+      "oneOf": [
+        {
+          "description": "A guest `finishInputEvent` ack.",
+          "enum": [
+            "guest"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The delivered window was removed within the step.",
+          "enum": [
+            "host_window_removed"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "No input was delivered, so there is nothing to have handled.",
+          "enum": [
+            "none"
           ],
           "type": "string"
         }
@@ -1419,6 +1506,88 @@
         }
       ]
     },
+    "StepAttempt": {
+      "description": "One attempt at a step the engine may perform more than once.\n\nA step is one entry in `verdict.json` and in the reply's `result.verdict`; an attempt is never a second entry. `StepResult.status` is the *final* outcome and `StepResult.attempts` is the history that produced it, so a passing step can never look failing because an earlier attempt was retried.",
+      "properties": {
+        "attempt": {
+          "description": "1-based attempt number (`1` is the first real gesture/traversal).",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "frame_seq": {
+          "description": "The settled traversal this attempt judged, when it took one.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why it ended that way, in one line (the miss reason, the error).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Status"
+            }
+          ],
+          "description": "The attempt's own outcome."
+        }
+      },
+      "required": [
+        "attempt",
+        "status"
+      ],
+      "type": "object"
+    },
+    "StepInputResult": {
+      "description": "REL3E: the `input` block of a step result.\n\n`handled` is the app's own `finishInputEvent(handled)` answer, or the host's window-removal fact when the app could not answer; `handled_evidence` says which. `target` is the resolved node plus the hit-test at the injected point and `expect_change` is the rule the step asked for (`\"auto\"` for a `tap`).",
+      "properties": {
+        "expect_change": {
+          "description": "`true`/`false`, or `\"auto\"` for a tap (the step's own check)."
+        },
+        "handled": {
+          "description": "The consumer's verdict (`null` when the guest did not ack).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "handled_evidence": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/HandledEvidence"
+            }
+          ],
+          "description": "The facts the verdict rests on."
+        },
+        "handled_hint": {
+          "description": "One line explaining a `handled`/hit-test combination that is not self-evident (REL3E).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "The resolved node plus the hit-test at the injected point."
+        },
+        "until": {
+          "description": "The `scroll_until`/`wait_for` search outcome, when the action searched."
+        }
+      },
+      "required": [
+        "expect_change",
+        "handled_evidence",
+        "target"
+      ],
+      "type": "object"
+    },
     "StepResult": {
       "description": "One step in a scenario run.",
       "properties": {
@@ -1427,6 +1596,13 @@
           "description": "Assertion results (empty for non-assertion steps).",
           "items": {
             "$ref": "#/definitions/AssertionResult"
+          },
+          "type": "array"
+        },
+        "attempts": {
+          "description": "Every attempt the step took, in order, when it took more than one (a `scroll_until` search performs one real gesture + fresh traversal per attempt). `status` above is the last attempt's outcome; this array says how it got there. Absent when the step succeeded on its first attempt.\n\nOne entry per step is the rule that keeps `verdict.json` and the inline reply's `result.verdict` the same document: both are built from this struct, so neither can carry a \"retried non-pass\" step in a passing run.",
+          "items": {
+            "$ref": "#/definitions/StepAttempt"
           },
           "type": "array"
         },
@@ -1470,6 +1646,17 @@
           "minimum": 0.0,
           "type": "integer"
         },
+        "input": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepInputResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "REL3E: the input step's own evidence. `handled` is the app window's `finishInputEvent(handled)` answer (`null` when the guest did not ack), or the host's window-removal fact when the delivered window died before it could answer (`handled_evidence.source`). `target` is what the selector resolved to plus the hit-test at the injected point, and `expect_change` says whether a change was required - `\"auto\"` for a `tap` (the step's own state-change check), `true`/`false` for the scenario's explicit flag. `None` for steps that inject no input."
+        },
         "name": {
           "description": "`capture` step name (the scenario's own label for this screenshot).\n\nWritten into the step JSON so \"the screenshot for X\" is answerable from the artifacts; the same name keys `verdict.json`'s `captures` map.",
           "type": [
@@ -1486,11 +1673,16 @@
               "$ref": "#/definitions/Status"
             }
           ],
-          "description": "Step outcome."
+          "description": "Step outcome. The **final** one: a retried attempt never changes this into a second entry."
         },
         "step": {
           "description": "Step kind (`launch`, `assert_text`, ...).",
           "type": "string"
+        },
+        "warnings": {
+          "description": "REL3H2: structured, non-fatal facts about this step (for example `INPUT_UNHANDLED`: the gesture was delivered and nothing consumed it). The step's status is exactly as measured; a warning never changes it, and the same records are copied into the verdict's `provenance.warnings[]` so a reader of either file sees them. Empty (and absent on the wire) when there is nothing to say.\n\nA warning is a *guest* fact (`finishInputEvent(handled) = false`), so a gesture whose delivered window the host removed reports no warning: that input is handled (`handled_evidence.source: host_window_removed`), which is the MERGE3I3 precedence (see `acos_protocol::ui::handled_source`).",
+          "items": true,
+          "type": "array"
         }
       },
       "required": [
@@ -1572,6 +1764,9 @@
         "type": "string"
       },
       "type": "array"
+    },
+    "provenance": {
+      "description": "PROVENANCE: the exact inputs this verdict judged — absolute scenario and APK paths, their SHA-256 (full and the 12-character display form), the engine that ran and the fidelity it reached, plus structured `warnings[]` (for example `SCENARIO_APP_OVERRIDDEN` when `--apk` and the scenario's own `app:` disagree). See [`crate::provenance`].\n\nWritten by the verifier; the CLI re-states the same block in the envelope `result` and in the human summary line, so a reader never has to open a second file to find out which scenario and APK produced a `pass`."
     },
     "reproducer": {
       "allOf": [

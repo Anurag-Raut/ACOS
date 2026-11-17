@@ -1,0 +1,45 @@
+# REL3H2: `expect_handled` is a tri-state, and this is the "intended no-op" end.
+#
+# REL3H made a delivered-but-unhandled input a *settled* observation (instead of
+# a TIMEOUT). REL3H2 keeps that step a pass but stops it being *silent*: a pass
+# whose app window answered `finishInputEvent(handled) = false` carries an
+# `INPUT_UNHANDLED` warning, in the step JSON's `warnings[]` and in the verdict's
+# `provenance.warnings[]`.
+#
+# `expect_handled: false` is the scenario saying "this press is a no-op on
+# purpose", so it does not carry that warning - and `expect_handled: true` on the
+# control that really is clickable is the positive half of the claim (a green
+# pass there means the window consumed the gesture).
+#
+# The warning-free verdict is what this run must produce: `provenance.warnings`
+# is `[]`, while `rel3h-unhandled-input.yaml` (the same label tap with no
+# `expect_handled`) reports one `INPUT_UNHANDLED` entry for its step 1.
+version: 1
+name: rel3h2-expect-handled-false
+description: >-
+  expect_handled: false silences INPUT_UNHANDLED for an intended no-op press, and
+  expect_handled: true holds on a control the window really handles.
+app: fixtures/build/apps/tap-targets.apk
+engine: art
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+animations: off
+expectation: pass
+steps:
+  - launch:
+      activity: dev.acos.fixtures.taptargets/.MainActivity
+  # The label is not clickable; the no-op is intentional here, so say so.
+  - tap:
+      selector: {id: title}
+      expect_handled: false
+  # The button really is pressable: this claim must hold.
+  - tap:
+      selector: {id: inc}
+      expect_handled: true
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}

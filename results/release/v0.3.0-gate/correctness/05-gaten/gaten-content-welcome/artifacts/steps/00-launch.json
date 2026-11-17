@@ -1,0 +1,63 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 433,
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/00-launch.json"
+    }
+  ],
+  "index": 0,
+  "provenance": {
+    "frame": "host-observed",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "bound": "content-stable",
+    "elapsed_ms": 354,
+    "frame_seq": 22,
+    "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+    "mode": "content",
+    "pixel_evidence": false,
+    "probe_seq": 24,
+    "probe_seq_first": 5,
+    "probe_seq_floor": 4,
+    "reason": "content-stable",
+    "settled": true,
+    "signature": "80d3b609b3b2d6fa",
+    "signature_fields": [
+      "class",
+      "resource_id",
+      "text",
+      "content_desc",
+      "hint",
+      "visible",
+      "enabled",
+      "focused",
+      "clickable",
+      "scrollable",
+      "checked",
+      "selected",
+      "window",
+      "package"
+    ],
+    "signature_tree_fields": [
+      "package",
+      "truncated",
+      "text_available"
+    ],
+    "traversals": 20,
+    "waited_ms": 354,
+    "window_ms": 300
+  },
+  "status": "pass",
+  "step": "launch",
+  "trust": "trusted"
+}

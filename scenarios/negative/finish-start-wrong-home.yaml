@@ -1,0 +1,24 @@
+# ROT8b negative: after the finish()+startActivity tap the bound state is
+# Home's; a wrong expectation about Home's text must fail strictly.
+version: 1
+name: negative-finish-start-wrong-home
+description: Tap Go (finish + start Home), then assert text Home does not have.
+app: fixtures/build/apps/finish-start.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.finishstart/.SplashActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: go}
+      timeout_ms: 5000
+  - tap:
+      selector: {id: go}
+  - assert_text:
+      selector: {id: home_title}
+      text: {exact: Goodbye}

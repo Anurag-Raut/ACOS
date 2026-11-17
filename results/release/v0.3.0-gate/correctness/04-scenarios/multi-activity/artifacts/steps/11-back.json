@@ -1,0 +1,72 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 3051,
+  "error": {
+    "class": "infra_timeout",
+    "code": "TIMEOUT",
+    "details": {
+      "animating": false,
+      "backend": "acos-art-session",
+      "context": "back",
+      "frame_seq": 9,
+      "reason": "no-draw-after-action",
+      "settle": {
+        "ack_ms": 10,
+        "animating": false,
+        "bound": "timeout",
+        "first_change_ms": null,
+        "frame_ms": null,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": false,
+        "probe": {
+          "guest_stall_pending_ms": null,
+          "newest_sample_age_ms": 42,
+          "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
+          "stale_samples": 0,
+          "wake_failures": 0,
+          "wakes_sent": 69
+        },
+        "reason": "no-draw-after-action",
+        "settled": false,
+        "state_changed": null,
+        "strict_rule": "event"
+      }
+    },
+    "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure and never a pass. For a screen that animates forever in pixels (React Native `Animated`, a custom `ValueAnimator`), `animations:off` does not help: use `settle: content` on the step (content-stable: the UI tree's text, nodes and state stop changing even while the pixels keep moving). Tree/text assertions and `wait_for` accept it too, and `wait_for`/`assert_*` fall back to it by default. The latest tree/frame is kept in the step evidence.",
+    "message": "back: strict settle timed out (no-draw-after-action); the step is a non-pass because the screen was still changing when the deadline elapsed",
+    "retryable": true
+  },
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/11-back.json"
+    }
+  ],
+  "index": 11,
+  "input": {
+    "expect_change": false,
+    "handled": true,
+    "handled_evidence": {
+      "acked": 2,
+      "published": 2,
+      "source": "guest"
+    },
+    "handled_hint": "the app's window consumed the input (`finishInputEvent(handled) = true`) but the settled frame shows no change: the handler may be asynchronous, or the control already had that state. Assert on the state you expect instead of expecting a change",
+    "target": null
+  },
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "timeout",
+  "step": "back",
+  "trust": "trusted"
+}

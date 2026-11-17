@@ -1,0 +1,7 @@
+{
+  "request_id": "req_32ed02_18e87bbdf2d46765",
+  "started_at": "2026-11-16T09:15:07.260Z",
+  "scenario": "scenarios/negative/wrong-lifecycle-order.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/svg-viewbox.apk",
+  "apk_sha256": "17cd35c969db4aa576cbd5263c30d3e2a53613578b5fea36e572a8f2adac583a",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/svg-viewbox.yaml",
+  "scenario_sha256": "d32a5f4114ee2c722eed2ad4c51748d586b30e7e613b6122c8633526af8189c1",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

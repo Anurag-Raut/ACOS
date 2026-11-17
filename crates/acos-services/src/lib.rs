@@ -93,7 +93,9 @@ pub mod window_session;
 pub mod wms;
 
 pub use error::{codes, Result, ServiceError};
-pub use host::{CallResult, PendingDelivery, ServiceHost, ServiceObject, Wiring};
+pub use host::{
+    CallResult, DeliveryWake, PendingDelivery, ServiceHost, ServiceObject, Wiring,
+};
 pub use module::{
     Module, ModuleConfig, ModuleManifest, ModuleRegistry, ModuleReport, ModuleSpec, Profile,
 };

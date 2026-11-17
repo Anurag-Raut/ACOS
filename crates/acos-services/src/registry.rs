@@ -214,13 +214,35 @@ pub struct LiveHandles {
 
 /// Install the standard ACOS service set on `host`.
 pub fn install(host: &mut ServiceHost) {
-    let _ = install_with_handles(host);
+    // The VM transport keeps the declared null IME (REL3I): only the ART entry
+    // point below attaches the `IInputMethodSession` binder and the WMS state.
+    let _ = install_with_handles_and_insets(host, None);
 }
 
 /// Install the standard ACOS service set and return the handles a live session
 /// drives (`InputHost`, C1 state).
 pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
-    install_with_handles_and_insets(host, None)
+    let handles = install_with_handles_and_insets(host, None);
+    // REL3I: the ART transport is the one that runs ACOS's in-process IME as a
+    // bound IME. Hand it the `IInputMethodSession` binder every
+    // `startInputOrWindowGainedFocus` answers with (which is what makes the
+    // framework keep an `InputChannel` and offer it keys) and the WMS state an
+    // IME show/hide flips the app's IME insets on. The VM transport
+    // (`install`/`install_standard`) keeps the declared null IME.
+    if let Some(session) = host.aux("com.android.internal.inputmethod.IInputMethodSession") {
+        let ime = crate::ime::shared();
+        let mut ime = ime.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        ime.attach_session(session);
+        ime.attach_wms(std::sync::Arc::clone(&handles.wms));
+        // REL3I2: every `InputBindResult` channel needs its **own** token
+        // binder (`InputChannel::openInputChannelPair` makes a fresh `BBinder`
+        // per pair). Minting it from the session's registry keeps the handle
+        // real (allocated, releasable) and unique, which is what makes the
+        // framework replace `mCurChannel` on the next `startInput` instead of
+        // keeping the stale one.
+        ime.attach_binder_registry(host.binder_registry_arc());
+    }
+    handles
 }
 
 /// W7b: [`install_with_handles`] with an explicit app-window inset model.
@@ -648,9 +670,11 @@ pub fn install_with_handles_and_insets(
         Box::new(crate::misc::InputService::new(Arc::clone(&input))) as Box<dyn ServiceObject>
     });
 
-    // T-38: the null in-process IME. `IInputMethodSession`/`IImeTracker` are
+    // T-38: the in-process IME. `IInputMethodSession`/`IImeTracker` are
     // auxiliary binders a real IME would hold; registering them keeps the
-    // decoded transactions routable instead of silently missing.
+    // decoded transactions routable instead of silently missing. REL3I: the
+    // ART entry point (`install_with_handles`) attaches the session binder and
+    // the WMS state afterwards, which is what selects the bound IME mode.
     host.register_aux("com.android.internal.inputmethod.IInputMethodSession");
     host.register_aux("com.android.internal.inputmethod.IImeTracker");
     // W13: the focus path's `startInputOrWindowGainedFocus` carries a real

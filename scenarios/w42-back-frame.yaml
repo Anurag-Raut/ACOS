@@ -106,8 +106,8 @@ steps:
       ordered: true
       patterns:
         - '^Second.finish$'
-        - '^Second.onDestroy$'
         - '^Main.onResume$'
+        - '^Second.onDestroy$'
 
   - assert_text:
       selector: {id: message}

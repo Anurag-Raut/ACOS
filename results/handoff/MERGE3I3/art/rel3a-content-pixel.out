@@ -1,0 +1,7 @@
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-879b7c7c-6dfb08dd82494c49/scenarios/rel3a-content-pixel.yaml (sha 66c7387720c3), apk /home/Qui/.t3/worktrees/acos/t3-879b7c7c-6dfb08dd82494c49/fixtures/build/apps/settle-lab.apk (sha 3ea3d28b33ba), engine art, fidelity art-reference
+  error: ASSERTION_FAILED: assert_region: the bound frame was settled by `settle: content` (UI tree content stable), which is not pixel evidence - the pixels may still be animating
+  artifacts: results/handoff/MERGE3I3/art/rel3a-content-pixel
+  steps: 5
+verify: ASSERTION_FAILED (assertion): assert_region: the bound frame was settled by `settle: content` (UI tree content stable), which is not pixel evidence - the pixels may still be animating [class=assertion, retryable=false]

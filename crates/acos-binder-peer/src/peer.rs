@@ -2246,6 +2246,20 @@ impl Peer {
         self.frames_for_deliveries(pending)
     }
 
+    /// Drain queued `system -> app` deliveries without an incoming frame.
+    ///
+    /// The IME's show/hide is driven by a **key** on the input channel, not by
+    /// a binder transaction, so its `IWindow` insets callbacks would otherwise
+    /// wait for the next guest transaction — which is itself waiting on those
+    /// insets. The launcher calls this when the delivery wake fires (the
+    /// producer signalled [`acos_services::DeliveryWake`]) and on a timed
+    /// deadline; an idle session never calls it at all.
+    pub fn flush_deliveries(&mut self) -> Vec<(u32, Frame)> {
+        let raw = self.host.drain_raw_deliveries_all();
+        self.local_deliveries.extend(raw);
+        self.take_delivery_frames()
+    }
+
     /// Deliveries that became ready while the guest was idle.
     ///
     /// A scripted/timed module (`location`'s `play_track`, a sensor or camera
@@ -2657,28 +2671,29 @@ pub fn host_binder_kind(id: BinderId) -> BinderKind {
 pub enum IdleWake {
     /// The guest wrote something: read a frame.
     Frame,
-    /// A module's scheduled delivery is due: call [`Peer::tick`].
+    /// A queued delivery is due: call [`Peer::flush_deliveries`].
     Deadline,
-    /// The launcher woke the peer (`stop` pipe): it is stopping the session, or
-    /// it queued a module request (attach/detach/control) that the idle turn
-    /// must pick up.
+    /// The launcher woke the peer: it is stopping the session, or a producer
+    /// queued a `system -> app` delivery that no transaction will carry
+    /// ([`acos_services::DeliveryWake`]). The queue is the state, the byte is
+    /// only the edge.
     Wake,
 }
 
-/// Sleep until the guest has a frame to read (`fd`), the module `deadline`
-/// elapses, or the launcher's wake pipe (`stop_fd`) fires.
+/// Sleep until the guest has a frame to read (`fd`), the delivery deadline
+/// elapses, or the delivery/stop wake (`wake_fd`) fires.
 ///
 /// `deadline` is the **remaining** time (see [`Peer::next_timed_deadline`]);
-/// `None` sleeps until a frame or the stop wake, i.e. forever when neither
-/// happens. That is the whole idle policy: no fixed poll interval, no wakeup a
-/// caller did not ask for.
+/// `None` sleeps until a frame or a wake, i.e. forever when neither happens.
+/// That is the whole idle policy: no fixed poll interval, no receive timeout as
+/// the idle cadence, and therefore no wakeup a caller did not ask for.
 ///
 /// # Errors
 ///
 /// The `poll(2)` error, so a broken socket is reported instead of spun on.
 pub fn wait_for_idle(
     fd: RawFd,
-    stop_fd: RawFd,
+    wake_fd: RawFd,
     deadline: Option<Duration>,
 ) -> std::io::Result<IdleWake> {
     let timeout_ms: libc::c_int = match deadline {
@@ -2697,7 +2712,7 @@ pub fn wait_for_idle(
             revents: 0,
         },
         libc::pollfd {
-            fd: stop_fd,
+            fd: wake_fd,
             events: libc::POLLIN,
             revents: 0,
         },

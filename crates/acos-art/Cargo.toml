@@ -22,10 +22,11 @@ acos-services = { path = "../acos-services" }
 # WV5b: the lazy WebView gate + the shared broker endpoint contract.
 acos-webview = { path = "../acos-webview" }
 acos-wm = { path = "../acos-wm" }
+# REL3I3: `BinderId` names the input channel an action was delivered to (the
+# settle's window-removal witness is keyed by it).
 acos-parcel = { path = "../acos-parcel" }
 # NET2: the relay client (`spike_net` under ACOS_NET_ARM=relay).
 acos-netd = { path = "../acos-netd" }
-
 # VIEW1a: the live-view frame encoder (jpeg/png only, no default formats).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 libc = "0.2"
@@ -35,5 +36,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+# Shared test-only helpers (the SUN_LEN scratch-root rule).
+acos-test-support = { path = "../acos-test-support" }
 # SHOTZ: the round-trip tests decode the PNG the capture path wrote.
 png = "0.17"

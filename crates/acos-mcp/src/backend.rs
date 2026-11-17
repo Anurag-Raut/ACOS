@@ -287,7 +287,7 @@ fn resolve_binary_from(
     None
 }
 
-/// The version word out of `acos --version` output (`acos 0.2.1`), when it
+/// The version word out of `acos --version` output (`acos 0.2.2`), when it
 /// differs from `ours`. `None` means "matches" or "unreadable".
 fn version_mismatch(version_output: &str, ours: &str) -> Option<String> {
     let theirs = version_output
@@ -541,6 +541,22 @@ impl CliBackend {
             argv.push("--required-fidelity".to_string());
             argv.push(fidelity.to_string());
         }
+        // REL3A: `animations` and `native` are the `acos verify` options of the
+        // same name. The tool schema did not expose them, so an agent that read
+        // the engine's own hint ("use `animations:off` for a functional check")
+        // had to leave MCP and run the CLI in a shell. Relayed verbatim; the CLI
+        // validates the values and refuses `off` on the Rust VM.
+        if let Some(animations) = args.get("animations").and_then(Value::as_str) {
+            argv.push("--animations".to_string());
+            argv.push(animations.to_string());
+        }
+        if args
+            .get("native")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            argv.push("--native".to_string());
+        }
         // Engine selection: **real ART by default**, exactly like every other
         // MCP session tool. `acos verify`'s own CLI default is the frozen Rust
         // VM, which cannot honour an ART-only scenario (for example
@@ -551,7 +567,13 @@ impl CliBackend {
         // the CLI default.
         let engine = match args.get("engine").and_then(Value::as_str) {
             Some(value) => Some(value.to_string()),
-            None if args.get("reference").is_none() => Some("art".to_string()),
+            // The **one** default engine (`acos_protocol::commands`), the same
+            // constant the schema advertises and `acos verify --help` prints.
+            // Hard-coding "art" here is how help text and behaviour drifted
+            // apart in the first place (feedback 2026-11-14).
+            None if args.get("reference").is_none() => Some(
+                acos_protocol::commands::DEFAULT_VERIFY_ENGINE_NAME.to_string(),
+            ),
             None => None,
         };
         if let Some(engine) = engine {

@@ -196,6 +196,11 @@ pub struct SessionBackend {
     stopping: AtomicBool,
     /// Source of [`OwnedSession::seq`].
     next_seq: AtomicU64,
+    /// REL3C: root for per-session artifacts (full trees and full logs). The
+    /// live ART daemon has its own per-session directory; this one is for the
+    /// legacy in-process/native/RN/Flutter routes so every live session can
+    /// name a file instead of inlining one.
+    artifacts_root: PathBuf,
 }
 
 impl std::fmt::Debug for SessionBackend {
@@ -228,7 +233,16 @@ impl SessionBackend {
             expired: Mutex::new(HashMap::new()),
             stopping: AtomicBool::new(false),
             next_seq: AtomicU64::new(1),
+            artifacts_root: default_artifacts_root(),
         }
+    }
+
+    /// Override the per-session artifacts root (tests and a caller-provided
+    /// `ACOS_ARTIFACTS_DIR`).
+    #[must_use]
+    pub fn with_artifacts_root(mut self, root: PathBuf) -> Self {
+        self.artifacts_root = root;
+        self
     }
 
     /// Wrap an already-probed CLI backend.
@@ -249,6 +263,7 @@ impl SessionBackend {
             expired: Mutex::new(HashMap::new()),
             stopping: AtomicBool::new(false),
             next_seq: AtomicU64::new(1),
+            artifacts_root: default_artifacts_root(),
         }
     }
 
@@ -263,10 +278,32 @@ impl SessionBackend {
     ///
     /// Used by the MCP server when `ACOS_SESSION_DAEMON` is set, so a CLI-driven
     /// daemon can own the session while MCP tools operate on it.
+    ///
+    /// REL3D: the external daemon is identity-checked at connect time. An older
+    /// daemon (the MODA11Y breakage: stale behaviour answering a newer client)
+    /// is **not** attached: the server prints the structured
+    /// `DAEMON_VERSION_MISMATCH` warning and keeps its own private ART daemon as
+    /// the route, rather than mixing two builds in one session.
     #[must_use]
     pub fn with_daemon_socket(mut self, path: PathBuf) -> Self {
         match DaemonClient::connect(&path) {
-            Ok(client) => self.daemon = Some(Mutex::new(client)),
+            Ok(client) => match client.mismatch() {
+                None => self.daemon = Some(Mutex::new(client)),
+                Some(mismatch) => {
+                    let mut warning = mismatch.to_json();
+                    if let Some(object) = warning.as_object_mut() {
+                        object.insert(
+                            "action".to_string(),
+                            Value::String("private ART daemon (this server's own)".to_string()),
+                        );
+                        object.insert(
+                            "socket".to_string(),
+                            Value::String(path.display().to_string()),
+                        );
+                    }
+                    eprintln!("acos-mcp: {warning}");
+                }
+            },
             Err(e) => eprintln!(
                 "acos-mcp: session daemon at {} unavailable: {e}",
                 path.display()
@@ -1007,6 +1044,13 @@ impl SessionBackend {
             } else {
                 Value::Null
             },
+            // PROVENANCE: which APK booted on the Flutter product path.
+            "provenance": acos_protocol::provenance::block(
+                apk,
+                None,
+                acos_protocol::commands::VerifyEngine::RustVm.as_str(),
+                Fidelity::NativeRuntime,
+            ),
         });
         let envelope = if first_frame_ok {
             Envelope::pass(
@@ -1284,6 +1328,13 @@ impl SessionBackend {
             "natives": natives,
             "real_boot": real_boot,
             "frame": Value::Null,
+            // PROVENANCE: which APK booted on the React Native product path.
+            "provenance": acos_protocol::provenance::block(
+                apk,
+                None,
+                acos_protocol::commands::VerifyEngine::RustVm.as_str(),
+                Fidelity::NativeRuntime,
+            ),
         });
         let envelope = if tree_ok {
             Envelope::pass(
@@ -1550,7 +1601,7 @@ impl SessionBackend {
                     let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
                     sessions.insert(id.clone(), session);
                 }
-                launch_envelope(request_id, &id, &report)
+                launch_envelope(request_id, &id, &report, &apk)
             }
             Err(err) => {
                 session.close();
@@ -1579,10 +1630,28 @@ impl SessionBackend {
         // The stateless CLI builds this argument; honouring it here is what
         // makes `acos observe --frame --screenshot` work against a live
         // daemon session (the Flutter backend already did this).
-        let screenshot = args
-            .get("screenshot")
+        let screenshot_arg = args.get("screenshot");
+        let screenshot = screenshot_arg
             .and_then(Value::as_str)
             .map(std::path::PathBuf::from);
+        // `png: true` / `screenshot: true` ask for the frame's pixels (see
+        // `ObserveRequest::png`). This in-process reference session can only
+        // write them to a caller-named path — it keeps no artifacts directory —
+        // so the destination-less form is a structured `UNSUPPORTED_BACKEND`
+        // here, never a reply that silently carries no PNG. (The ART daemon and
+        // Flutter routes do honour both forms.)
+        let wants_png = args.get("png").and_then(Value::as_bool).unwrap_or(false)
+            || screenshot_arg.is_some_and(|value| value.as_bool() == Some(true));
+        if wants_png && screenshot.is_none() {
+            return unsupported(
+                request_id,
+                "ui.screenshot",
+                "the in-process reference session writes frame pixels only to a path: pass \
+                 `screenshot: \"/abs/out.png\"` (or launch with the ART engine, where `png: true` \
+                 writes under the session's artifacts)",
+            )
+            .with_session_id(id.clone());
+        }
         self.with_session(&id, |session| {
             let status = session.status().ok();
             match session.observe(screenshot) {
@@ -1801,6 +1870,16 @@ impl SessionBackend {
             }
             "back" => input_envelope(request_id, &id, session.key(4), "key"),
             "swipe" => {
+                // REL3S: `until` is a settled-observation search, which only the
+                // ART session engine can prove; the frozen VM must not pretend.
+                if action.get("until").is_some_and(|value| !value.is_null()) {
+                    return invalid_argument(
+                        request_id,
+                        "action.until",
+                        "`until` needs the ART engine (`--engine art`): it is only reported found \
+                         from a settled observation",
+                    );
+                }
                 let from = action.get("from");
                 let to = action.get("to");
                 let (Some(from), Some(to)) = (from, to) else {
@@ -2385,7 +2464,7 @@ impl SessionBackend {
             )),
             "acos_swipe" => Some(self.call_action(
                 &request_id,
-                &json!({"base": session_base(args), "action": {"kind": "swipe", "from": args.get("from"), "to": args.get("to"), "duration_ms": args.get("duration_ms")}}),
+                &json!({"base": session_base(args), "action": {"kind": "swipe", "from": args.get("from"), "to": args.get("to"), "direction": args.get("direction"), "distance": args.get("distance"), "duration_ms": args.get("duration_ms"), "fling": args.get("fling"), "until": args.get("until"), "max_attempts": args.get("max_attempts")}}),
                 ctx,
             )),
             "acos_logs" => Some(self.call_logs(&request_id, args)),
@@ -2414,13 +2493,49 @@ impl SessionBackend {
         self.with_session(&id, |session| match session.logs() {
             Ok(lines) => {
                 let status = session.status().ok();
-                let min_priority = args
+                let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
+                let requested = args
                     .get("min_priority")
                     .and_then(Value::as_str)
                     .and_then(acos_runtime::session::parse_log_priority);
+                let tag = args.get("tag").and_then(Value::as_str);
+                // FB6/REL3C: default view = priority >= W plus anything that
+                // names the app's own package. The old default was the whole
+                // 235-line SoLoader buffer, which buried the app's words.
+                let package = status
+                    .as_ref()
+                    .and_then(|s| s.package.clone())
+                    .unwrap_or_default();
+                let default_view = !all && requested.is_none() && tag.is_none();
+                let min_priority = if all { None } else { requested.or(Some(5)) };
+                let mut kept = lines.clone();
+                if default_view && !package.is_empty() {
+                    kept.retain(|line| {
+                        line.priority >= 5
+                            || line.tag.contains(&package)
+                            || line.message.contains(&package)
+                    });
+                }
+                let total_lines = lines.len();
+                let filtered = total_lines - kept.len();
+                // The full buffer is evidence: write it to the session's own
+                // artifacts directory and name it. The reply is the small view.
+                let log_path = {
+                    let dir = artifact_tree_dir(&self.artifacts_root, &id).join("logs");
+                    let _ = std::fs::create_dir_all(&dir);
+                    let path = dir.join("logcat.txt");
+                    let mut text = String::from("--------- beginning of main\n");
+                    for line in &lines {
+                        text.push_str(&line.line);
+                        text.push('\n');
+                    }
+                    std::fs::write(&path, text)
+                        .ok()
+                        .map(|()| std::fs::canonicalize(&path).unwrap_or(path).display().to_string())
+                };
                 let records: Vec<Value> = acos_runtime::session::summarize_logs(
-                    &lines,
-                    args.get("tag").and_then(Value::as_str),
+                    &kept,
+                    tag,
                     min_priority,
                 )
                 .into_iter()
@@ -2460,10 +2575,17 @@ impl SessionBackend {
                     "session_id": id,
                     "launched": status.as_ref().map(|s| s.launched).unwrap_or(false),
                     "stage_reached": stage_reached,
-                    "total": lines.len(),
+                    "total": total_lines,
                     "count": records.len(),
                     "collapsed": collapsed,
                     "logs": records,
+                    "log_path": log_path,
+                    "filter": {
+                        "min_priority": if all { "V" } else if min_priority == Some(5) { "W" } else { "explicit" },
+                        "package": if default_view { json!(package) } else { Value::Null },
+                        "default_view": default_view,
+                        "dropped": filtered,
+                    },
                     "note": if records.is_empty() {
                         "empty is valid only if the app reached onCreate; check stage_reached (and `acos_launch`) before concluding anything"
                     } else {
@@ -2705,6 +2827,32 @@ fn launch_token(envelope: &Envelope) -> String {
 /// The default idle TTL for this process (FB5): `ACOS_SESSION_IDLE_TTL_S`, else
 /// [`DEFAULT_IDLE_TTL_S`]. A malformed value is ignored (the default applies)
 /// rather than silently disabling the reaper; `0` is the explicit opt-out.
+/// Where a live session's full tree/log files go when no artifacts root was
+/// configured. Never `/tmp`: an agent's evidence must survive the process.
+fn default_artifacts_root() -> PathBuf {
+    std::env::var_os("ACOS_ARTIFACTS_DIR")
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".acos-mcp-artifacts")
+}
+
+fn safe_session_dir(id: &str) -> String {
+    let safe: String = id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    if safe.is_empty() {
+        "session".to_string()
+    } else {
+        safe
+    }
+}
+
+fn artifact_tree_dir(root: &std::path::Path, id: &str) -> PathBuf {
+    root.join("sessions").join(safe_session_dir(id))
+}
+
 fn default_idle_ttl_s() -> u64 {
     if let Some(value) = std::env::var(IDLE_TTL_ENV)
         .ok()
@@ -2969,6 +3117,10 @@ fn input_envelope(
             "session_id": session_id,
             "action": kind,
             "accepted": report.accepted,
+            // REL3E: the app window's own `finishInputEvent(handled)` answer,
+            // carried by the VM's native ack hook. `null` = the guest did not
+            // ack every event, never "not handled".
+            "handled": report.handled,
             "state_changed": report.state_changed,
             "input_ack_seq": report.ack_seqs.last().copied(),
             "text_path": report.path,
@@ -2978,8 +3130,21 @@ fn input_envelope(
     }
 }
 
-fn launch_envelope(request_id: &str, session_id: &str, report: &LaunchReport) -> Envelope {
-    let result = ladder_json(report);
+fn launch_envelope(
+    request_id: &str,
+    session_id: &str,
+    report: &LaunchReport,
+    apk: &std::path::Path,
+) -> Envelope {
+    let mut result = ladder_json(report);
+    // PROVENANCE: the same block the CLI writes: absolute APK path + digest,
+    // engine, fidelity. This in-process route is the frozen Rust VM.
+    result["provenance"] = acos_protocol::provenance::block(
+        apk,
+        None,
+        acos_protocol::commands::VerifyEngine::RustVm.as_str(),
+        Fidelity::NativeRuntime,
+    );
     let mut metrics = Metrics::wall_ms(report.wall_ms);
     if report.peak_rss_bytes > 0 {
         metrics = metrics.with_peak_rss_bytes(report.peak_rss_bytes);

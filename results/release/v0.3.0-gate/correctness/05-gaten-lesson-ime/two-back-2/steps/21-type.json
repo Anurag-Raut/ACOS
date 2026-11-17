@@ -1,0 +1,108 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 67,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/22.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/22.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/21-type.json"
+    }
+  ],
+  "frame_seq": 22,
+  "index": 21,
+  "input": {
+    "expect_change": false,
+    "handled": false,
+    "handled_evidence": {
+      "acked": 32,
+      "published": 32,
+      "source": "guest",
+      "unhandled": [
+        20,
+        22,
+        24,
+        26,
+        28,
+        30,
+        32,
+        34,
+        36,
+        38,
+        40,
+        42,
+        44,
+        46,
+        48,
+        50
+      ]
+    },
+    "handled_hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+    "target": null
+  },
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 10,
+    "bound": "state-commit",
+    "first_change_ms": 32,
+    "frame_ms": 42,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "fast",
+    "pixels_changed": null,
+    "reason": "state-commit",
+    "settled": true,
+    "state_changed": true,
+    "waited_ms": 67,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "type",
+  "trust": "trusted",
+  "warnings": [
+    {
+      "acked": 32,
+      "code": "INPUT_UNHANDLED",
+      "handled": false,
+      "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+      "message": "step 21 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+      "published": 32,
+      "step": 21,
+      "step_kind": "type",
+      "target": null,
+      "unhandled": [
+        20,
+        22,
+        24,
+        26,
+        28,
+        30,
+        32,
+        34,
+        36,
+        38,
+        40,
+        42,
+        44,
+        46,
+        48,
+        50
+      ]
+    }
+  ]
+}

@@ -33,10 +33,20 @@ impl McpToolDescriptor {
         command: CommandName,
         description: impl Into<String>,
     ) -> McpToolDescriptor {
+        // ARGS: the published schema is a **closed** object. schemars does not
+        // emit `additionalProperties: false` for a struct, and an open schema
+        // tells a client that any extra key is acceptable — which is how
+        // `acos_observe_tree {"screenshot": true}` on a build that ignored it
+        // looked like a success (feedback 2026-11-15). The server rejects an
+        // unknown argument for the same reason; see `acos-mcp::args`.
+        let mut input_schema = schema_value::<T>();
+        if let Some(object) = input_schema.as_object_mut() {
+            object.insert("additionalProperties".to_string(), Value::Bool(false));
+        }
         McpToolDescriptor {
             name: command.tool_name().to_string(),
             description: description.into(),
-            input_schema: schema_value::<T>(),
+            input_schema,
         }
     }
 }
@@ -110,10 +120,12 @@ pub fn mcp_tools() -> McpToolsList {
                 concat!(
                     "NOT THE CANONICAL TOOL — prefer the one-purpose session tools on a live ART session: ",
                     "`acos_tap` (id/text/testID or a point), `acos_text` (focused editor), `acos_key` and ",
-                    "`acos_swipe`. They report the action's own ack and settle evidence. This tool keeps the ",
+                    "`acos_swipe`. They report the action's own ack and settle evidence, including ",
+                    "`handled` (the app window's own `finishInputEvent` answer) and `target` (the resolved ",
+                    "node and the hit-test at the injected point). This tool keeps the ",
                     "generic multi-action path (tap, long_press, swipe, type, key, back, rotate, wait) and is ",
                     "kept for compatibility. ",
-                    "Deliver one input action. Prefer selectors over coordinates. Returns accepted/state_changed, an input-ack event seq and optionally a fresh frame. ",
+                    "Deliver one input action. Prefer selectors over coordinates. Returns accepted/state_changed/handled, an input-ack event seq and optionally a fresh frame. ",
                     "Common errors: ELEMENT_NOT_FOUND, SESSION_NOT_FOUND, TIMEOUT, APP_NOT_RESPONDING, NO_DISPLAY."
                 ),
             ),
@@ -163,7 +175,9 @@ pub fn mcp_tools() -> McpToolsList {
                     "This is the primary verification loop: inspect -> verify -> read verdict.json -> fix -> rerun. ",
                     "A pass is valid only if its evidence exists; `unsupported` is never a pass. Set required_fidelity when the task needs ART/device evidence. ",
                     "A run owns its artifacts directory: a non-empty `artifacts` directory written by another run is refused with INVALID_ARGUMENT naming that run (details.previous_run_id) unless `overwrite: true`. ",
-                    "Common errors: INVALID_ARGUMENT, INVALID_SCENARIO, ARTIFACTS_INVALID, ASSERTION_FAILED, APP_CRASHED, UNSUPPORTED_*, UNVERIFIED_FIDELITY."
+                    "Settle semantics (REL3A): every step JSON states the settle rule it used and its outcome (`settle: {mode, settled, waited_ms, reason}`). `wait_for` and the tree/text assertions default to auto (strict, then the content-stable rule when the screen animates forever in pixels) and honour `timeout_ms`; a step whose settle timed out is never a pass (`status: timeout`, error class infra_timeout). ",
+                    "`animations` (on/off) and `native` are the same options `acos verify` has. ",
+                    "Common errors: INVALID_ARGUMENT, INVALID_SCENARIO, ARTIFACTS_INVALID, ASSERTION_FAILED, APP_CRASHED, TIMEOUT, UNSUPPORTED_*, UNVERIFIED_FIDELITY."
                 ),
             ),
             McpToolDescriptor::new::<CapabilityReportRequest>(

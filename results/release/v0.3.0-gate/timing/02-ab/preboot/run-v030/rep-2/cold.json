@@ -1,0 +1,159 @@
+{
+  "acos": "/home/Qui/.t3/worktrees/acos/t3-c216e10c-9ee2c3262751508a/.cache/rg2-target/release/acos",
+  "binary_sha256": "9f7b8c5d5dbe6d0dc0f5ae3b23e745bb01dc735808a8e83ec8385166210820b4",
+  "bundle_wall_s": 88.553,
+  "checks": {
+    "cache_bytes_after": 0,
+    "cache_bytes_before": 305356800,
+    "cache_evicted": true,
+    "page_cache_dropped": true,
+    "reference_md5": "7218b3ae7e51e4035c89fd96646d72d7",
+    "verified": 20
+  },
+  "errors": [],
+  "host_after": {
+    "loadavg1": 8.99,
+    "loadavg15": 3.96,
+    "loadavg5": 3.63,
+    "mem_available_gib": 47.49,
+    "mem_available_mib": 48633.6,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [],
+    "runnable": "1/2007",
+    "used_mib": 13275.1,
+    "used_pct": 21.44,
+    "utc": "2026-11-16T10:20:06+00:00"
+  },
+  "host_before": {
+    "loadavg1": 8.99,
+    "loadavg15": 3.96,
+    "loadavg5": 3.63,
+    "mem_available_gib": 47.49,
+    "mem_available_mib": 48633.6,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [],
+    "runnable": "1/2007",
+    "used_mib": 13275.1,
+    "used_pct": 21.44,
+    "utc": "2026-11-16T10:20:06+00:00"
+  },
+  "ok": true,
+  "phase": "cold",
+  "samples": {
+    "m3_cold_start_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "daemon_start_ms": 1.800108999304939
+        },
+        {
+          "daemon_start_ms": 1.8101489986293018
+        },
+        {
+          "daemon_start_ms": 1.853379999374738
+        },
+        {
+          "daemon_start_ms": 1.7873050019261427
+        },
+        {
+          "daemon_start_ms": 1.8101179994118866
+        },
+        {
+          "daemon_start_ms": 1.76651500078151
+        },
+        {
+          "daemon_start_ms": 1.8219099983980414
+        },
+        {
+          "daemon_start_ms": 1.8135239988623653
+        },
+        {
+          "daemon_start_ms": 1.8252270019729622
+        },
+        {
+          "daemon_start_ms": 1.2642849978874438
+        },
+        {
+          "daemon_start_ms": 1.8378199965809472
+        },
+        {
+          "daemon_start_ms": 1.2630019991775043
+        },
+        {
+          "daemon_start_ms": 1.2704260007012635
+        },
+        {
+          "daemon_start_ms": 1.8189750007877592
+        },
+        {
+          "daemon_start_ms": 1.8185429980803747
+        },
+        {
+          "daemon_start_ms": 1.8298360009794123
+        },
+        {
+          "daemon_start_ms": 1.8257470001117326
+        },
+        {
+          "daemon_start_ms": 1.8103790025634225
+        },
+        {
+          "daemon_start_ms": 1.8274809990543872
+        },
+        {
+          "daemon_start_ms": 1.8154080025851727
+        }
+      ],
+      "median": 4148.969499999999,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 4156.059,
+        "ci95_low": 4138.5135,
+        "cv": 0.0047346869745026,
+        "max": 4173.56,
+        "mean": 4145.60305,
+        "median": 4148.969499999999,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 4105.768,
+        "n": 20,
+        "p5": 4107.071400000001,
+        "p50": 4148.969499999999,
+        "p95": 4173.420349999999,
+        "resamples": 2000,
+        "spread": 0.015991669738714326,
+        "spread_pct": 1.5991669738714327,
+        "stdev": 19.62813276229325
+      },
+      "unit": "ms",
+      "values": [
+        4125.351,
+        4138.508,
+        4138.519,
+        4107.14,
+        4155.812,
+        4155.655,
+        4172.529,
+        4139.683,
+        4138.402,
+        4173.56,
+        4140.968,
+        4156.059,
+        4142.284,
+        4155.819,
+        4156.164,
+        4155.968,
+        4105.768,
+        4173.413,
+        4122.229,
+        4158.23
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "utc": "2026-11-16T10:20:06+00:00"
+}

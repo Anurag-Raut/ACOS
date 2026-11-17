@@ -563,6 +563,73 @@ fn check_ndk(args: &DoctorArgs) -> Check {
     )
 }
 
+/// REL3D: the running `acos serve` daemon's build identity vs this CLI's.
+///
+/// `acos serve` is shared across invocations of one user, so after an upgrade (or
+/// when two builds are installed) an *older* daemon can still be listening on the
+/// session socket. That daemon used to answer new clients with its own stale
+/// behaviour (MODA11Y); `doctor` now names both identities so an operator can see
+/// whether the daemon on the socket is the CLI they are running.
+fn check_session_daemon() -> Check {
+    use acos_mcp::daemon::DaemonClient;
+    use acos_mcp::identity::Identity;
+
+    let socket = acos_mcp::daemon::socket_path();
+    let cli = Identity::local();
+    if !socket.exists() {
+        return Check::ok(
+            "session_daemon",
+            format!(
+                "no daemon running ({} absent); cli {}",
+                socket.display(),
+                cli.build_id
+            ),
+        );
+    }
+    match DaemonClient::connect(&socket) {
+        Ok(client) => {
+            let daemon = client.daemon_identity();
+            match client.mismatch() {
+                None => Check::ok(
+                    "session_daemon",
+                    format!(
+                        "pid {} build {} matches the cli ({})",
+                        daemon.pid().unwrap_or(0),
+                        daemon
+                            .known()
+                            .map(|identity| identity.build_id.clone())
+                            .unwrap_or_else(|| "unknown".to_string()),
+                        socket.display()
+                    ),
+                ),
+                Some(mismatch) => Check::warn(
+                    "session_daemon",
+                    format!(
+                        "running daemon is a different build: {}\n  daemon: {}\n  cli:    {}",
+                        mismatch.reason.rule(),
+                        daemon
+                            .known()
+                            .map(Identity::label)
+                            .unwrap_or_else(|| "predates the identity protocol".to_string()),
+                        cli.label()
+                    ),
+                    format!(
+                        "`acos session …` replaces an idle auto-started daemon and otherwise uses a \
+                         build-private one, so its answers are never the old build's. Restart an \
+                         operator-started daemon after an upgrade: kill {}",
+                        daemon.pid().unwrap_or(0)
+                    ),
+                ),
+            }
+        }
+        Err(e) => Check::warn(
+            "session_daemon",
+            format!("{} but unreachable: {e}", socket.display()),
+            "Remove the stale socket (or restart `acos serve`); the CLI removes it on the next auto-start.",
+        ),
+    }
+}
+
 fn check_memory() -> Check {
     let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") else {
         return Check::warn(
@@ -612,6 +679,7 @@ pub fn diagnose(args: &DoctorArgs) -> DoctorReport {
     checks.push(check_ndk(args));
     checks.extend(check_sandbox_helpers());
     checks.extend(check_workspace(installed));
+    checks.push(check_session_daemon());
     checks.push(check_memory());
     let subject = json!({
         "acos_version": env!("CARGO_PKG_VERSION"),

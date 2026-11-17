@@ -39,6 +39,7 @@ use acos_protocol::{
     Backend as ProtocolBackend, Envelope, ErrorCode, Fidelity, LogLevel, Metrics, ProtocolError,
     Selector,
 };
+use acos_protocol::reply::{self, TreeShapeOptions};
 use acos_verify::BackendError;
 use serde_json::{json, Value};
 
@@ -68,6 +69,12 @@ struct HeldArtSession {
     /// classify a lost guest (W55).
     artifacts: PathBuf,
     trust: Trust,
+    /// The agent's `acos_launch {label}` (empty when unset): the human handle
+    /// `session list` / `acos_status` print beside the session id.
+    label: Mutex<String>,
+    /// When the current launch started (ms since the epoch), for the `age_s`
+    /// column of `session list`.
+    started_ms: Mutex<u64>,
     /// SERVELEAK2/F3: the identity of the **launch** that currently owns this
     /// session id. Every `acos_launch` renews it, `session_list` reports it and a
     /// client that launched the session records it, so a client whose launch was
@@ -80,6 +87,32 @@ struct HeldArtSession {
 }
 
 impl HeldArtSession {
+    /// Record a (re)launch: its agent label and its start time. A launch on a
+    /// live session is a new launch, so age restarts (the same rule
+    /// `acos_status` uses for its owned sessions).
+    fn note_launch(&self, label: &str) {
+        *self.label.lock().unwrap_or_else(|e| e.into_inner()) = label.to_string();
+        *self
+            .started_ms
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = crate::live_registry::now_ms();
+    }
+
+    fn label(&self) -> String {
+        self.label
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    fn age_s(&self) -> u64 {
+        let started = *self
+            .started_ms
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        crate::live_registry::now_ms().saturating_sub(started) / 1000
+    }
+
     /// Renew and return this session's launch token (SERVELEAK2/F3).
     fn renew_launch_token(&self) -> String {
         let token = new_launch_token();
@@ -111,6 +144,20 @@ fn new_launch_token() -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+/// `/proc/<pid>/status` `VmRSS`, in KiB, for a live guest (`None` when the pid
+/// is gone). `session_list` reports it so an agent sees what a parked session
+/// costs; it is the guest's own RSS, not the whole tree's.
+fn guest_rss_kb(pid: u32) -> Option<u64> {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+    for line in status.lines() {
+        let Some(rest) = line.strip_prefix("VmRSS:") else {
+            continue;
+        };
+        return rest.split_whitespace().next()?.parse().ok();
+    }
+    None
+}
+
 /// Session routing for the daemon: which engine owns a session id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Route {
@@ -124,6 +171,10 @@ pub struct ServeEngine {
     default_engine: Engine,
     max_sessions: usize,
     artifacts_root: PathBuf,
+    /// REL3D: what this daemon reports in `hello`/`ping` (crate version, build
+    /// id, binary hash, pid, engine). A client compares it with its own before
+    /// it sends any request.
+    identity: acos_mcp::identity::Identity,
     /// VIEW1a: the live-view registry this daemon publishes its sessions to
     /// (`$XDG_RUNTIME_DIR/acos/live`, protocol v1 §5). It writes nothing until a
     /// session reaches ready.
@@ -148,19 +199,49 @@ impl ServeEngine {
         max_sessions: usize,
         artifacts_root: PathBuf,
     ) -> Self {
+        Self::with_identity(
+            legacy,
+            default_engine,
+            max_sessions,
+            artifacts_root,
+            false,
+        )
+    }
+
+    /// [`Self::new`] with the provenance a client needs to decide whether this
+    /// daemon may be replaced: `auto_started` is true when a client started it
+    /// (`acos session …`, the MCP server's private daemon) instead of an
+    /// operator running `acos serve` in a terminal.
+    pub fn with_identity(
+        legacy: Arc<LegacyBackend>,
+        default_engine: Engine,
+        max_sessions: usize,
+        artifacts_root: PathBuf,
+        auto_started: bool,
+    ) -> Self {
         // ZPROD3: keepers live inside the daemon's private runtime directory.
         let zygote = Arc::new(ZygoteHost::for_artifacts(&artifacts_root));
+        let identity =
+            acos_mcp::identity::Identity::daemon(default_engine.as_str(), auto_started);
         ServeEngine {
             legacy,
             default_engine,
             max_sessions: max_sessions.max(1),
             artifacts_root,
+            identity,
             live: crate::live_registry::LiveRegistry::from_env(),
             art: Mutex::new(HashMap::new()),
             routes: Mutex::new(HashMap::new()),
             zygote,
         }
     }
+
+    /// This daemon's identity (REL3D).
+    #[must_use]
+    pub fn identity(&self) -> &acos_mcp::identity::Identity {
+        &self.identity
+    }
+
 
     /// Number of sessions held (ART + legacy). Used by the idle-exit check and
     /// the `--max-sessions` cap; it never probes a guest.
@@ -252,6 +333,12 @@ impl ServeEngine {
                 // guest RSS read from `/proc/<pid>/status`.
                 "activity": session.activity(),
                 "guest_pid": session.guest_pid(),
+                // FB5 hygiene, now also on the daemon's own list: the agent's
+                // label, how long this launch has been up, and what the guest
+                // costs. `acos session list` (text) prints exactly these.
+                "label": held.label(),
+                "age_s": held.age_s(),
+                "guest_rss_kb": session.guest_pid().and_then(guest_rss_kb),
                 "apk": held.apk.display().to_string(),
                 "stage_reached": "first_frame",
                 "frame_seq": if exit.is_some() {
@@ -307,6 +394,23 @@ impl ServeEngine {
         let request_id = request_id(args);
         let id = session_id(args);
 
+        if tool == acos_mcp::identity::TOOL_HELLO {
+            // REL3D: identity before any request. The client compares this with
+            // its own build and refuses to use a daemon built from other code.
+            return Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_value_result(json!({
+                "identity": self.identity,
+                "engine": self.default_engine.as_str(),
+                "sessions": self.session_count(),
+                "trust": Trust::Trusted.as_str(),
+                "evidence": EVIDENCE_NO_GUEST,
+            }));
+        }
         if tool == "ping" {
             return Envelope::pass(
                 request_id,
@@ -319,6 +423,12 @@ impl ServeEngine {
                 "pid": std::process::id(),
                 "engine": self.default_engine.as_str(),
                 "default_engine": self.default_engine.as_str(),
+                "sessions": self.session_count(),
+                // REL3D: `ping` reports the same identity `hello` does, so a
+                // status probe can never be answered without it.
+                "identity": self.identity,
+                "build_id": self.identity.build_id,
+                "version": self.identity.version,
                 "trust": Trust::Trusted.as_str(),
                 "evidence": EVIDENCE_NO_GUEST,
             }));
@@ -480,6 +590,11 @@ impl ServeEngine {
         ctx: &CallContext,
     ) -> Envelope {
         let trust = trust_arg(args);
+        let agent_label = args
+            .get("label")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
         let verb_started = std::time::Instant::now();
         // P9: launch consumes P1/P3b's settle vocabulary. `strict` is the
         // default and unchanged; `fast` binds the first traversal's probe sample
@@ -761,6 +876,7 @@ impl ServeEngine {
                     // Re-launch on the live session = hand back its bound live
                     // frame (the daemon's whole point); never boot a second
                     // guest.
+                    held.note_launch(&agent_label);
                     let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
                     return match session.ensure_launch_tree(settle, pixels) {
                         Ok(tree) => launch_reply(
@@ -772,6 +888,7 @@ impl ServeEngine {
                             false,
                             None,
                             verb_started,
+                            args,
                         ),
                         Err(error) => art_error(request_id, Some(id), held.trust, &error),
                     };
@@ -863,9 +980,12 @@ impl ServeEngine {
                     apk: apk.clone(),
                     artifacts: artifacts.clone(),
                     trust,
+                    label: Mutex::new(String::new()),
+                    started_ms: Mutex::new(0),
                     launch_token: Mutex::new(String::new()),
                     session: Mutex::new(session),
                 });
+                held.note_launch(&agent_label);
                 self.art
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
@@ -888,6 +1008,7 @@ impl ServeEngine {
                     true,
                     replaced_guest,
                     verb_started,
+                    args,
                 )
             }
             Err(error) => {
@@ -1041,6 +1162,12 @@ impl ServeEngine {
     ) -> Envelope {
         let trust = held.trust;
         let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+        // REL3A: every serve verb starts from the strict observation rule. Serve
+        // never asks for a content observation (its tree verbs select
+        // `settle: strict|fast|content` explicitly through `tree_with_settle`),
+        // and a rule left over from a verify step must never leak into a verb's
+        // capture/pixel evidence.
+        session.set_observation_settle("strict");
         // Correctness first: a dead guest must never answer from its cache.
         // Every verb starts with the child's own liveness, not with a frame.
         if let Some(exit) = session.liveness() {
@@ -1059,7 +1186,7 @@ impl ServeEngine {
                     "verb": tool,
                     "assertion": assertion,
                     "trust_guard": "crate::trust::TrustGuard (observe/logs_since fail closed)",
-                    "allowed": ["acos_observe (frame only)", "acos_tap", "acos_key", "acos_text"],
+                    "allowed": ["acos_observe (frame only)", "acos_tap", "acos_key", "acos_text", "acos_swipe"],
                 }),
             );
         }
@@ -1078,7 +1205,7 @@ impl ServeEngine {
             "acos_text" => type_text(&mut session, args),
             "acos_key" => key(&mut session, args),
             "acos_assert" => assert(&mut session, args, trust),
-            "acos_logs" => logs(&mut session, args),
+            "acos_logs" => logs(&mut session, &held.artifacts, args),
             "acos_status" => Ok(status_value(&session)),
             // ADR-0029 item 4: list/status/attach/detach on the live guest.
             // The launcher's peer thread owns the service table, so this is a
@@ -1088,11 +1215,8 @@ impl ServeEngine {
             // MPROC1: session control ops (`acos_service_ctl`). The module and
             // op are the session's own vocabulary; nothing is translated here.
             "acos_service_ctl" => service_ctl(&mut session, args),
-            "acos_reset" => reset(&mut session, args),
-            "acos_swipe" => Err(BackendError::unsupported(
-                "input.swipe",
-                "the ART session engine has no swipe command (tap/key/type_text only)",
-            )),
+            "acos_reset" => reset(&mut session, &held.artifacts, args),
+            "acos_swipe" => swipe(&mut session, args),
             "acos_action" => action(&mut session, args),
             // NET2/NET4: the session's own network controls (the module wraps
             // this). Host-side only: the relay supervisor owns the rules, the
@@ -1116,8 +1240,11 @@ impl ServeEngine {
                 let p3_t_outcome = m5_now_us();
                 let mut result = result;
                 result["session_id"] = json!(id);
-                if matches!(tool, "acos_tap" | "acos_text" | "acos_key" | "acos_action") {
-                    if let Err(error) = attach_observation(&mut session, &mut result, args) {
+                if matches!(
+                    tool,
+                    "acos_tap" | "acos_text" | "acos_key" | "acos_swipe" | "acos_action"
+                ) {
+                    if let Err(error) = attach_observation(&mut session, &held.artifacts, &mut result, args) {
                         return art_error(request_id, Some(id), trust, &error);
                     }
                 }
@@ -1133,6 +1260,16 @@ impl ServeEngine {
                 // VIEW1a: keep the registry's `activity` in step with the
                 // session's own state (a no-op when it has not changed).
                 self.refresh_live_activity(id, &session);
+                // REL3A §3: an action whose own settle timed out is never a plain
+                // pass. The input was delivered (the reply keeps `state_changed`,
+                // the tree and the frame identity so an agent can still see the
+                // screen), but the frame it produced is not a settled one and no
+                // assertion may be built on `status: pass`.
+                if matches!(tool, "acos_tap" | "acos_text" | "acos_key" | "acos_action") {
+                    if let Some(settle) = session.input_settle_timeout() {
+                        return settle_timeout_envelope(request_id, id, trust, &settle, result);
+                    }
+                }
                 let envelope = Envelope::pass(
                     request_id,
                     ProtocolBackend::AcosNative,
@@ -1338,7 +1475,7 @@ fn capabilities_for(tool: &str) -> Vec<&'static str> {
     match tool {
         "acos_observe_tree" | "acos_assert" => vec!["ui.tree"],
         "acos_observe" => vec!["ui.frame", "ui.screenshot"],
-        "acos_tap" | "acos_text" | "acos_key" | "acos_action" => vec!["input"],
+        "acos_tap" | "acos_text" | "acos_key" | "acos_swipe" | "acos_action" => vec!["input"],
         "acos_logs" => vec!["logs"],
         "acos_reset" => vec!["reset"],
         "acos_status" => vec!["lifecycle"],
@@ -1548,8 +1685,10 @@ fn launch_reply(
     fresh_guest: bool,
     replaced_guest: Option<Value>,
     started: std::time::Instant,
+    args: &Value,
 ) -> Envelope {
-    let (max_nodes, node_count, truncated, tree_value) = tree_json(tree, 2000);
+    let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
+        shaped_tree(&held.artifacts, tree, 2000, args);
     // SERVELEAK2/F3: this launch now owns the id. A client that launched the
     // session earlier keeps its old token and can see that its guest was
     // replaced (see `SessionBackend::shutdown`).
@@ -1568,6 +1707,8 @@ fn launch_reply(
         "tree_max_nodes": max_nodes,
         "tree_node_count": node_count,
         "tree_truncated": truncated,
+        "tree_path": tree_path,
+        "tree_next_cursor": next_cursor,
         "events": [],
         // FB5: `ms` is the time from launch start to when this rung's evidence
         // was **observed** — not a guess. `acos-art`'s ready line proves
@@ -1582,6 +1723,15 @@ fn launch_reply(
             {"stage": "first_frame", "ok": true, "status": "ok", "ms": session.session_start_ms()}
         ],
     });
+    // PROVENANCE: which APK this guest booted, with its digest, the engine and
+    // the fidelity. The digest is what makes "the launch passed" checkable
+    // against the build under test (feedback 2026-11-14: a stale APK passed).
+    result["provenance"] = acos_protocol::provenance::block(
+        &held.apk,
+        None,
+        ENGINE_ART,
+        Fidelity::ArtReference,
+    );
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
     // ZPROD3: a session that really runs a zygote child says so, with the facts
     // the keeper acked. With the flag off `merge_zygote_fields` changes nothing,
@@ -1846,6 +1996,19 @@ fn screenshot_request(args: &Value) -> Result<ScreenshotRequest, BackendError> {
     }
 }
 
+/// `png: true` is the documented shorthand for "write this frame's PNG"
+/// (docs/AGENT_API.md, `tools/art-runtime/agent_loop.py`, the MCP
+/// `acos_observe` schema). It means `screenshot: true` — write under the
+/// session's artifacts and report the path — unless the caller named a
+/// destination. Silently ignoring it (the old behaviour) made a documented
+/// argument a no-op.
+fn png_shorthand(request: ScreenshotRequest, args: &Value) -> ScreenshotRequest {
+    match (request, args.get("png").and_then(Value::as_bool)) {
+        (ScreenshotRequest::None, Some(true)) => ScreenshotRequest::Default,
+        (request, _) => request,
+    }
+}
+
 /// The pixel size in a PNG's IHDR chunk (16-byte signature + 8-byte length/type
 /// header, then width and height). Header-only: an 80 KB frame is never decoded
 /// just to say how big it is.
@@ -2094,7 +2257,8 @@ fn observe_tree(
     let tree =
         session.tree_with_settle_pixels(settle, !matches!(screenshot, ScreenshotRequest::None))?;
     let t_tree = m5_now_us();
-    let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, max_nodes);
+    let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
+        shaped_tree(artifacts, &tree, max_nodes, args);
     let t_end = m5_now_us();
     if p3_enabled() {
         p3_trace(
@@ -2121,6 +2285,8 @@ fn observe_tree(
         "max_nodes": max_nodes,
         "node_count": node_count,
         "tree": tree_value,
+        "tree_path": tree_path,
+        "tree_next_cursor": next_cursor,
         "settle": session.last_tree_settle().cloned(),
     });
     // FB2: the screenshot is of *this* bound frame, and its `display_origin`
@@ -2148,7 +2314,7 @@ fn observe(
     let want_tree = args.get("tree").and_then(Value::as_bool).unwrap_or(false);
     let want_text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
     let settle = requested_settle(args)?;
-    let screenshot = screenshot_request(args)?;
+    let screenshot = png_shorthand(screenshot_request(args)?, args);
     let path = match &screenshot {
         ScreenshotRequest::Path(path) => Some(path.clone()),
         _ => None,
@@ -2167,14 +2333,24 @@ fn observe(
                 "meaningful": true,
             },
         });
-        if want_tree {
-            let (_, node_count, truncated, tree_value) = tree_json(&tree, 2000);
+        if want_tree || want_text {
+            let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
+                shaped_tree(artifacts, &tree, 2000, args);
             result["tree"] = tree_value;
             result["truncated"] = json!(truncated);
             result["node_count"] = json!(node_count);
-        }
-        if want_text {
-            result["text"] = json!(flat_text(&tree));
+            result["tree_max_nodes"] = json!(max_nodes);
+            result["tree_path"] = json!(tree_path);
+            result["tree_next_cursor"] = json!(next_cursor);
+            if want_text {
+                let (_, _, _, full_tree) = tree_json(&tree, 2000);
+                let cursor = args.get("cursor").and_then(Value::as_u64).unwrap_or(0) as usize;
+                let (text, total, text_next) =
+                    reply::compact_text(&full_tree, cursor, reply::DEFAULT_PAGE_SIZE);
+                result["text"] = json!(text);
+                result["text_node_count"] = json!(total);
+                result["text_next_cursor"] = json!(text_next);
+            }
         }
         result["settle"] = session.last_tree_settle().cloned().unwrap_or(Value::Null);
         // FB2: `screenshot` used to be silently ignored on the tree path (the
@@ -2244,12 +2420,16 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
         // explicit `content_desc` selector names that field exactly instead.
         // Either way several user-visible matches are refused, never silently
         // picked.
-        let target = resolve_input_node(session, &selector, &describe)?;
+        let tree = session.ensure_bound_tree()?;
+        let target = resolve_input_node_in(&tree, &selector, &describe)?;
         session.set_settle_mode(settle);
         session.begin_input();
         let (x, y) = target.tap_point();
         session.tap_in_window(&target.window, x, y)?;
-        input_result(session, "tap", describe)
+        // REL3E: the hit-test uses the tree the selector resolved against, i.e.
+        // the same geometry `tap_point` came from; no extra traversal.
+        let target = acos_protocol::ui::tap_target_json(Some(&describe), Some(&target), Some(&tree), x, y);
+        input_result(session, "tap", target)
     } else {
         let (Some(x), Some(y)) = (
             args.get("x").and_then(Value::as_i64),
@@ -2261,13 +2441,130 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
                     .to_string(),
             });
         };
+        // A coordinate tap has no selector; its hit-test still comes from the
+        // already-bound tree (never a new traversal).
+        let tree = session.bound_tree();
         session.set_settle_mode(settle);
         session.begin_input();
         session.tap(x as i32, y as i32)?;
-        input_result(session, "tap", json!({"x": x, "y": y}))
+        let target = acos_protocol::ui::tap_target_json(None, None, tree.as_ref(), x as i32, y as i32);
+        input_result(session, "tap", target)
     };
     check_expect_change(args, session, &result)?;
     Ok(result)
+}
+
+/// REL3S: `acos_swipe` / CLI `acos swipe` / `acos scroll` on the ART engine.
+///
+/// One swipe is a real interpolated `MotionEvent` stream on the live input
+/// channel (see `acos-services::input_dispatch::InputDispatch::inject_swipe`),
+/// delivered through the same path a tap uses and settled with the same rules;
+/// the reply carries REL3E's `handled` contract and FB3's `changes`.
+///
+/// `until` turns it into a bounded `scroll_until` search: swipe, take a fresh
+/// **settled** traversal, look for the selector, repeat. "Found" is only ever
+/// reported from such a traversal, and a miss is a structured `ELEMENT_NOT_FOUND`
+/// naming the attempts and the last tree's texts.
+fn swipe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let settle = requested_settle(args)?;
+    session.set_diff_requested(diff_requested(args)?);
+    reject_expect_change_without_pixel_evidence(args)?;
+    let (from, to, duration_ms) = swipe_points(session, args)?;
+    let fling = fling_requested(args);
+    let Some(until) = args.get("until").filter(|value| !value.is_null()) else {
+        session.set_settle_mode(settle);
+        session.begin_input();
+        session.swipe(from, to, duration_ms, fling)?;
+        return Ok(input_result(session, "swipe", Value::Null));
+    };
+    // A repeated search needs every observation to be settled, and the
+    // selector's visibility is checked on the fresh tree each attempt took.
+    if matches!(settle, "fast" | "content") {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: format!(
+                "`until` needs a strict settle so a found node is backed by a settled \
+                 observation; `settle: {settle}` cannot prove that"
+            ),
+        });
+    }
+    let (selector, describe) = selector_of(until).ok_or_else(|| BackendError::Failed {
+        code: ErrorCode::InvalidArgument,
+        detail: "`until` needs a selector (`id`, `content_desc` or `text`)".to_string(),
+    })?;
+    let max_attempts = args
+        .get("max_attempts")
+        .and_then(Value::as_u64)
+        .unwrap_or(if fling { 10 } else { 6 })
+        .clamp(1, 50) as usize;
+    session.set_settle_mode("strict");
+    session.begin_input();
+    let report = session.scroll_until(&selector, from, to, duration_ms, fling, max_attempts)?;
+    let mut result = input_result(session, "swipe", Value::Null);
+    result["until"] = json!({
+        "selector": describe,
+        "found": true,
+        "attempts": report.attempts,
+        "frame_seq": report.frame_seq,
+    });
+    Ok(result)
+}
+
+/// Resolve a swipe's two points: explicit `from`/`to`, else a `direction`
+/// (+ optional `distance` in pixels) over the session's display.
+fn swipe_points(
+    session: &ArtSession,
+    args: &Value,
+) -> Result<((f32, f32), (f32, f32), u64), BackendError> {
+    let point = |value: Option<&Value>| -> Option<(f32, f32)> {
+        let value = value?;
+        let x = value.get("x").and_then(Value::as_f64)?;
+        let y = value.get("y").and_then(Value::as_f64)?;
+        Some((x as f32, y as f32))
+    };
+    let duration_ms = args
+        .get("duration_ms")
+        .and_then(Value::as_u64)
+        .unwrap_or(if fling_requested(args) { 120 } else { 400 })
+        .clamp(1, 30_000);
+    if let (Some(from), Some(to)) = (point(args.get("from")), point(args.get("to"))) {
+        return Ok((from, to, duration_ms));
+    }
+    let (width, height) = session.display_size();
+    let direction = args
+        .get("direction")
+        .and_then(Value::as_str)
+        .unwrap_or("up")
+        .to_ascii_lowercase();
+    let direction = match direction.as_str() {
+        // Finger up = the content scrolls up = later rows come into view.
+        "up" => acos_protocol::scenario::SwipeDirection::Up,
+        "down" => acos_protocol::scenario::SwipeDirection::Down,
+        "left" => acos_protocol::scenario::SwipeDirection::Left,
+        "right" => acos_protocol::scenario::SwipeDirection::Right,
+        other => {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: format!(
+                    "unknown swipe direction {other:?}; use up, down, left or right, or explicit \
+                     `from`/`to` points"
+                ),
+            })
+        }
+    };
+    let distance = args
+        .get("distance")
+        .and_then(Value::as_f64)
+        .map(|distance| distance.abs() as u32);
+    // One source for the direction semantics: the scenario `SwipeStep` resolves
+    // its points with the same `endpoints` rule (centre, 60 % of the axis by
+    // default).
+    let (from, to) = direction.endpoints(distance, width, height);
+    Ok((from, to, duration_ms))
+}
+
+fn fling_requested(args: &Value) -> bool {
+    args.get("fling").and_then(Value::as_bool).unwrap_or(false)
 }
 
 /// The selector an input/assert argument names, with the JSON that describes it.
@@ -2278,10 +2575,14 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
 /// with whichever field was used, so `{"text": "Continue", "index": 1}` is the
 /// escape hatch for a legitimately repeated label.
 fn args_selector(args: &Value) -> Option<(Selector, Value)> {
-    let index = args
-        .get("index")
-        .and_then(Value::as_u64)
-        .map(|i| i as usize);
+    selector_of(args)
+}
+
+/// Build a selector from an object's `id` / `content_desc` / `text` (+`index`)
+/// with the JSON that describes it. Shared by an input's own selector and a
+/// `until` search target, so both resolve the same way.
+fn selector_of(args: &Value) -> Option<(Selector, Value)> {
+    let index = args.get("index").and_then(Value::as_u64).map(|i| i as usize);
     let mut selector = if let Some(id) = args.get("id").and_then(Value::as_str) {
         Selector::by_id(id)
     } else if let Some(desc) = args.get("content_desc").and_then(Value::as_str) {
@@ -2320,12 +2621,11 @@ fn args_selector(args: &Value) -> Option<(Selector, Value)> {
 /// established ladder: a node that exists but is not visible is
 /// `ELEMENT_OFFSCREEN` (with its bounds), a complete tree with nothing is
 /// `ELEMENT_NOT_FOUND`, a truncated tree is `TREE_TRUNCATED`.
-fn resolve_input_node(
-    session: &mut ArtSession,
+fn resolve_input_node_in(
+    tree: &UiTree,
     selector: &Selector,
     describe: &Value,
 ) -> Result<UiNode, BackendError> {
-    let tree = session.ensure_bound_tree()?;
     let candidates = tree.find_input_candidates(selector);
     match candidates.len() {
         1 => return Ok(candidates[0].clone()),
@@ -2455,16 +2755,13 @@ fn echo_decision(tree: &UiTree, forced: bool) -> EchoDecision<'_> {
     EchoDecision { node, mask_reason }
 }
 
-/// The node as the reply describes it. A password node's own text is withheld
-/// too: it is the secret the field holds, not the agent's typing.
+/// The node as the reply describes it: identity, its accessible name, its
+/// geometry and the input flags an agent has to reason about.
+///
+/// A password node's own text is withheld too: it is the secret the field holds,
+/// not the agent's typing.
 fn node_summary(node: &UiNode, withhold_text: bool) -> Value {
-    json!({
-        "id": node.id,
-        "class": node.class,
-        "content_desc": node.content_desc,
-        "text": if withhold_text { Value::Null } else { json!(node.text) },
-        "password": node.password,
-    })
+    acos_protocol::ui::node_input_json(node, withhold_text)
 }
 
 /// `mask: true` on `acos_text`: the caller knows the field is a secret even when
@@ -2580,9 +2877,11 @@ fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError>
         "tap" => tap(session, &action),
         "key" => key(session, &action),
         "text" => type_text(session, &action),
+        // REL3S: the generic multi-action path reaches the same real gesture.
+        "swipe" | "scroll" => swipe(session, &action),
         other => Err(BackendError::unsupported(
             format!("input.{other}"),
-            "acos_action supports tap, key and text on the ART engine",
+            "acos_action supports tap, key, text, swipe and scroll on the ART engine",
         )),
     }
 }
@@ -2772,9 +3071,19 @@ fn core_service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, Bac
     session.ctl(module, op, inner)
 }
 
-fn logs(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Value, BackendError> {
     let records = session.logs_since(0)?;
     let crash = session.last_crash();
+    // The default view is small, but the guest's full buffer is still evidence:
+    // write it before filtering so `log_path` always names the whole run.
+    let log_path = acos_verify::artifacts::write_logcat(artifacts, &records)
+        .ok()
+        .map(|()| {
+            std::fs::canonicalize(artifacts.join(acos_protocol::artifacts::logcat_file_name()))
+                .unwrap_or_else(|_| artifacts.join(acos_protocol::artifacts::logcat_file_name()))
+                .display()
+                .to_string()
+        });
     let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
     let requested = args.get("min_priority");
     let explicit_priority = match requested {
@@ -2879,6 +3188,7 @@ fn logs(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
             },
         },
         "logs": lines,
+        "log_path": log_path,
         "crash": crash.map(|crash| json!({
             "exception": crash.exception,
             "message": crash.message,
@@ -2987,9 +3297,9 @@ fn status_value(session: &ArtSession) -> Value {
         "capabilities": {
             "tree": true, "screenshot": true, "tap": true, "tap_text": true,
             "type_text": true, "key": true, "reset": true, "logs": true,
-            "assert": true, "swipe": false, "environment": false,
+            "assert": true, "swipe": true, "environment": false,
         },
-        "unsupported": ["acos_swipe"],
+        "unsupported": [],
     });
     merge_zygote_fields(&mut status, session);
     status
@@ -3114,7 +3424,7 @@ fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, Back
     Ok(reply)
 }
 
-fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+fn reset(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Value, BackendError> {
     // P9: reset consumes the same settle vocabulary as launch. `strict` is the
     // default and unchanged (150 ms quiet window + capture); `fast` binds the
     // relaunched guest's first traversal from a fresh probe sample, with no
@@ -3131,7 +3441,8 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
     // P9: the reset reply carries the relaunched app's bound tree, so "reset ->
     // first correct screen" is one round trip (the tree was already bound by
     // reset; serializing it costs ~1 ms). Same shape as the launch reply.
-    let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, 2000);
+    let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
+        shaped_tree(artifacts, &tree, 2000, args);
     let mut reply = json!({
         "state_reset": true,
         "data_cleared": true,
@@ -3145,6 +3456,8 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
         "tree_max_nodes": max_nodes,
         "tree_node_count": node_count,
         "tree_truncated": truncated,
+        "tree_path": tree_path,
+        "tree_next_cursor": next_cursor,
         "settle": session.last_tree_settle().cloned().unwrap_or(Value::Null),
         "note": "the guest process was stopped and the same APK relaunched with empty app-data",
     });
@@ -3179,6 +3492,7 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
 /// extra traversal. The frame reference itself is added by `label_frame`.
 fn attach_observation(
     session: &mut ArtSession,
+    artifacts: &Path,
     result: &mut Value,
     args: &Value,
 ) -> Result<(), BackendError> {
@@ -3213,12 +3527,15 @@ fn attach_observation(
         .and_then(Value::as_u64)
         .unwrap_or(2000) as usize;
     let tree = session.ensure_bound_tree()?;
-    let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, max_nodes);
+    let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
+        shaped_tree(artifacts, &tree, max_nodes, args);
     if let Some(object) = result.as_object_mut() {
         object.insert("tree".into(), tree_value);
         object.insert("tree_max_nodes".into(), json!(max_nodes));
         object.insert("tree_node_count".into(), json!(node_count));
         object.insert("tree_truncated".into(), json!(truncated));
+        object.insert("tree_path".into(), json!(tree_path));
+        object.insert("tree_next_cursor".into(), json!(next_cursor));
         object.insert(
             "observe".into(),
             json!({"tree": true, "png": false, "round_trip": "same-acos-art-reply"}),
@@ -3316,10 +3633,14 @@ fn diff_requested(args: &Value) -> Result<bool, BackendError> {
     }
 }
 
-fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
+fn input_result(session: &mut ArtSession, kind: &str, target: Value) -> Value {
+    // REL3E: the resolved target and its hit-test are the action's own evidence,
+    // so they travel with the delivery the verifier reads (a scenario step's JSON
+    // carries the same block the MCP reply does).
+    session.attach_input_target(target.clone());
     let delivery = session.last_input_delivery();
     let settle = session.last_input_settle().cloned();
-    let (delivered, state_changed, acks) = match delivery {
+    let (delivered, state_changed, acks) = match &delivery {
         Some(delivery) => (
             delivery.delivered,
             delivery.visual_change,
@@ -3335,7 +3656,27 @@ fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
         ),
         None => (true, false, json!([])),
     };
-    let mut result = input_reply(kind, delivered, state_changed, acks, target, settle);
+    let handled = delivery.as_ref().and_then(|delivery| delivery.handled);
+    let mut result = input_reply(
+        kind,
+        delivered,
+        state_changed,
+        handled,
+        handled_evidence(&delivery),
+        acks,
+        target,
+        settle,
+    );
+    // REL3E: the reply must answer "did the app handle it", not just "did we
+    // send it". The hint is written against the *same* target block, so the
+    // agent reads one object: what was resolved, what the point hit, what the
+    // framework did with it.
+    if let Some(object) = result.as_object_mut() {
+        let hint = acos_protocol::ui::handling_hint(object.get("target"), handled, state_changed);
+        if let Some(hint) = hint {
+            object.insert("handled_hint".into(), json!(hint));
+        }
+    }
     // FB3: what the action changed, from the two trees the session already
     // holds (the pre-action tree and the tree this action's settle bound). Only
     // present when asked for: `diff:false` is the pre-FB3 reply, byte for byte.
@@ -3345,13 +3686,40 @@ fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
     result
 }
 
-/// The action reply every backend has always produced (FB3 adds `changes` to it,
-/// and nothing else): kept as its own function so "`diff:false` is byte for
-/// byte today's reply" is checkable without a live guest.
+/// REL3E: the delivery evidence behind `handled`, never a boolean on its own.
+fn handled_evidence(delivery: &Option<acos_verify::backend::InputDelivery>) -> Value {
+    let Some(delivery) = delivery else {
+        return json!(acos_protocol::HandledEvidence::none());
+    };
+    let unhandled: Vec<u64> = delivery
+        .acks
+        .iter()
+        .filter(|ack| !ack.handled)
+        .map(|ack| ack.seq)
+        .collect();
+    let any_handled = delivery.acks.iter().any(|ack| ack.handled);
+    json!(acos_protocol::HandledEvidence::new(
+        acos_protocol::ui::handled_source(
+            delivery.published,
+            delivery.acks.len(),
+            any_handled,
+            delivery.window_removed,
+        ),
+        delivery.published,
+        delivery.acks.len(),
+        unhandled,
+    ))
+}
+
+/// The action reply every backend has always produced. REL3E adds `handled` and
+/// `handled_evidence` after `state_changed`, and nothing else: `target` keeps
+/// its position and `diff:false` keeps every pre-REL3E key.
 fn input_reply(
     kind: &str,
     delivered: bool,
     state_changed: bool,
+    handled: Option<bool>,
+    handled_evidence: Value,
     acks: Value,
     target: Value,
     settle: Option<Value>,
@@ -3360,10 +3728,12 @@ fn input_reply(
         "action": kind,
         "accepted": delivered,
         "state_changed": state_changed,
+        "handled": handled,
+        "handled_evidence": handled_evidence,
         "acks": acks,
         "target": target,
         "settle": settle,
-        "input_evidence": "guest-asserted acks; state_changed is the host's own pixel+tree comparison in strict mode; in fast mode it is the guest's tree-change verdict and a fast frame may be mid-animation",
+        "input_evidence": "`handled` is the app window's own finishInputEvent(handled) answer (guest-asserted, one ack per InputMessage); state_changed is the host's own pixel+tree comparison in strict mode; in fast mode it is the guest's tree-change verdict and a fast frame may be mid-animation",
     })
 }
 
@@ -3520,6 +3890,48 @@ fn resolve_assert_node(
 
 /// Serialize a live tree for the agent-facing `acos_observe_tree` result.
 ///
+/// REL3C: one reply rule for every tree-bearing verb.
+///
+/// The full tree (up to `max_nodes`) is written to the session's
+/// `artifacts/tree/<frame_seq>.json`; the inline value is the compact
+/// visible-text page unless the caller explicitly asked for the full tree.
+/// Returns `(tree_value, max_nodes, node_count, truncated, tree_path,
+/// next_cursor)`.
+fn shaped_tree(
+    artifacts: &Path,
+    tree: &UiTree,
+    max_nodes: usize,
+    args: &Value,
+) -> (Value, usize, usize, bool, Option<String>, Option<usize>) {
+    let (max_nodes, _sampled, truncated, full_value) = tree_json(tree, max_nodes);
+    let full = args.get("full").and_then(Value::as_bool).unwrap_or(false)
+        || args
+            .get("full_tree")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        || args
+            .get("tree")
+            .and_then(Value::as_str)
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("full"));
+    let cursor = args.get("cursor").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let opts = TreeShapeOptions {
+        cursor,
+        page_size: reply::DEFAULT_PAGE_SIZE,
+        full,
+        artifacts_dir: Some(artifacts.to_path_buf()),
+        session: None,
+    };
+    let shaped = reply::shape_tree(&full_value, Some(tree.frame.frame_seq), &opts);
+    (
+        shaped.view,
+        max_nodes,
+        shaped.total,
+        truncated,
+        shaped.tree_path,
+        shaped.next_cursor,
+    )
+}
+
 /// `max_nodes` is a hard host-side cap: the walk stops at the cap and the reply
 /// says `truncated: true`, so absence is never claimed from an incomplete tree.
 fn tree_json(tree: &UiTree, max_nodes: usize) -> (usize, usize, bool, Value) {
@@ -3810,6 +4222,50 @@ fn art_error_with_launch_evidence(
     }
 }
 
+/// REL3A §3: the reply for an action whose own settle timed out.
+///
+/// The action *was* delivered, so the caller keeps the measured delivery facts
+/// (`state_changed`, the bound tree, the frame identity, the settle record), but
+/// the envelope status is `timeout` with `error.code: TIMEOUT` (error class
+/// `infra_timeout`) and `details.reason: "settle_timeout"`. Before this the same
+/// reply was `status: pass` with `settle.settled:false`, i.e. a false green for
+/// an agent that reads only `status` (F-06 in the v0.3.0 feedback).
+fn settle_timeout_envelope(
+    request_id: &str,
+    id: &str,
+    trust: Trust,
+    settle: &Value,
+    delivered: Value,
+) -> Envelope {
+    let reason = settle
+        .get("reason")
+        .and_then(Value::as_str)
+        .unwrap_or("the guest still reported pending UI work")
+        .to_string();
+    let record = acos_verify::settle::settle_record(settle, 0);
+    let error = BackendError::Protocol {
+        code: ErrorCode::Timeout,
+        detail: format!(
+            "the action was delivered but its settle timed out ({reason}); the bound tree/frame \
+             is the latest observed state, not a settled one"
+        ),
+        hint: Some(
+            "Not a pass: `status: timeout` means the action landed but the screen did not settle \
+             within the deadline. Read `settle.reason`; for a screen that animates forever use \
+             `settle: \"content\"` (content-stable) instead of waiting for the pixels to stop, or \
+             raise `settle_timeout_ms`. The delivered facts are kept in `details.delivery`."
+                .to_string(),
+        ),
+        details: Some(json!({
+            "reason": "settle_timeout",
+            "settle": record,
+            "delivery": delivered,
+        })),
+    };
+    let envelope = art_error(request_id, Some(id), trust, &error);
+    envelope.with_value_result(delivered)
+}
+
 fn art_error(
     request_id: &str,
     session_id: Option<&str>,
@@ -4076,6 +4532,41 @@ mod tests {
         )
     }
 
+    /// REL3C: the launch/observe default is the compact screen, and the full
+    /// tree is on disk under the session's artifacts directory.
+    #[test]
+    fn shaped_tree_defaults_to_the_compact_screen_and_writes_the_full_tree() {
+        let mut nodes = Vec::new();
+        for i in 0..80 {
+            let mut node = node(
+                &format!("row{i}"),
+                &format!("settings row {i}"),
+                Vec::new(),
+            );
+            node.bounds = Bounds::new(0, i * 40, 1080, i * 40 + 36);
+            node.visible = true;
+            nodes.push(node);
+        }
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/acos-serve-reply-tests")
+            .join(format!("{}-{}", std::process::id(), 1));
+        let (view, _, count, truncated, path, next) =
+            shaped_tree(&dir, &tree(nodes), 2000, &json!({}));
+        assert_eq!(count, 80);
+        assert!(!truncated);
+        assert_eq!(view["compact"], true);
+        assert_eq!(view["nodes"].as_array().unwrap().len(), 40);
+        assert_eq!(view["next_cursor"], 40);
+        let path = path.expect("full tree path");
+        let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(written["nodes"].as_array().unwrap().len(), 80);
+        // The explicit `full` argument restores the old inline tree when it
+        // fits the reply cap.
+        let (full, _, _, _, _, _) = shaped_tree(&dir, &tree(vec![node("row0", "settings row 0", Vec::new())]), 2000, &json!({"full": true}));
+        assert!(full.get("compact").is_none(), "full mode must not compact");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// FB1: the live channel's selector precedence, field by field.
     #[test]
     fn live_selectors_prefer_id_then_content_desc_then_text() {
@@ -4277,22 +4768,28 @@ mod tests {
     }
 
     /// FB3: `diff:false` must be the pre-FB3 reply, byte for byte; the diff is
-    /// only ever an *added* key after the existing ones.
+    /// only ever an *added* key after the existing ones. REL3E adds `handled`
+    /// and `handled_evidence`, and the byte-exact expectation carries them.
     #[test]
     fn fb3_diff_false_reply_is_byte_identical_and_changes_are_appended() {
         let base = input_reply(
             "tap",
             true,
             true,
+            Some(true),
+            handled_evidence(&None),
             json!([{"seq": 3, "handled": true, "latency_us": 1200}]),
             json!({"id": "inc"}),
             Some(json!({"mode": "strict", "settled": true})),
         );
         let expected = concat!(
             "{\"accepted\":true,\"acks\":[{\"handled\":true,\"latency_us\":1200,\"seq\":3}],",
-            "\"action\":\"tap\",\"input_evidence\":\"guest-asserted acks; state_changed is ",
-            "the host's own pixel+tree comparison in strict mode; in fast mode it is the ",
-            "guest's tree-change verdict and a fast frame may be mid-animation\",",
+            "\"action\":\"tap\",\"handled\":true,",
+            "\"handled_evidence\":{\"acked\":0,\"published\":0,\"source\":\"none\"},",
+            "\"input_evidence\":\"`handled` is the app window's own ",
+            "finishInputEvent(handled) answer (guest-asserted, one ack per InputMessage); ",
+            "state_changed is the host's own pixel+tree comparison in strict mode; in fast ",
+            "mode it is the guest's tree-change verdict and a fast frame may be mid-animation\",",
             "\"settle\":{\"mode\":\"strict\",\"settled\":true},\"state_changed\":true,",
             "\"target\":{\"id\":\"inc\"}}"
         );
@@ -4317,6 +4814,123 @@ mod tests {
             expected,
             "removing `changes` must give back the pre-FB3 reply exactly"
         );
+    }
+
+    /// REL3E: a tap reply answers "did the app handle it", and the target block
+    /// names what the point hit plus the clickable node to tap instead.
+    #[test]
+    fn rel3e_tap_target_names_the_hit_and_the_clickable_sibling() {
+        // The Gaten settings row: a non-clickable label whose clickable switch
+        // sits beside it, inside a row that is not clickable either.
+        let mut label = UiNode::new("n1", "android.widget.TextView", Bounds::new(40, 300, 460, 360))
+            .with_resource_id("title")
+            .with_text("Floating button");
+        label.window = "main".into();
+        let mut switch = UiNode::new("n2", "android.widget.Switch", Bounds::new(900, 300, 1040, 360))
+            .with_resource_id("toggle")
+            .with_text("Floating button");
+        switch.clickable = true;
+        switch.checked = false;
+        switch.window = "main".into();
+        let mut row = UiNode::new("n0", "android.widget.LinearLayout", Bounds::new(0, 296, 1080, 364));
+        row.window = "main".into();
+        row.children = vec![label, switch];
+        let screen = tree(vec![row]);
+
+        let target = acos_protocol::ui::tap_target_json(
+            Some(&json!({"text": "Floating button"})),
+            None,
+            Some(&screen),
+            250,
+            330,
+        );
+        assert_eq!(target["selector"], json!({"text": "Floating button"}));
+        assert_eq!(target["point"], json!({"x": 250, "y": 330}));
+        assert_eq!(target["hit"]["method"], json!("tree-geometry"));
+        assert_eq!(target["hit"]["node"]["resource_id"], json!("title"));
+        assert_eq!(target["hit"]["node"]["class"], json!("android.widget.TextView"));
+        assert_eq!(target["hit"]["node"]["bounds"], json!("[40,300][460,360]"));
+        assert_eq!(target["hit"]["clickable"], json!(false));
+        assert_eq!(target["hit"]["consumer"], Value::Null, "no ancestor is clickable");
+        assert_eq!(target["hit"]["suggest"]["resource_id"], json!("toggle"));
+        assert_eq!(target["hit"]["suggest"]["clickable"], json!(true));
+
+        let hint = acos_protocol::ui::handling_hint(Some(&target), Some(false), false).expect("a hint");
+        assert!(hint.contains("nothing tappable there"), "{hint}");
+        assert!(hint.contains("Floating button"), "{hint}");
+        assert!(hint.contains("android.widget.Switch"), "{hint}");
+        assert!(hint.contains("nearest clickable"), "{hint}");
+        assert!(hint.contains("finishInputEvent(handled) = false"), "{hint}");
+    }
+
+    /// REL3E: a hit on a clickable control needs no suggestion, and a handled
+    /// input with no visible change explains itself.
+    #[test]
+    fn rel3e_handled_true_with_or_without_a_change() {
+        let mut button = UiNode::new("n1", "android.widget.Button", Bounds::new(0, 0, 100, 60))
+            .with_resource_id("inc")
+            .with_text("Increment");
+        button.clickable = true;
+        let screen = tree(vec![button]);
+        let target = acos_protocol::ui::tap_target_json(None, None, Some(&screen), 50, 30);
+        assert_eq!(target["hit"]["node"]["resource_id"], json!("inc"));
+        assert_eq!(target["hit"]["clickable"], json!(true));
+        assert_eq!(target["hit"]["consumer"]["resource_id"], json!("inc"));
+        assert_eq!(target["hit"]["suggest"], Value::Null);
+        assert_eq!(acos_protocol::ui::handling_hint(Some(&target), Some(true), true), None);
+        let hint = acos_protocol::ui::handling_hint(Some(&target), Some(true), false).expect("a hint");
+        assert!(hint.contains("consumed the input"), "{hint}");
+        assert!(hint.contains("no change"), "{hint}");
+    }
+
+    /// REL3E: a missing ack is "unknown", never "not handled"; a point with no
+    /// node and no tree is described as such.
+    #[test]
+    fn rel3e_unknown_handling_is_reported_as_unknown() {
+        let hint = acos_protocol::ui::handling_hint(None, None, false).expect("a hint");
+        assert!(hint.contains("unknown"), "{hint}");
+        assert!(!hint.contains("did NOT consume"), "{hint}");
+
+        let empty = tree(vec![UiNode::new("n0", "android.view.View", Bounds::new(0, 0, 10, 10))]);
+        let target = acos_protocol::ui::tap_target_json(None, None, Some(&empty), 5, 5);
+        assert_eq!(target["hit"]["node"]["class"], json!("android.view.View"));
+        let hint = acos_protocol::ui::handling_hint(Some(&target), Some(false), false).expect("a hint");
+        assert!(hint.contains("nothing tappable there"), "{hint}");
+        assert!(hint.contains("no clickable node"), "{hint}");
+
+        let no_tree = acos_protocol::ui::tap_target_json(None, None, None, 5, 5);
+        assert_eq!(no_tree["hit"]["node"], Value::Null);
+        assert_eq!(no_tree["hit"]["clickable"], Value::Null);
+        assert!(no_tree["hit"]["note"].as_str().unwrap().contains("no bound tree"));
+        let hint = acos_protocol::ui::handling_hint(Some(&no_tree), Some(false), false).expect("a hint");
+        assert!(hint.contains("no node there"), "{hint}");
+    }
+
+    /// REL3E: `target` for a resolved tap carries the node's input fields, and
+    /// the delivery evidence counts published vs acked events.
+    #[test]
+    fn rel3e_reply_carries_handled_and_evidence() {
+        let mut button = UiNode::new("n1", "android.widget.Button", Bounds::new(0, 0, 100, 60))
+            .with_resource_id("inc")
+            .with_text("Increment");
+        button.clickable = true;
+        button.focused = true;
+        button.enabled = false;
+        let target = acos_protocol::ui::tap_target_json(Some(&json!({"id": "inc"})), Some(&button), None, 50, 30);
+        let node = &target["node"];
+        assert_eq!(node["id"], json!("n1"));
+        assert_eq!(node["class"], json!("android.widget.Button"));
+        assert_eq!(node["text"], json!("Increment"));
+        assert_eq!(node["content_desc"], json!(""));
+        assert_eq!(node["bounds"], json!("[0,0][100,60]"));
+        assert_eq!(node["clickable"], json!(true));
+        assert_eq!(node["enabled"], json!(false));
+        assert_eq!(node["focused"], json!(true));
+
+        let evidence = handled_evidence(&None);
+        assert_eq!(evidence["source"], json!("none"));
+        assert_eq!(evidence["published"], json!(0));
+        assert_eq!(evidence["acked"], json!(0));
     }
 
     /// FB3: `diff` defaults on and a non-boolean is a typed argument error.
@@ -4561,6 +5175,34 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// `png: true` — the documented shorthand (MCP `acos_observe {png: true}`,
+    /// docs/AGENT_API.md, `tools/art-runtime/agent_loop.py`) — asks for this
+    /// frame's PNG. On the ART daemon it means `screenshot: true` unless a
+    /// destination is named; before this it was read by nobody on this route, so
+    /// a documented, accepted argument quietly produced no file.
+    #[test]
+    fn png_true_writes_the_frame_and_a_named_destination_wins() {
+        assert_eq!(
+            png_shorthand(ScreenshotRequest::None, &json!({"png": true})),
+            ScreenshotRequest::Default
+        );
+        assert_eq!(
+            png_shorthand(
+                ScreenshotRequest::Path(PathBuf::from("out/x.png")),
+                &json!({"png": true, "screenshot": "out/x.png"})
+            ),
+            ScreenshotRequest::Path(PathBuf::from("out/x.png"))
+        );
+        assert_eq!(
+            png_shorthand(ScreenshotRequest::None, &json!({"png": false})),
+            ScreenshotRequest::None
+        );
+        assert_eq!(
+            png_shorthand(ScreenshotRequest::None, &json!({})),
+            ScreenshotRequest::None
+        );
+    }
+
     #[test]
     fn the_screenshot_argument_is_true_or_a_path_and_nothing_else() {
         assert_eq!(
@@ -4628,6 +5270,8 @@ mod tests {
             pixels_compared: true,
             pixels_changed: false,
             budget_ms: 5000,
+            window_ms: 5000,
+            window_spent: true,
         }
     }
 

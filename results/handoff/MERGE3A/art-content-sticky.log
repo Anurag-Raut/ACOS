@@ -1,0 +1,7 @@
+verify: timeout (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-aa9681f2-7ddfb13c1c0dc0bc/scenarios/rel3a-content-sticky.yaml (sha 34783bf80795), apk /home/Qui/.t3/worktrees/acos/t3-aa9681f2-7ddfb13c1c0dc0bc/fixtures/build/apps/settle-lab.apk (sha 3ea3d28b33ba), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  error: TIMEOUT: capture: strict settle timed out (traversal); the step is a non-pass because the screen was still changing when the deadline elapsed
+  artifacts: results/handoff/MERGE3A/artifacts/content-sticky
+  steps: 5
+verify: TIMEOUT (infra_timeout): capture: strict settle timed out (traversal); the step is a non-pass because the screen was still changing when the deadline elapsed [class=infra_timeout, retryable=true]

@@ -94,6 +94,15 @@ impl Mode {
     }
 }
 
+/// The frame identity a `scroll_until` search found its target in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScrollUntilReport {
+    /// Swipes it took (1 = the first one already revealed the node).
+    pub attempts: usize,
+    /// The settled traversal's frame sequence the node was found in.
+    pub frame_seq: u64,
+}
+
 /// The commands a [`SessionBackend`] can actually execute today.
 ///
 /// A `false` field is reported by name when a scenario needs it; the executor's
@@ -111,6 +120,8 @@ pub struct SessionCapabilities {
     pub tap: bool,
     /// `tap_text(text)`.
     pub tap_text: bool,
+    /// `swipe(from, to, duration_ms)` — a real interpolated MotionEvent stream.
+    pub swipe: bool,
     /// `type_text(text)`.
     pub type_text: bool,
     /// `key(name)`.
@@ -160,6 +171,7 @@ impl SessionCapabilities {
             ("screenshot", self.screenshot),
             ("tap", self.tap),
             ("tap_text", self.tap_text),
+            ("swipe", self.swipe),
             ("type_text", self.type_text),
             ("key", self.key),
             ("rotate", self.rotate),
@@ -180,7 +192,7 @@ impl SessionCapabilities {
             ui_tree: self.tree,
             logs: self.logs,
             screenshot: self.screenshot,
-            input: self.tap || self.key || self.type_text,
+            input: self.tap || self.key || self.type_text || self.swipe,
             reset: self.reset,
             environment: self.environment,
             crash_reports: self.crash_reports,
@@ -419,6 +431,17 @@ pub trait SessionBackend {
         None
     }
 
+    /// REL3E: the bound tree of the most recent traversal, **without** issuing a
+    /// traversal of its own (a hit-test must not cost a guest round trip).
+    fn bound_tree(&self) -> Option<acos_protocol::ui::UiTree> {
+        None
+    }
+
+    /// REL3E: attach the action's resolved-target/hit-test block to its delivery
+    /// record, so a scenario step publishes the same `input.target` an MCP reply
+    /// carries.
+    fn attach_input_target(&mut self, _target: serde_json::Value) {}
+
     /// P12b: per-request settle deadline (`settle_timeout_ms`). A session
     /// engine with a settle rule applies it to the next observation; the
     /// default has no settle rule and ignores it.
@@ -432,6 +455,15 @@ pub trait SessionBackend {
     /// screen that animates forever in pixels). Mutually exclusive with
     /// [`Self::set_input_settle_mode`].
     fn set_input_content_settle(&mut self, _content: bool) {}
+
+    /// REL3A: the settle rule the next **observation** binds its tree/frame with
+    /// (`strict` default, `content` for a screen that animates forever in
+    /// pixels). Distinct from the input settle mode: the verifier asks for it on
+    /// every `wait_for`/`assert_*` it makes, and a `settle: content` tap must not
+    /// leak into the next observation (or the reverse). A session engine without
+    /// the rule keeps the default no-op and reports no content record, so a step
+    /// that asked for content fails closed.
+    fn set_observation_settle(&mut self, _mode: acos_verify::settle::ObservationSettle) {}
 
     /// SE2b: the settle rule the next input action will apply (`strict`,
     /// `fast` or `content`). Target resolution reads it so a content action
@@ -463,6 +495,17 @@ pub trait SessionBackend {
 
     /// P12b: the same for the most recent tree/launch/reset observation.
     fn tree_settle_timeout(&self) -> Option<serde_json::Value> {
+        None
+    }
+
+    /// REL3H2: the settle record of the most recent traversal, **settled or
+    /// not** (`settle: {settled, bound, reason, ...}`).
+    ///
+    /// `None` means the engine reported no record at all - not "settled". A
+    /// `scroll_until` hit may only come from a settled observation, so a search
+    /// on an engine that stays silent here fails closed
+    /// (`scroll_until_no_settle_record`) instead of trusting the tree.
+    fn tree_settle_record(&self) -> Option<serde_json::Value> {
         None
     }
 
@@ -518,6 +561,151 @@ pub trait SessionBackend {
 
     /// Type UTF-8 text into the focused field.
     fn type_text(&mut self, text: &str) -> Result<(), BackendError>;
+
+    /// Swipe/scroll from `from` to `to` over `duration_ms` on the live window.
+    ///
+    /// This is a real touch gesture: `DOWN`, interpolated `MOVE`s at the display
+    /// refresh cadence, `UP`. The list/scroll container's own physics
+    /// (`VelocityTracker`/`OverScroller`) decides whether it flings; the engine
+    /// only publishes the finger stream. The default has no swipe command and
+    /// says so (`input.swipe`) — never a fake send.
+    /// The live display size in pixels, when this engine reports it.
+    ///
+    /// A direction-only swipe/scroll step needs two points; without a display
+    /// the executor refuses the step rather than guessing a screen.
+    fn display_size(&self) -> Option<(u32, u32)> {
+        None
+    }
+
+    fn swipe(
+        &mut self,
+        _from: (f32, f32),
+        _to: (f32, f32),
+        _duration_ms: u64,
+        _fling: bool,
+    ) -> Result<(), BackendError> {
+        Err(BackendError::unsupported(
+            "input.swipe",
+            "this session engine has no swipe/scroll command",
+        ))
+    }
+
+    /// Swipe repeatedly until `selector` is visible in a **settled** observation.
+    ///
+    /// Bounded by `max_attempts`; every attempt is one real swipe followed by a
+    /// fresh traversal (never a cached tree), so "found" can only be reported
+    /// for a node the framework was actually showing after the gesture settled.
+    ///
+    /// REL3H: a swipe that moved nothing (the settled tree before and after it is
+    /// identical) has reached the end of the list, so the search stops there
+    /// with a structured `END_OF_LIST` instead of spending the remaining
+    /// attempts on gestures that cannot reveal anything. A search that used
+    /// every attempt without reaching the end stays `ELEMENT_NOT_FOUND`. Both
+    /// name the attempts and the last settled tree's texts, and neither is ever
+    /// a pass.
+    ///
+    /// REL3H2: the inference needs a **consumed** gesture, the tree unchanged
+    /// across **two** such gestures, and a traversal that actually settled. A
+    /// swipe the app window did not consume (`finishInputEvent(handled) = false`,
+    /// settle `reason: unhandled_input`) missed the scroller: that is
+    /// `ELEMENT_NOT_FOUND` with "gesture not consumed", never `END_OF_LIST`. A
+    /// tree reply with no settle record is not evidence of anything and fails
+    /// closed. All three rules are the shared ones from `acos_verify::backend`,
+    /// so this engine and the verifier's default search cannot disagree.
+    fn scroll_until(
+        &mut self,
+        selector: &acos_protocol::Selector,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        fling: bool,
+        max_attempts: usize,
+    ) -> Result<ScrollUntilReport, BackendError> {
+        let attempts = max_attempts.max(1);
+        // The baseline is a settled traversal *before* the first gesture: without
+        // it the very first swipe (which may already be at the end) could not be
+        // recognised as having moved nothing.
+        let mut movement = acos_verify::backend::ScrollUntilMovement::new(self.tree()?);
+        let mut last: Option<(u64, usize, Vec<String>)> = None;
+        for attempt in 1..=attempts {
+            self.swipe(from, to, duration_ms, fling)?;
+            // REL3H2: the swipe's own delivery (`handled`) is read before the
+            // traversal, which overwrites the engine's last-input record.
+            let delivery = self.last_input_delivery();
+            let tree = self.tree()?;
+            // REL3H: `found` may only come from a *settled* observation. A tree
+            // request that timed out still answers with the latest tree (P12b),
+            // and the node it shows may be a mid-animation state, so the search
+            // stops with the settle's own TIMEOUT instead of claiming a hit.
+            if let Some(settle) = self.tree_settle_timeout() {
+                return Err(settle_timeout_error(
+                    settle,
+                    "scroll_until",
+                    self.last_frame_seq(),
+                ));
+            }
+            // REL3H2: no settle record at all is *not* "settled" (fail closed).
+            let settle = match self.tree_settle_record() {
+                Some(record) => record,
+                None => {
+                    return Err(acos_verify::backend::scroll_until_no_settle_record(
+                        selector,
+                        attempt,
+                        self.last_frame_seq(),
+                    ))
+                }
+            };
+            if settle.get("settled").and_then(serde_json::Value::as_bool) == Some(false) {
+                return Err(acos_verify::backend::scroll_until_not_settled(
+                    selector,
+                    attempt,
+                    self.last_frame_seq(),
+                    &settle,
+                ));
+            }
+            let seen = acos_verify::backend::scroll_until_seen_texts(&tree);
+            let frame_seq = tree.frame.frame_seq;
+            let hit = tree.find_one(selector).is_some_and(|node| node.visible);
+            last = Some((frame_seq, attempt, seen.clone()));
+            if hit {
+                return Ok(ScrollUntilReport {
+                    attempts: attempt,
+                    frame_seq,
+                });
+            }
+            // REL3H2: a gesture the app never consumed moved nothing because it
+            // missed the scroller - never evidence that the list ended.
+            if let Some(reason) = acos_verify::backend::scroll_until_unconsumed_reason(
+                Some(&settle),
+                delivery.as_ref(),
+            ) {
+                return Err(acos_verify::backend::scroll_until_gesture_not_consumed(
+                    selector,
+                    attempt,
+                    attempts,
+                    frame_seq,
+                    &seen,
+                    reason,
+                    Some(settle),
+                    delivery.as_ref().and_then(|delivery| delivery.handled),
+                ));
+            }
+            if movement.observe(&tree) {
+                return Err(acos_verify::backend::scroll_until_end_of_list(
+                    selector,
+                    attempt,
+                    attempts,
+                    frame_seq,
+                    &seen,
+                    movement.unchanged(),
+                ));
+            }
+        }
+        let (frame_seq, attempt, seen) = last.unwrap_or((0, 0, Vec::new()));
+        Err(acos_verify::backend::scroll_until_not_found(
+            selector, attempt, attempts, frame_seq, &seen,
+        ))
+    }
 
     /// The first fatal crash signature this session has observed, if any.
     ///
@@ -909,6 +1097,13 @@ impl Backend for EngineBackend {
         }
     }
 
+    fn last_input_delivery(&self) -> Option<acos_verify::backend::InputDelivery> {
+        match self {
+            EngineBackend::Native(backend) => backend.last_input_delivery(),
+            EngineBackend::Session { session, .. } => session.last_input_delivery(),
+        }
+    }
+
     fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
         match self {
             EngineBackend::Native(backend) => backend.manifest(apk),
@@ -974,6 +1169,12 @@ impl Backend for EngineBackend {
         }
     }
 
+    fn set_observation_settle(&mut self, mode: acos_verify::settle::ObservationSettle) {
+        if let EngineBackend::Session { session, .. } = self {
+            session.set_observation_settle(mode);
+        }
+    }
+
     fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
         match self {
             EngineBackend::Native(backend) => backend.refresh(),
@@ -1028,6 +1229,11 @@ impl Backend for EngineBackend {
                     Text(String),
                     Point(String, i32, i32),
                 }
+                // REL3E: the tap's target/hit-test block, built from the tree the
+                // point was resolved against and attached to the action's own
+                // delivery so a verify step publishes the same evidence an MCP
+                // reply carries (`input.target`).
+                let mut tap_target: Option<serde_json::Value> = None;
                 match action {
                     InputAction::Tap { selector, x, y } => {
                         if !caps.tap {
@@ -1062,6 +1268,41 @@ impl Backend for EngineBackend {
                         };
                         // The action starts here; `previous` is the frame before it.
                         let previous = self.current_frame_seq();
+                        let selector_json = selector
+                            .as_ref()
+                            .map(|selector| serde_json::json!({"selector": selector.human()}));
+                        tap_target = match (&target, &*self) {
+                            (_, EngineBackend::Session { session, .. }) => {
+                                let tree = session.bound_tree();
+                                match &target {
+                                    Target::Text(text) => {
+                                        let node = tree.as_ref().and_then(|tree| {
+                                            tree.find_input_target(&Selector::by_text(text)).cloned()
+                                        });
+                                        node.map(|node| {
+                                            let (cx, cy) = node.tap_point();
+                                            acos_protocol::ui::tap_target_json(
+                                                selector_json.as_ref(),
+                                                Some(&node),
+                                                tree.as_ref(),
+                                                cx,
+                                                cy,
+                                            )
+                                        })
+                                    }
+                                    Target::Point(_window, x, y) => {
+                                        Some(acos_protocol::ui::tap_target_json(
+                                            selector_json.as_ref(),
+                                            None,
+                                            tree.as_ref(),
+                                            *x,
+                                            *y,
+                                        ))
+                                    }
+                                }
+                            }
+                            (_, EngineBackend::Native(_)) => None,
+                        };
                         match target {
                             Target::Text(text) => self.tap_node(&text)?,
                             Target::Point(window, x, y) => {
@@ -1069,6 +1310,35 @@ impl Backend for EngineBackend {
                                     session.tap_in_window(&window, x, y)?;
                                 }
                             }
+                        }
+                        if let (Some(target), EngineBackend::Session { session, .. }) =
+                            (tap_target, &mut *self)
+                        {
+                            session.attach_input_target(target);
+                        }
+                        self.action_result(previous, action.kind())
+                    }
+                    InputAction::Swipe {
+                        from,
+                        to,
+                        duration_ms,
+                        fling,
+                    } => {
+                        if !caps.swipe {
+                            return Err(BackendError::unsupported(
+                                "input.swipe",
+                                "this session engine has no swipe/scroll command",
+                            ));
+                        }
+                        let previous = self.current_frame_seq();
+                        if let EngineBackend::Session { session, .. } = self {
+                            session.begin_input();
+                            session.swipe(
+                                (from.0 as f32, from.1 as f32),
+                                (to.0 as f32, to.1 as f32),
+                                *duration_ms,
+                                *fling,
+                            )?;
                         }
                         self.action_result(previous, action.kind())
                     }
@@ -1154,6 +1424,59 @@ impl Backend for EngineBackend {
                         self.action_result(previous, action.kind())
                     }
                 }
+            }
+        }
+    }
+
+    fn display_size(&self) -> Option<(u32, u32)> {
+        match self {
+            EngineBackend::Native(backend) => backend.display_size(),
+            EngineBackend::Session { session, .. } => session.display_size(),
+        }
+    }
+
+
+    fn scroll_until(
+        &mut self,
+        selector: &Selector,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        fling: bool,
+        max_attempts: usize,
+    ) -> Result<(acos_verify::backend::ScrollUntilReport, SessionObservation), BackendError> {
+        match self {
+            EngineBackend::Native(backend) => {
+                backend.scroll_until(selector, from, to, duration_ms, fling, max_attempts)
+            }
+            EngineBackend::Session { .. } => {
+                let caps = match self {
+                    EngineBackend::Session { session, .. } => session.capabilities(),
+                    EngineBackend::Native(_) => unreachable!(),
+                };
+                if !caps.swipe {
+                    return Err(BackendError::unsupported(
+                        "input.swipe",
+                        "this session engine has no swipe/scroll command",
+                    ));
+                }
+                let previous = self.current_frame_seq();
+                let report = if let EngineBackend::Session { session, .. } = self {
+                    session.begin_input();
+                    session.scroll_until(selector, from, to, duration_ms, fling, max_attempts)?
+                } else {
+                    unreachable!()
+                };
+                // The search's last traversal is the action's frame: bind it and
+                // attach the delivery record so the step reports `handled` too.
+                let observation = self.action_result(previous, "scroll_until")?;
+                Ok((
+                    acos_verify::backend::ScrollUntilReport {
+                        attempts: report.attempts,
+                        frame_seq: report.frame_seq,
+                    },
+                    observation,
+                ))
             }
         }
     }
@@ -1287,8 +1610,12 @@ fn settle_timeout_error(settle: serde_json::Value, context: &str, frame_seq: u64
         ),
         hint: Some(
             "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a \
-             TIMEOUT failure; use wait_for for a later event, or `animations:off` for a \
-             functional check. The latest tree/frame is kept in the step evidence."
+             TIMEOUT failure and never a pass. For a screen that animates forever in pixels \
+             (React Native `Animated`, a custom `ValueAnimator`), `animations:off` does not \
+             help: use `settle: content` on the step (content-stable: the UI tree's text, \
+             nodes and state stop changing even while the pixels keep moving). Tree/text \
+             assertions and `wait_for` accept it too, and `wait_for`/`assert_*` fall back to it \
+             by default. The latest tree/frame is kept in the step evidence."
                 .to_string(),
         ),
         details: Some(serde_json::json!({
@@ -1744,6 +2071,7 @@ mod tests {
             caps.missing(),
             vec![
                 "tap_text",
+                "swipe",
                 "type_text",
                 "key",
                 "rotate",
@@ -2182,6 +2510,8 @@ mod engine_tests {
             required_fidelity: None,
             engine: acos_protocol::VerifyEngine::Art,
             flags: Vec::new(),
+            animations: None,
+            native: false,
         }
     }
 
@@ -2200,7 +2530,7 @@ mod engine_tests {
             required_fidelity: None,
             flags: Vec::new(),
             native: false,
-            engine: engine.to_string(),
+            engine: Some(engine.to_string()),
             animations: None,
             insets: None,
             untrusted: false,

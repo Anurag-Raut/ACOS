@@ -1,0 +1,562 @@
+warning: acos-binder-peer@0.2.3: built /home/Qui/.t3/worktrees/acos/t3-879b7c7c-6dfb08dd82494c49/.cache/merge3i3-target/debug/build/acos-binder-peer-d09b609fe6f2366d/out/libacos_binder_driver.so
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-services` (lib) generated 1 warning
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:1131:21
+     |
+1131 |             let mut unsettled: Option<BackendError> = None;
+     |                     ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:2051:13
+     |
+2051 |     let mut unsettled: Option<BackendError> = None;
+     |             ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: `acos-verify` (lib) generated 2 warnings
+warning: `acos-verify` (lib test) generated 2 warnings (2 duplicates)
+warning: method `with_settle_pixels` is never used
+   --> crates/acos-verify/tests/scenarios.rs:361:8
+    |
+346 | impl SliceBackend {
+    | ----------------- method in this implementation
+...
+361 |     fn with_settle_pixels(mut self, pixels_changed: bool) -> Self {
+    |        ^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-verify` (test "scenarios") generated 1 warning
+    Finished `test` profile [unoptimized] target(s) in 0.05s
+     Running unittests src/lib.rs (.cache/merge3i3-target/debug/deps/acos_binder_peer-16d0fd7cef4780fd)
+
+running 3 tests
+test protocol::tests::header_is_48_bytes_and_round_trips ... ok
+test protocol::tests::frames_round_trip_over_a_unix_socket ... ok
+test protocol::tests::object_offsets_decode ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (.cache/merge3i3-target/debug/deps/acos_binder_peer-616c19f1b949499a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/peer.rs (.cache/merge3i3-target/debug/deps/peer-8fe929fb1e504897)
+
+running 17 tests
+test a_null_binder_consumes_its_stability_record_even_without_an_offset_entry ... ok
+test error_code_is_the_stable_host_code ... ok
+test reply_file_descriptors_stay_open_until_the_frame_is_written ... ok
+test wire_form_round_trips_a_null_binder_and_a_real_one ... ok
+test reverse_reply_status_codes_are_not_counted_as_deliveries ... ok
+test iwindowmanager_has_navigation_bar_is_answered_by_the_real_window_service ... ok
+test add_service_registers_a_java_local_binder ... ok
+test host_error_paths_are_not_silent_successes ... ok
+test a_service_host_transaction_covered_by_the_existing_tests_round_trips ... ok
+test unknown_code_is_a_structured_error_and_a_json_line ... ok
+test twenty_reverse_deliveries_reach_the_java_receiver_without_a_race ... ok
+test service_manager_returns_real_host_nodes_for_window_activity_task_and_package ... ok
+test the_java_binder_table_is_bounded_with_a_structured_refusal ... ok
+test delivery_wake::a_queued_delivery_is_flushed_within_five_ms_with_no_incoming_transaction ... ok
+test the_unsupported_log_is_bounded_and_counts_the_drops ... ok
+test the_forwarded_transaction_log_is_bounded ... ok
+test delivery_wake::an_idle_peer_with_nothing_queued_has_no_wakeups ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.00s
+
+     Running unittests src/lib.rs (.cache/merge3i3-target/debug/deps/acos_protocol-c1a5082aab674b1a)
+
+running 94 tests
+test artifacts::tests::capture_names_are_sanitised_and_deterministic ... ok
+test artifacts::tests::claim_refuses_a_partial_run_without_a_marker ... ok
+test artifacts::tests::claim_refuses_a_directory_another_run_owns ... ok
+test artifacts::tests::claim_accepts_an_absent_or_empty_directory ... ok
+test artifacts::tests::claim_overwrite_replaces_the_previous_run_and_records_it ... ok
+test artifacts::tests::claim_accepts_pre_created_empty_subdirectories ... ok
+test commands::flag_tests::name_value_flags_are_accepted ... ok
+test artifacts::tests::claimed_pass_without_evidence_is_invalid ... ok
+test commands::flag_tests::option_like_and_malformed_flags_are_rejected ... ok
+test commands::tests::action_validation_catches_ambiguity ... ok
+test artifacts::tests::non_pass_verdict_does_not_require_evidence ... ok
+test artifacts::tests::missing_step_artifact_is_invalid ... ok
+test commands::tests::typed_union_round_trips ... ok
+test diff::tests::added_and_removed_nodes_are_matched_by_id_path_not_position ... ok
+test diff::tests::identical_trees_report_no_change ... ok
+test diff::tests::duplicate_identities_stay_distinct ... ok
+test artifacts::tests::missing_frame_makes_claimed_pass_invalid ... ok
+test diff::tests::one_text_change_is_the_only_change ... ok
+test artifacts::tests::valid_directory_is_accepted ... ok
+test artifacts::tests::path_escape_is_rejected ... ok
+test diff::tests::lists_are_capped_and_say_so ... ok
+test envelope::tests::pass_is_the_only_ok_envelope ... ok
+test diff::tests::no_baseline_invents_nothing ... ok
+test envelope::tests::invalid_json_envelopes_are_rejected_on_deserialize ... ok
+test error::tests::deserialization_derives_class_and_defaults_from_the_code ... ok
+test envelope::tests::typed_results_round_trip ... ok
+test diff::tests::pure_addition_reports_only_added ... ok
+test error::tests::error_object_carries_hint_and_retryable ... ok
+test diff::tests::pure_removal_reports_only_removed ... ok
+test diff::tests::flag_and_bounds_changes_carry_old_and_new ... ok
+test error::tests::existing_crate_codes_are_all_represented ... ok
+test frame::tests::tree_bound_to_frame_crop_round_trip ... ok
+test frame::tests::the_status_bar_has_no_pixels_in_an_app_area_frame ... ok
+test events::tests::monotonic_helper ... ok
+test identity::tests::display_wire_shape ... ok
+test artifacts::tests::validator_rejects_a_capture_map_that_dangles_or_is_incomplete ... ok
+test artifacts::tests::validator_rejects_status_that_disagrees_with_verdict ... ok
+test error::tests::every_code_has_a_class_and_the_new_host_codes_are_registered ... ok
+test error::tests::all_codes_are_unique_and_round_trip ... ok
+test provenance::tests::paths_are_absolute_even_when_they_do_not_exist ... ok
+test provenance::tests::short_sha_is_twelve_characters ... ok
+test diff::tests::removed_and_changed_lists_are_capped_with_true_counts ... ok
+test events::tests::wire_shape_is_flat ... ok
+test frame::tests::a_whole_display_frame_needs_no_origin ... ok
+test provenance::tests::an_input_identity_carries_the_size_and_mtime_it_was_hashed_at ... ok
+test envelope::tests::failure_status_is_derived_from_code ... ok
+test frame::tests::freshness_is_strict ... ok
+test scenario::tests::action_alias_is_a_string ... ok
+test identity::tests::isolation_ranking ... ok
+test reply::tests::identical_tree_content_reuses_the_named_artifact ... ok
+test provenance::tests::a_launch_block_has_a_null_scenario_and_named_engine ... ok
+test provenance::tests::the_summary_line_names_both_inputs_and_their_short_digests ... ok
+test scenario::tests::expect_handled_rejects_a_non_bool ... ok
+test scenario::tests::expect_change_rejects_a_non_bool ... ok
+test scenario::tests::expect_change_with_fast_settle_is_invalid ... ok
+test provenance::tests::a_file_identity_carries_the_full_digest_and_its_prefix ... ok
+test scenario::tests::swipe_direction_up_moves_the_finger_toward_the_top ... ok
+test scenario::tests::missing_version_is_a_parse_error ... ok
+test reply::tests::the_full_tree_is_written_once_and_named ... ok
+test ui::tests::a_host_window_removal_outranks_an_unhandled_ack ... ok
+test ui::tests::bounds_round_trip_and_parse ... ok
+test ui::tests::content_desc_is_an_explicit_selector_field ... ok
+test ui::tests::include_invisible_is_not_a_matching_field ... ok
+test scenario::tests::expect_change_parses_as_a_bool_and_defaults_false ... ok
+test reply::tests::a_different_tree_for_a_used_sequence_gets_its_own_artifact ... ok
+test frame::tests::display_geometry_serde_is_additive ... ok
+test ui::tests::selector_human_form_is_not_a_debug_dump ... ok
+test scenario::tests::expect_handled_parses_and_defaults_to_unset ... ok
+test scenario::tests::parses_and_validates ... ok
+test ui::tests::selectors_are_stable ... ok
+test ui::tests::several_visible_matches_are_all_returned_as_candidates ... ok
+test ui::tests::selectors_skip_offscreen_nodes_and_tap_the_visible_rect ... ok
+test scenario::tests::semantic_errors_have_paths ... ok
+test scenario::tests::swipe_geometry_errors_have_paths ... ok
+test ui::tests::tap_hit_finds_the_deepest_node_and_prefers_a_clickable_sibling ... ok
+test ui::tests::the_text_stage_wins_over_the_content_desc_stage ... ok
+test scenario::tests::swipe_and_scroll_until_parse_and_validate ... ok
+test verdict::tests::a_verdict_without_status_reads_as_fail_never_pass ... ok
+test verdict::tests::reproducer_flags_are_deterministic ... ok
+test verdict::tests::status_mirrors_verdict_with_the_envelope_vocabulary ... ok
+test reply::tests::an_oversized_string_is_bounded_in_place_before_the_result_is_replaced ... ok
+test reply::tests::the_second_page_reaches_the_middle_and_later_rows ... ok
+test reply::tests::compact_view_keeps_the_middle_text_and_the_ids ... ok
+test ui::tests::regex_and_validation ... ok
+test reply::tests::a_capped_launch_ladder_keeps_every_rung_and_the_blocker ... ok
+test reply::tests::an_enormous_non_tree_result_is_replaced_by_a_pointer_not_silently_cut ... ok
+test reply::tests::a_blocked_launch_keeps_its_ladder_and_shortens_the_repeated_blocker ... ok
+test mcp::tests::one_tool_per_command_with_schema ... ok
+test reply::tests::enforce_cap_shrinks_a_compact_page_instead_of_cutting_the_middle ... ok
+test provenance::tests::the_digest_is_cached_for_an_unchanged_file_and_recomputed_when_it_changes ... ok
+test provenance::tests::an_input_rewritten_during_the_run_is_reported_not_silent ... ok
+test reply::tests::a_capped_verify_reply_keeps_the_outcome_failing_step_and_provenance ... ok
+test provenance::tests::a_warm_capture_of_a_large_file_costs_no_hash ... ok
+test provenance::tests::a_warm_launch_of_the_gaten_apk_pays_no_digest ... ok
+
+test result: ok. 94 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.42s
+
+     Running tests/golden.rs (.cache/merge3i3-target/debug/deps/golden-95320913838a578b)
+
+running 3 tests
+test a_pass_never_serializes_an_error_and_a_failure_never_serializes_ok ... ok
+test inspect_pass_envelope_is_golden ... ok
+test unsupported_envelope_is_golden ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/invariants.rs (.cache/merge3i3-target/debug/deps/invariants-b8065b25f8da3bfa)
+
+running 7 tests
+test envelope_helpers_preserve_identity_and_evidence ... ok
+test failure_constructors_map_codes_to_honest_statuses ... ok
+test fidelity_semantics_are_explicit ... ok
+test envelope_deserialization_cannot_create_a_false_pass ... ok
+test ok_is_equivalent_to_pass_for_every_status ... ok
+test unsupported_is_never_a_pass ... ok
+test frames_cannot_be_reused_after_the_requested_sequence ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/roundtrip.rs (.cache/merge3i3-target/debug/deps/roundtrip-22488d69c15d9594)
+
+running 8 tests
+test envelope_and_identity_round_trip ... ok
+test events_round_trip ... ok
+test assertion_round_trips ... ok
+test ui_round_trips ... ok
+test error_taxonomy_round_trips ... ok
+test command_requests_and_responses_round_trip ... ok
+test scenario_all_steps_round_trip_json_and_yaml ... ok
+test verdict_and_mcp_round_trip ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/scenarios.rs (.cache/merge3i3-target/debug/deps/scenarios-a4054fe9e326940f)
+
+running 9 tests
+test an_engine_mismatch_names_both_engines ... ok
+test the_declared_engine_is_the_parsed_yaml_value_not_a_trimmed_line ... ok
+test fixture_scenarios_contain_the_art_reference_strings ... ok
+test valid_scenario_has_no_errors_and_warns_on_optional_step ... ok
+test a_legacy_engine_with_a_trailing_comment_still_warns ... ok
+test a_legacy_engine_value_warns_with_the_canonical_name ... ok
+test the_scenario_engine_field_uses_the_cli_vocabulary ... ok
+test at_least_thirty_negative_validation_cases_are_rejected ... ok
+test every_checked_in_scenario_parses_and_validates ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/schemas.rs (.cache/merge3i3-target/debug/deps/schemas-0c4d864336fcf301)
+
+running 2 tests
+test every_command_has_a_request_schema ... ok
+test schemas_are_up_to_date ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (.cache/merge3i3-target/debug/deps/acos_verify-e007a7dba702547d)
+
+running 114 tests
+test artifacts::tests::shell_quote_handles_spaces ... ok
+test assertions::tests::a_passing_not_visible_assertion_echoes_the_expectation ... ok
+test assertions::tests::a_passing_state_assertion_echoes_every_requested_flag ... ok
+test artifacts::tests::prepares_and_writes_expected_files ... ok
+test assertions::tests::a_passing_text_assertion_echoes_expected_and_actual_geometry ... ok
+test artifacts::tests::a_richer_tree_artifact_is_not_overwritten_by_a_skeleton ... ok
+test artifacts::tests::repro_sh_replays_the_recorded_flags ... ok
+test assertions::tests::missing_node_is_element_not_found ... ok
+test assertions::tests::assert_text_on_an_offscreen_node_is_element_offscreen ... ok
+test assertions::tests::assert_not_visible_sees_the_present_but_offscreen_node ... ok
+test assertions::tests::selectors_match_the_visible_node_first ... ok
+test assertions::tests::selector_miss_messages_use_the_human_selector_form ... ok
+test assertions::tests::assert_visible_on_an_offscreen_node_is_element_offscreen_not_a_pass ... ok
+test assertions::tests::text_assertion_fails_on_wrong_bounds ... ok
+test assertions::tests::text_assertion_fails_on_wrong_text ... ok
+test assertions::tests::text_assertion_passes_on_match ... ok
+test assertions::tests::truncated_tree_reports_tree_truncated_not_element_not_found ... ok
+test backend::tests::a_list_that_loads_after_the_first_unchanged_observation_is_not_an_end ... ok
+test backend::tests::a_moving_list_uses_every_attempt ... ok
+test backend::tests::a_not_handled_delivery_alone_refuses_the_end_of_list ... ok
+test backend::tests::a_visible_node_is_found_in_the_first_settled_observation ... ok
+test backend::tests::capability_names_are_stable ... ok
+test backend::tests::a_swipe_that_moves_nothing_ends_the_search ... ok
+test backend::tests::an_unconsumed_swipe_is_never_an_end_of_list ... ok
+test backend::tests::a_real_end_of_list_is_reported_after_two_consumed_gestures ... ok
+test backend::tests::resolve_component_expands_android_component_shorthand ... ok
+test backend::tests::resolve_component_handles_forms ... ok
+test backend::tests::unsupported_maps_to_unsupported_status ... ok
+test clock::tests::fixed_clock_advances ... ok
+test clock::tests::epoch_is_formatted ... ok
+test clock::tests::known_instant_matches ... ok
+test display::tests::a_frame_of_an_unexpected_size_gets_no_origin ... ok
+test display::tests::an_unsigned_full_display_frame_is_signed_and_a_declared_one_is_kept ... ok
+test display::tests::report_mode_puts_the_full_display_frame_at_the_origin ... ok
+test display::tests::the_reference_display_puts_an_app_area_frame_at_the_status_bar ... ok
+test executor::content_settle_tests::step_evidence_prefers_the_per_action_settle ... ok
+test executor::content_settle_tests::expect_change_with_content_settle_is_invalid ... ok
+test executor::content_settle_tests::a_negative_failure_must_match_its_pinned_error ... ok
+test executor::content_settle_tests::fast_still_never_backs_a_pass ... ok
+test executor::content_settle_tests::a_content_step_without_a_content_record_fails_closed ... ok
+test executor::content_settle_tests::content_settle_parses_on_inputs_and_launch ... ok
+test executor::content_settle_tests::content_settle_requires_the_settled_frame_identity ... ok
+test executor::rel3a_settle_tests::an_unconfirmed_content_observation_is_labelled_strict ... ok
+test executor::region_tests::region_hash_matches_exact_rgba ... ok
+test executor::region_tests::region_colour_statistics_and_ocr_unsupported ... ok
+test executor::region_tests::a_removed_delivered_window_is_host_handled_and_not_a_guest_ack ... ok
+test executor::region_tests::merge3i3_a_removed_dialog_outranks_an_unhandled_ack ... ok
+test executor::region_tests::rel3h2_an_unhandled_pass_carries_input_unhandled ... ok
+test executor::content_settle_tests::pixel_assertion_backed_by_content_settle_fails_closed ... ok
+test manifest::tests::hex_encoding_is_lowercase ... ok
+test native::tests::blank_frames_are_not_meaningful ... ok
+test native::tests::every_key_name_has_a_code ... ok
+test native::tests::native_capabilities_are_honest ... ok
+test executor::content_settle_tests::geometry_claims_are_refused_on_content_settle ... ok
+test native::tests::view_tree_maps_to_protocol_ui_tree ... ok
+test retention::tests::capture_order_puts_first_and_last_first ... ok
+test assertions::tests::ordered_logs_require_order ... ok
+test executor::launch_gate_tests::a_scenario_without_an_activity_and_no_launcher_is_an_invalid_scenario ... ok
+test retention::tests::a_declared_frame_survives_even_none_on_pass ... ok
+test retention::tests::a_retained_json_reference_unprunes_a_candidate ... ok
+test reference::tests::backend_replays_initial_state ... ok
+test retention::tests::decision_never_prunes_a_non_pass ... ok
+test executor::launch_gate_tests::undeclared_activity_is_an_invalid_scenario_not_an_assertion ... ok
+test artifacts::tests::repro_sh_requires_a_fresh_artifacts_dir ... ok
+test executor::region_tests::a_status_bar_region_fails_and_names_the_geometry ... ok
+test manifest::tests::hello_views_manifest_resolves ... ok
+test executor::content_settle_tests::selector_bounds_is_a_geometry_claim_on_every_assertion_kind ... ok
+test executor::content_settle_tests::text_assertions_are_allowed_on_content_settle ... ok
+test executor::region_tests::region_hash_mismatch_fails ... ok
+test executor::region_tests::rel3h2_expect_handled_false_silences_the_warning ... ok
+test executor::region_tests::region_equals_png_is_exact_and_reads_a_region_of_the_frame ... ok
+test executor::region_tests::assert_region_takes_display_coordinates_and_finds_the_tree_crop ... ok
+test executor::region_tests::rel3h2_only_a_proven_unhandled_pass_warns ... ok
+test executor::region_tests::rel3h2_expect_handled_true_fails_with_input_not_handled ... ok
+test executor::region_tests::rel3e_tap_step_reports_handled_target_and_expect_change_auto ... ok
+test retention::tests::live_session_is_rewritten_so_no_png_path_dangles ... ok
+test retention::tests::failing_run_keeps_every_frame_and_capture ... ok
+test executor::region_tests::delivered_but_visually_unchanged_input_is_not_a_state_change ... ok
+test executor::launch_gate_tests::documented_component_shorthand_passes_the_gate ... ok
+test retention::tests::mode_parsing_and_default ... ok
+test screenshot::tests::display_space_masks_are_shifted_onto_the_frame ... ok
+test retention::tests::the_stored_block_detector_separates_the_two_layouts ... ok
+test screenshot::tests::a_mask_outside_the_frame_excludes_nothing_and_a_straddling_one_is_clipped ... ok
+test settle::tests::a_change_resets_the_window ... ok
+test screenshot::tests::changed_pixel_fails_zero_tolerance ... ok
+test settle::tests::a_repeated_probe_sample_does_not_count_as_a_distinct_traversal ... ok
+test screenshot::tests::identical_images_pass ... ok
+test settle::tests::a_reply_without_probe_seq_fails_closed ... ok
+test executor::rel3a_settle_tests::fast_is_rejected_on_observation_steps ... ok
+test settle::tests::a_signature_that_changes_every_traversal_still_times_out ... ok
+test screenshot::tests::size_mismatch_is_an_error_not_a_false_pass ... ok
+test settle::tests::a_stale_probe_sample_never_counts_toward_the_window ... ok
+test screenshot::tests::mask_excludes_a_region_from_both_terms ... ok
+test settle::tests::configured_window_is_never_below_the_floor ... ok
+test retention::tests::passing_run_keeps_referenced_frames_and_first_last_only ... ok
+test settle::tests::child_structure_and_order_change_the_signature ... ok
+test retention::tests::none_on_pass_drops_every_frame_but_keeps_trees_and_reports ... ok
+test settle::tests::same_content_has_the_same_signature ... ok
+test settle::tests::signature_covers_every_field_an_assertion_reads ... ok
+test settle::tests::the_next_floor_is_the_last_consumed_sample ... ok
+test settle::tests::window_never_settles_before_two_traversals_even_at_a_zero_window ... ok
+test settle::tests::text_and_state_changes_change_the_signature_but_geometry_does_not ... ok
+test settle::tests::window_settles_only_after_two_traversals_over_the_window ... ok
+test reference::tests::parses_reference_tree_and_logs ... ok
+test retention::tests::an_already_compressed_frame_is_not_reencoded ... ok
+test executor::rel3a_settle_tests::assert_text_honours_timeout_ms ... ok
+test retention::tests::reencoding_keeps_pixels_and_shrinks_the_frame ... ok
+test executor::rel3a_settle_tests::an_assertion_without_a_settled_observation_is_an_infra_timeout ... ok
+test executor::rel3a_settle_tests::wait_for_strict_on_an_animating_screen_is_a_timeout ... ok
+test executor::rel3a_settle_tests::a_pixel_assertion_after_a_content_settled_wait_fails_closed ... ok
+test executor::rel3a_settle_tests::a_content_observation_does_not_leak_into_the_next_capture ... ok
+test executor::rel3a_settle_tests::wait_for_falls_back_to_content_and_reports_it ... ok
+test executor::rel3a_settle_tests::assert_text_waits_under_content_settle_on_an_animating_screen ... ok
+test executor::rel3a_settle_tests::a_single_content_observation_does_not_pass_a_wait ... ok
+
+test result: ok. 114 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.50s
+
+     Running tests/scenarios.rs (.cache/merge3i3-target/debug/deps/scenarios-484b81b7de181546)
+
+running 37 tests
+test required_fidelity_mismatch_is_unsupported_not_a_pass ... ok
+test placeholder_frame_never_satisfies_an_assertion ... ok
+test unbound_tree_and_frame_is_a_backend_error_never_a_pass ... ok
+test fresh_capture_requires_a_new_completed_frame ... ok
+test tap_changes_state_in_both_tree_and_screenshot ... ok
+test pure_assertion_drifting_frame_is_not_bound_to_the_completed_frame ... ok
+test tap_that_changes_only_the_screenshot_fails ... ok
+test tap_that_changes_only_the_tree_fails ... ok
+test a_first_attempt_pass_records_no_attempts_array ... ok
+test a_step_that_never_passes_fails_with_every_attempt ... ok
+test assertion_on_a_fast_input_frame_fails_closed ... ok
+test expect_change_fails_when_the_settled_frame_is_pixel_identical ... ok
+test a_strict_wait_for_after_a_fast_input_rebinds_the_frame ... ok
+test a_no_change_tap_without_the_flag_keeps_the_p12_rule ... ok
+test expect_change_without_a_settle_record_is_unsupported ... ok
+test a_retried_step_is_one_entry_with_its_attempts ... ok
+test expect_change_passes_when_the_settled_frame_changed ... ok
+test capture_name_is_persisted_in_the_step_file_name_and_verdict_map ... ok
+test a_scenario_engine_that_differs_from_the_run_is_a_structured_warning ... ok
+test a_relative_app_resolves_against_the_scenario_path_as_written ... ok
+test the_verdict_names_both_inputs_absolutely_with_their_digests ... ok
+test an_apk_that_overrides_the_scenario_app_is_a_structured_warning ... ok
+test an_omitted_engine_is_not_a_mismatch ... ok
+test verify_envelope_satisfies_protocol_invariants ... ok
+test unimplemented_step_kind_is_unsupported_with_the_missing_capability ... ok
+test positive_hello_views_is_a_truthful_partial ... ok
+test positive_hello_jni_is_a_truthful_partial ... ok
+test a_refused_log_channel_fails_closed_with_the_backend_code ... ok
+test an_input_rewritten_during_the_run_is_a_warning_in_the_verdict ... ok
+test negative_scenarios_fail_and_never_pass ... ok
+test wait_for_returns_as_soon_as_the_condition_appears ... ok
+test assert_log_polls_until_the_line_appears_or_the_deadline_passes ... ok
+test wait_for_condition_that_never_appears_is_a_structured_timeout ... ok
+test wait_for_on_a_never_settling_screen_is_a_settle_timeout ... ok
+test screenshot_assertion_uses_the_same_completed_frame ... ok
+test screenshot_assertion_fails_beyond_tolerance ... ok
+test wait_for_keeps_polling_through_unsettled_polls ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+     Running unittests src/lib.rs (.cache/merge3i3-target/debug/deps/acos_wm-699aa4ccb9a3ed1c)
+
+running 57 tests
+test callbacks::tests::insets_control_changed_round_trips_frames ... ok
+test compositor::tests::cause_id_is_propagated ... ok
+test compositor::tests::present_is_skipped_without_damage ... ok
+test clock::tests::virtual_clock_arms_and_disarms ... ok
+test display::tests::config_change_bits_follow_the_manifest_that_declares_them ... ok
+test compositor::tests::two_layers_z_order_opaque_wins ... ok
+test compositor::tests::translucent_alpha_does_not_occlude_the_layer_below ... ok
+test clock::tests::real_clock_is_monotonic ... ok
+test display::tests::control_positions_match_dumpsys ... ok
+test compositor::tests::negative_position_and_crop_stay_in_bounds ... ok
+test display::tests::custom_display_applies_phone_geometry ... ok
+test display::tests::reference_numbers_are_the_measured_ones ... ok
+test compositor::tests::removed_layer_area_is_repainted ... ok
+test display::tests::rotated_twice_is_a_half_turn_and_the_other_quarter_is_its_mirror ... ok
+test display::tests::rotate_back_restores_the_portrait_geometry ... ok
+test ime::tests::editor_info_round_trips ... ok
+test display::tests::every_rotation_matches_the_reference_decor_insets ... ok
+test display::tests::rotate_to_landscape_swaps_the_frame_and_moves_the_bars ... ok
+test callbacks::tests::visibility_delivers_one_bool ... ok
+test ime::tests::input_bind_result_round_trips ... ok
+test compositor::tests::damage_tracking_keeps_only_the_changed_region ... ok
+test display::tests::every_rotation_matches_the_reference_config_insets ... ok
+test ime::tests::show_hide_are_honest ... ok
+test ime::tests::tracker_tokens_are_monotonic ... ok
+test ime::tests::start_input_without_connection_is_no_ime ... ok
+test input::tests::hit_test_prefers_topmost_z ... ok
+test ime::tests::typing_round_trip_through_input_connection ... ok
+test input::tests::anr_arms_only_while_unacked ... ok
+test input::tests::message_round_trip_is_exact ... ok
+test input::tests::unknown_ack_is_structured ... ok
+test input::tests::tap_delivers_down_and_up_with_ack_latency ... ok
+test replay::tests::wm_owned_classification_is_exact ... ok
+test transport::tests::in_memory_preserves_boundaries ... ok
+test transport::tests::registry_handles_are_stable_and_reusable ... ok
+test replay::tests::relayout_request_and_reply_shapes_match_the_layout ... ok
+test vsync::tests::concurrent_clients_share_one_deadline ... ok
+test vsync::tests::fixed_grid_is_deterministic ... ok
+test transport::tests::socketpair_round_trips_and_is_nonblocking ... ok
+test vsync::tests::pipe_record_layout_is_stable ... ok
+test input::tests::sessions_never_see_each_others_events ... ok
+test vsync::tests::idle_has_no_timer_and_zero_arms ... ok
+test vsync::tests::unlimited_mode_delivers_immediately ... ok
+test wms::tests::add_returns_measured_app_frame_and_insets ... ok
+test wms::tests::duplicate_add_and_unknown_window_are_structured ... ok
+test wms::tests::rotated_display_reports_a_landscape_merged_configuration ... ok
+test wms::tests::rotated_insets_state_delivers_the_config_strip ... ok
+test wms::tests::focus_and_visibility_callbacks_are_queued_in_order ... ok
+test input::tests::swipe_interpolation_action_sequence ... ok
+test wms::tests::relayout_is_stable_and_first_time_only_once ... ok
+test wms::tests::update_requested_visible_types_shows_ime ... ok
+test wms::tests::wrap_content_window_uses_client_requested_size ... ok
+test wms::tests::match_parent_window_ignores_requested_size ... ok
+test wms::tests::reference_screen_layout_is_normal_long_not_xlarge ... ok
+test wms::tests::wrap_content_without_measure_falls_back_to_parent ... ok
+test replay::tests::tsv_parser_reads_both_traces ... ok
+test replay::tests::full_replay_reports_no_wm_errors ... ok
+test compositor::tests::damage_matches_full ... ok
+
+test result: ok. 57 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.44s
+
+     Running tests/codec_golden.rs (.cache/merge3i3-target/debug/deps/codec_golden-c9e80995f45f7daa)
+
+running 10 tests
+test client_window_frames_golden_layout ... ok
+test display_cutout_marker_is_present_zero_or_minus_one ... ok
+test layout_params_full_round_trip ... ok
+test optional_codecs_round_trip ... ok
+test rect_golden_bytes ... ok
+test insets_state_round_trips_with_reference_sources ... ok
+test point_and_insets_golden_bytes ... ok
+test insets_state_ime_visible_round_trips ... ok
+test configuration_round_trips ... ok
+test derived_layout_file_exists_and_covers_every_codec ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/compositor.rs (.cache/merge3i3-target/debug/deps/compositor-d51737dd9b4e6e06)
+
+running 4 tests
+test window_frame_is_the_measured_app_bounds ... ok
+test remove_window_drops_layer_and_input_route ... ok
+test two_windows_z_order_and_opaque_overlap ... ok
+test finish_drawing_produces_a_fresh_frame_with_cause ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/fuzz.rs (.cache/merge3i3-target/debug/deps/fuzz-451a4e80667bf2b0)
+
+running 2 tests
+test a_fixed_workload_runs_cleanly ... ok
+test random_operation_sequences_never_panic ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/input.rs (.cache/merge3i3-target/debug/deps/input-100609af06cfa9cc)
+
+running 6 tests
+test idle_input_has_no_wakeups ... ok
+test anr_is_detected_only_while_unacked ... ok
+test focus_change_reports_to_the_new_window ... ok
+test tap_is_hit_tested_delivered_and_acked ... ok
+test swipe_produces_down_moves_up_in_order ... ok
+test type_text_reaches_the_registered_input_connection ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/multi_session.rs (.cache/merge3i3-target/debug/deps/multi_session-e9ef4f31d27dedee)
+
+running 2 tests
+test concurrent_sessions_do_not_share_events ... ok
+test concurrent_sessions_keep_independent_frames ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/replay.rs (.cache/merge3i3-target/debug/deps/replay-10b29599f06e00b8)
+
+running 3 tests
+test aidl_tables_cover_the_owned_methods ... ok
+test coverage_table_counts_are_sane ... ok
+test replay_covers_every_wm_owned_row ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/vsync.rs (.cache/merge3i3-target/debug/deps/vsync-fbf008580e9a5480)
+
+running 4 tests
+test deterministic_60hz_sequence ... ok
+test idle_vsync_has_zero_wakeups ... ok
+test vrr_refresh_rate_is_queryable ... ok
+test pipe_record_has_the_dispatch_vsync_shape ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_binder_peer
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_protocol
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_verify
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_wm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

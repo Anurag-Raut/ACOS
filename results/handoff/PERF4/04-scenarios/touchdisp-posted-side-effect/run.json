@@ -1,0 +1,7 @@
+{
+  "request_id": "req_8116c_18e8c5caf4a56251",
+  "started_at": "2026-11-17T07:52:06.985Z",
+  "scenario": "scenarios/touchdisp-posted-side-effect.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

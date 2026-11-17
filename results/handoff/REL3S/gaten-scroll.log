@@ -1,0 +1,35 @@
+# REL3S2 Gaten scroll smoke (third-party RN/Fabric build)
+# command: acos verify --scenario scenarios/rel3s-gaten-scroll.yaml --engine art --artifacts .cache/gaten-run/artifacts --json
+# host: 2026-11-16T05:01:16Z
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 252399616,
+    "wall_ms": 11097
+  },
+  "ok": true,
+  "request_id": "req_10d8b6_18e86db64aed6c79",
+  "result": {
+    "artifacts_dir": ".cache/gaten-run/artifacts",
+    "cap_bytes": 20480,
+    "note": "this result was larger than the reply cap; the full evidence is in the artifacts paths named here",
+    "reply_capped": true,
+    "verdict_path": ".cache/gaten-run/artifacts/verdict.json"
+  },
+  "session_id": "s_art_gaten-dev-f344272-x86_64-release-unsigned",
+  "status": "pass"
+}

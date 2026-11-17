@@ -46,11 +46,29 @@ fn fail(request_id: &str, code: ErrorCode, message: impl Into<String>, details: 
 }
 
 fn emit(envelope: &Envelope, json: bool) -> ExitCode {
+    emit_with_text(envelope, json, None)
+}
+
+/// A tool's result rendered as the human lines after the status line.
+///
+/// Without one, text mode answers only with the envelope line (`req_…:
+/// ok=true status=pass`), which is unreadable for a tool whose result *is* the
+/// answer (`session list`: "how many sessions are live?" was only answerable
+/// with `--json`).
+type ResultText = fn(&Envelope) -> String;
+
+fn emit_with_text(envelope: &Envelope, json: bool, text: Option<ResultText>) -> ExitCode {
     if json {
         crate::print_json(envelope);
     } else {
+        // The request id is labelled as a *request*: it looked like a session
+        // handle, so an agent tried `acos session destroy req_…`.
         print!("{}", status_line(envelope));
-        if let Some(error) = envelope.error() {
+        if envelope.status().is_pass() {
+            if let (Some(render), Some(_)) = (text, envelope.result()) {
+                print!("{}", render(envelope));
+            }
+        } else if let Some(error) = envelope.error() {
             eprintln!("  error: {}: {}", error.code, error.message);
         }
     }
@@ -63,7 +81,7 @@ fn emit(envelope: &Envelope, json: bool) -> ExitCode {
 
 fn status_line(envelope: &Envelope) -> String {
     format!(
-        "{}: ok={} status={}\n",
+        "request {}: ok={} status={}\n",
         envelope.request_id(),
         envelope.ok(),
         envelope.status()
@@ -74,9 +92,19 @@ fn daemon_base(session: &str) -> Value {
     json!({"request_id": new_request_id(), "session_id": session})
 }
 
-fn emit_daemon_call(mut client: DaemonClient, tool: &str, args: &Value, json: bool) -> ExitCode {
+fn emit_daemon_call(client: DaemonClient, tool: &str, args: &Value, json: bool) -> ExitCode {
+    emit_daemon_call_with(client, tool, args, json, None)
+}
+
+fn emit_daemon_call_with(
+    mut client: DaemonClient,
+    tool: &str,
+    args: &Value,
+    json: bool,
+    text: Option<ResultText>,
+) -> ExitCode {
     match client.call(tool, args) {
-        Ok(envelope) => emit(&envelope, json),
+        Ok(envelope) => emit_with_text(&envelope, json, text),
         Err(e) => {
             let envelope = fail(
                 &new_request_id(),
@@ -84,7 +112,7 @@ fn emit_daemon_call(mut client: DaemonClient, tool: &str, args: &Value, json: bo
                 format!("session daemon: {e}"),
                 json!({"tool": tool}),
             );
-            emit(&envelope, json)
+            emit_with_text(&envelope, json, text)
         }
     }
 }
@@ -97,14 +125,23 @@ fn call_running_daemon(tool: &str, args: &Value, json: bool) -> Option<ExitCode>
 
 /// Use the daemon, starting one detached if needed (`acos session …`).
 fn call_ensure_daemon(tool: &str, args: &Value, json: bool) -> Option<ExitCode> {
+    call_ensure_daemon_with(tool, args, json, None)
+}
+
+fn call_ensure_daemon_with(
+    tool: &str,
+    args: &Value,
+    json: bool,
+    text: Option<ResultText>,
+) -> Option<ExitCode> {
     if !serve::daemon_enabled() {
         return None;
     }
     match serve::ensure_daemon() {
-        Ok(client) => Some(emit_daemon_call(client, tool, args, json)),
+        Ok(client) => Some(emit_daemon_call_with(client, tool, args, json, text)),
         Err(e) => {
             let envelope = fail(&new_request_id(), ErrorCode::Internal, e, json!({}));
-            Some(emit(&envelope, json))
+            Some(emit_with_text(&envelope, json, text))
         }
     }
 }
@@ -145,9 +182,18 @@ pub struct ObserveArgs {
     #[arg(long)]
     pub tree: bool,
 
-    /// Request the flat text rendering.
+    /// Request the compact visible-text rendering.
     #[arg(long)]
     pub text: bool,
+
+    /// Return the full tree inline instead of the compact screen (the full
+    /// tree is always written to `tree_path`).
+    #[arg(long)]
+    pub full: bool,
+
+    /// Compact-screen page cursor (`tree_next_cursor` from a previous reply).
+    #[arg(long, default_value_t = 0)]
+    pub cursor: usize,
 
     /// Explicitly request the frame (the default `observe` result). Mutually
     /// exclusive with `--tree`/`--text`; accepted so `observe --frame` works.
@@ -190,6 +236,8 @@ pub fn observe(args: ObserveArgs) -> ExitCode {
             "base": daemon_base(&args.session),
             "tree": args.tree,
             "text": args.text,
+            "full": args.full,
+            "cursor": args.cursor,
             "png": screenshot.is_some(),
             "screenshot": screenshot.as_ref().map(|p| p.display().to_string()),
         });
@@ -222,6 +270,8 @@ pub fn observe(args: ObserveArgs) -> ExitCode {
                     "windows": tree.windows,
                     "truncated": tree.truncated,
                     "tree": crate::observe_tree::tree_to_json(&tree),
+                    "full_tree": args.full,
+                    "cursor": args.cursor,
                 });
                 if args.text {
                     result["text"] = json!(crate::observe_tree::tree_text(&tree));
@@ -779,6 +829,10 @@ pub fn logs(args: LogsArgs) -> ExitCode {
 /// Arguments common to the `acos session` subcommands.
 #[derive(Debug, clap::Args)]
 pub struct SessionCmdArgs {
+    /// Session id or label (positional form, e.g. `acos session destroy s_cli`).
+    #[arg(value_name = "SESSION")]
+    pub session_id: Option<String>,
+
     /// Session id label (default `s_cli`).
     #[arg(long, default_value = "s_cli")]
     pub session: String,
@@ -805,6 +859,18 @@ pub struct SessionCmdArgs {
     pub json: bool,
 }
 
+impl SessionCmdArgs {
+    /// The addressed session: the positional id wins, `--session` stays as the
+    /// default-bearing flag. Before this, `acos session destroy s_cli` was a
+    /// clap error ("unexpected argument") and only `--session` worked, while
+    /// the printed request id looked like the handle an agent tried there.
+    pub fn resolve_session(&self) -> String {
+        self.session_id
+            .clone()
+            .unwrap_or_else(|| self.session.clone())
+    }
+}
+
 /// Arguments for `acos session list`.
 #[derive(Debug, clap::Args)]
 pub struct SessionListArgs {
@@ -822,9 +888,15 @@ pub struct SessionObserveArgs {
     /// Request the structured UI tree.
     #[arg(long)]
     pub tree: bool,
-    /// Request the flat text rendering.
+    /// Request the compact visible-text rendering.
     #[arg(long)]
     pub text: bool,
+    /// Return the full tree inline instead of the compact screen.
+    #[arg(long)]
+    pub full: bool,
+    /// Compact-screen page cursor.
+    #[arg(long, default_value_t = 0)]
+    pub cursor: usize,
     /// Explicitly request the frame (the default result).
     #[arg(long)]
     pub frame: bool,
@@ -966,7 +1038,12 @@ pub fn session(command: SessionCommand) -> ExitCode {
 
 fn session_list(args: SessionListArgs) -> ExitCode {
     let daemon_args = json!({"base": daemon_base("s_cli")});
-    if let Some(code) = call_ensure_daemon(daemon::TOOL_LIST, &daemon_args, args.json) {
+    if let Some(code) = call_ensure_daemon_with(
+        daemon::TOOL_LIST,
+        &daemon_args,
+        args.json,
+        Some(session_list_text),
+    ) {
         return code;
     }
     let envelope = fail(
@@ -978,8 +1055,57 @@ fn session_list(args: SessionListArgs) -> ExitCode {
     emit(&envelope, args.json)
 }
 
+/// Text mode for `acos session list`: the count and one line per session.
+///
+/// `0 sessions (art)` answers "is anything live?" without `--json`; each row
+/// carries the id, the agent's launch label, the age and the guest's RSS (the
+/// same hygiene fields `acos_status` reports). Missing fields print `-` rather
+/// than disappearing: an older daemon must still produce readable rows.
+fn session_list_text(envelope: &Envelope) -> String {
+    let Some(result) = envelope.result() else {
+        return String::new();
+    };
+    let engine = result
+        .get("engine")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let sessions = result
+        .get("sessions")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut out = format!(
+        "{} session{} ({engine})\n",
+        sessions.len(),
+        if sessions.len() == 1 { "" } else { "s" }
+    );
+    for session in &sessions {
+        let text = |key: &str| {
+            session
+                .get(key)
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("-")
+        };
+        let age = session
+            .get("age_s")
+            .and_then(Value::as_u64)
+            .map_or_else(|| "-".to_string(), |secs| format!("{secs}s"));
+        let rss = session
+            .get("guest_rss_kb")
+            .and_then(Value::as_u64)
+            .map_or_else(|| "-".to_string(), |kb| format!("{kb} kB"));
+        out.push_str(&format!(
+            "  {}  label={}  age={age}  rss={rss}\n",
+            text("session_id"),
+            text("label"),
+        ));
+    }
+    out
+}
+
 fn session_status(args: SessionCmdArgs) -> ExitCode {
-    let daemon_args = json!({"base": daemon_base(&args.session)});
+    let daemon_args = json!({"base": daemon_base(&args.resolve_session())});
     if let Some(code) = call_ensure_daemon("acos_status", &daemon_args, args.json) {
         return code;
     }
@@ -992,14 +1118,21 @@ fn session_observe(args: SessionObserveArgs) -> ExitCode {
     } else {
         "acos_observe"
     };
-    let daemon_args = json!({
+    let mut daemon_args = json!({
         "base": daemon_base(&args.session),
         "tree": args.tree,
         "text": args.text,
+        "full": args.full,
+        "cursor": args.cursor,
         "png": args.screenshot.is_some(),
         "screenshot": args.screenshot.as_ref().map(|p| p.display().to_string()),
-        "settle_timeout_ms": args.settle_timeout_ms,
     });
+    // P12b's settle deadline is a property of the tree route: the reference
+    // `acos_observe` (frame/text) has no settle rule, so it is not sent there —
+    // its closed schema rejects an argument it cannot honour.
+    if tool == "acos_observe_tree" {
+        daemon_args["settle_timeout_ms"] = json!(args.settle_timeout_ms);
+    }
     if let Some(code) = call_ensure_daemon(tool, &daemon_args, args.json) {
         return code;
     }
@@ -1009,6 +1142,8 @@ fn session_observe(args: SessionObserveArgs) -> ExitCode {
         screenshot: args.screenshot,
         tree: args.tree,
         text: args.text,
+        full: args.full,
+        cursor: args.cursor,
         frame: args.frame,
         timeout: 120,
         json: args.json,
@@ -1089,8 +1224,9 @@ fn session_text(args: SessionTextArgs) -> ExitCode {
 }
 
 fn session_logs(args: SessionCmdArgs) -> ExitCode {
+    let session = args.resolve_session();
     let daemon_args = json!({
-        "base": daemon_base(&args.session),
+        "base": daemon_base(&session),
         "tag": args.tag,
         "min_priority": args.min_priority,
     });
@@ -1098,11 +1234,11 @@ fn session_logs(args: SessionCmdArgs) -> ExitCode {
         return code;
     }
     logs(LogsArgs {
-        session: args.session,
+        session,
         apk: None,
         timeout: args.timeout,
-        tag: args.tag,
-        min_priority: args.min_priority,
+        tag: args.tag.clone(),
+        min_priority: args.min_priority.clone(),
         json: args.json,
     })
 }
@@ -1168,7 +1304,7 @@ fn session_ctl(args: SessionCtlArgs) -> ExitCode {
 }
 
 fn session_reset(args: SessionCmdArgs) -> ExitCode {
-    let daemon_args = json!({"base": daemon_base(&args.session)});
+    let daemon_args = json!({"base": daemon_base(&args.resolve_session())});
     if let Some(code) = call_ensure_daemon("acos_reset", &daemon_args, args.json) {
         return code;
     }
@@ -1176,7 +1312,7 @@ fn session_reset(args: SessionCmdArgs) -> ExitCode {
 }
 
 fn session_destroy(args: SessionCmdArgs) -> ExitCode {
-    let daemon_args = json!({"base": daemon_base(&args.session)});
+    let daemon_args = json!({"base": daemon_base(&args.resolve_session())});
     if let Some(code) = call_ensure_daemon("acos_destroy", &daemon_args, args.json) {
         return code;
     }
@@ -1185,6 +1321,7 @@ fn session_destroy(args: SessionCmdArgs) -> ExitCode {
 
 fn run_status(args: SessionCmdArgs) -> ExitCode {
     let request_id = new_request_id();
+    let session_id = args.resolve_session();
     let session = start_session(args.timeout);
     if let Some(envelope) = maybe_launch(&session, &args.apk, &request_id) {
         return emit(&envelope, args.json);
@@ -1196,9 +1333,9 @@ fn run_status(args: SessionCmdArgs) -> ExitCode {
             Fidelity::NativeRuntime,
             Metrics::wall_ms(0),
         )
-        .with_session_id(args.session.clone())
+        .with_session_id(session_id.clone())
         .with_value_result(json!({
-            "session_id": args.session,
+            "session_id": session_id,
             "launched": state.launched,
             "package": state.package,
             "apk": state.apk,
@@ -1213,6 +1350,7 @@ fn run_status(args: SessionCmdArgs) -> ExitCode {
 
 fn run_reset(args: SessionCmdArgs) -> ExitCode {
     let request_id = new_request_id();
+    let session_id = args.resolve_session();
     let session = start_session(args.timeout);
     if let Some(envelope) = maybe_launch(&session, &args.apk, &request_id) {
         return emit(&envelope, args.json);
@@ -1224,9 +1362,9 @@ fn run_reset(args: SessionCmdArgs) -> ExitCode {
             Fidelity::NativeRuntime,
             Metrics::wall_ms(0),
         )
-        .with_session_id(args.session.clone())
+        .with_session_id(session_id.clone())
         .with_value_result(json!({
-            "session_id": args.session,
+            "session_id": session_id,
             "scope": "all",
             "state_reset": true,
             "data_cleared": false,
@@ -1240,6 +1378,7 @@ fn run_reset(args: SessionCmdArgs) -> ExitCode {
 
 fn run_close(args: SessionCmdArgs) -> ExitCode {
     let request_id = new_request_id();
+    let session_id = args.resolve_session();
     // `close` never launches; it just tears the (process-local) session down.
     start_session(args.timeout).close();
     let envelope = Envelope::pass(
@@ -1248,11 +1387,71 @@ fn run_close(args: SessionCmdArgs) -> ExitCode {
         Fidelity::NativeRuntime,
         Metrics::wall_ms(0),
     )
-    .with_session_id(args.session.clone())
+    .with_session_id(session_id.clone())
     .with_value_result(json!({
-        "session_id": args.session,
+        "session_id": session_id,
         "destroyed": true,
         "already_absent": false,
     }));
     emit(&envelope, args.json)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pass_with(result: Value) -> Envelope {
+        Envelope::pass(
+            "req_test",
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            Metrics::wall_ms(0),
+        )
+        .with_value_result(result)
+    }
+
+    #[test]
+    fn session_list_text_answers_the_count_without_json() {
+        let envelope = pass_with(json!({"sessions": [], "count": 0, "engine": "art"}));
+        assert_eq!(session_list_text(&envelope), "0 sessions (art)\n");
+    }
+
+    #[test]
+    fn session_list_text_prints_id_label_age_and_rss_per_session() {
+        let envelope = pass_with(json!({
+            "sessions": [
+                {"session_id": "s_cli", "label": "counter", "age_s": 12, "guest_rss_kb": 204800},
+                {"session_id": "mcp-1", "label": "", "age_s": 1, "guest_rss_kb": 1024},
+            ],
+            "count": 2,
+            "engine": "art",
+        }));
+        let text = session_list_text(&envelope);
+        let mut lines = text.lines();
+        assert_eq!(lines.next(), Some("2 sessions (art)"));
+        assert_eq!(
+            lines.next(),
+            Some("  s_cli  label=counter  age=12s  rss=204800 kB")
+        );
+        assert_eq!(lines.next(), Some("  mcp-1  label=-  age=1s  rss=1024 kB"));
+        assert_eq!(lines.next(), None);
+    }
+
+    #[test]
+    fn session_list_text_keeps_rows_readable_when_fields_are_absent() {
+        // An older daemon reports only the id: the row still prints, with `-`
+        // for every hygiene field (never a silently missing row).
+        let envelope = pass_with(json!({"sessions": [{"session_id": "s_cli"}]}));
+        let text = session_list_text(&envelope);
+        assert!(text.starts_with("1 session (unknown)\n"), "{text}");
+        assert!(text.contains("  s_cli  label=-  age=-  rss=-"), "{text}");
+    }
+
+    #[test]
+    fn text_status_line_labels_the_request_id() {
+        let envelope = pass_with(json!({}));
+        let line = status_line(&envelope);
+        assert!(line.starts_with("request req_test: "), "{line}");
+        assert!(line.contains("ok=true status=pass"), "{line}");
+    }
 }

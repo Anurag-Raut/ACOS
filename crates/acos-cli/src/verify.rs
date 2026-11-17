@@ -22,6 +22,35 @@ use acos_verify::Backend;
 
 use crate::engine::{Engine, EngineBackend, Mode};
 
+impl VerifyArgs {
+    /// The engine this invocation runs: `--engine` when given, else the engine
+    /// the rest of the invocation implies (`--reference` replays recorded ART
+    /// evidence with the `rust-vm` side; everything else takes the build
+    /// default).
+    ///
+    /// One place answers this, so `--help`, the `engine.json` `explicit` field
+    /// and the engine that actually runs cannot disagree.
+    #[must_use]
+    pub fn engine_name(&self) -> &str {
+        match self.engine.as_deref() {
+            Some(name) => name,
+            None if self.reference.is_some() => {
+                acos_protocol::commands::VerifyEngine::RustVm.as_str()
+            }
+            None => acos_protocol::commands::DEFAULT_VERIFY_ENGINE_NAME,
+        }
+    }
+
+    /// Whether the caller chose the engine (rather than it being implied).
+    ///
+    /// `--reference` without `--engine` implies the replay engine; the run is
+    /// then **not** explicit, which is what `engine.json` reports.
+    #[must_use]
+    pub fn engine_explicit(&self) -> bool {
+        self.engine.is_some()
+    }
+}
+
 /// Arguments for `acos verify`.
 #[derive(Debug, clap::Args)]
 pub struct VerifyArgs {
@@ -65,10 +94,20 @@ pub struct VerifyArgs {
     #[arg(long)]
     pub native: bool,
 
-    /// Execution engine. No fallback: `art` fails loudly when ART is
-    /// unavailable, and never silently runs the Rust VM instead.
-    #[arg(long, value_name = "ENGINE", default_value = "rust-vm")]
-    pub engine: String,
+    /// Execution engine: `art` (default) or `rust-vm`. No fallback: `art`
+    /// fails loudly when ART is unavailable, and never silently runs the Rust VM
+    /// instead.
+    ///
+    /// The default comes from one constant
+    /// (`acos_protocol::commands::DEFAULT_VERIFY_ENGINE`) — the same one the MCP
+    /// `engine` schema advertises — so `--help` can never disagree with
+    /// behaviour: `--reference` replays recorded ART evidence rather than
+    /// running live ART, so it selects the `rust-vm` side when `--engine` is
+    /// omitted (an explicit `--engine art --reference` is still refused).
+    ///
+    /// [default: art]
+    #[arg(long, value_name = "ENGINE")]
+    pub engine: Option<String>,
 
     /// P12: framework animation scales for the ART session (`on`/`off`).
     ///
@@ -271,17 +310,23 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         }
     }
 
-    let Some(engine) = Engine::parse(&args.engine) else {
+    let Some(engine) = Engine::parse(args.engine_name()) else {
         let envelope = Envelope::failure(
             request_id,
             ProtocolBackend::AcosNative,
             Fidelity::StaticAnalysis,
             ProtocolError::new(
                 ErrorCode::InvalidArgument,
-                format!("unknown --engine value {:?}", args.engine),
+                format!("unknown --engine value {:?}", args.engine_name()),
             )
-            .with_hint("Use `--engine rust-vm` (default) or `--engine art`. There is no silent fallback between engines.")
-            .with_details(serde_json::json!({"field": "engine", "value": args.engine})),
+            .with_hint(format!(
+                "Use `--engine {}` (default) or `--engine {}`. There is no silent fallback between engines.",
+                acos_protocol::commands::DEFAULT_VERIFY_ENGINE_NAME,
+                acos_protocol::commands::VerifyEngine::RustVm.as_str(),
+            ))
+            .with_details(
+                serde_json::json!({"field": "engine", "value": args.engine_name()}),
+            ),
             Metrics::wall_ms(0),
         );
         return finish_run(&envelope, &args, &artifacts, Some(trust));
@@ -489,6 +534,8 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             Engine::RustVm => acos_protocol::VerifyEngine::RustVm,
         },
         flags: args.flags.clone(),
+        animations: args.animations.clone(),
+        native: args.native,
     };
 
     let native = args.reference.is_none() && crate::native_launch::native_requested(args.native);
@@ -782,7 +829,10 @@ pub(crate) fn annotate(
             "supported": caps.names(),
             "missing": caps.missing(),
         })),
-        "explicit": args.engine != "rust-vm" || mode == Mode::Preview,
+        // `explicit` means "the caller picked the engine", not "the engine is
+        // not the build default": `--reference` without `--engine` selects the
+        // replay engine by implication, so that run is not explicit.
+        "explicit": args.engine_explicit() || mode == Mode::Preview,
         "modules": session_modules,
         "animations": session_animations.unwrap_or("on"),
         "insets": session_insets
@@ -865,6 +915,12 @@ pub(crate) fn annotate(
             object.insert("session_exit".to_string(), summary.clone());
         }
     }
+    // PROVENANCE: the verifier writes the input block (absolute paths, digests,
+    // engine, fidelity, warnings); here it is restated with the engine that
+    // **actually** ran and copied into the envelope `result`, so the same facts
+    // are in `verdict.json`, the JSON reply and the human summary line. A pass
+    // that names neither its scenario nor its APK is not evidence.
+    let provenance = verdict_provenance(&mut verdict, engine);
     crate::provenance::annotate_verdict(&mut verdict, trust);
 
     let preview_downgrade = mode == Mode::Preview && crate::engine::preview_downgrade(&mut verdict);
@@ -919,6 +975,10 @@ pub(crate) fn annotate(
     }
     let mut annotated_result = result;
     annotated_result["verdict"] = verdict;
+    // PROVENANCE: the same block as `verdict.json`, in the envelope `result`,
+    // so `jq .result.provenance` answers "which scenario and APK was this?"
+    // without opening the artifacts directory.
+    annotated_result["provenance"] = provenance;
     if let Some((error, path)) = write_error {
         let protocol = crate::failure::write_failure(&error, &path);
         *envelope = Envelope::failure(
@@ -945,6 +1005,57 @@ pub(crate) fn annotate(
     } else {
         *envelope = envelope.clone().with_value_result(annotated_result);
     }
+}
+
+/// Restate the verifier's provenance block with the engine that actually ran.
+///
+/// The verifier writes the block (it knows the input digests and the warnings);
+/// the CLI knows which engine the backend turned out to be, so the engine and
+/// fidelity are refreshed here — the verdict names the engine that ran, never
+/// the one that was asked for. If a verdict somehow arrives without a block
+/// (a backend that skipped the verifier), one is rebuilt from the verdict's own
+/// `app`/`scenario` identities rather than leaving the reply without
+/// provenance.
+fn verdict_provenance(verdict: &mut serde_json::Value, engine: Engine) -> serde_json::Value {
+    let fidelity = verdict
+        .get("fidelity")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<Fidelity>(value).ok())
+        .unwrap_or(Fidelity::StaticAnalysis);
+    let mut block = match verdict.get("provenance").cloned().filter(|value| value.is_object()) {
+        Some(block) => block,
+        None => {
+            let apk = verdict
+                .pointer("/app/path")
+                .and_then(|value| value.as_str())
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            let scenario = verdict
+                .pointer("/scenario/path")
+                .and_then(|value| value.as_str())
+                .map(PathBuf::from);
+            acos_protocol::provenance::block(
+                &apk,
+                scenario.as_deref(),
+                engine.as_str(),
+                fidelity,
+            )
+        }
+    };
+    if let Some(object) = block.as_object_mut() {
+        object.insert("engine".to_string(), serde_json::json!(engine.as_str()));
+        object.insert(
+            "fidelity".to_string(),
+            serde_json::json!(verdict
+                .get("fidelity")
+                .and_then(|value| value.as_str())
+                .unwrap_or(fidelity.as_str())),
+        );
+    }
+    if let Some(object) = verdict.as_object_mut() {
+        object.insert("provenance".to_string(), block.clone());
+    }
+    block
 }
 
 /// Per-step cost accounting for the engine report.
@@ -1073,6 +1184,21 @@ fn print_summary(envelope: &Envelope, artifacts: &Path) {
                 );
             }
         }
+        // PROVENANCE: the human summary names the scenario and the APK it
+        // judged, with the 12-character digests. Before this line, a mistyped
+        // scenario path could run an older scenario against a stale APK and
+        // print `verify: pass` with no way to tell which files were used
+        // (feedback 2026-11-14).
+        if let Some(block) = envelope
+            .result()
+            .and_then(|result| result.get("provenance"))
+            .or_else(|| verdict.get("provenance"))
+        {
+            println!(
+                "  provenance: {}",
+                acos_protocol::provenance::summary_line(block)
+            );
+        }
         if let Some(steps) = verdict.get("unsupported_steps").and_then(|v| v.as_array()) {
             for step in steps {
                 println!(
@@ -1121,10 +1247,7 @@ fn new_request_id() -> String {
 }
 
 fn print_json<T: serde::Serialize>(value: &T) {
-    match serde_json::to_string_pretty(value) {
-        Ok(text) => println!("{text}"),
-        Err(error) => eprintln!("error: failed to serialize JSON envelope: {error}"),
-    }
+    crate::print_json(value);
 }
 
 /// Resolve the APK the same way `verify` does: `--apk` wins, otherwise the

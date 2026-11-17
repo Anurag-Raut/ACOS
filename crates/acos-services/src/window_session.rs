@@ -62,7 +62,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use acos_parcel::{BinderId, Parcel};
-use acos_wm::callbacks::{WmCallback, IWINDOW_DESCRIPTOR};
+use acos_wm::callbacks::{PendingCallback, WmCallback, IWINDOW_DESCRIPTOR};
 use acos_wm::codec::{LayoutParams, ParcelCodec};
 use acos_wm::geom::RectI;
 use acos_wm::wms::{AddWindowResult, RelayoutResult};
@@ -144,6 +144,70 @@ pub enum WindowStackChange {
 /// to the host through [`ServiceObject::drain_raw_deliveries`].
 pub type WindowStackSink =
     std::sync::Arc<dyn Fn(WindowStackChange) -> Vec<PendingDelivery> + Send + Sync>;
+
+/// One `IWindow` callback body as a delivery, when it is an in-process IME
+/// show/hide callback.
+///
+/// One encoder for both drains: the `IWindowSession` object returns these after
+/// one of its own transactions, and the IME manager returns them right after
+/// the `showSoftInput`/`hideSoftInput` transaction that caused them. The IME's
+/// *hide* is driven by a key on the input channel (no transaction of its own),
+/// so the binder peer also drains this queue on its idle tick.
+pub fn ime_inset_delivery(pc: &PendingCallback) -> Option<PendingDelivery> {
+    let is_ime_insets = matches!(
+        pc.callback,
+        WmCallback::InsetsControlChanged { ime: true, .. }
+            | WmCallback::ShowInsets { from_ime: true, .. }
+            | WmCallback::HideInsets { from_ime: true, .. }
+    );
+    if !is_ime_insets || pc.window == 0 {
+        return None;
+    }
+    let data = match pc.callback.to_parcel() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!(
+                "{DESCRIPTOR}: IME insets callback for window {}: {e}",
+                pc.window
+            );
+            return None;
+        }
+    };
+    if std::env::var_os("ACOS_W6_CALLBACKS").is_some() {
+        eprintln!(
+            "ACOSW6 deliver {IWINDOW_DESCRIPTOR}.{} code={} → window {:#x}",
+            pc.callback.method(),
+            pc.callback.code(),
+            pc.window
+        );
+    }
+    Some(PendingDelivery {
+        target: BinderId(pc.window),
+        interface: IWINDOW_DESCRIPTOR.to_string(),
+        code: pc.callback.code(),
+        method: pc.callback.method().to_string(),
+        data,
+    })
+}
+
+/// Pop and encode every queued in-process IME insets callback.
+///
+/// Non-IME callbacks are put back untouched (delivering those from the
+/// add/relayout path is the W5 §5.1 problem, not this module's).
+pub fn take_ime_insets_deliveries(wms: &mut WmsState) -> Vec<PendingDelivery> {
+    let mut kept = Vec::new();
+    let mut out = Vec::new();
+    while let Some(pc) = wms.wm.callbacks.pop() {
+        match ime_inset_delivery(&pc) {
+            Some(delivery) => out.push(delivery),
+            None => kept.push(pc),
+        }
+    }
+    for pc in kept {
+        wms.wm.callbacks.push(pc.window, pc.callback);
+    }
+    out
+}
 
 /// The host node behind `IWindowManager.openSession`.
 ///
@@ -651,7 +715,26 @@ impl ServiceObject for WindowSessionService {
                     self.visibility_delivered.remove(&pc.window);
                     self.callbacks_deferred += 1;
                 }
+                // REL3I: the IME showed/hid. A phone's app learns the soft
+                // input changed through these two `IWindow` callbacks
+                // (`showInsets`/`hideInsets` for the IMS readiness,
+                // `insetsControlChanged` for the control itself) and relayouts
+                // from them. They are only queued by the IME path
+                // (`WmsState::set_ime_visible`), never by the launch/relayout
+                // sequence W5 measured as a hang, so the ordering caveat there
+                // does not apply.
+                WmCallback::InsetsControlChanged { ime: true, .. }
+                | WmCallback::ShowInsets { from_ime: true, .. }
+                | WmCallback::HideInsets { from_ime: true, .. } => {
+                    match ime_inset_delivery(&pc) {
+                        Some(delivery) => out.push(delivery),
+                        None => self.callbacks_deferred += 1,
+                    }
+                }
                 other => {
+                    // Includes the launch-time `insetsControlChanged`/`resized`
+                    // callbacks: W5 §5.1 measured that delivering those from the
+                    // add/relayout path hangs the guest, so they stay deferred.
                     self.callbacks_deferred += 1;
                     if std::env::var_os("ACOS_W6_CALLBACKS").is_some() {
                         eprintln!(

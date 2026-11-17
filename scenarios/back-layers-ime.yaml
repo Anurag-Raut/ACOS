@@ -1,0 +1,170 @@
+# Back-layer ordering with the soft input up (REL3I3: passing).
+#
+# This is the IME arm of the layer stack. The dialog and Activity layers run in
+# `scenarios/back-layers.yaml`; this scenario isolates the soft-input layer so
+# the IME chain can be read on its own:
+#
+#   * the show — `startInputOrWindowGainedFocus` answers a real session, a
+#     session id and a real `InputChannel` pair, whose token is fresh per pair
+#     (`InputChannel::openInputChannelPair` makes a new `BBinder` per pair, so
+#     the framework's `areSameInputChannel` replaces `mCurChannel` instead of
+#     keeping a stale one — REL3I2);
+#   * the press — the app's `ImeInputEventSender` writes the Back into that
+#     channel, the IME consumes it (`back-down hid the soft input seq=1`,
+#     `wms set_ime_visible(false)`) and answers `FINISHED(handled=true)`, so the
+#     Activity's window never sees the key and stays resumed;
+#   * the app-visible hide — the IME hide is driven by a key on the input
+#     channel, so its `IWindow` insets callbacks have no transaction to ride. The
+#     binder peer used to drain them only on its 1 s receive timeout; REL3I3's
+#     delivery wake (`DeliveryWake` + `wait_for_idle`) flushes them as soon as
+#     they are queued, so the app sees `insets_ime visible=false` (`ImeDown`) in
+#     the same step.
+#
+# Back-layer ordering: which layer consumes a Back press (REL3K2).
+#
+# AOSP order on API 34: a Back key goes to the focused window, and the layer
+# that owns the press handles it before the Activity finishes:
+#   1. an open dialog window (frameworks/base Dialog.onBackPressed -> cancel()
+#      -> dismiss()); the Activity below is not paused and keeps its state;
+#   2. the soft input (InputMethodService consumes Back and hides itself);
+#   3. only then the Activity's own onBackPressed -> finish.
+#
+# The fixture (fixtures/apps/back-layers) logs which layer acted, tag AcosBack:
+#   dialog_shown / dialog_dismissed        the dialog window
+#   input_focus=… ime accepting=… active=… the field's focus + IME binding
+#   dispatchKeyBack action=…               the Activity's window saw the key
+#   onBackPressed / onPause / onDestroy    the framework's default handling
+version: 1
+name: back-layers
+description: >-
+  Back closes the open AlertDialog first: the dialog window's own
+  onBackPressed dismisses it, the Activity stays resumed (no onPause, no
+  onBackPressed, its views are unchanged), and only the next Back finishes the
+  task.
+app: fixtures/build/apps/back-layers.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.backlayers/.MainActivity
+      clear_state: true
+
+  - assert_text:
+      selector: {id: dialog}
+      text: {exact: "Show dialog"}
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "Idle"}
+
+  # ---- layer 1: the dialog window ---------------------------------------
+  - tap:
+      selector: {id: dialog}
+  - assert_text:
+      selector: {id: message}
+      text: {exact: "Are you sure?"}
+
+  # Back with the dialog up: the dialog takes it.
+  #
+  # `key: back` with the content settle rule: dismissing a dialog window does
+  # not publish a *new* Activity draw that the strict event rule can attribute
+  # to this key (REL3K2 report: `no-draw-after-action`, pixels_changed=true,
+  # acked=0 because the destroyed dialog window never sends finishInputEvent).
+  # The claim here is about the tree (which layer consumed the key), and the
+  # content rule is the tree rule; the strict-rule gap is a product bug, not a
+  # scenario setting.
+  - key:
+      key: back
+      settle: content
+
+  # Both halves of the claim: the dialog is gone ...
+  - assert_not_visible:
+      selector: {id: message}
+  - assert_not_visible:
+      selector: {id: button1}
+  # ... and the Activity below is untouched and still resumed.
+  - assert_text:
+      selector: {id: dialog}
+      text: {exact: "Show dialog"}
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "Idle"}
+  - assert_log:
+      tag: AcosBack
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - 'dialog_shown$'
+        - 'dialog_dismissed$'
+
+  # ---- layer 2: the soft input -----------------------------------------
+  # Focusing the field raises the soft input. `InputMethodManager.showSoftInput`
+  # reaches the in-process IME, which turns on the IME inset source on the
+  # window: the app logs `insets_ime visible=true` and shows `ImeUp`, exactly
+  # the change a phone's app sees before the keyboard is drawn.
+  - tap:
+      selector: {id: input}
+  - assert_log:
+      tag: AcosBack
+      since_previous_step: true
+      patterns:
+        - 'input_focus=true ime accepting=true active=true'
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "ImeUp"}
+
+  # Back with the soft input up: the IME must consume the press. The layer stack's
+  # second layer hides the keyboard and reports the key handled, so the
+  # Activity's window never sees it: no `dispatchKeyBack`, no `onBackPressed`,
+  # and the task stays resumed. The app sees the IME insets disappear
+  # (`ImeDown`), which is the draw this press is attributed to.
+  - key:
+      key: back
+      settle: content
+  # The hide's guest log line belongs to the key step, so it is asserted before
+  # any other step consumes the log cursor.
+  - assert_log:
+      tag: AcosBack
+      since_previous_step: true
+      patterns:
+        - 'insets_ime visible=false'
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "ImeDown"}
+  - assert_text:
+      selector: {id: dialog}
+      text: {exact: "Show dialog"}
+
+  # ---- layer 3: the Activity itself -------------------------------------
+  # The next Back reaches the Activity's window (the dialog never offered it
+  # to the Activity above) and finishes the task. The ordered log is also the
+  # proof that the Activity was never paused by the dialog's Back: onPause can
+  # only appear after this onBackPressed.
+  - back: {}
+  - assert_no_crash: {}
+  - assert_not_visible:
+      selector: {id: dialog}
+  - assert_log:
+      tag: AcosBack
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - 'dispatchKeyBack action=0'
+        - 'dispatchKeyBack action=1'
+        - 'onBackPressed$'
+        - 'onPause$'
+        - 'onDestroy$'

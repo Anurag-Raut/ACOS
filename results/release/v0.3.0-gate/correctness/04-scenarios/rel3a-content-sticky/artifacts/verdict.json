@@ -1,0 +1,515 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.settletab",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/settle-lab.apk",
+    "sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4"
+  },
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/rel3a-content-sticky/artifacts",
+    "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/rel3a-content-sticky/artifacts/engine.json",
+    "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/rel3a-content-sticky/artifacts/retention.json",
+    "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/rel3a-content-sticky/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "failure": {
+    "code": "TIMEOUT",
+    "error": {
+      "class": "infra_timeout",
+      "code": "TIMEOUT",
+      "details": {
+        "animating": false,
+        "backend": "acos-art-session",
+        "context": "assert_region",
+        "frame_seq": 49,
+        "reason": "traversal",
+        "settle": {
+          "animating": false,
+          "bound": "timeout",
+          "mode": "strict",
+          "probe": {
+            "guest_stall_pending_ms": null,
+            "newest_sample_age_ms": 24,
+            "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
+            "stale_samples": 0,
+            "wake_failures": 0,
+            "wakes_sent": 46
+          },
+          "probe_seq": 234,
+          "reason": "traversal",
+          "settled": false,
+          "strict_rule": "event",
+          "tree_age_ms": 24,
+          "warning": "strict settle timed out: the tree and frame identity are the latest observed state, not a settled one; this is not assertion evidence"
+        }
+      },
+      "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure and never a pass. For a screen that animates forever in pixels (React Native `Animated`, a custom `ValueAnimator`), `animations:off` does not help: use `settle: content` on the step (content-stable: the UI tree's text, nodes and state stop changing even while the pixels keep moving). Tree/text assertions and `wait_for` accept it too, and `wait_for`/`assert_*` fall back to it by default. The latest tree/frame is kept in the step evidence.",
+      "message": "capture: strict settle timed out (traversal); the step is a non-pass because the screen was still changing when the deadline elapsed",
+      "retryable": true
+    },
+    "step_index": 4,
+    "summary": "step 4 (assert_region) timeout"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T09:15:25.618Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "stopped at step 4 (assert_region): timeout; later steps were not executed",
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 3 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (keep-all): 25 file(s) / 2.1 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794521211436188681,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/settle-lab.apk",
+      "sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4",
+      "sha256_12": "3ea3d28b33ba",
+      "size_bytes": 21082
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794819986994970954,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/rel3a-content-sticky.yaml",
+      "sha256": "77064e2def5ca813d932eabacc23261175e3c09c8fb5ee8c7ad8f4230b3c9379",
+      "sha256_12": "77064e2def5c",
+      "size_bytes": 2619
+    },
+    "scenario_engine": "art",
+    "warnings": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/settle-lab.apk",
+    "apk_sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/rel3a-content-sticky.yaml",
+    "scenario_sha256": "77064e2def5ca813d932eabacc23261175e3c09c8fb5ee8c7ad8f4230b3c9379"
+  },
+  "request_id": "req_334e13_18e87bc0e6d3bf8f",
+  "resources": {
+    "events": 138,
+    "frames_captured": 4,
+    "memory_mib": 15,
+    "peak_rss_bytes": 16252928,
+    "sessions": 1,
+    "steps": 5,
+    "wall_ms": 5531
+  },
+  "scenario": {
+    "name": "rel3a-content-sticky",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/rel3a-content-sticky.yaml",
+    "sha256": "77064e2def5ca813d932eabacc23261175e3c09c8fb5ee8c7ad8f4230b3c9379"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=72MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3362334-i3325416.scope)",
+    "code": null,
+    "disk_free_bytes": 249056899072,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/release/v0.3.0-gate/correctness/04-scenarios/rel3a-content-sticky/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_settle-lab",
+  "started_at": "2026-11-16T09:15:20.087Z",
+  "status": "timeout",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 147,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "previous_observation": false
+          },
+          "expected": {
+            "compared": false
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "no previous observation to compare; change not claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 91,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-tap.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 1,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[21,1224][415,1340]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.settletab:id/progress_start",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.settletab:id/progress_start",
+              "scrollable": false,
+              "text": "Infinite progress",
+              "visible_bounds": "[21,1224][415,1340]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[21,1224][415,1340]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.settletab:id/progress_start",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.settletab:id/progress_start",
+              "scrollable": false,
+              "text": "Infinite progress",
+              "visible_bounds": "[21,1224][415,1340]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 218,
+            "y": 1282
+          },
+          "selector": {
+            "selector": "id==\"progress_start\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "state-commit",
+        "first_change_ms": 22,
+        "frame_ms": 35,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 91,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 2231,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/46.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/46.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-wait_for.json"
+        }
+      ],
+      "frame_seq": 46,
+      "index": 2,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 357,
+        "fallback_from": "strict",
+        "fallback_reason": "strict-did-not-settle",
+        "frame_seq": 46,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 111,
+        "probe_seq_first": 92,
+        "probe_seq_floor": 89,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "626ab4f94e752d00",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 20,
+        "waited_ms": 357,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1537,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/48.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/48.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-tap.json"
+        }
+      ],
+      "frame_seq": 48,
+      "index": 3,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[21,1456][415,1572]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.settletab:id/rapid_inc",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.settletab:id/rapid_inc",
+              "scrollable": false,
+              "text": "Rapid increment",
+              "visible_bounds": "[21,1456][415,1572]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[21,1456][415,1572]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.settletab:id/rapid_inc",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.settletab:id/rapid_inc",
+              "scrollable": false,
+              "text": "Rapid increment",
+              "visible_bounds": "[21,1456][415,1572]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 218,
+            "y": 1514
+          },
+          "selector": {
+            "selector": "id==\"rapid_inc\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "state-commit",
+        "first_change_ms": 5,
+        "frame_ms": 20,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 1537,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 1522,
+      "error": {
+        "class": "infra_timeout",
+        "code": "TIMEOUT",
+        "details": {
+          "animating": false,
+          "backend": "acos-art-session",
+          "context": "assert_region",
+          "frame_seq": 49,
+          "reason": "traversal",
+          "settle": {
+            "animating": false,
+            "bound": "timeout",
+            "mode": "strict",
+            "probe": {
+              "guest_stall_pending_ms": null,
+              "newest_sample_age_ms": 24,
+              "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
+              "stale_samples": 0,
+              "wake_failures": 0,
+              "wakes_sent": 46
+            },
+            "probe_seq": 234,
+            "reason": "traversal",
+            "settled": false,
+            "strict_rule": "event",
+            "tree_age_ms": 24,
+            "warning": "strict settle timed out: the tree and frame identity are the latest observed state, not a settled one; this is not assertion evidence"
+          }
+        },
+        "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure and never a pass. For a screen that animates forever in pixels (React Native `Animated`, a custom `ValueAnimator`), `animations:off` does not help: use `settle: content` on the step (content-stable: the UI tree's text, nodes and state stop changing even while the pixels keep moving). Tree/text assertions and `wait_for` accept it too, and `wait_for`/`assert_*` fall back to it by default. The latest tree/frame is kept in the step evidence.",
+        "message": "capture: strict settle timed out (traversal); the step is a non-pass because the screen was still changing when the deadline elapsed",
+        "retryable": true
+      },
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/04-assert_region.json"
+        }
+      ],
+      "index": 4,
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "status": "timeout",
+      "step": "assert_region"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "timeout"
+}

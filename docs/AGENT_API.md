@@ -484,7 +484,13 @@ optional `settle` argument (`strict` default, `fast` navigation,
   prove the draw is after the action, and requiring different pixels only
   produced false timeouts. `ACOS_STRICT_SETTLE_PIXEL_GUARD=on` restores the P11
   experiment. A tap with **no draw after the action** still times out
-  (`reason:"no-draw-after-action"`). On timeout the reply is not settled and
+  (`reason:"no-draw-after-action"`) **unless every one of its events was
+  acknowledged `finishInputEvent(handled) = false`**: nothing consumed the input,
+  so the quiet, unchanged screen is the settled outcome and the reply is
+  `settled:true` with `bound:"unhandled-input"`, `reason:"unhandled_input"` and
+  `pixels_changed:false` (REL3H) - a pass for the delivery rule only, never a
+  claimed change (`expect_change:true` fails on it). On a real timeout the reply
+  is not settled and
   names the guest's reason (`reason`, plus `animating:true` for frame/animator
   reasons) under `bound:"timeout"` — but it still carries the latest tree and
   frame identity, so the agent can use what is on screen (next bullet and
@@ -542,13 +548,27 @@ and the usual `frame` reference (`frame_seq`, `md5`, `captured_at`). No extra
 traversal is issued. `observe.png:true` is rejected on an input verb: use
 `acos_observe` for the PNG.
 
-**Assertions are always strict.** `acos_assert` rejects `settle:"fast"` with
-`INVALID_ARGUMENT`; `acos verify` assertions, `assert_screenshot` and
-`assert_region` never pass a settle option and always use the strict rule. A
-scenario cannot request fast for an assertion step. Acknowledgement is not
-success: a fast reply with `ack_ms` is still only a delivered input; the
-state change is whatever `settle.state_changed` (fast) or the host pixel+tree
-comparison (strict) actually measured.
+**Assertions are never fast.** `acos_assert` rejects `settle:"fast"` with
+`INVALID_ARGUMENT`; a scenario's `wait_for` and `assert_*` steps reject it with
+`INVALID_SCENARIO`. REL3A gives them the same two evidence rules an action has:
+
+* `strict` (event settle) — the default for `assert_log`, `assert_no_crash`,
+  `assert_screenshot`, `assert_region` and `capture`, and available explicitly
+  everywhere else;
+* `content` (content-stable, ADR-0026 decision 3) — accepted by `wait_for` and
+  by the tree/text/state assertions, which default to *auto*: strict first, then
+  content-stable when strict never settles. A content-settled frame backs
+  text/tree/state claims only; a pixel claim fails with
+  `details.reason: "content_settle_pixel"` and a bounds claim with
+  `"content_settle_geometry"`.
+
+Every step and reply states the rule it used: `settle: {mode, settled,
+waited_ms, reason}`. Acknowledgement is not success: a fast reply with `ack_ms`
+is still only a delivered input; the state change is whatever
+`settle.state_changed` (fast) or the host pixel+tree comparison (strict)
+actually measured. A settle that timed out is never a pass: the scenario step is
+`status: timeout` (error class `infra_timeout`) and a live-channel input reply is
+`status: timeout` with `details.reason: "settle_timeout"`.
 
 ### 8.6.2 Tree-only observations and `settle` on the tree verb (P3b)
 
@@ -1055,7 +1075,7 @@ version: 1                    # required; only 1 is accepted
 name: hello-views             # required, non-empty
 description: ...              # optional
 app: fixtures/build/apps/hello-views.apk
-engine: native-preferred      # native-preferred | native-only | reference-only
+engine: rust-vm              # art | rust-vm (same names as --engine)
 fallback: report-and-escalate # report-and-escalate | report-only | forbid
 api_level: 34
 isolation: process            # shared-task | process | sandbox | core | vm
@@ -1234,7 +1254,12 @@ scenario and every settle reply are untouched.
 
 A step that provokes no **draw** at all does not settle, so it is a `TIMEOUT`
 (`reason: "no-draw-after-action"`), not an `expect_change` failure; both are
-non-passes. The same flag is available per action on the serve/MCP input tools
+non-passes. The exception is input the app provably did not handle: when every
+event of a `tap`/`key`/`type` came back `finishInputEvent(handled) = false` and
+no draw followed, the strict settle ends as a settled `unhandled_input` record
+(`pixels_changed:false`), and `expect_change: true` then fails with
+`ASSERTION_FAILED` / `details.reason: "expect_change"` instead of a timeout.
+The same flag is available per action on the serve/MCP input tools
 (`acos_tap`, `acos_key`, `acos_text`) as `expect_change: true`.
 
 ---
@@ -1379,6 +1404,47 @@ A `capture` step's own `name` is persisted in three places: the step JSON
 `verdict.json`'s `captures` map (`{name: path}`). The canonical
 `frames/<frame_seq>.png` is still written (it is what `frame_seq` names); the
 named copy is the same bytes under a second name.
+
+**One step is one entry.** `steps[]` has exactly one entry per scenario step, and
+its `status` is the *final* outcome. When a step took more than one real attempt
+(today: `scroll_until`, which performs one gesture and one fresh settled
+traversal per attempt) the history is explicit in `attempts[]`:
+
+```json
+{
+  "index": 1,
+  "step": "scroll_until",
+  "status": "pass",
+  "frame_seq": 3,
+  "attempts": [
+    {"attempt": 1, "status": "fail", "reason": "selector not visible in this attempt's settled traversal"},
+    {"attempt": 2, "status": "pass", "reason": "selector visible in this attempt's settled traversal", "frame_seq": 3}
+  ]
+}
+```
+
+A step that never passes keeps every attempt (`attempts: [fail, fail, fail]`) and
+its `status`/`error` are the final miss. `attempts` is absent when the step
+succeeded on its first attempt, so "a retry happened" is answerable from the
+reply alone. `verdict.json`, `steps/NN-<kind>.json` and the inline
+`result.verdict` are all written from the same `Verdict` structure: a passing run
+never shows a retried non-pass step in one view and a pass in the other.
+
+The **final** attempt's `reason` is the search's own answer, so a miss says why it
+stopped instead of a generic "exhausted" (REL3H2, in this history - never a
+second structure):
+
+* `"end_of_list: two consumed gestures in a row moved nothing, so this direction
+  has no more content"` - the step's `error.code` is `END_OF_LIST`, and
+  `error.details` carries `end_of_list: true`, `unchanged_gestures: 2`,
+  `gesture_consumed: true`, `attempts`, `max_attempts`, `last_tree_texts`;
+* `"gesture not consumed (swipe missed the scroller?): the app window answered
+  finishInputEvent(handled) = false (...)"` - `error.code` is
+  `ELEMENT_NOT_FOUND` with `details.gesture_consumed: false` and
+  `details.reason: "unhandled_input" | "not_handled"`: nothing learned about the
+  end of the list, so re-aim the gesture rather than raising `max_attempts`;
+* otherwise `ELEMENT_NOT_FOUND` after every attempt (the selector may never
+  render).
 
 A non-pass verdict has `failure` populated:
 

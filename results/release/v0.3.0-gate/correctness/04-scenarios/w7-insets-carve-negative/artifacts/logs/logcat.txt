@@ -1,0 +1,117 @@
+--------- beginning of main
+1794820590072      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794820590072      2  I : Using CollectorTypeCC GC.
+1794820590072      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794820590072      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794820590072      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794820590072      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794820590072      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794820590072      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794820590072      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794820590072     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794820590072     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794820590072     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794820590072     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794820590072     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794820590072     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794820590072     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794820590072     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794820590072     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794820590072     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794820590072     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794820590072     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794820590072     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794820590072     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794820590072     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794820590072     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794820590072     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794820590072     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794820590072     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794820590072     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794820590072     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794820590072     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794820590072     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794820590072     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794820590072     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794820590072     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794820590072     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794820590072     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794820590072     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794820590072     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794820590072     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794820590072     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794820590072     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794820590072     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794820590072     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794820590072     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794820590072     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794820590072     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794820590072     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794820590072     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794820590072     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794820590072     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794820590072     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794820590072     53  D nativeloader: InitExtendedPublicLibraries: 
+1794820590072     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794820590072     55  D nativeloader: InitProductPublicLibraries: 
+1794820590072     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794820590072     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794820590072     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794820590072     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794820590072     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794820590072     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794820590072     62  W ziparchive: Unable to open '/data/app/insets-probe.dm': No such file or directory
+1794820590072     63  W ziparchive: Unable to open '/data/app/insets-probe.dm': No such file or directory
+1794820590072     64  D nativeloader: Configuring clns-2 for other apk /data/app/insets-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.insetsprobe
+1794820590072     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.insetsprobe/cache: chown failed: EINVAL (Invalid argument)
+1794820590072     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.insetsprobe/code_cache: chown failed: EINVAL (Invalid argument)
+1794820590072     67  V GraphicsEnvironment: Currently set values for:
+1794820590072     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794820590072     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794820590072     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.insetsprobe: false
+1794820590072     71  V GraphicsEnvironment: dev.acos.fixtures.insetsprobe is not listed in per-application setting
+1794820590072     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794820590072     73  W SystemServiceRegistry: No service published for: netstats
+1794820590072     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794820590072     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794820590072     76  D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED
+1794820590072     77  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794820590072     78  E logdw: dev.acos.fixtures.insetsprobe.MainActivity
+1794820590072     79  E logdw: dev.acos.fixtures.insetsprobe.MainActivity
+1794820590072     80  E logdw: dev.acos.fixtures.insetsprobe.MainActivity
+1794820590072     81  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794820590072     82  I AcosInsetsProbe: status=0 nav=0 systemBars=0,0 gestures=0 decor=[0,0][0,0] frame=[0,0][0,0] window=[0,0][0,0]
+1794820590072     83  I AcosInsetsProbe: status=0 nav=0 systemBars=0,0 gestures=21 decor=[0,0][0,0] frame=[0,0][0,0] window=[0,0][1080,2400]
+1794820590072     84  I AcosInsetsProbe: status=0 nav=0 systemBars=0,0 gestures=21 decor=[0,0][1080,2209] frame=[0,128][1080,2337] window=[0,0][1080,2400]
+1794820590072     85  W View: requestLayout() improperly called by android.widget.TextView{cb9d060 V.ED..... ......ID 21,21-164,72 #7f010006 app:id/status} during layout: running second layout pass
+1794820590072     86  W View: requestLayout() improperly called by android.widget.TextView{2db2919 V.ED..... ......ID 21,72-120,123 #7f010004 app:id/nav} during layout: running second layout pass
+1794820590072     87  W View: requestLayout() improperly called by android.widget.TextView{2c4dde V.ED..... ......ID 21,123-285,174 #7f010007 app:id/system_bars} during layout: running second layout pass
+1794820590072     88  W View: requestLayout() improperly called by android.widget.TextView{a4afbbf V.ED..... ......ID 21,174-227,225 #7f010003 app:id/gestures} during layout: running second layout pass
+1794820590072     89  W View: requestLayout() improperly called by android.widget.TextView{f5b928c V.ED..... ......ID 21,225-273,276 #7f010000 app:id/decor} during layout: running second layout pass
+1794820590072     90  W View: requestLayout() improperly called by android.widget.TextView{4ec3dd5 V.ED..... ......ID 21,276-277,327 #7f010002 app:id/frame} during layout: running second layout pass
+1794820590072     91  W View: requestLayout() improperly called by android.widget.TextView{b2b69ea V.ED..... ......ID 21,327-432,378 #7f010008 app:id/window} during layout: running second layout pass
+1794820590072     92  W View: requestLayout() improperly called by android.widget.TextView{bd94db V.ED..... ......ID 21,378-344,429 #7f010001 app:id/display} during layout: running second layout pass
+1794820590072     93  W View: requestLayout() improperly called by android.widget.TextView{754b78 V.ED..... ......ID 21,429-352,480 #7f010005 app:id/probe_mode} during layout: running second layout pass
+1794820590072     94  I AcosInsetsProbe: status=0 nav=0 systemBars=0,0 gestures=21 decor=[0,0][1080,2209] frame=[0,128][1080,2337] window=[0,0][1080,2400]
+1794820590072     95  I AcosInsetsProbe: status=0 nav=0 systemBars=0,0 gestures=21 decor=[0,0][1080,2209] frame=[0,128][1080,2337] window=[0,0][1080,2400]
+1794820590072     96  I AcosInsetsProbe: status=0 nav=0 systemBars=0,0 gestures=21 decor=[0,0][1080,2209] frame=[0,128][1080,2337] window=[0,0][1080,2400]
+1794820590072     97  W View: requestLayout() improperly called by android.widget.TextView{cb9d060 V.ED..... ......I. 21,21-164,72 #7f010006 app:id/status} during second layout pass: posting in next frame
+1794820590072     98  W View: requestLayout() improperly called by android.widget.TextView{2db2919 V.ED..... ......I. 21,72-120,123 #7f010004 app:id/nav} during second layout pass: posting in next frame
+1794820590072     99  W View: requestLayout() improperly called by android.widget.TextView{2c4dde V.ED..... ......I. 21,123-285,174 #7f010007 app:id/system_bars} during second layout pass: posting in next frame
+1794820590072    100  W View: requestLayout() improperly called by android.widget.TextView{a4afbbf V.ED..... ......I. 21,174-227,225 #7f010003 app:id/gestures} during second layout pass: posting in next frame
+1794820590072    101  W View: requestLayout() improperly called by android.widget.TextView{f5b928c V.ED..... ......I. 21,225-399,276 #7f010000 app:id/decor} during second layout pass: posting in next frame
+1794820590072    102  W View: requestLayout() improperly called by android.widget.TextView{4ec3dd5 V.ED..... ......I. 21,276-445,327 #7f010002 app:id/frame} during second layout pass: posting in next frame
+1794820590072    103  W View: requestLayout() improperly called by android.widget.TextView{b2b69ea V.ED..... ......I. 21,327-432,378 #7f010008 app:id/window} during second layout pass: posting in next frame
+1794820590072    104  W View: requestLayout() improperly called by android.widget.TextView{bd94db V.ED..... ......I. 21,378-344,429 #7f010001 app:id/display} during second layout pass: posting in next frame
+1794820590072    105  W View: requestLayout() improperly called by android.widget.TextView{754b78 V.ED..... ......I. 21,429-352,480 #7f010005 app:id/probe_mode} during second layout pass: posting in next frame
+1794820590159    106  I AcosInsetsProbe: status=0 nav=0 systemBars=0,0 gestures=21 decor=[0,0][1080,2209] frame=[0,128][1080,2337] window=[0,0][1080,2400]
+1794820590159    107  W View: requestLayout() improperly called by android.widget.TextView{cb9d060 V.ED..... ......ID 21,21-164,72 #7f010006 app:id/status} during layout: running second layout pass
+1794820590159    108  W View: requestLayout() improperly called by android.widget.TextView{2db2919 V.ED..... ......ID 21,72-120,123 #7f010004 app:id/nav} during layout: running second layout pass
+1794820590159    109  W View: requestLayout() improperly called by android.widget.TextView{2c4dde V.ED..... ......ID 21,123-285,174 #7f010007 app:id/system_bars} during layout: running second layout pass
+1794820590159    110  W View: requestLayout() improperly called by android.widget.TextView{a4afbbf V.ED..... ......ID 21,174-227,225 #7f010003 app:id/gestures} during layout: running second layout pass
+1794820590159    111  W View: requestLayout() improperly called by android.widget.TextView{f5b928c V.ED..... ......ID 21,225-399,276 #7f010000 app:id/decor} during layout: running second layout pass
+1794820590159    112  W View: requestLayout() improperly called by android.widget.TextView{4ec3dd5 V.ED..... ......ID 21,276-445,327 #7f010002 app:id/frame} during layout: running second layout pass
+1794820590159    113  W View: requestLayout() improperly called by android.widget.TextView{b2b69ea V.ED..... ......ID 21,327-432,378 #7f010008 app:id/window} during layout: running second layout pass
+1794820590159    114  W View: requestLayout() improperly called by android.widget.TextView{bd94db V.ED..... ......ID 21,378-344,429 #7f010001 app:id/display} during layout: running second layout pass
+1794820590159    115  W View: requestLayout() improperly called by android.widget.TextView{754b78 V.ED..... ......ID 21,429-352,480 #7f010005 app:id/probe_mode} during layout: running second layout pass
+1794820590159    116  I AcosInsetsProbe: status=0 nav=0 systemBars=0,0 gestures=21 decor=[0,0][1080,2209] frame=[0,128][1080,2337] window=[0,0][1080,2400]

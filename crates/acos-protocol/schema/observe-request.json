@@ -231,6 +231,18 @@
         "null"
       ]
     },
+    "png": {
+      "default": false,
+      "description": "Capture this frame's PNG into the reply (`true`).\n\nThe ART daemon writes it under the session's artifacts and reports the path (same as `screenshot: true`); the Flutter route returns the PNG inline (`png_base64`/`png_bytes`). A route that cannot produce pixels answers `UNSUPPORTED_BACKEND` instead of a reply that silently has none.",
+      "type": "boolean"
+    },
+    "screenshot": {
+      "description": "Write this frame's PNG (`true` = under the session's artifacts and return the path; a string = that destination inside the artifacts directory).\n\nThe pixels are always those of the frame the tree in the same reply describes; a placeholder/no-pixel frame is `NO_FRESH_FRAME`, never an empty success.",
+      "type": [
+        "boolean",
+        "string"
+      ]
+    },
     "text": {
       "default": false,
       "description": "Include the newline-joined text rendering.",

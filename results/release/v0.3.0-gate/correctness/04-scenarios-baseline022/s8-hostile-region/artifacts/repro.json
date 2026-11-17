@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/hostile-probe.apk",
+  "apk_sha256": "df2736658d4498d0d895f2237646d7d9638801b6d969b256752f08dcb82fdb5a",
+  "scenario_path": "scenarios/s8-hostile-region.yaml",
+  "scenario_sha256": "b8c3cfdc685cc4eddeda9497532a0510ea50a632bb80e6089fd4ec86d3a769fc",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

@@ -1,0 +1,7 @@
+{
+  "request_id": "req_338506_18e87bce57e46f00",
+  "started_at": "2026-11-16T09:16:17.675Z",
+  "scenario": "scenarios/w24-counter-labels.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

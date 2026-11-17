@@ -570,6 +570,13 @@ impl Backend for NativeBackend {
         Ok(out)
     }
 
+    fn display_size(&self) -> Option<(u32, u32)> {
+        match self.display {
+            acos_protocol::DisplaySpec::Offscreen { width, height, .. } => Some((width, height)),
+            acos_protocol::DisplaySpec::None => None,
+        }
+    }
+
     fn input(&mut self, action: &InputAction) -> Result<SessionObservation, BackendError> {
         match action {
             InputAction::Tap { selector, x, y } => {
@@ -616,6 +623,23 @@ impl Backend for NativeBackend {
                     }
                 }
                 session.text(text.clone()).map_err(input_error)?;
+            }
+            InputAction::Swipe {
+                from,
+                to,
+                duration_ms,
+                fling: _,
+            } => {
+                // The frozen VM's own gesture path: the same interpolated
+                // `DOWN`/`MOVE`/`UP` stream its `AgentSession` publishes. It has
+                // no scroller physics, so `fling` only changes the timing on the
+                // ART engine; the gesture itself is identical.
+                self.session()?.swipe(
+                    (from.0 as f32, from.1 as f32),
+                    (to.0 as f32, to.1 as f32),
+                    std::time::Duration::from_millis(*duration_ms),
+                    8,
+                ).map_err(input_error)?;
             }
             InputAction::Key(key) => {
                 self.session()?.key(key_code(*key)).map_err(input_error)?;

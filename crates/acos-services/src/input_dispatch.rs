@@ -116,6 +116,17 @@ pub struct InputDispatch {
     plan: Option<Injection>,
     inject_delay: Duration,
     ack_wait: Duration,
+    /// Monotonic count of windows whose input channel went away.
+    ///
+    /// A gesture records this before it publishes and asks afterwards whether
+    /// **its own** token was among the removals: dismissing a dialog window
+    /// destroys the receiver that owes the `FINISHED` ack, so the guest never
+    /// answers and the only honest evidence left is the host's own fact that the
+    /// window it delivered to is gone (REL3I3). A removal of a *different*
+    /// window never counts, which is what the token check gives.
+    removals: u64,
+    /// `(removals value, token)` for every removal, oldest first.
+    removed: Vec<(u64, BinderId)>,
 }
 
 impl InputDispatch {
@@ -248,6 +259,112 @@ impl InputDispatch {
     /// Publish a tap on `token`'s channel.
     pub fn inject_tap(&mut self, token: BinderId, x: f32, y: f32) -> Result<Gesture> {
         self.publish_tap(token, x, y)
+    }
+
+    /// Publish a real swipe/scroll gesture on `token`'s channel: `DOWN` at
+    /// `from`, one `MOVE` per display refresh interval, `UP` at `to`.
+    ///
+    /// The events are **paced** at the refresh cadence (a sleep until each
+    /// sample's scheduled time), so the guest sees the same arrival pattern a
+    /// touchscreen produces instead of a burst that arrives in one looper wake
+    /// up. `eventTime` is `downTime` plus the sample's offset, so the
+    /// timestamps a `VelocityTracker` reads are evenly spaced and end at the
+    /// lift — the list's own fling physics then runs on real numbers.
+    ///
+    /// Coordinates are carried in the message transform, exactly like
+    /// [`Self::inject_tap`] (the image's `MotionEvent` path reads them there).
+    /// `duration` shorter than one refresh interval still publishes one
+    /// interpolated `MOVE`; nothing about the gesture is invented beyond the
+    /// interpolation between the two points the caller named.
+    pub fn inject_swipe(
+        &mut self,
+        token: BinderId,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration: Duration,
+    ) -> Result<Gesture> {
+        self.publish_swipe(token, from, to, duration)
+    }
+
+    fn publish_swipe(
+        &mut self,
+        token: BinderId,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration: Duration,
+    ) -> Result<Gesture> {
+        let samples = crate::input_channel::swipe_samples(
+            from,
+            to,
+            i64::try_from(duration.as_nanos()).unwrap_or(i64::MAX / 2),
+            crate::input_channel::GESTURE_SAMPLE_INTERVAL_NANOS,
+        );
+        let Some(publisher) = self.registry.publisher_mut(token) else {
+            let message = format!("inject_swipe: no input channel for token {:#x}", token.0);
+            self.events.push(InputEvent::Error {
+                token,
+                message: message.clone(),
+            });
+            return Err(ChannelError::Io(message));
+        };
+        let down_time = monotonic_nanos();
+        let started = Instant::now();
+        let last = samples.len().saturating_sub(1);
+        let mut dispatches = Vec::with_capacity(samples.len());
+        for (index, sample) in samples.iter().enumerate() {
+            // Pace the publication to the sample's own event time. The `DOWN`
+            // has offset 0 and goes immediately.
+            let scheduled = started + Duration::from_nanos(u64::try_from(sample.offset_nanos).unwrap_or(0));
+            let now = Instant::now();
+            if scheduled > now {
+                thread::sleep(scheduled - now);
+            }
+            let action = if index == 0 {
+                crate::input_channel::ACTION_DOWN
+            } else if index == last {
+                crate::input_channel::ACTION_UP
+            } else {
+                crate::input_channel::ACTION_MOVE
+            };
+            let event_id = publisher.allocate_event_id();
+            let mut event = crate::input_channel::MotionEvent::touch(
+                event_id,
+                action,
+                down_time,
+                down_time + sample.offset_nanos,
+                0.0,
+                0.0,
+            );
+            event.transform.tx = sample.x;
+            event.transform.ty = sample.y;
+            event.raw_transform.tx = sample.x;
+            event.raw_transform.ty = sample.y;
+            match publisher.publish_motion(&event) {
+                Ok(dispatch) => {
+                    self.events.push(InputEvent::Published {
+                        token,
+                        seq: dispatch.seq,
+                        kind: "motion",
+                        detail: format!(
+                            "{:?} x={} y={} t={}ms",
+                            dispatch.kind,
+                            sample.x.round() as i64,
+                            sample.y.round() as i64,
+                            sample.offset_nanos / 1_000_000
+                        ),
+                    });
+                    dispatches.push(dispatch);
+                }
+                Err(e) => {
+                    self.events.push(InputEvent::Error {
+                        token,
+                        message: format!("inject_swipe: {e}"),
+                    });
+                    return Err(e);
+                }
+            }
+        }
+        Ok(crate::input_channel::Gesture { dispatches })
     }
 
     fn publish_tap(&mut self, token: BinderId, x: f32, y: f32) -> Result<Gesture> {
@@ -387,9 +504,52 @@ impl InputDispatch {
         self.publish_key(token, key_code)
     }
 
+    /// Publish on the newest live window, skipping channels whose guest end is
+    /// gone.
+    ///
+    /// The app re-adds a window (`IWindow` handle churn) and a dismissed
+    /// dialog's channel entry can outlive its `InputEventReceiver`; the
+    /// dispatcher must not deliver into a dead channel, and it must not treat
+    /// one dead entry as "input is broken". AOSP's dispatcher holds the live
+    /// focus connection, so asking the next token is the same policy with
+    /// ACOS's token-set bookkeeping.
+    pub fn publish_on_live(
+        &mut self,
+        mut publish: impl FnMut(&mut InputDispatch, BinderId) -> Result<Gesture>,
+    ) -> Result<(BinderId, Gesture)> {
+        let mut last: Option<ChannelError> = None;
+        loop {
+            let Some(token) = self.newest_token() else {
+                return Err(last.unwrap_or(ChannelError::Malformed(
+                    "no live window input channel yet",
+                )));
+            };
+            match publish(self, token) {
+                Ok(gesture) => return Ok((token, gesture)),
+                Err(ChannelError::PeerClosed) => {
+                    let message = format!(
+                        "input channel {:#x} peer is closed; forgetting it",
+                        token.0
+                    );
+                    self.events.push(InputEvent::Error { token, message });
+                    self.remove(token);
+                    last = Some(ChannelError::PeerClosed);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     fn publish_key(&mut self, token: BinderId, key_code: i32) -> Result<Gesture> {
         let Some(publisher) = self.registry.publisher_mut(token) else {
-            let message = format!("inject_key: no input channel for token {:#x}", token.0);
+            let message = format!(
+                "inject_key: no input channel for token {:#x} (live: {:?})",
+                token.0,
+                self.tokens
+                    .iter()
+                    .map(|t| format!("{t:#x}"))
+                    .collect::<Vec<_>>()
+            );
             self.events.push(InputEvent::Error {
                 token,
                 message: message.clone(),
@@ -401,7 +561,7 @@ impl InputDispatch {
             Err(e) => {
                 self.events.push(InputEvent::Error {
                     token,
-                    message: format!("inject_key: {e}"),
+                    message: format!("inject_key token={:#x}: {e}", token.0),
                 });
                 return Err(e);
             }
@@ -479,7 +639,11 @@ impl InputDispatch {
                 }
                 Ok(None) => break,
                 Err(ChannelError::PeerClosed) => {
-                    self.events.push(InputEvent::Closed { token });
+                    // The guest disposed its `InputEventReceiver` (a removed
+                    // window, or an APP that closed the channel). Forget the
+                    // token so it can never be picked as the newest target
+                    // again; this call still reports the lost channel.
+                    self.remove(token);
                     return Err(ChannelError::PeerClosed);
                 }
                 Err(e) => {
@@ -496,6 +660,10 @@ impl InputDispatch {
 
     /// Drop `token`'s channel. Dropping the server end makes the guest's next
     /// read see EOF.
+    ///
+    /// The removal is also recorded as a fact for the gesture that was in
+    /// flight: a window that goes away before its receiver finished the event
+    /// can never ack it (REL3I3).
     pub fn remove(&mut self, token: BinderId) -> bool {
         let was = self.registry.remove(token);
         self.tokens.remove(&token.0);
@@ -504,8 +672,24 @@ impl InputDispatch {
         }
         if was {
             self.events.push(InputEvent::Closed { token });
+            self.removals += 1;
+            self.removed.push((self.removals, token));
         }
         was
+    }
+
+    /// The removals counter to pass to [`Self::was_removed_since`] later.
+    #[must_use]
+    pub fn removal_mark(&self) -> u64 {
+        self.removals
+    }
+
+    /// `true` when `token` itself was removed after `mark`.
+    #[must_use]
+    pub fn was_removed_since(&self, token: BinderId, mark: u64) -> bool {
+        self.removed
+            .iter()
+            .any(|(at, removed)| *at > mark && *removed == token)
     }
 
     /// The token of the most recently registered live window (env-driven
@@ -583,6 +767,32 @@ impl InputHost {
         }
     }
 
+    /// The live window tokens (`{:#x}` strings), for diagnostics.
+    #[must_use]
+    pub fn live_tokens(&self) -> Vec<String> {
+        let state = lock(&self.state);
+        state.tokens.iter().map(|t| format!("{t:#x}")).collect()
+    }
+
+    /// The removals counter, taken before an action so
+    /// [`Self::window_removed_since`] can answer about that action only.
+    #[must_use]
+    pub fn removal_mark(&self) -> u64 {
+        lock(&self.state).removal_mark()
+    }
+
+    /// `true` when `token`'s own window was removed after `mark`.
+    ///
+    /// REL3I3: the host's fact that the window it delivered input to no longer
+    /// exists. A dialog's Back destroys the dialog window before its
+    /// `InputEventReceiver` can finish the event (`Attempted to finish an input
+    /// event but the input event receiver has already been disposed.`), so no
+    /// guest ack will ever exist; the removal is the evidence.
+    #[must_use]
+    pub fn window_removed_since(&self, token: BinderId, mark: u64) -> bool {
+        lock(&self.state).was_removed_since(token, mark)
+    }
+
     /// Shared producer state.
     #[must_use]
     pub fn state(&self) -> &Arc<Mutex<InputDispatch>> {
@@ -636,10 +846,9 @@ impl InputHost {
     /// coordinates on the real `InputChannel`), with the wait for the guest's
     /// acks instead of a fire-and-forget log.
     pub fn tap(&self, x: f32, y: f32, ack_wait: Duration) -> Result<InjectedGesture> {
-        let token = self
-            .newest_token()
-            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
-        self.tap_window(token, x, y, ack_wait)
+        let (token, gesture) = lock(&self.state)
+            .publish_on_live(|dispatch, token| dispatch.inject_tap(token, x, y))?;
+        self.collect(&token, &gesture, ack_wait)
     }
 
     /// Publish one tap on an explicit window token. The point is **window
@@ -657,14 +866,32 @@ impl InputHost {
         self.collect(&token, &gesture, ack_wait)
     }
 
+    /// Publish one swipe/scroll on the newest live window and collect the
+    /// guest's `FINISHED` replies for a bounded window.
+    ///
+    /// The stream is paced over `duration` (see
+    /// [`InputDispatch::inject_swipe`]); the ack window starts after the `UP`
+    /// is published, so a slow drag is never reported as "no acks" because the
+    /// gesture itself consumed the budget.
+    pub fn swipe(
+        &self,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration: Duration,
+        ack_wait: Duration,
+    ) -> Result<InjectedGesture> {
+        let (token, gesture) = lock(&self.state).publish_on_live(|dispatch, token| {
+            dispatch.inject_swipe(token, from, to, duration)
+        })?;
+        self.collect(&token, &gesture, ack_wait)
+    }
+
     /// Publish one key press on the newest live window (delivery only; window
     /// focus still needs the IME `EditorInfo` codec, so the app may drop it —
     /// the ack's `handled` field reports exactly that).
     pub fn key(&self, code: i32, ack_wait: Duration) -> Result<InjectedGesture> {
-        let token = self
-            .newest_token()
-            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
-        let gesture = lock(&self.state).inject_key(token, code)?;
+        let (token, gesture) = lock(&self.state)
+            .publish_on_live(|dispatch, token| dispatch.inject_key(token, code))?;
         self.collect(&token, &gesture, ack_wait)
     }
 
@@ -676,10 +903,8 @@ impl InputHost {
     /// for a physical keyboard. It is not an IME `commitText` (ACOS runs a null
     /// IME; see `crate::ime`).
     pub fn type_text(&self, text: &str, ack_wait: Duration) -> Result<InjectedGesture> {
-        let token = self
-            .newest_token()
-            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
-        let gesture = lock(&self.state).inject_text(token, text)?;
+        let (token, gesture) = lock(&self.state)
+            .publish_on_live(|dispatch, token| dispatch.inject_text(token, text))?;
         self.collect(&token, &gesture, ack_wait)
     }
 
@@ -702,7 +927,23 @@ impl InputHost {
         let mut acks: Vec<InjectedAck> = Vec::new();
         let deadline = Instant::now() + ack_wait;
         while Instant::now() < deadline && acks.len() < seqs.len() {
-            let responses = lock(&self.state).drain_acks(*token)?;
+            // REL3I: when the soft input is shown, the app's `ImeInputStage`
+            // offers this key to its `InputMethodManager`, which writes it into
+            // the IME channel and blocks on our `FINISHED`. Answer it here, on
+            // the same wait that collects the window's own ack.
+            let _ = crate::ime::service_pending_keys();
+            let responses = match lock(&self.state).drain_acks(*token) {
+                Ok(responses) => responses,
+                Err(ChannelError::PeerClosed) => {
+                    // The target's guest end went away while we waited. The
+                    // publish went somewhere, but nothing can acknowledge it:
+                    // report the acks we do have (possibly none) instead of
+                    // failing the whole action. The dead token was already
+                    // forgotten by `drain_acks`.
+                    break;
+                }
+                Err(e) => return Err(e),
+            };
             for response in responses {
                 if let ConsumerResponse::Finished(ack) = response {
                     // P1/W59: the framework's `NativeInputEventReceiver`
@@ -953,6 +1194,74 @@ pub fn default_token(d: &InputDispatch) -> Option<BinderId> {
 }
 
 #[cfg(test)]
+mod window_removal_tests {
+    use super::*;
+
+    const DELIVERED: BinderId = BinderId(0x7a01);
+    const OTHER: BinderId = BinderId(0x7a02);
+
+    fn dispatch_with_two_windows() -> InputDispatch {
+        let mut dispatch = InputDispatch::new();
+        dispatch
+            .register_window(DELIVERED, "Surface(name=acos-fixture/dialog)/@0x20")
+            .expect("register dialog");
+        dispatch
+            .register_window(OTHER, "Surface(name=acos-fixture/activity)/@0x21")
+            .expect("register activity");
+        dispatch
+    }
+
+    /// REL3I3: a dialog's Back removes the window the key was delivered to, and
+    /// that is the evidence for `handled: true` (no ack can exist: the receiver
+    /// was disposed). It must be scoped to the **delivered** token, so removing
+    /// a different window is never evidence about this input.
+    #[test]
+    fn only_the_delivered_windows_removal_counts() {
+        let mut dispatch = dispatch_with_two_windows();
+        let mark = dispatch.removal_mark();
+        // A different window goes away first: no evidence about the delivery.
+        assert!(dispatch.remove(OTHER));
+        assert!(
+            !dispatch.was_removed_since(DELIVERED, mark),
+            "a different window's removal must not count for the delivered one"
+        );
+        assert!(dispatch.was_removed_since(OTHER, mark));
+
+        // Then the window the input went to is removed.
+        assert!(dispatch.remove(DELIVERED));
+        assert!(
+            dispatch.was_removed_since(DELIVERED, mark),
+            "the delivered window's own removal is the evidence"
+        );
+    }
+
+    /// A removal before the gesture does not blur into it: the mark is taken
+    /// when the action is published.
+    #[test]
+    fn a_removal_before_the_mark_is_not_evidence() {
+        let mut dispatch = dispatch_with_two_windows();
+        assert!(dispatch.remove(DELIVERED));
+        let mark = dispatch.removal_mark();
+        dispatch.remove(OTHER);
+        dispatch
+            .register_window(DELIVERED, "Surface(name=acos-fixture/dialog)/@0x22")
+            .expect("re-register");
+        assert!(
+            !dispatch.was_removed_since(DELIVERED, mark),
+            "an earlier removal of the same window id is not this gesture's evidence"
+        );
+    }
+
+    /// Without a removal the answer is unchanged: no evidence at all.
+    #[test]
+    fn no_removal_means_no_evidence() {
+        let dispatch = dispatch_with_two_windows();
+        let mark = dispatch.removal_mark();
+        assert!(!dispatch.was_removed_since(DELIVERED, mark));
+    }
+}
+
+#[cfg(test)]
 mod ack_accounting_tests {
     use super::*;
     use crate::input_channel::{InputMessage, LoopbackConsumer};
@@ -1067,6 +1376,178 @@ mod ack_accounting_tests {
         assert!(
             gesture.acks.iter().all(|ack| ack.latency_us.is_some()),
             "a matching ack carries its real publish -> FINISHED latency"
+        );
+    }
+}
+
+/// REL3S: the swipe event stream.
+///
+/// A swipe is not "a tap at two places": the framework's scroll/fling physics
+/// read the *timestamps* and the *positions over time*. These tests pin the
+/// properties a real touchscreen stream has, so a regression to "DOWN, UP" (or
+/// to a burst with identical event times) fails here before it reaches an app.
+#[cfg(test)]
+mod swipe_stream_tests {
+    use super::*;
+    use crate::input_channel::{
+        swipe_samples, DispatchKind, InputMessage, LoopbackConsumer, GESTURE_SAMPLE_INTERVAL_NANOS,
+    };
+
+    const TOKEN: BinderId = BinderId(0x8801);
+
+    #[test]
+    fn swipe_samples_interpolate_the_path_at_the_refresh_cadence() {
+        let duration_ns = 320_000_000; // 320 ms
+        let samples = swipe_samples((10.0, 600.0), (10.0, 100.0), duration_ns, GESTURE_SAMPLE_INTERVAL_NANOS);
+        // DOWN + one MOVE per 16 ms (20) with the last sample serving as the UP.
+        assert_eq!(samples.len(), 21, "down + 20 refresh samples");
+        assert_eq!(samples.first().unwrap().offset_nanos, 0);
+        assert_eq!(samples.first().unwrap().x, 10.0);
+        assert_eq!(samples.first().unwrap().y, 600.0);
+        let last = samples.last().unwrap();
+        assert_eq!(last.offset_nanos, duration_ns, "the lift is the last sample");
+        assert_eq!((last.x, last.y), (10.0, 100.0), "the lift is the requested end point");
+        // Timestamps are strictly increasing and evenly spaced (the velocity a
+        // VelocityTracker derives is the gesture's real speed: 500 px / 320 ms).
+        for pair in samples.windows(2) {
+            let step = pair[1].offset_nanos - pair[0].offset_nanos;
+            assert!(step > 0, "event times must increase");
+            assert!(
+                (step - GESTURE_SAMPLE_INTERVAL_NANOS).abs() <= 1,
+                "each sample is one refresh interval after the previous: {step}"
+            );
+            assert!(pair[1].y < pair[0].y, "an upward swipe moves monotonically up");
+        }
+        let travelled = samples.first().unwrap().y - samples.last().unwrap().y;
+        assert!((travelled - 500.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_short_swipe_still_publishes_one_move_and_ends_at_the_lift_time() {
+        let samples = swipe_samples((0.0, 0.0), (100.0, 0.0), 5_000_000, GESTURE_SAMPLE_INTERVAL_NANOS);
+        assert_eq!(samples.len(), 2, "DOWN + one interpolated MOVE==UP");
+        assert_eq!(samples[1].offset_nanos, 5_000_000);
+        assert_eq!((samples[1].x, samples[1].y), (100.0, 0.0));
+    }
+
+    #[test]
+    fn publish_swipe_sends_down_moves_and_up_with_real_event_times() {
+        let mut dispatch = InputDispatch::new();
+        dispatch
+            .register_window(TOKEN, "Surface(name=acos-fixture/scroll-list)/@0x20")
+            .expect("register");
+        let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
+        let mut guest = LoopbackConsumer::new(fd);
+        // Drain the registration messages (touch mode + focus).
+        for _ in 0..2 {
+            guest.recv().expect("recv").expect("registration message");
+        }
+
+        let started = Instant::now();
+        let gesture = dispatch
+            .inject_swipe(
+                TOKEN,
+                (540.0, 1800.0),
+                (540.0, 600.0),
+                Duration::from_millis(160),
+            )
+            .expect("swipe");
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed >= Duration::from_millis(120),
+            "the stream is paced at the refresh cadence, not published in a burst: {elapsed:?}"
+        );
+
+        // 160 ms / 16 ms = 10 samples; adjacent samples share `downTime`.
+        assert_eq!(gesture.dispatches.len(), 11, "down + 10 refresh samples");
+        assert_eq!(gesture.dispatches[0].kind, DispatchKind::MotionDown);
+        assert_eq!(gesture.dispatches[10].kind, DispatchKind::MotionUp);
+        assert!(
+            gesture.dispatches[1..10]
+                .iter()
+                .all(|d| d.kind == DispatchKind::MotionMove)
+        );
+        let down_time = gesture.dispatches[0].down_time;
+        assert!(gesture.dispatches.iter().all(|d| d.down_time == down_time));
+        for pair in gesture.dispatches.windows(2) {
+            assert!(pair[1].event_time > pair[0].event_time);
+        }
+        assert_eq!(
+            gesture.dispatches[10].event_time - down_time,
+            160_000_000,
+            "the lift carries the requested duration"
+        );
+
+        // The guest sees the interpolated positions and the increasing times.
+        let mut events = Vec::new();
+        while let Some(message) = guest.recv().expect("recv") {
+            if let InputMessage::Motion { event, .. } = message {
+                events.push(event);
+            }
+        }
+        assert_eq!(events.len(), 11);
+        assert_eq!(events[0].action, crate::input_channel::ACTION_DOWN);
+        assert_eq!(events[0].transform.ty, 1800.0);
+        assert_eq!(events[10].action, crate::input_channel::ACTION_UP);
+        assert_eq!(events[10].transform.ty, 600.0);
+        assert!(
+            events.windows(2).all(|pair| pair[1].transform.ty < pair[0].transform.ty),
+            "the finger travels up monotonically"
+        );
+        assert!(
+            events.windows(2).all(|pair| pair[1].event_time > pair[0].event_time),
+            "the wire carries real, increasing event times"
+        );
+    }
+
+    #[test]
+    fn input_host_swipe_reports_every_events_handled_bit() {
+        let mut dispatch = InputDispatch::new();
+        dispatch
+            .register_window(TOKEN, "Surface(name=acos-fixture/scroll-list)/@0x30")
+            .expect("register");
+        let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
+        let mut guest = LoopbackConsumer::new(fd);
+        for _ in 0..2 {
+            guest.recv().expect("recv").expect("registration message");
+        }
+        let state = Arc::new(Mutex::new(dispatch));
+        let host = InputHost {
+            state: Arc::clone(&state),
+            relayout_tx: None,
+        };
+        let acker = thread::spawn(move || {
+            let mut acked = 0;
+            while acked < 6 {
+                while let Some(message) = guest.recv().expect("recv") {
+                    if let InputMessage::Motion { seq, .. } = message {
+                        // REL3E: the app window's own finishInputEvent bit.
+                        guest.send_finished(seq, seq % 2 == 0).expect("ack");
+                        acked += 1;
+                    }
+                }
+                thread::sleep(Duration::from_millis(2));
+            }
+        });
+        let gesture = host
+            .swipe(
+                (540.0, 1200.0),
+                (540.0, 900.0),
+                Duration::from_millis(80), // 5 samples + down = 6 events
+                Duration::from_secs(2),
+            )
+            .expect("swipe");
+        acker.join().expect("acker");
+        assert_eq!(gesture.seqs.len(), 6);
+        assert_eq!(gesture.acks.len(), 6, "every published event is acknowledged");
+        let mut want = gesture.seqs.clone();
+        want.sort_unstable();
+        let mut got: Vec<u32> = gesture.acks.iter().map(|ack| ack.seq).collect();
+        got.sort_unstable();
+        assert_eq!(got, want);
+        assert!(
+            gesture.acks.iter().any(|ack| !ack.handled) && gesture.acks.iter().any(|ack| ack.handled),
+            "the mixed handled/unhandled acks are reported per event, not folded away"
         );
     }
 }

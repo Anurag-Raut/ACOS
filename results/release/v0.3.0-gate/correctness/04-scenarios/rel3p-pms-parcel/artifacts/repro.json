@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/pms-parcel.apk",
+  "apk_sha256": "bdba054f57141962d46dd49d26d3e43ca80824f7ed289a473476cdd27a27cfa4",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/rel3p-pms-parcel.yaml",
+  "scenario_sha256": "9fa965973828665f6d7aa3dc7c304ad92118f6bee37c3d7787a6f4122fac81ad",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

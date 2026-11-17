@@ -1,0 +1,265 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "screenshot",
+    "static-manifest"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 14753792,
+    "wall_ms": 167
+  },
+  "ok": true,
+  "request_id": "req_3377bd_18e87bcc000f42aa",
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/release/v0.3.0-gate/correctness/04-scenarios/w15-native-hostile/artifacts",
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794521206393089027,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/native-hostile.apk",
+        "sha256": "90104d09a9aac95a2d41406448c1f3b02e9b8e76302d71cf3a99be5f513ee565",
+        "sha256_12": "90104d09a9aa",
+        "size_bytes": 16930
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794819964137509752,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w15-native-hostile.yaml",
+        "sha256": "3df6e53a9a9d568e3a6db9538d5a113cfa376e29cf7d09f0881d91ac026022ea",
+        "sha256_12": "3df6e53a9a9d",
+        "size_bytes": 955
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        }
+      ]
+    },
+    "trust": "trusted",
+    "verdict": {
+      "animations": "on",
+      "app": {
+        "package": "dev.acos.fixtures.nativehostile",
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/native-hostile.apk",
+        "sha256": "90104d09a9aac95a2d41406448c1f3b02e9b8e76302d71cf3a99be5f513ee565"
+      },
+      "backend": "acos-native",
+      "captures": {
+        "native-hostile-first": "frames/2-native-hostile-first.png"
+      },
+      "certification": "certified-with-limits",
+      "certification_limits": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "section": "§8.7"
+      },
+      "certification_policy": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+        "section": "§8.8"
+      },
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/w15-native-hostile/artifacts",
+        "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/w15-native-hostile/artifacts/engine.json",
+        "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/w15-native-hostile/artifacts/retention.json",
+        "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/w15-native-hostile/artifacts/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-16T09:16:07.917Z",
+      "insets": "report",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+        "artifacts: referenced (prune-unreferenced): 14 file(s) / 0.3 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+      ],
+      "provenance": {
+        "apk": {
+          "mtime_ns": 1794521206393089027,
+          "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/native-hostile.apk",
+          "sha256": "90104d09a9aac95a2d41406448c1f3b02e9b8e76302d71cf3a99be5f513ee565",
+          "sha256_12": "90104d09a9aa",
+          "size_bytes": 16930
+        },
+        "engine": "art",
+        "fidelity": "art-reference",
+        "scenario": {
+          "mtime_ns": 1794819964137509752,
+          "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w15-native-hostile.yaml",
+          "sha256": "3df6e53a9a9d568e3a6db9538d5a113cfa376e29cf7d09f0881d91ac026022ea",
+          "sha256_12": "3df6e53a9a9d",
+          "size_bytes": 955
+        },
+        "scenario_engine": "rust-vm",
+        "warnings": [
+          {
+            "code": "SCENARIO_ENGINE_MISMATCH",
+            "engine": "art",
+            "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+            "scenario_engine": "rust-vm"
+          }
+        ]
+      },
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.3.0",
+        "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/native-hostile.apk",
+        "apk_sha256": "90104d09a9aac95a2d41406448c1f3b02e9b8e76302d71cf3a99be5f513ee565",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w15-native-hostile.yaml",
+        "scenario_sha256": "3df6e53a9a9d568e3a6db9538d5a113cfa376e29cf7d09f0881d91ac026022ea"
+      },
+      "request_id": "req_3377bd_18e87bcc000f42aa",
+      "resources": {
+        "events": 83,
+        "frames_captured": 2,
+        "memory_mib": 14,
+        "peak_rss_bytes": 14753792,
+        "sessions": 1,
+        "steps": 2,
+        "wall_ms": 167
+      },
+      "scenario": {
+        "name": "w15-native-hostile",
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w15-native-hostile.yaml",
+        "sha256": "3df6e53a9a9d568e3a6db9538d5a113cfa376e29cf7d09f0881d91ac026022ea"
+      },
+      "schema_version": 1,
+      "session_exit": {
+        "abi": null,
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=55MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3373000-i3381067.scope)",
+        "code": null,
+        "disk_free_bytes": 248972075008,
+        "guest_crash": null,
+        "guest_exit": 0,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "ok",
+        "panic": null,
+        "path": "results/release/v0.3.0-gate/correctness/04-scenarios/w15-native-hostile/artifacts/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": "teardown-evidence"
+      },
+      "session_id": "s_art_native-hostile",
+      "started_at": "2026-11-16T09:16:07.750Z",
+      "status": "pass",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 112,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 53,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "capture",
+              "path": "frames/2-native-hostile-first.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-capture.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 1,
+          "name": "native-hostile-first",
+          "provenance": {
+            "frame": "host-observed"
+          },
+          "settle": {
+            "bound": "strict-event",
+            "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+            "mode": "strict",
+            "probe_seq": 4,
+            "reason": "strict-event",
+            "settled": true,
+            "strict_rule": "event",
+            "tree_age_ms": 40,
+            "waited_ms": 53,
+            "waited_ms_source": "step"
+          },
+          "status": "pass",
+          "step": "capture"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "pass"
+    },
+    "verdict_path": "results/release/v0.3.0-gate/correctness/04-scenarios/w15-native-hostile/artifacts/verdict.json"
+  },
+  "session_id": "s_art_native-hostile",
+  "status": "pass"
+}

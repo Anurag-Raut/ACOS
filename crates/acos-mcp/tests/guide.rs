@@ -744,3 +744,33 @@ fn the_service_module_tools_advertise_closed_schemas() {
         Some(vec!["off", "stub", "scripted", "real"])
     );
 }
+
+/// REL3F: the CLI topic — not the bounded overview — carries the stream
+/// contract an agent needs to parse output safely: `--json` puts the JSON
+/// document alone on stdout, the human summary goes to stderr, and `acos guide`
+/// reaches this text without MCP.
+#[test]
+fn the_cli_topic_documents_the_stdout_stderr_contract() {
+    let cli = acos_mcp::help::guide(Some("cli"));
+    for expected in [
+        "Human output contract",
+        "stdout is the JSON document",
+        "human summary",
+        "to stderr",
+        "acos guide [topic]",
+        "acos guide all",
+    ] {
+        assert!(cli.contains(expected), "the cli topic lost {expected:?}");
+    }
+    // Keeping it out of the overview is what keeps the default reply bounded.
+    let skeleton = acos_mcp::help::guide(None);
+    assert!(
+        !skeleton.contains("Human output contract"),
+        "the stream contract belongs in the CLI topic, not the skeleton"
+    );
+    assert!(
+        skeleton.len() < 3072,
+        "the acos_help default reply is {} bytes; the budget is 3 KiB",
+        skeleton.len()
+    );
+}

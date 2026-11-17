@@ -649,18 +649,10 @@ mod tests {
     use std::os::unix::net::UnixListener;
 
     fn scratch(tag: &str) -> PathBuf {
-        let root = std::env::var_os("ACOS_VIEW_TEST_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(".cache/lv")
-            });
-        // Short paths: a Unix socket path must fit in `sun_path` (< 108 bytes).
-        let dir = root.join(format!("{}-{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("scratch");
-        dir
+        // Short paths: a Unix socket path must fit in `sun_path` (< 108 bytes),
+        // and the checkout path is not something this test controls (agent
+        // worktrees are long). `test_scratch_root` keeps it short.
+        crate::live_registry::short_scratch(crate::live_registry::test_scratch_root(), tag)
     }
 
     /// A started hub on an ephemeral port plus its token.

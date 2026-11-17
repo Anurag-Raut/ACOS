@@ -34,6 +34,8 @@ pub mod events;
 pub mod frame;
 pub mod identity;
 pub mod mcp;
+pub mod provenance;
+pub mod reply;
 pub mod scenario;
 pub mod schema;
 pub mod ui;
@@ -70,6 +72,10 @@ pub use events::{
 pub use frame::FrameMeta;
 pub use identity::{DisplaySpec, IsolationLevel, ResourceBudget};
 pub use mcp::{mcp_tools, McpToolDescriptor, McpToolsList};
+pub use reply::{
+    compact_nodes, compact_text, enforce_cap, enforce_cap_pretty, shape_result_tree, shape_tree,
+    write_full_tree, ShapedTree, TreeShapeOptions, DEFAULT_PAGE_SIZE, MAX_REPLY_BYTES,
+};
 pub use scenario::{
     validate_scenario, CaptureStep, DensitySetup, Engine, Expectation, FallbackPolicy, LaunchStep,
     LocaleSetup, NetworkRule, NetworkSetup, OutputOptions, PermissionSetup, PermissionState,
@@ -78,6 +84,18 @@ pub use scenario::{
 };
 pub use ui::{Bounds, Selector, TextMatch, UiNode, UiTree};
 pub use verdict::{
-    AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
-    StepResult, Verdict, VERDICT_SCHEMA_VERSION,
+    AppIdentity, ArtifactRef, FailureClassification, HandledEvidence, HandledSource, Reproducer,
+    ResourceReport, ScenarioIdentity, StepAttempt, StepInputResult, StepResult, Verdict,
+    VERDICT_SCHEMA_VERSION,
 };
+
+/// The settle `reason` of an input whose every published event the app window
+/// acknowledged `finishInputEvent(handled) = false`, with no draw (REL3H).
+///
+/// Nothing consumed the gesture, so there is no new state to settle into: the
+/// unchanged, quiet screen the input produced **is** the settled observation.
+/// The string lives here, not in the engine, because two crates must agree on
+/// it: the ART guest writes it into the reply's `settle` block and the verifier
+/// reads it to refuse an end-of-list inference from a gesture nothing consumed
+/// (REL3H2).
+pub const SETTLE_UNHANDLED_INPUT_REASON: &str = "unhandled_input";

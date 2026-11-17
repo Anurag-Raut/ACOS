@@ -1180,6 +1180,89 @@ app. Decision: keep the host-Chromium design; the in-session gate is re-run in v
 multi-package PMS foundation lands; the parcel defect is fixed in v0.3.0 as its own root-cause item
 (audit every ACOS parcelable writer against AOSP `writeToParcel`). The Android WebView APK fallback
 stays rejected.
+
+## ADR-0032 — Settle is not a pixel rule: content stability for every wait and assertion (REL3A, 2026-11-17)
+
+**Context.** v0.3.0 agent feedback (two independent agents) showed the settle model still leaked into
+the product in three ways: `wait_for` had no settle option and always ran the strict (pixel/event) rule,
+so a screen whose pixels never stop animating could only time out (31 s `TIMEOUT`, `reason: queue` /
+`newer-store`, `animations: off` did not help); `assert_text` advertised `timeout_ms` and ignored it
+(it read the bound frame ~1 ms after the action and failed while the result list was still loading);
+and `acos_tap` answered `status: pass` with `settle.settled:false` — a false green for an agent that
+reads only `status`. MCP `acos_verify` also lacked the `animations` and `native` arguments the CLI has,
+while the engine's own hint told agents to use `animations:off`.
+
+**Decision.**
+
+1. **Content stability is a first-class settle rule for every wait, assertion and action.** `wait_for`
+   and `assert_text`/`assert_visible`/`assert_not_visible`/`assert_state` take `settle`
+   (`strict`|`content`), like `tap`/`type`/`key`/`launch`/`reset` already did. `fast` is rejected there
+   at validation time.
+2. **Default per step kind.** `wait_for` and the tree/text/state assertions default to *auto*: strict
+   first, then content-stable once strict has proven it cannot settle. Actions (`tap`/`type`/`key`/
+   `back`/`launch`/`reset`) stay strict by default (an action's frame is evidence; an endless animation
+   there is an honest `TIMEOUT`); pixel steps (`capture`, `assert_screenshot`, `assert_region`) always
+   need pixel settle. This never weakens a claim: an assertion still requires its condition on a
+   *settled* observation of the mode it reports, content stability still refuses pixel and geometry
+   claims, and an explicit `settle: content` step fails closed when the backend cannot prove it.
+3. **Every step and reply states the rule and its outcome**: `settle: {mode, settled, waited_ms,
+   reason}` plus the mode-specific evidence (`bound`, `window_ms`, `traversals`, `pixels_changed`,
+   `fallback_from`, ...).
+4. **A settle that timed out is never a pass.** A scenario step is `status: timeout` with
+   `error.code: TIMEOUT` (error class `infra_timeout`); a live-channel input reply is
+   `status: timeout` with `details.reason: "settle_timeout"`, the settle record and the delivered facts
+   in `details.delivery`. `settle_timeout_ms` moves the deadline only.
+5. **`timeout_ms` is a real wait on assertions too.** With it, a tree/text/state assertion polls fresh
+   settled observations until the condition holds or the deadline passes, and the frame it judged
+   becomes the bound frame; without it the old single-observation, no-extra-traversal path is unchanged
+   (benchmark metrics unaffected).
+6. **MCP parity:** `acos_verify` gains `animations` (`on`/`off`) and `native`, matching `acos verify`
+   (`REL3F`'s one-front-door rule). Every hint that names an option names a real one.
+
+**Consequences.** `wait_for`/assertion settle records now name `content` where they previously could
+not, so a verdict may show `mode: content, fallback_from: strict, pixel_evidence: false`. A scenario
+that asserted a text on an animating screen used to fail (and was being worked around with a
+`settle: content` tap); it now passes with a content record. Pixel assertions on the same screens still
+fail (`content_settle_pixel`), as they must.
+
+### ADR-0032 amendment 1 — a placeholder verdict needs a window, not a sample burst (GATEFIX, 2026-11-17)
+
+**Context.** The v0.3.0 release gate found `launch` + `settle: content` answering
+`PLACEHOLDER_CONTENT` on a quiet host (2/32 matrix negatives; the same rows passed on a busy host).
+A content launch binds its first frame with the guest's `fast` rule and then proves the tree content
+stable on the host. The pre-content mount wait was the G3c/G3f1 loop: repeat a re-traversal while the
+tree is a window skeleton, capped at `FIRST_FRAME_MAX_ATTEMPTS = 8`. A `fast` traversal has no change
+gate, so on an idle host the eight samples cost ~0 ms: the loop read the guest's cached skeleton eight
+times and declared `placeholder` before the app could draw. ADR-0032 already says content settle is a
+tree rule, not a pixel rule; it did not say what "the app never mounted" needs as evidence.
+
+**Decision.** A placeholder is a claim about the app, so it gets the same shape as every other settle:
+a **window plus a guest signal**, never a count of samples.
+
+1. The mount wait is a *change* wait for every settle rule. It hands the guest the tree it just
+   published (`baseline_tree`) and asks with the strict change rule, whatever the caller's rule is
+   (the caller's rule is proven on the mounted tree afterwards). It is bounded by the
+   `ACOS_ART_FIRST_FRAME_MS` window, not by a traversal count; a guest that answers before the window
+   has run out is paced (`FIRST_FRAME_PROBE_PACE_MS`) and observed again.
+2. `placeholder` requires the skeleton to be stable **for the whole window** (report:
+   `first_frame.window_ms`, `window_spent`) with no frame/pixel movement. Eight samples in a
+   millisecond are not evidence of an unmounted app.
+3. A wait that cannot observe the window (guest error) yields neither a placeholder nor a pass: the
+   launch returns the guest's own structured error (`first_frame_window_unproven` when there is none).
+   Never a false placeholder, never a false pass.
+4. The same rule for `reset`. Nothing else changes: a real placeholder still blocks with the log hint,
+   and a text-free mounted screen is still `placeholder_suspect` (pixels moved), not blocked.
+
+**Consequences.** A launch that really never mounts now spends the content window (default 5 s) before
+`PLACEHOLDER_CONTENT` — it already did on the strict path, and the content path now matches it. The
+reply's `first_frame` block names the window and whether it was spent, so a gate can check the
+evidence instead of trusting the verdict.
+
+`tools/benchlib.py`'s failure taxonomy gained the protocol's assertion outcomes (`ELEMENT_OFFSCREEN`,
+`AMBIGUOUS_SELECTOR`, `TREE_TRUNCATED`, `END_OF_LIST`, `INPUT_NOT_HANDLED`): a correct negative that
+fails with one of them is a `correct_negative`, never an `unclassified` row (v0.3.0 gate F2). The
+matrix's default fixture set is built on demand (`tools/run-matrix.sh` → `tools/build-apps.sh
+ACOS_APP_ONLY=<missing>`) so a stale `fixtures/build` cannot produce an `APK_IO` row (F3).
 ADR-0030 note (SPIKE-NET2): the guest has no path to netfilter at all: `AF_NETLINK`, raw `AF_INET`
 and `SO_MARK` are denied by seccomp, CapEff is 0, and the guest userns is not the netns owner; a
 session whose drop rules cannot be installed fails closed. Session 1's AF_INET seccomp branch was dead
@@ -1259,3 +1342,58 @@ so the last two open questions get a recorded answer instead of an implementer's
    `module::system_apks`) **at launch** and binds the session's gate socket; the one host Chromium is
    still started by the first guest connect. There is no `stub`/`scripted` profile: a scripted page
    would be a fake success.
+**ADR-0030 amendment 3 (owner, 2026-11-16, after NETSHARE).** Owner chose design **B2**: one relay
+netns per host served by one pasta (26 MiB once), each session keeps its own netns joined to it by a
+veth pair (~0 MiB per session, 2 ms attach floor); per-session online/offline and latency/loss are
+rules/netem on that session's veth. Measured: BASE 24 MiB per session (494 MiB at N=20, 887 ms
+attach), B2 flat 26 MiB from N=1 to 20; aggregate ~15–18 MB/s through one pasta (accepted for a dev
+tool). Orchestrator decisions on the open questions: the LAN/host-loopback drop rules live in the relay
+netns (guest has no capability there); a dead relay is fail-closed (every session reports the network
+unavailable, never a silent offline) and the supervisor restarts it; host ports (Metro) are opened per
+session on request by a REDIRECT on that session's veth; the relay supervisor and `acos-netd`
+(dnsproxyd) live in the existing host broker; per-session pasta (BASE) stays as a fallback arm for
+one release. Option A (own userspace stack) remains the upgrade path if the throughput ceiling bites.
+ADR-0030 note (NET1, orchestrator): the relay supervisor is its own lazily started process
+(`acos-netd`), not code inside the MCP broker, because it must own the user namespace that holds the
+relay netns and every session netns, and plain CLI use has no broker. Host-port opt-in is pasta
+`-t <port>` plus a per-session DROP for sessions that did not opt in (simpler than an fd-passing
+REDIRECT proxy). Attach cost 15–49 ms (exec-based) is accepted for v0.4.0; rtnetlink (~2 ms) moves to
+the v0.5.0 density work.
+ADR-0030 correction (NET3, measured on the pinned pasta): the `-t <port>` + DROP shape above is
+superseded. `pasta -T <port>` serves only the target netns, never a relay-joined session, and pasta
+rejects address-qualified `-T` (`Listening address not allowed`). Host-port opt-in is therefore the
+gated `--map-host-loopback` address plus a per-session `ACCEPT` for an opted-in port, with a small
+`acos-netd forward` binding the session's own `127.0.0.1:<port>`; sessions that did not opt in get a
+tcp-reset (that is what "refused" means), not a `DROP` (a DROP stalled guest boot ~4.5 s). Evidence:
+`results/handoff/NET3.md`, branch `net3`.
+
+ADR-0031 note (WVB, orchestrator): the broker is one shared chrome-headless-shell 157.0.8103.78 per
+host (sha256-verified into `.cache/webview/engine`), DevTools over `--remote-debugging-pipe` only, one
+browser context per session. Engine sandbox: bwrap with the host root read-only and `/home`, `/root`,
+`/run/user` masked by tmpfs (profile + engine re-bound); an empty-root layout makes the engine die
+with SIGTRAP before logging, and full root minimisation is not pursued (security takes a back seat for
+this tool). Chromium's own namespace sandbox stays on. Measured: fixed 130 MiB PSS, +3.9 MiB per extra
+session context, frame p95 15.6 ms at 1080x2400. Activation is lazy (no Chromium for sessions that
+never create a WebView); the per-session socket lives in a short per-session dir mounted at `/run/acos`.
+
+ADR-0029 amendment (owner, 2026-11-16, after MPROC4): **the host builds launch transactions.** A
+launch into an already-running process (and every later launch flavour: extras, results, flags,
+singleTop/onNewIntent) is a `ClientTransaction` with `LaunchActivityItem` (+ lifecycle items) encoded by
+the ACOS activity manager from the image dex shape and delivered on the existing host transport, the
+way system_server does; no ACOS helper inside the app builds launches (option B rejected). Codecs are
+checked byte-for-byte against real Java (the MODNOTIF4 differential). MPROC4's guest-marshalled first
+launch of a freshly spawned process is migrated onto the same encoder.
+
+**ADR-0029 amendment (owner, 2026-11-16, after MODNOTIF): system UI comes from system apps in the
+guest.** The permission dialog and the notification shade are provided by small ACOS system apps
+installed in the session image and run as their own ART process (multi-process foundation): a
+`com.android.permissioncontroller` package with `GrantPermissionsActivity` answering the framework's own
+`buildRequestPermissionsIntent`, and an ACOS shade/system-UI app. The same mechanism later provides the
+launcher, Settings targets and the share chooser. ACOS does not paint host-side windows (option A
+rejected). The `notifications` and `permissions` service layers (state, control ops) are built now;
+names a module replaces (`notification`, `statusbar`, `permission`) move out of `core` into their
+modules so detach restores the core answer (orchestrator).
+ADR-0029 note (MODSENS, orchestrator): for a service whose framework client caches the proxy
+(sensorservice, location), `core` publishes the binder node and the module fills it
+(`core_module::FILLED_BY_MODULE` + `ServiceHost::dynamic_object_mut`); detach empties the node back to
+the honest off answer. This is the framework pattern for such names.

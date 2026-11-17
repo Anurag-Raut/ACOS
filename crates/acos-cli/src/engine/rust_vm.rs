@@ -96,6 +96,9 @@ impl SessionBackend for RustVmSession {
             screenshot: caps.screenshot,
             tap: caps.input,
             tap_text: caps.input,
+            // The frozen Rust VM's input seam is tap/key/text; its `swipe`
+            // exists on the legacy AgentSession path, not on this seam.
+            swipe: false,
             type_text: caps.input,
             key: caps.input,
             // The frozen Rust VM keeps its own relaunch path

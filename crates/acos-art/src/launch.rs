@@ -1603,12 +1603,19 @@ pub(crate) fn launch_session(
     }
     let stop = Arc::new(AtomicBool::new(false));
     let peer_stop = Arc::clone(&stop);
+    // REL3I3: the peer sleeps in `poll(2)` until the guest speaks, a delivery is
+    // due, or this wake fires. Producers that queue a `system -> app` delivery
+    // outside a peer turn (the in-process IME hiding itself on a key) write to
+    // it; so does `stop`, which the receive timeout used to notice after up to
+    // a second. One pipe, no idle timer.
+    let delivery_wake = Arc::new(acos_services::DeliveryWake::new().map_err(Error::Io)?);
+    let peer_wake_fd = delivery_wake.read_fd();
     let unsupported_log = staging.join("unsupported.jsonl");
     let (tx, rx) = mpsc::channel::<PeerSummary>();
     // The peer sleeps in `poll(2)` until a guest frame or the earliest module
     // deadline; this pipe is how the launcher's stop reaches that sleep.
     let peer_wakeup = PeerWakeup::new().map_err(Error::Io)?;
-    let peer_wake_fd = peer_wakeup.read;
+    let control_wake_fd = peer_wakeup.read;
     let peer_log = unsupported_log.clone();
     let apk_for_peer = opts.apk.clone();
     // W10: the live session drives the same `InputHost` the window session
@@ -1687,6 +1694,18 @@ pub(crate) fn launch_session(
         // property of what this session is, stated by the only component that
         // knows.
         host.set_host_side_services(true);
+        // REL3I3: this session's delivery wake. The host hands it to the
+        // producers it installs (the WMS's IME insets queue) and the peer's
+        // idle wait polls the same pipe. A prebuilt (host-template) child
+        // installed its graph before this process existed, so the state is
+        // attached here as well; the receiver end is this process's, never the
+        // template's.
+        host.set_delivery_wake(Arc::clone(&delivery_wake));
+        handles
+            .wms
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .attach_delivery_wake(Arc::clone(&delivery_wake));
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`
@@ -1762,6 +1781,13 @@ pub(crate) fn launch_session(
     // a plain message and nothing is started from the peer thread.
     let (spawn_tx, spawn_rx) = mpsc::channel::<acos_services::ams::ProcessSpawnRequest>();
     crate::stage("peer-setup");
+    // PERF4: the session's settle/observation wake exists before the peer thread
+    // because applying a guest transaction is one of the facts a settle waits
+    // for: a `Surface` transaction is the C1 store, and the peer loop signals
+    // this wake as soon as it has applied one, so a settle never waits for its
+    // own poll tick to notice the frame it is binding.
+    let settle_change = Arc::new(ProbeWake::default());
+    let settle_change_for_peer = Arc::clone(&settle_change);
     let peer_thread = std::thread::spawn(move || {
         let summary = (|| -> std::io::Result<PeerSummary> {
             // The real ServiceHost, with its package manager pointed at the APK
@@ -1812,17 +1838,17 @@ pub(crate) fn launch_session(
                 }
                 frames
             };
+            let notify_settle = || settle_change_for_peer.notify();
             let served = acos_binder_peer::serve::serve_with_control(
                 &mut peer,
                 listener,
                 &peer_stop,
                 Some(&mut sink),
-                Some(peer_wake_fd),
+                Some(control_wake_fd),
                 Some(&mut pump),
+                Some(peer_wake_fd),
+                Some(&notify_settle),
             );
-            unsafe {
-                libc::close(listener);
-            }
             let outcome = served?;
             eprintln!(
                 "acos-art: peer: processes={:?} peak_connections={} accepted={} refused={} \
@@ -2666,6 +2692,15 @@ pub(crate) fn launch_session(
         top_process: Arc::clone(&live.top_process),
         ..ProbeState::default()
     }));
+    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+    // PERF4: the probe state uses the wake the peer thread already signals, so
+    // one condvar covers both fact sources (a parsed guest sample and an applied
+    // transaction). Nothing has subscribed to `ProbeState::default()`'s own wake
+    // yet, so replacing it here cannot strand a waiter.
+    probe_state
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .wake = Arc::clone(&settle_change);
     // W59: one trace sink for the whole interactive session. The guest's looper
     // lines and the host's tap markers share `started`, so the two clocks are
     // directly comparable (both are the same CLOCK_MONOTONIC on this host).
@@ -2835,6 +2870,9 @@ pub(crate) fn launch_session(
     // MPROC4 step 3b: a secondary process never outlives the session (its whole
     // cgroup scope goes, exactly like the primary's).
     secondary_pool.shutdown();
+    // The peer is asleep in `poll(2)`: an idle session has no timer to notice
+    // `stop`, so wake it (the byte is the edge, the flag is the decision).
+    delivery_wake.wake();
     cgroup.sample();
     if status.is_some() {
         cgroup.kill();
@@ -3317,6 +3355,10 @@ struct ProbeSample {
     /// P11: the guest's framework-signal verdict for this sample.
     settled: bool,
     pending: Vec<String>,
+    /// ROT8: the guest reports the app's task finished: its last Activity is
+    /// destroyed and no window root is attached (`settle.window_gone`). The
+    /// tree of such a sample is an empty window forest.
+    window_gone: bool,
     /// P12: the guest's applied animation state (`None` if it did not report).
     animations_on: Option<bool>,
 }
@@ -3345,6 +3387,22 @@ impl ProbeWake {
         self.signal.notify_all();
     }
 
+    /// PERF4: the settle/observation loops' wait. A settle binds exactly when
+    /// the *last* host-visible fact it needs has landed (the probe sample that
+    /// differs from the baseline, the C1 store that commits it, the ack). This
+    /// condvar is signalled by every producer of those facts — the guest-line
+    /// reader for a sample, the peer loop for an applied transaction (the C1
+    /// store) — so the loop wakes on the event instead of re-reading state on a
+    /// fixed period.
+    ///
+    /// The period was not harmless: with a 15 ms sleep a tap whose commit landed
+    /// 1 ms after a tick waited the whole quantum, and a sub-millisecond
+    /// difference between two builds moved the metric by a full 15 ms (measured:
+    /// the same build resolves `frame_ms` 16 or 29 depending on phase — v0.3.0's
+    /// M8 form-fast "+8.7 ms regression" was that flip, not 8.7 ms of work).
+    /// `WAKE_LIVENESS_MS` bounds only how long a *silent* guest (a dead child, a
+    /// stalled probe) goes unnoticed; every real change wakes the loop at once.
+    ///
     /// Wait until the tick differs from `seen`, or `timeout` elapses.
     fn wait(&self, seen: &mut u64, timeout: std::time::Duration) {
         let tick = self.tick.lock().unwrap_or_else(|e| e.into_inner());
@@ -3358,6 +3416,35 @@ impl ProbeWake {
             .unwrap_or_else(|e| e.into_inner());
         *seen = *tick;
     }
+}
+
+/// PERF4: how long a settle/observation loop may go without re-reading host
+/// state when nothing signalled [`ProbeWake`].
+///
+/// Every fact a settle waits for has a producer that signals the wake, so this
+/// is a *liveness* bound only: it is how quickly a silent guest (a dead child, a
+/// probe thread that never answers) is noticed, which the old fixed poll noticed
+/// on its own period. It must stay well under the shortest useful settle budget
+/// (`ACOS_STRICT_SETTLE_CONFIRM_MS` is 24 ms) so a missed edge can never outlast
+/// a rule window, and it is never the cadence a normal settle runs at.
+const WAKE_LIVENESS_MS: u64 = 10;
+
+/// The wake channel of this session's probe state (see [`ProbeWake`]).
+fn settle_wake(probe_state: &Arc<std::sync::Mutex<ProbeState>>) -> Arc<ProbeWake> {
+    Arc::clone(
+        &probe_state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .wake,
+    )
+}
+
+/// Block until the session's host-visible state may have moved, or the liveness
+/// bound elapses. Callers re-read their own state after every return, so a
+/// spurious wake only costs one re-read; a missed one is impossible because the
+/// tick is compared against the last value `wait` consumed.
+fn wait_for_change(wake: &ProbeWake, seen: &mut u64) {
+    wake.wait(seen, Duration::from_millis(WAKE_LIVENESS_MS));
 }
 
 #[derive(Default)]
@@ -3411,6 +3498,18 @@ struct ProbeState {
     /// ROT4: the guest's own diagnostic lines (`ACOSLAUNCH MARK …`), oldest
     /// first, so an interactive reply can carry the rungs that ran for it.
     marks: std::collections::VecDeque<String>,
+    /// SETTLE5: the demand-probe channel's own health, so a `probe-floor`
+    /// timeout says which side stalled instead of leaving it a mystery.
+    /// `wakes_sent` counts wake lines written to the guest's stdin,
+    /// `wake_failures` counts writes the channel refused (a dead reader),
+    /// `stale_samples` counts guest samples the host refused to publish
+    /// because their sequence was not newer (a probe-thread restart), and
+    /// `stall_pending_ms` is the guest's own `probe-stalled` mark (a sample
+    /// posted to the main looper that has not run for this long).
+    wakes_sent: u64,
+    wake_failures: u64,
+    stale_samples: u64,
+    stall_pending_ms: Option<u64>,
 }
 
 /// W59 latency trace: `elapsed_us tag text` per line, written under one lock
@@ -3460,6 +3559,36 @@ fn host_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// SETTLE5: the demand-probe channel's own health, attached to a settle
+/// timeout so it names the side that stalled. `probe-floor` used to read as
+/// "no fresh sample", which is equally consistent with a dead wake channel, a
+/// guest that keeps emitting samples the host refuses, and a guest main looper
+/// that cannot run the posted probe; these counters separate them:
+///
+/// * `wake_failures` > 0 — the guest's stdin refused a wake (a dead reader /
+///   control thread); the demand channel is gone and only the guest's own
+///   fallback can publish.
+/// * `stale_samples` > 0 — the guest emitted samples whose sequence was not
+///   newer (a probe-thread restart), so the host froze on the old sample.
+/// * `guest_stall_pending_ms` is the guest's own `probe-stalled` mark: a sample
+///   posted to its main looper that has not run for this long (its main thread
+///   is busy or blocked; the probe is starved, not silent).
+fn probe_health_json(state: &Arc<std::sync::Mutex<ProbeState>>) -> serde_json::Value {
+    let state = state.lock().unwrap_or_else(|e| e.into_inner());
+    let age = state
+        .latest
+        .as_ref()
+        .map(|sample| host_ms().saturating_sub(sample.at_ms));
+    serde_json::json!({
+        "wakes_sent": state.wakes_sent,
+        "wake_failures": state.wake_failures,
+        "stale_samples": state.stale_samples,
+        "guest_stall_pending_ms": state.stall_pending_ms,
+        "newest_sample_age_ms": age,
+        "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
+    })
 }
 
 fn env_u64(name: &str, default: u64) -> u64 {
@@ -4115,6 +4244,19 @@ fn drain_tee_lines<R: std::io::Read>(
         if trimmed.starts_with("ACOSLAUNCH ") || trimmed.starts_with("ACOSPROBE-STALL") {
             eprintln!("acos-art: guest: {trimmed}");
             let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            // SETTLE5: the guest names its own starved probe (a sample posted
+            // to the main looper that has not run). Kept as the newest mark so
+            // a settle timeout can report a guest-side stall with its measured
+            // age, never as a guess.
+            if let Some(rest) = trimmed.strip_prefix("ACOSLAUNCH MARK probe-stalled") {
+                if let Some(ms) = rest
+                    .split_whitespace()
+                    .find_map(|word| word.strip_prefix("pending_ms="))
+                    .and_then(|value| value.parse::<u64>().ok())
+                {
+                    state.stall_pending_ms = Some(ms);
+                }
+            }
             state.marks.push_back(trimmed.to_string());
             while state.marks.len() > 64 {
                 state.marks.pop_front();
@@ -4231,6 +4373,10 @@ fn drain_tee_lines<R: std::io::Read>(
                                 .collect::<Vec<_>>()
                         })
                         .unwrap_or_default();
+                    let window_gone = event
+                        .and_then(|v| v.get("window_gone"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
                     // P12: the guest is the authority on what it applied.
                     let animations_on = value
                         .get("animations")
@@ -4249,15 +4395,40 @@ fn drain_tee_lines<R: std::io::Read>(
                         .map(|p| p.seq < seq)
                         .unwrap_or(true);
                     if newer {
+                        let at_ms = host_ms();
+                        // SETTLE5 diagnostic: the host's own receipt time and
+                        // the guest's build time, so a stalled probe can be
+                        // attributed to the guest (no line), the pipe (line
+                        // without receipt) or the wait (receipt ignored).
+                        // Trace-only: no reply changes.
+                        if let Some(trace) = state.trace.as_mut() {
+                            let guest_ms = value
+                                .get("time")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(0);
+                            let cause = value
+                                .get("cause")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("?");
+                            trace.line(
+                                "HOST",
+                                &format!(
+                                    "probe rx seq={seq} cause={cause} lag_ms={} settled={settled} \
+                                     draw_seq={draw_seq} gen={generation}",
+                                    at_ms.saturating_sub(guest_ms)
+                                ),
+                            );
+                        }
                         let sample = ProbeSample {
                             seq,
                             tree,
-                            at_ms: host_ms(),
+                            at_ms,
                             generation,
                             draw_ms,
                             draw_seq,
                             settled,
                             pending,
+                            window_gone,
                             animations_on,
                         };
                         state.by_process.insert(tag, sample.clone());
@@ -4266,6 +4437,22 @@ fn drain_tee_lines<R: std::io::Read>(
                         let newer_any = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
                         if newer_any {
                             state.latest = Some(sample);
+                        }
+                    } else {
+                        // SETTLE5: a sample the process itself has already
+                        // superseded is the evidence a `probe-floor` timeout
+                        // cites (the guest sent it, the wait ignored it).
+                        state.stale_samples = state.stale_samples.saturating_add(1);
+                        let latest = state
+                            .latest
+                            .as_ref()
+                            .map(|p| p.seq)
+                            .unwrap_or_default();
+                        if let Some(trace) = state.trace.as_mut() {
+                            trace.line(
+                                "HOST",
+                                &format!("probe stale seq={seq} latest={latest}"),
+                            );
                         }
                     }
                     // P9: wake the startup loop (and anyone else waiting on a
@@ -4940,7 +5127,145 @@ struct SettleTiming {
     /// no pre-action capture to compare with. Never a failure when the guard is
     /// off (the default since the owner decision).
     pixels_changed: Option<bool>,
+    /// ROT8: the step ended with the app's task finished (`window-gone`).
+    task_finished: bool,
 }
+
+/// REL3H: the settle `reason` of an input whose every published event the app
+/// window acknowledged `finishInputEvent(handled=false)`, with no draw.
+///
+/// Nothing consumed the input, so there is no new state to settle into; the
+/// unchanged, quiet screen the gesture produced **is** the settled observation.
+/// Before this the same input was a `TIMEOUT` (`reason: no-draw-after-action`),
+/// which charged a delivered no-op the whole settle deadline and reported an
+/// honest, stable screen as a failure (REL3E left it open for REL3A's track).
+/// The wire string is shared with the verifier, which refuses to infer the end of
+/// a list from a gesture nothing consumed (REL3H2): see
+/// `acos_protocol::SETTLE_UNHANDLED_INPUT_REASON`. `acos-art` does not depend on
+/// `acos-protocol` (it is the guest side of the wire), so the two literals are
+/// pinned equal by a test in `acos-cli` (the crate that sees both).
+pub const SETTLE_UNHANDLED_INPUT: &str = "unhandled_input";
+
+/// REL3H: did the framework acknowledge **every** published event of this
+/// gesture as unhandled?
+///
+/// The rule is only as strong as the acks behind it, so it needs all of them:
+/// one `FINISHED` reply per published `InputMessage` (`acks.len() ==
+/// seqs.len()`, each acknowledging a sequence this gesture published) and every
+/// one of those replies `handled == false`. A short or missing ack list is
+/// **unknown**, never "not handled" (REL3E's rule), and any event the app *did*
+/// handle means the app consumed the gesture: both keep the pre-REL3H settle.
+fn every_event_acked_unhandled(
+    seqs: &[u32],
+    acks: &[acos_services::window_session::input_dispatch::InjectedAck],
+) -> bool {
+    !seqs.is_empty()
+        && acks.len() == seqs.len()
+        && acks.iter().all(|ack| !ack.handled)
+        && seqs
+            .iter()
+            .all(|seq| acks.iter().any(|ack| ack.seq == *seq))
+}
+
+/// REL3H2: the gate that decides whether a "nothing drew" sample may settle an
+/// unhandled input.
+///
+/// REL3H bound the shortcut to whatever the probe had seen by the time the
+/// gesture's acks came back, and that sample can be older than the app's own
+/// handling of the gesture: the probe is event-driven, so a sample is taken on
+/// every dirty draw and on every wake, and the newest one at that moment may
+/// have been taken **between the publish and the UI thread running the
+/// handler** (or before the handler's posted side effect - a `post()`ed
+/// `setText` - ran and drew). Binding it reported "nothing happened" for a
+/// gesture that was about to change the screen, and the next assertion then
+/// read a state the app had already left. The `expect_change: false`-shaped
+/// pass was a false green for exactly the case the shortcut exists for.
+///
+/// Two rules make the bind honest, and they are the same two the normal strict
+/// path already applies:
+///
+/// * **after the last ack** - the sample must be newer than the probe sequence
+///   at the moment the gesture's own acks had all arrived (`ack_floor_seq`).
+///   The handler that answered `finishInputEvent(handled=false)` had provably
+///   finished before that point, so a sample after it describes the state the
+///   handler left behind, not the one it was still working on.
+/// * **one confirmation window** - the same `draw_seq` must stay the newest
+///   draw for `confirm` (`ACOS_STRICT_SETTLE_CONFIRM_MS`, the strict rule's own
+///   window). A side effect that draws inside the window restarts the wait, so
+///   the gesture falls through to the normal strict rule and captures the
+///   change instead of settling on the pre-change sample.
+///
+/// A sample can still miss a side effect that draws later than the window; that
+/// is the same limit the normal event rule has, and it is why the shortcut
+/// never *claims* stillness - it reports what it measured
+/// (`pixels_changed` against the caller's pre-action capture), so
+/// `expect_change: true` still has to earn its pass.
+#[derive(Debug)]
+struct UnhandledSettleGate {
+    /// The newest probe sequence when the gesture's last ack had arrived.
+    ack_floor_seq: u64,
+    /// How long the candidate draw must stay the newest one.
+    confirm: Duration,
+    /// The draw the current window is measured on, and when it started.
+    candidate: Option<(u64, Instant)>,
+}
+
+/// What [`UnhandledSettleGate`] decided about one probe sample.
+#[derive(Debug, PartialEq, Eq)]
+enum UnhandledGateOutcome {
+    /// Bind this sample: it is after the last ack and its draw stayed newest.
+    Bind,
+    /// Keep waiting; the string is the settle's `last_reason` (and the guest
+    /// trace line), never a user-visible reason on its own.
+    Wait(&'static str),
+}
+
+impl UnhandledSettleGate {
+    fn new(ack_floor_seq: u64, confirm: Duration) -> Self {
+        UnhandledSettleGate {
+            ack_floor_seq,
+            confirm,
+            candidate: None,
+        }
+    }
+
+    /// Forget the current window: a pending signal or a different draw means
+    /// the screen is not quiet, so the timer starts again on the next sample.
+    fn reset(&mut self) {
+        self.candidate = None;
+    }
+
+    /// Judge one sample: `Bind` only when it is strictly newer than the last ack
+    /// and its draw has stayed the newest for the confirmation window.
+    fn observe(&mut self, sample_seq: u64, draw_seq: u64, now: Instant) -> UnhandledGateOutcome {
+        if sample_seq <= self.ack_floor_seq {
+            // Taken before (or while) the handler that acked the gesture ran:
+            // it cannot describe what the handler left behind.
+            self.candidate = None;
+            return UnhandledGateOutcome::Wait(UNHANDLED_ACK_FLOOR_REASON);
+        }
+        let restart = match self.candidate {
+            Some((draw, _)) => draw != draw_seq,
+            None => true,
+        };
+        if restart {
+            self.candidate = Some((draw_seq, now));
+        }
+        match self.candidate {
+            Some((draw, since))
+                if draw == draw_seq && now.saturating_duration_since(since) >= self.confirm =>
+            {
+                UnhandledGateOutcome::Bind
+            }
+            _ => UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON),
+        }
+    }
+}
+
+/// REL3H2: settle trace reason - the sample predates the gesture's last ack.
+const UNHANDLED_ACK_FLOOR_REASON: &str = "unhandled-ack-floor";
+/// REL3H2: settle trace reason - the confirmation window has not elapsed.
+const UNHANDLED_CONFIRM_REASON: &str = "unhandled-confirm";
 
 impl SettleTiming {
     fn to_json(&self, settled: bool, ack_ms: u64) -> serde_json::Value {
@@ -4955,6 +5280,12 @@ impl SettleTiming {
             "bound": self.bound,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         });
+        if self.task_finished {
+            if let Some(map) = value.as_object_mut() {
+                map.insert("task_finished".into(), serde_json::json!(true));
+                map.insert("window_gone".into(), serde_json::json!(true));
+            }
+        }
         if let Some(rule) = self.rule {
             if let Some(map) = value.as_object_mut() {
                 map.insert("strict_rule".into(), serde_json::json!(rule));
@@ -5051,6 +5382,32 @@ fn wait_for_event_settled(
     // the reply is the app's *next* committed state and not the same skeleton
     // the caller already holds.
     await_tree: Option<&serde_json::Value>,
+    // REL3H: every event of this gesture came back
+    // `finishInputEvent(handled=false)` (see [`every_event_acked_unhandled`]).
+    // An input nothing consumed has no state to settle into: a sample whose
+    // newest draw predates the publish and that reports no pending work is the
+    // settled observation "the app did not handle this", not a timeout.
+    // REL3H2: the value is the newest probe sequence **when the gesture's last
+    // ack had arrived**; only samples strictly newer than it may settle the
+    // shortcut (see [`UnhandledSettleGate`]), so a sample taken before the UI
+    // thread ran the handler can never bind. `None` = not an unhandled input.
+    unhandled_ack_floor: Option<u64>,
+    // REL3H: the newest C1 capture's pixel hash **at publish**, used only when
+    // the caller has no pre-action capture of its own (`previous_fnv: None`,
+    // e.g. after a `pixels:false` launch). The unhandled-input branch measures
+    // `pixels_changed` against it instead of inventing a value.
+    entry_fnv: Option<u64>,
+    // REL3I3: `(delivered token, removal mark)`. A dialog's Back destroys the
+    // window it was delivered to: the app never traverses (its views are
+    // unchanged), so no guest draw follows the press, while the composite still
+    // changes because a layer went away. The removal is that draw's cause, and
+    // the host recorded it for exactly this token.
+    //
+    // MERGE3I3 precedence: this fact outranks `unhandled_ack_floor`. A removed
+    // dialog is *handled* (`source: host_window_removed`) even when every guest
+    // ack of the same gesture said `finishInputEvent(handled) = false`; the
+    // window it acted on is gone, so it is never reported `INPUT_UNHANDLED`.
+    window_removal: Option<(acos_parcel::BinderId, u64)>,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
     // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
@@ -5102,12 +5459,51 @@ fn wait_for_event_settled(
     let mut last_requested_seq = latest_probe(probe_state)
         .map(|sample| sample.seq)
         .unwrap_or(0);
+    // ROT8b: was the window forest already empty when the request began?
+    let entry_tree_empty = latest_probe(probe_state)
+        .map(|sample| {
+            sample
+                .tree
+                .get("nodes")
+                .and_then(|nodes| nodes.as_array())
+                .map(|nodes| nodes.is_empty())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
     let mut candidate: Option<ProbeSample> = None;
     let mut candidate_since = Instant::now();
+    // REL3H2: the unhandled-input shortcut's own window. It is created once, at
+    // entry, so the ack floor is a fixed point: samples older than it are never
+    // eligible, however long the wait runs.
+    let mut unhandled_gate = unhandled_ack_floor.map(|floor| UnhandledSettleGate::new(floor, confirm));
     let mut first_change_ms: Option<u64> = None;
     let mut last_reason = String::from("no-probe");
     let mut last_pixels_changed: Option<bool> = None;
-    request_guest_probe(guest_stdin);
+    // SETTLE5 diagnostic: trace the wait's own decisions (entry floor, every
+    // wake it sends, every reason change), so a `probe-floor` timeout can be
+    // attributed to a guest that never answered, a wake that never arrived, or
+    // a sample the host ignored. Trace-only (`ACOS_ART_INPUT_TRACE`); no reply
+    // changes.
+    let mut traced_reason = String::new();
+    trace_host(
+        probe_state,
+        &format!(
+            "settle entry floor={entry_floor} gen={entry_generation} \
+             deadline_ms={} await_tree={} pending={:?}",
+            deadline.saturating_duration_since(Instant::now()).as_millis(),
+            await_tree.is_some(),
+            latest_probe(probe_state)
+                .map(|s| s.pending.clone())
+                .unwrap_or_default()
+        ),
+    );
+    let entry_wake = request_guest_probe(guest_stdin, probe_state);
+    trace_host(
+        probe_state,
+        &format!(
+            "settle wake probe_seq={entry_floor} reason=entry written={entry_wake}"
+        ),
+    );
     loop {
         let (unsupported_seq, marker) = latest_unsupported(probe_state);
         if unsupported_seq > unsupported_baseline {
@@ -5126,12 +5522,57 @@ fn wait_for_event_settled(
             last_generation = generation;
         }
         let probe = latest_probe(probe_state);
+        // The delivered window is gone: the removal is this step's draw (see
+        // `window_removal`), so a sample drawn before the publish is still the
+        // post-action state — the screen changed because a window was removed,
+        // not because the app drew.
+        let removal_binds = window_removal
+            .is_some_and(|(token, mark)| live.input.window_removed_since(token, mark));
         let mut valid: Option<ProbeSample> = None;
         match &probe {
             None => last_reason = "no-probe".to_string(),
             Some(sample) => {
                 if sample.seq <= entry_floor {
                     last_reason = "probe-floor".to_string();
+                } else if window_gone_shape(sample) && !host_confirms_task_finished(live) {
+                    // ROT8b: the guest reports an empty settled forest, but the
+                    // host ATMS still has a live record or a pending start (a
+                    // `finish()` + `startActivity(Home)` leaves exactly this gap
+                    // before Home's launch transaction runs). That is not a
+                    // finished task: keep waiting (bounded by the deadline) and
+                    // settle on the next Activity's draw.
+                    last_reason = "window-gone-unconfirmed".to_string();
+                } else if window_gone_shape(sample) {
+                    // ROT8: the app's task is finished (last Activity
+                    // destroyed, no window root) and the HOST ATMS agrees (no
+                    // live record, no pending start). Nothing draws, so this
+                    // binds on the state proof, not on a draw.
+                    let timing = SettleTiming {
+                        mode: SettleMode::Strict,
+                        first_change_ms: Some(sample.at_ms.saturating_sub(publish_epoch_ms)),
+                        frame_ms: None,
+                        state_changed: Some(window_gone_state_changed(
+                            await_tree,
+                            entry_tree_empty,
+                        )),
+                        bound: "window-gone",
+                        rule: Some("event"),
+                        reason: None,
+                        pixels_changed: Some(false),
+                        task_finished: true,
+                    };
+                    trace_host(
+                        probe_state,
+                        &format!(
+                            "settle window-gone ready gen={generation} probe_seq={}",
+                            sample.seq
+                        ),
+                    );
+                    return SettleEnd::Settled(Settled {
+                        probe: sample.clone(),
+                        generation,
+                        timing,
+                    });
                 } else if await_tree
                     .map(|baseline| &sample.tree == baseline)
                     .unwrap_or(false)
@@ -5166,6 +5607,7 @@ fn wait_for_event_settled(
                             rule: Some("event"),
                             reason: None,
                             pixels_changed: None,
+                            task_finished: false,
                         };
                         trace_host(
                             probe_state,
@@ -5188,8 +5630,90 @@ fn wait_for_event_settled(
                         .first()
                         .cloned()
                         .unwrap_or_else(|| "unsettled".to_string());
-                } else if publish_epoch_ms != 0 && sample.draw_ms < publish_epoch_ms {
-                    last_reason = "no-draw-after-action".to_string();
+                } else if publish_epoch_ms != 0
+                    && sample.draw_ms < publish_epoch_ms
+                    && !removal_binds
+                {
+                    // MERGE3I3 precedence: `!removal_binds` is the first guard
+                    // of this arm on purpose. When the host recorded the removal
+                    // of the very window this input was delivered to (after the
+                    // publish), that removal **is** the step's draw, so the
+                    // sample falls through to the normal strict rule and binds
+                    // with `bound: "host-window-removal"` below. The gesture was
+                    // handled by definition (a removed dialog consumed the Back),
+                    // so it can never be the `INPUT_UNHANDLED` shortcut - even
+                    // when every guest ack of the same gesture said
+                    // `finishInputEvent(handled) = false` because the app's
+                    // `InputEventReceiver` was disposed before it could answer.
+                    // REL3H: no draw landed since the action *and* the framework
+                    // acknowledged every event as unhandled. Nothing consumed
+                    // the input, so the app has no new state to settle into: the
+                    // screen this sample describes **is** the settled outcome.
+                    // Reporting this as `TIMEOUT no-draw-after-action` (the
+                    // pre-REL3H rule) charged a delivered, provably-unhandled
+                    // tap the whole settle deadline and called an honest, stable
+                    // screen a failure.
+                    // REL3H2: the shortcut binds only a sample that is newer
+                    // than the gesture's last ack (so the handler had finished)
+                    // and whose draw then stayed newest for one confirmation
+                    // window (so a side effect that draws is caught and the
+                    // gesture falls through to the normal rule below). Anything
+                    // else keeps waiting and the strict rule applies.
+                    let gate_outcome = unhandled_gate.as_mut().map(|gate| {
+                        gate.observe(sample.seq, sample.draw_seq, Instant::now())
+                    });
+                    if gate_outcome == Some(UnhandledGateOutcome::Bind) {
+                        // `pixels_changed` is measured exactly like the normal
+                        // strict path measures it (newest C1 capture against the
+                        // caller's pre-action one), never assumed: it is what
+                        // `expect_change: true` judges, so an unhandled tap must
+                        // fail that claim on a measured `false` rather than a
+                        // hard-coded one. No pre-action capture (a tree request)
+                        // keeps the established conservative `true` = no claim.
+                        let pixels_changed = match previous_fnv.or(entry_fnv) {
+                            None => true,
+                            Some(previous) => {
+                                let current = {
+                                    let state = live
+                                        .compositor
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner());
+                                    state.capture_latest().map(|c| c.fnv1a)
+                                };
+                                current != Some(previous) && current.is_some()
+                            }
+                        };
+                        let timing = SettleTiming {
+                            mode: SettleMode::Strict,
+                            first_change_ms: None,
+                            frame_ms: None,
+                            state_changed: None,
+                            bound: "unhandled-input",
+                            rule: Some("event"),
+                            reason: Some(SETTLE_UNHANDLED_INPUT.to_string()),
+                            pixels_changed: Some(pixels_changed),
+                            task_finished: false,
+                        };
+                        trace_host(
+                            probe_state,
+                            &format!(
+                                "settle unhandled-input ready gen={generation} probe_seq={} \
+                                 draw_seq={}",
+                                sample.seq, sample.draw_seq
+                            ),
+                        );
+                        return SettleEnd::Settled(Settled {
+                            probe: sample.clone(),
+                            generation,
+                            timing,
+                        });
+                    }
+                    last_reason = match gate_outcome {
+                        Some(UnhandledGateOutcome::Wait(reason)) => reason.to_string(),
+                        // No gate at all: this input was consumed (or its acks
+                        // are incomplete), so a missing draw is a timeout.
+                        _ => "no-draw-after-action".to_string(),
+                    };
                 } else if sample.generation < generation {
                     last_reason = "newer-store".to_string();
                 } else {
@@ -5236,7 +5760,13 @@ fn wait_for_event_settled(
                     && candidate_since.elapsed() >= confirm
                     && sample.generation == generation
                 {
-                    let bound = if sample.settled {
+                    let bound = if removal_binds {
+                        // REL3I3: the screen changed because the window this
+                        // input was delivered to was removed (a dismissed
+                        // dialog). Named, so no reader mistakes it for a guest
+                        // draw.
+                        "host-window-removal"
+                    } else if sample.settled {
                         "strict-event"
                     } else {
                         "change-draw"
@@ -5254,6 +5784,7 @@ fn wait_for_event_settled(
                         rule: Some("event"),
                         reason: None,
                         pixels_changed: last_pixels_changed,
+                        task_finished: false,
                     };
                     trace_host(
                         probe_state,
@@ -5281,6 +5812,13 @@ fn wait_for_event_settled(
                     candidate = None;
                 }
             }
+            // REL3H2: the same for the unhandled-input shortcut: pending work
+            // (a posted side effect waiting to run) or a new draw restarts it.
+            if let Some(gate) = unhandled_gate.as_mut() {
+                if !sample.settled || sample.draw_seq != gate.candidate.map(|(draw, _)| draw).unwrap_or(sample.draw_seq) {
+                    gate.reset();
+                }
+            }
         }
         // An idle screen emits nothing, so a bounded wake keeps it observable;
         // a drawing screen's own dirty events are the request. Never re-ask for
@@ -5300,9 +5838,34 @@ fn wait_for_event_settled(
         if last_wake.elapsed() >= Duration::from_millis(wake_ms)
             && current_probe_seq == last_requested_seq
         {
-            request_guest_probe(guest_stdin);
+            let written = request_guest_probe(guest_stdin, probe_state);
+            trace_host(
+                probe_state,
+                &format!(
+                    "settle wake probe_seq={current_probe_seq} reason=pacing written={written}"
+                ),
+            );
             last_requested_seq = current_probe_seq;
             last_wake = Instant::now();
+        }
+        if last_reason != traced_reason {
+            traced_reason = last_reason.clone();
+            let (seq, age, draw_seq, settled) = match &probe {
+                Some(sample) => (
+                    sample.seq,
+                    host_ms().saturating_sub(sample.at_ms),
+                    sample.draw_seq,
+                    sample.settled,
+                ),
+                None => (0, 0, 0, false),
+            };
+            trace_host(
+                probe_state,
+                &format!(
+                    "settle wait reason={last_reason} probe_seq={seq} age_ms={age} \
+                     draw_seq={draw_seq} settled={settled} floor={entry_floor}"
+                ),
+            );
         }
         if Instant::now() >= deadline {
             // A timeout must still state the pixel fact (true|false), even when
@@ -5335,10 +5898,19 @@ fn wait_for_event_settled(
                     rule: Some("event"),
                     reason: Some(last_reason),
                     pixels_changed: Some(pixels_changed),
+                    task_finished: false,
                 },
             };
         }
         cgroup.sample();
+        // PERF4: the strict rule keeps its own cadence. It binds on timestamps
+        // plus a 150 ms quiet window and a 24 ms confirmation window, so a 10 ms
+        // observation tick is at most 1 % of a ~950 ms strict wait (M8 strict is
+        // flat: 949.3 ms vs 951.9 ms over 5 reps), while an eager wake here cost
+        // 20 points of active CPU in the 20-tap charge cohort (65.8 % vs 45.0 %,
+        // `04-ab/ab-compare.txt`): every binder transaction of an animating
+        // screen re-reads the tree. The eager wait is used where it pays — the
+        // fast rule in [`wait_for_settled_observation`].
         std::thread::sleep(Duration::from_millis(10));
     }
 }
@@ -5365,6 +5937,18 @@ fn wait_for_settled_observation(
     // for the *next* state instead of polling; `None` keeps every existing
     // caller byte-identical.
     await_tree: Option<&serde_json::Value>,
+    // REL3H/REL3H2: the gesture's own acks said nothing consumed it (input
+    // verbs only; every tree/launch caller passes `None`), with the probe
+    // sequence that was current when the last ack arrived, and the pixel hash the
+    // unhandled branch measures against when the caller has no capture of its own.
+    unhandled_ack_floor: Option<u64>,
+    entry_fnv: Option<u64>,
+    // REL3I3: `(delivered token, removal mark)` for an input action. When the
+    // window this input went to is removed during the wait, the removal is the
+    // draw (the composite changes with no guest traversal), so the step may bind
+    // it; `None` keeps the strict draw requirement for every other caller.
+    // Precedence over the unhandled shortcut: see [`wait_for_event_settled`].
+    window_removal: Option<(acos_parcel::BinderId, u64)>,
 ) -> SettleEnd {
     if mode == SettleMode::Strict {
         return wait_for_event_settled(
@@ -5379,6 +5963,9 @@ fn wait_for_settled_observation(
             previous_fnv,
             publish_epoch_ms,
             await_tree,
+            unhandled_ack_floor,
+            entry_fnv,
+            window_removal,
         );
     }
     // ---- fast (P1): first probe tree that differs from the pre-action baseline.
@@ -5394,6 +5981,11 @@ fn wait_for_settled_observation(
     let mut first_change_probe: Option<ProbeSample> = None;
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
     let mut last_wake = Instant::now();
+    // PERF4: the session's own change signal (see [`wait_for_change`]) and the
+    // tick this loop has already consumed. Signalled by the guest-line reader for
+    // a sample and by the peer loop for every applied transaction (the C1 store).
+    let wake = settle_wake(probe_state);
+    let mut seen = 0u64;
     loop {
         // A structured guest marker is more informative than the generic
         // "no fresh frame" timeout, and it is the only honest result for an
@@ -5430,7 +6022,7 @@ fn wait_for_settled_observation(
             && last_change.elapsed() >= quiet
             && last_wake.elapsed() >= Duration::from_millis(20)
         {
-            request_guest_probe(guest_stdin);
+            request_guest_probe(guest_stdin, probe_state);
             last_wake = Instant::now();
         }
         // Fast mode binds the guest's own post-input tree sample. The baseline
@@ -5447,9 +6039,39 @@ fn wait_for_settled_observation(
             .as_ref()
             .map(|sample| sample.at_ms.saturating_sub(publish_epoch_ms));
         let frame_ms = |store_ms: u64| store_ms.checked_sub(publish_epoch_ms);
+        // The commit store: the C1 buffer the sample is bound to must be at
+        // least as new as the state the sample's tree describes.
+        //
+        // The shipped rule is *observation order* — a store the host saw after
+        // the sample (`last_change_ms > commit.at_ms`). That is satisfied by
+        // whichever store happens to be noticed next, and with the fixed poll a
+        // build that notices the sample's own store in time has to wait for the
+        // **following** frame: measured, the same loop resolves `frame_ms` 16 or
+        // 29 depending on which side of a poll tick the store landed
+        // (diagnosis/tap-split-*.txt).
+        //
+        // PERF4 adds the precise form of the same fact, from what the sample
+        // reports: `generation` is C1's store counter when the host parsed the
+        // sample and `draw_seq` is the guest's `ViewTreeObserver.OnDraw` counter.
+        // When they are **equal** every draw so far has been stored and nothing
+        // else was, so store #draw_seq is the buffer of the very draw this tree
+        // was taken at — the tree and the frame describe one UI state, which is
+        // the property the observation-order rule approximates. It can never bind
+        // an earlier sample: it requires a draw newer than the pre-publish one,
+        // with its own buffer already in C1.
+        //
+        // Anything the equality cannot prove (a store without a draw, a draw
+        // whose buffer has not landed, no draw counter on the sample) falls back
+        // to the shipped rule exactly.
+        let own_draw_stored = match &first_change_probe {
+            Some(commit) => {
+                sample_own_draw_is_stored(commit, baseline_probe.as_ref(), last_change_ms)
+            }
+            None => false,
+        };
         let committed_store = first_change_probe
             .as_ref()
-            .map(|commit| last_change_ms > commit.at_ms)
+            .map(|commit| last_change_ms > commit.at_ms || own_draw_stored)
             .unwrap_or(false);
         let committed_now = mode == SettleMode::Fast
             && committed_store
@@ -5469,14 +6091,19 @@ fn wait_for_settled_observation(
                 rule: None,
                 reason: None,
                 pixels_changed: None,
+                task_finished: false,
             };
             trace_host(
                 probe_state,
                 &format!(
-                    "settle fast ready gen={generation} probe_seq={} first_change_ms={} frame_ms={}",
+                    "settle fast ready gen={generation} probe_seq={} first_change_ms={} frame_ms={} \
+                     commit_gen={} draw_seq={} own_draw={}",
                     commit.seq,
                     first_change_ms.unwrap_or(0),
-                    timing.frame_ms.unwrap_or(0)
+                    timing.frame_ms.unwrap_or(0),
+                    commit.generation,
+                    commit.draw_seq,
+                    own_draw_stored
                 ),
             );
             return SettleEnd::Settled(Settled {
@@ -5526,6 +6153,7 @@ fn wait_for_settled_observation(
                         rule: None,
                         reason: None,
                         pixels_changed: None,
+                        task_finished: false,
                     };
                     trace_host(
                         probe_state,
@@ -5559,12 +6187,60 @@ fn wait_for_settled_observation(
                     rule: None,
                     reason: None,
                     pixels_changed: None,
+                    task_finished: false,
                 },
             };
         }
         cgroup.sample();
-        std::thread::sleep(Duration::from_millis(15));
+        // PERF4: block on the session's own change signal instead of a 15 ms
+        // sleep. The sleep quantized every fast settle to its period, so a
+        // sub-millisecond difference between builds moved M8 by a whole step
+        // (the same build resolved `frame_ms` 16 or 29 depending on phase).
+        // Unlike the strict loop this one is on the action path the gate
+        // measures, and its iterations are cheap (one probe read, one store
+        // counter), so the eager wake is a win here.
+        wait_for_change(&wake, &mut seen);
     }
+}
+
+/// PERF4: does the store the fast settle is about to bind hold the buffer of the
+/// very draw this sample's tree was taken at?
+///
+/// The shipped rule is *observation order*: a C1 store the host saw **after**
+/// the sample. That is satisfied by whichever store is noticed next, and because
+/// a draw's own buffer is stored before the probe sample describing it is
+/// parsed, it always binds the *following* frame. Measured: the same loop
+/// resolves `frame_ms` 16 or 29 ms depending on which side of a poll tick the
+/// store landed (`results/handoff/PERF4/diagnosis/tap-split-*.txt`).
+///
+/// The sample already reports the two facts that make the precise statement
+/// possible: `generation` is C1's store counter when the host parsed it and
+/// `draw_seq` is the guest's `ViewTreeObserver.OnDraw` counter. All three must
+/// hold, or the caller keeps the shipped rule:
+///
+/// * `generation >= draw_seq` — every draw so far has been stored (a session may
+///   store more than it draws, never fewer), so the sample's own draw has a
+///   buffer in C1;
+/// * `last_change_ms >= draw_ms` — the store the host holds arrived after that
+///   draw's own wall clock (`draw_ms` comes from the same clock), so it is not a
+///   pre-draw buffer left behind;
+/// * `draw_seq > baseline.draw_seq` (or no baseline) — the sample's draw is newer
+///   than the pre-publish one, so the tree cannot predate the gesture.
+///
+/// With all three the tree and the bound frame describe one UI state, which is
+/// the property the observation-order rule approximates; nothing here can bind a
+/// sample taken before the action.
+fn sample_own_draw_is_stored(
+    commit: &ProbeSample,
+    baseline: Option<&ProbeSample>,
+    last_change_ms: u64,
+) -> bool {
+    commit.draw_seq > 0
+        && commit.generation >= commit.draw_seq
+        && last_change_ms >= commit.draw_ms
+        && baseline
+            .map(|b| commit.draw_seq > b.draw_seq)
+            .unwrap_or(true)
 }
 
 /// Is this probe sample usable for a fast tree request that started when C1 was
@@ -5575,6 +6251,43 @@ fn wait_for_settled_observation(
 /// began (so no frame landed between the sample and the request) and its guest
 /// sequence is past the caller's floor. Nothing about a 150 ms quiet window is
 /// involved: that is the strict rule, unchanged.
+/// ROT8: a sample proves the task finished only when the guest says so AND it
+/// is internally consistent: settled, with an empty window forest.
+fn window_gone_shape(sample: &ProbeSample) -> bool {
+    sample.window_gone
+        && sample.settled
+        && sample
+            .tree
+            .get("nodes")
+            .and_then(|nodes| nodes.as_array())
+            .map(|nodes| nodes.is_empty())
+            .unwrap_or(false)
+}
+
+/// ROT8b: the host ATMS confirms the task is finished (no live record, no
+/// pending start). The guest's own flag is only a claim until this holds.
+fn host_confirms_task_finished(live: &acos_services::registry::LiveHandles) -> bool {
+    live.atms
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .task_finished_proof()
+}
+
+/// ROT8b: did the step change state? The tree the caller held before the
+/// action is the baseline: an already-empty forest (`await_tree` with no
+/// nodes, or no tree at all and an empty screen before the action) is NOT a
+/// change; a non-empty previous tree is.
+fn window_gone_state_changed(await_tree: Option<&serde_json::Value>, entry_empty: bool) -> bool {
+    match await_tree {
+        Some(tree) => tree
+            .get("nodes")
+            .and_then(|nodes| nodes.as_array())
+            .map(|nodes| !nodes.is_empty())
+            .unwrap_or(true),
+        None => !entry_empty,
+    }
+}
+
 fn probe_usable_for_fast_tree(
     probe: &ProbeSample,
     entry_generation: u64,
@@ -5638,12 +6351,33 @@ fn open_guest_probe_fifo(dir: &Path) -> Result<std::fs::File> {
 /// Ask the guest for one probe sample on its main looper, out of its 50 ms
 /// cadence. The guest reads `PROBE` lines from stdin (interactive sessions only)
 /// and wakes the probe thread immediately; this never changes the view tree.
-fn request_guest_probe(stdin: &mut Option<GuestProbeChannel>) {
-    if let Some(writer) = stdin.as_mut() {
-        use std::io::Write;
-        let _ = writeln!(writer, "PROBE");
-        let _ = writer.flush();
+///
+/// Returns whether the wake was actually written. SETTLE5: a wake that cannot
+/// be written (a closed guest stdin, a dead reader) must not be silent — the
+/// caller traces it, and the demand-probe channel's health is part of the
+/// timeout evidence instead of a guess.
+fn request_guest_probe(
+    stdin: &mut Option<GuestProbeChannel>,
+    state: &Arc<std::sync::Mutex<ProbeState>>,
+) -> bool {
+    let Some(writer) = stdin.as_mut() else {
+        return true;
+    };
+    use std::io::Write;
+    let written = writeln!(writer, "PROBE")
+        .and_then(|_| writer.flush())
+        .is_ok();
+    // SETTLE5: the channel's health is evidence, and a wake the pipe refuses is
+    // counted rather than silently swallowed. Only the counters change; the
+    // demand probe's behaviour is unchanged.
+    let mut guard = state.lock().unwrap_or_else(|e| e.into_inner());
+    if written {
+        guard.wakes_sent = guard.wakes_sent.saturating_add(1);
+    } else {
+        guard.wake_failures = guard.wake_failures.saturating_add(1);
     }
+    drop(guard);
+    written
 }
 
 enum FastTreeEnd {
@@ -5699,7 +6433,7 @@ fn wait_for_fast_tree(
         }
         if !requested {
             requested = true;
-            request_guest_probe(guest_stdin);
+            request_guest_probe(guest_stdin, probe_state);
             trace_host(probe_state, "fast-tree requested an immediate guest probe");
         }
         if Instant::now() >= deadline {
@@ -6446,6 +7180,12 @@ fn interactive_serve(
                         None,
                         0,
                         baseline_tree.as_ref(),
+                        // A tree request publishes no input, so no gesture's
+                        // acks can make it an unhandled-input settle (REL3H)
+                        // and no delivered token can have been removed (REL3I3).
+                        None,
+                        None,
+                        None,
                     );
                     match settled {
                         SettleEnd::Settled(settled) => {
@@ -6503,7 +7243,25 @@ fn interactive_serve(
                         .as_ref()
                         .map(|timing| timing.bound == "change-draw")
                         .unwrap_or(false);
-                let mut settle_json = if draw_commit {
+                // ROT8: the tree request bound on the guest's window-gone state.
+                let tree_window_gone = tree_timeout.is_none()
+                    && tree_bind
+                        .as_ref()
+                        .map(|timing| timing.task_finished)
+                        .unwrap_or(false);
+                let mut settle_json = if tree_window_gone {
+                    serde_json::json!({
+                        "mode": "strict",
+                        "settled": true,
+                        "probe_seq": probe.seq,
+                        "tree_age_ms": tree_age_ms,
+                        "bound": "window-gone",
+                        "strict_rule": "event",
+                        "task_finished": true,
+                        "window_gone": true,
+                        "meaning": "the app's last Activity is destroyed and no window root remains: the window forest is empty and no frame exists to bind",
+                    })
+                } else if draw_commit {
                     serde_json::json!({
                         "mode": "strict",
                         "settled": false,
@@ -6560,6 +7318,13 @@ fn interactive_serve(
                 // G3f1: say what the request waited for, so a reply can never
                 // be mistaken for "the same tree again": the sample it binds
                 // was forced to differ from the caller's baseline tree.
+                if tree_timeout.is_some() {
+                    // SETTLE5: a timed-out tree request carries the probe
+                    // channel's health, so `probe-floor` names its cause.
+                    if let Some(map) = settle_json.as_object_mut() {
+                        map.insert("probe".into(), probe_health_json(probe_state));
+                    }
+                }
                 if baseline_tree.is_some() {
                     if let Some(map) = settle_json.as_object_mut() {
                         map.insert("awaited".into(), serde_json::json!("tree-change"));
@@ -6862,12 +7627,50 @@ fn interactive_serve(
                 protocol_write(&reply);
                 evidence.push(reply);
             }
-            "tap" | "key" | "type_text" => {
+            "tap" | "key" | "type_text" | "swipe" => {
                 let text_arg = request
                     .get("text")
                     .and_then(|v| v.as_str())
                     .map(str::to_string);
-                let (x, y, key_code) = if cmd == "tap" {
+                // REL3S: a swipe is a real interpolated MotionEvent stream, so
+                // it names two points and a duration (never a direction the
+                // guest would have to invent physics for).
+                let mut swipe_from = (0.0f32, 0.0f32);
+                let mut swipe_to = (0.0f32, 0.0f32);
+                let mut swipe_duration = Duration::from_millis(300);
+                let (x, y, key_code) = if cmd == "swipe" {
+                    let point = |suffix: &str| {
+                        let x = request.get(&format!("x{suffix}")).and_then(|v| v.as_i64());
+                        let y = request.get(&format!("y{suffix}")).and_then(|v| v.as_i64());
+                        match (x, y) {
+                            (Some(x), Some(y)) => Some((x as f32, y as f32)),
+                            _ => None,
+                        }
+                    };
+                    match (point("1"), point("2")) {
+                        (Some(from), Some(to)) => {
+                            swipe_from = from;
+                            swipe_to = to;
+                            swipe_duration = Duration::from_millis(
+                                request
+                                    .get("duration_ms")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(300)
+                                    .clamp(1, 30_000),
+                            );
+                            (from.0, from.1, None)
+                        }
+                        _ => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": cmd, "code": "BAD_REQUEST",
+                                "error": "swipe needs integers x1, y1, x2 and y2 (and optional duration_ms)",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                    }
+                } else if cmd == "tap" {
                     let x = request.get("x").and_then(|v| v.as_i64());
                     let y = request.get("y").and_then(|v| v.as_i64());
                     match (x, y) {
@@ -6934,13 +7737,41 @@ fn interactive_serve(
                 // phase; the looper lines the guest printed in between are the
                 // stages. Both are stamped on the same monotonic base.
                 let injection_started = Instant::now();
+                // REL3I3: the host's own window-removal counter, taken before
+                // the input is published. A window destroyed during this step
+                // that is the one this gesture went to explains a missing ack:
+                // its `InputEventReceiver` was disposed before it could finish
+                // the event. A different window's removal never matches.
+                let removal_mark = live.input.removal_mark();
+                let gesture_label = if cmd == "swipe" {
+                    format!(
+                        "from ({},{}) to ({},{}) in {} ms",
+                        swipe_from.0,
+                        swipe_from.1,
+                        swipe_to.0,
+                        swipe_to.1,
+                        swipe_duration.as_millis()
+                    )
+                } else {
+                    format!("at ({x},{y})")
+                };
                 trace_host(
                     probe_state,
                     &format!(
-                        "{cmd} publish_begin x={x} y={y} ack_wait_ms={}",
+                        "{cmd} publish_begin {gesture_label} ack_wait_ms={}",
                         ack_wait.as_millis()
                     ),
                 );
+                // PERF4: the fallback pre-action pixels are NOT captured here.
+                // They used to be, and the cost was a full composite of the
+                // display (`capture_latest`: every visible layer's buffer copied
+                // and hashed, 1080x2400) on every action whose caller had no
+                // capture of its own — i.e. every tap after a `pixels:false`
+                // reply, which is the whole M8 form loop and any agent that does
+                // not ask for pixels. Measured on the bench's form-fast loop:
+                // 8.7-9.2 ms per tap (`diagnosis/tap-split-*.txt`), the entire
+                // v0.3.0 M8 regression. See `unhandled_entry_fnv` below for where
+                // the value is taken now and why moving it changes nothing.
                 let injected = match (cmd, key_code) {
                     ("tap", _) => {
                         // LAYER1: the ART/`verify` path routes a tap through the
@@ -6982,6 +7813,10 @@ fn interactive_serve(
                             ),
                         }
                     }
+                    ("tap", _) => live.input.tap(x, y, ack_wait),
+                    ("swipe", _) => live
+                        .input
+                        .swipe(swipe_from, swipe_to, swipe_duration, ack_wait),
                     ("type_text", _) => live
                         .input
                         .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
@@ -7009,6 +7844,7 @@ fn interactive_serve(
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": "INPUT_UNAVAILABLE",
                             "error": format!("the real InputChannel accepted no gesture: {error}"),
+                            "live_tokens": live.input.live_tokens(),
                         });
                         protocol_write(&reply);
                         evidence.push(reply);
@@ -7029,6 +7865,46 @@ fn interactive_serve(
                 // P12b: per-request strict/fast deadline, default = the engine's
                 // long-standing frame wait.
                 let settle_timeout = request_settle_timeout(&request, frame_wait);
+                // REL3H: only a strict input whose *every* event came back
+                // acknowledged unhandled can settle as "unhandled input".
+                // REL3H2: the floor of that rule is the newest probe sample at
+                // this moment - *after* every ack of this gesture had arrived -
+                // because a sample taken earlier may have been taken before the
+                // UI thread ran the handler (see [`UnhandledSettleGate`]).
+                let unhandled_ack_floor = (mode == SettleMode::Strict
+                    && every_event_acked_unhandled(&injected.seqs, &injected.acks))
+                .then(|| {
+                    latest_probe(probe_state)
+                        .map(|sample| sample.seq)
+                        .unwrap_or(p0)
+                });
+                // REL3H's fallback pre-action pixels, taken here instead of at
+                // publish (PERF4; see the publish site for the measured 9 ms).
+                //
+                // What the value is for: the unhandled-input branch reports
+                // `pixels_changed` against it instead of inventing one, so an
+                // `expect_change: true` claim on a tap nothing consumed fails on
+                // a *measured* false. The branch can only bind a sample whose
+                // draw predates the publish (that is what makes the gesture
+                // unhandled: no draw followed it), so when no C1 store has
+                // landed since `g0` the composite in C1 is still the pre-action
+                // screen, byte for byte — the same value the old code captured
+                // before publishing, just read later. If a store *did* land, the
+                // pre-action screen is gone; the old comparison would then have
+                // reported a change by construction (current != entry, unless a
+                // redraw reproduced the same pixels), and `None` makes the branch
+                // report exactly that: the conservative `true`, no claim.
+                // The capture is skipped entirely when the branch cannot be
+                // reached (fast mode never sets `unhandled_ack_floor`; a handled
+                // gesture never does) and when the caller supplied its own
+                // pre-action capture.
+                let entry_fnv = match (unhandled_ack_floor, last_capture_fnv) {
+                    (Some(_), None) if latest_generation(live) == g0 => {
+                        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                        state.capture_latest().map(|capture| capture.fnv1a)
+                    }
+                    _ => None,
+                };
                 let settled = wait_for_settled_observation(
                     child,
                     cgroup,
@@ -7043,6 +7919,9 @@ fn interactive_serve(
                     baseline_probe,
                     publish_epoch_ms,
                     None,
+                    unhandled_ack_floor,
+                    entry_fnv,
+                    Some((injected.token, removal_mark)),
                 );
                 let (settled_probe, g1, p1, settle_timing) = match settled {
                     SettleEnd::Settled(settled) => (
@@ -7130,6 +8009,21 @@ fn interactive_serve(
                         settle_timing.mode.as_str()
                     ),
                 );
+                // The window this gesture went to is gone (dialog dismissed, task
+                // finished): the host's fact, checked against the *delivered*
+                // token only.
+                let window_removed = live
+                    .input
+                    .window_removed_since(injected.token, removal_mark);
+                if window_removed {
+                    trace_host(
+                        probe_state,
+                        &format!(
+                            "{cmd} delivered window {:#x} was removed within the step",
+                            injected.token.0
+                        ),
+                    );
+                }
                 if settled_probe.is_none() {
                     // P12b: a settle timeout is still an observation. Return the
                     // latest tree and C1 frame identity with `settled:false` so
@@ -7140,7 +8034,7 @@ fn interactive_serve(
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": "NO_FRESH_FRAME",
                             "error": format!(
-                                "{cmd} at ({x},{y}) completed no settled observation within {} ms \
+                                "{cmd} {gesture_label} completed no settled observation within {} ms \
                                  (c1_generation {g0} -> {g1}, probe_seq {p0} -> {p1}) and the \
                                  in-guest probe has produced no sample",
                                 settle_timeout.as_millis()
@@ -7151,6 +8045,7 @@ fn interactive_serve(
                                     "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
                                 })).collect::<Vec<_>>(),
                                 "token": format!("{:#x}", injected.token.0),
+                                "window_removed": window_removed,
                             },
                             "settle": settle_timing.to_json(false, ack_ms),
                         });
@@ -7203,9 +8098,16 @@ fn interactive_serve(
                                 "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
                             })).collect::<Vec<_>>(),
                             "token": format!("{:#x}", injected.token.0),
+                            "window_removed": window_removed,
                         }),
                     );
-                    map.insert("settle".into(), settle_timing.to_json(false, ack_ms));
+                    let mut settle_json = settle_timing.to_json(false, ack_ms);
+                    let health = probe_health_json(probe_state);
+                    if let Some(set) = settle_json.as_object_mut() {
+                        set.insert("probe".into(), health.clone());
+                    }
+                    map.insert("settle".into(), settle_json);
+                    map.insert("probe".into(), health);
                     map.insert(
                         "warning".into(),
                         serde_json::json!(format!(
@@ -7221,6 +8123,54 @@ fn interactive_serve(
                     continue;
                 }
                 let capture = match capture_c1(live, frames_dir, &mut captures) {
+                    // ROT8b: a finished task never publishes a capture, even if
+                    // the compositor still holds a stale buffer of the
+                    // destroyed window (it would be the dead window's pixels
+                    // under a new frame id).
+                    Ok(_) if settle_timing.task_finished => {
+                        // ROT8: the app's last window is gone, so the
+                        // compositor holds no layer and there is no frame to
+                        // bind. The step is proven by the guest's STATE (task
+                        // finished, empty window forest), not by a frame; none
+                        // is invented.
+                        let probe = settled_probe.expect("settled probe checked above");
+                        // The logical frame id advances (as on every pixel-less
+                        // tree reply, P9) so the observation is ordered after
+                        // the previous one; no buffer is claimed.
+                        captures += 1;
+                        let reply = serde_json::json!({
+                            "ok": true, "cmd": cmd,
+                            "frame_seq": captures,
+                            "pixels": false,
+                            "capture_source": CAPTURE_SOURCE,
+                            "frame_identity": "no frame: the app's task finished and no window layer remains",
+                            "window_gone": true,
+                            "task_finished": true,
+                            "tree": probe.tree.clone(),
+                            "probe_seq": probe.seq,
+                            "probe_at_ms": probe.at_ms,
+                            "gesture": {
+                                "x": x, "y": y,
+                                "seqs": injected.seqs,
+                                "acks": injected.acks.iter().map(|a| serde_json::json!({
+                                    "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
+                                })).collect::<Vec<_>>(),
+                                "token": format!("{:#x}", injected.token.0),
+                                "window_removed": window_removed,
+                                "new_buffer_generation": g1,
+                                "new_probe_seq": p1,
+                            },
+                            "settle": settle_timing.to_json(true, ack_ms),
+                        });
+                        protocol_write(&reply);
+                        evidence.push(serde_json::json!({
+                            "cmd": cmd, "ok": true, "window_gone": true,
+                            "frame_seq": captures,
+                            "probe_seq": probe.seq, "x": x, "y": y,
+                            "handled": injected.acks.iter().map(|a| a.handled).collect::<Vec<_>>(),
+                        }));
+                        continue;
+                    }
                     Ok(Some(capture)) => capture,
                     Ok(None) => {
                         let reply = serde_json::json!({
@@ -7267,6 +8217,7 @@ fn interactive_serve(
                             "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
                         })).collect::<Vec<_>>(),
                         "token": format!("{:#x}", injected.token.0),
+                        "window_removed": window_removed,
                         "new_buffer_generation": g1,
                         "new_probe_seq": p1,
                     }),
@@ -8545,6 +9496,10 @@ mod probe_line_tests {
                 bad_probe_lines: self.bad_probe_lines,
                 trace: None,
                 marks: self.marks.clone(),
+                wakes_sent: self.wakes_sent,
+                wake_failures: self.wake_failures,
+                stale_samples: self.stale_samples,
+                stall_pending_ms: self.stall_pending_ms,
                 wake: Arc::clone(&self.wake),
                 anim_traced: self.anim_traced.clone(),
                 touch_traced: self.touch_traced,
@@ -8610,8 +9565,141 @@ mod probe_line_tests {
             draw_seq: 0,
             settled: false,
             pending: Vec::new(),
+            window_gone: false,
             animations_on: None,
         }
+    }
+
+    /// PERF4: the fast settle binds the sample's *own* draw only when the
+    /// guest/C1 counters prove that draw's buffer is in C1; every other shape
+    /// keeps the shipped "a store observed after the sample" rule, so this can
+    /// only ever move the bind earlier for a sample whose frame is already
+    /// there — never bind a sample from before the action.
+    #[test]
+    fn a_fast_commit_binds_its_own_draw_only_with_proof() {
+        let mut commit = sample(7, 3); // generation (C1 stores) = 3
+        commit.draw_seq = 2; // the guest's draw counter
+        commit.draw_ms = 1_000; // same clock as the host's store stamps
+        let mut baseline = sample(3, 1);
+        baseline.draw_seq = 1;
+        // Every draw stored, the store arrived after this draw, and the draw is
+        // newer than the pre-publish one: bind at once.
+        assert!(sample_own_draw_is_stored(&commit, Some(&baseline), 1_004));
+
+        // Stores behind draws: the sample's own buffer may not be in C1 yet.
+        let mut behind = commit.clone();
+        behind.generation = 1;
+        assert!(!sample_own_draw_is_stored(&behind, Some(&baseline), 1_004));
+
+        // The newest store predates this draw: a pre-draw buffer.
+        assert!(!sample_own_draw_is_stored(&commit, Some(&baseline), 999));
+
+        // The tree was taken at the pre-publish draw.
+        let mut same_draw = commit.clone();
+        same_draw.draw_seq = 1;
+        assert!(!sample_own_draw_is_stored(&same_draw, Some(&baseline), 1_004));
+
+        // No draw counter on the sample (a non-event sample): never a shortcut.
+        let mut no_draw = commit.clone();
+        no_draw.draw_seq = 0;
+        assert!(!sample_own_draw_is_stored(&no_draw, Some(&baseline), 1_004));
+
+        // No pre-publish sample (a first observation): the draw must still be
+        // real and stored.
+        assert!(sample_own_draw_is_stored(&commit, None, 1_004));
+        assert!(!sample_own_draw_is_stored(&no_draw, None, 1_004));
+    }
+
+    /// PERF4: the settle wait is woken by a change signal, and a signal that
+    /// arrived before the wait is not lost (the tick is compared, not cleared) —
+    /// the two properties the loops depend on now that they no longer sleep.
+    #[test]
+    fn the_change_wake_is_event_driven_and_loses_no_edge() {
+        let wake = std::sync::Arc::new(ProbeWake::default());
+        let mut seen = 0u64;
+
+        // No event: the wait spends its whole (short) budget.
+        let started = Instant::now();
+        wake.wait(&mut seen, Duration::from_millis(5));
+        assert!(started.elapsed() >= Duration::from_millis(4));
+
+        // An event that landed *before* the wait returns at once.
+        wake.notify();
+        let started = Instant::now();
+        wake.wait(&mut seen, Duration::from_millis(50));
+        assert!(
+            started.elapsed() < Duration::from_millis(20),
+            "a pending signal must not wait for the timeout: {:?}",
+            started.elapsed()
+        );
+
+        // An event that lands *while* waiting returns promptly, from another
+        // thread (the two producers are the guest-line reader and the peer loop).
+        let started = Instant::now();
+        let producer = {
+            let wake = std::sync::Arc::clone(&wake);
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(10));
+                wake.notify();
+            })
+        };
+        wake.wait(&mut seen, Duration::from_millis(500));
+        producer.join().expect("producer");
+        assert!(
+            started.elapsed() < Duration::from_millis(100),
+            "a notify during the wait must end it: {:?}",
+            started.elapsed()
+        );
+    }
+
+    /// ROT8b: `state_changed` is computed from the pre-action tree, never
+    /// hard-coded.
+    #[test]
+    fn window_gone_state_changed_is_computed() {
+        let full = serde_json::json!({"nodes": [{"id": "x"}]});
+        let empty = serde_json::json!({"nodes": []});
+        assert!(window_gone_state_changed(Some(&full), false));
+        assert!(!window_gone_state_changed(Some(&empty), true));
+        assert!(window_gone_state_changed(None, false));
+        assert!(!window_gone_state_changed(None, true), "already empty before the action");
+    }
+
+    /// ROT8: a probe line carrying `settle.window_gone` parses into the sample,
+    /// and only a settled sample with an EMPTY window forest binds a step as
+    /// `window-gone`. A stale-looking `window_gone` over a non-empty tree, or an
+    /// unsettled one, never does.
+    #[test]
+    fn window_gone_sample_is_parsed_and_binds_only_with_state_proof() {
+        let line = "ACOSPROBE {\"seq\":9,\"windows\":[],\"tree\":{\"nodes\":[],\"window_count\":0,\"node_budget\":2000,\"truncated\":false},\"settle\":{\"settled\":true,\"pending\":[],\"draw_ms\":5,\"draw_seq\":3,\"window_gone\":true,\"task_finished\":true}}\n";
+        let state = drain(line);
+        let sample = state.latest.expect("window-gone sample published");
+        assert!(sample.window_gone && sample.settled);
+        assert!(window_gone_shape(&sample));
+        let mut not_empty = sample.clone();
+        not_empty.tree = serde_json::json!({"nodes": [{"id": "x"}]});
+        assert!(!window_gone_shape(&not_empty), "a window forest that is not empty is not gone");
+        let mut unsettled = sample.clone();
+        unsettled.settled = false;
+        assert!(!window_gone_shape(&unsettled));
+        let mut plain = sample;
+        plain.window_gone = false;
+        assert!(!window_gone_shape(&plain), "an ordinary settled empty tree is not a finished task");
+        // The step evidence names the proof.
+        let timing = SettleTiming {
+            mode: SettleMode::Strict,
+            first_change_ms: None,
+            frame_ms: None,
+            state_changed: Some(true),
+            bound: "window-gone",
+            rule: Some("event"),
+            reason: None,
+            pixels_changed: Some(false),
+            task_finished: true,
+        };
+        let json = timing.to_json(true, 5);
+        assert_eq!(json["bound"], "window-gone");
+        assert_eq!(json["task_finished"], true);
+        assert_eq!(json["pixels_changed"], false);
     }
 
     /// P3b's invalidation rule: a fast tree may only use a probe parsed at a C1
@@ -8643,6 +9731,97 @@ mod probe_line_tests {
         assert!(read_capped_line(&mut cursor, 8).unwrap().is_none());
         let next = read_capped_line(&mut cursor, 8).unwrap().unwrap();
         assert_eq!(next, b"next\n");
+    }
+
+    /// SETTLE5: a settle that times out on `probe-floor` must carry the demand
+    /// probe's own health, not just "the newest sample is old". The parser turns
+    /// the guest's `probe-stalled` mark and a refused (not-newer) sample into
+    /// the exact counters the timeout reports, so the next occurrence names the
+    /// side that stalled.
+    #[test]
+    fn a_starved_probe_and_a_stale_sample_are_counted_for_the_timeout_evidence() {
+        let state = drain(concat!(
+            "ACOSPROBE {\"seq\":5,\"tree\":{\"nodes\":[]}}\n",
+            "ACOSLAUNCH MARK probe-stalled pending_ms=1234 wake=received\n",
+            "ACOSPROBE {\"seq\":4,\"tree\":{\"nodes\":[]}}\n",
+            "ACOSPROBE {\"seq\":6,\"tree\":{\"nodes\":[]}}\n",
+        ));
+        assert_eq!(state.latest.as_ref().map(|s| s.seq), Some(6));
+        assert_eq!(state.stall_pending_ms, Some(1234));
+        // Only seq 4 was refused; 6 advanced the sample.
+        assert_eq!(state.stale_samples, 1);
+
+        let health = probe_health_json(&Arc::new(std::sync::Mutex::new(state)));
+        assert_eq!(health["stale_samples"], serde_json::json!(1));
+        assert_eq!(health["guest_stall_pending_ms"], serde_json::json!(1234));
+        assert!(health["newest_sample_age_ms"].as_u64().is_some());
+        assert_eq!(health["wake_failures"], serde_json::json!(0));
+    }
+
+    /// SETTLE5: a wake the channel refuses is counted, never silently dropped.
+    /// Before this, `request_guest_probe` discarded the write error, so a dead
+    /// reader degraded the session to the 5 s fallback with no evidence at all
+    /// (every strict settle then timed out as a bare `probe-floor`).
+    #[test]
+    fn a_refused_probe_wake_is_counted_and_a_written_one_is_counted_separately() {
+        let dir = std::env::temp_dir().join(format!("acos-settle5-wake-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let path = dir.join("wake-probe");
+        std::fs::write(&path, b"").expect("scratch file");
+
+        // A read-only handle is the shape of a channel that cannot accept a
+        // wake (a dead reader): the write fails and must be counted.
+        let read_only = std::fs::File::open(&path).expect("open read-only");
+        let mut dead = Some(GuestProbeChannel::Fifo(read_only));
+        let state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+        assert!(!request_guest_probe(&mut dead, &state));
+        {
+            let state = state.lock().unwrap();
+            assert_eq!(state.wake_failures, 1, "a refused wake is counted");
+            assert_eq!(state.wakes_sent, 0);
+        }
+
+        // A writable handle is the real channel: the wake is delivered and the
+        // sent counter moves.
+        let writable = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("open writable");
+        let mut live = Some(GuestProbeChannel::Fifo(writable));
+        assert!(request_guest_probe(&mut live, &state));
+        {
+            let state = state.lock().unwrap();
+            assert_eq!(state.wakes_sent, 1);
+            assert_eq!(state.wake_failures, 1);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SETTLE5: when the demand channel's control thread ends, no wake can ever
+    /// arrive again. The guest must then poll at a strict-settle useful cadence
+    /// instead of the 5 s idle fallback — otherwise every later settle times out
+    /// on a healthy, idle screen. The sample is still a real probe sample under
+    /// the same settle rule, so this can only remove false timeouts, never
+    /// produce a pass.
+    #[test]
+    fn a_dead_demand_channel_switches_the_guest_fallback_to_a_fast_poll() {
+        let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        assert!(
+            src.contains("sProbeControlDead = true;"),
+            "the control thread must record that the demand channel ended"
+        );
+        assert!(
+            src.matches("Math.min(fallbackMs, deadChannelMs)").count() >= 2,
+            "both the emit decision and the wait must use the fast dead-channel fallback"
+        );
+        assert!(
+            src.contains("probe-control-exit reason="),
+            "an ended control thread must be named"
+        );
+        assert!(
+            src.contains("probe-stalled"),
+            "a starved probe must be named with its pending age"
+        );
     }
 }
 
@@ -9030,6 +10209,7 @@ mod skipped_traversal_tests {
             );
         }
     }
+
 }
 
 /// ABIGATE: the pre-guest ABI refusal is structured, carries its inventory, and
@@ -9096,5 +10276,182 @@ mod abi_gate_tests {
         let result = disk_full_result(&opts("/tmp/app.apk"), "dev.acos.app", 1, 2);
         assert!(result.abi.is_none());
         assert_eq!(result.code.as_deref(), Some("HOST_DISK_FULL"));
+    }
+}
+
+/// REL3H: unhandled input is a settled observation, not a timeout.
+///
+/// The rule is only as strong as the framework acks behind it, so these pin the
+/// two halves: *when* the guest may take the shortcut (every published event
+/// delivered and acknowledged unhandled) and *what* it reports when it does
+/// (`settled: true`, `reason: unhandled_input`, `pixels_changed: false`, under
+/// the strict rule).
+#[cfg(test)]
+mod rel3h_unhandled_input_tests {
+    use super::*;
+    use acos_services::window_session::input_dispatch::InjectedAck;
+
+    fn ack(seq: u32, handled: bool) -> InjectedAck {
+        InjectedAck {
+            seq,
+            handled,
+            latency_us: Some(1_200),
+        }
+    }
+
+    /// A tap publishes DOWN+UP; both acks must be present and both unhandled.
+    #[test]
+    fn every_published_event_must_be_acked_unhandled() {
+        assert!(every_event_acked_unhandled(
+            &[3, 4],
+            &[ack(3, false), ack(4, false)]
+        ));
+        // Any handled event means the app consumed the gesture: normal settle.
+        assert!(!every_event_acked_unhandled(
+            &[3, 4],
+            &[ack(3, false), ack(4, true)]
+        ));
+        // A short ack list is "unknown", never "not handled" (REL3E): the
+        // pre-REL3H settle (and so the timeout) stays.
+        assert!(!every_event_acked_unhandled(&[3, 4], &[ack(3, false)]));
+        assert!(!every_event_acked_unhandled(&[3, 4], &[]));
+        // An empty gesture proves nothing.
+        assert!(!every_event_acked_unhandled(&[], &[]));
+        // An ack for a sequence this gesture never published cannot stand in for
+        // a published one (stale FOCUS/TOUCH_MODE acks are filtered upstream;
+        // this is the rule that makes that filtering load-bearing).
+        assert!(!every_event_acked_unhandled(
+            &[3, 4],
+            &[ack(3, false), ack(9, false)]
+        ));
+    }
+
+    /// REL3H2: the shortcut binds only what the handler provably left behind.
+    ///
+    /// A sample taken before the gesture's last ack can be the pre-handler state
+    /// (the probe is event-driven, so it also samples on the touch feedback's
+    /// draw), and binding it reported "nothing happened" for a gesture whose
+    /// handler had actually queued a `setText`. It must never bind, however long
+    /// the wait runs.
+    mod gate {
+        use super::super::*;
+
+        /// A sample at or below the ack floor is always `Wait`, never `Bind`.
+        #[test]
+        fn a_sample_at_or_before_the_last_ack_never_binds() {
+            let mut gate = UnhandledSettleGate::new(10, Duration::ZERO);
+            assert_eq!(
+                gate.observe(10, 4, Instant::now()),
+                UnhandledGateOutcome::Wait(UNHANDLED_ACK_FLOOR_REASON),
+                "the sample is the one the acks returned with: it may predate the handler"
+            );
+            let later = Instant::now() + Duration::from_secs(5);
+            assert_eq!(
+                gate.observe(7, 4, later),
+                UnhandledGateOutcome::Wait(UNHANDLED_ACK_FLOOR_REASON),
+                "no amount of waiting makes an old sample older than itself"
+            );
+        }
+
+        /// A sample strictly after the last ack still needs one confirmation
+        /// window on an unchanged draw - the same rule as the normal path.
+        #[test]
+        fn a_sample_after_the_ack_binds_only_after_the_window() {
+            let confirm = Duration::from_millis(20);
+            let mut gate = UnhandledSettleGate::new(10, confirm);
+            let start = Instant::now();
+            assert_eq!(
+                gate.observe(11, 4, start),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON),
+                "the window starts with this sample"
+            );
+            assert_eq!(
+                gate.observe(11, 4, start + Duration::from_millis(19)),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON)
+            );
+            assert_eq!(
+                gate.observe(12, 4, start + Duration::from_millis(21)),
+                UnhandledGateOutcome::Bind,
+                "the same draw stayed newest for the whole window"
+            );
+        }
+
+        /// The handler's posted side effect: `finishInputEvent(handled=false)`
+        /// with a `post()`ed `setText`. The samples before that draw are
+        /// pre-change; the new draw restarts the window, so the shortcut never
+        /// binds them and the gesture goes the normal path (which captures it).
+        #[test]
+        fn a_draw_inside_the_window_restarts_it_instead_of_binding() {
+            let confirm = Duration::from_millis(20);
+            let mut gate = UnhandledSettleGate::new(10, confirm);
+            let start = Instant::now();
+            assert_eq!(
+                gate.observe(11, 4, start),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON)
+            );
+            // The posted setText ran and drew: draw 4 -> 5.
+            assert_eq!(
+                gate.observe(12, 5, start + Duration::from_millis(21)),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON),
+                "a new draw restarts the window; it must not settle on the pre-change sample"
+            );
+            assert_eq!(
+                gate.observe(13, 5, start + Duration::from_millis(30)),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON)
+            );
+            // ... and only the unchanged draw after the *new* window binds.
+            assert_eq!(
+                gate.observe(14, 5, start + Duration::from_millis(41)),
+                UnhandledGateOutcome::Bind
+            );
+        }
+
+        /// A pending framework signal (the guest reported work it still has to
+        /// run) resets the window: no sample it took can be the settled one.
+        #[test]
+        fn a_reset_forgets_the_window() {
+            let mut gate = UnhandledSettleGate::new(10, Duration::from_millis(20));
+            let start = Instant::now();
+            assert_eq!(
+                gate.observe(11, 4, start),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON)
+            );
+            gate.reset();
+            assert_eq!(
+                gate.observe(11, 4, start + Duration::from_millis(30)),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON),
+                "the window restarts after pending work was reported"
+            );
+            assert_eq!(
+                gate.observe(11, 4, start + Duration::from_millis(51)),
+                UnhandledGateOutcome::Bind
+            );
+        }
+    }
+
+    /// The reply's settle block is the REL3A record shape with this rule's own
+    /// bound/reason, and it says the pixels did not change (so `expect_change`
+    /// can fail on it instead of reporting "unmeasured").
+    #[test]
+    fn the_unhandled_input_settle_is_settled_with_its_own_reason() {
+        let timing = SettleTiming {
+            mode: SettleMode::Strict,
+            first_change_ms: None,
+            frame_ms: None,
+            state_changed: None,
+            bound: "unhandled-input",
+            rule: Some("event"),
+            reason: Some(SETTLE_UNHANDLED_INPUT.to_string()),
+            pixels_changed: Some(false),
+            task_finished: false,
+        };
+        let json = timing.to_json(true, 7);
+        assert_eq!(json["mode"], serde_json::json!("strict"));
+        assert_eq!(json["settled"], serde_json::json!(true));
+        assert_eq!(json["reason"], serde_json::json!("unhandled_input"));
+        assert_eq!(json["bound"], serde_json::json!("unhandled-input"));
+        assert_eq!(json["strict_rule"], serde_json::json!("event"));
+        assert_eq!(json["pixels_changed"], serde_json::json!(false));
+        assert_eq!(json["ack_ms"], serde_json::json!(7));
     }
 }

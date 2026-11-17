@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tap targets</string>
+    <string name="row_title">Floating button</string>
+    <string name="row_switch">Floating button</string>
+    <string name="inc">Increment</string>
+    <string name="initial">0</string>
+    <string name="state_off">off</string>
+    <string name="state_on">on</string>
+</resources>

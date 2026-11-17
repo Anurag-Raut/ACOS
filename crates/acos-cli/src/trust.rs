@@ -24,7 +24,7 @@
 use std::path::Path;
 
 use acos_protocol::commands::ResetScope;
-use acos_protocol::{Backend as ProtocolBackend, Envelope, ErrorCode};
+use acos_protocol::{Backend as ProtocolBackend, Envelope, ErrorCode, Selector};
 use acos_verify::backend::{
     Backend, BackendError, Capabilities, EnvironmentChange, InputAction, LaunchOutcome,
     LaunchRequest, LogRecord, ManifestInfo, ServiceCtlRequest, SessionObservation,
@@ -347,6 +347,29 @@ impl Backend for TrustGuard {
         self.inner.input(action)
     }
 
+    fn last_input_delivery(&self) -> Option<acos_verify::backend::InputDelivery> {
+        // Host-observed delivery (`handled` acks, target): the wrapper must not
+        // drop the evidence the step reports.
+        self.inner.last_input_delivery()
+    }
+
+    fn display_size(&self) -> Option<(u32, u32)> {
+        self.inner.display_size()
+    }
+
+    fn scroll_until(
+        &mut self,
+        selector: &Selector,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        fling: bool,
+        max_attempts: usize,
+    ) -> Result<(acos_verify::backend::ScrollUntilReport, SessionObservation), BackendError> {
+        self.inner
+            .scroll_until(selector, from, to, duration_ms, fling, max_attempts)
+    }
+
     fn reset(&mut self, scope: ResetScope) -> Result<(), BackendError> {
         self.inner.reset(scope)
     }
@@ -380,6 +403,14 @@ impl Backend for TrustGuard {
 
     fn set_input_content_settle(&mut self, content: bool) {
         self.inner.set_input_content_settle(content);
+    }
+
+    /// REL3A: the observation settle rule must reach the engine through the
+    /// guard too. Without this forward the trait's default (a no-op) swallowed
+    /// it, so `settle: content` on a `wait_for`/assertion silently ran the strict
+    /// rule and timed out - exactly the quiet downgrade this project forbids.
+    fn set_observation_settle(&mut self, mode: acos_verify::settle::ObservationSettle) {
+        self.inner.set_observation_settle(mode);
     }
 }
 

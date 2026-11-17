@@ -1,0 +1,14 @@
+Indicative settle latency, same host, shared ART slot, one measurement per arm
+(not an exclusive benchmark; the bench owner runs the sanctioned A/B).
+
+capture step duration (ms), counter scenario:
+  before (rel-030 7168439c, 5 concurrent sessions): n=45 median=53 p90=54 max=54
+  after  (settle5,           5 concurrent sessions): n=45 median=53 p90=54 max=55
+capture step duration (ms), net-check scenario (network module off):
+  before: n=45 median=54 p90=55 max=56
+  after : n=45 median=54 p90=55 max=55
+single session (5 reps, settle5): n=15 median=53 p90=54 max=56
+
+Probe cadence of every passing session (evidence/probe-cadence.tsv): the guest
+published a sample for every wake within <=2 ms (host `probe rx ... lag_ms`), and
+the largest gap between consecutive samples in any session was 61 ms.
