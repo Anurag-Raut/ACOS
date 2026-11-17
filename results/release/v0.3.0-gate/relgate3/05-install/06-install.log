@@ -1,0 +1,24 @@
+== install 2026-11-17T14:46:44Z prefix=/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix
+using binaries from /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-target/release
+copy .cache/art/sysroot (/home/Qui/Projects/acos/.cache/art/sysroot)
+copy .cache/boot/android-34 (/home/Qui/Projects/acos/.cache/boot/android-34)
+copy crates/acos-art/guest/java (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-art/guest/java)
+copy research/art-feasibility/a-dalvikvm/bootclasspath.txt (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/research/art-feasibility/a-dalvikvm/bootclasspath.txt)
+wrote /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix/bin/acos
+wrote /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix/bin/acos-mcp
+
+installed ACOS 0.3.0
+  root    /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix/share/acos/0.3.0
+  size    1.6G (3135 files listed in MANIFEST.txt)
+  current /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix/share/acos/current -> 0.3.0
+  wrapper /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix/bin/acos, /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix/bin/acos-mcp
+
+Next steps
+  1. preflight:   /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix/bin/acos doctor
+  2. try it:      /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix/bin/acos inspect app.apk
+  3. run:         /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix/bin/acos launch app.apk --engine art --json
+  4. MCP (Claude Code, user scope):
+       /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix/bin/acos-mcp is registered by:
+       tools/release/register-mcp.sh --prefix /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-prefix
+     (or re-run this installer with --register-mcp; --dry-run prints the command)
+INSTALL_RC=0

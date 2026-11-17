@@ -1,0 +1,399 @@
+   Compiling libc v0.2.191
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling cfg-if v1.0.5
+   Compiling version_check v0.9.5
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.15
+   Compiling typenum v1.20.1
+   Compiling memchr v2.8.3
+   Compiling serde_core v1.0.229
+   Compiling thiserror v2.0.21
+   Compiling serde v1.0.229
+   Compiling zmij v1.0.23
+   Compiling serde_json v1.0.154
+   Compiling simd-adler32 v0.3.10
+   Compiling itoa v1.0.19
+   Compiling pkg-config v0.3.34
+   Compiling crc32fast v1.5.5
+   Compiling subtle v2.6.1
+   Compiling vcpkg v0.2.15
+   Compiling adler2 v2.0.1
+   Compiling hashbrown v0.17.1
+   Compiling equivalent v1.0.3
+   Compiling crossbeam-utils v0.8.23
+   Compiling winnow v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling cpufeatures v0.2.17
+   Compiling toml_datetime v1.1.3+spec-1.1.0
+   Compiling crossbeam-epoch v0.9.21
+   Compiling log v0.4.35
+   Compiling crossbeam-deque v0.8.8
+   Compiling cfg_aliases v0.2.2
+   Compiling libm v0.2.16
+   Compiling bytemuck v1.25.2
+   Compiling borsh v1.8.1
+   Compiling cc v1.11.1
+   Compiling rayon-core v1.13.0
+   Compiling once_cell v1.21.4
+   Compiling miniz_oxide v0.9.1
+   Compiling miniz_oxide v0.8.9
+   Compiling fdeflate v0.3.7
+   Compiling generic-array v0.14.7
+   Compiling smallvec v1.16.5
+   Compiling strict-num v0.1.1
+   Compiling arrayref v0.3.9
+   Compiling byteorder-lite v0.1.0
+   Compiling zip v2.6.1
+   Compiling either v1.19.0
+   Compiling bumpalo v3.20.3
+   Compiling bitflags v1.3.2
+   Compiling rustix v1.1.6
+   Compiling quick-error v2.0.1
+   Compiling arrayvec v0.7.8
+   Compiling unicode-bidi-mirroring v0.4.0
+   Compiling unicode-ccc v0.4.0
+   Compiling unicode-properties v0.1.5
+   Compiling unicode-script v0.5.9
+   Compiling linux-raw-sys v0.12.1
+   Compiling regex-syntax v0.8.11
+   Compiling unicode-bidi v0.3.18
+   Compiling tiny-skia-path v0.11.4
+   Compiling xxhash-rust v0.8.19
+   Compiling schemars v0.8.22
+   Compiling dyn-clone v1.0.20
+   Compiling unsafe-libyaml v0.2.11
+   Compiling ryu v1.0.23
+   Compiling image-webp v0.2.4
+   Compiling foldhash v0.1.5
+   Compiling zopfli v0.8.4
+   Compiling roxmltree v0.21.2
+   Compiling aho-corasick v1.1.5
+   Compiling opaque-debug v0.3.1
+   Compiling fallible-iterator v0.3.0
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling hashbrown v0.15.5
+   Compiling autocfg v1.5.1
+   Compiling acos-binder-peer v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-binder-peer)
+   Compiling indexmap v2.14.2
+   Compiling pxfm v0.1.30
+   Compiling flate2 v1.1.11
+   Compiling zune-core v0.5.1
+   Compiling utf8parse v0.2.2
+   Compiling acos-mcp v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-mcp)
+   Compiling anstyle-parse v1.0.0
+   Compiling num-traits v0.2.19
+   Compiling anstyle-query v1.1.5
+   Compiling syn v3.0.10
+   Compiling syn v2.0.119
+   Compiling zune-jpeg v0.5.15
+   Compiling png v0.17.16
+   Compiling png v0.18.1
+   Compiling anstyle v1.0.14
+   Compiling toml_parser v1.1.5+spec-1.1.0
+warning: acos-binder-peer@0.3.0: built /home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/.cache/rg3-target/release/build/acos-binder-peer-5232b8ab71f88e6f/out/libacos_binder_driver.so
+   Compiling hashlink v0.10.0
+   Compiling block-buffer v0.10.4
+   Compiling core_maths v0.1.1
+   Compiling block-padding v0.3.3
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling getrandom v0.2.17
+   Compiling ttf-parser v0.25.1
+   Compiling memmap2 v0.9.12
+   Compiling inout v0.1.4
+   Compiling anstream v1.0.0
+   Compiling heck v0.5.0
+   Compiling rand_core v0.6.4
+   Compiling strsim v0.11.1
+   Compiling rayon v1.12.0
+   Compiling toml_edit v0.25.19+spec-1.1.0
+   Compiling crypto-common v0.1.7
+   Compiling clap_lex v1.1.1
+   Compiling digest v0.10.7
+   Compiling libz-sys v1.1.33
+   Compiling freetype-sys v0.23.0
+   Compiling acos-sfgeom v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-sfgeom)
+   Compiling libsqlite3-sys v0.35.0
+   Compiling cipher v0.4.4
+   Compiling universal-hash v0.5.1
+   Compiling sha2 v0.10.9
+   Compiling tiny-skia v0.11.4
+   Compiling acos-native-loader v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-native-loader)
+   Compiling aead v0.5.2
+   Compiling polyval v0.6.2
+   Compiling md-5 v0.10.6
+   Compiling hmac v0.12.1
+   Compiling ctr v0.9.2
+   Compiling regex-automata v0.4.18
+   Compiling ghash v0.5.1
+   Compiling aes v0.8.4
+   Compiling cbc v0.1.2
+   Compiling proc-macro-crate v3.5.0
+   Compiling sha1 v0.10.7
+   Compiling acos-jni v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-jni)
+   Compiling clap_builder v4.6.7
+   Compiling acos-test-support v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-test-support)
+   Compiling aes-gcm v0.10.3
+   Compiling serde_derive_internals v0.29.1
+   Compiling moxcms v0.8.1
+   Compiling schemars_derive v0.8.22
+   Compiling rustybuzz v0.20.1
+   Compiling thiserror-impl v2.0.21
+   Compiling serde_derive v1.0.229
+   Compiling borsh-derive v1.8.1
+   Compiling jpeg-decoder v0.3.2
+   Compiling clap_derive v4.6.7
+   Compiling regex v1.13.1
+   Compiling acos-framework-natives v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-framework-natives)
+   Compiling acos-parcel v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-parcel)
+   Compiling acos-dex v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-dex)
+   Compiling clap v4.6.7
+   Compiling acos-sandbox v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-sandbox)
+   Compiling serde_yaml_ng v0.10.0
+   Compiling acos-aidl v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-aidl)
+   Compiling acos-apk v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-apk)
+   Compiling image v0.25.10
+   Compiling acos-arm64 v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-arm64)
+   Compiling acos-protocol v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-protocol)
+   Compiling acos-seccomp-guard v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-seccomp-guard)
+   Compiling acos-gles v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-gles)
+   Compiling acos-render v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-render)
+   Compiling acos-wm v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-wm)
+   Compiling acos-services v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-services)
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+   Compiling acos-art v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-art)
+warning: unused variable: `started`
+   --> crates/acos-art/src/boot_image.rs:801:13
+    |
+801 |         let started = Instant::now();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_started`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: method `cache_str` is never used
+   --> crates/acos-art/src/boot_image.rs:540:8
+    |
+539 | impl CacheOutcome {
+    | ----------------- method in this implementation
+540 |     fn cache_str(&self) -> &'static str {
+    |        ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `animations_on` is never read
+    --> crates/acos-art/src/launch.rs:2106:5
+     |
+2083 | struct ProbeSample {
+     |        ----------- field in this struct
+...
+2106 |     animations_on: Option<bool>,
+     |     ^^^^^^^^^^^^^
+     |
+     = note: `ProbeSample` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `adler32` is never used
+    --> crates/acos-art/src/launch.rs:7163:4
+     |
+7163 | fn adler32(data: &[u8]) -> u32 {
+     |    ^^^^^^^
+
+warning: function `tail` is never used
+    --> crates/acos-art/src/launch.rs:7727:4
+     |
+7727 | fn tail(s: &str, max: usize) -> String {
+     |    ^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/acos-art/src/lib.rs:836:20
+    |
+836 |     pub fn sandbox(&self) -> Sandbox {
+    |                    ^^^^^     ------- the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+836 |     pub fn sandbox(&self) -> Sandbox<'_> {
+    |                                     ++++
+
+warning: `acos-services` (lib) generated 1 warning
+warning: `acos-art` (lib) generated 6 warnings
+   Compiling rusqlite v0.37.0
+   Compiling acos-sqlite v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-sqlite)
+   Compiling acos-vm v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-vm)
+   Compiling acos-runtime v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-runtime)
+   Compiling acos-verify v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-verify)
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:1139:21
+     |
+1139 |             let mut unsettled: Option<BackendError> = None;
+     |                     ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:2059:13
+     |
+2059 |     let mut unsettled: Option<BackendError> = None;
+     |             ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: `acos-verify` (lib) generated 2 warnings
+   Compiling acos-cli v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-7a2f4ca5-3dab9ee7edba13ab/crates/acos-cli)
+warning: unused variable: `rest`
+   --> crates/acos-art/src/main.rs:100:13
+    |
+100 |     let mut rest: Vec<String> = Vec::new();
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_rest`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:100:9
+    |
+100 |     let mut rest: Vec<String> = Vec::new();
+    |         ----^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:140:13
+    |
+140 |         let mut next = |i: &mut usize| -> Result<String> {
+    |             ----^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-art` (bin "acos-art") generated 3 warnings (run `cargo fix --bin "acos-art"` to apply 2 suggestions)
+warning: value assigned to `tap_target` is never read
+    --> crates/acos-cli/src/engine/mod.rs:1182:25
+     |
+1182 |                 let mut tap_target: Option<serde_json::Value> = None;
+     |                         ^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-cli/src/serve.rs:836:16
+    |
+836 |             Ok(mut client) => match client.mismatch() {
+    |                ----^^^^^^
+    |                |
+    |                help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: method `label` is never used
+   --> crates/acos-cli/src/engine/mod.rs:264:12
+    |
+257 | impl FrameEvidence {
+    | ------------------ method in this implementation
+...
+264 |     pub fn label(&self) -> String {
+    |            ^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `start`, `start_with_animations`, `start_with_options`, `zygote_facts`, `zygote_previous_child_pid`, and `observation_settle` are never used
+    --> crates/acos-cli/src/engine/art.rs:1551:12
+     |
+1533 | impl ArtSession {
+     | --------------- associated items in this implementation
+...
+1551 |     pub fn start(apk: &Path, artifacts: &Path) -> Result<ArtSession, BackendError> {
+     |            ^^^^^
+...
+1559 |     pub fn start_with_animations(
+     |            ^^^^^^^^^^^^^^^^^^^^^
+...
+1574 |     pub fn start_with_options(
+     |            ^^^^^^^^^^^^^^^^^^
+...
+2147 |     pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+     |            ^^^^^^^^^^^^
+...
+2152 |     pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2361 |     pub fn observation_settle(&self) -> &'static str {
+     |            ^^^^^^^^^^^^^^^^^^
+
+warning: method `first_frame_bound` is never used
+    --> crates/acos-cli/src/engine/art.rs:4275:19
+     |
+3946 | impl ArtSession {
+     | --------------- method in this implementation
+...
+4275 |     pub(crate) fn first_frame_bound(&self) -> Option<(bool, Option<String>)> {
+     |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `read_png` is never used
+    --> crates/acos-cli/src/engine/art.rs:5783:4
+     |
+5783 | fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {
+     |    ^^^^^^^^
+
+warning: function `kill_group_signals` is never used
+    --> crates/acos-cli/src/engine/art.rs:5902:15
+     |
+5902 | pub(crate) fn kill_group_signals() -> usize {
+     |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> crates/acos-cli/src/engine/serve.rs:196:12
+    |
+190 | impl ServeEngine {
+    | ---------------- associated function in this implementation
+...
+196 |     pub fn new(
+    |            ^^^
+
+warning: function `flat_text` is never used
+    --> crates/acos-cli/src/engine/serve.rs:3603:4
+     |
+3603 | fn flat_text(tree: &UiTree) -> String {
+     |    ^^^^^^^^^
+
+warning: associated items `disabled`, `keeper_count`, and `keeper_pids` are never used
+   --> crates/acos-cli/src/engine/zygote_host.rs:164:12
+    |
+ 93 | impl ZygoteHost {
+    | --------------- associated items in this implementation
+...
+164 |     pub fn disabled() -> Self {
+    |            ^^^^^^^^
+...
+179 |     pub fn keeper_count(&self) -> usize {
+    |            ^^^^^^^^^^^^
+...
+184 |     pub fn keeper_pids(&self) -> Vec<u32> {
+    |            ^^^^^^^^^^^
+
+warning: associated function `at` is never used
+   --> crates/acos-cli/src/live_registry.rs:123:12
+    |
+ 95 | impl LiveRegistry {
+    | ----------------- associated function in this implementation
+...
+123 |     pub fn at(dir: PathBuf) -> Self {
+    |            ^^
+
+warning: `acos-cli` (bin "acos") generated 11 warnings (run `cargo fix --bin "acos"` to apply 1 suggestion)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 10s
+CARGO_RC=0

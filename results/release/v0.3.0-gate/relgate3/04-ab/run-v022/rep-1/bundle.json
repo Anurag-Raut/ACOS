@@ -1,0 +1,43 @@
+{
+  "host_after": {
+    "loadavg1": 1.07,
+    "loadavg15": 2.55,
+    "loadavg5": 2.31,
+    "mem_available_gib": 49.35,
+    "mem_available_mib": 50531.3,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [],
+    "runnable": "1/2041",
+    "used_mib": 11377.4,
+    "used_pct": 18.38,
+    "utc": "2026-11-17T14:02:12+00:00"
+  },
+  "host_before": {
+    "loadavg1": 5.97,
+    "loadavg15": 3.04,
+    "loadavg5": 3.95,
+    "mem_available_gib": 49.27,
+    "mem_available_mib": 50448.8,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [],
+    "runnable": "1/1982",
+    "used_mib": 11459.9,
+    "used_pct": 18.51,
+    "utc": "2026-11-17T13:58:29+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "memory": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 222.709
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-17T13:58:29+00:00",
+  "wall_s": 222.709
+}
