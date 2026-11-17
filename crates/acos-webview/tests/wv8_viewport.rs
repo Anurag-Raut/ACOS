@@ -260,6 +260,34 @@ fn the_wide_arm_honours_meta_viewport_and_the_980_default_and_overview_fits_it()
         "overview mode scales; it does not change the layout width"
     );
 
+    // A *new* document under overview mode lays out at its own width, not at
+    // `viewport / scale`: a page scale left over from the previous document would
+    // otherwise become the next document's initial scale (measured on the ART
+    // arm: the wide 980 px page came out at 343 with the old 0.35 scale still in
+    // force). The broker resets the scale before a navigation and re-fits after.
+    load(&guest, 2, META_PAGE);
+    assert_eq!(
+        layout_width(&guest, 2),
+        640,
+        "a meta-viewport page loaded under overview mode keeps its layout width"
+    );
+    let scale = page_scale(&guest, 2);
+    assert!(
+        (scale - 411.0 / 640.0).abs() < 0.03,
+        "and is fitted to the View after the load, got {scale}"
+    );
+    load(&guest, 2, NO_META_PAGE);
+    assert_eq!(
+        layout_width(&guest, 2),
+        980,
+        "a page without a meta tag loaded under overview mode keeps the wide 980 px layout"
+    );
+    let scale = page_scale(&guest, 2);
+    assert!(
+        (scale - 411.0 / 980.0).abs() < 0.03,
+        "and is fitted to the View, got {scale}"
+    );
+
     // Back to the default arm: the layout returns to the View's width and the
     // scale to 100 %.
     guest

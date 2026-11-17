@@ -515,6 +515,19 @@ impl View {
     // --- navigation --------------------------------------------------------
 
     pub fn load_url(&self, url: &str) -> Result<Value> {
+        // A page scale left over from the previous document would be the *initial*
+        // scale of the next one, and with `mobile: true` Chromium then lays the new
+        // document out at `viewport / scale` instead of at the page's own layout
+        // width (measured: the wide arm's 980 CSS px page came out at 343 with a
+        // 0.35 overview scale still in force). Reset to 100 % before the
+        // navigation; `apply_overview_scale` re-fits the new document afterwards.
+        if self.viewport_options().overview {
+            self.call(
+                "Emulation.setPageScaleFactor",
+                json!({"pageScaleFactor": 1.0}),
+                self.browser.call_timeout,
+            )?;
+        }
         let started_before = self.nav.inner.lock().expect("nav").started;
         let res = self.call(
             "Page.navigate",

@@ -14,22 +14,22 @@
       "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.8103.78 Safari/537.36",
       "version": "157.0.8103.78"
     },
-    "path": "/home/Qui/.t3/worktrees/acos/t3-9c5e8079-ad473ce8568360d4/.cache/webview/engine/157.0.8103.78/chrome-headless-shell-linux64/chrome-headless-shell",
+    "path": "/home/Qui/Projects/acos/.cache/webview/engine/157.0.8103.78/chrome-headless-shell-linux64/chrome-headless-shell",
     "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.8103.78 Safari/537.36",
     "version": "157.0.8103.78",
     "zipSha256": "f90329720fb61e5a76da9b6b509b6ad12a484c9c5df0359403e935177c6d153a"
   },
-  "finishedAt": 1794823477,
+  "finishedAt": 1794897880,
   "gate_a_load": {
-    "loadMs": 15.7,
+    "loadMs": 14.3,
     "result": {
-      "loadMs": 7.0,
+      "loadMs": 7.2,
       "title": "acos-wv-test",
-      "url": "http://127.0.0.1:37753/",
+      "url": "http://127.0.0.1:34993/",
       "view": 1
     },
     "title": "acos-wv-test",
-    "url": "http://127.0.0.1:37753/"
+    "url": "http://127.0.0.1:34993/"
   },
   "gate_b_host_to_page": {
     "type": "string",
@@ -80,10 +80,10 @@
   },
   "gate_d_frames": {
     "gateMs": 50,
-    "maxMs": 5.4,
+    "maxMs": 4.9,
     "n": 20,
-    "p50Ms": 0.3,
-    "p95Ms": 5.4,
+    "p50Ms": 2.6,
+    "p95Ms": 4.9,
     "pass": true,
     "pngBytes": 18168,
     "viewport": {
@@ -94,13 +94,13 @@
   },
   "gate_e_memory": {
     "contexts": 3,
-    "fixedEngineMiB": 126.6,
+    "fixedEngineMiB": 76.8,
     "gateMiB": 60,
     "pass": true,
-    "perExtraContextMiB": 3.8,
+    "perExtraContextMiB": 4.8,
     "processes": 11,
-    "pss1MiB": 212.4,
-    "pss3MiB": 220.0,
+    "pss1MiB": 147.4,
+    "pss3MiB": 157.0,
     "targets": 3
   },
   "hello": {
@@ -120,13 +120,13 @@
   },
   "lifecycle": {
     "idleShutdown": "down",
-    "pidReaped": 3766550,
+    "pidReaped": 256122,
     "restart": {
       "engine": {
         "product": "HeadlessChrome/157.0.8103.78",
         "protocolVersion": "1.3",
         "revision": "@4b3d0dabb8250b6f152d2d85d79e7706e309d087",
-        "uptimeMs": 14,
+        "uptimeMs": 15,
         "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.8103.78 Safari/537.36",
         "version": "157.0.8103.78"
       },
@@ -142,11 +142,11 @@
   "memory": {
     "fixed": {
       "processes": 8,
-      "pssMiB": 126.6,
-      "rssMiB": 346.9
+      "pssMiB": 76.8,
+      "rssMiB": 294.3
     }
   },
-  "startedAt": 1794823472,
+  "startedAt": 1794897875,
   "status": "PASS",
   "structured_errors": [
     "NO_VIEW",

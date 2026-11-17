@@ -35,6 +35,22 @@ public class MainActivity extends Activity {
             + "<body style='font:18px sans-serif'><h1 id=h style='font-size:24px;margin:8px 0'>acos data page</h1>"
             + "<div id=out style='font:16px sans-serif'>data page body</div></body></html>";
 
+    private static final String DATA_PAGE_B64;
+    static {
+        String b64 = "";
+        try {
+            b64 = android.util.Base64.encodeToString(
+                    DATA_PAGE.getBytes("UTF-8"), android.util.Base64.NO_WRAP);
+        } catch (Exception e) {
+            b64 = "";
+        }
+        DATA_PAGE_B64 = b64;
+    }
+
+    private static void loadData(WebView view, String base64) {
+        view.loadUrl("data:text/html;base64," + base64);
+    }
+
     private TextView status;
     private final StringBuilder log = new StringBuilder();
 
@@ -82,7 +98,73 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void report(String what) {
             activity.append("JS->Java: " + what);
+            if ("tapped".equals(what)) {
+                // The page's own click: the input steps are done, so the
+                // viewport arms can run without starving them.
+                new android.os.Handler(android.os.Looper.getMainLooper())
+                        .post(activity::startViewportArms);
+            }
         }
+    }
+
+    // -- WV8 viewport arms -------------------------------------------------
+    //
+    // One extra WebView carries every arm so the probe stays at two views: a
+    // session with four engine targets serialises so many frames on the broker
+    // that the tap's guest ack arrived 2 s late (measured) and the input was
+    // lost. The arms are therefore sequential, and each one is a real load:
+    //
+    //   1. `B` is created with `setUseWideViewPort(true)` **before** its first
+    //      load (where an app sets it), so the provider replays the switch right
+    //      after `view.create` — the page has `<meta viewport content='width=640'>`
+    //      and lays out at 640 CSS px.
+    //   2. the same view loads a page without a meta tag: the wide arm's default
+    //      is Chromium's 980 CSS px.
+    //   3. the switch goes back to the default (narrow) and the same page is
+    //      loaded again: the layout viewport is the View's CSS width.
+    private volatile int mViewportArm;
+    private volatile boolean mViewportArmsStarted;
+    private ProbeWebView mViewportView;
+
+    /**
+     * The arms start when the page's own button calls the Java bridge
+     * (`window.acosBridge.report("tapped")`), i.e. after the scenario's input
+     * steps. Two engine targets that are both loading pages serialise their
+     * frame pulls on the broker, and the guest's UI thread blocks in `onDraw`
+     * waiting for one: the tap's own ack arrived ~2 s late and the click was
+     * lost (`Choreographer: Skipped 119 frames`). Input fidelity is measured
+     * first, then the viewport arms run on the same connection.
+     */
+    private void startViewportArms() {
+        if (mViewportArmsStarted) {
+            return;
+        }
+        mViewportArmsStarted = true;
+        append("viewport arms: start (after the tap)");
+        advanceViewportArm();
+    }
+
+    private void advanceViewportArm() {
+        final WebView view = mViewportView;
+        if (view == null) {
+            return;
+        }
+        final int arm = ++mViewportArm;
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+            try {
+                if (arm == 1) {
+                    append("arm 2: wide, page without <meta viewport>");
+                    loadData(view, DATA_PAGE_B64);
+                } else if (arm == 2) {
+                    append("arm 3: back to the default (narrow) arm");
+                    view.getSettings().setUseWideViewPort(false);
+                    view.getSettings().setLoadWithOverviewMode(false);
+                    loadData(view, DATA_PAGE_B64);
+                }
+            } catch (Throwable t) {
+                append("viewport arm " + arm + " FAILED: " + t);
+            }
+        });
     }
 
     private void append(String line) {
@@ -141,7 +223,17 @@ public class MainActivity extends Activity {
                             new ValueCallback<String>() {
                                 @Override
                                 public void onReceiveValue(String value) {
-                                    append(label + " viewport -> " + value);
+                                    if (label.equals("B")) {
+                                        append(label + " viewport#" + mViewportArm + " -> " + value);
+                                        // #0 is the create-path arm (before the
+                                        // tap); every later report advances the
+                                        // sequence.
+                                        if (mViewportArmsStarted) {
+                                            advanceViewportArm();
+                                        }
+                                    } else {
+                                        append(label + " viewport -> " + value);
+                                    }
                                 }
                             });
                 }
@@ -183,25 +275,14 @@ public class MainActivity extends Activity {
             append("WebView created: " + a);
             a.addJavascriptInterface(new Bridge(this), "acosBridge");
 
-            // Page B: a data: URL; Chromium never network-fetches it, so it
-            // needs no interception at all (WIRE.md §4.3).
-            String encoded = android.util.Base64.encodeToString(
-                    DATA_PAGE.getBytes("UTF-8"), android.util.Base64.NO_WRAP);
+            // Page B (WV8): the viewport arms. Created with the wide switch on
+            // *before* the first load, and pointed at a page that declares
+            // `<meta name="viewport" content="width=640">`; `advanceViewportArm`
+            // then walks the remaining arms (see the comment there).
             ProbeWebView b = addWebView(root, R.id.webview2,
-                    "B", "data:text/html;base64," + encoded);
+                    "B", "file:///android_asset/viewport-meta.html", true, true);
+            mViewportView = b;
             append("WebView created: " + b);
-
-            // WV8 viewport arms. C is a page that declares
-            // `<meta name="viewport" content="width=640">`, D is the same page
-            // without one; both ask for the wide arm, so C lays out at 640 CSS px
-            // and D at Chromium's Android default 980, and `loadWithOverviewMode`
-            // scales each to fit the View's width.
-            ProbeWebView c = addWebView(root, R.id.webview3,
-                    "C", "file:///android_asset/viewport-meta.html", true, true);
-            append("WebView created: " + c);
-            ProbeWebView d = addWebView(root, R.id.webview4,
-                    "D", "data:text/html;base64," + encoded, true, true);
-            append("WebView created: " + d);
         } catch (Throwable t) {
             StringBuilder where = new StringBuilder();
             StackTraceElement[] st = t.getStackTrace();
