@@ -13,7 +13,7 @@ Branch `sysui2` (from `sysui1`, `f0f19b1c`), 2026-11-17. All ART runs are privat
 | `cargo test -p acos-services -p acos-wm` | **PASS** (160 + all wm suites) |
 | `cargo test -p acos-art` | **163 pass, 6 `live_view` tests fail for a worktree path reason, not a code reason** (§5) |
 | Regressions `sysui1-permission-allow` / `-deny`, `notif-perm-granted` / `-denied` | **PASS** (4/4) |
-| Regressions `a11y-probe`, `mproc3-two-process` | run in `.cache/batch2.log` (APKs were missing on the first attempt) |
+| Regressions `a11y-probe`, `mproc3-two-process` | **PASS** (2/2; the first attempt lacked their APKs — see `.cache/batch2.log`) |
 
 ## 1. The pre-granted arm: what actually races (finding + three fixes)
 
