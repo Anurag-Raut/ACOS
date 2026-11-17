@@ -1470,6 +1470,212 @@ fn assert_log_wait_judges_the_same_scope_as_the_assertion() {
     let _ = std::fs::remove_dir_all(&artifacts);
 }
 
+/// A backend whose log stream is a script: call *n* of `logs_since` returns
+/// `script[n]`. Used to place lines at exact step boundaries.
+struct ScriptedLogs {
+    manifest: Option<ManifestInfo>,
+    script: Vec<Vec<(&'static str, &'static str)>>,
+    calls: usize,
+    next_seq: u64,
+}
+
+impl ScriptedLogs {
+    fn new(script: Vec<Vec<(&'static str, &'static str)>>) -> Self {
+        ScriptedLogs {
+            manifest: None,
+            script,
+            calls: 0,
+            next_seq: 1,
+        }
+    }
+}
+
+impl Backend for ScriptedLogs {
+    fn id(&self) -> &'static str {
+        "scripted-logs"
+    }
+
+    fn protocol_backend(&self) -> ProtocolBackend {
+        ProtocolBackend::AcosNative
+    }
+
+    fn fidelity(&self) -> Fidelity {
+        Fidelity::NativeRuntime
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            static_manifest: true,
+            launch: true,
+            logs: true,
+            ..Capabilities::default()
+        }
+    }
+
+    fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
+        let info = acos_verify::manifest::load_manifest(apk)?;
+        self.manifest = Some(info.clone());
+        Ok(info)
+    }
+
+    fn launch(&mut self, _request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
+        Ok(LaunchOutcome {
+            session_id: "s_scripted".to_string(),
+            package: self
+                .manifest
+                .as_ref()
+                .map(|m| m.package.clone())
+                .unwrap_or_default(),
+            frame: None,
+            screenshot_png: None,
+            crashed: None,
+            detail: serde_json::json!({}),
+        })
+    }
+
+    fn logs_since(&mut self, _since: u64) -> Result<Vec<LogRecord>, BackendError> {
+        let batch = self.script.get(self.calls).cloned().unwrap_or_default();
+        self.calls += 1;
+        Ok(batch
+            .into_iter()
+            .map(|(tag, message)| {
+                let seq = self.next_seq;
+                self.next_seq += 1;
+                LogRecord {
+                    seq,
+                    timestamp_ms: 1_794_318_674_000,
+                    level: LogLevel::Info,
+                    tag: tag.to_string(),
+                    message: message.to_string(),
+                }
+            })
+            .collect())
+    }
+}
+
+/// MERGEFIX: the ordered-`assert_log` cursor rule, pinned end to end.
+///
+/// One rule, `executor::log_scope_start`: by default (`since_previous_step:
+/// false`) an assertion judges the whole stream — one snapshot, so an ordered
+/// assertion advances one monotonic cursor over it — and with
+/// `since_previous_step: true` the slice starts where the stream stood when the
+/// **previous step** began. So
+///   * a line the previous step produced is visible to this step (the effect of
+///     an action is judged by the assertion that follows it),
+///   * with `since_previous_step: true`, a line from *before* that boundary is
+///     not visible: a later step cannot re-match history it did not opt into,
+///   * the default (`false`) reads one snapshot for the whole scenario, so an
+///     ordered assertion never depends on where a step boundary fell,
+///   * the wait judges exactly the same slice as the assertion that follows it.
+///
+/// The brief's failure mode (a11y-probe step 14) was the boundary being decided
+/// in two places / reset per step, which let a later ordered assertion match a
+/// line that the previous assertion had already consumed.
+#[test]
+fn the_ordered_log_cursor_starts_at_the_previous_steps_boundary() {
+    let yaml = r#"
+version: 1
+name: ordered-log-scope
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - assert_log:
+      tag: AcosFixture
+      ordered: true
+      since_previous_step: true
+      timeout_ms: 2000
+      patterns: ['^first$', '^second$']
+  - assert_log:
+      tag: AcosFixture
+      ordered: true
+      since_previous_step: true
+      patterns: ['^second$']
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: false
+      patterns: ['^boot$', '^first$', '^second$']
+"#;
+    let scenario = Scenario::from_yaml_str(yaml).expect("valid scenario");
+    // Call 1 is the launch step's flush, call 2 the first assert's flush, call 3
+    // its first wait poll: the lines land inside step 1's window.
+    let mut backend = ScriptedLogs::new(vec![
+        vec![("AcosFixture", "boot")],
+        vec![],
+        vec![("AcosFixture", "first"), ("AcosFixture", "second")],
+    ]);
+    let (outcome, artifacts) = run_ordered(&scenario, &mut backend);
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "{:?}",
+        outcome.verdict.failure
+    );
+    assert_eq!(outcome.verdict.steps[2].step, "assert_log");
+    assert_eq!(outcome.verdict.steps[2].status, Status::Pass);
+    assert_eq!(outcome.verdict.steps[3].status, Status::Pass);
+    let _ = std::fs::remove_dir_all(&artifacts);
+
+    // Negative: `boot` was produced before the previous step began, so an
+    // ordered assertion that starts with it must fail — the cursor never
+    // rewinds into history on its own.
+    let yaml = r#"
+version: 1
+name: ordered-log-no-rewind
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - assert_log:
+      tag: AcosFixture
+      ordered: true
+      timeout_ms: 2000
+      patterns: ['^first$']
+  - assert_log:
+      tag: AcosFixture
+      ordered: true
+      since_previous_step: true
+      patterns: ['^boot$', '^second$']
+"#;
+    let scenario = Scenario::from_yaml_str(yaml).expect("valid scenario");
+    let mut backend = ScriptedLogs::new(vec![
+        vec![("AcosFixture", "boot")],
+        vec![],
+        vec![("AcosFixture", "first"), ("AcosFixture", "second")],
+    ]);
+    let (outcome, artifacts) = run_ordered(&scenario, &mut backend);
+    assert_eq!(outcome.verdict.steps[2].step, "assert_log");
+    assert_eq!(
+        outcome.verdict.steps[2].status,
+        Status::Fail,
+        "a line from before the previous step's boundary must not satisfy a later ordered assertion"
+    );
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+fn run_ordered(scenario: &Scenario, backend: &mut dyn Backend) -> (RunOutcome, PathBuf) {
+    let artifacts = scratch("ordered-log");
+    let options = RunOptions {
+        apk: workspace().join("fixtures/build/apps/hello-views.apk"),
+        scenario_path: workspace().join("scenarios/v2-art-counter.yaml"),
+        artifacts_dir: artifacts.clone(),
+        required_fidelity: None,
+        request_id: "req_ordered_log".to_string(),
+        flags: Vec::new(),
+        acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
+        engine: "rust-vm".to_string(),
+        warnings: Vec::new(),
+    };
+    let clock = FixedClock::new(1_794_318_674_000);
+    let outcome = run_scenario(scenario, &options, backend, &clock).expect("run_scenario succeeds");
+    (outcome, artifacts)
+}
+
 #[test]
 fn a_refused_log_channel_fails_closed_with_the_backend_code() {
     // This is the untrusted-run shape: the backend refuses guest-asserted logs.

@@ -2688,11 +2688,16 @@ pub(crate) fn launch_session(
     // Bounded capture (R1): a guest that loops on printf costs at most the cap.
     let cap = stream_cap_from_env();
     let (otx, orx) = mpsc::channel::<(u8, TailBuffer)>();
-    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState {
-        top_process: Arc::clone(&live.top_process),
-        ..ProbeState::default()
-    }));
-    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+    // MERGEFIX: one construction, and it is wired to ATMS's `top_process`.
+    // The merge of main (PERF4's probe state + wake) into modules (MPROC5's
+    // per-process samples) kept **both** declarations: the wired one was
+    // immediately shadowed by `ProbeState::default()`, whose own
+    // `top_process` Arc nothing ever writes. Every session then served the
+    // primary process's sample, so a cross-process launch (`mproc3`) never saw
+    // the second process's window and its log/probe lines looked absent.
+    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::for_session(
+        Arc::clone(&live.top_process),
+    )));
     // PERF4: the probe state uses the wake the peer thread already signals, so
     // one condvar covers both fact sources (a parsed guest sample and an applied
     // transaction). Nothing has subscribed to `ProbeState::default()`'s own wake
@@ -3458,6 +3463,10 @@ struct ProbeState {
     by_process: std::collections::BTreeMap<u32, ProbeSample>,
     /// MPROC5: the foreground process tag (`LiveHandles::top_process`), written
     /// by ATMS whenever the top-of-task moves.
+    ///
+    /// It is the **same** `Arc` ATMS publishes into, never a private copy: the
+    /// sample that is served must be the one of the process the activity
+    /// manager calls foreground (`ProbeState::for_session`).
     top_process: Arc<std::sync::atomic::AtomicU32>,
     /// MPROC7: per-process probe-sequence bases. A guest's probe counter starts
     /// at 1 in every **process**, so a respawned process's samples (1, 2, ...)
@@ -3510,6 +3519,29 @@ struct ProbeState {
     wake_failures: u64,
     stale_samples: u64,
     stall_pending_ms: Option<u64>,
+}
+
+impl ProbeState {
+    /// The probe state a session serves its trees from.
+    ///
+    /// MERGEFIX: this constructor is the **only** way a session's probe state is
+    /// built, so the foreground tag it reads is by construction the one ATMS
+    /// writes. The merge of main into modules had two declarations (a wired one
+    /// and a default one) and the second shadowed the first, which silently
+    /// pinned `top_process` to 0: every tree reply described the primary
+    /// process, however far the foreground had moved (`mproc3-two-process`).
+    fn for_session(top_process: Arc<std::sync::atomic::AtomicU32>) -> Self {
+        Self {
+            top_process,
+            ..Self::default()
+        }
+    }
+
+    /// The tag this state treats as foreground (diagnostics/tests).
+    #[cfg(test)]
+    fn published_top(&self) -> u32 {
+        self.top_process.load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 /// W59 latency trace: `elapsed_us tag text` per line, written under one lock
@@ -9505,6 +9537,74 @@ mod probe_line_tests {
                 touch_traced: self.touch_traced,
             }
         }
+    }
+
+    /// MERGEFIX (mproc3): the served tree is the **foreground** process's
+    /// sample.
+    ///
+    /// The launcher builds its probe state with `ProbeState::for_session(top)`,
+    /// and that `Arc` is the one ATMS writes when the top-of-task moves. The
+    /// merge of main into modules kept *two* declarations — the wired one and
+    /// `ProbeState::default()` — and the second shadowed the first, so
+    /// `top_process` was a private 0 that nothing ever wrote: every tree reply
+    /// described the primary process however far the foreground had moved.
+    /// `mproc3-two-process` then timed out on `wait_for id=="finish"`, because
+    /// proc-b's window was never the served one.
+    ///
+    /// ATMS publishes through the same `Arc`; no other wiring step may be
+    /// needed for the served sample to follow it.
+    #[test]
+    fn the_served_sample_is_the_foreground_processes() {
+        let atms_top = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let state = Arc::new(std::sync::Mutex::new(ProbeState::for_session(Arc::clone(
+            &atms_top,
+        ))));
+        let sample = |window: &str| {
+            format!(
+                "ACOSPROBE {{\"seq\":1,\"tree\":{{\"nodes\":[],\"window\":\"{window}\"}}}}\n"
+            )
+        };
+        let a = sample("proca");
+        let b = sample("procb");
+        drain_stdout_lines(
+            std::io::Cursor::new(a.into_bytes()),
+            4096,
+            Arc::clone(&state),
+            None,
+            0,
+        );
+        drain_stdout_lines(
+            std::io::Cursor::new(b.into_bytes()),
+            4096,
+            Arc::clone(&state),
+            None,
+            1,
+        );
+        let served_window = |state: &Arc<std::sync::Mutex<ProbeState>>| {
+            latest_probe(state).expect("a sample").tree["window"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
+        };
+        assert_eq!(
+            served_window(&state),
+            "proca",
+            "while the primary is the top, its sample is the served one"
+        );
+        // ATMS's `publish_top(1)`: one store into the `Arc` the session was
+        // built with. Nothing else may be needed — this is the wiring the merge
+        // lost.
+        atms_top.store(1, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            served_window(&state),
+            "procb",
+            "a cross-process launch serves the new foreground process's tree"
+        );
+        assert_eq!(
+            state.lock().unwrap().published_top(),
+            1,
+            "the session's top is ATMS's Arc, not a private copy"
+        );
     }
 
     /// Teeth for the W32 misinterpretation: a two-window sample is larger than

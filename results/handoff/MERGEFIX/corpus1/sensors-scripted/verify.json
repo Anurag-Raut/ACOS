@@ -1,0 +1,63 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 15646720,
+    "wall_ms": 1386
+  },
+  "ok": true,
+  "request_id": "req_8c2ec_18e8e1c1afd47810",
+  "result": {
+    "artifacts_dir": "out/sensors-scripted",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794931457395014077,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-7c249e7f-be667def3a8cdb30/fixtures/build/apps/sensor-probe.apk",
+        "sha256": "d7c3f99f116407b19b5e38df5f08e27a92c8f32609f8a31982c05c5c9a389970",
+        "sha256_12": "d7c3f99f1164",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794931179977067755,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-7c249e7f-be667def3a8cdb30/scenarios/sensors-scripted.yaml",
+        "sha256": "c21f87b1c9b7cd98f8a6673cc470a4787123e77d9cad84693878842e33be2ef6",
+        "sha256_12": "c21f87b1c9b7",
+        "size_bytes": 4207
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "out/sensors-scripted/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_sensor-probe",
+  "status": "pass"
+}

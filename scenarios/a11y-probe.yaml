@@ -196,6 +196,15 @@ steps:
       # The key is published before `performGlobalAction` returns, so the app's
       # `key_down` may be logged before or after `global_action back=true`: the
       # claim is that all of these happened, not their interleaving.
+      #
+      # MERGEFIX: and the app reads it on a **later** looper iteration than the
+      # one that ran its click handler. `timeout_ms` is the wait-for-effect
+      # semantic (a missing line still fails at the deadline): without it this
+      # step judged the log at the instant the tap's settle bound its frame, so
+      # whether `key_down`/`key_up`/`back_pressed` were already in the buffer
+      # depended on where the step boundary fell — that is the whole difference
+      # between this scenario passing and failing across trees.
+      timeout_ms: 10000
       ordered: false
       patterns:
         - "back_requested"

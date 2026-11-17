@@ -260,6 +260,36 @@ impl StepExec {
     }
 }
 
+/// The one rule for a `since_previous_step` log scope.
+///
+/// `assert_log` judges a slice of the session's log stream; this function is
+/// the **only** place that decides where the slice starts, so the wait
+/// (`assert_log.timeout_ms`) and the assertion itself can never disagree.
+///
+/// `since_previous_step: false` (the default: one log snapshot for the whole
+/// scenario) starts at the beginning of the stream, `true` at the position the
+/// log buffer had when the **previous step** began. Both are decided here and
+/// nowhere else. Nothing here is allowed to reset the scope to the current step's
+/// own start: a cursor that restarted per step would let two steps both match
+/// one line, which is how a log assertion turns into a false pass (LOOPERWAKE
+/// measured the mirror-image bug on the wait side: the wait judged the per-step
+/// window while the assertion judged the whole stream, so a line the host
+/// already held burned the whole `timeout_ms` before passing).
+///
+/// Inside the slice, an ordered assertion advances **one monotonic cursor**
+/// (`assertions::ordered_log_match`): every pattern must match at or after the
+/// previous pattern's match position, in the same snapshot. A line that is
+/// printed before the previous pattern's match cannot satisfy a later pattern,
+/// and an unordered assertion is unaffected.
+#[must_use]
+fn log_scope_start(since_previous_step: bool, index: usize, step_log_cursors: &[usize]) -> usize {
+    if since_previous_step && index > 0 {
+        step_log_cursors[index - 1]
+    } else {
+        0
+    }
+}
+
 /// Run one scenario and write its artifacts.
 pub fn run_scenario(
     scenario: &Scenario,
@@ -349,19 +379,14 @@ pub fn run_scenario(
         if caps.logs {
             if let Some(StepRef::AssertLog(assertion)) = step.as_step() {
                 if let Some(timeout_ms) = assertion.timeout_ms {
-                    // The wait must judge exactly the slice the assertion below
-                    // will judge. `since_previous_step: false` means the whole
-                    // stream, so a line that is already present from an earlier
-                    // step satisfies it at once; scoping the wait to the
-                    // per-step window made such a step poll for its whole
-                    // `timeout_ms` and then pass, which reads as a slow effect
-                    // that arrived late (measured on the ART engine: 4.07 s for
-                    // a log line the host already held).
-                    let start = if assertion.since_previous_step && index > 0 {
-                        step_log_cursors[index - 1]
-                    } else {
-                        0
-                    };
+                    // The wait judges exactly the slice the assertion below
+                    // judges: one rule, `log_scope_start`, for both. (Measured
+                    // before LOOPERWAKE: the wait used the per-step window while
+                    // the assertion used the whole stream for
+                    // `since_previous_step: false`, so an already-present line
+                    // burned the entire `timeout_ms` — 4.07 s of a 4 s deadline
+                    // — and then passed.)
+                    let start = log_scope_start(assertion.since_previous_step, index, &step_log_cursors);
                     // Real elapsed time, not the injected evidence clock: a
                     // `FixedClock` never advances, and a wait must not depend
                     // on the clock a test uses to stamp evidence.
@@ -391,11 +416,10 @@ pub fn run_scenario(
             }
         }
 
-        let since_logs: &[LogRecord] = if index > 0 {
-            &all_logs[step_log_cursors[index - 1]..]
-        } else {
-            &all_logs[..]
-        };
+        // The step's log scope, computed once: `assert_log` (this step's own
+        // assertion, below) reads it as `since_logs`, and the wait above judged
+        // exactly the same slice.
+        let since_logs: &[LogRecord] = &all_logs[log_scope_start(true, index, &step_log_cursors)..];
 
         let cause_id = format!("{}:{}:{}", options.request_id, step.kind(), index);
         // ADR-0029 item 4/5: a step that needs a module this session does not
