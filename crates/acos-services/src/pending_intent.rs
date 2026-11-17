@@ -539,8 +539,9 @@ impl crate::host::ServiceObject for IntentSenderService {
         // marker means an `Intent` body follows. An **immutable** sender never
         // merges it (`PendingIntentRecord.sendInner` skips `fillIn` for
         // `FLAG_IMMUTABLE`), so its body is not decoded at all — a body this
-        // codec cannot read (a non-null `Uri`, a `ClipData`) must not turn a
-        // send the framework would perform into an error. A **mutable** sender
+        // codec cannot read (an extra whose Parcelable class has no codec, a
+        // malformed field shape) must not turn a send the framework would
+        // perform into an error. A **mutable** sender
         // does merge it, so its body must decode: an unreadable fill-in is the
         // structured `UnsupportedParcelable`, never a send without it.
         let has_fill_in = data.read_parcelable_marker().unwrap_or(false);
@@ -843,12 +844,45 @@ mod tests {
     /// A request whose fill-in body is one this codec refuses (a non-null
     /// `android.net.Uri`), to prove the sender decision comes *before* the
     /// decode.
-    fn uris_fill_in_request(code: i32) -> acos_parcel::Parcel {
+    /// LAUNCHEXTRAS: a fill-in Intent whose one extra is a Parcelable class the
+    /// codec has no spec for. This is the "unreadable body" the mutable sender
+    /// must refuse; it used to be a non-null `Uri` presence word, which the
+    /// Intent codec now reads (the image's StringUri shape), so the fixture uses
+    /// the refusal that still exists: an extra whose type cannot be encoded.
+    fn unreadable_fill_in_request(code: i32) -> acos_parcel::Parcel {
         let mut parcel = acos_parcel::Parcel::new();
         parcel.write_int32(code);
         parcel.write_parcelable_marker(true);
-        parcel.write_string8_opt(None).expect("action");
-        parcel.write_int32(1); // data presence word: a `Uri` body follows
+        parcel.write_string8_opt(None).expect("action"); // mAction
+        parcel.write_int32(0); // mData: null Uri
+        parcel.write_string8_opt(None).expect("type"); // mType
+        parcel.write_string8_opt(None).expect("identifier"); // mIdentifier
+        parcel.write_int32(0); // mFlags
+        parcel.write_string8_opt(None).expect("package"); // mPackage
+        parcel.write_string16_opt(None).expect("component"); // mComponent (null)
+        parcel.write_int32(0); // mSourceBounds
+        parcel.write_int32(0); // mCategories
+        parcel.write_int32(0); // mSelector
+        parcel.write_int32(0); // mClipData
+        parcel.write_int32(0); // mContentUserHint
+        // Extras, written by hand: one `VAL_PARCELABLE` whose class has no codec.
+        // The writer refuses such a class (that is the point), so the wire shape
+        // is assembled directly: [bundle length][magic][size] then
+        // [String16 key][VAL_PARCELABLE][value length][String16 class].
+        let length_at = parcel.data_size();
+        parcel.write_int32(0); // Bundle length, patched below
+        parcel.write_int32(crate::parcelable::BUNDLE_MAGIC as i32);
+        parcel.write_int32(1); // one entry
+        parcel.write_string16("unknown").expect("key");
+        parcel.write_int32(crate::parcelable::val::PARCELABLE);
+        parcel.write_int32(0); // VAL_PARCELABLE body length
+        parcel
+            .write_string16("dev.acos.fixtures.NoSuchParcelableCodec")
+            .expect("class");
+        let end = parcel.data_size();
+        parcel.set_data_position(length_at);
+        parcel.write_int32(i32::try_from(end - length_at - 4).expect("bundle length"));
+        parcel.set_data_position(end);
         parcel.set_data_position(0);
         parcel
     }
@@ -951,14 +985,14 @@ mod tests {
     #[test]
     fn an_unreadable_fill_in_is_ignored_by_an_immutable_sender_and_refused_by_a_mutable_one() {
         let (mut immutable, _) = sender_node(FLAG_IMMUTABLE);
-        let mut data = uris_fill_in_request(0);
+        let mut data = unreadable_fill_in_request(0);
         let mut reply = acos_parcel::Parcel::new();
         immutable
             .raw_transact(DESCRIPTOR, TRANSACTION_SEND, &mut data, &mut reply)
             .expect("an immutable sender never reads the fill-in it ignores");
 
         let (mut mutable, binder) = sender_node(FLAG_MUTABLE);
-        let mut data = uris_fill_in_request(0);
+        let mut data = unreadable_fill_in_request(0);
         let mut reply = acos_parcel::Parcel::new();
         let error = mutable
             .raw_transact(DESCRIPTOR, TRANSACTION_SEND, &mut data, &mut reply)
