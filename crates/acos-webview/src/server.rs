@@ -387,6 +387,9 @@ pub struct Conn {
     closed: AtomicBool,
     unanswered: AtomicU32,
     intercepts: AtomicUsize,
+    /// Frame pulls dispatched on their own threads (bounded, see
+    /// [`Conn::dispatch_render`]).
+    frame_pulls: AtomicUsize,
     pumps: Mutex<Vec<std::thread::JoinHandle<()>>>,
     hello: AtomicBool,
 }
@@ -407,6 +410,7 @@ impl Conn {
             closed: AtomicBool::new(false),
             unanswered: AtomicU32::new(0),
             intercepts: AtomicUsize::new(0),
+            frame_pulls: AtomicUsize::new(0),
             pumps: Mutex::new(Vec::new()),
             hello: AtomicBool::new(false),
         }
@@ -599,6 +603,17 @@ impl Conn {
             return;
         }
         if msg.get("op").is_some() {
+            // WVFAIR: a frame pull gets its own thread, never one of the
+            // connection's shared workers. A slow page's `render` used to
+            // occupy a worker for seconds, and input / JavaScript-interface
+            // calls queued behind it on the same channel — the guest's tap ack
+            // arrived 2 s late and the click was lost (WV8 §5). Bounded by
+            // [`Conn::dispatch_render`]; the fair gate
+            // ([`crate::fair::FrameGate`]) bounds the per-view engine work.
+            if msg["op"].as_str() == Some("render") {
+                self.dispatch_render(msg);
+                return;
+            }
             if work.send(msg).is_err() {
                 self.closed.store(true, Ordering::SeqCst);
             }
@@ -616,6 +631,43 @@ impl Conn {
     }
 
     // --- request dispatch -------------------------------------------------
+
+    /// Run a frame pull on its own thread.
+    ///
+    /// In-flight pulls are bounded by the session's view budget (plus a small
+    /// margin): the gate coalesces per view, so the bound is the number of
+    /// views a guest can name, and a guest that floods `render` after its views
+    /// are gone gets a structured `FRAME_FAILED` instead of an unbounded thread
+    /// spawn.
+    fn dispatch_render(self: &Arc<Self>, msg: Value) {
+        let limit = self.broker.config().max_views * 2 + 4;
+        let in_flight = self.frame_pulls.fetch_add(1, Ordering::SeqCst) + 1;
+        if in_flight > limit {
+            self.frame_pulls.fetch_sub(1, Ordering::SeqCst);
+            let id = msg["id"].as_str().unwrap_or("g?").to_string();
+            self.send_value(&err_response(
+                &id,
+                &ErrorBody::new(
+                    crate::wire::code::FRAME_FAILED,
+                    format!(
+                        "{in_flight} frame pulls are already in flight on this session \
+                         (max {limit}); a view has at most one outstanding pull"
+                    ),
+                ),
+            ));
+            return;
+        }
+        let conn = Arc::clone(self);
+        let spawned = std::thread::Builder::new()
+            .name(format!("wv-frame-{}", in_flight))
+            .spawn(move || {
+                conn.dispatch(msg);
+                conn.frame_pulls.fetch_sub(1, Ordering::SeqCst);
+            });
+        if spawned.is_err() {
+            self.frame_pulls.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
 
     fn dispatch(self: &Arc<Self>, req: Value) {
         let id = req["id"].as_str().unwrap_or("g?").to_string();
@@ -920,7 +972,7 @@ impl Conn {
                             height: f.height,
                             stride: f.stride,
                             seq: f.seq,
-                            data: f.bytes,
+                            data: f.bytes.clone(),
                         };
                         Ok(Outcome::Frame(meta, blob))
                     }

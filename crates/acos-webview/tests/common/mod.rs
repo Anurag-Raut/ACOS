@@ -4,7 +4,7 @@
 //! assertion rather than a helper's convenience.
 
 use std::collections::HashMap;
-use std::io::BufReader;
+use std::io::{BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -29,8 +29,47 @@ pub struct WireGuest {
 impl WireGuest {
     /// Connect to a session socket. The reader thread lives until EOF.
     pub fn connect(path: &Path) -> Self {
+        Self::connect_inner(path, None)
+    }
+
+    /// Connect to the host-wide shared socket and announce a session first
+    /// (`WIRE.md` §0 / `gate::ATTACH_PROTO`): what a per-session gate does, so a
+    /// test can put two sessions on one broker.
+    pub fn connect_attached(path: &Path, session: &str) -> Self {
+        Self::connect_inner(path, Some(session))
+    }
+
+    fn connect_inner(path: &Path, session: Option<&str>) -> Self {
         let stream =
             UnixStream::connect(path).unwrap_or_else(|e| panic!("connect {}: {e}", path.display()));
+        if let Some(session) = session {
+            let attach = serde_json::json!({
+                "attach": acos_webview::gate::ATTACH_PROTO,
+                "session": session,
+            });
+            let mut line = attach.to_string().into_bytes();
+            line.push(b'\n');
+            let mut w = &stream;
+            w.write_all(&line).expect("attach line");
+            w.flush().expect("attach flush");
+            // The daemon answers one line before the framed protocol starts.
+            let mut answer = Vec::new();
+            let mut byte = [0u8; 1];
+            while answer.len() < 4096 {
+                let mut r = &stream;
+                r.read_exact(&mut byte).expect("attach answer");
+                if byte[0] == b'\n' {
+                    break;
+                }
+                answer.push(byte[0]);
+            }
+            let answer: Value = serde_json::from_slice(&answer).expect("attach answer json");
+            assert_eq!(
+                answer["ok"].as_bool(),
+                Some(true),
+                "the shared daemon refused the attach: {answer}"
+            );
+        }
         stream
             .set_read_timeout(Some(Duration::from_secs(45)))
             .expect("read timeout");

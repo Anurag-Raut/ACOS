@@ -5,4 +5,5 @@
     <item name="webview2" type="id" />
     <item name="webview3" type="id" />
     <item name="webview4" type="id" />
+    <item name="slow" type="id" />
 </resources>

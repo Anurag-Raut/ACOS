@@ -149,6 +149,46 @@ DevTools taps `density` times too far right and down).
 | `input.text` | `{view, text}` | `{view, delivered:true}` (IME commit → `Input.insertText`) |
 | `input.setFocus` | `{view, focused:bool}` | `{view, focused}` |
 
+### 4.2.1 Frame pulls are fair across views (WVFAIR)
+
+`HeadlessExperimental.beginFrame` is a browser-global command in the pinned
+engine (two targets asking at once crashed it), so frame production is
+**serialised per engine** — but the serialisation is a fair queue
+(`crates/acos-webview/src/fair.rs`), and a guest may rely on:
+
+* **one frame in flight per view**: however many `render` requests name one
+  view, a view has at most one outstanding pull. A request that arrives while
+  another for the same view is in flight joins it and gets the same frame (the
+  counters say so: `engineStatus.frames.coalesced`);
+* **bounded engine time per attempt**: each `beginFrame` attempt may hold the
+  engine for `frame_attempt` (750 ms) while the engine serves another view. Once
+  the engine serves only one view, an attempt gets the full 2 s it always had
+  (`engineStatus.frames.attemptBudgetMs` / `attemptBudgetIdleMs`);
+* **a fair queue**: waiting views are granted the engine in priority order, then
+  FIFO; a transient retry re-enters at the back, so a slow page's retries
+  interleave with other views instead of running back to back;
+* **input first**: the frames `input.tap`/`input.touch`/`input.key` need are
+  granted ahead of guest pull frames. A slow page therefore delays a tap by at
+  most one bounded attempt per frame the tap needs — measured 65 ms on the host
+  (worst-case pull 927 ms) and an end-to-end 3 ms tap→page-click in the ART
+  two-WebView scenario;
+* **no unbounded blocking**: a `render` whose `timeoutMs` elapses while queued
+  fails with `TIMEOUT` (`FRAME_FAILED` when the attempts are used up and the view
+  has never painted), never a silent hang. A view whose page cannot produce a
+  frame inside the budget is answered with its **last real frame**
+  (`hasDamage:false`) — never invented pixels.
+
+`engineStatus` reports the gate's own counters under `frames`
+(`pulls`, `coalesced`, `attempts`, `retries`, `timeouts`, `inputGrants`,
+`contendedAttempts`, `maxWaitMs`, `maxAttemptMs`, `openViews`). They are what a
+fairness claim is checked against.
+
+The guest side mirrors the rule: a view pulls at most one frame at a time
+(`requestFrame`), `evaluateJavascript` answers asynchronously (Android's
+contract — a page that is slow must not block the guest's UI thread), and a
+post-input `ax` read waits at most 250 ms for the engine before serving the last
+snapshot, so one busy page cannot stall the whole screen tree.
+
 `view.loadUrl` and friends are **async at the protocol level** even though the
 response reports `loadMs`: the response is written after `Page.loadEventFired`
 *or* after `Page.loadEventFired` already happened for that navigation; the guest

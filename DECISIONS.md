@@ -1181,6 +1181,23 @@ multi-package PMS foundation lands; the parcel defect is fixed in v0.3.0 as its 
 (audit every ACOS parcelable writer against AOSP `writeToParcel`). The Android WebView APK fallback
 stays rejected.
 
+**ADR-0031 amendment (2026-11-17, WVFAIR).** Frame production stays serialised per engine — two
+targets calling `beginFrame` at once crashed the pinned engine — but the serialisation is now a
+*fair* queue (`crates/acos-webview/src/fair.rs`), not one mutex: one attempt in flight, bounded by
+750 ms while another view is waiting (2 s when the engine serves a single view, i.e. the budget it
+always had), one outstanding pull per view (coalesced), priority for the frames the input path needs,
+and structured timeouts instead of unbounded blocking. Frame pulls run on their own threads, so they
+never occupy the connection's worker pool behind which input and JavaScript-interface calls queue.
+Measured: a two-view host test (one deliberately slow page) puts the fast view's pulls at 1 ms median
+/ 927 ms worst case and a tap ack at 65 ms, where the pre-gate broker starved them (1943 ms pulls,
+1085 ms tap acks, 8 concurrent pulls of one view serialised at 17 s); the ART two-WebView scenario
+holds a 3 ms tap→page-click. The guest side follows the same rule: `evaluateJavascript` is async
+(Android's contract), and a post-input `ax` read is bounded at 250 ms, so one busy page cannot stall
+the guest's UI thread. The WebView provider APK is now **shipped by the image**
+(`tools/extract-bootclasspath.sh` builds it with `tools/build-webview-provider.sh` and stages
+`.cache/boot/android-34/system-apps/com.android.webview.apk`), so a fresh install needs no separate
+step; the installer carries it and the module resolves it from the image first.
+
 ## ADR-0032 — Settle is not a pixel rule: content stability for every wait and assertion (REL3A, 2026-11-17)
 
 **Context.** v0.3.0 agent feedback (two independent agents) showed the settle model still leaked into

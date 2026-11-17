@@ -38,10 +38,22 @@ fn the_real_profile_contributes_the_provider_apk_to_the_launch() {
 
     let apks = system_apks(&[spec(Profile::Real)]);
     assert_eq!(apks.len(), 1, "one provider package, got {apks:?}");
-    assert_eq!(
-        apks[0].file_name().and_then(|n| n.to_str()),
-        Some("webview-provider.apk"),
-        "the provider APK is the one tools/build-apps.sh produces"
+    // The provider APK is a **shipped** file: the image build
+    // (tools/extract-bootclasspath.sh) stages it under `system-apps/`, so a
+    // fresh install carries it and needs no separate APK build step. When the
+    // image does not have it (a bare developer checkout), the fixture build
+    // tools/build-apps.sh produces is the fallback — never a hand-written
+    // `extra_apks:` line either way.
+    let name = apks[0].file_name().and_then(|n| n.to_str()).unwrap_or("");
+    assert!(
+        name == "com.android.webview.apk" || name == "webview-provider.apk",
+        "unexpected provider APK name {name:?}"
+    );
+    let path = apks[0].display().to_string();
+    assert!(
+        path.ends_with("system-apps/com.android.webview.apk")
+            || path.ends_with("webview-provider.apk"),
+        "the provider must come from the image or the fixture build, got {path}"
     );
 
     // `off` stages nothing: Android's own no-provider path.
