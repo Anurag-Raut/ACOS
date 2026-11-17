@@ -334,7 +334,15 @@ pub fn run_scenario(
         if caps.logs {
             if let Some(StepRef::AssertLog(assertion)) = step.as_step() {
                 if let Some(timeout_ms) = assertion.timeout_ms {
-                    let start = if index > 0 {
+                    // The wait must judge exactly the slice the assertion below
+                    // will judge. `since_previous_step: false` means the whole
+                    // stream, so a line that is already present from an earlier
+                    // step satisfies it at once; scoping the wait to the
+                    // per-step window made such a step poll for its whole
+                    // `timeout_ms` and then pass, which reads as a slow effect
+                    // that arrived late (measured on the ART engine: 4.07 s for
+                    // a log line the host already held).
+                    let start = if assertion.since_previous_step && index > 0 {
                         step_log_cursors[index - 1]
                     } else {
                         0

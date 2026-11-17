@@ -456,6 +456,56 @@ def test_classify_error():
     eq("lowercase normalised", bl.classify_error("timeout")["code"], "TIMEOUT")
 
 
+def test_an_assertion_outcome_is_never_unclassified():
+    """GATEFIX (F2): the two rows that made the v0.3.0 release-gate matrix INVALID.
+
+    `negative/form-wrong-error` and `negative/offscreen-pager-visible` are
+    expected negatives that fail with `ELEMENT_OFFSCREEN` — a correct negative
+    (the selector only matched a node the user cannot see), not an unknown
+    harness class. The class is `assertion`, so the matrix counts them
+    `correct_negative` and `unclassified == 0` holds at `false_pass == 0`.
+    """
+    for code in ("ELEMENT_OFFSCREEN", "AMBIGUOUS_SELECTOR", "TREE_TRUNCATED",
+                 "END_OF_LIST", "INPUT_NOT_HANDLED"):
+        e = bl.classify_error(code)
+        eq("%s class" % code, e["class"], "assertion")
+        eq("%s not retryable" % code, e["retryable"], False)
+    # The matrix row itself: an expected negative failing with
+    # ELEMENT_OFFSCREEN must validate (the schema gate rejects `unclassified`).
+    m = valid_matrix()
+    m["runs"][0]["error"] = bl.classify_error("ELEMENT_OFFSCREEN")
+    eq("a correct negative with ELEMENT_OFFSCREEN validates",
+       bl.validate_matrix(m), [])
+
+
+def test_every_protocol_assertion_code_is_classified():
+    """The protocol is the source of truth for `assertion` (GATEFIX, F2).
+
+    `ErrorCode::default_status() == Status::Fail` is the protocol's own list of
+    assertion outcomes. Every one of them has to classify as `assertion` here,
+    or a legitimate negative can turn into an `unclassified` matrix row and a
+    release gate can be declared INVALID for a correct run.
+    """
+    import re
+    src = Path(REPO, "crates/acos-protocol/src/error.rs").read_text()
+    name_to_code = dict(re.findall(r'ErrorCode::(\w+) => "([A-Z0-9_]+)"', src))
+    # The `Status::Fail` arm lists its codes as `A | B | C => Status::Fail`.
+    arms = re.findall(r'((?:ErrorCode::\w+\s*\|\s*)+ErrorCode::\w+)\s*=>\s*Status::Fail',
+                      src, re.S)
+    check("the protocol still declares the assertion set", bool(arms),
+          "no `=> Status::Fail` arm found in error.rs")
+    missing = []
+    for arm in arms:
+        for name in re.findall(r'ErrorCode::(\w+)', arm):
+            code = name_to_code.get(name)
+            if code is None:
+                missing.append("unnamed:" + name)
+                continue
+            if bl.classify_error(code)["class"] != "assertion":
+                missing.append(code)
+    eq("every Status::Fail code classifies as assertion", missing, [])
+
+
 # --------------------------------------------------------------------------- #
 # matrix schema validation
 # --------------------------------------------------------------------------- #
@@ -495,6 +545,25 @@ def valid_matrix():
         "summary": {"total_runs": 1, "passed": 0, "failed": 1, "false_pass": 0,
                     "negative_runs": 1, "unclassified": 0},
     }
+
+
+def test_a_refused_host_gate_makes_the_provenance_ineligible():
+    """GATEFIX: the recorded host gate decides eligibility, not just the profile.
+
+    A correctness run on a busy host (run-matrix --allow-contaminated) records
+    `host_gate.ok: false`; the provenance must say `verdict_eligible: false` so
+    nobody can quote its timings.
+    """
+    refused = {"ok": False, "reasons": ["loadavg1 9.00 > 4.00"],
+               "loadavg1": 9.0, "mem_available_gib": 45.0}
+    prov = bl.provenance(REPO, profile="release", gate=refused)
+    eq("refused gate is not verdict-eligible", prov["verdict_eligible"], False)
+    check("the refusal reason is recorded",
+          "loadavg1 9.00 > 4.00" in (prov["not_verdict_eligible_reason"] or ""),
+          prov["not_verdict_eligible_reason"])
+    ok = bl.provenance(REPO, profile="release",
+                       gate={"ok": True, "reasons": []})
+    eq("a passing gate stays eligible", ok["verdict_eligible"], True)
 
 
 def test_matrix_schema_valid():

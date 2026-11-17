@@ -5104,3 +5104,52 @@ so a non-clickable listener runs.
   action: a guest-side assert on every `addToDisplayAsUser` reply
   (`table[0] == 16 && data[0..4] == 0`) so the next occurrence is caught with
   its parcel, and a safe block re-use policy for the still-monotonic heap.
+
+## LOOPERWAKE — is a background-thread handler post invisible on an idle screen? — NOT ON rel-030 (guest-measured wake is 0–17 ms); one real settle defect found and fixed
+
+- **Hypothesis (NET6 §4, WV7 §4a):** a `runOnUiThread`/`Handler.post`/
+  `View.postInvalidate` from a non-main thread does not wake ACOS's idle main
+  looper, so the UI update appears only on the next input.
+- **Fixture:** `fixtures/apps/looper-wake` (new). Idle Activity; a *plain Java
+  thread* posts `runOnUiThread(setText)` 1500 ms after the first frame, then
+  calls `View.postInvalidate()` from the same thread; a `HandlerThread` (a
+  non-main Looper thread, the shape of a framework/binder callback) posts to the
+  main `Handler` on demand. Every mark carries `SystemClock.uptimeMillis()`, so
+  the post→drain and invalidate→draw latencies are the **guest's own**
+  measurements; `PulseView.onDraw` reports `since_invalidate_ms`.
+- **Scenario:** `scenarios/looperwake-bg-post.yaml` (`engine: art`). The decisive
+  step is an `assert_log` (log-stream read only: no PROBE, no input, no capture,
+  nothing that could wake the looper on the app's behalf) requiring
+  `ui-drain latency_ms=<0..999>` and `pulse.draw ... since_invalidate_ms=<0..999>`.
+- **Result — rel-030 (5a912d4b):** PASS, 11/11 steps; the reported defect is
+  **not present**. Guest log
+  (`results/handoff/LOOPERWAKE/after/logs/logcat.txt`): `bg-post t=1714502` →
+  `ui-drain latency_ms=1 t=1714503` (1 ms), `bg-invalidate t=1714753` →
+  `pulse.draw n=3 since_invalidate_ms=16` (16 ms), `bg2-post` → `ui2-drain
+  latency_ms=15` (15 ms, HandlerThread), on-demand background `postInvalidate`
+  → draw 16 ms. A prior run measured 0 ms / 17 ms / 14 ms / 17 ms. So on this
+  branch the stock `libandroid_runtime.so` the ART guest loads
+  (`crates/acos-art/src/launch.rs:1145`; stock 2.4 MB image library) really does
+  `MessageQueue.enqueueMessage -> nativeWake` (eventfd write) and the host
+  `display_events` clock really does deliver the vsync event that
+  `Choreographer` registered on the same looper.
+- **Result — a real defect in the settle path:** with
+  `assert_log since_previous_step: false` + `timeout_ms`, the *wait* judged the
+  per-step window while the *assertion* judged the whole stream, so a line
+  already present (e.g. from the previous step) never satisfied the wait: the
+  step polled for its whole deadline (measured 4069 ms) and only then passed —
+  exactly the "the effect arrived late" shape. Fixed in
+  `crates/acos-verify/src/executor.rs` (the wait now uses the same slice as the
+  assertion); regression test
+  `assert_log_wait_judges_the_same_scope_as_the_assertion` fails before it
+  (`25 fetches`, 2.06 s) and passes after (`3 fetches`, 0.00 s). The scenario's
+  step 7 went 4069 ms → 1 ms.
+- **Trade-offs / regressions:** none; `cargo test -p acos-vm -p acos-verify`
+  green (35 test binaries), `-p acos-art` green (166 + suites).
+- **Open:** the *modules*-branch reports (a callback on a guest binder thread,
+  a WebView frame decoded in another process) were not reproduced here — this
+  branch has neither the network module nor the WebView module, so a binder-thread
+  callback cannot be produced in a rel-030 fixture. Smallest next action: run
+  `looperwake-bg-post` plus a NET6-style `netcb` TextView assertion on `modules`
+  (and WV8); if it reproduces there, diff the module delivery thread against the
+  plain-thread case before touching the guest runtime.

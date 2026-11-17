@@ -1289,6 +1289,35 @@ fn assert_log_polls_until_the_line_appears_or_the_deadline_passes() {
 }
 
 #[test]
+fn assert_log_wait_judges_the_same_scope_as_the_assertion() {
+    // An `assert_log` with `since_previous_step: false` and a `timeout_ms`
+    // judges the whole stream outside the wait, so the wait must judge the same
+    // slice. Before this fix the wait used the per-step window, so a line that
+    // was already present (here: emitted during launch) never satisfied the
+    // wait: the step polled for its whole deadline and only then passed on the
+    // full-stream evaluation. On the ART engine that showed up as a 4.07 s step
+    // for a line the host already held (LOOPERWAKE), which reads exactly like
+    // "the effect arrived late".
+    let (scenario, artifacts) = log_scenario(2000);
+    let mut backend = LogBackend::new(1);
+    let started = std::time::Instant::now();
+    let outcome = run_log_scenario(&scenario, &artifacts, &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    assert_eq!(outcome.verdict.steps[1].step, "assert_log");
+    assert!(
+        backend.polls <= 5,
+        "the wait must see an already-present line on its first poll, got {} fetches",
+        backend.polls
+    );
+    assert!(
+        started.elapsed() < std::time::Duration::from_millis(1500),
+        "the step burned its whole deadline on a line that was already present: {:?}",
+        started.elapsed()
+    );
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+#[test]
 fn a_refused_log_channel_fails_closed_with_the_backend_code() {
     // This is the untrusted-run shape: the backend refuses guest-asserted logs.
     // The step must carry INSUFFICIENT_HOST_EVIDENCE, not a generic "no line".

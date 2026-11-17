@@ -1,0 +1,126 @@
+# LOOPERWAKE: an idle Activity is changed from a non-main thread.
+#
+# On a real device a handler post from a background thread is
+# `MessageQueue.enqueueMessage -> nativeWake` (an eventfd write) that interrupts
+# the main `Looper.pollOnce` epoll_wait, and the view's invalidate then schedules
+# a traversal through `ViewRootImpl.scheduleTraversals ->
+# Choreographer.scheduleVsync` (a vsync event on the DisplayEventReceiver
+# BitTube wakes the same looper again). No touch, key or any other input is
+# involved.
+#
+# The fixture is that shape: the app is idle, nothing is tapped, and a *plain
+# Java thread* calls `runOnUiThread` 1500 ms after the first frame to
+# setText("bg-update"); 250 ms later the same thread calls
+# `View.postInvalidate()` from the background thread, which must be painted as a
+# frame of its own.
+#
+# The decisive steps are the ones that touch nothing in the guest:
+#   * `assert_log` only reads the guest's log stream (no probe request, no
+#     input, no capture), so a `ui-drain` line that arrives with a *guest
+#     measured* latency under 1 s proves the post itself woke the looper;
+#   * `pulse.draw ... since_invalidate_ms=<1..3 digits>` proves the background
+#     `postInvalidate` was painted, not left for the next input.
+# Only then does an `assert_text` bind the drawn update.
+version: 1
+name: looperwake-bg-post
+description: >-
+  Idle screen, no input: a plain background thread posts setText via
+  runOnUiThread and then postInvalidates from the same thread. The guest's own
+  post->drain and invalidate->draw latencies must be under a second, and
+  assert_text must see the update.
+app: fixtures/build/apps/looper-wake.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+animations: off
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.looperwake/.MainActivity
+      clear_state: true
+
+  # The pre-state: the launch's settled frame, before the background post fires
+  # (1500 ms after the first frame).
+  - assert_text:
+      selector: {id: status}
+      text: {exact: idle}
+
+  # The wake, measured by the guest itself. `assert_log` reads the log stream
+  # only: it never sends a PROBE, an input or a capture that could wake the main
+  # looper on the app's behalf. The latency bound is the guest's own
+  # post -> drain number.
+  - assert_log:
+      tag: AcosLooperWake
+      since_previous_step: false
+      timeout_ms: 6000
+      ordered: true
+      patterns:
+        - '^bg-post '
+        - '^ui-drain latency_ms=[0-9]{1,3} '
+        - '^ui-setText '
+
+  # The drawn update. By now the setText has run; the assertion binds a frame
+  # that really contains it.
+  - assert_text:
+      selector: {id: status}
+      text: {exact: bg-update}
+      timeout_ms: 3000
+
+  # The background postInvalidate (no text change): the frame pump must run for
+  # it. `since_invalidate_ms` is measured inside the guest's onDraw.
+  - assert_log:
+      tag: AcosLooperWake
+      since_previous_step: false
+      timeout_ms: 4000
+      ordered: true
+      patterns:
+        - '^bg-invalidate '
+        - '^pulse\.draw .*since_invalidate_ms=[0-9]{1,3} '
+
+  # On-demand comparator 1: a HandlerThread (a non-main Looper thread; the shape
+  # of a framework/binder callback deciding to update the UI) posts to the main
+  # Handler. The guest reports the post-to-drain latency.
+  - tap:
+      selector: {id: go}
+  - assert_text:
+      selector: {id: status}
+      text: {exact: go-update}
+  - assert_log:
+      tag: AcosLooperWake
+      since_previous_step: false
+      timeout_ms: 4000
+      ordered: true
+      patterns:
+        - '^go\.click'
+        - '^bg2-post '
+        - '^ui2-drain latency_ms=[0-9]{1,3} '
+        - '^ui2-setText '
+
+  # On-demand comparator 2: a plain thread calls postInvalidate, no text change.
+  - tap:
+      selector: {id: invalidate}
+  - assert_log:
+      tag: AcosLooperWake
+      since_previous_step: false
+      timeout_ms: 4000
+      ordered: true
+      patterns:
+        - '^invalidate\.click'
+        - '^bg-invalidate-on-demand '
+        - '^pulse\.draw .*since_invalidate_ms=[0-9]{1,3} '
+
+  - assert_no_crash: {}

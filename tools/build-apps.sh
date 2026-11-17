@@ -13,10 +13,15 @@
 #   fixtures/build/apps/counter.apk
 #   fixtures/build/apps/todo-list.apk
 #   fixtures/build/apps/multi-activity.apk
+#   fixtures/build/apps/finish-start.apk
 #   fixtures/build/apps/form-validation.apk
 #   fixtures/build/apps/svg-viewbox.apk
 #   fixtures/build/apps/offscreen-pager.apk
 #   fixtures/build/apps/insets-probe.apk
+#
+# `tools/run-matrix.sh` calls this script with ACOS_APP_ONLY for any scenario
+# APK under fixtures/build/apps that is missing, so a stale fixtures/build can
+# never turn a correct matrix row into `APK_IO` (v0.3.0 gate finding F3).
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -216,7 +221,11 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
-for app in counter todo-list multi-activity finish-start form-validation settle-lab thread-heavy svg-viewbox offscreen-pager; do
+# looper-wake is the LOOPERWAKE fixture: an idle Activity changed from a
+# non-main thread (plain Thread + runOnUiThread, HandlerThread + main Handler,
+# and View.postInvalidate from a plain thread). Nothing here needs input, so a
+# scenario can prove the main looper is woken by the post itself.
+for app in counter todo-list multi-activity finish-start form-validation settle-lab thread-heavy svg-viewbox offscreen-pager looper-wake; do
     build_apk "$app"
 done
 

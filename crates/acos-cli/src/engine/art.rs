@@ -1049,6 +1049,14 @@ pub(crate) struct FirstFrameReport {
     pub pixels_changed: bool,
     /// The budget the content wait was allowed (`ACOS_ART_FIRST_FRAME_MS`).
     pub budget_ms: u64,
+    /// GATEFIX (F1): the content window the wait had to cover before a
+    /// placeholder verdict (the budget, from the end of the launch's own
+    /// traversal).
+    pub window_ms: u64,
+    /// GATEFIX (F1): did the wait observe the skeleton for that whole window?
+    /// `false` means the wait ended early (guest error / protocol failure), so
+    /// neither a placeholder nor a pass may be claimed from it.
+    pub window_spent: bool,
 }
 
 impl Default for FirstFrameReport {
@@ -1069,6 +1077,8 @@ impl Default for FirstFrameReport {
             pixels_compared: false,
             pixels_changed: false,
             budget_ms: 0,
+            window_ms: 0,
+            window_spent: false,
         }
     }
 }
@@ -1111,6 +1121,8 @@ impl FirstFrameReport {
             "frames_advanced": self.frames_advanced,
             "pixels_compared": self.pixels_compared,
             "pixels_changed": self.pixels_changed,
+            "window_ms": self.window_ms,
+            "window_spent": self.window_spent,
         })
     }
 }
@@ -1137,6 +1149,12 @@ struct FirstFrameEvidence {
     pixels_compared: bool,
     /// The digest changed (the frame's pixels are not the skeleton's).
     pixels_changed: bool,
+    /// GATEFIX (F1): did the wait give the app its whole chance — the content
+    /// window (`ACOS_ART_FIRST_FRAME_MS`) elapsed while the skeleton was
+    /// observed? A placeholder is a claim about the app ("it never mounted"),
+    /// so it may only be made after the app had that window to run; samples
+    /// taken within the first few milliseconds are not evidence of absence.
+    window_spent: bool,
 }
 
 fn frame_identity(frame: Option<&CachedFrame>) -> FrameIdentity {
@@ -1154,6 +1172,7 @@ fn frame_evidence(
     baseline: &FrameIdentity,
     current: &FrameIdentity,
     frames: usize,
+    window_spent: bool,
 ) -> FirstFrameEvidence {
     let seq_advanced = match (baseline.seq, current.seq) {
         (Some(before), Some(after)) => after > before,
@@ -1173,6 +1192,7 @@ fn frame_evidence(
         frames_advanced: seq_advanced || number_advanced,
         pixels_compared,
         pixels_changed,
+        window_spent,
     }
 }
 
@@ -1186,7 +1206,13 @@ fn frame_evidence(
 /// * a skeleton whose frame identity advanced but whose pixels are the same is
 ///   *still* the window (the launcher re-published the same buffer), so the
 ///   pixels decide when they are comparable;
-/// * a skeleton that nothing moved is the placeholder: the app never mounted.
+/// * a skeleton that nothing moved **for the whole content window** is the
+///   placeholder: the app never mounted. The window is what makes it evidence:
+///   the launch's own traversal plus a burst of samples taken within a few
+///   milliseconds of the window mount is exactly how a fast host produced a
+///   false `PLACEHOLDER_CONTENT` on a launch whose app did mount 300 ms later
+///   (v0.3.0 gate F1). `window_spent == false` therefore yields neither a
+///   placeholder nor a pass; the caller fails closed instead.
 fn first_frame_placeholder_verdict(
     tree: &UiTree,
     evidence: &FirstFrameEvidence,
@@ -1199,7 +1225,7 @@ fn first_frame_placeholder_verdict(
     } else {
         evidence.frames_advanced
     };
-    (!moved, moved)
+    (!moved && evidence.window_spent, moved)
 }
 
 /// FB2c: what the launch actually measured, in one sentence.
@@ -1221,12 +1247,14 @@ pub(crate) fn placeholder_evidence_sentence(report: &FirstFrameReport) -> String
         (false, _) => facts.push("no pixel digest was comparable".to_string()),
     }
     format!(
-        "{} frame(s) over {} traversal(s)/{} ms ({} event wait(s), budget ACOS_ART_FIRST_FRAME_MS={} ms): {}",
+        "{} frame(s) over {} traversal(s)/{} ms ({} event wait(s), budget ACOS_ART_FIRST_FRAME_MS={} ms, window {} ms spent: {}): {}",
         report.frames,
         report.traversals,
         report.waited_ms,
         report.event_waits,
         report.budget_ms,
+        report.window_ms,
+        report.window_spent,
         facts.join(", ")
     )
 }
@@ -1270,13 +1298,17 @@ fn ui_tree_has_app_text(nodes: &[UiNode]) -> bool {
 /// reaching a mounted app screen.
 const FIRST_FRAME_SKELETON_MAX_NODES: usize = 40;
 
-/// G3c: how many traversals a launch may spend waiting for app content.
+/// GATEFIX (F1): how long the mount wait sleeps between two observations when
+/// the guest answered *before* the window ran out.
 ///
-/// G3f1: this is now only a runaway guard, not the binding budget — a content
-/// wait is an *event* request that returns when the guest commits its next tree
-/// state, so the wall-clock budget below is what decides. Kept generous so a
-/// pathologically repainting screen cannot loop forever.
-const FIRST_FRAME_MAX_ATTEMPTS: usize = 8;
+/// G3f1 made the wait event-driven and G3c capped it at a traversal count
+/// (`FIRST_FRAME_MAX_ATTEMPTS = 8`). The cap was the bug: on a quiet host eight
+/// samples of the guest's *cached* skeleton cost ~0 ms, so the launch concluded
+/// `placeholder` before the app ever got CPU time (v0.3.0 gate F1). The window
+/// is now the binding budget and this pace only keeps a fast-answering guest
+/// (an old launcher, a fake) from burning it in a burst; the placeholder
+/// verdict requires the whole window (see `first_frame_placeholder_verdict`).
+const FIRST_FRAME_PROBE_PACE_MS: u64 = 25;
 
 /// G3c: at or below this node count a text-free tree is the *bare* window
 /// skeleton measured on Gaten (1–10 nodes), so a launch frame that never grew
@@ -4327,16 +4359,29 @@ pub(crate) fn ensure_launch_tree(
     /// description anywhere and at most [`FIRST_FRAME_SKELETON_MAX_NODES`] nodes
     /// — the app's own mounting work is still in flight (measured on Gaten: 10
     /// nodes at the launch frame, 243 two seconds later). The launch then waits
-    /// for an **event**, not a traversal count: it sends the skeleton back as
-    /// `baseline_tree` and the guest's strict settle rule only accepts a sample
-    /// whose tree differs from it (one real draw, its own confirmation window,
-    /// no pending framework work — the same signal the launch's own traversal
-    /// uses), bounded by the `ACOS_ART_FIRST_FRAME_MS` wall clock (default
-    /// 3000 ms, measured from the end of the launch's own traversal). The
-    /// request is repeated only while the guest keeps committing *further*
-    /// still-unmounted states inside that budget (a cap of
-    /// [`FIRST_FRAME_MAX_ATTEMPTS`] traversals is a runaway guard, never the
-    /// budget).
+    /// for an **event**, not a traversal count and not a fixed number of samples:
+    /// it sends the current tree back as `baseline_tree` and the guest's strict
+    /// settle rule only accepts a sample whose tree differs from it (one real
+    /// draw, its own confirmation window, no pending framework work — the same
+    /// signal the launch's own traversal uses), bounded by the
+    /// `ACOS_ART_FIRST_FRAME_MS` window (default 5000 ms, measured from the end
+    /// of the launch's own traversal).
+    ///
+    /// GATEFIX (F1): the mount wait is a **change** wait for every settle rule.
+    /// The caller's rule (`content`) is proven *after* the app mounted; the
+    /// question here is only "did the guest commit the app's own frame yet?". A
+    /// `fast` first traversal has no gate, and the old wait inherited that: its
+    /// eight samples of the guest's cached skeleton cost ~0 ms, so a launch
+    /// concluded `placeholder` before the app could draw (v0.3.0 gate F1, 2/32
+    /// matrix negatives). Two rules follow from that and are enforced here:
+    ///
+    /// * the wait is bounded by the **window**, never by a traversal count, and
+    ///   a guest that answers before the window has run out (an old launcher, a
+    ///   fake, a timeout that returned early) is simply observed again after
+    ///   [`FIRST_FRAME_PROBE_PACE_MS`];
+    /// * `placeholder` is only claimed once the skeleton was observed for that
+    ///   whole window (see [`first_frame_placeholder_verdict`]). A wait that
+    ///   ended early (guest error) yields neither a placeholder nor a pass.
     ///
     /// Every guarantee of the pre-G3f1 wait is preserved:
     ///
@@ -4349,11 +4394,6 @@ pub(crate) fn ensure_launch_tree(
     ///   into a `TIMEOUT`;
     /// * the launch step's P9 contract is untouched: the caller restores the
     ///   pre-launch settle block, so the launch step is judged exactly as before.
-    ///
-    /// `fast` mode (navigation, never assertion evidence) has no change gate —
-    /// the guest's fast path already binds the first probe sample newer than the
-    /// request — so it keeps a plain re-traversal bounded by the same wall
-    /// clock.
     fn bind_first_frame(
         &mut self,
         settle: &'static str,
@@ -4389,67 +4429,83 @@ pub(crate) fn ensure_launch_tree(
             self.last_tree_settle.clone(),
         );
 
-        // 2. The content wait. Only an unmounted skeleton reaches it.
+        // 2. The mount wait. Only an unmounted skeleton reaches it.
+        let mut wait_error: Option<BackendError> = None;
+        let mut window_spent = false;
         if first_frame_is_unmounted(&tree) {
             let deadline = Instant::now() + Duration::from_millis(budget_ms);
-            while first_frame_is_unmounted(&tree) && traversals < FIRST_FRAME_MAX_ATTEMPTS {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
+            loop {
+                if !first_frame_is_unmounted(&tree) {
                     break;
                 }
+                let now = Instant::now();
+                if now >= deadline {
+                    // The app had its whole window and the guest never committed
+                    // anything else: that is what a placeholder is.
+                    window_spent = true;
+                    break;
+                }
+                let remaining = deadline.saturating_duration_since(now);
                 let budget = match self.settle_timeout_ms {
                     // A caller's own settle deadline is a ceiling on the wait.
                     Some(caller) => (remaining.as_millis() as u64).min(caller),
                     None => remaining.as_millis().max(1) as u64,
                 };
-                // The raw probe tree this engine holds. `strict` hands it to the
-                // guest as the change baseline; `fast` has no gate.
-                let baseline = if settle == "strict" {
-                    self.last_tree_json.clone()
-                } else {
-                    None
-                };
+                // GATEFIX (F1): hand the guest the tree it just published, so
+                // the request waits for the app's *next committed state* whatever
+                // the caller's settle rule is. A `fast` request ignores a
+                // baseline, so the gated wait asks with `strict` (tree-only when
+                // the launch is tree-only); the caller's own rule is proven on
+                // the mounted tree afterwards.
+                let baseline = self.last_tree_json.clone();
+                let wait_settle: &'static str = if baseline.is_some() { "strict" } else { settle };
                 let gated = baseline.is_some();
                 let started = Instant::now();
                 let result = match baseline {
-                    Some(baseline) => self.request_tree_after(settle, pixels, baseline, budget),
-                    None => self.request_tree_params(settle, pixels, None, Some(budget)),
+                    Some(baseline) => {
+                        self.request_tree_after(wait_settle, pixels, baseline, budget)
+                    }
+                    None => self.request_tree_params(wait_settle, pixels, None, Some(budget)),
                 };
                 traversals += 1;
                 if gated {
                     event_waits += 1;
                 }
                 waited_ms += started.elapsed().as_millis() as u64;
-                if result.is_err() {
-                    // Never a new failure mode: keep the last settled binding.
+                if let Err(error) = result {
+                    // The guest stopped answering. Keep the last settled binding
+                    // (never a new failure mode) but do not pretend the window
+                    // ran: the verdict below fails closed instead.
+                    wait_error = Some(error);
                     break;
                 }
                 let settled_now = tree_settle_settled(&self.last_tree_settle);
-                let draw_commit = tree_bound_draw_commit(&self.last_tree_settle);
                 tree = self.require_cached_tree()?;
                 if settled_now {
                     settled_binding = (
                         self.require_cached_frame()?.clone(),
                         self.last_tree_settle.clone(),
                     );
-                } else if draw_commit {
-                    // G3f1: a fresh draw-committed content frame. It is accepted
-                    // as the launch frame (P9's contract is a *fresh* frame, and
-                    // the guest's settle verdict stays in the reply as
-                    // `settled:false`), so an animating screen stops producing a
-                    // skeleton placeholder. `settled_binding` intentionally keeps
-                    // the last *settled* traversal: if a later wait commits
-                    // nothing, the rollback target is unchanged.
-                    if !first_frame_is_unmounted(&tree) {
-                        break;
-                    }
-                } else {
-                    // The wait hit its budget (or the guest kept reporting the
-                    // same tree): the rollback below restores the last settled
-                    // traversal, so the wait can never turn a pass into a
-                    // TIMEOUT.
+                }
+                // G3f1: a draw-committed frame is accepted as the launch frame
+                // (P9's contract is a *fresh* frame, and the guest's settle
+                // verdict stays in the reply as `settled:false`).
+                if !first_frame_is_unmounted(&tree) {
                     break;
                 }
+                // Still the skeleton: keep observing the rest of the window.
+                // A guest that answered before the window ran out (an early
+                // timeout, an old launcher, a fake) is paced, so a burst of
+                // immediate samples can never decide the verdict.
+                let now = Instant::now();
+                if now >= deadline {
+                    window_spent = true;
+                    break;
+                }
+                let pause = deadline
+                    .saturating_duration_since(now)
+                    .min(Duration::from_millis(FIRST_FRAME_PROBE_PACE_MS));
+                std::thread::sleep(pause);
             }
         }
 
@@ -4471,10 +4527,38 @@ pub(crate) fn ensure_launch_tree(
             settled = tree_settle_settled(&self.last_tree_settle);
             bound = settle_bound(&self.last_tree_settle);
         }
-        let unmounted = first_frame_is_unmounted(&tree);
         let current_identity = self.verdict_identity(&tree);
-        let evidence = frame_evidence(&baseline_identity, &observed_identity, traversals);
+        let evidence = frame_evidence(
+            &baseline_identity,
+            &observed_identity,
+            traversals,
+            window_spent,
+        );
         let (placeholder, suspect) = first_frame_placeholder_verdict(&tree, &evidence);
+        if !placeholder && !suspect && first_frame_is_unmounted(&tree) && !evidence.window_spent {
+            // GATEFIX (F1): a window skeleton the wait could not observe for the
+            // whole window is neither a placeholder (unproven) nor a pass. The
+            // guest error that ended the wait is the honest answer; without one,
+            // the launch still fails closed rather than claim a first frame it
+            // never observed.
+            if let Some(error) = wait_error {
+                return Err(error);
+            }
+            return Err(BackendError::Protocol {
+                code: ErrorCode::Timeout,
+                detail: format!(
+                    "launch bound only the window skeleton and the first-frame window ({} ms) did \
+                     not run out, so neither the app's content nor a placeholder can be claimed",
+                    budget_ms
+                ),
+                hint: Some(
+                    "Re-run the launch; a window that is not observed for the whole \
+                     ACOS_ART_FIRST_FRAME_MS window is not evidence of an unmounted app."
+                        .to_string(),
+                ),
+                details: Some(serde_json::json!({ "reason": "first_frame_window_unproven" })),
+            });
+        }
         self.first_frame_bound = Some((settled, bound.clone()));
         let report = FirstFrameReport {
             traversals,
@@ -4492,6 +4576,8 @@ pub(crate) fn ensure_launch_tree(
             pixels_compared: evidence.pixels_compared,
             pixels_changed: evidence.pixels_changed,
             budget_ms,
+            window_ms: budget_ms,
+            window_spent: evidence.window_spent,
         };
         if suspect {
             eprintln!(
@@ -4508,14 +4594,15 @@ pub(crate) fn ensure_launch_tree(
         if report.placeholder && warn_placeholder {
             eprintln!(
                 "acos serve: launch first frame is a window skeleton ({} nodes, no app text) \
-                 after {} traversal(s)/{} ms ({} event wait(s), budget {} ms); nothing about the \
-                 frame moved (identity advanced: {}, pixels compared: {}, pixels changed: {}), so \
-                 it is reported as a placeholder, never as app content",
+                 after {} traversal(s)/{} ms ({} event wait(s), budget {} ms, window spent: {}); \
+                 nothing about the frame moved (identity advanced: {}, pixels compared: {}, pixels \
+                 changed: {}), so it is reported as a placeholder, never as app content",
                 report.nodes,
                 report.traversals,
                 report.waited_ms,
                 report.event_waits,
                 report.budget_ms,
+                report.window_spent,
                 report.frames_advanced,
                 report.pixels_compared,
                 report.pixels_changed
@@ -4525,7 +4612,6 @@ pub(crate) fn ensure_launch_tree(
         // verbs read it, `reset` replaces it). Storing it here means every route
         // that binds a first frame — serve, verify, reset — keeps it honest.
         self.first_frame_report = Some(report.clone());
-        let _ = unmounted;
         Ok((tree, report))
     }
 
@@ -6195,8 +6281,11 @@ mod tests {
             frame_number: Some(seq),
             md5: Some(md5.to_string()),
         };
+        // GATEFIX (F1): a placeholder verdict also needs the wait to have
+        // observed the skeleton for the whole content window, so the evidence of
+        // a wait that actually ran carries `window_spent: true`.
         let evidence = |before: &FrameIdentity, after: &FrameIdentity| {
-            frame_evidence(before, after, 2)
+            frame_evidence(before, after, 2, true)
         };
 
         // Skeleton, same pixels, no newer frame: the placeholder.
@@ -6243,6 +6332,22 @@ mod tests {
         assert_eq!(
             first_frame_placeholder_verdict(&tree(painted), &still),
             (false, false)
+        );
+        // GATEFIX (F1): the same unchanged skeleton observed for less than the
+        // window is NOT a placeholder. A launch may only claim that the app never
+        // mounted after the app had the whole `ACOS_ART_FIRST_FRAME_MS` window to
+        // mount; eight cached samples in ~0 ms are not that evidence.
+        let premature = frame_evidence(&identity(1, "aa"), &identity(1, "aa"), 8, false);
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &premature),
+            (false, false),
+            "an unproven skeleton is neither a placeholder nor a pass"
+        );
+        // …and moving pixels are still the app's frame, window or not.
+        let animating_early = frame_evidence(&identity(1, "aa"), &identity(2, "bb"), 2, false);
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &animating_early),
+            (false, true)
         );
     }
 
@@ -7887,7 +7992,7 @@ mod tests {
         let mut body = String::new();
         body.push_str("#!/bin/sh\n");
         body.push_str("echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"activity\":\"dev.test/.Main\",\"width\":1080,\"height\":2400,\"density\":420}'\n");
-        body.push_str("seq=0\ngated=0\n");
+        body.push_str("seq=0\ngated=0\nstartns=$(date +%s%N)\n");
         body.push_str(&format!("requests='{}'\n", requests.display()));
         body.push_str(&format!("png='{}'\n", png.display()));
         // The mode lives in a file so a test can change the app's behaviour
@@ -7909,6 +8014,13 @@ mod tests {
         body.push_str("      fseq=$seq\n");
         body.push_str("      fmd5=m$seq\n");
         body.push_str("      if [ \"$mode\" = never ]; then fseq=1; fmd5=m1; fi\n");
+        // GATEFIX (F1): the real launcher answers with its *cached* frame while
+        // the app is still booting, so the frame identity does not move until the
+        // app draws. `slow-mount` reproduces that: a constant skeleton identity
+        // for the first 400 ms, then the app's content.
+        body.push_str("      elapsed=0\n");
+        body.push_str("      if [ \"$mode\" = slow-mount ]; then now=$(date +%s%N); elapsed=$(( (now - startns) / 1000000 )); fi\n");
+        body.push_str("      if [ \"$mode\" = slow-mount ] && [ \"$elapsed\" -lt 400 ]; then fseq=1; fmd5=m1; fi\n");
         body.push_str("      case \"$line\" in\n");
         body.push_str("        *'baseline_tree'*)\n");
         body.push_str("          gated=$((gated+1))\n");
@@ -7928,6 +8040,16 @@ mod tests {
         body.push_str("            unsettled-first)\n");
         body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
+        body.push_str("            slow-mount)\n");
+        body.push_str("              if [ \"$elapsed\" -ge 400 ]; then\n");
+        body.push_str("                echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              else\n");
+        body.push_str("                echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"tree-unchanged\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              fi\n");
+        body.push_str("              ;;\n");
+        body.push_str("            wait-dies)\n");
+        body.push_str("              echo '{\"ok\":false,\"cmd\":\"tree\",\"code\":\"INTERNAL\",\"error\":\"the guest stopped answering\"}'\n");
+        body.push_str("              ;;\n");
         body.push_str("            unsettled-change)\n");
         body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
@@ -7936,6 +8058,11 @@ mod tests {
         body.push_str("        *)\n");
         body.push_str("          tree=$skeleton\n");
         body.push_str("          [ \"$mode\" = content-first ] && tree=$content\n");
+        body.push_str("          if [ \"$mode\" = slow-mount ] && [ \"$elapsed\" -ge 400 ]; then tree=$content; fi\n");
+        body.push_str("          if [ \"$mode\" = wait-dies ]; then\n");
+        body.push_str("            echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"fast\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"probe-fresh\\\"}}\"\n");
+        body.push_str("            continue\n");
+        body.push_str("          fi\n");
         body.push_str("          if [ \"$mode\" = unsettled-first ]; then\n");
         body.push_str("            echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$tree,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("          else\n");
@@ -8028,8 +8155,14 @@ mod tests {
         std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
         let report = session.first_frame_report().expect("report");
         assert!(report.placeholder, "an unmounted frame is a placeholder: {report:?}");
-        assert_eq!(report.traversals, 2, "{report:?}");
-        assert_eq!(report.event_waits, 1, "{report:?}");
+        // GATEFIX (F1): the wait is bounded by the content *window*, so a fake
+        // that answers instantly is observed again (paced) until the window has
+        // run out. Every observation after the launch's own traversal is a gated
+        // change request, and the verdict rests on the whole window.
+        assert!(report.traversals >= 2, "{report:?}");
+        assert_eq!(report.event_waits, report.traversals - 1, "{report:?}");
+        assert!(report.window_spent, "{report:?}");
+        assert_eq!(report.window_ms, 60, "{report:?}");
         assert!(
             report.settled,
             "the rolled-back frame is the settled skeleton: {report:?}"
@@ -8119,6 +8252,106 @@ mod tests {
             "the bound tree is the app's content, not the splash skeleton"
         );
         assert_eq!(report.budget_ms, first_frame_budget_ms(), "{report:?}");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// GATEFIX (F1, the v0.3.0 release-blocker): on a quiet host a `launch` step
+    /// that carried `settle: content` answered `PLACEHOLDER_CONTENT` (2 of 32
+    /// matrix negatives passed on a busy host and failed here). The launch's own
+    /// traversal is `fast`, and the mount wait inherited the fast rule's missing
+    /// gate: eight samples of the guest's stale skeleton cost ~0 ms, so the
+    /// window was declared a placeholder before the app ever ran.
+    ///
+    /// The rule (ADR-0032 amendment): a placeholder needs the skeleton to be
+    /// stable over the whole content **window**, confirmed by the guest's change
+    /// signal — not N traversals. This test mounts the app 400 ms after the
+    /// launch frame: before the fix the launch bound the skeleton in <1 ms and
+    /// reported `placeholder`; now the wait asks the guest for its next committed
+    /// tree state, keeps observing until content arrives, and binds it.
+    #[test]
+    fn gatefix_a_slow_mount_is_never_called_a_placeholder() {
+        let dir = g3f1_scratch("slow-mount");
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "3000");
+        let mut session = start_fake_first_frame(&dir, "slow-mount");
+        let started = Instant::now();
+        let tree = session
+            .ensure_launch_tree("fast", false)
+            .expect("a slow mount binds the app's frame");
+        let elapsed = started.elapsed();
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        let report = session.first_frame_report().expect("report");
+        assert!(
+            ui_tree_has_app_text(&tree.nodes),
+            "the app's content is the frame, not the skeleton: {report:?}"
+        );
+        assert!(
+            !report.placeholder && !report.suspect,
+            "content that mounted inside the window is never a placeholder: {report:?}"
+        );
+        assert!(report.event_waits >= 1, "the wait is a change request: {report:?}");
+        assert!(
+            elapsed >= Duration::from_millis(300),
+            "the wait has to give the app time to draw (was {elapsed:?}): {report:?}"
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The other half of the same rule: a launch that really never mounts is
+    /// still a placeholder, but only after the whole window was observed — never
+    /// from a burst of samples taken within a millisecond of the window mount.
+    #[test]
+    fn gatefix_a_real_placeholder_still_blocks_after_the_window() {
+        let dir = g3f1_scratch("never-window");
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "150");
+        let mut session = start_fake_first_frame(&dir, "never");
+        let started = Instant::now();
+        let tree = session
+            .ensure_launch_tree("fast", false)
+            .expect("the launch binds the window it observed");
+        let elapsed = started.elapsed();
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        let report = session.first_frame_report().expect("report");
+        assert!(!ui_tree_has_app_text(&tree.nodes));
+        assert!(report.placeholder, "a skeleton that never mounted is a placeholder: {report:?}");
+        assert!(!report.suspect, "{report:?}");
+        assert!(
+            report.window_spent && report.window_ms >= 150,
+            "the verdict rests on the whole window: {report:?}"
+        );
+        assert!(
+            elapsed >= Duration::from_millis(100),
+            "the verdict cannot come from a burst (was {elapsed:?}): {report:?}"
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A wait whose guest stops answering cannot prove either outcome. It is the
+    /// guest's error, never a `placeholder` claim about an app that had no
+    /// window — the fail-closed half of the F1 rule.
+    #[test]
+    fn gatefix_a_wait_that_cannot_observe_the_window_is_not_a_placeholder() {
+        let dir = g3f1_scratch("wait-dies");
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "3000");
+        let mut session = start_fake_first_frame(&dir, "wait-dies");
+        let error = session
+            .ensure_launch_tree("fast", false)
+            .expect_err("a guest that stops answering must not become a placeholder");
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        let text = error.to_string();
+        assert!(
+            text.contains("INTERNAL") || text.contains("guest stopped answering"),
+            "the guest's own failure is reported: {error}"
+        );
+        assert!(
+            session.first_frame_report().is_none(),
+            "no verdict may be published from a wait that could not observe"
+        );
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }
