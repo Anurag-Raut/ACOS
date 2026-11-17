@@ -1104,6 +1104,39 @@ impl ServiceHost {
         held
     }
 
+    /// Apply the reference changes every handler reported outside a binder
+    /// transaction.
+    ///
+    /// A handler's `drain_retained`/`drain_released` runs after both dispatch
+    /// paths, but a module can also answer a pending request from a **control
+    /// op** (`hw.biometric`'s scripted `auth`, a fixture driving a module from
+    /// the harness): there is no transaction to drain after, so without this
+    /// the one-shot release would wait for the guest's next call — the node
+    /// stays rooted (and the app's callback object stays alive) in between.
+    ///
+    /// Returns `(retained, released)` for evidence.
+    pub fn drain_refs(&mut self) -> (Vec<BinderId>, Vec<BinderId>) {
+        let mut retained: Vec<BinderId> = Vec::new();
+        let mut released: Vec<BinderId> = Vec::new();
+        for entry in self.entries.values_mut() {
+            if let Some(object) = entry.object.as_mut() {
+                retained.append(&mut object.drain_retained());
+                released.append(&mut object.drain_released());
+            }
+        }
+        for object in self.dynamic.values_mut() {
+            retained.append(&mut object.drain_retained());
+            released.append(&mut object.drain_released());
+        }
+        for id in &retained {
+            self.retain_binder(*id);
+        }
+        for id in &released {
+            self.release_binder(*id);
+        }
+        (retained, released)
+    }
+
     /// Release **every** reference every live handler holds (session teardown:
     /// the guest process is gone, so its nodes must not stay rooted on a
     /// long-lived peer).

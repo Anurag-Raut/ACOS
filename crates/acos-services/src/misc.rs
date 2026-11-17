@@ -1603,6 +1603,11 @@ pub struct AutofillState {
     pub clients: Vec<u64>,
     /// Sessions started (and immediately finished).
     pub sessions: Vec<i32>,
+    /// Strong references the host holds on the registered clients
+    /// (`IAutoFillManagerClient`). A registration *is* a reference: it keeps the
+    /// guest's node rooted until `removeClient`, and one ledger covers every
+    /// module (`crate::refs`).
+    pub refs: crate::refs::GuestRefs,
 }
 
 impl AutofillState {
@@ -1640,7 +1645,11 @@ impl ServiceObject for AutofillService {
         let reply = match method.name.as_str() {
             "addClient" => {
                 if let Some(client) = args.first().and_then(Value::as_binder) {
-                    state.clients.push(client.0);
+                    if client.0 != 0 && !state.clients.contains(&client.0) {
+                        state.clients.push(client.0);
+                        // The service stores the client: one strong reference.
+                        state.refs.hold(client);
+                    }
                 }
                 // The IResultReceiver is the last argument; answer it so the
                 // app never waits (services.tsv: "report disabled").
@@ -1656,7 +1665,14 @@ impl ServiceObject for AutofillService {
                 }
                 Vec::new()
             }
-            "removeClient" | "finishSession" | "cancelSession" => Vec::new(),
+            "removeClient" => {
+                if let Some(client) = args.first().and_then(Value::as_binder) {
+                    state.clients.retain(|held| *held != client.0);
+                    state.refs.release(client);
+                }
+                Vec::new()
+            }
+            "finishSession" | "cancelSession" => Vec::new(),
             "isServiceEnabled" => vec![Value::Bool(false)],
             "isServiceSupported" => vec![Value::Bool(false)],
             "isFieldClassificationEnabled" => vec![Value::Bool(false)],
@@ -1669,6 +1685,18 @@ impl ServiceObject for AutofillService {
             }
         };
         Ok(CallResult { reply, deliveries })
+    }
+
+    fn drain_retained(&mut self) -> Vec<acos_parcel::BinderId> {
+        self.state.lock().unwrap().refs.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<acos_parcel::BinderId> {
+        self.state.lock().unwrap().refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<acos_parcel::BinderId> {
+        self.state.lock().unwrap().refs.release_all()
     }
 }
 

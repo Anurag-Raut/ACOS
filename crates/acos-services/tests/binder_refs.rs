@@ -15,6 +15,8 @@
 //! (`take_released_binders`). The guest half is the ART evidence in
 //! `results/handoff/BINDERREF2/`.
 
+use std::sync::Arc;
+
 use acos_parcel::{BinderId, Parcel};
 use acos_services::host::ServiceHost;
 use acos_services::module::{ModuleConfig, ModuleRegistry, Profile};
@@ -504,4 +506,213 @@ fn releasing_everything_leaves_no_reference_behind_for_a_dead_guest() {
     assert_eq!(host.held_refs(listener), 0);
     assert_eq!(host.held_refs(a11y_client), 0);
     assert!(host.release_all_refs().is_empty(), "a second pass is empty");
+}
+
+// ---------------------------------------------------------------------------
+// BINDERREF3: the one-shot callbacks (biometric, autofill) and the IME client
+// ---------------------------------------------------------------------------
+
+const AUTH: &str = "android.hardware.biometrics.IAuthService";
+
+/// `IAuthService.authenticate(IBinder, long, int, IBiometricServiceReceiver,
+/// String, PromptInfo)`: code 4, the wire form the module decodes.
+fn authenticate(host: &mut ServiceHost, receiver: BinderId) -> Parcel {
+    let mut data = Parcel::new();
+    data.write_interface_token(AUTH).expect("token");
+    data.write_strong_binder(BinderId(0x9001));
+    data.write_int64(7);
+    data.write_int32(0);
+    data.write_strong_binder(receiver);
+    data.write_string16("dev.acos.fixtures.tailprobe")
+        .expect("package");
+    // `PromptInfo` is consumed by the module's reader as a null bundle.
+    data.write_int32(-1);
+    call(host, "auth", 4, &mut data)
+}
+
+#[test]
+fn a_pending_biometric_authenticate_references_its_receiver_until_answered() {
+    let mut host = ServiceHost::standard();
+    let mut registry = registry_with(&mut host, "hw.biometric", Profile::Scripted);
+    let receiver = guest(0x91);
+    assert_eq!(host.held_refs(receiver), 0);
+    let _ = authenticate(&mut host, receiver);
+    assert_eq!(
+        host.held_refs(receiver),
+        1,
+        "a pending authenticate holds its IBiometricServiceReceiver"
+    );
+    let _ = host.take_deliveries();
+    assert!(
+        host.take_released_binders().is_empty(),
+        "taking the reference is not a release"
+    );
+
+    // The request is answered: the receiver's reference goes with it, exactly
+    // once (`release` is a set operation, so a second answer cannot drop a
+    // reference the service no longer holds).
+    registry
+        .control(
+            &mut host,
+            "hw.biometric",
+            "auth",
+            &serde_json::json!({"result": "success"}),
+        )
+        .expect("scripted answer");
+    assert_eq!(host.held_refs(receiver), 0);
+    assert_eq!(host.take_released_binders(), vec![receiver]);
+}
+
+#[test]
+fn cancelling_a_biometric_authentication_releases_its_receiver() {
+    let mut host = ServiceHost::standard();
+    let _registry = registry_with(&mut host, "hw.biometric", Profile::Scripted);
+    let receiver = guest(0x92);
+    let reply = authenticate(&mut host, receiver);
+    let auth_id = {
+        let mut reply = reply;
+        let _exception = reply.read_int32().expect("no-exception header");
+        reply.read_int64().expect("auth id")
+    };
+    let _ = host.take_deliveries();
+    let _ = host.take_released_binders();
+    assert_eq!(host.held_refs(receiver), 1);
+
+    let mut data = Parcel::new();
+    data.write_interface_token(AUTH).expect("token");
+    data.write_strong_binder(BinderId(0x9001));
+    data.write_string16("dev.acos.fixtures.tailprobe")
+        .expect("package");
+    data.write_int64(auth_id);
+    let _ = call(&mut host, "auth", 5, &mut data);
+    assert_eq!(
+        host.held_refs(receiver),
+        0,
+        "the cancelled request no longer holds its receiver"
+    );
+    assert!(host.take_released_binders().contains(&receiver));
+}
+
+const AUTOFILL: &str = "android.view.autofill.IAutoFillManager";
+
+fn autofill_client(host: &mut ServiceHost, client: BinderId, code: u32) -> Parcel {
+    // The decoded codec writes the `ComponentName`/`IResultReceiver` layout the
+    // image's framework expects; a hand-written parcel is not authoritative.
+    let args = if code == 1 {
+        vec![
+            Value::Binder(Some(client)),
+            Value::TypedObject(acos_services::value::Parcelable::Null),
+            Value::Int(0),
+            Value::Binder(Some(BinderId(0))),
+        ]
+    } else {
+        vec![Value::Binder(Some(client)), Value::Int(0)]
+    };
+    decoded(host, "autofill", AUTOFILL, code, args)
+}
+
+#[test]
+fn an_autofill_client_is_referenced_until_remove_client() {
+    let mut host = ServiceHost::standard();
+    let _registry = registry_with(&mut host, "core", Profile::Real);
+    let client = guest(0x93);
+    let _ = autofill_client(&mut host, client, 1);
+    let _ = host.take_deliveries();
+    assert_eq!(host.held_refs(client), 1, "addClient holds the client");
+    assert!(host.take_released_binders().is_empty());
+
+    // A repeat registration is the same client, not a second reference.
+    let _ = autofill_client(&mut host, client, 1);
+    assert_eq!(host.held_refs(client), 1);
+
+    let _ = autofill_client(&mut host, client, 2);
+    assert_eq!(host.held_refs(client), 0);
+    assert!(host.take_released_binders().contains(&client));
+}
+
+const IME: &str = "com.android.internal.view.IInputMethodManager";
+
+#[test]
+fn an_ime_client_and_its_remote_connection_are_referenced_until_teardown() {
+    let mut host = ServiceHost::standard();
+    let _registry = registry_with(&mut host, "core", Profile::Real);
+    // The shipped `input_method` node is built over the process-wide IME state
+    // (`ime::shared`), which every host in this test process shares; a
+    // per-test state keeps this test's ledger its own (the shared one is
+    // exercised by the `w26`/`t38` service tests).
+    let state = Arc::new(std::sync::Mutex::new(acos_services::ime::ImeState::new()));
+    let _ = host.register_dynamic_named(
+        "input_method",
+        IME,
+        Box::new(acos_services::ime_wire::ImeWireService::new(state)),
+    );
+    let client = guest(0x94);
+    let remote = guest(0x95);
+    let _ = decoded(
+        &mut host,
+        "input_method",
+        IME,
+        1,
+        vec![
+            Value::Binder(Some(client)),
+            Value::Binder(Some(remote)),
+            Value::Int(0),
+        ],
+    );
+    let _ = host.take_deliveries();
+    assert_eq!(host.held_refs(client), 1, "the IInputMethodClient");
+    assert_eq!(host.held_refs(remote), 1, "its IRemoteInputConnection");
+    assert!(host.take_released_binders().is_empty());
+
+    // `IInputMethodManager` has no `removeClient`: AOSP drops the `ClientState`
+    // when the client process dies, which is the peer's process-teardown hook.
+    let released = host.release_all_refs();
+    assert!(released.contains(&client), "released: {released:?}");
+    assert!(released.contains(&remote), "released: {released:?}");
+    assert_eq!(host.held_refs(client), 0);
+    assert_eq!(host.held_refs(remote), 0);
+}
+
+#[test]
+fn a_hundred_attach_detach_cycles_return_the_ledger_to_baseline() {
+    let mut host = ServiceHost::standard();
+    let mut registry = registry_with(&mut host, "core", Profile::Real);
+    let baseline = host.held_ref_ids();
+    assert!(baseline.is_empty(), "baseline: {baseline:?}");
+
+    for round in 0..100u64 {
+        registry
+            .attach(
+                &mut host,
+                "hw.biometric",
+                Profile::Scripted,
+                &ModuleConfig::default(),
+            )
+            .unwrap_or_else(|error| panic!("round {round}: attach: {error}"));
+        let receiver = guest(0x1000 + round);
+        let _ = authenticate(&mut host, receiver);
+        let _ = host.take_deliveries();
+        assert_eq!(
+            host.held_refs(receiver),
+            1,
+            "round {round}: the pending request holds its receiver"
+        );
+        registry
+            .detach(&mut host, "hw.biometric")
+            .unwrap_or_else(|error| panic!("round {round}: detach: {error}"));
+        assert_eq!(
+            host.held_refs(receiver),
+            0,
+            "round {round}: detach released the receiver"
+        );
+        assert!(
+            host.take_released_binders().contains(&receiver),
+            "round {round}: the peer was told to unroot the node"
+        );
+        assert_eq!(
+            host.held_ref_ids(),
+            baseline,
+            "round {round}: the ledger is back to its baseline"
+        );
+    }
 }
