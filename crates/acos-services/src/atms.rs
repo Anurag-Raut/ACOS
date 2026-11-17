@@ -586,13 +586,16 @@ impl AtmsState {
     pub fn register_receiver(&mut self, registration: ReceiverRegistration) {
         let receiver = registration.receiver;
         let detail = describe_receiver(&registration);
-        self.ams.register_receiver(
-            receiver,
-            &registration.package,
-            registration.actions.clone(),
-            registration.categories.clone(),
-            registration.flags,
-        );
+        if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
+            eprintln!("ACOSATMS receiver-registered {detail}");
+        }
+        // The whole `IntentFilter` decides matching (`IntentFilter.match`), so
+        // the AMS record carries every fact the guest registered — to
+        // `register_receiver` the registration would be action+category only,
+        // and a filter that declares a scheme or a MIME type would then match
+        // broadcasts it must not.
+        self.ams
+            .register_receiver_with_filter(receiver, &registration.package, filter_facts(&registration), registration.flags);
         self.receiver_registrations
             .retain(|r| r.receiver != receiver);
         self.receiver_registrations.push(registration);
@@ -630,6 +633,54 @@ impl AtmsState {
             );
         }
         removed
+    }
+
+    /// The `IApplicationThread` of the attached process that runs `package`'s
+    /// components — the process a device would instantiate a manifest
+    /// `<receiver>` in (`ActivityManagerService.getProcessRecordLocked`).
+    ///
+    /// Three answers, in AOSP's precedence order for this host's data:
+    ///
+    /// 1. a process whose `ProcessRecord` names the package;
+    /// 2. the process running one of the package's **activities** (the launch
+    ///    record names the package, and its token names the process tag);
+    /// 3. a session with exactly one attached process whose own record names no
+    ///    package: that process is the session's app process (the ART
+    ///    launcher's handshake does not always carry the package name, so this
+    ///    is the only way to reach the app that is unambiguously the one).
+    ///
+    /// Anything else is `None`: no running process, and starting one is the
+    /// launcher's decision, never this host's guess.
+    #[must_use]
+    pub fn attached_thread_for_package(&self, package: &str) -> Option<u64> {
+        if let Some(thread) = self
+            .processes
+            .iter()
+            .find(|p| p.attached && p.package_name == package)
+            .and_then(|p| p.app_thread)
+        {
+            return Some(thread);
+        }
+        if let Some(thread) = self
+            .ams
+            .activities
+            .iter()
+            .filter(|activity| !activity.finished && activity.package == package)
+            .find_map(|activity| {
+                let tag = process_tag_of(activity.token);
+                self.processes
+                    .iter()
+                    .find(|p| p.tag == tag && p.attached)
+                    .and_then(|p| p.app_thread)
+            })
+        {
+            return Some(thread);
+        }
+        let mut attached = self.processes.iter().filter(|p| p.attached);
+        match (attached.next(), attached.next()) {
+            (Some(process), None) if process.package_name.is_empty() => process.app_thread,
+            _ => None,
+        }
     }
 
     /// Record an attach and emit `process_started` (primary process).
@@ -1843,6 +1894,40 @@ impl AtmsService {
         let mut state = self.state.lock().unwrap();
         take_receiver_deliveries(&mut state)
     }
+
+    /// Drain the manifest-receiver matches.
+    ///
+    /// A manifest `<receiver>` is not an `IIntentReceiver`: stock
+    /// `BroadcastQueue` asks the **owning process** to instantiate the class
+    /// (`IApplicationThread.scheduleReceiver` → `ActivityThread
+    /// .handleReceiver`), so the host builds that transaction. Fully-qualified
+    /// classes only (the parser already expanded `.Name`), and a match whose
+    /// package has no running process is reported here — a device would start
+    /// the process, which this host cannot decide on its own.
+    pub fn take_manifest_receiver_matches(&mut self) -> Vec<crate::ams::PendingManifestReceiver> {
+        let mut state = self.state.lock().unwrap();
+        let matches = state.ams.take_pending_manifest_receivers();
+        for receiver in &matches {
+            if state.attached_thread_for_package(&receiver.package).is_none() {
+                state.log_event(
+                    "ActivityManagerBroadcast",
+                    acos_protocol::LogLevel::Warn,
+                    format!(
+                        "manifest receiver {}/{} not delivered: no running process for the package",
+                        receiver.package, receiver.class
+                    ),
+                );
+            }
+        }
+        matches
+    }
+
+    /// The `IApplicationThread` of the attached process that owns `package`.
+    #[must_use]
+    pub fn app_thread_for_package(&mut self, package: &str) -> Option<u64> {
+        let state = self.state.lock().unwrap();
+        state.attached_thread_for_package(package)
+    }
 }
 
 /// Convert the AMS state's queued receiver matches into `system -> app`
@@ -1851,29 +1936,24 @@ fn take_receiver_deliveries(state: &mut AtmsState) -> Vec<crate::host::PendingDe
     let queued = state.ams.take_pending_receivers();
     let mut deliveries = Vec::new();
     for receiver in queued {
-        if receiver.is_manifest() {
-            state.log_event(
-                "ActivityManagerBroadcast",
-                acos_protocol::LogLevel::Debug,
-                format!(
-                    "manifest receiver for {} not delivered: an ACOS session has no separate process to instantiate it",
-                    receiver
-                        .intent
-                        .component
-                        .as_ref()
-                        .map(|(p, c)| format!("{p}/{c}"))
-                        .unwrap_or_else(|| "(implicit)".to_string())
-                ),
-            );
-            continue;
-        }
         match receiver.receiver_delivery() {
             Ok(delivery) => deliveries.push(delivery),
-            Err(error) => state.log_event(
-                "ActivityManagerBroadcast",
-                acos_protocol::LogLevel::Warn,
-                format!("receiver delivery not encodable: {error}"),
-            ),
+            Err(error) => {
+                // A delivery the host cannot encode is a dropped broadcast: it
+                // must be visible (stderr + the module log), never a silent
+                // success for the caller.
+                if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
+                    eprintln!(
+                        "ACOSATMS receiver-delivery-failed receiver={:#x} {error}",
+                        receiver.receiver
+                    );
+                }
+                state.log_event(
+                    "ActivityManagerBroadcast",
+                    acos_protocol::LogLevel::Warn,
+                    format!("receiver delivery not encodable: {error}"),
+                );
+            }
         }
     }
     deliveries
@@ -2210,6 +2290,35 @@ impl ServiceObject for AtmsService {
                 // the queued match (ADR-0029 late modules need this for
                 // `SMS_RECEIVED`). The conversion is shared with the
                 // `IIntentSender` fire path ([`take_receiver_deliveries`]).
+                if std::env::var_os("ACOS_ATMS_TRACE").is_some()
+                    && matches!(
+                        method.name.as_str(),
+                        "broadcastIntent" | "broadcastIntentWithFeature"
+                    )
+                {
+                    eprintln!(
+                        "ACOSATMS broadcast method={} reply={:?} receivers={} intent={:?}",
+                        method.name,
+                        result.reply.first(),
+                        state.receiver_registrations.len(),
+                        args.iter()
+                            .filter_map(Value::as_parcelable)
+                            .next()
+                            .map(crate::ams::IntentFacts::from_parcelable)
+                            .map(|f| (f.action, f.package, f.flags))
+                    );
+                    eprintln!(
+                        "ACOSATMS broadcast-queued manifest={} dynamic={} dyn_records={:?}",
+                        state.ams.pending_manifest_receivers.len(),
+                        state.ams.pending_receivers.len(),
+                        state
+                            .ams
+                            .receivers
+                            .iter()
+                            .map(|r| (r.receiver, r.filter.actions.clone()))
+                            .collect::<Vec<_>>()
+                    );
+                }
                 deliveries.extend(take_receiver_deliveries(&mut state));
                 return Ok(CallResult {
                     reply: result.reply,
@@ -2373,6 +2482,49 @@ fn describe_crash_info(crash: Option<&Parcelable>) -> String {
 /// record, not an error.
 /// A registration the runtime's AMS accepted, without a decoded `IntentFilter`
 /// (the runtime keeps the decoded actions/categories it matched on).
+/// The `IntentFilter` facts a [`ReceiverRegistration`] carries, in the shape
+/// the AMS matcher reads.
+fn filter_facts(registration: &ReceiverRegistration) -> crate::ams::ReceiverFilter {
+    let mut data_types = registration.static_data_types.clone();
+    for data_type in &registration.data_types {
+        if !data_types.contains(data_type) {
+            data_types.push(data_type.clone());
+        }
+    }
+    crate::ams::ReceiverFilter {
+        actions: registration.actions.clone(),
+        categories: registration.categories.clone(),
+        schemes: registration.schemes.clone(),
+        data_types,
+        scheme_specific_parts: registration
+            .scheme_specific_parts
+            .iter()
+            .map(|pattern| crate::ams::DataPattern {
+                pattern: pattern.pattern.clone(),
+                kind: pattern.kind,
+            })
+            .collect(),
+        authorities: registration
+            .authorities
+            .iter()
+            .map(|authority| crate::ams::DataAuthority {
+                host: authority.host.clone(),
+                port: authority.port,
+                wild: authority.wild,
+            })
+            .collect(),
+        paths: registration
+            .paths
+            .iter()
+            .map(|pattern| crate::ams::DataPattern {
+                pattern: pattern.pattern.clone(),
+                kind: pattern.kind,
+            })
+            .collect(),
+        priority: registration.priority,
+    }
+}
+
 fn receiver_registration_from_parts(
     receiver: u64,
     package: &str,

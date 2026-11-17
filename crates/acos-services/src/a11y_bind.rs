@@ -186,7 +186,7 @@ pub fn bind_intent(package: &str, class: &str) -> Parcelable {
 /// `applicationInvertedScale`).
 const DEFAULT_COMPAT: [u8; 16] = [0; 16];
 
-fn default_compat_info() -> Parcelable {
+pub(crate) fn default_compat_info() -> Parcelable {
     // `CompatibilityInfo` is four scalars; the default instance is all zero
     // except `applicationScale`/`applicationInvertedScale` = 1.0f.
     let _ = DEFAULT_COMPAT;
