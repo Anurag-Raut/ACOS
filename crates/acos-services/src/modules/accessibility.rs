@@ -54,7 +54,15 @@ use crate::module::{
 /// Module id.
 pub const MODULE_ID: &str = "accessibility";
 
-const CONTROL_OPS: [ControlOp; 3] = [
+const CONTROL_OPS: [ControlOp; 5] = [
+    ControlOp {
+        name: "enable",
+        args: "{\"services\": [\"pkg/.Class\"]} — the Settings UI's switch: writes Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES/ACCESSIBILITY_ENABLED and lets the system's settings observer bind the service (AccessibilityManagerService.setEnabledServices -> bindServices)",
+    },
+    ControlOp {
+        name: "disable",
+        args: "none — the Settings UI switched off: clears the enable set, so the bound service is unbound (onUnbind/onDestroy)",
+    },
     ControlOp {
         name: "list_events",
         args: "{\"limit\": N} — the recent a11y events (newest last, default 50)",
@@ -223,6 +231,44 @@ impl Module for AccessibilityModule {
             });
         };
         match op {
+            // The Settings UI's switch, in the two directions. Both write the
+            // secure settings exactly as `AccessibilityManagerService
+            // .setAccessibilityEnabled` does; the bind/unbind itself follows
+            // from that write (`a11y_bind::sync_enabled_services`), so this op
+            // cannot put the module in a state the settings table does not
+            // describe.
+            "enable" => {
+                let services: Vec<String> = args
+                    .get("services")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|value| value.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if services.is_empty() {
+                    return Err(ServiceError::ModuleRejected {
+                        module: MODULE_ID,
+                        detail: "enable needs {services: [\"pkg/.Class\"]}: an empty list is the \
+                                 disable op"
+                            .into(),
+                    });
+                }
+                state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .enable_services(&services)?;
+                Ok(json!({"enabled_services": services}))
+            }
+            "disable" => {
+                state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .enable_services(&[])?;
+                Ok(json!({"enabled_services": []}))
+            }
             "status" => Ok(state
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)

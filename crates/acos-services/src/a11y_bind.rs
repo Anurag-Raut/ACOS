@@ -1617,3 +1617,190 @@ pub fn accessibility_info_for(
         _ => Parcelable::Null,
     }
 }
+
+/// The deliveries that **unbind** the currently bound accessibility service.
+///
+/// AOSP's `AccessibilityManagerService.removeServiceLocked` →
+/// `unbindService` → the app's `ActivityThread` runs `Service.onUnbind`, then
+/// `scheduleStopService` destroys it (`AccessibilityService.onUnbind`/
+/// `onDestroy`). ACOS's bind created the service with
+/// `scheduleCreateService` + `scheduleBindService` (`plan_bind`), so the
+/// inverse is `scheduleUnbindService` + `scheduleStopService` addressed at the
+/// same token — exactly the pair the generic `bindService` path already uses
+/// (`crate::service_bind`).
+///
+/// The service's overlay window token is released with it: AOSP removes an
+/// accessibility window token when the service that owns it goes away, and
+/// leaving the token behind would let a later, unrelated window inherit the
+/// overlay authority of a service that is no longer enabled.
+pub fn plan_unbind(state: &mut A11yState) -> Vec<PendingDelivery> {
+    let bound = state.bound_service.take();
+    let pending = state.pending_bind.take();
+    let (component, token) = match (&bound, &pending) {
+        (Some(bound), _) => (bound.component.clone(), bound.token),
+        (None, Some(pending)) => (pending.component.clone(), pending.token),
+        (None, None) => return Vec::new(),
+    };
+    if let Some(bound) = &bound {
+        state.release_overlay_token(bound.window_token);
+        if bound.binder != 0 {
+            state.refs.release(acos_parcel::BinderId(bound.binder));
+        }
+    }
+    state.service_config = None;
+    let (package, class) = component
+        .split_once('/')
+        .map(|(package, class)| {
+            (
+                package.to_string(),
+                if let Some(short) = class.strip_prefix('.') {
+                    format!("{package}.{short}")
+                } else {
+                    class.to_string()
+                },
+            )
+        })
+        .unwrap_or_else(|| (component.clone(), component.clone()));
+    let Some(app_thread) = state.app_thread else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    if let Ok(data) = request(
+        APP_THREAD,
+        SCHEDULE_UNBIND_SERVICE,
+        vec![
+            Value::Binder(Some(BinderId(token))),
+            Value::Parcelable(bind_intent(&package, &class)),
+        ],
+    ) {
+        out.push(PendingDelivery {
+            target: BinderId(app_thread),
+            interface: APP_THREAD.to_string(),
+            code: SCHEDULE_UNBIND_SERVICE,
+            method: "scheduleUnbindService".into(),
+            data,
+        });
+    }
+    if let Ok(data) = request(
+        APP_THREAD,
+        SCHEDULE_STOP_SERVICE,
+        vec![Value::Binder(Some(BinderId(token)))],
+    ) {
+        out.push(PendingDelivery {
+            target: BinderId(app_thread),
+            interface: APP_THREAD.to_string(),
+            code: SCHEDULE_STOP_SERVICE,
+            method: "scheduleStopService".into(),
+            data,
+        });
+    }
+    out
+}
+
+/// `IApplicationThread.scheduleUnbindService(IBinder, Intent)`.
+pub const SCHEDULE_UNBIND_SERVICE: u32 = 12;
+/// `IApplicationThread.scheduleStopService(IBinder)`.
+pub const SCHEDULE_STOP_SERVICE: u32 = 4;
+
+/// `AccessibilityManagerService.onUserStateChangedLocked` →
+/// `readConfigurationForUserStateLocked` → `setEnabledServices` →
+/// `bindServices`.
+///
+/// The system learns that the enabled-service set changed from its
+/// `SettingsObserver`, never from an app call. ACOS's equivalent observer is a
+/// **pull** at the session's delivery drain: the settings provider's `PUT_secure`
+/// and the module's own launches write the same table, so re-reading it there
+/// is exactly what the observer sees, without a callback channel between two
+/// service objects that share only the `SettingsState` lock.
+///
+/// Returns the deliveries the reconciliation produced (a bind for a newly
+/// enabled service, the unbind pair for a service that left the set).
+pub fn sync_enabled_services(state: &mut A11yState) -> Vec<PendingDelivery> {
+    let Some(settings) = state.settings.as_ref() else {
+        // No settings provider: nothing can change the enable set behind the
+        // module's back, and `enable_services` already keeps the state in step.
+        return Vec::new();
+    };
+    let (enabled, services, generation, written) = {
+        let settings = settings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // A settings table nobody has written has no enable set to read: the
+        // module's own record is then the authority (a host built without the
+        // module's launch config, a conformance kit). Once either key exists —
+        // every real session writes both when a service is switched on — the
+        // table is the authority, exactly as it is on a device.
+        let written = settings.secure.contains_key("accessibility_enabled")
+            || settings
+                .secure
+                .contains_key("enabled_accessibility_services");
+        (
+            settings
+                .secure
+                .get("accessibility_enabled")
+                .is_some_and(|value| value == "1"),
+            settings
+                .secure
+                .get("enabled_accessibility_services")
+                .map(|raw| {
+                    raw.split(':')
+                        .filter(|entry| !entry.is_empty())
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            settings.generation(crate::provider::Namespace::Secure),
+            written,
+        )
+    };
+    if !written {
+        return Vec::new();
+    }
+    // The observer runs when the `Settings.Secure` generation moves — whether
+    // the write came from a guest `ContentResolver` or from the module's own
+    // `enable_services` (which writes the same two keys and then keeps its own
+    // record in step). Reading the table on every drain is what makes the two
+    // paths converge on one reconciliation.
+    if state.observed_secure_generation == Some(generation)
+        && enabled == state.enabled
+        && services == state.enabled_services
+    {
+        return Vec::new();
+    }
+    state.observed_secure_generation = Some(generation);
+    state.enabled = enabled;
+    state.enabled_services = services;
+    // A service that is no longer enabled (or was replaced by another one) is
+    // unbound first: `setEnabledServices` unbinds the services that left the
+    // set before it binds the ones that joined it.
+    let keep = state
+        .enabled
+        .then(|| state.enabled_services.first().cloned())
+        .flatten();
+    let bound = state
+        .bound_service
+        .as_ref()
+        .map(|bound| bound.component.clone())
+        .or_else(|| state.pending_bind.as_ref().map(|bind| bind.component.clone()));
+    let mut deliveries = Vec::new();
+    if let Some(bound) = bound {
+        if keep.as_deref() != Some(bound.as_str()) {
+            deliveries.extend(plan_unbind(state));
+        }
+    }
+    if keep.is_some() {
+        match plan_bind(state) {
+            Ok(more) => deliveries.extend(more),
+            Err(error) => {
+                // A bind that cannot start yet (no `attachApplication`, no
+                // installed service) is recorded on the state, never a silent
+                // success: the module's report lists it.
+                let reason = format!("bind not started: {error}");
+                if !state.unsupported.contains(&reason) {
+                    state.unsupported.push(reason);
+                }
+            }
+        }
+    }
+    deliveries
+}

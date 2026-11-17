@@ -2640,7 +2640,29 @@ impl ServiceHost {
             .map(crate::atms::AtmsService::take_receiver_deliveries)
             .unwrap_or_default();
         out.extend(self.take_manifest_receiver_deliveries());
+        out.extend(self.take_accessibility_deliveries());
         out
+    }
+
+    /// `AccessibilityManagerService`'s settings observer, as a pull.
+    ///
+    /// AOSP learns that `Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES` /
+    /// `ACCESSIBILITY_ENABLED` changed from its `SettingsObserver` →
+    /// `onUserStateChangedLocked` → `setEnabledServices` → `bindServices`, and
+    /// binds or unbinds the affected service. ACOS's enable set is writable
+    /// from two places that share only the settings table (a guest
+    /// `ContentResolver` put and the module's own control op), so the same
+    /// reconciliation runs where the session drains its deliveries — after
+    /// every transaction and control op, exactly the point the settings write
+    /// becomes visible to the system.
+    fn take_accessibility_deliveries(&mut self) -> Vec<PendingDelivery> {
+        self.entries
+            .get_mut("android.view.accessibility.IAccessibilityManager")
+            .and_then(|entry| entry.object.as_mut())
+            .and_then(|object| object.as_any_mut())
+            .and_then(|any| any.downcast_mut::<crate::misc::A11yService>())
+            .map(crate::misc::A11yService::sync_from_settings)
+            .unwrap_or_default()
     }
 
     /// `ActivityThread.handleReceiver` for every manifest `<receiver>` a
@@ -2811,6 +2833,9 @@ impl ServiceHost {
             out.append(&mut object.drain_raw_deliveries());
         }
         out.extend(self.take_ams_receiver_deliveries());
+        // A control op that changed the accessibility enable set is drained by
+        // the peer's idle tick, not by a transaction.
+        out.extend(self.take_accessibility_deliveries());
         out
     }
 

@@ -117,6 +117,10 @@ pub struct A11yBoundService {
     pub package: String,
     /// Fully-qualified class.
     pub class: String,
+    /// The bind token the system created the service with (`plan_bind`'s
+    /// `scheduleCreateService`/`scheduleBindService` token). The unbind pair
+    /// (`scheduleUnbindService` + `scheduleStopService`) names it.
+    pub token: u64,
     /// The app-side `IAccessibilityServiceClient` binder (`onBind`'s reply).
     pub binder: u64,
     /// `IAccessibilityServiceConnection` connection id handed to the service.
@@ -151,6 +155,10 @@ pub struct A11yState {
     pub enabled_services: Vec<String>,
     /// `Settings.Secure.ACCESSIBILITY_ENABLED`.
     pub enabled: bool,
+    /// The `Settings.Secure` generation this state was last reconciled
+    /// against (`a11y_bind::sync_enabled_services`): a write moves the
+    /// generation, which is the settings observer's trigger.
+    pub observed_secure_generation: Option<i32>,
     /// The most recent events (bounded, newest last).
     pub events: Vec<A11yEvent>,
     /// Every interaction connection the app registered.
@@ -280,6 +288,7 @@ impl A11yState {
             settings: None,
             enabled_services: Vec::new(),
             enabled: false,
+            observed_secure_generation: None,
             events: Vec::new(),
             connections: Vec::new(),
             unsupported: Vec::new(),
@@ -370,22 +379,20 @@ impl A11yState {
             let mut settings = settings
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let value = services.join(":");
-            settings
-                .secure
-                .insert("enabled_accessibility_services".into(), value.clone());
-            settings.secure.insert(
-                "accessibility_enabled".into(),
-                if services.is_empty() { "0" } else { "1" }.into(),
+            // `put`, not a map insert: a real settings write bumps the
+            // namespace generation, which is the counter
+            // `Settings$GenerationTracker` hands the system's observers — the
+            // trigger `a11y_bind::sync_enabled_services` reads.
+            settings.put(
+                crate::provider::Namespace::Secure,
+                "enabled_accessibility_services",
+                &services.join(":"),
             );
-            settings.changes.push((
+            settings.put(
                 crate::provider::Namespace::Secure,
-                "enabled_accessibility_services".into(),
-            ));
-            settings.changes.push((
-                crate::provider::Namespace::Secure,
-                "accessibility_enabled".into(),
-            ));
+                "accessibility_enabled",
+                if services.is_empty() { "0" } else { "1" },
+            );
         }
         self.enabled_services = services.to_vec();
         self.enabled = !services.is_empty();
@@ -398,12 +405,16 @@ impl A11yState {
             let mut settings = settings
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            settings
-                .secure
-                .insert("enabled_accessibility_services".into(), String::new());
-            settings
-                .secure
-                .insert("accessibility_enabled".into(), "0".into());
+            settings.put(
+                crate::provider::Namespace::Secure,
+                "enabled_accessibility_services",
+                "",
+            );
+            settings.put(
+                crate::provider::Namespace::Secure,
+                "accessibility_enabled",
+                "0",
+            );
         }
         self.enabled_services.clear();
         self.enabled = false;
@@ -959,6 +970,7 @@ impl A11yState {
             self.refs.hold(acos_parcel::BinderId(binder));
         }
         self.bound_service = Some(A11yBoundService {
+            token: pending.token,
             component: pending.component.clone(),
             package: pending.package.clone(),
             class: pending.class.clone(),
@@ -1099,6 +1111,22 @@ impl A11yService {
     pub fn state(&self) -> Arc<Mutex<A11yState>> {
         Arc::clone(&self.state)
     }
+
+    /// `AccessibilityManagerService.onUserStateChangedLocked`: reconcile the
+    /// bound service with the enable set the secure settings now hold.
+    ///
+    /// This is the settings observer's pull (`crate::a11y_bind`
+    /// `sync_enabled_services`), called by the host at the session's delivery
+    /// drain. A no-op when nothing changed, so it costs one settings read per
+    /// drain and cannot loop.
+    pub fn sync_from_settings(&mut self) -> Vec<crate::host::PendingDelivery> {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        crate::a11y_bind::sync_enabled_services(&mut state)
+    }
+
 }
 
 impl ServiceObject for A11yService {
