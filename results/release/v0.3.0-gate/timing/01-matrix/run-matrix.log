@@ -1,0 +1,69 @@
+run-matrix: host gate ok (loadavg1 1.08, MemAvailable 46.0 GiB)
+run-matrix: [1] scenarios/v2-art-counter.yaml rep 1/1
+run-matrix: [1] verdict=pass class=- wall=3554 ms cg_peak=21.46 MiB
+run-matrix: [2] scenarios/negative/counter-wrong-count.yaml rep 1/1
+run-matrix: [2] verdict=fail class=assertion wall=524 ms cg_peak=8.06 MiB
+run-matrix: [3] scenarios/negative/finish-start-wrong-home.yaml rep 1/1
+run-matrix: [3] verdict=error class=unknown wall=121 ms cg_peak=0.41 MiB
+run-matrix: [4] scenarios/negative/form-wrong-error.yaml rep 1/1
+run-matrix: [4] verdict=fail class=unknown wall=422 ms cg_peak=8.75 MiB
+run-matrix: [5] scenarios/negative/gaten-backstack-wrong.yaml rep 1/1
+run-matrix: [5] verdict=fail class=assertion wall=12310 ms cg_peak=532.98 MiB
+run-matrix: [6] scenarios/negative/gaten-content-assert-screenshot.yaml rep 1/1
+run-matrix: [6] verdict=error class=harness wall=924 ms cg_peak=351.58 MiB
+run-matrix: [7] scenarios/negative/gaten-content-pixel.yaml rep 1/1
+run-matrix: [7] verdict=fail class=assertion wall=3139 ms cg_peak=417.32 MiB
+run-matrix: [8] scenarios/negative/gaten-content-selector-bounds.yaml rep 1/1
+run-matrix: [8] verdict=error class=harness wall=925 ms cg_peak=322.81 MiB
+run-matrix: [9] scenarios/negative/gaten-content-welcome-wrong.yaml rep 1/1
+run-matrix: [9] verdict=error class=harness wall=825 ms cg_peak=417.45 MiB
+run-matrix: [10] scenarios/negative/gaten-content-window-impossible.yaml rep 1/1
+run-matrix: [10] verdict=error class=infra_timeout wall=522 ms cg_peak=9.5 MiB
+run-matrix: [11] scenarios/negative/gaten-home-wrong.yaml rep 1/1
+run-matrix: [11] verdict=fail class=assertion wall=8473 ms cg_peak=398.95 MiB
+run-matrix: [12] scenarios/negative/gaten-kanji-wrong.yaml rep 1/1
+run-matrix: [12] verdict=fail class=assertion wall=13230 ms cg_peak=408.11 MiB
+run-matrix: [13] scenarios/negative/gaten-lesson-wrong.yaml rep 1/1
+run-matrix: [13] verdict=fail class=assertion wall=9906 ms cg_peak=415.71 MiB
+run-matrix: [14] scenarios/negative/gaten-recognition-wrong.yaml rep 1/1
+run-matrix: [14] verdict=fail class=assertion wall=13094 ms cg_peak=417.5 MiB
+run-matrix: [15] scenarios/negative/gaten-search-wrong.yaml rep 1/1
+run-matrix: [15] verdict=fail class=assertion wall=11895 ms cg_peak=331.03 MiB
+run-matrix: [16] scenarios/negative/gaten-settings-wrong.yaml rep 1/1
+run-matrix: [16] verdict=fail class=assertion wall=9886 ms cg_peak=357.07 MiB
+run-matrix: [17] scenarios/negative/gaten-support-wrong.yaml rep 1/1
+run-matrix: [17] verdict=fail class=assertion wall=10488 ms cg_peak=343.7 MiB
+run-matrix: [18] scenarios/negative/gaten-tabs-wrong.yaml rep 1/1
+run-matrix: [18] verdict=fail class=assertion wall=8375 ms cg_peak=324.04 MiB
+run-matrix: [19] scenarios/negative/hello-views-back-text-gone.yaml rep 1/1
+run-matrix: [19] verdict=fail class=assertion wall=422 ms cg_peak=8.64 MiB
+run-matrix: [20] scenarios/negative/missing-element.yaml rep 1/1
+run-matrix: [20] verdict=fail class=assertion wall=422 ms cg_peak=7.83 MiB
+run-matrix: [21] scenarios/negative/missing-jni-line.yaml rep 1/1
+run-matrix: [21] verdict=fail class=assertion wall=422 ms cg_peak=8.49 MiB
+run-matrix: [22] scenarios/negative/multi-back-save-state.yaml rep 1/1
+run-matrix: [22] verdict=fail class=assertion wall=2935 ms cg_peak=8.45 MiB
+run-matrix: [23] scenarios/negative/multi-wrong-after-back.yaml rep 1/1
+run-matrix: [23] verdict=error class=infra_timeout wall=4847 ms cg_peak=25.8 MiB
+run-matrix: [24] scenarios/negative/multi-wrong-message.yaml rep 1/1
+run-matrix: [24] verdict=fail class=assertion wall=422 ms cg_peak=7.48 MiB
+run-matrix: [25] scenarios/negative/offscreen-pager-visible.yaml rep 1/1
+run-matrix: [25] verdict=fail class=unknown wall=422 ms cg_peak=8.17 MiB
+run-matrix: [26] scenarios/negative/offscreen-pager-wait.yaml rep 1/1
+run-matrix: [26] verdict=error class=infra_timeout wall=1528 ms cg_peak=9.43 MiB
+run-matrix: [27] scenarios/negative/rot1-rotate-wrong.yaml rep 1/1
+run-matrix: [27] verdict=fail class=assertion wall=724 ms cg_peak=17.41 MiB
+run-matrix: [28] scenarios/negative/se1-expect-change-noop.yaml rep 1/1
+run-matrix: [28] verdict=fail class=assertion wall=623 ms cg_peak=17.93 MiB
+run-matrix: [29] scenarios/negative/todo-missing-item.yaml rep 1/1
+run-matrix: [29] verdict=fail class=assertion wall=422 ms cg_peak=8.74 MiB
+run-matrix: [30] scenarios/negative/w44-hostile-forest-trusted.yaml rep 1/1
+run-matrix: [30] verdict=fail class=assertion wall=3238 ms cg_peak=8.75 MiB
+run-matrix: [31] scenarios/negative/wrong-bounds.yaml rep 1/1
+run-matrix: [31] verdict=fail class=assertion wall=422 ms cg_peak=7.78 MiB
+run-matrix: [32] scenarios/negative/wrong-lifecycle-order.yaml rep 1/1
+run-matrix: [32] verdict=fail class=assertion wall=422 ms cg_peak=8.0 MiB
+run-matrix: [33] scenarios/negative/wrong-text.yaml rep 1/1
+run-matrix: [33] verdict=fail class=assertion wall=422 ms cg_peak=8.66 MiB
+run-matrix: result INVALID (1 schema/gate errors); wrote results/release/v0.3.0-gate/timing/01-matrix/matrix.json.invalid.json
+run-matrix:   summary.unclassified=3 (gate requires 0)

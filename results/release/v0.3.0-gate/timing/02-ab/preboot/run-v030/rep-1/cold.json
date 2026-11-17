@@ -1,0 +1,201 @@
+{
+  "acos": "/home/Qui/.t3/worktrees/acos/t3-c216e10c-9ee2c3262751508a/.cache/rg2-target/release/acos",
+  "binary_sha256": "9f7b8c5d5dbe6d0dc0f5ae3b23e745bb01dc735808a8e83ec8385166210820b4",
+  "bundle_wall_s": 95.747,
+  "checks": {
+    "cache_bytes_after": 241233920,
+    "cache_bytes_before": 512864256,
+    "cache_evicted": false,
+    "page_cache_dropped": true,
+    "reference_md5": "7218b3ae7e51e4035c89fd96646d72d7",
+    "verified": 20
+  },
+  "errors": [],
+  "host_after": {
+    "loadavg1": 7.46,
+    "loadavg15": 6.34,
+    "loadavg5": 6.52,
+    "mem_available_gib": 46.81,
+    "mem_available_mib": 47930.5,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-c8359f70-55fc41a57d616519 && rm -rf results/handoff/MPROC7/scenario-final && export ACOS_FONT_DIR=/home/Qui/Proj",
+        "comm": "bash",
+        "pid": 3759937
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-c8359f70-55fc41a57d616519/.cache/mproc7-target/debug/acos-art launch --apk fixtures/build/apps/proc-a.apk --until activity-resum",
+        "comm": "acos-art",
+        "pid": 3759974
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 3759984
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 3759989
+      }
+    ],
+    "runnable": "1/2243",
+    "used_mib": 13978.2,
+    "used_pct": 22.58,
+    "utc": "2026-11-16T10:03:04+00:00"
+  },
+  "host_before": {
+    "loadavg1": 7.46,
+    "loadavg15": 6.34,
+    "loadavg5": 6.52,
+    "mem_available_gib": 46.81,
+    "mem_available_mib": 47930.5,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-c8359f70-55fc41a57d616519 && rm -rf results/handoff/MPROC7/scenario-final && export ACOS_FONT_DIR=/home/Qui/Proj",
+        "comm": "bash",
+        "pid": 3759937
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-c8359f70-55fc41a57d616519/.cache/mproc7-target/debug/acos-art launch --apk fixtures/build/apps/proc-a.apk --until activity-resum",
+        "comm": "acos-art",
+        "pid": 3759974
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 3759984
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 3759989
+      }
+    ],
+    "runnable": "1/2243",
+    "used_mib": 13978.2,
+    "used_pct": 22.58,
+    "utc": "2026-11-16T10:03:04+00:00"
+  },
+  "ok": true,
+  "phase": "cold",
+  "samples": {
+    "m3_cold_start_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "daemon_start_ms": 1.8095449995598756
+        },
+        {
+          "daemon_start_ms": 1.8185219996667001
+        },
+        {
+          "daemon_start_ms": 1.8110370001522824
+        },
+        {
+          "daemon_start_ms": 1.2726079985441174
+        },
+        {
+          "daemon_start_ms": 1.8118790030712262
+        },
+        {
+          "daemon_start_ms": 1.7867410024337005
+        },
+        {
+          "daemon_start_ms": 1.8203050021838862
+        },
+        {
+          "daemon_start_ms": 1.821918001951417
+        },
+        {
+          "daemon_start_ms": 1.8390609984635375
+        },
+        {
+          "daemon_start_ms": 1.825043000280857
+        },
+        {
+          "daemon_start_ms": 1.8216680000477936
+        },
+        {
+          "daemon_start_ms": 1.8105070012097713
+        },
+        {
+          "daemon_start_ms": 1.2447849985619541
+        },
+        {
+          "daemon_start_ms": 1.824392002163222
+        },
+        {
+          "daemon_start_ms": 1.8151849981222767
+        },
+        {
+          "daemon_start_ms": 1.8200449994765222
+        },
+        {
+          "daemon_start_ms": 1.8093940016115084
+        },
+        {
+          "daemon_start_ms": 1.8270279979333282
+        },
+        {
+          "daemon_start_ms": 1.7905489985423628
+        },
+        {
+          "daemon_start_ms": 1.8427469985908829
+        }
+      ],
+      "median": 4167.6475,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 4174.834000000001,
+        "ci95_low": 4137.439,
+        "cv": 0.2306025724401179,
+        "max": 7710.718,
+        "mean": 4493.43425,
+        "median": 4167.6475,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 4106.351,
+        "n": 20,
+        "p5": 4108.7545,
+        "p50": 4167.6475,
+        "p95": 7340.6132,
+        "resamples": 2000,
+        "spread": 0.7754635438817702,
+        "spread_pct": 77.54635438817702,
+        "stdev": 1036.1974971405318
+      },
+      "unit": "ms",
+      "values": [
+        4106.351,
+        4172.508,
+        4120.534,
+        4189.938,
+        4173.071,
+        4162.837,
+        7710.718,
+        7321.134,
+        4241.041,
+        4174.524,
+        4137.763,
+        4172.458,
+        4175.144,
+        4155.184,
+        4222.406,
+        4108.881,
+        4122.786,
+        4120.206,
+        4144.086,
+        4137.115
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "utc": "2026-11-16T10:03:04+00:00"
+}

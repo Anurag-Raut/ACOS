@@ -1,0 +1,262 @@
+{
+  "engine": {
+    "animations": "off",
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "swipe",
+        "type_text",
+        "key",
+        "rotate",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/release/v0.3.0-gate/timing/00-gaten-lesson/artifacts",
+      "engine_report": "results/release/v0.3.0-gate/timing/00-gaten-lesson/artifacts/engine.json",
+      "pruned_session_captures": 21,
+      "retention": "results/release/v0.3.0-gate/timing/00-gaten-lesson/artifacts/retention.json",
+      "verdict": "results/release/v0.3.0-gate/timing/00-gaten-lesson/artifacts/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "insets": "report",
+    "mode": "live",
+    "session_exit": {
+      "abi": null,
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=285MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3524637-i3488551.scope)",
+      "code": null,
+      "disk_free_bytes": 266889093120,
+      "guest_crash": null,
+      "guest_exit": 0,
+      "guest_signal": null,
+      "native_crash": null,
+      "native_crash_path": null,
+      "outcome": "ok",
+      "panic": null,
+      "path": "results/release/v0.3.0-gate/timing/00-gaten-lesson/artifacts/art-frames/session-exit.json",
+      "retryable": false,
+      "stage": "teardown-evidence"
+    },
+    "timing": {
+      "attributed_ms": 13465,
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "built",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-57d996d05f0d3261",
+        "input_hash": "57d996d05f0d3261",
+        "mode": "shared-fixed",
+        "prep_ms": 3605,
+        "reason": "no usable manifest at /home/Qui/.cache/acos/art/boot-images/fixed-57d996d05f0d3261/manifest.json: No such file or directory (os error 2)"
+      },
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 5834,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 1534
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 5510
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 74
+        },
+        {
+          "index": 3,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 58
+        },
+        {
+          "index": 4,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 49
+        },
+        {
+          "index": 5,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 281
+        },
+        {
+          "index": 6,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 76
+        },
+        {
+          "index": 7,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 872
+        },
+        {
+          "index": 8,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 68
+        },
+        {
+          "index": 9,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 80
+        },
+        {
+          "index": 10,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 11,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 12,
+          "status": "pass",
+          "step": "back",
+          "wall_ms": 1114
+        },
+        {
+          "index": 13,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 82
+        },
+        {
+          "index": 14,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 83
+        },
+        {
+          "index": 15,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 863
+        },
+        {
+          "index": 16,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 68
+        },
+        {
+          "index": 17,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 70
+        },
+        {
+          "index": 18,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        },
+        {
+          "index": 19,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 20,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 384
+        },
+        {
+          "index": 21,
+          "status": "pass",
+          "step": "type",
+          "wall_ms": 136
+        },
+        {
+          "index": 22,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 113
+        },
+        {
+          "index": 23,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 24,
+          "status": "pass",
+          "step": "back",
+          "wall_ms": 472
+        },
+        {
+          "index": 25,
+          "status": "pass",
+          "step": "back",
+          "wall_ms": 1211
+        },
+        {
+          "index": 26,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 130
+        },
+        {
+          "index": 27,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 136
+        },
+        {
+          "index": 28,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        }
+      ],
+      "unattributed_ms": 59,
+      "unit": "ms",
+      "verdict_wall_ms": 13524
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": null,
+  "request_id": "req_35c667_18e87d130028dbbd",
+  "verdict_status": "pass"
+}
