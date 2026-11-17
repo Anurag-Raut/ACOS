@@ -78,13 +78,11 @@ public class WebSettingsChromium extends android.webkit.WebSettings {
     }
     @Override
     public void setLoadWithOverviewMode(boolean p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebSettings: void setLoadWithOverviewMode(boolean); WIRE v1 has no message for it (see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        mCore.setLoadWithOverviewMode(p0);
     }
     @Override
     public boolean getLoadWithOverviewMode() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebSettings: boolean getLoadWithOverviewMode(); WIRE v1 has no message for it (see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        return mCore.loadWithOverviewMode();
     }
     @Override
     public void setEnableSmoothTransition(boolean p0) {
@@ -148,13 +146,11 @@ public class WebSettingsChromium extends android.webkit.WebSettings {
     }
     @Override
     public void setUseWideViewPort(boolean p0) {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebSettings: void setUseWideViewPort(boolean); WIRE v1 has no message for it (see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        mCore.setUseWideViewPort(p0);
     }
     @Override
     public boolean getUseWideViewPort() {
-        throw new UnsupportedOperationException(
-                "ACOS WebView provider: unsupported method WebSettings: boolean getUseWideViewPort(); WIRE v1 has no message for it (see results/handoff/WV5a/WIRE-ADDITIONS.md)");
+        return mCore.useWideViewPort();
     }
     @Override
     public void setSupportMultipleWindows(boolean p0) {

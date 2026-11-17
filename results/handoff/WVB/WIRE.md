@@ -134,7 +134,7 @@ DevTools taps `density` times too far right and down).
 | `view.reload` / `view.stop` | `{view}` | `{view}` |
 | `view.setUserAgent` | `{view, userAgent}` | `{view, userAgent}` |
 | `view.setVisibility` | `{view, visible, windowVisible}` | `{view, visible, windowVisible}` (v1.1) |
-| `view.settings` | `{view, settings:{key:value,…}}` | `{view, applied:[…], rejected:[…]}` (v1.1) |
+| `view.settings` | `{view, settings:{key:value,…}}` | `{view, applied:[…], rejected:[…]}` (v1.1). WV8 adds the two viewport switches: `useWideViewPort` (default `false` = the layout viewport is the View's width in CSS px and `<meta viewport>` is ignored; `true` = honour the page's `<meta viewport>`, and without one use Chromium's Android default of 980 CSS px) and `loadWithOverviewMode` (default `false` = 100 % scale; `true` = `Emulation.setPageScaleFactor(cssWidth / layoutWidth)`, a visual scale that does not change the layout width). Both re-apply the engine's device metrics, so a guest that set them before `view.create` replays them right after it. |
 | `view.scrollTo` | `{view, x, y}` (display px) | `{view, x, y, contentWidth, contentHeight, scrollX, scrollY}` (v1.1) |
 | `view.evaluateJavascript` | `{view, script, timeoutMs?, userGesture?}` | `{view, valueJson:string\|null, type:"string"\|"number"\|…\|"undefined"}` — `valueJson` is the JSON text of the result (Android's `ValueCallback<String>` contract) |
 | `view.addJavascriptInterface` | `{view, name, methods:[string]}` | `{view, name, methods}` |

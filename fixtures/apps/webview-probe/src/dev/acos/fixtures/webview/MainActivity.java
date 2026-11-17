@@ -96,10 +96,26 @@ public class MainActivity extends Activity {
     }
 
     private ProbeWebView addWebView(LinearLayout root, int id, String label, String url) {
+        return addWebView(root, id, label, url, false, false);
+    }
+
+    /**
+     * WV8: the viewport arms. `wide` sets `useWideViewPort` (and
+     * `loadWithOverviewMode`) **before** the first load — i.e. before the
+     * provider created its engine view, which is where an app normally sets
+     * them — and `reportViewport` asks the page for its layout width and page
+     * scale, which is the assertion the scenario makes.
+     */
+    private ProbeWebView addWebView(
+            LinearLayout root, int id, String label, String url, boolean wide, boolean reportViewport) {
         ProbeWebView wv = new ProbeWebView(this, label, url);
         wv.setId(id);
         WebSettings settings = wv.getSettings();
         settings.setJavaScriptEnabled(true);
+        if (wide) {
+            settings.setUseWideViewPort(true);
+            settings.setLoadWithOverviewMode(true);
+        }
         wv.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String loadedUrl) {
@@ -114,6 +130,21 @@ public class MainActivity extends Activity {
                                 append(label + " evaluateJavascript -> " + value);
                             }
                         });
+                if (reportViewport) {
+                    // The layout viewport width and the page scale, straight from
+                    // the page: `clientWidth` is the CSS px the document is laid
+                    // out at, `visualViewport.scale` is what overview mode did.
+                    view.evaluateJavascript(
+                            "(function(){var w=document.documentElement.clientWidth;"
+                            + "var s=(window.visualViewport?window.visualViewport.scale:1);"
+                            + "return w+'x'+s.toFixed(2)})()",
+                            new ValueCallback<String>() {
+                                @Override
+                                public void onReceiveValue(String value) {
+                                    append(label + " viewport -> " + value);
+                                }
+                            });
+                }
             }
         });
         wv.setWebChromeClient(new WebChromeClient());
@@ -147,7 +178,8 @@ public class MainActivity extends Activity {
 
             // Page A: the broker intercepts file:///android_asset/test.html and
             // asks this process for the APK asset bytes (WIRE.md §4.3).
-            ProbeWebView a = addWebView(root, R.id.webview, "A", "file:///android_asset/test.html");
+            ProbeWebView a = addWebView(
+                    root, R.id.webview, "A", "file:///android_asset/test.html", false, true);
             append("WebView created: " + a);
             a.addJavascriptInterface(new Bridge(this), "acosBridge");
 
@@ -158,6 +190,18 @@ public class MainActivity extends Activity {
             ProbeWebView b = addWebView(root, R.id.webview2,
                     "B", "data:text/html;base64," + encoded);
             append("WebView created: " + b);
+
+            // WV8 viewport arms. C is a page that declares
+            // `<meta name="viewport" content="width=640">`, D is the same page
+            // without one; both ask for the wide arm, so C lays out at 640 CSS px
+            // and D at Chromium's Android default 980, and `loadWithOverviewMode`
+            // scales each to fit the View's width.
+            ProbeWebView c = addWebView(root, R.id.webview3,
+                    "C", "file:///android_asset/viewport-meta.html", true, true);
+            append("WebView created: " + c);
+            ProbeWebView d = addWebView(root, R.id.webview4,
+                    "D", "data:text/html;base64," + encoded, true, true);
+            append("WebView created: " + d);
         } catch (Throwable t) {
             StringBuilder where = new StringBuilder();
             StackTraceElement[] st = t.getStackTrace();

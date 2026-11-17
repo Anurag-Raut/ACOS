@@ -628,6 +628,19 @@ def main() -> int:
                     "        mCore.setBlockNetworkImage(p0);",
                 "getBlockNetworkImage()":
                     "        return mCore.blockNetworkImage();",
+                # WV8: the viewport switches. `false`/`false` is Android's
+                # default and the behaviour this provider always had (layout
+                # width = the View's CSS width, `<meta viewport>` ignored); the
+                # wide arm honours the page's meta viewport through the engine
+                # (`mobile: true` + `Emulation.setPageScaleFactor`).
+                "setUseWideViewPort(boolean)":
+                    "        mCore.setUseWideViewPort(p0);",
+                "getUseWideViewPort()":
+                    "        return mCore.useWideViewPort();",
+                "setLoadWithOverviewMode(boolean)":
+                    "        mCore.setLoadWithOverviewMode(p0);",
+                "getLoadWithOverviewMode()":
+                    "        return mCore.loadWithOverviewMode();",
             },
         ),
         check,

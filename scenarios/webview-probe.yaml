@@ -1,8 +1,11 @@
-# WV6: the WebView end-to-end gate. Two real WebViews against the host broker
-# and the pinned Chromium:
+# WV6: the WebView end-to-end gate. Real WebViews against the host broker and the
+# pinned Chromium:
 #   A: file:///android_asset/test.html, served by the broker's interception
 #      from this APK's own assets (WIRE.md §4.3);
-#   B: a data: URL (no network, no interception).
+#   B: a data: URL (no network, no interception);
+#   C, D (WV8): the viewport arms — C is a page with
+#      `<meta name="viewport" content="width=640">`, D has no meta tag, and both
+#      ask for `useWideViewPort` + `loadWithOverviewMode`.
 # The page's text must appear in the ACOS UI tree through the WIRE v1.1
 # ax -> AccessibilityNodeProvider path, a tap by that text must reach the page,
 # the page's JS must change it (and call the Java bridge), and frames must be
@@ -10,17 +13,22 @@
 version: 1
 name: webview-probe
 description: >-
-  Launch webview-probe with com.android.webview installed and drive a real page
-  end to end: asset + data URL loads, page text in the ACOS tree via the
+  Launch webview-probe with the `webview` module real (ADR-0029: the
+  com.android.webview provider package plus this session's gate socket, the
+  shared host Chromium started on the first connect) and drive a real page end
+  to end: asset + data URL loads, page text in the ACOS tree via the
   accessibility provider, tap by text, page JS change, JS interface both ways,
-  and captured frames.
+  the two viewport arms, and captured frames.
 app: fixtures/build/apps/webview-probe.apk
 engine: native-preferred
 fallback: report-and-escalate
 api_level: 34
 isolation: process
-extra_apks:
-  - fixtures/build/apps/webview-provider.apk
+# ADR-0029: the module installs the provider package itself (`system_apps`), so
+# there is no `extra_apks:` line to keep in step with the attached set.
+services:
+  - id: webview
+    profile: real
 display:
   mode: offscreen
   width: 1080
@@ -71,14 +79,50 @@ steps:
       selector: {text: {exact: "acos data page"}}
       text: {contains: "acos data page"}
       timeout_ms: 12000
+  # WV8 viewport arms, asserted from the page's own JS:
+  #  C = `assets/viewport-meta.html` with `<meta name="viewport" content="width=640">`
+  #      and `setUseWideViewPort(true)` before the first load -> lays out at 640
+  #      CSS px, then `loadWithOverviewMode` scales it to fit the 343 CSS px View;
+  #  D = the same data page as B (no meta tag) with the wide arm -> Chromium's
+  #      Android default 980 CSS px, scaled to fit.
+  # A stays on the default arm: 343 CSS px = the 900-device-px View / 2.625
+  # density (the View is 900x560 inside a 1080x2400 @420 dpi display), and
+  # its page has no meta viewport to honour.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "A viewport -> 343x1.00"}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "C viewport -> 640x0.5"}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "D viewport -> 980x0.3"}
+      timeout_ms: 20000
+  # The page text of the meta-viewport page, through the AX provider path.
+  - assert_text:
+      selector: {text: {exact: "acos meta page"}}
+      text: {contains: "acos meta page"}
+      timeout_ms: 12000
   # A real engine frame was painted into the View.
+  #
+  # WV8 note (LOOPERWAKE track, not fixed here): a frame that the engine delivers
+  # while nothing else draws is painted only on the *next* draw — the guest does
+  # not run a traversal for an invalidation alone
+  # (`results/handoff/WV7/evidence/no-draw-after-frame.md`). The `assert_log`
+  # below therefore waits for the provider's own "frame decoded" line, which is
+  # what the wire delivered, and the captures that follow are taken after the
+  # steps that do force a traversal (the tap and the JS repaint). The generous
+  # timeout_ms is deliberate: it tolerates the deferred paint instead of
+  # encoding it as a failure of this scenario.
   - capture:
       name: webview-first-frame
   - assert_log:
       tag: ACOSWvProvider
       patterns:
         - 'frame decoded (view=[0-9]+ )?[0-9]+x[0-9]+ seq=[0-9]+ bytes=[0-9]+'
-      timeout_ms: 20000
+      timeout_ms: 30000
   # Tap the page's button by the text the accessibility tree exposes; the page's
   # own JS changes #out to "tapped" and calls the Java bridge.
   - tap:

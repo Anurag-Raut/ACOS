@@ -47,6 +47,29 @@ impl Viewport {
     }
 }
 
+/// The two `WebSettings` viewport switches the wire (`view.settings`,
+/// WIRE.md §4.2) can carry, and what each one means in the engine.
+///
+/// Android's contract (WV8 decision, recorded in `DECISIONS.md`):
+///
+/// * `useWideViewPort = false` (the **default**, exactly what Chromium's
+///   `WebView` does) — the layout viewport is the View's width in CSS px
+///   (`device px / density`) and `<meta name="viewport">` is ignored.
+/// * `useWideViewPort = true` — the page's `<meta viewport>` is honoured and,
+///   without one, Chromium's Android default layout viewport of 980 CSS px is
+///   used (`Emulation.setDeviceMetricsOverride` with `mobile: true`).
+/// * `loadWithOverviewMode = true` — after the page lays out, the page is
+///   scaled down so its whole width fits the View
+///   (`Emulation.setPageScaleFactor(cssWidth / layoutWidth)`), which is what
+///   `WebView.setLoadWithOverviewMode` does; the layout width does not change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ViewportOptions {
+    /// `WebSettings.setUseWideViewPort`.
+    pub wide: bool,
+    /// `WebSettings.setLoadWithOverviewMode`.
+    pub overview: bool,
+}
+
 /// The newest frame the engine handed over, kept so a `render` for an
 /// unchanged page answers with the surface's own pixels instead of asking the
 /// compositor for a frame it will not produce.
@@ -263,6 +286,9 @@ pub struct View {
     pub cdp_session: String,
     pub events: Arc<crate::cdp::EventQueue>,
     pub viewport: Mutex<Viewport>,
+    /// The `WebSettings` viewport switches (`useWideViewPort`,
+    /// `loadWithOverviewMode`); both default to Android's `false`.
+    pub viewport_options: Mutex<ViewportOptions>,
     pub nav: Arc<NavState>,
     pub seq: AtomicU64,
     pub bindings: Mutex<Vec<String>>,
@@ -319,6 +345,7 @@ impl View {
             cdp_session: session,
             events,
             viewport: Mutex::new(viewport),
+            viewport_options: Mutex::new(ViewportOptions::default()),
             nav: Arc::new(NavState::default()),
             seq: AtomicU64::new(0),
             bindings: Mutex::new(Vec::new()),
@@ -373,6 +400,11 @@ impl View {
         *self.viewport.lock().expect("viewport")
     }
 
+    /// The `WebSettings` viewport switches in force.
+    pub fn viewport_options(&self) -> ViewportOptions {
+        *self.viewport_options.lock().expect("viewport options")
+    }
+
     /// Opt in to pausing every request (`shouldInterceptRequest` fidelity).
     pub fn set_intercept_all(&self, enabled: bool) -> Result<()> {
         let patterns = if enabled {
@@ -408,12 +440,14 @@ impl View {
                 "height": css_height,
                 "deviceScaleFactor": vp.density,
                 // `mobile: true` selects Chromium's wide (980 CSS px) mobile
-                // layout viewport when a page has no `<meta viewport>`, which
-                // puts page CSS in a different space from the View's pixels
-                // (measured: a full-width heading's AX box was 2530 device px
-                // in a 900 px View). ACOS's WebView contract is CSS px =
-                // device px / density, so the engine lays out at that width.
-                "mobile": false,
+                // layout viewport when a page has no `<meta viewport>`, and
+                // honours a `<meta viewport>` that is present. That is exactly
+                // `WebSettings.setUseWideViewPort(true)` (measured: with the
+                // default `false`, a full-width heading's AX box was 2530 device
+                // px in a 900 px View because `mobile: true` was on
+                // unconditionally). The default arm keeps `mobile: false`, i.e.
+                // CSS px = device px / density and `<meta viewport>` ignored.
+                "mobile": self.viewport_options().wide,
                 "screenWidth": css_width,
                 "screenHeight": css_height,
             }),
@@ -440,7 +474,42 @@ impl View {
             }),
             self.browser.call_timeout,
         )?;
+        // `loadWithOverviewMode` is a *visual* scale on top of the layout, and it
+        // depends on the layout width the call above just set.
+        self.apply_overview_scale()?;
         Ok(())
+    }
+
+    /// `WebSettings.setLoadWithOverviewMode`: zoom the page out so its whole
+    /// width fits the View, or back to 100 % when the switch is off.
+    ///
+    /// The engine's own numbers decide the scale (`Page.getLayoutMetrics`'
+    /// `contentSize.width` in CSS px, which is the layout viewport width), never
+    /// the requested View width: with `useWideViewPort` the two differ by design
+    /// (411 vs 980 CSS px for a page without `<meta viewport>`).
+    pub fn apply_overview_scale(&self) -> Result<f64> {
+        let vp = self.viewport();
+        let css_width = (vp.width as f64 / vp.density).round().max(1.0);
+        let scale = if self.viewport_options().overview {
+            let m = self.call("Page.getLayoutMetrics", json!({}), self.browser.call_timeout)?;
+            let layout = m["contentSize"]["width"]
+                .as_f64()
+                .filter(|w| w.is_finite() && *w > 0.0)
+                .unwrap_or(css_width);
+            if layout > css_width {
+                css_width / layout
+            } else {
+                1.0
+            }
+        } else {
+            1.0
+        };
+        self.call(
+            "Emulation.setPageScaleFactor",
+            json!({"pageScaleFactor": scale}),
+            self.browser.call_timeout,
+        )?;
+        Ok(scale)
     }
 
     // --- navigation --------------------------------------------------------
@@ -461,6 +530,11 @@ impl View {
         }
         let t0 = Instant::now();
         let (final_url, title) = self.nav.wait_load(started_before, self.browser.nav_timeout)?;
+        // A new document lays out at its own width, so `loadWithOverviewMode`
+        // re-fits it (Chromium's own `WebView` does the same on `onPageFinished`).
+        if self.viewport_options().overview {
+            self.apply_overview_scale()?;
+        }
         Ok(json!({
             "url": final_url,
             "title": title,
@@ -536,6 +610,7 @@ impl View {
             // enabling is idempotent.
             self.call("Network.enable", json!({}), self.browser.call_timeout)?;
         }
+        let vp = self.viewport();
         let mut applied: Vec<String> = Vec::new();
         let mut rejected: Vec<String> = Vec::new();
         for (key, value) in map {
@@ -569,6 +644,26 @@ impl View {
                     } else {
                         rejected.push(key.clone());
                     }
+                }
+                // WV8 viewport decisions (see [`ViewportOptions`]).
+                "useWideViewPort" => {
+                    let on = value.as_bool().ok_or_else(|| {
+                        Error::proto(code::BAD_REQUEST, "useWideViewPort must be a boolean")
+                    })?;
+                    self.viewport_options.lock().expect("viewport options").wide = on;
+                    // Re-send the device metrics: `mobile` is what makes the
+                    // engine honour `<meta viewport>` (and the 980 px default).
+                    self.set_viewport(vp)?;
+                    applied.push(key.clone());
+                }
+                "loadWithOverviewMode" => {
+                    let on = value.as_bool().ok_or_else(|| {
+                        Error::proto(code::BAD_REQUEST, "loadWithOverviewMode must be a boolean")
+                    })?;
+                    self.viewport_options.lock().expect("viewport options").overview = on;
+                    let scale = self.apply_overview_scale()?;
+                    let _ = scale;
+                    applied.push(key.clone());
                 }
                 "loadsImagesAutomatically" | "blockNetworkImage" => {
                     let on = value.as_bool().ok_or_else(|| {

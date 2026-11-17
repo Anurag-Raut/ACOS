@@ -170,6 +170,11 @@ public final class WebViewChromiumCore {
     private volatile int mCacheMode = -1;
     private volatile boolean mLoadsImages = true;
     private volatile boolean mBlockNetworkImage;
+    // WV8: the two viewport switches. Android's defaults are `false`: the layout
+    // viewport is the View's width in CSS px and `<meta viewport>` is ignored
+    // until the app asks for the wide arm.
+    private volatile boolean mUseWideViewPort;
+    private volatile boolean mLoadWithOverviewMode;
 
     /**
      * One transport per session, one core per View: events and host requests
@@ -424,6 +429,16 @@ public final class WebViewChromiumCore {
         // v1.1: the engine must know a View that was already hidden when its
         // view was created (`view.setVisibility`, WIRE.md §4.2).
         sendVisibility();
+        // WV8: `settings.setUseWideViewPort(true)` is normally called *before*
+        // the first `loadUrl`, i.e. before this provider created the engine view
+        // (the first measure). The switch is guest state until then, exactly like
+        // `javascriptEnabled`, so the create path replays it here.
+        if (mUseWideViewPort) {
+            applySetting("useWideViewPort", Boolean.TRUE);
+        }
+        if (mLoadWithOverviewMode) {
+            applySetting("loadWithOverviewMode", Boolean.TRUE);
+        }
         // JS interfaces registered before the engine view existed.
         for (Map.Entry<String, JavascriptInterfaceBridge> entry : mInterfaces.entrySet()) {
             sendJavascriptInterface(entry.getKey(), entry.getValue());
@@ -891,6 +906,39 @@ public final class WebViewChromiumCore {
 
     boolean blockNetworkImage() {
         return mBlockNetworkImage;
+    }
+
+    /**
+     * `WebSettings.setUseWideViewPort` (`WIRE.md` §4.2 `view.settings`): with it
+     * on, the engine honours the page's `<meta name="viewport">` (and, without
+     * one, lays out at Chromium's 980 CSS px Android default); with it off (the
+     * default) the layout width is the View's width in CSS px.
+     */
+    void setUseWideViewPort(boolean enable) {
+        mUseWideViewPort = enable;
+        if (mCreated) {
+            applySetting("useWideViewPort", Boolean.valueOf(enable));
+        }
+    }
+
+    boolean useWideViewPort() {
+        return mUseWideViewPort;
+    }
+
+    /**
+     * `WebSettings.setLoadWithOverviewMode`: scale the page so its whole width
+     * fits the View. It does not change the layout width — that is
+     * `useWideViewPort`'s job, exactly as on a phone.
+     */
+    void setLoadWithOverviewMode(boolean enable) {
+        mLoadWithOverviewMode = enable;
+        if (mCreated) {
+            applySetting("loadWithOverviewMode", Boolean.valueOf(enable));
+        }
+    }
+
+    boolean loadWithOverviewMode() {
+        return mLoadWithOverviewMode;
     }
 
     String userAgent() {
