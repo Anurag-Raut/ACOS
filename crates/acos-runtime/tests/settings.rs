@@ -16,10 +16,9 @@ fn settings_provider_generation_matches_the_golden() {
     let Some(stdout) = run_ok(&dex, "android.content.SettingsMain", "SettingsMain") else {
         return;
     };
-    let expected = std::fs::read_to_string(
-        repo_root().join("crates/acos-runtime/tests/data/settings.golden"),
-    )
-    .expect("committed settings golden file");
+    let expected =
+        std::fs::read_to_string(repo_root().join("crates/acos-runtime/tests/data/settings.golden"))
+            .expect("committed settings golden file");
 
     let actual: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();
     let expected: Vec<&str> = expected.lines().filter(|l| !l.is_empty()).collect();

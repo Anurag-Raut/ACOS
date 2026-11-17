@@ -25,7 +25,10 @@ fn open(host: &mut ServiceHost, name: &str, code: u32) -> (u32, Parcel, Parcel) 
         .check_service(name)
         .expect("lookup is infallible")
         .unwrap_or_else(|| panic!("{name} did not resolve to a binder"));
-    let descriptor = host.descriptor_of(binder).unwrap_or("<unknown>").to_string();
+    let descriptor = host
+        .descriptor_of(binder)
+        .unwrap_or("<unknown>")
+        .to_string();
     let mut data = Parcel::new();
     data.write_interface_token(&descriptor).expect("token");
     (code, data, Parcel::new())
@@ -48,7 +51,12 @@ fn start() -> (ServiceHost, ModuleRegistry) {
     let mut host = ServiceHost::standard();
     let mut registry = ModuleRegistry::standard();
     registry
-        .attach(&mut host, MODULE, Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            MODULE,
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .expect("net.telephony attaches");
     (host, registry)
 }
@@ -137,7 +145,12 @@ fn send_text_for_subscriber_is_recorded_with_the_destination_and_body() {
     let mut host = ServiceHost::standard();
     let mut registry = ModuleRegistry::standard();
     registry
-        .attach(&mut host, MODULE, Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            MODULE,
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .unwrap();
     let (code, mut data, _) = open(&mut host, "isms", 5);
     data.write_int32(-1);
@@ -166,7 +179,12 @@ fn sms_injects_a_real_sms_received_broadcast_that_reaches_a_registered_receiver(
     let mut host = ServiceHost::standard();
     let mut registry = ModuleRegistry::standard();
     registry
-        .attach(&mut host, MODULE, Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            MODULE,
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .unwrap();
 
     // Register a dynamic receiver for SMS_RECEIVED, as the app does.
@@ -247,7 +265,12 @@ fn a_call_state_change_reaches_a_phone_state_listener_and_a_telephony_callback()
     let mut host = ServiceHost::standard();
     let mut registry = ModuleRegistry::standard();
     registry
-        .attach(&mut host, MODULE, Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            MODULE,
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .unwrap();
 
     // `PhoneStateListener.listen(LISTEN_CALL_STATE)` registers
@@ -353,7 +376,12 @@ fn detach_leaves_no_registration_and_control_refuses_a_detached_module() {
     let mut host = ServiceHost::standard();
     let mut registry = ModuleRegistry::standard();
     registry
-        .attach(&mut host, MODULE, Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            MODULE,
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .unwrap();
     assert!(host.check_service("phone").unwrap().is_some());
     registry.detach(&mut host, MODULE).unwrap();

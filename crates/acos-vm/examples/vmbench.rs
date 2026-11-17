@@ -22,10 +22,7 @@ fn main() {
     }
     let dex_path = &args[1];
     let main_class = &args[2];
-    let repeats: usize = args
-        .get(3)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(3);
+    let repeats: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(3);
     let show_ops = args.iter().any(|a| a == "--ops");
 
     let bytes = std::fs::read(dex_path).expect("read dex");

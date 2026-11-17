@@ -371,6 +371,27 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     carries the latest tree and frame identity with `settled:false` and \
                                     `bound:timeout`; a timeout is never assertion evidence."
                 },
+                "extra_apks": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "MPROC1: APK paths to install into this session beside `apk` \
+                                    (each at its own uid, with its own guest paths), so the app \
+                                    can query them through PackageManager/getPackageInfo/\
+                                    createPackageContext exactly as it would see a second \
+                                    installed app. Resolved under ACOS_ALLOWED_ROOTS like `apk`. \
+                                    ART only, and launch-time: a live session cannot change its \
+                                    installed packages (acos_destroy, then relaunch). The launch \
+                                    reply echoes the list and `result.extra_packages` names each \
+                                    package, uid and guest sourceDir/nativeLibraryDir."
+                },
+                "idle_kill_seconds": {
+                    "type": "integer", "minimum": 0, "maximum": 86400,
+                    "description": "MPROC7: how long a lazily spawned secondary ART process may sit \
+                                    idle (no started activity, no started/bound service, no visible \
+                                    window) before the launcher kills it; the next intent respawns it. \
+                                    `0` disables the idle kill (launcher default 30). Launch-time: a \
+                                    live session cannot change it (acos_destroy, then relaunch). ART \
+                                    only; the reply names the value the launcher used."
+                },
                 "animations": {
                     "type": "string", "enum": ["on", "off"],
                     "description": "P12: per-session framework animation scales. `on` (default) is real \
@@ -864,7 +885,8 @@ mod tests {
         let infos = tool_infos(&caps);
         // 13 protocol tools + acos_capabilities + acos_help + the session tools
         // (`SESSION_TOOL_NAMES`).
-        assert_eq!(infos.len(), 13 + 2 + SESSION_TOOL_NAMES.len());        let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
+        assert_eq!(infos.len(), 13 + 2 + SESSION_TOOL_NAMES.len());
+        let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
         for descriptor in mcp_tools().tools {
             assert!(
                 names.contains(descriptor.name.as_str()),

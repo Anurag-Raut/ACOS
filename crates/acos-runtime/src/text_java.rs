@@ -421,7 +421,10 @@ mod tests {
             TextError::UnsupportedCharacter('!').code(),
             "UNSUPPORTED_BACKEND"
         );
-        assert_eq!(TextError::NotReady(String::new()).code(), "UNSUPPORTED_BACKEND");
+        assert_eq!(
+            TextError::NotReady(String::new()).code(),
+            "UNSUPPORTED_BACKEND"
+        );
         assert_eq!(TextError::Framework(String::new()).code(), "INTERNAL");
     }
 }

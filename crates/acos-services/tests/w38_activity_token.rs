@@ -45,9 +45,12 @@ fn a_guest_token_is_adopted_and_finish_resolves() {
     assert!(atms.activities.iter().any(|a| a.token == 0xabc));
 
     let token = GUEST_TAG | 0x77;
-    atms.activity_resumed(token, true).expect("adopted on resume");
+    atms.activity_resumed(token, true)
+        .expect("adopted on resume");
     assert!(
-        atms.activities.iter().any(|a| a.token == token && a.resumed),
+        atms.activities
+            .iter()
+            .any(|a| a.token == token && a.resumed),
         "the real token owns a record"
     );
     assert!(
@@ -57,13 +60,17 @@ fn a_guest_token_is_adopted_and_finish_resolves() {
     atms.activity_idle(token).expect("idle resolves too");
 
     // The Gaten wall: `finish()` on a real activity token.
-    atms.finish_activity(token).expect("finish resolves");
-    assert!(atms.activities.iter().any(|a| a.token == token && a.finished));
+    atms.finish_activity(token, 0, None)
+        .expect("finish resolves");
+    assert!(atms
+        .activities
+        .iter()
+        .any(|a| a.token == token && a.finished));
 
     // A callback before the process attached cannot adopt anything.
     let mut detached = AtmsState::new();
     assert!(detached.activity_resumed(token, true).is_err());
-    assert!(detached.finish_activity(token).is_err());
+    assert!(detached.finish_activity(token, 0, None).is_err());
 }
 
 #[test]
@@ -109,7 +116,8 @@ fn a_recorded_launch_is_rebound_to_the_real_token() {
         "the guest materialised the launch; nothing is left pending"
     );
 
-    atms.finish_activity(real).expect("finish of the second activity");
+    atms.finish_activity(real, 0, None)
+        .expect("finish of the second activity");
     assert!(atms.ams.tasks.is_empty(), "the task emptied on finish");
 }
 
@@ -120,10 +128,13 @@ fn an_unknown_or_zero_token_still_errors() {
     let err = atms
         .activity_resumed(0x77, true)
         .expect_err("an arbitrary number is not an activity");
-    assert!(err.to_string().contains("no activity for token 0x77"), "{err}");
-    assert!(atms.finish_activity(0x77).is_err());
+    assert!(
+        err.to_string().contains("no activity for token 0x77"),
+        "{err}"
+    );
+    assert!(atms.finish_activity(0x77, 0, None).is_err());
     // Token 0 is what the old launch delivered; it stays an error so a null
     // token can never silently resolve.
-    assert!(atms.finish_activity(0).is_err());
+    assert!(atms.finish_activity(0, 0, None).is_err());
     assert!(atms.activity_idle(0).is_err());
 }

@@ -34,15 +34,20 @@ fn main() {
     report.insert("hasFonts".into(), has_fonts.into());
     report.insert("rssKbBefore".into(), rss_before.into());
     report.insert("rssKbAfterFonts".into(), rss_fonts.into());
-    report.insert("fontDeltaKb".into(), (rss_fonts.saturating_sub(rss_before)).into());
+    report.insert(
+        "fontDeltaKb".into(),
+        (rss_fonts.saturating_sub(rss_before)).into(),
+    );
     report.insert("hwmKbBefore".into(), hwm_before.into());
 
-    let scene_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/scenes/hello-views.json");
+    let scene_path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/scenes/hello-views.json");
     let scene = Scene::load(&scene_path).expect("load hello-views scene");
 
     // ---- (a) hello-views-like scene ------------------------------------
-    let surface = ctx.surface_create(scene.width, scene.height, scene.density).unwrap();
+    let surface = ctx
+        .surface_create(scene.width, scene.height, scene.density)
+        .unwrap();
     let (root, node_count) = scene.build_tree(&mut ctx, &scene.root).unwrap();
     if let Some(node) = ctx.render_nodes.get_mut(root) {
         node.display_list
@@ -62,7 +67,8 @@ fn main() {
     for i in 0..ITER {
         ctx.render_node_set_alpha(root, 1.0).unwrap();
         let t = Instant::now();
-        ctx.surface_render_node(surface, root, i as i64 + 1).unwrap();
+        ctx.surface_render_node(surface, root, i as i64 + 1)
+            .unwrap();
         warm.push(t.elapsed().as_secs_f64() * 1000.0);
     }
     report.insert("helloWarmMs".into(), percentile_json(&mut warm));
@@ -134,7 +140,11 @@ fn main() {
         let paint = ctx.paint_create();
         ctx.paint_set_text_size(paint, 42.0).unwrap();
         let strings: Vec<Vec<u16>> = (0..1000)
-            .map(|i| format!("Hello ACOS row {i} — valeur").encode_utf16().collect())
+            .map(|i| {
+                format!("Hello ACOS row {i} — valeur")
+                    .encode_utf16()
+                    .collect()
+            })
             .collect();
 
         // First pass: distinct strings -> cache misses.
@@ -180,16 +190,20 @@ fn main() {
     }
 
     // ---- (e) heavy scene ------------------------------------------------
-    let heavy_surface = ctx.surface_create(scene.width, scene.height, scene.density).unwrap();
+    let heavy_surface = ctx
+        .surface_create(scene.width, scene.height, scene.density)
+        .unwrap();
     let heavy_root = build_heavy_scene(&mut ctx, 200, 50, 20);
     let t = Instant::now();
-    ctx.surface_render_node(heavy_surface, heavy_root, 1).unwrap();
+    ctx.surface_render_node(heavy_surface, heavy_root, 1)
+        .unwrap();
     let heavy_cold = t.elapsed().as_secs_f64() * 1000.0;
     let mut heavy_warm = Vec::new();
     for i in 0..ITER {
         ctx.render_node_set_alpha(heavy_root, 1.0).unwrap();
         let t = Instant::now();
-        ctx.surface_render_node(heavy_surface, heavy_root, i as i64 + 2).unwrap();
+        ctx.surface_render_node(heavy_surface, heavy_root, i as i64 + 2)
+            .unwrap();
         heavy_warm.push(t.elapsed().as_secs_f64() * 1000.0);
     }
     report.insert(
@@ -285,16 +299,23 @@ fn main() {
 }
 
 /// 200 text rows + 50 rounded cards + 20 bitmaps.
-fn build_heavy_scene(ctx: &mut RenderContext, rows: usize, cards: usize, bitmaps: usize) -> acos_render::Handle {
+fn build_heavy_scene(
+    ctx: &mut RenderContext,
+    rows: usize,
+    cards: usize,
+    bitmaps: usize,
+) -> acos_render::Handle {
     let root = ctx.render_node_create("heavy-root");
     ctx.render_node_set_bounds(root, 0, 0, 1080, 2400).unwrap();
-    ctx.render_node_push_op(root, DisplayOp::DrawColor(0xffffffff)).unwrap();
+    ctx.render_node_push_op(root, DisplayOp::DrawColor(0xffffffff))
+        .unwrap();
 
     // Bitmaps.
     let mut bitmap_handles = Vec::new();
     for i in 0..bitmaps {
         let b = ctx.bitmap_create(128, 128, BitmapConfig::Rgba8888).unwrap();
-        let color = 0xff00_0000 | ((i as u32 * 13) & 0xff) << 16 | ((i as u32 * 29) & 0xff) << 8 | 0x80;
+        let color =
+            0xff00_0000 | ((i as u32 * 13) & 0xff) << 16 | ((i as u32 * 29) & 0xff) << 8 | 0x80;
         ctx.bitmap_erase(b, color).unwrap();
         bitmap_handles.push(b);
     }
@@ -317,13 +338,7 @@ fn build_heavy_scene(ctx: &mut RenderContext, rows: usize, cards: usize, bitmaps
         let y = 80.0 + i as f32 * 120.0;
         ctx.render_node_push_op(
             root,
-            DisplayOp::DrawBitmap(
-                *b,
-                None,
-                RectF::new(800.0, y, 928.0, y + 128.0),
-                None,
-                true,
-            ),
+            DisplayOp::DrawBitmap(*b, None, RectF::new(800.0, y, 928.0, y + 128.0), None, true),
         )
         .unwrap();
     }

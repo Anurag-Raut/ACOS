@@ -50,6 +50,8 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 
+use acos_parcel::BinderId;
+
 use crate::ams::IntentFacts;
 use crate::error::{Result, ServiceError};
 use crate::exception::write_no_exception;
@@ -425,7 +427,9 @@ fn rejected(detail: impl Into<String>) -> ServiceError {
 }
 
 fn state_of(state: &Arc<Mutex<TelephonyState>>) -> std::sync::MutexGuard<'_, TelephonyState> {
-    state.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 // --- services ---------------------------------------------------------------
@@ -476,39 +480,57 @@ impl ServiceObject for TelephonyService {
         }
         match code {
             TELEPHONY_GET_SIM_STATE_FOR_SLOT_INDEX => {
-                let _slot = data.read_int32().map_err(|e| self.bad("getSimStateForSlotIndex", e.to_string()))?;
+                let _slot = data
+                    .read_int32()
+                    .map_err(|e| self.bad("getSimStateForSlotIndex", e.to_string()))?;
                 let state = state_of(&self.state);
                 write_no_exception(reply);
                 reply.write_int32(state.sim_state);
                 Ok(true)
             }
             TELEPHONY_GET_ACTIVE_PHONE_TYPE_FOR_SLOT => {
-                let _slot = data.read_int32().map_err(|e| self.bad("getActivePhoneTypeForSlot", e.to_string()))?;
+                let _slot = data
+                    .read_int32()
+                    .map_err(|e| self.bad("getActivePhoneTypeForSlot", e.to_string()))?;
                 let state = state_of(&self.state);
                 write_no_exception(reply);
                 reply.write_int32(state.phone_type);
                 Ok(true)
             }
             TELEPHONY_GET_NETWORK_TYPE_FOR_SUBSCRIBER => {
-                let _sub = data.read_int32().map_err(|e| self.bad("getNetworkTypeForSubscriber", e.to_string()))?;
-                let _pkg = data.read_string16().map_err(|e| self.bad("getNetworkTypeForSubscriber", e.to_string()))?;
-                let _feature = data.read_string16().map_err(|e| self.bad("getNetworkTypeForSubscriber", e.to_string()))?;
+                let _sub = data
+                    .read_int32()
+                    .map_err(|e| self.bad("getNetworkTypeForSubscriber", e.to_string()))?;
+                let _pkg = data
+                    .read_string16()
+                    .map_err(|e| self.bad("getNetworkTypeForSubscriber", e.to_string()))?;
+                let _feature = data
+                    .read_string16()
+                    .map_err(|e| self.bad("getNetworkTypeForSubscriber", e.to_string()))?;
                 let state = state_of(&self.state);
                 write_no_exception(reply);
                 reply.write_int32(state.network_type);
                 Ok(true)
             }
             TELEPHONY_HAS_ICC_CARD_USING_SLOT_INDEX => {
-                let _slot = data.read_int32().map_err(|e| self.bad("hasIccCardUsingSlotIndex", e.to_string()))?;
+                let _slot = data
+                    .read_int32()
+                    .map_err(|e| self.bad("hasIccCardUsingSlotIndex", e.to_string()))?;
                 let present = state_of(&self.state).icc_present;
                 write_no_exception(reply);
                 reply.write_int32(i32::from(present));
                 Ok(true)
             }
             TELEPHONY_GET_LINE1_NUMBER_FOR_DISPLAY => {
-                let _sub = data.read_int32().map_err(|e| self.bad("getLine1NumberForDisplay", e.to_string()))?;
-                let _pkg = data.read_string16().map_err(|e| self.bad("getLine1NumberForDisplay", e.to_string()))?;
-                let _feature = data.read_string16().map_err(|e| self.bad("getLine1NumberForDisplay", e.to_string()))?;
+                let _sub = data
+                    .read_int32()
+                    .map_err(|e| self.bad("getLine1NumberForDisplay", e.to_string()))?;
+                let _pkg = data
+                    .read_string16()
+                    .map_err(|e| self.bad("getLine1NumberForDisplay", e.to_string()))?;
+                let _feature = data
+                    .read_string16()
+                    .map_err(|e| self.bad("getLine1NumberForDisplay", e.to_string()))?;
                 let line1 = state_of(&self.state).line1.clone();
                 write_no_exception(reply);
                 reply
@@ -523,9 +545,15 @@ impl ServiceObject for TelephonyService {
                 Ok(true)
             }
             TELEPHONY_GET_CALL_STATE_FOR_SUBSCRIPTION => {
-                let _sub = data.read_int32().map_err(|e| self.bad("getCallStateForSubscription", e.to_string()))?;
-                let _pkg = data.read_string16().map_err(|e| self.bad("getCallStateForSubscription", e.to_string()))?;
-                let _feature = data.read_string16().map_err(|e| self.bad("getCallStateForSubscription", e.to_string()))?;
+                let _sub = data
+                    .read_int32()
+                    .map_err(|e| self.bad("getCallStateForSubscription", e.to_string()))?;
+                let _pkg = data
+                    .read_string16()
+                    .map_err(|e| self.bad("getCallStateForSubscription", e.to_string()))?;
+                let _feature = data
+                    .read_string16()
+                    .map_err(|e| self.bad("getCallStateForSubscription", e.to_string()))?;
                 let call_state = state_of(&self.state).call_state;
                 write_no_exception(reply);
                 reply.write_int32(call_state);
@@ -577,8 +605,12 @@ impl ServiceObject for PhoneSubInfoService {
         }
         match code {
             SUBINFO_GET_LINE1_NUMBER => {
-                let _pkg = data.read_string16().map_err(|e| self.bad("getLine1Number", e.to_string()))?;
-                let _feature = data.read_string16().map_err(|e| self.bad("getLine1Number", e.to_string()))?;
+                let _pkg = data
+                    .read_string16()
+                    .map_err(|e| self.bad("getLine1Number", e.to_string()))?;
+                let _feature = data
+                    .read_string16()
+                    .map_err(|e| self.bad("getLine1Number", e.to_string()))?;
                 let line1 = state_of(&self.state).line1.clone();
                 write_no_exception(reply);
                 reply
@@ -587,9 +619,15 @@ impl ServiceObject for PhoneSubInfoService {
                 Ok(true)
             }
             SUBINFO_GET_LINE1_NUMBER_FOR_SUBSCRIBER => {
-                let _sub = data.read_int32().map_err(|e| self.bad("getLine1NumberForSubscriber", e.to_string()))?;
-                let _pkg = data.read_string16().map_err(|e| self.bad("getLine1NumberForSubscriber", e.to_string()))?;
-                let _feature = data.read_string16().map_err(|e| self.bad("getLine1NumberForSubscriber", e.to_string()))?;
+                let _sub = data
+                    .read_int32()
+                    .map_err(|e| self.bad("getLine1NumberForSubscriber", e.to_string()))?;
+                let _pkg = data
+                    .read_string16()
+                    .map_err(|e| self.bad("getLine1NumberForSubscriber", e.to_string()))?;
+                let _feature = data
+                    .read_string16()
+                    .map_err(|e| self.bad("getLine1NumberForSubscriber", e.to_string()))?;
                 let line1 = state_of(&self.state).line1.clone();
                 write_no_exception(reply);
                 reply
@@ -606,6 +644,12 @@ impl ServiceObject for PhoneSubInfoService {
 struct TelephonyRegistryService {
     state: Arc<Mutex<TelephonyState>>,
     queued: Vec<PendingDelivery>,
+    /// The live registrations, as host-held strong references. A registration
+    /// *is* a reference: the host keeps the guest's node alive while it exists,
+    /// and releasing it is what tells the driver to unroot the node
+    /// (`F_REF` release -> `BR_RELEASE` + `BR_DECREFS`). One ledger for every
+    /// module, so re-registering a listener cannot double-count.
+    refs: crate::refs::GuestRefs,
 }
 
 impl TelephonyRegistryService {
@@ -644,9 +688,15 @@ impl ServiceObject for TelephonyRegistryService {
         }
         match code {
             REGISTRY_LISTEN_WITH_EVENT_LIST => {
-                let _renounce_fine = data.read_int32().map_err(|e| self.bad("listenWithEventList", e.to_string()))?;
-                let _renounce_coarse = data.read_int32().map_err(|e| self.bad("listenWithEventList", e.to_string()))?;
-                let _sub_id = data.read_int32().map_err(|e| self.bad("listenWithEventList", e.to_string()))?;
+                let _renounce_fine = data
+                    .read_int32()
+                    .map_err(|e| self.bad("listenWithEventList", e.to_string()))?;
+                let _renounce_coarse = data
+                    .read_int32()
+                    .map_err(|e| self.bad("listenWithEventList", e.to_string()))?;
+                let _sub_id = data
+                    .read_int32()
+                    .map_err(|e| self.bad("listenWithEventList", e.to_string()))?;
                 let package = data
                     .read_string16()
                     .map_err(|e| self.bad("listenWithEventList", e.to_string()))?
@@ -670,12 +720,22 @@ impl ServiceObject for TelephonyRegistryService {
                 let (call_state, number) = {
                     let mut state = state_of(&self.state);
                     if binder != 0 {
+                        // `LISTEN_NONE` (an empty event list) is the unregister
+                        // path: the registration goes away, and so does the
+                        // reference the host held for it.
                         state.listeners.retain(|listener| listener.binder != binder);
-                        state.listeners.push(StateListener {
-                            binder,
-                            events: events.clone(),
-                            package,
-                        });
+                        if events.is_empty() {
+                            // `LISTEN_NONE`: the registration goes away, and so
+                            // does the reference the host held for it.
+                            self.refs.release(BinderId(binder));
+                        } else {
+                            state.listeners.push(StateListener {
+                                binder,
+                                events: events.clone(),
+                                package,
+                            });
+                            self.refs.hold(BinderId(binder));
+                        }
                     }
                     (state.call_state, state.incoming_number.clone())
                 };
@@ -695,7 +755,9 @@ impl ServiceObject for TelephonyRegistryService {
                 // `String pkg, IOnSubscriptionsChangedListener callback`: drop
                 // the registration if the callback is one of ours (a listener
                 // registered through `listen`), which costs no extra state.
-                let _pkg = data.read_string16().map_err(|e| self.bad("removeOnSubscriptionsChangedListener", e.to_string()))?;
+                let _pkg = data
+                    .read_string16()
+                    .map_err(|e| self.bad("removeOnSubscriptionsChangedListener", e.to_string()))?;
                 let binder = data
                     .read_strong_binder()
                     .map_err(|e| self.bad("removeOnSubscriptionsChangedListener", e.to_string()))?
@@ -704,6 +766,9 @@ impl ServiceObject for TelephonyRegistryService {
                 state_of(&self.state)
                     .listeners
                     .retain(|listener| listener.binder != binder);
+                if binder != 0 {
+                    self.refs.release(BinderId(binder));
+                }
                 write_no_exception(reply);
                 Ok(true)
             }
@@ -713,6 +778,18 @@ impl ServiceObject for TelephonyRegistryService {
 
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
         std::mem::take(&mut self.queued)
+    }
+
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        self.refs.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        self.refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.refs.release_all()
     }
 }
 
@@ -764,17 +841,23 @@ impl ServiceObject for SmsService {
                 // long messageId)`. The two `PendingIntent`s are read only as
                 // their presence word: the module never fires them, and their
                 // payload is not needed to record the send.
-                let sub_id = data.read_int32().map_err(|e| self.bad("sendTextForSubscriber", e.to_string()))?;
+                let sub_id = data
+                    .read_int32()
+                    .map_err(|e| self.bad("sendTextForSubscriber", e.to_string()))?;
                 let package = data
                     .read_string16()
                     .map_err(|e| self.bad("sendTextForSubscriber", e.to_string()))?
                     .unwrap_or_default();
-                let _feature = data.read_string16().map_err(|e| self.bad("sendTextForSubscriber", e.to_string()))?;
+                let _feature = data
+                    .read_string16()
+                    .map_err(|e| self.bad("sendTextForSubscriber", e.to_string()))?;
                 let destination = data
                     .read_string16()
                     .map_err(|e| self.bad("sendTextForSubscriber", e.to_string()))?
                     .unwrap_or_default();
-                let sc_address = data.read_string16().map_err(|e| self.bad("sendTextForSubscriber", e.to_string()))?;
+                let sc_address = data
+                    .read_string16()
+                    .map_err(|e| self.bad("sendTextForSubscriber", e.to_string()))?;
                 let text = data
                     .read_string16()
                     .map_err(|e| self.bad("sendTextForSubscriber", e.to_string()))?
@@ -826,13 +909,17 @@ impl ServiceObject for SmsService {
                 Ok(true)
             }
             SMS_IS_IMS_SMS_SUPPORTED_FOR_SUBSCRIBER => {
-                let _sub = data.read_int32().map_err(|e| self.bad("isImsSmsSupportedForSubscriber", e.to_string()))?;
+                let _sub = data
+                    .read_int32()
+                    .map_err(|e| self.bad("isImsSmsSupportedForSubscriber", e.to_string()))?;
                 write_no_exception(reply);
                 reply.write_int32(0);
                 Ok(true)
             }
             SMS_GET_IMS_SMS_FORMAT_FOR_SUBSCRIBER => {
-                let _sub = data.read_int32().map_err(|e| self.bad("getImsSmsFormatForSubscriber", e.to_string()))?;
+                let _sub = data
+                    .read_int32()
+                    .map_err(|e| self.bad("getImsSmsFormatForSubscriber", e.to_string()))?;
                 write_no_exception(reply);
                 reply
                     .write_string16_opt(Some("3gpp"))
@@ -845,7 +932,9 @@ impl ServiceObject for SmsService {
                 Ok(true)
             }
             SMS_IS_SIM_PICK_ACTIVITY_NEEDED => {
-                let _sub = data.read_int32().map_err(|e| self.bad("isSmsSimPickActivityNeeded", e.to_string()))?;
+                let _sub = data
+                    .read_int32()
+                    .map_err(|e| self.bad("isSmsSimPickActivityNeeded", e.to_string()))?;
                 // One scripted subscription: no picker is ever needed, so
                 // `SmsManager.sendTextMessage` goes straight to the send.
                 write_no_exception(reply);
@@ -954,7 +1043,9 @@ fn parse_network_type(value: &Value) -> Result<i32> {
             .as_i64()
             .and_then(|n| i32::try_from(n).ok())
             .filter(|n| (0..=20).contains(n))
-            .ok_or_else(|| rejected("network_type must be a TelephonyManager.NETWORK_TYPE_* number (0..20)")),
+            .ok_or_else(|| {
+                rejected("network_type must be a TelephonyManager.NETWORK_TYPE_* number (0..20)")
+            }),
         Value::String(text) => Ok(match text.as_str() {
             "unknown" => 0,
             "gprs" => 1,
@@ -983,7 +1074,9 @@ fn parse_network_type(value: &Value) -> Result<i32> {
                 )))
             }
         }),
-        other => Err(rejected(format!("network_type must be a string or number, got {other}"))),
+        other => Err(rejected(format!(
+            "network_type must be a string or number, got {other}"
+        ))),
     }
 }
 
@@ -1208,7 +1301,11 @@ pub fn encode_sms_deliver(from: &str, body: &str, now_unix_seconds: u64) -> Resu
     };
     let address = decimal_digits(digits)
         .filter(|digits| !digits.is_empty() && digits.len() <= 20)
-        .ok_or_else(|| rejected(format!("from {from:?} is not a phone number (digits, optional leading '+')")))?;
+        .ok_or_else(|| {
+            rejected(format!(
+                "from {from:?} is not a phone number (digits, optional leading '+')"
+            ))
+        })?;
     let septets: Vec<u8> = body
         .chars()
         .map(|c| {
@@ -1314,6 +1411,7 @@ impl Module for TelephonyModule {
             Box::new(TelephonyRegistryService {
                 state: Arc::clone(&state),
                 queued: Vec::new(),
+                refs: crate::refs::GuestRefs::new(),
             }),
         );
         host.register_dynamic_named(
@@ -1338,7 +1436,9 @@ impl Module for TelephonyModule {
 
     fn control(&mut self, host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         let Some(shared) = self.state.as_ref().cloned() else {
-            return Err(rejected(format!("module is off, so {op:?} was not applied")));
+            return Err(rejected(format!(
+                "module is off, so {op:?} was not applied"
+            )));
         };
         match op {
             "state" => Ok(state_of(&shared).to_json()),
@@ -1413,8 +1513,14 @@ impl Module for TelephonyModule {
                 let mut intent = IntentFacts::action(SMS_RECEIVED_ACTION);
                 intent.extras = {
                     let mut extras = std::collections::BTreeMap::new();
-                    extras.insert("pdus".to_string(), crate::ams::Extra::ByteArrays(vec![pdu.clone()]));
-                    extras.insert("format".to_string(), crate::ams::Extra::String("3gpp".to_string()));
+                    extras.insert(
+                        "pdus".to_string(),
+                        crate::ams::Extra::ByteArrays(vec![pdu.clone()]),
+                    );
+                    extras.insert(
+                        "format".to_string(),
+                        crate::ams::Extra::String("3gpp".to_string()),
+                    );
                     extras
                 };
                 let matched = host.broadcast_intent(&intent)?;
@@ -1461,7 +1567,10 @@ impl Module for TelephonyModule {
                 .as_ref()
                 .map(|state| state_of(state).to_json())
                 .unwrap_or(Value::Null);
-            let sent = state.get("sent").and_then(Value::as_array).map_or(0, Vec::len);
+            let sent = state
+                .get("sent")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len);
             let injected = state
                 .get("injected")
                 .and_then(Value::as_array)
@@ -1509,7 +1618,10 @@ mod tests {
 
     #[test]
     fn the_pdu_round_trips_through_the_gsm7_packing() {
-        let septets: Vec<u8> = "ACOS SMS".chars().map(|c| gsm7_septet(c).unwrap()).collect();
+        let septets: Vec<u8> = "ACOS SMS"
+            .chars()
+            .map(|c| gsm7_septet(c).unwrap())
+            .collect();
         let packed = pack_septets(&septets);
         let mut unpacked = Vec::new();
         let mut acc: u32 = 0;

@@ -282,7 +282,9 @@ pub(crate) fn apply_with_warning(
     //    logs) and each step's frame sequence, which the validator requires.
     for step in &verdict.steps {
         if let Some(seq) = step.frame_seq {
-            keep.insert(PathBuf::from(acos_protocol::artifacts::frame_file_name(seq)));
+            keep.insert(PathBuf::from(acos_protocol::artifacts::frame_file_name(
+                seq,
+            )));
             keep.insert(PathBuf::from(acos_protocol::artifacts::tree_file_name(seq)));
         }
         for evidence in &step.evidence {
@@ -301,10 +303,18 @@ pub(crate) fn apply_with_warning(
             keep.insert(PathBuf::from(FRAMES_DIR).join(first));
             keep.insert(PathBuf::from(FRAMES_DIR).join(last));
         }
-        candidates.extend(frames.drain(..).map(|name| PathBuf::from(FRAMES_DIR).join(name)));
+        candidates.extend(
+            frames
+                .drain(..)
+                .map(|name| PathBuf::from(FRAMES_DIR).join(name)),
+        );
     } else {
         // none-on-pass: no frame at all survives, so no first/last exemption.
-        candidates.extend(frames.drain(..).map(|name| PathBuf::from(FRAMES_DIR).join(name)));
+        candidates.extend(
+            frames
+                .drain(..)
+                .map(|name| PathBuf::from(FRAMES_DIR).join(name)),
+        );
     }
 
     // 3. The mirrored raw captures. Only the first and last capture is kept
@@ -313,15 +323,23 @@ pub(crate) fn apply_with_warning(
     let mut captures = list_capture_order(dir.join(ART_FRAMES_DIR).join(LIVE_FRAMES_DIR));
     if decision == Decision::PruneUnreferenced {
         if let (Some(first), Some(last)) = (captures.first(), captures.last()) {
-            keep.insert(PathBuf::from(ART_FRAMES_DIR).join(LIVE_FRAMES_DIR).join(first));
-            keep.insert(PathBuf::from(ART_FRAMES_DIR).join(LIVE_FRAMES_DIR).join(last));
+            keep.insert(
+                PathBuf::from(ART_FRAMES_DIR)
+                    .join(LIVE_FRAMES_DIR)
+                    .join(first),
+            );
+            keep.insert(
+                PathBuf::from(ART_FRAMES_DIR)
+                    .join(LIVE_FRAMES_DIR)
+                    .join(last),
+            );
         }
     }
-    candidates.extend(
-        captures
-            .drain(..)
-            .map(|name| PathBuf::from(ART_FRAMES_DIR).join(LIVE_FRAMES_DIR).join(name)),
-    );
+    candidates.extend(captures.drain(..).map(|name| {
+        PathBuf::from(ART_FRAMES_DIR)
+            .join(LIVE_FRAMES_DIR)
+            .join(name)
+    }));
 
     // 4. Drop candidates that are already declared as kept.
     let mut prune: Vec<PathBuf> = candidates
@@ -374,10 +392,9 @@ pub(crate) fn apply_with_warning(
             Err(error) => {
                 // A file we cannot remove stays: evidence is never lost to a
                 // permission problem, and the report says so.
-                report.kept_because_referenced.push(format!(
-                    "{} (kept: {error})",
-                    path.to_string_lossy()
-                ));
+                report
+                    .kept_because_referenced
+                    .push(format!("{} (kept: {error})", path.to_string_lossy()));
             }
         }
     }
@@ -409,9 +426,9 @@ pub(crate) fn apply_with_warning(
     report.kept_files = files;
     report.kept_bytes = bytes;
     report.reason = match decision {
-        Decision::PruneAllFrames => format!(
-            "passing run (mode `{mode}`): reports, trees and logs kept, no frames"
-        ),
+        Decision::PruneAllFrames => {
+            format!("passing run (mode `{mode}`): reports, trees and logs kept, no frames")
+        }
         _ => format!(
             "passing run (mode `{mode}`): declared evidence plus the first and last frame kept, \
              intermediate frames and mirrored captures pruned"
@@ -478,7 +495,11 @@ pub fn finalize(dir: &Path) -> u64 {
     let mut stripped = 0_u64;
     if let Some(steps) = doc.get_mut("steps").and_then(|steps| steps.as_array_mut()) {
         for step in steps.iter_mut() {
-            let Some(png) = step.get("png").and_then(|png| png.as_str()).map(str::to_string) else {
+            let Some(png) = step
+                .get("png")
+                .and_then(|png| png.as_str())
+                .map(str::to_string)
+            else {
                 continue;
             };
             if resolves_inside(dir, &png) {
@@ -683,7 +704,10 @@ fn list_capture_order(dir: PathBuf) -> Vec<String> {
 }
 
 fn capture_index(name: &str) -> u64 {
-    let stem = name.rsplit_once(".png").map(|(stem, _)| stem).unwrap_or(name);
+    let stem = name
+        .rsplit_once(".png")
+        .map(|(stem, _)| stem)
+        .unwrap_or(name);
     let Some((_, tail)) = stem.rsplit_once("-c") else {
         return u64::MAX;
     };
@@ -725,7 +749,9 @@ fn walk_files(dir: &Path) -> Vec<PathBuf> {
         };
         for entry in entries.flatten() {
             let path = entry.path();
-            let Ok(kind) = entry.file_type() else { continue };
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
             if kind.is_dir() {
                 // Symlinked directories are not followed (artifact dirs must
                 // stay inside the tree).
@@ -814,14 +840,14 @@ fn write_report(dir: &Path, report: &RetentionReport) {
 mod tests {
     use super::*;
     use acos_protocol::identity::{DisplaySpec, IsolationLevel};
-    use acos_protocol::verdict::{AppIdentity, ArtifactRef, Reproducer, ScenarioIdentity, StepResult};
+    use acos_protocol::verdict::{
+        AppIdentity, ArtifactRef, Reproducer, ScenarioIdentity, StepResult,
+    };
     use acos_protocol::Fidelity;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "acos-retention-{}-{name}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("acos-retention-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -868,7 +894,8 @@ mod tests {
             let mut step = StepResult::new(index, "tap", Status::Pass, 1);
             step.frame_seq = Some(seq);
             for reference in &refs {
-                step.evidence.push(ArtifactRef::new("frame", (*reference).to_string()));
+                step.evidence
+                    .push(ArtifactRef::new("frame", (*reference).to_string()));
             }
             verdict.steps.push(step);
         }
@@ -936,10 +963,7 @@ mod tests {
         }
         write(&dir, "steps/00-tap.json", b"{\"index\":0}");
         write(&dir, "events.jsonl", b"{}\n");
-        let verdict = verdict_with(vec![
-            (1, vec!["frames/1.png"]),
-            (3, vec!["frames/3.png"]),
-        ]);
+        let verdict = verdict_with(vec![(1, vec!["frames/1.png"]), (3, vec!["frames/3.png"])]);
         let report = apply(&dir, KeepArtifacts::Referenced, Status::Pass, &verdict).unwrap();
         assert!(
             dir.join("frames/1.png").is_file(),

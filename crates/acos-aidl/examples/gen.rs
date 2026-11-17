@@ -67,14 +67,20 @@ fn main() {
     }
 
     let workspace = PathBuf::from(workspace.unwrap_or_else(|| ".".to_string()));
-    let boot_dir = PathBuf::from(
-        boot.unwrap_or_else(|| workspace.join(".cache/boot/android-34").display().to_string()),
-    );
+    let boot_dir = PathBuf::from(boot.unwrap_or_else(|| {
+        workspace
+            .join(".cache/boot/android-34")
+            .display()
+            .to_string()
+    }));
 
     let scanner = match BootScanner::load(&boot_dir) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("failed to load boot classpath at {}: {e}", boot_dir.display());
+            eprintln!(
+                "failed to load boot classpath at {}: {e}",
+                boot_dir.display()
+            );
             std::process::exit(1);
         }
     };
@@ -225,6 +231,9 @@ fn main() {
         println!("  missing {iface}: {err}");
     }
     for u in cov.unknown.iter().take(40) {
-        println!("  unknown {}.{} code={}: {}", u.interface, u.method, u.code, u.reason);
+        println!(
+            "  unknown {}.{} code={}: {}",
+            u.interface, u.method, u.code, u.reason
+        );
     }
 }

@@ -105,4 +105,3 @@ unsafe fn write_u64(p: *mut u8, v: u64) {
 pub fn stub_count() -> usize {
     stubs().lock().map(|g| g.len()).unwrap_or(0)
 }
-

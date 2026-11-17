@@ -78,18 +78,24 @@ pub struct ZygoteKey {
     pub density: u32,
     pub insets: String,
     pub animations: String,
+    /// MPROC1: the extra APKs the session installs, in the caller's order. A
+    /// child forked for one package set must never serve a session that asks
+    /// for another, so the list is part of the identity (and of the hash).
+    pub extra_apks: Vec<String>,
 }
 
 impl ZygoteKey {
     /// A filesystem-safe directory name for this key (stable, sorted, short).
     pub fn dir_name(&self) -> String {
         let mut hash: u64 = 0xcbf29ce484222325;
-        for part in [
+        let mut parts: Vec<&str> = vec![
             self.apk.as_str(),
             self.boot_image.as_str(),
             self.insets.as_str(),
             self.animations.as_str(),
-        ] {
+        ];
+        parts.extend(self.extra_apks.iter().map(String::as_str));
+        for part in parts {
             for byte in part.as_bytes() {
                 hash ^= u64::from(*byte);
                 hash = hash.wrapping_mul(0x100000001b3);
@@ -118,6 +124,7 @@ impl ZygoteKey {
             "density": self.density,
             "insets": self.insets,
             "animations": self.animations,
+            "extra_apks": self.extra_apks,
         })
     }
 }
@@ -137,11 +144,22 @@ fn short_hash(text: &str, hex: usize) -> String {
 #[derive(Debug)]
 pub enum ZygoteError {
     /// The keeper process is gone (or its `ready` file vanished).
-    Dead { status: Option<String>, tail: String },
+    Dead {
+        status: Option<String>,
+        tail: String,
+    },
     /// The keeper is alive but never acked a verb.
-    AckTimeout { verb: String, tag: u32, waited_ms: u64, tail: String },
+    AckTimeout {
+        verb: String,
+        tag: u32,
+        waited_ms: u64,
+        tail: String,
+    },
     /// The keeper never came up.
-    NotReady { waited_ms: u64, tail: String },
+    NotReady {
+        waited_ms: u64,
+        tail: String,
+    },
     /// A contract file was absent or unparsable.
     Contract(String),
     Io(String),
@@ -376,9 +394,9 @@ impl PersistentZygote {
         for (name, value) in env {
             command.env(name, value);
         }
-        let keeper = command.spawn().map_err(|error| {
-            ZygoteError::Io(format!("cannot start the keeper: {error}"))
-        })?;
+        let keeper = command
+            .spawn()
+            .map_err(|error| ZygoteError::Io(format!("cannot start the keeper: {error}")))?;
         let ready_path = plan.join("ready");
         let mut zygote = PersistentZygote {
             root,
@@ -471,7 +489,9 @@ impl PersistentZygote {
     /// Is the keeper process (and its zygote) still there? A dead keeper is a
     /// **reported** condition, never a silent fallback (§6).
     pub fn alive(&mut self) -> bool {
-        let Some(child) = self.keeper.as_mut() else { return false };
+        let Some(child) = self.keeper.as_mut() else {
+            return false;
+        };
         match child.try_wait() {
             Ok(None) => {}
             _ => return false,
@@ -489,7 +509,10 @@ impl PersistentZygote {
             .as_mut()
             .and_then(|child| child.try_wait().ok().flatten())
             .map(describe_status);
-        Some(ZygoteError::Dead { status, tail: self.log_tail(20) })
+        Some(ZygoteError::Dead {
+            status,
+            tail: self.log_tail(20),
+        })
     }
 
     /// Prepare `<plan>/<tag>` for a **fresh** child: empty `run` and `sock`, and
@@ -525,9 +548,10 @@ impl PersistentZygote {
         // NET2: `<plan>/<tag>/sock` is bound at `/dev/socket` in the zygote child,
         // so the resolver proxy has to be served there (not in the launcher's
         // directory, which the child never sees). Held until the next session.
-        self.dns = crate::spike_net::serve_dnsproxyd_if_enabled(&dir.join("sock")).map_err(|e| {
-            ZygoteError::Io(format!("dnsproxyd in {}: {e}", dir.join("sock").display()))
-        })?;
+        self.dns =
+            crate::spike_net::serve_dnsproxyd_if_enabled(&dir.join("sock")).map_err(|e| {
+                ZygoteError::Io(format!("dnsproxyd in {}: {e}", dir.join("sock").display()))
+            })?;
         Ok(dir)
     }
 
@@ -536,7 +560,10 @@ impl PersistentZygote {
     pub fn publish_binds(&self, tag: u32) -> ZygoteResult<()> {
         let dir = self.session_dir(tag);
         let rows = [
-            (format!("/sessions/{tag}/run/dalvik-cache"), "/data/dalvik-cache"),
+            (
+                format!("/sessions/{tag}/run/dalvik-cache"),
+                "/data/dalvik-cache",
+            ),
             (format!("/sessions/{tag}/run/misc"), "/data/misc"),
             (format!("/sessions/{tag}/run/tmp"), "/data/tmp"),
             (format!("/sessions/{tag}/run/out"), "/data/out"),
@@ -544,7 +571,10 @@ impl PersistentZygote {
             (format!("/sessions/{tag}/run/app-data"), "/data/app-data"),
             (format!("/sessions/{tag}/run/app-lib"), "/data/app-lib"),
             (format!("/sessions/{tag}/sock"), "/dev/socket"),
-            (format!("/sessions/{tag}/sock/peer.sock"), "/data/acos-launch.sock"),
+            (
+                format!("/sessions/{tag}/sock/peer.sock"),
+                "/data/acos-launch.sock",
+            ),
         ];
         let mut text = String::new();
         for (a, b) in rows {
@@ -591,9 +621,9 @@ impl PersistentZygote {
                 return Ok(());
             }
             if !self.alive() {
-                return Err(self
-                    .dead_reason()
-                    .unwrap_or(ZygoteError::Contract("the keeper died before <tag>/argv".into())));
+                return Err(self.dead_reason().unwrap_or(ZygoteError::Contract(
+                    "the keeper died before <tag>/argv".into(),
+                )));
             }
             if let Some(reason) = peer_gone() {
                 return Err(ZygoteError::Contract(format!(
@@ -628,7 +658,11 @@ impl PersistentZygote {
                 ZygoteError::Contract(format!("spawn ack for tag {tag} named no pid"))
             })?;
         self.last_child.insert(tag, child_pid);
-        Ok(ZygoteChild { tag, child_pid, run_root: dir.join("run") })
+        Ok(ZygoteChild {
+            tag,
+            child_pid,
+            run_root: dir.join("run"),
+        })
     }
 
     /// `kill <tag>`: the zygote SIGKILLs **that child's process group** and reaps
@@ -642,10 +676,7 @@ impl PersistentZygote {
         self.send(&format!("kill {tag}"))?;
         let ack = self.wait_ack(&dir.join("reaped"), "kill", tag)?;
         let _ = fs::remove_file(dir.join("pid"));
-        Ok(ack
-            .get("pid")
-            .and_then(|v| v.parse().ok())
-            .or(previous))
+        Ok(ack.get("pid").and_then(|v| v.parse().ok()).or(previous))
     }
 
     /// §4: the whole reset — kill one child, wipe its run root, fork one fresh
@@ -665,12 +696,16 @@ impl PersistentZygote {
     /// process for its whole life, so a write never blocks on a reader.
     pub fn send(&mut self, line: &str) -> ZygoteResult<()> {
         if !self.alive() {
-            return Err(self
-                .dead_reason()
-                .unwrap_or(ZygoteError::Dead { status: None, tail: self.log_tail(20) }));
+            return Err(self.dead_reason().unwrap_or(ZygoteError::Dead {
+                status: None,
+                tail: self.log_tail(20),
+            }));
         }
         let Some(cmd) = self.cmd.as_mut() else {
-            return Err(ZygoteError::Dead { status: None, tail: self.log_tail(20) });
+            return Err(ZygoteError::Dead {
+                status: None,
+                tail: self.log_tail(20),
+            });
         };
         cmd.write_all(line.as_bytes())?;
         cmd.write_all(b"\n")?;
@@ -701,7 +736,12 @@ impl PersistentZygote {
         }
     }
 
-    fn wait_ack(&mut self, path: &Path, verb: &str, tag: u32) -> ZygoteResult<HashMap<String, String>> {
+    fn wait_ack(
+        &mut self,
+        path: &Path,
+        verb: &str,
+        tag: u32,
+    ) -> ZygoteResult<HashMap<String, String>> {
         let started = Instant::now();
         while started.elapsed() < self.ack_timeout {
             if let Some(kv) = read_kv(path) {
@@ -850,6 +890,7 @@ mod tests {
             density: 400,
             insets: "carve".into(),
             animations: "on".into(),
+            extra_apks: Vec::new(),
         }
     }
 
@@ -915,9 +956,18 @@ mod tests {
         fs::write(tag_dir.join("pid"), b"41\n").unwrap();
         fs::write(tag_dir.join("argv"), b"stale").unwrap();
         keeper.prepare_session(7).unwrap();
-        assert!(!tag_dir.join("run/app-data/state.txt").exists(), "run root must be empty");
-        assert!(tag_dir.join("run/app-data").is_dir(), "the mount points must exist");
-        assert!(!tag_dir.join("spawned").exists(), "a stale ack must never answer a new spawn");
+        assert!(
+            !tag_dir.join("run/app-data/state.txt").exists(),
+            "run root must be empty"
+        );
+        assert!(
+            tag_dir.join("run/app-data").is_dir(),
+            "the mount points must exist"
+        );
+        assert!(
+            !tag_dir.join("spawned").exists(),
+            "a stale ack must never answer a new spawn"
+        );
         assert!(!tag_dir.join("pid").exists());
         assert!(!tag_dir.join("argv").exists());
         let _ = fs::remove_dir_all(&dir);
@@ -946,8 +996,14 @@ mod tests {
         keeper.prepare_session(3).unwrap();
         keeper.publish_binds(3).unwrap();
         let text = fs::read_to_string(dir.join("3/binds")).unwrap();
-        assert!(text.contains("/sessions/3/run/app-data\t/data/app-data"), "{text}");
-        assert!(text.contains("/sessions/3/sock/peer.sock\t/data/acos-launch.sock"), "{text}");
+        assert!(
+            text.contains("/sessions/3/run/app-data\t/data/app-data"),
+            "{text}"
+        );
+        assert!(
+            text.contains("/sessions/3/sock/peer.sock\t/data/acos-launch.sock"),
+            "{text}"
+        );
         assert_eq!(text.lines().count(), 9);
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1015,11 +1071,22 @@ done < "$plan/cmd"
         // The reset: kill one child, wipe its run root, fork one fresh child from
         // the same zygote (same pid, same boot epoch).
         let (previous, fresh) = keeper.reset(0).expect("reset is acked");
-        assert_eq!(previous, Some(101), "the reply must name the child it killed");
-        assert_eq!(fresh.child_pid, 102, "a genuinely different process answered");
+        assert_eq!(
+            previous,
+            Some(101),
+            "the reply must name the child it killed"
+        );
+        assert_eq!(
+            fresh.child_pid, 102,
+            "a genuinely different process answered"
+        );
         assert_ne!(fresh.child_pid, previous.unwrap());
         assert!(!keeper.run_root_of(0).join("app-data/state.txt").exists());
-        assert_eq!(keeper.boot_epoch(), epoch, "a reset must not restart the zygote");
+        assert_eq!(
+            keeper.boot_epoch(),
+            epoch,
+            "a reset must not restart the zygote"
+        );
         assert_eq!(keeper.zygote_pid(), 2);
 
         // Shutdown ends the keeper: no leaked zygote process after serve exit.
@@ -1054,7 +1121,9 @@ done < "$plan/cmd"
         // `kill 1` on a tag that never spawned: the mock keeper writes an empty
         // pid, and the host must fail with a named error rather than hang.
         keeper.kill(1).expect("the mock acks with the pid it had");
-        let error = keeper.wait_contract(9, Duration::from_millis(60)).unwrap_err();
+        let error = keeper
+            .wait_contract(9, Duration::from_millis(60))
+            .unwrap_err();
         assert!(error.to_string().starts_with("ZYGOTE_DEAD"), "{error}");
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1064,7 +1133,11 @@ done < "$plan/cmd"
         let dir = std::env::temp_dir().join(format!("zprod2-dead-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("keeper.log"), "ZP1 ready epoch=1\nZL update failed\n").unwrap();
+        fs::write(
+            dir.join("keeper.log"),
+            "ZP1 ready epoch=1\nZL update failed\n",
+        )
+        .unwrap();
         let mut keeper = PersistentZygote {
             root: dir.clone(),
             plan: dir.clone(),
@@ -1084,7 +1157,10 @@ done < "$plan/cmd"
         let error = keeper.spawn(0).unwrap_err();
         let text = error.to_string();
         assert!(text.starts_with("ZYGOTE_DEAD"), "{text}");
-        assert!(text.contains("ZL update failed"), "the log tail is evidence: {text}");
+        assert!(
+            text.contains("ZL update failed"),
+            "the log tail is evidence: {text}"
+        );
         assert!(keeper.dead_reason().is_some());
         let _ = fs::remove_dir_all(&dir);
     }

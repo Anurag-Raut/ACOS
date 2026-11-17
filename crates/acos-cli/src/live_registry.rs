@@ -153,14 +153,18 @@ impl LiveRegistry {
     /// Publish (or refresh) a session's entry, atomically.
     pub fn write(&self, entry: &LiveEntry) -> io::Result<PathBuf> {
         self.prepare_dir()?;
-        let path = self.dir.join(self.file_name(&entry.session_id, entry.daemon_pid));
+        let path = self
+            .dir
+            .join(self.file_name(&entry.session_id, entry.daemon_pid));
         write_atomic(&path, &entry.to_json().to_string())?;
         Ok(path)
     }
 
     /// Update `activity` in an existing entry (no-op when the file is gone).
     pub fn update_activity(&self, session_id: &str, activity: Option<&str>) -> io::Result<bool> {
-        let path = self.dir.join(self.file_name(session_id, std::process::id()));
+        let path = self
+            .dir
+            .join(self.file_name(session_id, std::process::id()));
         let Ok(text) = std::fs::read_to_string(&path) else {
             return Ok(false);
         };
@@ -190,7 +194,9 @@ impl LiveRegistry {
 
     /// Remove one session's entry (destroy/close). Missing is success.
     pub fn remove(&self, session_id: &str) {
-        let path = self.dir.join(self.file_name(session_id, std::process::id()));
+        let path = self
+            .dir
+            .join(self.file_name(session_id, std::process::id()));
         let _ = std::fs::remove_file(path);
     }
 
@@ -272,7 +278,10 @@ pub fn verify_private_dir(dir: &Path, create: bool) -> io::Result<()> {
         if mode != 0o700 {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                format!("{} has mode {mode:o}, could not make it 0700", dir.display()),
+                format!(
+                    "{} has mode {mode:o}, could not make it 0700",
+                    dir.display()
+                ),
             ));
         }
     }
@@ -428,10 +437,7 @@ pub fn pid_alive(pid: u32) -> bool {
     if rc == 0 {
         return true;
     }
-    matches!(
-        io::Error::last_os_error().raw_os_error(),
-        Some(libc::EPERM)
-    )
+    matches!(io::Error::last_os_error().raw_os_error(), Some(libc::EPERM))
 }
 
 /// Host wall clock in milliseconds since the Unix epoch.
@@ -522,7 +528,10 @@ mod tests {
         assert_eq!(doc["project_dir"], "/home/Qui/Projects/acos");
         assert_eq!(doc["display"]["w"], 1080);
         assert_eq!(doc["display"]["h"], 2400);
-        assert!(doc["stream_socket"].as_str().unwrap().ends_with("view.sock"));
+        assert!(doc["stream_socket"]
+            .as_str()
+            .unwrap()
+            .ends_with("view.sock"));
         // A live daemon's entry is not stale.
         let entries = read_entries(&dir);
         assert_eq!(entries.len(), 1);
@@ -545,7 +554,10 @@ mod tests {
         write_atomic(&dead_path, &dead.to_json().to_string()).expect("write dead");
         let entries = read_entries(&dir);
         assert_eq!(entries.len(), 2);
-        let stale = entries.iter().find(|e| e.doc["session_id"] == "s_dead").expect("dead entry");
+        let stale = entries
+            .iter()
+            .find(|e| e.doc["session_id"] == "s_dead")
+            .expect("dead entry");
         assert!(stale.stale, "a dead daemon_pid must read as stale");
         assert_eq!(sweep(&dir), 1);
         assert_eq!(read_entries(&dir).len(), 1);
@@ -563,7 +575,9 @@ mod tests {
         let open = root.join("open");
         std::fs::create_dir_all(&open).expect("mkdir");
         std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o777)).expect("chmod");
-        LiveRegistry::at(open.clone()).write(&entry("s_l6")).expect("write");
+        LiveRegistry::at(open.clone())
+            .write(&entry("s_l6"))
+            .expect("write");
         assert_eq!(
             std::fs::metadata(&open).expect("stat").permissions().mode() & 0o777,
             0o700
@@ -573,7 +587,9 @@ mod tests {
         std::fs::create_dir_all(&target).expect("mkdir");
         let link = root.join("link");
         symlink(&target, &link).expect("symlink");
-        assert!(LiveRegistry::at(link.clone()).write(&entry("s_l6")).is_err());
+        assert!(LiveRegistry::at(link.clone())
+            .write(&entry("s_l6"))
+            .is_err());
         assert!(read_entries(&link).is_empty());
         // A regular file is refused.
         let file = root.join("file");

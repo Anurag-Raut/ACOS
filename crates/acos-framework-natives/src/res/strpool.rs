@@ -52,7 +52,10 @@ impl<'a> StringPool<'a> {
         }
         let header_size = u16_at(data, start + 2)? as usize;
         if header_size < 28 {
-            return Err(ResError::new(RES_STRING_POOL, "string pool header too small"));
+            return Err(ResError::new(
+                RES_STRING_POOL,
+                "string pool header too small",
+            ));
         }
         let string_count = crate::res::bytes::u32_at(data, start + 8)? as usize;
         let style_count = crate::res::bytes::u32_at(data, start + 12)? as usize;
@@ -240,7 +243,10 @@ impl StringBlock {
         if idx < 0 {
             return &[];
         }
-        self.styles.get(idx as usize).map(Vec::as_slice).unwrap_or(&[])
+        self.styles
+            .get(idx as usize)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
     }
 }
 

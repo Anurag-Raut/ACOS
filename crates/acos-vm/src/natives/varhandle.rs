@@ -289,7 +289,9 @@ fn write_raw(vm: &mut Vm, target: &VhTarget, obj: u32, index: i32, bits: u64) ->
                 return Err(vm.throw_new("Ljava/lang/NullPointerException;", None));
             };
             if *slot >= fields.len() {
-                return Err(VmError::Internal("VarHandle field slot out of range".into()));
+                return Err(VmError::Internal(
+                    "VarHandle field slot out of range".into(),
+                ));
             }
             fields[*slot] = bits as u32;
             if wide {
@@ -304,12 +306,16 @@ fn write_raw(vm: &mut Vm, target: &VhTarget, obj: u32, index: i32, bits: u64) ->
             let wide = wide(desc);
             let st = &mut vm.classes[*class as usize].statics;
             if *slot >= st.len() {
-                return Err(VmError::Internal("VarHandle static slot out of range".into()));
+                return Err(VmError::Internal(
+                    "VarHandle static slot out of range".into(),
+                ));
             }
             st[*slot] = bits as u32;
             if wide {
                 if *slot + 1 >= st.len() {
-                    return Err(VmError::Internal("VarHandle static long slot out of range".into()));
+                    return Err(VmError::Internal(
+                        "VarHandle static long slot out of range".into(),
+                    ));
                 }
                 st[*slot + 1] = (bits >> 32) as u32;
             }

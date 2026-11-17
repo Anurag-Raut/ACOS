@@ -109,7 +109,11 @@ pub enum Request {
     Detach { session: String },
     /// `offline: true` drops the session's traffic, `false` restores it. Nothing
     /// in the guest participates, so it works mid-request.
-    Offline { session: String, #[serde(default)] offline: bool },
+    Offline {
+        session: String,
+        #[serde(default)]
+        offline: bool,
+    },
     /// `netem` shaping on the session's veth (`ms: 0, loss_pct: 0` clears it).
     Delay {
         session: String,
@@ -238,14 +242,24 @@ pub struct ProtoError {
 impl Reply {
     #[must_use]
     pub fn ok() -> Self {
-        Self { ok: true, error: None, status: None, session: None, attach_ms: None, identity: None }
+        Self {
+            ok: true,
+            error: None,
+            status: None,
+            session: None,
+            attach_ms: None,
+            identity: None,
+        }
     }
 
     #[must_use]
     pub fn fail(code: ErrorCode, message: impl Into<String>) -> Self {
         Self {
             ok: false,
-            error: Some(ProtoError { code, message: message.into() }),
+            error: Some(ProtoError {
+                code,
+                message: message.into(),
+            }),
             status: None,
             session: None,
             attach_ms: None,
@@ -255,13 +269,19 @@ impl Reply {
 
     #[must_use]
     pub fn status(s: StatusInfo) -> Self {
-        Self { status: Some(s), ..Self::ok() }
+        Self {
+            status: Some(s),
+            ..Self::ok()
+        }
     }
 }
 
 /// One line of the wire format, newline-terminated.
 pub fn encode<T: Serialize>(v: &T) -> String {
-    format!("{}\n", serde_json::to_string(v).unwrap_or_else(|_| "{\"ok\":false}".into()))
+    format!(
+        "{}\n",
+        serde_json::to_string(v).unwrap_or_else(|_| "{\"ok\":false}".into())
+    )
 }
 
 /// Decode one request line.

@@ -48,8 +48,8 @@ use serde::{Deserialize, Serialize};
 
 mod confine;
 pub mod error;
-mod live;
 mod linux;
+mod live;
 mod probe;
 
 pub use confine::{

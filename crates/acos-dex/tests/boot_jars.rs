@@ -143,11 +143,9 @@ fn boot_classpath_parse_and_verify() {
                         )),
                     }
                 }
-                Err(e) => failures.push(format!(
-                    "parse {}!{name}: {} {e}",
-                    jar.display(),
-                    e.code()
-                )),
+                Err(e) => {
+                    failures.push(format!("parse {}!{name}: {} {e}", jar.display(), e.code()))
+                }
             }
             let _ = std::fs::remove_file(&tmpf);
         }
@@ -219,5 +217,8 @@ fn boot_classpath_dexdump_differential() {
         .filter_map(|s| s.trim().parse().ok())
         .next()
         .unwrap_or(u64::MAX);
-    assert_eq!(mismatches, 0, "boot dexdump differential mismatches: {mismatches}");
+    assert_eq!(
+        mismatches, 0,
+        "boot dexdump differential mismatches: {mismatches}"
+    );
 }

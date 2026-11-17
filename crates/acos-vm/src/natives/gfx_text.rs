@@ -107,8 +107,7 @@ impl FaceRef {
         let fc = FontCollection::shared()?;
         if let Some(fam) = fc.families.get(self.family_key) {
             if let Some(entry) = fam.fonts.iter().find(|e| {
-                e.file.face_index == self.face_index
-                    && e.file.path.to_string_lossy() == self.path
+                e.file.face_index == self.face_index && e.file.path.to_string_lossy() == self.path
             }) {
                 return Some(FontRef {
                     file: entry.file.clone(),
@@ -247,7 +246,10 @@ impl TextShared {
         } else {
             Handle::from_jlong(handle)
         };
-        self.typefaces.get(h).cloned().map_err(|e| bad_handle("Typeface", &e))
+        self.typefaces
+            .get(h)
+            .cloned()
+            .map_err(|e| bad_handle("Typeface", &e))
     }
 
     fn style(&self, attrs: &TextAttrs) -> VmResult<TextStyle> {
@@ -261,7 +263,11 @@ impl TextShared {
         let font = match tf.resolved_font() {
             Some(f) => f,
             None => fonts
-                .resolve_typeface(tf.family.as_deref(), tf.weight.clamp(1, 1000) as u16, tf.italic)
+                .resolve_typeface(
+                    tf.family.as_deref(),
+                    tf.weight.clamp(1, 1000) as u16,
+                    tf.italic,
+                )
                 .ok_or_else(|| {
                     VmError::unsupported_api(
                         format!("Typeface family {:?} not present", tf.family),
@@ -432,7 +438,11 @@ fn state_from_text(t: &TextShared) -> TextState {
             family: r.family.clone(),
             weight: r.weight,
             italic: r.italic,
-            face: r.font.as_ref().map(FaceRef::of).or_else(|| r.deferred.clone()),
+            face: r
+                .font
+                .as_ref()
+                .map(FaceRef::of)
+                .or_else(|| r.deferred.clone()),
         })
         .collect();
     typefaces.sort_unstable_by_key(|r| r.handle);
@@ -538,7 +548,10 @@ pub fn new_typeface(family: Option<String>, weight: i32, italic: bool) -> i64 {
             .get(Handle::from_jlong(t.default_typeface))
             .expect("default")
             .clone();
-        if rec.family == default.family && rec.weight == default.weight && rec.italic == default.italic {
+        if rec.family == default.family
+            && rec.weight == default.weight
+            && rec.italic == default.italic
+        {
             return t.default_typeface;
         }
         t.typefaces.insert(rec).to_jlong()
@@ -557,23 +570,53 @@ pub fn typeface_rec(handle: i64) -> VmResult<TypefaceRec> {
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     let t = "Landroid/graphics/Typeface;";
     vm.register_native(t, "nativeCreateFromTypeface", "(JI)J", typeface_create_from);
-    vm.register_native(t, "nativeCreateFromTypefaceWithExactStyle", "(JIZ)J", typeface_create_exact);
+    vm.register_native(
+        t,
+        "nativeCreateFromTypefaceWithExactStyle",
+        "(JIZ)J",
+        typeface_create_exact,
+    );
     vm.register_native(t, "nativeCreateWeightAlias", "(JI)J", typeface_weight_alias);
-    vm.register_native(t, "nativeCreateFromTypefaceWithVariation", "(JLjava/util/List;)J", typeface_variation);
+    vm.register_native(
+        t,
+        "nativeCreateFromTypefaceWithVariation",
+        "(JLjava/util/List;)J",
+        typeface_variation,
+    );
     vm.register_native(t, "nativeGetStyle", "(J)I", typeface_get_style);
     vm.register_native(t, "nativeGetWeight", "(J)I", typeface_get_weight);
     vm.register_native(t, "nativeSetDefault", "(J)V", typeface_set_default);
-    vm.register_native(t, "nativeRegisterGenericFamily", "(Ljava/lang/String;J)V", typeface_register_generic);
+    vm.register_native(
+        t,
+        "nativeRegisterGenericFamily",
+        "(Ljava/lang/String;J)V",
+        typeface_register_generic,
+    );
     vm.register_native(t, "nativeGetReleaseFunc", "()J", release_func);
-    vm.register_native(t, "nativeGetSupportedAxes", "(J)[I", typeface_supported_axes);
+    vm.register_native(
+        t,
+        "nativeGetSupportedAxes",
+        "(J)[I",
+        typeface_supported_axes,
+    );
     vm.register_native(t, "nativeWarmUpCache", "(Ljava/lang/String;)V", noop_string);
     vm.register_native(t, "nativeAddFontCollections", "(J)V", noop_long);
-    vm.register_native(t, "nativeRegisterLocaleList", "(Ljava/lang/String;)V", noop_string);
+    vm.register_native(
+        t,
+        "nativeRegisterLocaleList",
+        "(Ljava/lang/String;)V",
+        noop_string,
+    );
     vm.register_native(t, "preloadFontFile", "(Ljava/lang/String;)V", noop_string);
 
     let lb = "Landroid/graphics/text/LineBreaker;";
     vm.register_native(lb, "nInit", "(IIZ[I)J", linebreaker_init);
-    vm.register_native(lb, "nComputeLineBreaks", "(J[CJIFIF[FFI)J", linebreaker_compute);
+    vm.register_native(
+        lb,
+        "nComputeLineBreaks",
+        "(J[CJIFIF[FFI)J",
+        linebreaker_compute,
+    );
     vm.register_native(lb, "nGetLineCount", "(J)I", linebreaker_count);
     vm.register_native(lb, "nGetLineBreakOffset", "(JI)I", linebreaker_offset);
     vm.register_native(lb, "nGetLineWidth", "(JI)F", linebreaker_width);
@@ -585,7 +628,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
 
     let mt = "Landroid/graphics/text/MeasuredText;";
     vm.register_native(mt, "nGetWidth", "(JII)F", measured_width);
-    vm.register_native(mt, "nGetBounds", "(J[CIILandroid/graphics/Rect;)V", measured_bounds);
+    vm.register_native(
+        mt,
+        "nGetBounds",
+        "(J[CIILandroid/graphics/Rect;)V",
+        measured_bounds,
+    );
     vm.register_native(mt, "nGetCharWidthAt", "(JI)F", measured_char_width);
     vm.register_native(mt, "nGetExtent", "(J[CII)J", measured_extent);
     vm.register_native(mt, "nGetMemoryUsage", "(J)I", measured_memory);

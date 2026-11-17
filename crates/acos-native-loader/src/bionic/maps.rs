@@ -58,12 +58,7 @@ pub(crate) fn range_is_mapped(addr: usize, len: usize, need_write: bool) -> bool
         return false;
     };
     match mapping_containing(addr) {
-        Some(m) => {
-            m.readable
-                && (!need_write || m.writable)
-                && m.start <= addr
-                && end <= m.end
-        }
+        Some(m) => m.readable && (!need_write || m.writable) && m.start <= addr && end <= m.end,
         None => false,
     }
 }
@@ -97,7 +92,10 @@ mod tests {
         let buf = [0u8; 8];
         let addr = buf.as_ptr() as usize;
         assert!(!range_is_mapped(addr, usize::MAX - addr - 1, false));
-        assert!(!range_is_mapped(usize::MAX - 1, 8, false), "overflow is rejected");
+        assert!(
+            !range_is_mapped(usize::MAX - 1, 8, false),
+            "overflow is rejected"
+        );
     }
 
     #[test]

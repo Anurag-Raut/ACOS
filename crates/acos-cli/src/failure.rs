@@ -69,12 +69,8 @@ pub fn map_art_code(code: &str) -> ErrorCode {
         "SERVICE_MODULE_UNAVAILABLE" => ErrorCode::UnsupportedAndroidApi,
         // Genuine harness/protocol defects: the session could not form or
         // deliver the binder transaction, or reported an explicit INTERNAL.
-        "NO_BIND_REQUEST"
-        | "BIND_NOT_DELIVERED"
-        | "NO_APPLICATION"
-        | "STARTUP_FAILED"
-        | "COMMAND_FAILED"
-        | "INTERNAL" => ErrorCode::Internal,
+        "NO_BIND_REQUEST" | "BIND_NOT_DELIVERED" | "NO_APPLICATION" | "STARTUP_FAILED"
+        | "COMMAND_FAILED" | "INTERNAL" => ErrorCode::Internal,
         // Unknown: the caller turns this into a named harness gap.
         _ => ErrorCode::Internal,
     }
@@ -213,8 +209,7 @@ pub fn prelaunch_exit_facts(
         ),
         (None, Some(0)) => (
             "guest-exited-zero",
-            "the guest process exited 0 before its first frame (the app ended itself)"
-                .to_string(),
+            "the guest process exited 0 before its first frame (the app ended itself)".to_string(),
         ),
         (None, Some(code)) => (
             "guest-exited-before-first-frame",
@@ -261,7 +256,7 @@ pub fn prelaunch_exit_facts(
 fn classify_facts_by_process(doc: &Value) -> Option<ErrorCode> {
     if let Some(signal) = doc.get("guest_signal").and_then(Value::as_i64) {
         return Some(match signal {
-            31 => ErrorCode::SeccompUnavailable, // SIGSYS
+            31 => ErrorCode::SeccompUnavailable,         // SIGSYS
             11 | 6 | 4 | 8 | 7 => ErrorCode::AppCrashed, // SEGV/ABRT/ILL/FPE/BUS
             _ => ErrorCode::GuestExited,
         });
@@ -456,10 +451,7 @@ pub fn attach_session_exit(error: &mut ProtocolError, artifacts: &Path) {
             *error = ProtocolError::new(code, message);
         }
     }
-    let mut details = error
-        .details
-        .clone()
-        .unwrap_or_else(|| json!({}));
+    let mut details = error.details.clone().unwrap_or_else(|| json!({}));
     if let Some(object) = details.as_object_mut() {
         object.insert("session_exit".to_string(), facts);
         object.insert(
@@ -493,7 +485,8 @@ pub fn install_panic_hook() {
         eprintln!("acos: HOST_PANIC: {info}");
         eprintln!(
             "{}",
-            serde_json::to_string(&envelope).unwrap_or_else(|_| "{\"error\":\"HOST_PANIC\"}".into())
+            serde_json::to_string(&envelope)
+                .unwrap_or_else(|_| "{\"error\":\"HOST_PANIC\"}".into())
         );
         previous(info);
     }));
@@ -636,7 +629,10 @@ mod tests {
             r#"{"outcome":"ok","code":null,"guest_exit":0}"#,
         )
         .unwrap();
-        assert!(classify_session_exit(&dir).is_none(), "a clean end is not a failure");
+        assert!(
+            classify_session_exit(&dir).is_none(),
+            "a clean end is not a failure"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -693,5 +689,4 @@ mod tests {
             "guest-exited-zero"
         );
     }
-
 }

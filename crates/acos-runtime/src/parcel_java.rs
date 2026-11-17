@@ -147,6 +147,9 @@ fn as_obj(v: JavaValue) -> JResult<Handle> {
     match v {
         JavaValue::Object(h) => Ok(h),
         JavaValue::Null => Err("parcel_java: unexpected null object".into()),
-        other => Err(format!("parcel_java: expected object, got {}", other.kind())),
+        other => Err(format!(
+            "parcel_java: expected object, got {}",
+            other.kind()
+        )),
     }
 }

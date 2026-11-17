@@ -33,8 +33,8 @@ use acos_vm::vm::ThreadStatus;
 use acos_vm::{Vm, VmError};
 
 use crate::bind_app::{self, BindAppError};
-use crate::client_transaction::ClientTransactionError;
 use crate::boot::BootError;
+use crate::client_transaction::ClientTransactionError;
 use crate::Runtime;
 
 /// A lifecycle callback observed in the `AcosFixture` log.
@@ -646,7 +646,10 @@ impl Runtime {
         if self.vm().pending_exception != NULL {
             let h = self.vm_mut().pending_exception;
             self.vm_mut().pending_exception = NULL;
-            return Err(LifecycleError::JavaException(describe_throwable(self.vm(), h)));
+            return Err(LifecycleError::JavaException(describe_throwable(
+                self.vm(),
+                h,
+            )));
         }
 
         // `handleRelaunchActivity` ends at `handleLaunchActivity`, which runs
@@ -685,7 +688,10 @@ impl Runtime {
         if self.vm().pending_exception != NULL {
             let h = self.vm_mut().pending_exception;
             self.vm_mut().pending_exception = NULL;
-            return Err(LifecycleError::JavaException(describe_throwable(self.vm(), h)));
+            return Err(LifecycleError::JavaException(describe_throwable(
+                self.vm(),
+                h,
+            )));
         }
         self.vm_mut().call_method(
             thread,
@@ -702,7 +708,10 @@ impl Runtime {
         if self.vm().pending_exception != NULL {
             let h = self.vm_mut().pending_exception;
             self.vm_mut().pending_exception = NULL;
-            return Err(LifecycleError::JavaException(describe_throwable(self.vm(), h)));
+            return Err(LifecycleError::JavaException(describe_throwable(
+                self.vm(),
+                h,
+            )));
         }
         // A recreate needs a **real traversal**: the recreated window has no
         // measured bounds until `ViewRootImpl` runs `performTraversals` on the
@@ -725,7 +734,10 @@ impl Runtime {
         if self.vm().pending_exception != NULL {
             let h = self.vm_mut().pending_exception;
             self.vm_mut().pending_exception = NULL;
-            return Err(LifecycleError::JavaException(describe_throwable(self.vm(), h)));
+            return Err(LifecycleError::JavaException(describe_throwable(
+                self.vm(),
+                h,
+            )));
         }
         self.render_frame_now()?;
         Ok(())
@@ -756,7 +768,10 @@ impl Runtime {
         if self.vm().pending_exception != NULL {
             let h = self.vm_mut().pending_exception;
             self.vm_mut().pending_exception = NULL;
-            return Err(LifecycleError::JavaException(describe_throwable(self.vm(), h)));
+            return Err(LifecycleError::JavaException(describe_throwable(
+                self.vm(),
+                h,
+            )));
         }
         self.render_frame_now()?;
         Ok(())
@@ -888,13 +903,15 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, Lifecy
             let shared = c.permission.clone().unwrap_or_default();
             let class = acos_apk::manifest::fq_name(&manifest.package, &c.name);
             let exported = c.exported.unwrap_or(false);
-            c.authorities.iter().map(move |authority| bind_app::ProviderSpec {
-                class: class.clone(),
-                authority: authority.clone(),
-                read_permission: shared.clone(),
-                write_permission: shared.clone(),
-                exported,
-            })
+            c.authorities
+                .iter()
+                .map(move |authority| bind_app::ProviderSpec {
+                    class: class.clone(),
+                    authority: authority.clone(),
+                    read_permission: shared.clone(),
+                    write_permission: shared.clone(),
+                    exported,
+                })
         })
         .collect())
 }

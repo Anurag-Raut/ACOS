@@ -32,11 +32,11 @@
 //! * Any unsupported transaction (flag, launch mode, provider method) raises
 //!   `UNSUPPORTED_ANDROID_API`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use acos_aidl::MethodInfo;
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::CallResult;
 use crate::value::{Bundle, Parcelable, Value};
 
@@ -56,6 +56,12 @@ use crate::value::{Bundle, Parcelable, Value};
 pub const INTENT_FIELD_ACTION: usize = crate::parcelable::INTENT_ACTION;
 /// `Intent.mData` (rendered as a string; a non-null Uri is refused by the codec).
 pub const INTENT_FIELD_DATA: usize = crate::parcelable::INTENT_DATA;
+/// `Intent.mType` (the MIME type).
+pub const INTENT_FIELD_TYPE: usize = crate::parcelable::INTENT_TYPE;
+/// `Intent.mIdentifier`.
+pub const INTENT_FIELD_IDENTIFIER: usize = crate::parcelable::INTENT_IDENTIFIER;
+/// `Intent.mFlags`.
+pub const INTENT_FIELD_FLAGS: usize = crate::parcelable::INTENT_FLAGS;
 /// `Intent.mPackage`.
 pub const INTENT_FIELD_PACKAGE: usize = crate::parcelable::INTENT_PACKAGE;
 /// `Intent.mComponent` (`android.content.ComponentName`, 2 String16 fields).
@@ -64,12 +70,6 @@ pub const INTENT_FIELD_COMPONENT: usize = crate::parcelable::INTENT_COMPONENT;
 pub const INTENT_FIELD_CATEGORIES: usize = crate::parcelable::INTENT_CATEGORIES;
 /// `Intent.mExtras` (`Bundle`).
 pub const INTENT_FIELD_EXTRAS: usize = crate::parcelable::INTENT_EXTRAS;
-/// `Intent.mType`.
-pub const INTENT_FIELD_TYPE: usize = crate::parcelable::INTENT_TYPE;
-/// `Intent.mIdentifier`.
-pub const INTENT_FIELD_IDENTIFIER: usize = crate::parcelable::INTENT_IDENTIFIER;
-/// `Intent.mFlags`.
-pub const INTENT_FIELD_FLAGS: usize = crate::parcelable::INTENT_FLAGS;
 /// `Intent.mSourceBounds` (a `Rect` parcelable, or null).
 pub const INTENT_FIELD_SOURCE_BOUNDS: usize = crate::parcelable::INTENT_SOURCE_BOUNDS;
 /// `Intent.mSelector` (a nested `Intent`, or null).
@@ -93,11 +93,17 @@ pub struct IntentFacts {
     pub action: Option<String>,
     /// `Intent.getDataString()`.
     pub data: Option<String>,
-    /// `Intent.getType()`.
-    pub type_: Option<String>,
-    /// `Intent.getIdentifier()`.
+    /// `Intent.getType()` (the MIME type). MPROC1: the capture target records
+    /// it and the intent-filter match uses it; `None` for an intent without a
+    /// type, which is not the same as the wildcard `*/*`.
+    pub mime_type: Option<String>,
+    /// `Intent.getIdentifier()`. PIFILLIN: `fillIn` copies it when the target
+    /// has none (or the caller asked for `FILL_IN_IDENTIFIER`), so the field is
+    /// carried, not dropped.
     pub identifier: Option<String>,
-    /// `Intent.getFlags()`.
+    /// `Intent.getFlags()`. MPROC1 records it on a capture; the launch path
+    /// takes the flag word from the transaction's own argument (they are the
+    /// same value the framework wrote).
     pub flags: i32,
     /// `Intent.getPackage()`.
     pub package: Option<String>,
@@ -155,7 +161,7 @@ impl Default for IntentFacts {
         Self {
             action: None,
             data: None,
-            type_: None,
+            mime_type: None,
             identifier: None,
             flags: 0,
             package: None,
@@ -199,7 +205,8 @@ impl IntentFacts {
     /// Add a string extra.
     #[must_use]
     pub fn with_string_extra(mut self, key: &str, value: impl Into<String>) -> Self {
-        self.extras.insert(key.to_string(), Extra::String(value.into()));
+        self.extras
+            .insert(key.to_string(), Extra::String(value.into()));
         self
     }
 
@@ -254,15 +261,30 @@ impl IntentFacts {
                 ])
             });
         Self {
-            action: f.get(INTENT_FIELD_ACTION).and_then(Value::as_str).map(str::to_string),
-            data: f.get(INTENT_FIELD_DATA).and_then(Value::as_str).map(str::to_string),
-            type_: f.get(INTENT_FIELD_TYPE).and_then(Value::as_str).map(str::to_string),
+            action: f
+                .get(INTENT_FIELD_ACTION)
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            data: f
+                .get(INTENT_FIELD_DATA)
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            mime_type: f
+                .get(INTENT_FIELD_TYPE)
+                .and_then(Value::as_str)
+                .map(str::to_string),
             identifier: f
                 .get(INTENT_FIELD_IDENTIFIER)
                 .and_then(Value::as_str)
                 .map(str::to_string),
-            flags: f.get(INTENT_FIELD_FLAGS).and_then(Value::as_int).unwrap_or(0),
-            package: f.get(INTENT_FIELD_PACKAGE).and_then(Value::as_str).map(str::to_string),
+            flags: f
+                .get(INTENT_FIELD_FLAGS)
+                .and_then(Value::as_int)
+                .unwrap_or(0),
+            package: f
+                .get(INTENT_FIELD_PACKAGE)
+                .and_then(Value::as_str)
+                .map(str::to_string),
             component,
             source_bounds,
             categories,
@@ -318,9 +340,9 @@ impl IntentFacts {
             vec![
                 Value::Str(self.action.clone()),
                 Value::Str(self.data.clone()),
-                Value::Str(self.type_.clone()),
-                Value::Str(self.identifier.clone()),
-                Value::Int(self.flags),
+                Value::Str(self.mime_type.clone()),  // type
+                Value::Str(self.identifier.clone()), // identifier
+                Value::Int(self.flags),              // flags
                 Value::Str(self.package.clone()),
                 Value::Parcelable(component.unwrap_or(Parcelable::Null)),
                 Value::Parcelable(source_bounds.unwrap_or(Parcelable::Null)),
@@ -356,8 +378,8 @@ impl IntentFacts {
     /// byte-verified one. Returns the `FILL_IN_*` change mask AOSP returns.
     pub fn fill_in(&mut self, other: &Self, flags: i32) -> i32 {
         let mut target = self.to_parcelable();
-        let changes = crate::fill_in::fill_in_value(&mut target, &other.to_parcelable(), flags)
-            .unwrap_or(0);
+        let changes =
+            crate::fill_in::fill_in_value(&mut target, &other.to_parcelable(), flags).unwrap_or(0);
         *self = Self::from_parcelable(&target);
         changes
     }
@@ -381,16 +403,18 @@ fn reduce_extras(bundle: &Bundle) -> BTreeMap<String, Extra> {
     for (key, value) in &bundle.entries {
         let extra = match value {
             Value::Str(Some(s)) | Value::Str8(Some(s)) => Extra::String(s.clone()),
-            Value::StringArray(Some(items)) => Extra::Strings(
-                items.iter().filter_map(|item| item.clone()).collect(),
-            ),
+            Value::StringArray(Some(items)) => {
+                Extra::Strings(items.iter().filter_map(|item| item.clone()).collect())
+            }
             Value::Int(i) => Extra::Int(*i),
             Value::Short(s) => Extra::Short(*s),
             Value::Bool(b) => Extra::Bool(*b),
             Value::ByteArray(Some(bytes)) => Extra::Bytes(bytes.clone()),
             Value::Parcelable(parcelable) => Extra::Parcelable(parcelable.clone()),
             Value::ObjectArray(Some(items))
-                if items.iter().all(|item| matches!(item, Value::ByteArray(Some(_)))) =>
+                if items
+                    .iter()
+                    .all(|item| matches!(item, Value::ByteArray(Some(_)))) =>
             {
                 Extra::ByteArrays(
                     items
@@ -422,9 +446,7 @@ fn encode_extras(extras: &BTreeMap<String, Extra>) -> Bundle {
                 Value::StringArray(Some(items.iter().cloned().map(Some).collect())),
             ),
             Extra::Bytes(bytes) => bundle.put(key, Value::ByteArray(Some(bytes.clone()))),
-            Extra::Parcelable(parcelable) => {
-                bundle.put(key, Value::Parcelable(parcelable.clone()))
-            }
+            Extra::Parcelable(parcelable) => bundle.put(key, Value::Parcelable(parcelable.clone())),
             Extra::ByteArrays(pdus) => bundle.put(
                 key,
                 Value::ObjectArray(Some(
@@ -496,7 +518,10 @@ impl Filter {
         } else {
             intent.categories.clone()
         };
-        if !categories.iter().all(|c| self.categories.iter().any(|f| f == c)) {
+        if !categories
+            .iter()
+            .all(|c| self.categories.iter().any(|f| f == c))
+        {
             return false;
         }
         if let Some(scheme) = intent.data.as_deref().and_then(scheme_of) {
@@ -677,17 +702,41 @@ impl ManifestDb {
         self.resolve_component(intent, ComponentKind::Service)
     }
 
+    /// Every declared activity matching `intent`, across every installed
+    /// package. Unlike [`ManifestDb::resolve_activity`] this does not pick one
+    /// and does not fail on zero or many: `IPackageManager.queryIntentActivities`
+    /// returns the full list (empty is a legitimate "no match").
+    #[must_use]
+    pub fn matching_activities(&self, intent: &IntentFacts) -> Vec<DeclaredComponent> {
+        if let Some((package, class)) = &intent.component {
+            return self
+                .component_by_class(package, class, ComponentKind::Activity)
+                .into_iter()
+                .collect();
+        }
+        let mut out = Vec::new();
+        for package in &self.packages {
+            if let Some(filter_pkg) = &intent.package {
+                if filter_pkg != &package.package {
+                    continue;
+                }
+            }
+            for component in &package.activities {
+                if self.component_matches(component, intent) {
+                    out.push(component.clone());
+                }
+            }
+        }
+        out
+    }
+
     /// All manifest receivers matching `intent`.
     #[must_use]
     pub fn resolve_receivers(&self, intent: &IntentFacts) -> Vec<DeclaredComponent> {
         let mut out = Vec::new();
         for package in &self.packages {
             for receiver in &package.receivers {
-                if receiver
-                    .filters
-                    .iter()
-                    .any(|f| f.matches_receiver(intent))
-                {
+                if receiver.filters.iter().any(|f| f.matches_receiver(intent)) {
                     out.push(receiver.clone());
                 }
             }
@@ -745,11 +794,7 @@ impl ManifestDb {
         match matches.len() {
             0 => Err(ServiceError::IllegalState {
                 component: "ams",
-                detail: format!(
-                    "no {} matches action {:?}",
-                    kind.as_str(),
-                    intent.action
-                ),
+                detail: format!("no {} matches action {:?}", kind.as_str(), intent.action),
             }),
             1 => Ok(matches.pop().expect("one match")),
             _ => Err(ServiceError::IllegalState {
@@ -833,6 +878,20 @@ pub const START_SUCCESS: i32 = 0;
 pub const START_CANCELED: i32 = 2;
 /// `ActivityManager.START_NOT_FOUND`.
 pub const START_NOT_FOUND: i32 = 4;
+
+/// The start code for a captured intent.
+///
+/// `START_SUCCESS` is what the framework would return for
+/// `startActivityForResult`; `START_RETURN_INTENT_TO_CALLER` would tell the
+/// caller nobody handled it, which is wrong here — the capture target *did*
+/// accept the intent (and will answer if a result was scripted), so the app
+/// gets the normal "it was handled" path and the reply says `captured`.
+const START_SUCCESS_CAPTURED: i32 = 0;
+
+fn capture_start_success(record: &crate::intents::CapturedIntent) -> i32 {
+    let _ = record;
+    START_SUCCESS_CAPTURED
+}
 /// `Service.START_NOT_STICKY`.
 pub const START_NOT_STICKY: i32 = 2;
 
@@ -917,7 +976,9 @@ impl ReceiverRecord {
         } else {
             intent.categories.clone()
         };
-        categories.iter().all(|c| self.categories.iter().any(|f| f == c))
+        categories
+            .iter()
+            .all(|c| self.categories.iter().any(|f| f == c))
             || self.categories.is_empty()
     }
 }
@@ -966,6 +1027,23 @@ pub struct PendingBind {
     pub class: String,
     /// The service binder (a real `Binder`; `0` when the service returned null).
     pub binder: u64,
+}
+
+/// A process the launcher must start (MPROC4 step 3b).
+///
+/// On a device `ActivityManagerService.startProcessLocked` asks the zygote for a
+/// new process as soon as a component resolves to a package that has none. ACOS
+/// has no system process, so the resolution path records the request here and
+/// the launcher (which owns the processes) drains it and spawns the guest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessSpawnRequest {
+    /// Package that needs a process (`ApplicationInfo.packageName`).
+    pub package: String,
+    /// The component that triggered it (`package/class`, class may be empty).
+    pub component: String,
+    /// Why the process is needed: `startActivity`, `startService`,
+    /// `bindService`, `getContentProvider`.
+    pub reason: String,
 }
 
 /// A broadcast the runtime must deliver to an `IIntentReceiver`.
@@ -1063,11 +1141,42 @@ pub struct AmsState {
     next_token: u64,
     /// Last `onNewIntent` records (evidence).
     pub new_intents: Vec<(u64, IntentFacts)>,
+    /// MPROC1: the session's intent **capture target**. `Some` in a session
+    /// (set by the standard registry); `None` in a bare state machine, where an
+    /// unresolvable intent stays the structured `START_NOT_FOUND`.
+    pub intents: Option<std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>>,
+    /// W53/WV3: `IActivityManager.addPackageDependency` records, i.e. the
+    /// packages the calling guest process declared it depends on. On a device
+    /// this is `ProcessRecord.pkgDeps` — the set AMS consults when a package is
+    /// updated or removed, which is exactly why `WebViewFactory` registers
+    /// `com.android.webview` before it reads that package's `PackageInfo` ("so
+    /// that we will be killed if the package info goes out-of-date",
+    /// `WebViewFactory.java:459`). ACOS has one guest process per session and
+    /// does not uninstall packages while it runs, so the set is session state:
+    /// recorded, never fabricated, and readable as evidence. Sorted, so the
+    /// recorded order is deterministic.
+    pub package_dependencies: BTreeSet<String>,
     /// `PendingIntent` senders: the `mIntentSenderRecords` map, addressed by the
     /// pool of `IIntentSender` binders `registry::install` registers
     /// (MODNOTIF4).
     pub intent_senders: crate::pending_intent::SenderTable,
+    /// MPROC7: `onNewIntent` deliveries the host still owes a process
+    /// (`FLAG_ACTIVITY_SINGLE_TOP` to an activity that is already the top).
+    pub pending_new_intents: Vec<(u64, IntentFacts)>,
+    /// MPROC4 step 3b: components that resolved to a package the service layer
+    /// cannot run by itself. The launcher drains them and spawns the guest; a
+    /// request names only what was resolved, never a pid, a tag or a command
+    /// line (those belong to the launcher).
+    pub spawn_requests: Vec<ProcessSpawnRequest>,
+    /// MPROC8: the guest-initiated cross-process bind table (AOSP
+    /// `ActiveServices`). Empty and inert until the session has real app
+    /// processes, which the launcher states
+    /// ([`crate::host::ServiceHost::set_host_side_services`]).
+    pub host_services: crate::service_bind::HostServices,
 }
+
+/// Ceiling on queued spawn requests (a bounded queue, never unbounded growth).
+pub const MAX_SPAWN_REQUESTS: usize = 64;
 
 impl AmsState {
     /// New empty state.
@@ -1093,9 +1202,18 @@ impl AmsState {
         result_to: u64,
         request_code: i32,
     ) -> Result<i32> {
+        // `Instrumentation.execStartActivity` passes `0` as the AIDL
+        // `startFlags` argument; the flags the caller set live **in the
+        // `Intent`** (`intent.getFlags()`), and stock `ActivityStarter` ORs the
+        // two (`mLaunchFlags`). Reading only the argument made
+        // `FLAG_ACTIVITY_SINGLE_TOP` invisible (MPROC7: B's `startActivity` with
+        // the flag arrived as a second launch instead of `onNewIntent`).
+        let flags = flags | intent.flags;
         const NEW_TASK: i32 = 0x1000_0000;
         const CLEAR_TOP: i32 = 0x0400_0000;
-        const HONOURED: i32 = NEW_TASK | CLEAR_TOP;
+        /// `Intent.FLAG_ACTIVITY_SINGLE_TOP` (MPROC7).
+        const SINGLE_TOP: i32 = 0x2000_0000;
+        const HONOURED: i32 = NEW_TASK | CLEAR_TOP | SINGLE_TOP;
         if flags & !HONOURED != 0 {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: "android.app.IActivityManager".into(),
@@ -1103,13 +1221,57 @@ impl AmsState {
                 method: format!("startActivity flags {flags:#x}"),
             });
         }
-        let component = self.manifests.resolve_activity(intent)?;
+        let component = match self.manifests.resolve_activity(intent) {
+            Ok(component) => component,
+            Err(ServiceError::IllegalState { .. }) => {
+                // MPROC1: nothing installed handles this intent. On a phone the
+                // share sheet / browser / picker would; the session's capture
+                // target stands in for it (no process, no fabricated app) and
+                // `START_SUCCESS` is the honest answer because the intent was
+                // accepted and its payload recorded. Anything the capture
+                // target does not stand in for stays `START_NOT_FOUND`.
+                let captured = self.intents.as_ref().and_then(|state| {
+                    state.lock().ok().and_then(|mut state| {
+                        state.capture(
+                            intent,
+                            flags,
+                            request_code,
+                            // AOSP's `Instrumentation.execStartActivity` passes
+                            // requestCode `-1` for a plain `startActivity`, and
+                            // `>= 0` only when the caller waits for a result
+                            // (`startActivityForResult`). That — not the result
+                            // token, which is the activity token either way —
+                            // is what "waiting for a result" means.
+                            request_code >= 0,
+                            crate::intents::now_ms(),
+                        )
+                    })
+                });
+                return match captured {
+                    Some(record) => Ok(capture_start_success(&record)),
+                    None => Err(ServiceError::IllegalState {
+                        component: "atms",
+                        detail: format!(
+                            "no installed package handles action {:?} (and it is not an intent \
+                             the capture target stands in for)",
+                            intent.action.as_deref().unwrap_or("")
+                        ),
+                    }),
+                };
+            }
+            Err(other) => return Err(other),
+        };
         let behaviour = if flags & NEW_TASK != 0 || component.launch_mode == 3 {
             LaunchBehaviour::NewTask
         } else {
             match component.launch_mode {
                 1 => LaunchBehaviour::ReuseTop,
                 2 => LaunchBehaviour::FinishAboveAndReuse,
+                // `FLAG_ACTIVITY_SINGLE_TOP` is the per-call spelling of
+                // `launchMode="singleTop"` (AOSP `ActivityStarter` folds the flag
+                // into the launch flags): a top instance is reused and gets
+                // `NewIntentItem`, never a second instance.
+                _ if flags & SINGLE_TOP != 0 => LaunchBehaviour::ReuseTop,
                 _ => LaunchBehaviour::NewInstance,
             }
         };
@@ -1139,6 +1301,7 @@ impl AmsState {
             let token = top.expect("top_same implies a top token");
             if behaviour == LaunchBehaviour::ReuseTop {
                 self.new_intents.push((token, intent.clone()));
+                self.pending_new_intents.push((token, intent.clone()));
                 return Ok(START_SUCCESS);
             }
             // `singleTask`: finish everything above the existing instance.
@@ -1163,6 +1326,10 @@ impl AmsState {
             reused: false,
         });
         self.task_mut(task_id).activities.push(token);
+        // MPROC4 step 3b: the activity lives in `component.package`'s process.
+        // Record the need here; the launcher decides whether that process
+        // already exists (it owns the processes and their tags).
+        self.request_process(&component.package, &component.class, "startActivity");
         self.pending_launches.push(PendingLaunch {
             token,
             package: component.package.clone(),
@@ -1274,6 +1441,86 @@ impl AmsState {
         Some((pending.token, pending.class))
     }
 
+    /// MPROC7: the launch recorded for `package` that the host has not
+    /// delivered yet (the first one in launch order).
+    #[must_use]
+    pub fn pending_launch_for(&self, package: &str) -> Option<&PendingLaunch> {
+        self.pending_launches.iter().find(|l| l.package == package)
+    }
+
+    /// MPROC7: take one `onNewIntent` delivery owed to process `tag`
+    /// (`singleTop` / `FLAG_ACTIVITY_SINGLE_TOP`). `new_intents` stays the
+    /// evidence stream; this queue is what the peer drains into a
+    /// `NewIntentItem`.
+    pub fn take_pending_new_intent(&mut self, tag: u32) -> Option<(u64, IntentFacts)> {
+        let index = self
+            .pending_new_intents
+            .iter()
+            .position(|(token, _)| crate::atms::process_tag_of(*token) == tag)?;
+        Some(self.pending_new_intents.remove(index))
+    }
+
+    /// MPROC7: bind the recorded launch of placeholder token `old` to `new`.
+    ///
+    /// The host mints the activity token for a launch it encodes itself (a
+    /// running process, or a freshly spawned secondary whose first launch is no
+    /// longer marshalled by its guest). The placeholder `start_activity`
+    /// recorded is rewritten in the task stack, so the caller's
+    /// `activityResumed(new)` finds the record in `AtmsState` and the
+    /// `startActivityForResult` receiver (`result_to`, an activity token) still
+    /// names the right activity.
+    pub fn bind_launch_token(&mut self, old: u64, new: u64) {
+        for activity in &mut self.activities {
+            if activity.token == old {
+                activity.token = new;
+            }
+        }
+        for task in &mut self.tasks {
+            for token in &mut task.activities {
+                if *token == old {
+                    *token = new;
+                }
+            }
+        }
+        for launch in &mut self.pending_launches {
+            if launch.token == old {
+                launch.token = new;
+            }
+            if launch.result_to == old {
+                launch.result_to = new;
+            }
+        }
+    }
+
+    /// MPROC7: mark the launch of `token` as delivered (it leaves the queue; the
+    /// activity record now carries the lifecycle).
+    pub fn take_launch(&mut self, token: u64) -> Option<PendingLaunch> {
+        let index = self
+            .pending_launches
+            .iter()
+            .position(|l| l.token == token)?;
+        Some(self.pending_launches.remove(index))
+    }
+
+    /// `IActivityManager.addPackageDependency(String packageName)`: record that
+    /// the calling process depends on `packageName`, exactly like
+    /// `ActivityManagerService.addPackageDependency` adds it to the caller's
+    /// `ProcessRecord.pkgDeps`.
+    ///
+    /// Android 14's AIDL method takes **one** `String` (transaction 96): the
+    /// image's `IActivityManager$Stub$Proxy.addPackageDependency` writes
+    /// `writeString(packageName)` and nothing else, and `IActivityManager$Stub`
+    /// reads one `readString()` before `writeNoException()` (checked with
+    /// `dexdump` of `.cache/boot/android-34/dex/framework/classes.dex`; the AOSP
+    /// source cache agrees — the `(String, int)` overload is a later platform).
+    /// The reply is void.
+    ///
+    /// Returns `true` when the dependency was newly recorded. A repeat is not an
+    /// error (`pkgDeps` is a set on a device too); it does not change the set.
+    pub fn add_package_dependency(&mut self, package_name: &str) -> bool {
+        self.package_dependencies.insert(package_name.to_string())
+    }
+
     /// `finishActivity`: pop the activity from its task. Returns whether the
     /// token existed and was unfinished.
     pub fn finish_activity(&mut self, token: u64) -> bool {
@@ -1308,11 +1555,7 @@ impl AmsState {
         binder: u64,
         code: i32,
     ) -> Result<crate::pending_intent::SendEvidence> {
-        self.send_pending_intent_with_fill_in(
-            binder,
-            code,
-            crate::pending_intent::FillIn::None,
-        )
+        self.send_pending_intent_with_fill_in(binder, code, crate::pending_intent::FillIn::None)
     }
 
     /// [`Self::send_pending_intent`] with the caller's fill-in `Intent`, the
@@ -1416,6 +1659,8 @@ impl AmsState {
 
     pub fn start_service(&mut self, intent: &IntentFacts) -> Result<(String, String)> {
         let component = self.manifests.resolve_service(intent)?;
+        // MPROC4 step 3b: the service's code runs in its package's process.
+        self.request_process(&component.package, &component.class, "startService");
         let key = format!("{}/{}", component.package, component.class);
         self.services
             .entry(key)
@@ -1453,6 +1698,8 @@ impl AmsState {
         _flags: i64,
     ) -> Result<u64> {
         let component = self.manifests.resolve_service(intent)?;
+        // MPROC4 step 3b: a bound service's code runs in its package's process.
+        self.request_process(&component.package, &component.class, "bindService");
         let key = format!("{}/{}", component.package, component.class);
         self.services
             .entry(key)
@@ -1475,6 +1722,42 @@ impl AmsState {
             binder,
         });
         Ok(binder)
+    }
+
+    /// Record that `package` needs a process (MPROC4 step 3b).
+    ///
+    /// One entry per `(package, component, reason)`: a resolution storm from one
+    /// guest must not turn into a spawn storm. The launcher dedups again against
+    /// its live processes (it is the authority on what is already running).
+    pub fn request_process(&mut self, package: &str, class: &str, reason: &str) {
+        if package.is_empty() {
+            return;
+        }
+        let component = if class.is_empty() {
+            package.to_string()
+        } else {
+            format!("{package}/{class}")
+        };
+        if self
+            .spawn_requests
+            .iter()
+            .any(|r| r.component == component && r.reason == reason)
+        {
+            return;
+        }
+        if self.spawn_requests.len() >= MAX_SPAWN_REQUESTS {
+            return;
+        }
+        self.spawn_requests.push(ProcessSpawnRequest {
+            package: package.to_string(),
+            component,
+            reason: reason.to_string(),
+        });
+    }
+
+    /// Drain the queued spawn requests (the launcher's side of step 3b).
+    pub fn take_spawn_requests(&mut self) -> Vec<ProcessSpawnRequest> {
+        std::mem::take(&mut self.spawn_requests)
     }
 
     /// `unbindService`: drop one connection. Returns whether one was released.
@@ -1545,7 +1828,6 @@ impl AmsState {
     ) -> Result<i32> {
         let ordered = result_to != 0;
         let mut matched = 0;
-
 
         // Manifest receivers first (in declared order), then dynamic ones.
         let manifest = self.manifests.resolve_receivers(intent);
@@ -1668,7 +1950,11 @@ fn synthesize_receiver_binder(package: &str, class: &str) -> u64 {
     // `IIntentReceiver` stub. The runtime maps it back to the real
     // `LoadedApk.ReceiverDispatcher` binder.
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in package.bytes().chain(b"/".iter().copied()).chain(class.bytes()) {
+    for byte in package
+        .bytes()
+        .chain(b"/".iter().copied())
+        .chain(class.bytes())
+    {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
@@ -1790,7 +2076,9 @@ pub fn dispatch(
         "startService" => {
             let intent = intent(1)?;
             let (package, class) = state.start_service(&intent)?;
-            vec![Value::TypedObject(component_name_parcelable(&package, &class))]
+            vec![Value::TypedObject(component_name_parcelable(
+                &package, &class,
+            ))]
         }
         "stopService" => {
             let intent = intent(1)?;
@@ -1822,7 +2110,11 @@ pub fn dispatch(
             vec![Value::Bool(state.unbind_service(connection))]
         }
         "registerReceiver" | "registerReceiverWithFeature" => {
-            let receiver_index = if method.name == "registerReceiver" { 2 } else { 4 };
+            let receiver_index = if method.name == "registerReceiver" {
+                2
+            } else {
+                4
+            };
             let filter_index = receiver_index + 1;
             let receiver = value(receiver_index)
                 .and_then(Value::as_binder)
@@ -1863,7 +2155,9 @@ pub fn dispatch(
                 .map(|b| b.0)
                 .unwrap_or(0);
             let result_code = value(code_index).and_then(Value::as_int).unwrap_or(0);
-            let result_data = value(data_index).and_then(Value::as_str).map(str::to_string);
+            let result_data = value(data_index)
+                .and_then(Value::as_str)
+                .map(str::to_string);
             let count = state.broadcast(&intent, result_to, result_code, result_data)?;
             vec![Value::Int(count)]
         }
@@ -1891,6 +2185,34 @@ pub fn dispatch(
                 }
                 state.publish_content_providers(records);
             }
+            Vec::new()
+        }
+        // W53/WV3 (wall 5 of the WebView provider load):
+        // `WebViewFactory.getWebViewContextAndSetProvider` registers the chosen
+        // provider package with AMS before it reads that package's
+        // `PackageInfo`, so a provider update kills the process that holds a
+        // stale record. The faithful answer is the recorded dependency and a
+        // void reply (the transport writes `writeNoException` only).
+        "addPackageDependency" => {
+            let package =
+                value(0)
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| ServiceError::BadRequest {
+                        interface: interface.to_string(),
+                        method: method.name.clone(),
+                        detail: "arg 0: expected the package name (String)".into(),
+                    })?;
+            if package.is_empty() {
+                // AOSP only records a name it can resolve; an empty dependency
+                // is never a real package and would break the kill-on-update
+                // contract the call exists for.
+                return Err(ServiceError::BadRequest {
+                    interface: interface.to_string(),
+                    method: method.name.clone(),
+                    detail: "arg 0: empty package name".into(),
+                });
+            }
+            state.add_package_dependency(package);
             Vec::new()
         }
         // K2/R3: read-only queries. The guest's real memory state is the
@@ -1991,14 +2313,8 @@ pub fn dispatch(
             vec![Value::TypedObject(Parcelable::ordered(
                 "android.app.ActivityManager$PendingIntentInfo",
                 vec![
-                    Value::Str(Some(
-                        record.map(|r| r.package.clone()).unwrap_or_default(),
-                    )),
-                    Value::Int(
-                        record
-                            .map(|_| crate::pms::FIXTURE_UID)
-                            .unwrap_or(0),
-                    ),
+                    Value::Str(Some(record.map(|r| r.package.clone()).unwrap_or_default())),
+                    Value::Int(record.map(|_| crate::pms::FIXTURE_UID).unwrap_or(0)),
                     Value::Bool(
                         record
                             .map(|r| r.flags & crate::pending_intent::FLAG_IMMUTABLE != 0)
@@ -2180,10 +2496,7 @@ mod tests {
             "dev.acos.fixtures.svcprovider.MainActivity",
         );
         let resolved = db.resolve_activity(&intent).expect("resolves");
-        assert_eq!(
-            resolved.class,
-            "dev.acos.fixtures.svcprovider.MainActivity"
-        );
+        assert_eq!(resolved.class, "dev.acos.fixtures.svcprovider.MainActivity");
     }
 
     #[test]
@@ -2202,7 +2515,13 @@ mod tests {
         let db = db_with_fixture();
         let intent = IntentFacts::action("com.example.NOPE");
         let err = db.resolve_activity(&intent).expect_err("must fail");
-        assert!(matches!(err, ServiceError::IllegalState { component: "ams", .. }));
+        assert!(matches!(
+            err,
+            ServiceError::IllegalState {
+                component: "ams",
+                ..
+            }
+        ));
         assert_eq!(err.code(), crate::codes::SERVICE_ILLEGAL_STATE);
     }
 
@@ -2220,7 +2539,10 @@ mod tests {
         );
         let launches = state.take_pending_launches();
         assert_eq!(launches.len(), 1);
-        assert_eq!(launches[0].class, "dev.acos.fixtures.svcprovider.MainActivity");
+        assert_eq!(
+            launches[0].class,
+            "dev.acos.fixtures.svcprovider.MainActivity"
+        );
         assert_eq!(state.tasks.len(), 1);
         assert_eq!(state.tasks[0].activities.len(), 1);
     }
@@ -2290,9 +2612,9 @@ mod tests {
         assert_eq!(count, 2, "one manifest + one dynamic receiver");
         let deliveries = state.take_pending_receivers();
         assert_eq!(deliveries.len(), 2);
-        assert!(deliveries
-            .iter()
-            .any(|d| matches!(d.intent.extras.get("payload"), Some(Extra::String(s)) if s == "hi")));
+        assert!(deliveries.iter().any(
+            |d| matches!(d.intent.extras.get("payload"), Some(Extra::String(s)) if s == "hi")
+        ));
     }
 
     #[test]
@@ -2300,7 +2622,9 @@ mod tests {
         let mut state = AmsState::new();
         state.manifests = db_with_fixture();
         let intent = IntentFacts::action("dev.acos.fixtures.svcprovider.ECHO");
-        let count = state.broadcast(&intent, 0x99, 7, Some("done".into())).unwrap();
+        let count = state
+            .broadcast(&intent, 0x99, 7, Some("done".into()))
+            .unwrap();
         assert_eq!(count, 2, "manifest receiver + ordered result");
         let last = state.take_pending_receivers().pop().unwrap();
         assert!(last.ordered);
@@ -2322,7 +2646,9 @@ mod tests {
             class: declared.class.clone(),
             binder: 0x1234,
         }]);
-        let provider = state.get_content_provider(&declared.authority).expect("published");
+        let provider = state
+            .get_content_provider(&declared.authority)
+            .expect("published");
         assert_eq!(provider.binder, 0x1234);
     }
 
@@ -2334,7 +2660,9 @@ mod tests {
             "dev.acos.fixtures.svcprovider",
             "dev.acos.fixtures.svcprovider.MainActivity",
         );
-        let err = state.start_activity(&intent, 0x0000_0020, 0, 0).expect_err("flags");
+        let err = state
+            .start_activity(&intent, 0x0000_0020, 0, 0)
+            .expect_err("flags");
         assert!(matches!(err, ServiceError::UnsupportedAndroidApi { .. }));
     }
 
@@ -2357,7 +2685,14 @@ mod tests {
                 7,
                 8,
             ),
-            ("android.app.IActivityManager", "startActivityAsUser", 2, 4, 6, 7),
+            (
+                "android.app.IActivityManager",
+                "startActivityAsUser",
+                2,
+                4,
+                6,
+                7,
+            ),
             (
                 "android.app.IActivityTaskManager",
                 "startActivity",
@@ -2412,7 +2747,11 @@ mod tests {
             );
             assert_eq!(layout.args[got.request_code], WireOp::I32);
             assert_eq!(layout.args[got.flags], WireOp::I32);
-            assert_eq!(got.flags, got.request_code + 1, "requestCode then startFlags");
+            assert_eq!(
+                got.flags,
+                got.request_code + 1,
+                "requestCode then startFlags"
+            );
         }
         assert!(start_activity_args("android.app.IActivityManager", "startService").is_none());
     }
@@ -2425,25 +2764,24 @@ mod tests {
     fn dispatch_start_activity_reads_request_code_and_flags_at_the_atms_indices() {
         let mut state = AmsState::new();
         state.manifests = db_with_fixture();
-        let method =
-            acos_aidl::lookup_by_name("android.app.IActivityTaskManager", "startActivity")
-                .expect("decoded");
+        let method = acos_aidl::lookup_by_name("android.app.IActivityTaskManager", "startActivity")
+            .expect("decoded");
         let intent = IntentFacts::explicit(
             "dev.acos.fixtures.svcprovider",
             "dev.acos.fixtures.svcprovider.MainActivity",
         );
         let args = vec![
-            Value::Binder(None),                  // 0 caller
-            Value::Str(None),                     // 1 callingPackage
-            Value::Str(None),                     // 2 callingFeatureId
+            Value::Binder(None),                        // 0 caller
+            Value::Str(None),                           // 1 callingPackage
+            Value::Str(None),                           // 2 callingFeatureId
             Value::TypedObject(intent.to_parcelable()), // 3 Intent
-            Value::Str(None),                     // 4 resolvedType
-            Value::Binder(None),                  // 5 resultTo
-            Value::Str(Some("who".into())),       // 6 resultWho
-            Value::Int(42),                       // 7 requestCode
-            Value::Int(0),                        // 8 startFlags
-            Value::TypedObject(Parcelable::Null), // 9 profilerInfo
-            Value::TypedObject(Parcelable::Null), // 10 bOptions
+            Value::Str(None),                           // 4 resolvedType
+            Value::Binder(None),                        // 5 resultTo
+            Value::Str(Some("who".into())),             // 6 resultWho
+            Value::Int(42),                             // 7 requestCode
+            Value::Int(0),                              // 8 startFlags
+            Value::TypedObject(Parcelable::Null),       // 9 profilerInfo
+            Value::TypedObject(Parcelable::Null),       // 10 bOptions
         ];
         let result = dispatch(
             &mut state,
@@ -2457,18 +2795,18 @@ mod tests {
         let launches = state.take_pending_launches();
         assert_eq!(launches.len(), 1);
         assert_eq!(launches[0].request_code, 42);
-        assert_eq!(launches[0].class, "dev.acos.fixtures.svcprovider.MainActivity");
+        assert_eq!(
+            launches[0].class,
+            "dev.acos.fixtures.svcprovider.MainActivity"
+        );
     }
 
     #[test]
     fn dispatch_resolves_start_service_through_the_decoded_table() {
         let mut state = AmsState::new();
         state.manifests = db_with_fixture();
-        let method = acos_aidl::lookup_by_name(
-            "android.app.IActivityManager",
-            "startService",
-        )
-        .expect("decoded");
+        let method = acos_aidl::lookup_by_name("android.app.IActivityManager", "startService")
+            .expect("decoded");
         let intent = IntentFacts::explicit(
             "dev.acos.fixtures.svcprovider",
             "dev.acos.fixtures.svcprovider.EchoService",
@@ -2492,5 +2830,71 @@ mod tests {
             component.field(1).and_then(Value::as_str),
             Some("dev.acos.fixtures.svcprovider.EchoService")
         );
+    }
+
+    /// Wall 5 of the WebView provider load (WV3):
+    /// `IActivityManager.addPackageDependency(String)` is AMS surface, not a
+    /// WebView hook, so it is pinned twice — against the image's own AIDL
+    /// (transaction 96, one `String`, a void reply) and behaviourally through
+    /// `dispatch` (the dependency is recorded, the reply carries no exception
+    /// word, and the same package recorded twice is still one dependency).
+    ///
+    /// Fails before the dispatch arm existed: `dispatch` returned `Ok(None)`,
+    /// which the service layer turns into
+    /// `unsupported Android API: android.app.IActivityManager code 96` — the
+    /// exact exception `WebViewFactory.getWebViewContextAndSetProvider` threw.
+    #[test]
+    fn add_package_dependency_is_recorded_and_replies_void() {
+        use acos_aidl::WireOp;
+        let method =
+            acos_aidl::lookup_by_name("android.app.IActivityManager", "addPackageDependency")
+                .expect("the table decodes addPackageDependency from the image");
+        assert_eq!(
+            method.code, 96,
+            "IActivityManager.addPackageDependency code"
+        );
+        assert!(
+            !method.oneway,
+            "the framework's proxy calls readException() on the reply"
+        );
+        assert_eq!(
+            method.args,
+            vec![WireOp::Str16],
+            "Android 14 writes one String (the (String, int) overload is newer)"
+        );
+        assert!(
+            method.reply.is_empty(),
+            "the reply is writeNoException() and nothing else"
+        );
+
+        let mut state = AmsState::new();
+        let args = vec![Value::Str(Some("com.android.webview".into()))];
+        let result = dispatch(&mut state, "android.app.IActivityManager", &method, &args)
+            .expect("dispatch")
+            .expect("addPackageDependency is handled, not UNSUPPORTED");
+        assert!(
+            result.reply.is_empty(),
+            "a void method replies with the exception word only, got {:?}",
+            result.reply
+        );
+        assert!(result.deliveries.is_empty());
+        assert!(state.package_dependencies.contains("com.android.webview"));
+
+        // Recording twice is the same dependency, not a second entry.
+        let again = dispatch(&mut state, "android.app.IActivityManager", &method, &args)
+            .expect("dispatch")
+            .expect("handled");
+        assert!(again.reply.is_empty());
+        assert_eq!(state.package_dependencies.len(), 1);
+
+        // An empty name is refused, not recorded: it could never be a package.
+        let empty = dispatch(
+            &mut state,
+            "android.app.IActivityManager",
+            &method,
+            &[Value::Str(Some(String::new()))],
+        );
+        assert!(matches!(empty, Err(ServiceError::BadRequest { .. })));
+        assert_eq!(state.package_dependencies.len(), 1);
     }
 }

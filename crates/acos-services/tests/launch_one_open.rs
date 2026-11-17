@@ -18,12 +18,16 @@ use acos_services::pms::manifest_labels;
 const HELLO_JNI: &str = "fixtures/build/apps/hello-jni.apk";
 
 fn repo(rel: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel)
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(rel)
 }
 
 /// Scratch under the cargo target dir (never /tmp).
 fn scratch(name: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("launch-one-open").join(name);
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("launch-one-open")
+        .join(name);
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     dir
@@ -54,11 +58,18 @@ fn a_launch_opens_its_source_apk_once() {
     let installed = install_from(&source, &apk, &dest).expect("install");
     match &installed {
         NativeLibInstall::Installed { libs, .. } => {
-            assert!(libs.iter().any(|l| l == "libhellojni.so"), "x86_64 lib: {libs:?}");
+            assert!(
+                libs.iter().any(|l| l == "libhellojni.so"),
+                "x86_64 lib: {libs:?}"
+            );
         }
         other => panic!("hello-jni must install its x86_64 lib, got {other:?}"),
     }
-    assert_eq!(open_count(), before + 1, "install_from does not re-open the APK");
+    assert_eq!(
+        open_count(),
+        before + 1,
+        "install_from does not re-open the APK"
+    );
 
     // Step 3: the facts are derived from the same open and cached.
     prime_from(&apk, &source);
@@ -67,7 +78,11 @@ fn a_launch_opens_its_source_apk_once() {
     launch_budget(&apk).expect("budget");
     manifest_labels(&apk).expect("labels");
     launch_facts(&apk).expect("facts");
-    assert_eq!(open_count(), before + 1, "the whole launch opened the APK once");
+    assert_eq!(
+        open_count(),
+        before + 1,
+        "the whole launch opened the APK once"
+    );
 
     // Step 4: the cache keeps facts, not bytes. Once the launch drops its open,
     // facts still answer without a read...
@@ -77,6 +92,10 @@ fn a_launch_opens_its_source_apk_once() {
 
     // ...and a new shared open after that reads the file again.
     let again = open_shared(&apk).expect("reopen");
-    assert_eq!(open_count(), before + 2, "no bytes were retained by the cache");
+    assert_eq!(
+        open_count(),
+        before + 2,
+        "no bytes were retained by the cache"
+    );
     drop(again);
 }

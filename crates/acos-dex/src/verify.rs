@@ -62,7 +62,13 @@ impl VerifyReport {
     /// opcode.
     pub fn histogram_entries(&self) -> Vec<(u8, &'static str, u64)> {
         crate::opcode::defined_opcodes()
-            .map(|op| (op.byte(), op.mnemonic(), self.opcode_histogram[op.byte() as usize]))
+            .map(|op| {
+                (
+                    op.byte(),
+                    op.mnemonic(),
+                    self.opcode_histogram[op.byte() as usize],
+                )
+            })
             .filter(|&(_, _, n)| n > 0)
             .collect()
     }
@@ -208,7 +214,9 @@ fn verify_method(
             report.switches += 1;
             let payload_pc = *ipc as i64 + insn.target as i64;
             if payload_pc < 0 || payload_pc as usize >= n {
-                return ctx.fail(format!("switch at pc {ipc} has out-of-range payload target"));
+                return ctx.fail(format!(
+                    "switch at pc {ipc} has out-of-range payload target"
+                ));
             }
             let payload_pc = payload_pc as usize;
             let kind = payload_kind(insns, payload_pc);
@@ -274,9 +282,9 @@ fn verify_method(
     for try_item in &code.tries {
         let start = try_item.start_addr as usize;
         let count = try_item.insn_count as usize;
-        let end = start.checked_add(count).ok_or(DexError::Overflow {
-            what: "try range",
-        })?;
+        let end = start
+            .checked_add(count)
+            .ok_or(DexError::Overflow { what: "try range" })?;
         if end > n {
             return ctx.fail(format!(
                 "try range [{start}, {end}) exceeds instruction count {n}"
@@ -306,9 +314,7 @@ fn verify_method(
         if let Some(all) = handler.catch_all_addr {
             let addr = all as usize;
             if addr >= n || !boundaries[addr] {
-                return ctx.fail(format!(
-                    "catch-all handler targets non-boundary pc {addr}"
-                ));
+                return ctx.fail(format!("catch-all handler targets non-boundary pc {addr}"));
             }
         }
     }
@@ -326,7 +332,11 @@ pub fn verify(dex: &DexFile) -> DexResult<VerifyReport> {
 
     for def in dex.class_defs() {
         if let Some(data) = dex.class_data(def)? {
-            for method in data.direct_methods.iter().chain(data.virtual_methods.iter()) {
+            for method in data
+                .direct_methods
+                .iter()
+                .chain(data.virtual_methods.iter())
+            {
                 if method.code_off == 0 {
                     continue;
                 }

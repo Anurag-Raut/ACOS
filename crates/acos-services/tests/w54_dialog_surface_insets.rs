@@ -53,13 +53,8 @@ fn window_surface_grows_by_surface_insets_and_the_layer_moves_by_them() {
     let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
     let (sess, _binder) = wm.open_session(None);
     const WINDOW: u64 = 0x2222;
-    wm.add_to_display_as_user(
-        sess,
-        acos_parcel::BinderId(WINDOW),
-        dialog_params(),
-        0,
-    )
-    .expect("dialog window is added");
+    wm.add_to_display_as_user(sess, acos_parcel::BinderId(WINDOW), dialog_params(), 0)
+        .expect("dialog window is added");
 
     let r = wm
         .relayout_with_requested(sess, WINDOW, dialog_params(), 1024, 513, -1)
@@ -120,7 +115,14 @@ fn composite_clips_a_layer_to_the_display_viewport() {
     );
     // Entirely off the display: no rectangle, so it cannot grow the canvas.
     assert_eq!(
-        placed_rect((0, 0, 1024, 513), &LayerPlacement { x: 2000, ..placement }, display),
+        placed_rect(
+            (0, 0, 1024, 513),
+            &LayerPlacement {
+                x: 2000,
+                ..placement
+            },
+            display
+        ),
         None
     );
     // The dialog card inside the surface: buffer (126,126) is what the client

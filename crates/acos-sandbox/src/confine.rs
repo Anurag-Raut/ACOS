@@ -282,7 +282,10 @@ impl ConfinementReport {
 
     /// The status of `layer`, if present.
     pub fn status(&self, layer: Layer) -> Option<LayerStatus> {
-        self.layers.iter().find(|l| l.layer == layer).map(|l| l.status)
+        self.layers
+            .iter()
+            .find(|l| l.layer == layer)
+            .map(|l| l.status)
     }
 }
 
@@ -300,13 +303,25 @@ pub fn confine(profile: &ConfineProfile) -> Result<ConfinementReport, ConfineErr
     record(&mut report, Layer::NoNewPrivs, linux::no_new_privs());
 
     // 2. Close inherited file descriptors.
-    record(&mut report, Layer::CloseFds, linux::close_inherited(&profile.keep_fds));
+    record(
+        &mut report,
+        Layer::CloseFds,
+        linux::close_inherited(&profile.keep_fds),
+    );
 
     // 3. Sanitised environment.
-    record(&mut report, Layer::SanitizeEnv, linux::sanitize_env(&profile.env));
+    record(
+        &mut report,
+        Layer::SanitizeEnv,
+        linux::sanitize_env(&profile.env),
+    );
 
     // 4. Resource limits.
-    record(&mut report, Layer::Rlimits, linux::apply_rlimits(&profile.rlimits));
+    record(
+        &mut report,
+        Layer::Rlimits,
+        linux::apply_rlimits(&profile.rlimits),
+    );
 
     // 5. Optional namespaces. Applied before Landlock/seccomp because mapping
     //    uid_map and making mounts private need `/proc` and `mount`, both of
@@ -368,16 +383,20 @@ pub fn confine(profile: &ConfineProfile) -> Result<ConfinementReport, ConfineErr
         .required
         .iter()
         .copied()
-        .filter(|l| {
-            !report.is_active(*l) && report.status(*l) != Some(LayerStatus::Deferred)
-        })
+        .filter(|l| !report.is_active(*l) && report.status(*l) != Some(LayerStatus::Deferred))
         .collect();
     if !missing.is_empty() {
         let message = report
             .layers
             .iter()
             .filter(|l| missing.contains(&l.layer))
-            .map(|l| format!("{}: {}", l.layer, l.detail.as_deref().unwrap_or("unavailable")))
+            .map(|l| {
+                format!(
+                    "{}: {}",
+                    l.layer,
+                    l.detail.as_deref().unwrap_or("unavailable")
+                )
+            })
             .collect::<Vec<_>>()
             .join("; ");
         return Err(ConfineError::Unavailable { missing, message });

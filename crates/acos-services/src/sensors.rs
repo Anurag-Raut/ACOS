@@ -684,7 +684,12 @@ impl SensorFeed {
     pub fn new(sensors: Vec<SensorDef>) -> Self {
         let values = sensors
             .iter()
-            .map(|sensor| (sensor.handle, default_values(sensor.handle, sensor.sensor_type)))
+            .map(|sensor| {
+                (
+                    sensor.handle,
+                    default_values(sensor.handle, sensor.sensor_type),
+                )
+            })
             .collect();
         Self {
             sensors,
@@ -820,7 +825,10 @@ impl SensorHub {
     /// The served sensors (empty when off).
     #[must_use]
     pub fn sensors(&self) -> &[SensorDef] {
-        self.feed.as_ref().map(|feed| feed.sensors.as_slice()).unwrap_or(&[])
+        self.feed
+            .as_ref()
+            .map(|feed| feed.sensors.as_slice())
+            .unwrap_or(&[])
     }
 
     /// The current value of `handle`.
@@ -859,8 +867,9 @@ impl SensorHub {
         let Some(value) = value else {
             return Err(ServiceError::ModuleRejected {
                 module: "sensors",
-                detail: "the op needs `sensor` (a name like \"accelerometer\" or an SENSOR_TYPE int)"
-                    .to_string(),
+                detail:
+                    "the op needs `sensor` (a name like \"accelerometer\" or an SENSOR_TYPE int)"
+                        .to_string(),
             });
         };
         let sensor_type = match value {
@@ -904,7 +913,9 @@ impl SensorHub {
             }
             if enabled {
                 state.enabled.insert(handle, period_ns.max(1_000_000));
-                state.next_due.insert(handle, now + period_ns.max(1_000_000));
+                state
+                    .next_due
+                    .insert(handle, now + period_ns.max(1_000_000));
             } else {
                 state.enabled.remove(&handle);
                 state.next_due.remove(&handle);
@@ -928,7 +939,12 @@ impl SensorHub {
             feed.values = feed
                 .sensors
                 .iter()
-                .map(|sensor| (sensor.handle, default_values(sensor.handle, sensor.sensor_type)))
+                .map(|sensor| {
+                    (
+                        sensor.handle,
+                        default_values(sensor.handle, sensor.sensor_type),
+                    )
+                })
                 .collect();
         }
         for connection in &self.connections {
@@ -972,17 +988,16 @@ impl SensorHub {
 
     /// Register a fresh connection for pool slot `slot`.
     fn open_connection(&mut self, slot: usize) -> Arc<Mutex<ConnectionState>> {
-        self.connections
-            .retain(|connection| {
-                let mut state = connection
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                if state.slot == slot {
-                    state.destroyed = true;
-                    return false;
-                }
-                !state.destroyed
-            });
+        self.connections.retain(|connection| {
+            let mut state = connection
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if state.slot == slot {
+                state.destroyed = true;
+                return false;
+            }
+            !state.destroyed
+        });
         let connection = Arc::new(Mutex::new(ConnectionState::new(slot)));
         self.connections.push(Arc::clone(&connection));
         connection
@@ -1068,8 +1083,19 @@ impl SensorHub {
     }
 
     /// Schedule `samples` for `handle` starting now.
-    pub fn play(&mut self, handle: i32, samples: Vec<Sample>, looped: bool, now: i64) -> SResult<()> {
-        if self.feed.as_ref().and_then(|feed| feed.sensor_by_handle(handle)).is_none() {
+    pub fn play(
+        &mut self,
+        handle: i32,
+        samples: Vec<Sample>,
+        looped: bool,
+        now: i64,
+    ) -> SResult<()> {
+        if self
+            .feed
+            .as_ref()
+            .and_then(|feed| feed.sensor_by_handle(handle))
+            .is_none()
+        {
             return Err(ServiceError::BadRequest {
                 interface: SENSOR_SERVER_DESCRIPTOR.to_string(),
                 method: "play".into(),
@@ -1142,9 +1168,8 @@ impl SensorHub {
                 };
                 let due = timeline.started_ns + sample.t_ms.max(0) * 1_000_000;
                 if due > now {
-                    timeline_next = Some(
-                        timeline_next.map_or(due, |current: i64| current.min(due)),
-                    );
+                    timeline_next =
+                        Some(timeline_next.map_or(due, |current: i64| current.min(due)));
                     break;
                 }
                 due_events.push(SensorEvent::sample(&sensor, due, sample.values));
@@ -1169,7 +1194,11 @@ impl SensorHub {
         //    its current value: the timeline *is* that sensor's hardware stream
         //    (a real HAL has one), so sampling it too would deliver two
         //    interleaved streams at different rates.
-        let played: Vec<i32> = self.timelines.iter().map(|timeline| timeline.handle).collect();
+        let played: Vec<i32> = self
+            .timelines
+            .iter()
+            .map(|timeline| timeline.handle)
+            .collect();
         let mut next: Option<i64> = timeline_next;
         let mut due: Vec<(usize, SensorEvent)> = Vec::new();
         let connections: Vec<Arc<Mutex<ConnectionState>>> = self.connections.clone();
@@ -1294,7 +1323,14 @@ impl SensorHub {
     /// The recorded delivered events (last `limit`, newest last).
     #[must_use]
     pub fn events_json(&self, limit: usize) -> Value {
-        let events: Vec<Value> = self.log.iter().rev().take(limit).rev().map(SensorEvent::to_json).collect();
+        let events: Vec<Value> = self
+            .log
+            .iter()
+            .rev()
+            .take(limit)
+            .rev()
+            .map(SensorEvent::to_json)
+            .collect();
         json!({
             "delivered": self.delivered,
             "dropped": self.dropped,
@@ -1647,7 +1683,9 @@ impl ServiceObject for SensorServer {
                     .map_err(|e| Self::bad("getSensorList", e))?
                     .unwrap_or_default();
                 if code == server_codes::GET_RUNTIME_SENSOR_LIST {
-                    let _device_id = data.read_int32().map_err(|e| Self::bad("getRuntimeSensorList", e))?;
+                    let _device_id = data
+                        .read_int32()
+                        .map_err(|e| Self::bad("getRuntimeSensorList", e))?;
                 }
                 self.list_calls.push(package);
                 self.write_sensor_list(reply)?;
@@ -1675,9 +1713,10 @@ impl ServiceObject for SensorServer {
                     return Err(ServiceError::UnsupportedAndroidApi {
                         interface: SENSOR_SERVER_DESCRIPTOR.to_string(),
                         code,
-                        method: "createSensorEventConnection (no sensor feed: attach the `sensors` \
+                        method:
+                            "createSensorEventConnection (no sensor feed: attach the `sensors` \
                                  module)"
-                            .to_string(),
+                                .to_string(),
                     });
                 }
                 let binder = self.open_connection("createSensorEventConnection")?;
@@ -1794,7 +1833,9 @@ impl ServiceObject for SensorEventConnectionService {
                 Ok(true)
             }
             connection_codes::ENABLE_DISABLE => {
-                let handle = data.read_int32().map_err(|e| bad("enableDisable", e.to_string()))?;
+                let handle = data
+                    .read_int32()
+                    .map_err(|e| bad("enableDisable", e.to_string()))?;
                 let enabled = data
                     .read_int32()
                     .map_err(|e| bad("enableDisable", e.to_string()))?;
@@ -1820,7 +1861,9 @@ impl ServiceObject for SensorEventConnectionService {
                     let mut guard = state
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    guard.enable_log.push((handle, enabled != 0, sampling_period_ns));
+                    guard
+                        .enable_log
+                        .push((handle, enabled != 0, sampling_period_ns));
                     if enabled != 0 {
                         let period = sampling_period_ns.max(1_000_000);
                         guard.enabled.insert(handle, period);
@@ -1837,8 +1880,12 @@ impl ServiceObject for SensorEventConnectionService {
                 Ok(true)
             }
             connection_codes::SET_EVENT_RATE => {
-                let handle = data.read_int32().map_err(|e| bad("setEventRate", e.to_string()))?;
-                let ns = data.read_int64().map_err(|e| bad("setEventRate", e.to_string()))?;
+                let handle = data
+                    .read_int32()
+                    .map_err(|e| bad("setEventRate", e.to_string()))?;
+                let ns = data
+                    .read_int64()
+                    .map_err(|e| bad("setEventRate", e.to_string()))?;
                 let mut guard = state
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -1953,11 +2000,7 @@ pub fn install_with_pool(
 }
 
 /// [`install_with_pool`], also returning the writer's waker.
-pub fn install_full(
-    host: &mut ServiceHost,
-    hub: Arc<Mutex<SensorHub>>,
-    pool: usize,
-) -> Installed {
+pub fn install_full(host: &mut ServiceHost, hub: Arc<Mutex<SensorHub>>, pool: usize) -> Installed {
     let waker = Arc::new(SensorWaker::default());
     let mut slots = Vec::with_capacity(pool);
     for _ in 0..pool {
@@ -1977,10 +2020,6 @@ pub fn install_full(
     server.slots = slots;
     // `sensorservice` is reached through `ServiceManager`, so the node is
     // published by name. It has no `acos-aidl` table: `raw_transact` serves it.
-    host.register_dynamic_named(
-        SERVICE_NAME,
-        SENSOR_SERVER_DESCRIPTOR,
-        Box::new(server),
-    );
+    host.register_dynamic_named(SERVICE_NAME, SENSOR_SERVER_DESCRIPTOR, Box::new(server));
     Installed { hub, waker }
 }

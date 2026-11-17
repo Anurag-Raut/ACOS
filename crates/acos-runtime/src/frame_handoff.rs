@@ -16,9 +16,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use acos_vm::natives::fwk_surface::{
-    clear_backend, install_backend, SurfaceBackend, SurfaceOp,
-};
+use acos_vm::natives::fwk_surface::{clear_backend, install_backend, SurfaceBackend, SurfaceOp};
 use acos_vm::natives::gfx_hwui::{install_sink, FrameSink, MemorySink};
 
 use crate::wms_java::WmSurfaceBackend;

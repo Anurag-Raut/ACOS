@@ -374,11 +374,7 @@ impl<'a> Elf<'a> {
     }
 
     /// Read `count` dynamic symbols starting at `symtab_off`.
-    pub fn read_symbols(
-        &self,
-        symtab_off: usize,
-        count: usize,
-    ) -> Result<Vec<Sym>, ElfError> {
+    pub fn read_symbols(&self, symtab_off: usize, count: usize) -> Result<Vec<Sym>, ElfError> {
         let mut out = Vec::with_capacity(count);
         let mut off = symtab_off;
         for _ in 0..count {
@@ -451,4 +447,3 @@ mod tests {
         assert!(Elf::parse(&data).is_err());
     }
 }
-

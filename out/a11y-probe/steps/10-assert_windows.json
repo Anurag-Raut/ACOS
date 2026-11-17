@@ -1,0 +1,104 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "focus": "application",
+        "focus_type": "TYPE_BASE_APPLICATION",
+        "order": [
+          "application",
+          "accessibility_overlay"
+        ],
+        "types": [
+          "TYPE_BASE_APPLICATION",
+          "TYPE_ACCESSIBILITY_OVERLAY"
+        ],
+        "windows": [
+          {
+            "bounds": [
+              0,
+              0,
+              1080,
+              2400
+            ],
+            "focus": true,
+            "id": "c9a0208",
+            "kind": "application",
+            "label": "main",
+            "touchable": true,
+            "type_name": "TYPE_BASE_APPLICATION",
+            "z": 0
+          },
+          {
+            "bounds": [
+              40,
+              368,
+              280,
+              488
+            ],
+            "focus": false,
+            "id": "f707002",
+            "kind": "accessibility_overlay",
+            "label": "window-2032#1",
+            "touchable": false,
+            "type_name": "TYPE_ACCESSIBILITY_OVERLAY",
+            "z": 1
+          }
+        ]
+      },
+      "expected": {
+        "focus": "application",
+        "focus_type": "TYPE_BASE_APPLICATION",
+        "order": [
+          "application",
+          "accessibility_overlay"
+        ],
+        "types": [
+          "TYPE_BASE_APPLICATION",
+          "TYPE_ACCESSIBILITY_OVERLAY"
+        ]
+      },
+      "kind": "windows",
+      "matched_node_ids": [],
+      "message": "2 windows in policy z order",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/3.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/3.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/10-assert_windows.json"
+    }
+  ],
+  "frame_seq": 3,
+  "index": 10,
+  "provenance": {},
+  "settle": {
+    "ack_ms": 5,
+    "bound": "strict-event",
+    "first_change_ms": 57,
+    "frame_ms": 918,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "strict",
+    "pixels_changed": true,
+    "settled": true,
+    "state_changed": null,
+    "strict_rule": "event"
+  },
+  "status": "pass",
+  "step": "assert_windows",
+  "trust": "trusted"
+}

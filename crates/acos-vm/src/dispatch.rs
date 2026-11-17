@@ -262,7 +262,11 @@ fn fast_op(
             let a = f32::from_bits(f.reg(r1));
             let b = f32::from_bits(f.reg(r2));
             let r: i32 = if a.is_nan() || b.is_nan() {
-                if insn.op == 0x2d { -1 } else { 1 }
+                if insn.op == 0x2d {
+                    -1
+                } else {
+                    1
+                }
             } else if a < b {
                 -1
             } else if a > b {
@@ -277,7 +281,11 @@ fn fast_op(
             let a = f64::from_bits(f.reg_wide(r1));
             let b = f64::from_bits(f.reg_wide(r2));
             let r: i32 = if a.is_nan() || b.is_nan() {
-                if insn.op == 0x2f { -1 } else { 1 }
+                if insn.op == 0x2f {
+                    -1
+                } else {
+                    1
+                }
             } else if a < b {
                 -1
             } else if a > b {

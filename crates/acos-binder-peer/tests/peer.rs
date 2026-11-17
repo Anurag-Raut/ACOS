@@ -1,8 +1,8 @@
 //! The peer acceptance tests: a `Frame` in, `Frame`s out, no socket needed.
 
 use acos_binder_peer::{
-    frame_from_parcel, import_parcel, Frame, Peer, F_REQ, F_RSP, F_TXN, JAVA_TAG, NODE_TAG,
-    TF_ONE_WAY,
+    frame_from_parcel, import_parcel, Frame, Peer, F_HELLO, F_REF, F_REQ, F_RSP, F_TXN, JAVA_TAG,
+    NODE_TAG, PROTOCOL_VERSION, REF_RELEASE, TF_ONE_WAY,
 };
 use acos_parcel::{BinderId, Parcel};
 use acos_services::codec;
@@ -60,7 +60,10 @@ fn service_manager_returns_real_host_nodes_for_window_activity_task_and_package(
         assert!(extra.is_empty());
         assert_eq!(exception_code(&reply), 0, "{name}: no exception");
         reply.set_data_position(4);
-        let binder = reply.read_strong_binder().unwrap().expect("non-null binder");
+        let binder = reply
+            .read_strong_binder()
+            .unwrap()
+            .expect("non-null binder");
         let host_id = binder.0;
         assert_eq!(
             peer.host().descriptor_of(BinderId(host_id)),
@@ -146,7 +149,8 @@ fn unknown_code_is_a_structured_error_and_a_json_line() {
         .binder_for_descriptor("android.app.IActivityManager")
         .expect("activity service");
     let mut data = Parcel::new();
-    data.write_interface_token("android.app.IActivityManager").unwrap();
+    data.write_interface_token("android.app.IActivityManager")
+        .unwrap();
     let req = Frame {
         ty: F_REQ,
         seq: 9,
@@ -192,7 +196,10 @@ fn add_service_registers_a_java_local_binder() {
     );
     let (reply, _) = read_reply(&mut peer, req);
     assert_eq!(exception_code(&reply), 0);
-    assert_eq!(peer.java_binders().get(&0x77).map(String::as_str), Some("acos.java"));
+    assert_eq!(
+        peer.java_binders().get(&0x77).map(String::as_str),
+        Some("acos.java")
+    );
 }
 
 #[test]
@@ -323,7 +330,8 @@ fn the_unsupported_log_is_bounded_and_counts_the_drops() {
         .binder_for_descriptor("android.app.IActivityManager")
         .expect("activity service");
     let mut data = Parcel::new();
-    data.write_interface_token("android.app.IActivityManager").unwrap();
+    data.write_interface_token("android.app.IActivityManager")
+        .unwrap();
     let total = acos_binder_peer::peer::MAX_UNSUPPORTED_RECORDS + 250;
     for _ in 0..total {
         let req = Frame {
@@ -372,9 +380,16 @@ fn the_java_binder_table_is_bounded_with_a_structured_refusal() {
         let (reply, _) = read_reply(&mut peer, req);
         last_exception = exception_code(&reply);
     }
-    assert_eq!(peer.java_binders().len(), cap, "the binder table must stop at its cap");
+    assert_eq!(
+        peer.java_binders().len(),
+        cap,
+        "the binder table must stop at its cap"
+    );
     // `Parcel.EX_UNSUPPORTED_OPERATION`: the guest sees a refusal, not silence.
-    assert_eq!(last_exception, -7, "overflow must be a structured ART_RESOURCE_LIMIT");
+    assert_eq!(
+        last_exception, -7,
+        "overflow must be a structured ART_RESOURCE_LIMIT"
+    );
     assert!(peer.resource_limits() > 0);
     let last = peer.unsupported.last().expect("an overflow record");
     assert_eq!(last.error, acos_services::codes::ART_RESOURCE_LIMIT);
@@ -428,7 +443,14 @@ fn reply_file_descriptors_stay_open_until_the_frame_is_written() {
     let mut parcel = Parcel::new();
     acos_services::exception::write_no_exception(&mut parcel);
     parcel.write_file_descriptor(fd.as_fd()).expect("write fd");
-    let frame = frame_from_parcel(F_RSP, &Frame { seq: 9, ..Default::default() }, &parcel);
+    let frame = frame_from_parcel(
+        F_RSP,
+        &Frame {
+            seq: 9,
+            ..Default::default()
+        },
+        &parcel,
+    );
     assert_eq!(
         frame.fds.len(),
         1,
@@ -438,10 +460,7 @@ fn reply_file_descriptors_stay_open_until_the_frame_is_written() {
 
     let mut buf = [0u8; 4];
     let n = unsafe { libc::pread(frame.fds[0], buf.as_mut_ptr().cast(), 4, 0) };
-    assert_eq!(
-        n, 4,
-        "the frame's descriptor must outlive the reply parcel"
-    );
+    assert_eq!(n, 4, "the frame's descriptor must outlive the reply parcel");
     assert_eq!(i32::from_le_bytes(buf), 7, "same bytes the provider wrote");
     close_frame_fds(&frame);
 }
@@ -464,13 +483,18 @@ fn a_null_binder_consumes_its_stability_record_even_without_an_offset_entry() {
     data.extend_from_slice(&0i32.to_le_bytes()); // Stability::UNDECLARED
     data.extend_from_slice(&42i32.to_le_bytes());
     let frame = Frame::plain(F_REQ, 1, 1, 0, NODE_TAG | 1, data);
-    assert!(frame.object_offsets().is_empty(), "a null binder is not listed");
+    assert!(
+        frame.object_offsets().is_empty(),
+        "a null binder is not listed"
+    );
 
     let mut parcel = import_parcel(&frame);
     assert_eq!(parcel.read_int32().expect("int"), 7);
     assert_eq!(parcel.read_strong_binder().expect("binder"), None);
     assert_eq!(
-        parcel.read_int32().expect("the argument after the null binder"),
+        parcel
+            .read_int32()
+            .expect("the argument after the null binder"),
         42
     );
     assert_eq!(parcel.data_avail(), 0);
@@ -509,7 +533,11 @@ fn an_imported_request_exposes_its_object_table() {
     let mut probe = parcel.clone();
     probe.set_data_position(parcel.objects()[0]);
     let binder = probe.read_strong_binder().expect("binder").expect("handle");
-    assert_eq!(binder.0, JAVA_TAG | 0x21, "a handle imports as a Java binder");
+    assert_eq!(
+        binder.0,
+        JAVA_TAG | 0x21,
+        "a handle imports as a Java binder"
+    );
 }
 
 /// The same round trip for both kinds of binder: the peer's wire writer must emit
@@ -614,14 +642,20 @@ fn an_idle_peer_with_no_timed_module_has_no_tick_wakeups() {
             IdleWake::Frame | IdleWake::Wake => break,
         }
         waits += 1;
-        assert!(waits < 8, "the peer must not poll: {waits} wait(s) in {ticks} tick(s)");
+        assert!(
+            waits < 8,
+            "the peer must not poll: {waits} wait(s) in {ticks} tick(s)"
+        );
     }
     let elapsed = started.elapsed();
     assert!(
         elapsed >= Duration::from_millis(1900),
         "the peer slept until the stop wake, got {elapsed:?}"
     );
-    assert_eq!(ticks, 0, "an idle session with no timed module must not tick");
+    assert_eq!(
+        ticks, 0,
+        "an idle session with no timed module must not tick"
+    );
     assert_eq!(waits, 0, "one unbounded wait, no poll loop");
     unsafe {
         libc::close(guest);
@@ -712,7 +746,7 @@ fn a_scheduled_fix_fires_within_five_ms_of_its_deadline() {
             other => panic!("expected the track deadline, got {other:?}"),
         }
     };
-    let frames = peer.tick();
+    let frames: Vec<acos_binder_peer::Frame> = peer.tick().into_iter().map(|(_, f)| f).collect();
     assert!(
         !frames.is_empty(),
         "the track point must reach the guest as a frame at its deadline"
@@ -734,4 +768,142 @@ fn a_scheduled_fix_fires_within_five_ms_of_its_deadline() {
         libc::close(wake_read);
         libc::close(_wake_write);
     }
+}
+
+/// The reference model, host side: a registration is a strong reference on a
+/// guest binder, and dropping the last one is a message to the driver (`F_REF`
+/// release) -- never a silent leak of a node that nobody references any more.
+#[test]
+fn a_dropped_registration_releases_the_guest_node_over_the_wire() {
+    let mut peer = Peer::new();
+    // The handshake decides whether the driver can be told at all.
+    let out = peer.handle(Frame::plain(F_HELLO, PROTOCOL_VERSION, 0, 0, 0, Vec::new()));
+    assert!(out.is_empty(), "hello is answered with nothing");
+    assert_eq!(peer.driver_protocol(), Some(PROTOCOL_VERSION));
+
+    let id = java(0x99);
+    peer.host_mut().binder_registry().register_at(
+        id.0,
+        "test.listener",
+        acos_parcel::BinderKind::Local,
+    );
+    assert_eq!(
+        peer.retain_binder(id),
+        1,
+        "a registration takes one reference"
+    );
+    assert_eq!(peer.retain_binder(id), 2);
+    assert_eq!(peer.release_binder(id), 1);
+    // Still referenced: nothing to tell the driver.
+    let ping = Frame::plain(
+        F_REQ,
+        7,
+        acos_binder_peer::PING_TRANSACTION,
+        0,
+        0,
+        Vec::new(),
+    );
+    let out = peer.handle(ping.clone());
+    assert!(
+        !out.iter().any(|f| f.ty == F_REF),
+        "a binder that is still registered must not be released"
+    );
+
+    assert_eq!(peer.release_binder(id), 0);
+    let out = peer.handle(ping);
+    let refs: Vec<&Frame> = out.iter().filter(|f| f.ty == F_REF).collect();
+    assert_eq!(
+        refs.len(),
+        1,
+        "the last reference release is one F_REF frame"
+    );
+    assert_eq!(refs[0].code, REF_RELEASE);
+    assert_eq!(refs[0].target, 0x99, "the driver sees its own wire handle");
+    assert_eq!(peer.held_refs_of(id), 0);
+}
+
+/// Frame order inside one turn: a delivery is written **before** the release of
+/// the reference that made the delivery possible. The driver unroots a node on
+/// `BR_RELEASE`/`BR_DECREFS`, so a release that came first would turn a callback
+/// that was queued while its registration was still live into `DEAD_OBJECT`.
+#[test]
+fn a_delivery_is_written_before_the_reference_release_of_the_same_turn() {
+    let mut peer = Peer::new();
+    let out = peer.handle(Frame::plain(F_HELLO, PROTOCOL_VERSION, 0, 0, 0, Vec::new()));
+    assert!(out.is_empty());
+    let id = java(0x55);
+    peer.host_mut().binder_registry().register_at(
+        id.0,
+        "test.listener",
+        acos_parcel::BinderKind::Local,
+    );
+    assert_eq!(peer.retain_binder(id), 1);
+
+    let mut data = Parcel::new();
+    data.write_interface_token("test.listener").expect("token");
+    peer.host_mut()
+        .queue_delivery(acos_services::host::PendingDelivery {
+            target: id,
+            interface: "test.listener".into(),
+            code: 1,
+            method: "onEvent".into(),
+            data,
+        });
+    // The registration goes away in the same turn the delivery was queued.
+    assert_eq!(peer.release_binder(id), 0);
+
+    let ping = Frame::plain(
+        F_REQ,
+        11,
+        acos_binder_peer::PING_TRANSACTION,
+        0,
+        0,
+        Vec::new(),
+    );
+    let out = peer.handle(ping);
+    let kinds: Vec<u32> = out.iter().map(|f| f.ty).collect();
+    let delivery = kinds
+        .iter()
+        .position(|ty| *ty == F_TXN)
+        .expect("the queued delivery is in this batch");
+    let release = kinds
+        .iter()
+        .position(|ty| *ty == F_REF)
+        .expect("the released reference is in this batch");
+    assert!(
+        delivery < release,
+        "delivery frames must precede release frames, got {kinds:?}"
+    );
+}
+
+/// An older driver (no `F_HELLO`) must never receive `F_REF`: the frame would
+/// be answered with "unexpected frame type" and the release would look like a
+/// driver bug. The peer keeps the node alive for the session instead, and counts
+/// what it suppressed.
+#[test]
+fn a_driver_without_the_handshake_never_gets_a_reference_frame() {
+    let mut peer = Peer::new();
+    assert_eq!(peer.driver_protocol(), None);
+    let id = java(0x42);
+    peer.host_mut().binder_registry().register_at(
+        id.0,
+        "test.listener",
+        acos_parcel::BinderKind::Local,
+    );
+    assert_eq!(peer.retain_binder(id), 1);
+    assert_eq!(peer.release_binder(id), 0);
+    let ping = Frame::plain(
+        F_REQ,
+        9,
+        acos_binder_peer::PING_TRANSACTION,
+        0,
+        0,
+        Vec::new(),
+    );
+    let out = peer.handle(ping);
+    assert!(
+        !out.iter().any(|f| f.ty == F_REF),
+        "an old driver must not be sent a frame it does not know"
+    );
+    assert_eq!(peer.ref_frames_suppressed(), 1);
 }

@@ -1,0 +1,5 @@
+ACOSART[render]: dlopen(libandroid_runtime.so) ok @0x8bd19060fa03f77b (default namespace, RTLD_GLOBAL)
+ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)
+ACOSLAUNCH MARK crash-handler installed sigchain=0x7f3d69be4d40
+E3G[warn]: BC_REPLY without an incoming transaction
+E3G[warn]: BC_REPLY without an incoming transaction

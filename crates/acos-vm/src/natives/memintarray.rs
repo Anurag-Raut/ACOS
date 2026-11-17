@@ -67,8 +67,7 @@ fn with_fd<R>(fd: RawFd, f: impl FnOnce(&File) -> std::io::Result<R>) -> VmResul
             let file = map
                 .get(&fd)
                 .ok_or_else(|| VmError::Internal(format!("MemoryIntArray: fd {fd} vanished")))?;
-            f(file)
-                .map_err(|e| VmError::Internal(format!("MemoryIntArray: io fd {fd}: {e}")))
+            f(file).map_err(|e| VmError::Internal(format!("MemoryIntArray: io fd {fd}: {e}")))
         })
     } else {
         let file = open_fd(fd)?;
@@ -93,7 +92,9 @@ fn write_word(fd: RawFd, index: i32, value: i32) -> VmResult<()> {
             "MemoryIntArray.set({index}): negative index"
         )));
     }
-    with_fd(fd, |file| file.write_all_at(&value.to_le_bytes(), index as u64 * 4))
+    with_fd(fd, |file| {
+        file.write_all_at(&value.to_le_bytes(), index as u64 * 4)
+    })
 }
 
 fn native_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {

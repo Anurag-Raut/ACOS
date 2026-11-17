@@ -44,9 +44,10 @@ fn install_probe(host: &mut ServiceHost) {
         .clone()
         .expect("package manager is wired");
     let mut pms = pms.lock().unwrap();
-    pms.app.package_name = PACKAGE.to_string();
-    pms.package.package_name = PACKAGE.to_string();
-    pms.services.push(ServiceInfo {
+    let primary = pms.primary_mut();
+    primary.app.package_name = PACKAGE.to_string();
+    primary.package.package_name = PACKAGE.to_string();
+    primary.services.push(ServiceInfo {
         name: SERVICE.to_string(),
         package_name: PACKAGE.to_string(),
         process_name: PACKAGE.to_string(),
@@ -76,7 +77,10 @@ fn transact(host: &mut ServiceHost, interface: &str, code: u32, args: Vec<Value>
     let method = acos_aidl::lookup(interface, code).expect("table row");
     let mut data = acos_services::codec::build_request(interface, method, &args).expect("request");
     data.set_data_position(0);
-    let binder = host.check_service(name_for(interface)).unwrap().expect("binder");
+    let binder = host
+        .check_service(name_for(interface))
+        .unwrap()
+        .expect("binder");
     let mut reply = Parcel::new();
     host.transact(binder, code, &mut data, &mut reply, 0)
         .expect("transact");
@@ -246,7 +250,8 @@ fn publish_service_answers_init_with_a_connection_node() {
     // windowToken)`.
     let mut data = init.data.clone();
     data.set_data_position(0);
-    data.enforce_interface(init.interface.as_str()).expect("token");
+    data.enforce_interface(init.interface.as_str())
+        .expect("token");
     let connection = data.read_strong_binder().unwrap().expect("connection");
     assert_eq!(data.read_int32().unwrap(), 1, "connection id");
     let window_token = data.read_strong_binder().unwrap().expect("window token");

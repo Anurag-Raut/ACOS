@@ -175,7 +175,10 @@ mod tests {
             .lines()
             .filter_map(|l| l.strip_prefix("rw ").and_then(|r| r.splitn(2, ' ').nth(1)))
             .collect();
-        assert!(rw.contains(&"/data/out"), "the run's out dir is writable: {rw:?}");
+        assert!(
+            rw.contains(&"/data/out"),
+            "the run's out dir is writable: {rw:?}"
+        );
         assert!(rw.contains(&"/data/task"), "{rw:?}");
         // The escape targets are *not* writable roots.
         for forbidden in [
@@ -187,7 +190,10 @@ mod tests {
             "/system",
             "/proc",
         ] {
-            assert!(!rw.contains(&forbidden), "{forbidden} must not be writable: {rw:?}");
+            assert!(
+                !rw.contains(&forbidden),
+                "{forbidden} must not be writable: {rw:?}"
+            );
         }
     }
 

@@ -4,41 +4,136 @@
 //! primitive classes, interfaces, `newInstance`). Annotation queries return the
 //! honest empty result (ACOS does not parse annotation metadata yet).
 
+use crate::class::ClassId;
 use crate::class::NativeCtx;
 use crate::error::{VmError, VmResult};
-use crate::class::ClassId;
 use crate::heap::{new_array_data, ArrayData, ArrayObj, Handle, Object, NULL};
 use crate::vm::{descriptor_to_dotted, InvokeKind, Vm};
 
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     let c = "Ljava/lang/Class;";
     vm.register_native(c, "getNameNative", "()Ljava/lang/String;", cl_get_name);
-    vm.register_native(c, "isAssignableFrom", "(Ljava/lang/Class;)Z", cl_is_assignable_from);
-    vm.register_native(c, "getPrimitiveClass", "(Ljava/lang/String;)Ljava/lang/Class;", cl_get_primitive);
-    vm.register_native(c, "classForName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", cl_for_name);
+    vm.register_native(
+        c,
+        "isAssignableFrom",
+        "(Ljava/lang/Class;)Z",
+        cl_is_assignable_from,
+    );
+    vm.register_native(
+        c,
+        "getPrimitiveClass",
+        "(Ljava/lang/String;)Ljava/lang/Class;",
+        cl_get_primitive,
+    );
+    vm.register_native(
+        c,
+        "classForName",
+        "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;",
+        cl_for_name,
+    );
     vm.register_native(c, "newInstance", "()Ljava/lang/Object;", cl_new_instance);
     vm.register_native(c, "isAnonymousClass", "()Z", cl_false);
     vm.register_native(c, "isRecord0", "()Z", cl_false);
-    vm.register_native(c, "getDeclaringClass", "()Ljava/lang/Class;", cl_get_declaring_class);
-    vm.register_native(c, "getEnclosingClass", "()Ljava/lang/Class;", cl_get_declaring_class);
-    vm.register_native(c, "getEnclosingConstructorNative", "()Ljava/lang/reflect/Constructor;", cl_null);
-    vm.register_native(c, "getEnclosingMethodNative", "()Ljava/lang/reflect/Method;", cl_null);
-    vm.register_native(c, "getInterfacesInternal", "()[Ljava/lang/Class;", cl_interfaces);
-    vm.register_native(c, "getDeclaredClasses", "()[Ljava/lang/Class;", cl_empty_class_array);
-    vm.register_native(c, "getDeclaredFields", "()[Ljava/lang/reflect/Field;", cl_empty_field_array);
-    vm.register_native(c, "getDeclaredFieldsUnchecked", "(Z)[Ljava/lang/reflect/Field;", cl_empty_field_array);
-    vm.register_native(c, "getPublicDeclaredFields", "()[Ljava/lang/reflect/Field;", cl_empty_field_array);
-    vm.register_native(c, "getDeclaredMethodsUnchecked", "(Z)[Ljava/lang/reflect/Method;", cl_empty_method_array);
-    vm.register_native(c, "getDeclaredConstructorsInternal", "(Z)[Ljava/lang/reflect/Constructor;", cl_empty_ctor_array);
-    vm.register_native(c, "getDeclaredMethodInternal", "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;", cl_null);
-    vm.register_native(c, "getDeclaredConstructorInternal", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;", cl_null);
-    vm.register_native(c, "getDeclaredField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;", cl_get_declared_field);
-    vm.register_native(c, "getPublicFieldRecursive", "(Ljava/lang/String;)Ljava/lang/reflect/Field;", cl_get_public_field_recursive);
+    vm.register_native(
+        c,
+        "getDeclaringClass",
+        "()Ljava/lang/Class;",
+        cl_get_declaring_class,
+    );
+    vm.register_native(
+        c,
+        "getEnclosingClass",
+        "()Ljava/lang/Class;",
+        cl_get_declaring_class,
+    );
+    vm.register_native(
+        c,
+        "getEnclosingConstructorNative",
+        "()Ljava/lang/reflect/Constructor;",
+        cl_null,
+    );
+    vm.register_native(
+        c,
+        "getEnclosingMethodNative",
+        "()Ljava/lang/reflect/Method;",
+        cl_null,
+    );
+    vm.register_native(
+        c,
+        "getInterfacesInternal",
+        "()[Ljava/lang/Class;",
+        cl_interfaces,
+    );
+    vm.register_native(
+        c,
+        "getDeclaredClasses",
+        "()[Ljava/lang/Class;",
+        cl_empty_class_array,
+    );
+    vm.register_native(
+        c,
+        "getDeclaredFields",
+        "()[Ljava/lang/reflect/Field;",
+        cl_empty_field_array,
+    );
+    vm.register_native(
+        c,
+        "getDeclaredFieldsUnchecked",
+        "(Z)[Ljava/lang/reflect/Field;",
+        cl_empty_field_array,
+    );
+    vm.register_native(
+        c,
+        "getPublicDeclaredFields",
+        "()[Ljava/lang/reflect/Field;",
+        cl_empty_field_array,
+    );
+    vm.register_native(
+        c,
+        "getDeclaredMethodsUnchecked",
+        "(Z)[Ljava/lang/reflect/Method;",
+        cl_empty_method_array,
+    );
+    vm.register_native(
+        c,
+        "getDeclaredConstructorsInternal",
+        "(Z)[Ljava/lang/reflect/Constructor;",
+        cl_empty_ctor_array,
+    );
+    vm.register_native(
+        c,
+        "getDeclaredMethodInternal",
+        "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;",
+        cl_null,
+    );
+    vm.register_native(
+        c,
+        "getDeclaredConstructorInternal",
+        "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
+        cl_null,
+    );
+    vm.register_native(
+        c,
+        "getDeclaredField",
+        "(Ljava/lang/String;)Ljava/lang/reflect/Field;",
+        cl_get_declared_field,
+    );
+    vm.register_native(
+        c,
+        "getPublicFieldRecursive",
+        "(Ljava/lang/String;)Ljava/lang/reflect/Field;",
+        cl_get_public_field_recursive,
+    );
 
     let f = "Ljava/lang/reflect/Field;";
     vm.register_native(f, "getNameInternal", "()Ljava/lang/String;", field_get_name);
     vm.register_native(f, "getArtField", "()J", field_get_art);
-    vm.register_native(f, "get", "(Ljava/lang/Object;)Ljava/lang/Object;", field_get);
+    vm.register_native(
+        f,
+        "get",
+        "(Ljava/lang/Object;)Ljava/lang/Object;",
+        field_get,
+    );
     vm.register_native(f, "getInt", "(Ljava/lang/Object;)I", field_get_int);
     vm.register_native(f, "getLong", "(Ljava/lang/Object;)J", field_get_long);
     vm.register_native(f, "getBoolean", "(Ljava/lang/Object;)Z", field_get_bool);
@@ -47,7 +142,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(f, "getShort", "(Ljava/lang/Object;)S", field_get_short);
     vm.register_native(f, "getFloat", "(Ljava/lang/Object;)F", field_get_float);
     vm.register_native(f, "getDouble", "(Ljava/lang/Object;)D", field_get_double);
-    vm.register_native(f, "set", "(Ljava/lang/Object;Ljava/lang/Object;)V", field_set);
+    vm.register_native(
+        f,
+        "set",
+        "(Ljava/lang/Object;Ljava/lang/Object;)V",
+        field_set,
+    );
     vm.register_native(f, "setInt", "(Ljava/lang/Object;I)V", field_set_int);
     vm.register_native(f, "setLong", "(Ljava/lang/Object;J)V", field_set_long);
     vm.register_native(f, "setBoolean", "(Ljava/lang/Object;Z)V", field_set_int);
@@ -56,24 +156,89 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(f, "setShort", "(Ljava/lang/Object;S)V", field_set_int);
     vm.register_native(f, "setFloat", "(Ljava/lang/Object;F)V", field_set_float);
     vm.register_native(f, "setDouble", "(Ljava/lang/Object;D)V", field_set_double);
-    vm.register_native(c, "isDeclaredAnnotationPresent", "(Ljava/lang/Class;)Z", cl_false);
-    vm.register_native(c, "getDeclaredAnnotation", "(Ljava/lang/Class;)Ljava/lang/annotation/Annotation;", cl_null);
-    vm.register_native(c, "getDeclaredAnnotations", "()[Ljava/lang/annotation/Annotation;", cl_empty_annotation_array);
-    vm.register_native(c, "getSignatureAnnotation", "()[Ljava/lang/String;", cl_null);
-    vm.register_native(c, "getNestHostFromAnnotation", "()Ljava/lang/Class;", cl_null);
-    vm.register_native(c, "getNestMembersFromAnnotation", "()[Ljava/lang/Class;", cl_null);
-    vm.register_native(c, "getPermittedSubclassesFromAnnotation", "()[Ljava/lang/Class;", cl_null);
-    vm.register_native(c, "getInnerClassName", "()Ljava/lang/String;", cl_get_inner_class_name);
+    vm.register_native(
+        c,
+        "isDeclaredAnnotationPresent",
+        "(Ljava/lang/Class;)Z",
+        cl_false,
+    );
+    vm.register_native(
+        c,
+        "getDeclaredAnnotation",
+        "(Ljava/lang/Class;)Ljava/lang/annotation/Annotation;",
+        cl_null,
+    );
+    vm.register_native(
+        c,
+        "getDeclaredAnnotations",
+        "()[Ljava/lang/annotation/Annotation;",
+        cl_empty_annotation_array,
+    );
+    vm.register_native(
+        c,
+        "getSignatureAnnotation",
+        "()[Ljava/lang/String;",
+        cl_null,
+    );
+    vm.register_native(
+        c,
+        "getNestHostFromAnnotation",
+        "()Ljava/lang/Class;",
+        cl_null,
+    );
+    vm.register_native(
+        c,
+        "getNestMembersFromAnnotation",
+        "()[Ljava/lang/Class;",
+        cl_null,
+    );
+    vm.register_native(
+        c,
+        "getPermittedSubclassesFromAnnotation",
+        "()[Ljava/lang/Class;",
+        cl_null,
+    );
+    vm.register_native(
+        c,
+        "getInnerClassName",
+        "()Ljava/lang/String;",
+        cl_get_inner_class_name,
+    );
     vm.register_native(c, "getInnerClassFlags", "(I)I", cl_inner_flags);
-    vm.register_native(c, "ensureExtDataPresent", "()Ldalvik/system/ClassExt;", cl_null);
-    vm.register_native(c, "getRecordAnnotationElement", "(Ljava/lang/String;Ljava/lang/Class;)[Ljava/lang/Object;", cl_null);
+    vm.register_native(
+        c,
+        "ensureExtDataPresent",
+        "()Ldalvik/system/ClassExt;",
+        cl_null,
+    );
+    vm.register_native(
+        c,
+        "getRecordAnnotationElement",
+        "(Ljava/lang/String;Ljava/lang/Class;)[Ljava/lang/Object;",
+        cl_null,
+    );
 
     let a = "Ljava/lang/reflect/Array;";
-    vm.register_native(a, "createObjectArray", "(Ljava/lang/Class;I)Ljava/lang/Object;", arr_create_object);
-    vm.register_native(a, "createMultiArray", "(Ljava/lang/Class;[I)Ljava/lang/Object;", arr_create_multi);
+    vm.register_native(
+        a,
+        "createObjectArray",
+        "(Ljava/lang/Class;I)Ljava/lang/Object;",
+        arr_create_object,
+    );
+    vm.register_native(
+        a,
+        "createMultiArray",
+        "(Ljava/lang/Class;[I)Ljava/lang/Object;",
+        arr_create_multi,
+    );
 
     let v = "Ljava/lang/VMClassLoader;";
-    vm.register_native(v, "findLoadedClass", "(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;", cl_for_name_loader);
+    vm.register_native(
+        v,
+        "findLoadedClass",
+        "(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;",
+        cl_for_name_loader,
+    );
     vm.register_native(
         v,
         "getBootClassPathEntries",
@@ -103,9 +268,7 @@ fn enum_values(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let candidates = vm.classes[cid as usize].declared_methods.clone();
     let mid = candidates.into_iter().find(|&m| {
         let mm = &vm.methods[m as usize];
-        mm.name == "values"
-            && mm.params.is_empty()
-            && vm.type_desc(mm.ret).starts_with('[')
+        mm.name == "values" && mm.params.is_empty() && vm.type_desc(mm.ret).starts_with('[')
     });
     match mid {
         Some(m) => {
@@ -194,10 +357,7 @@ fn cl_for_name(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         vm.ret_ref(ctx, obj);
         Ok(())
     } else {
-        Err(vm.throw_new(
-            "Ljava/lang/ClassNotFoundException;",
-            Some(&name),
-        ))
+        Err(vm.throw_new("Ljava/lang/ClassNotFoundException;", Some(&name)))
     }
 }
 
@@ -429,7 +589,10 @@ fn arr_create_multi(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         .map(|c| vm.class_desc(c).to_string())
         .unwrap_or_else(|| "Ljava/lang/Object;".to_string());
     let lens: Vec<i32> = match vm.heap.get(dims) {
-        Some(Object::Array(ArrayObj { data: ArrayData::Int(v), .. })) => v.clone(),
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Int(v),
+            ..
+        })) => v.clone(),
         _ => Vec::new(),
     };
     // The JVM caps array dimensions at 255; a guest `int[] dims` must not drive
@@ -521,11 +684,7 @@ fn cl_get_public_field_recursive(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Err(vm.throw_new("Ljava/lang/NoSuchFieldException;", Some(&name)))
 }
 
-fn find_field(
-    vm: &Vm,
-    cid: ClassId,
-    name: &str,
-) -> Option<(crate::class::FieldDef, bool, usize)> {
+fn find_field(vm: &Vm, cid: ClassId, name: &str) -> Option<(crate::class::FieldDef, bool, usize)> {
     let c = &vm.classes[cid as usize];
     if let Some((i, f)) = c
         .declared_instance_fields
@@ -581,8 +740,12 @@ fn make_field(
 fn field_name_of(vm: &Vm, this: Handle) -> Option<String> {
     let dc = vm.get_instance_field_by_name(this, "declaringClass")?;
     let cid = vm.class_id_of_class_object(dc)?;
-    let idx = vm.get_instance_field_by_name(this, "artFieldIndex").unwrap_or(0) as usize;
-    let access = vm.get_instance_field_by_name(this, "accessFlags").unwrap_or(0);
+    let idx = vm
+        .get_instance_field_by_name(this, "artFieldIndex")
+        .unwrap_or(0) as usize;
+    let access = vm
+        .get_instance_field_by_name(this, "accessFlags")
+        .unwrap_or(0);
     let c = &vm.classes[cid as usize];
     if access & acos_dex::access::STATIC != 0 {
         c.declared_static_fields.get(idx).map(|f| f.name.clone())
@@ -619,9 +782,13 @@ fn field_get_art(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 /// as a wide field precedes the target. That is the `Settings.Global` NPE in
 /// the M2 chain: `Field.get` returned a value from the wrong static slot.
 fn field_slot(vm: &Vm, this: Handle) -> (bool, usize) {
-    let access = vm.get_instance_field_by_name(this, "accessFlags").unwrap_or(0);
+    let access = vm
+        .get_instance_field_by_name(this, "accessFlags")
+        .unwrap_or(0);
     let is_static = access & acos_dex::access::STATIC != 0;
-    let idx = vm.get_instance_field_by_name(this, "artFieldIndex").unwrap_or(0) as usize;
+    let idx = vm
+        .get_instance_field_by_name(this, "artFieldIndex")
+        .unwrap_or(0) as usize;
     if let Some(cid) = vm
         .get_instance_field_by_name(this, "declaringClass")
         .and_then(|dc| vm.class_id_of_class_object(dc))
@@ -653,7 +820,11 @@ fn read_field(vm: &mut Vm, this: Handle, target: Handle) -> VmResult<u32> {
             // `sget-object` runs `<clinit>` and overwrites a value written
             // through `Field.set` (`SoLoader.sSoSources`, W88-A blocker 3).
             vm.initialize_class(cid)?;
-            return Ok(vm.classes[cid as usize].statics.get(slot).copied().unwrap_or(0));
+            return Ok(vm.classes[cid as usize]
+                .statics
+                .get(slot)
+                .copied()
+                .unwrap_or(0));
         }
         return Ok(0);
     }

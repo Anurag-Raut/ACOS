@@ -15,16 +15,15 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use acos_protocol::{
-    Backend as ProtocolBackend, CommandName, Envelope, ErrorCode, Fidelity, Metrics,
-    ProtocolError, ResourceBudget,
+    Backend as ProtocolBackend, CommandName, Envelope, ErrorCode, Fidelity, Metrics, ProtocolError,
+    ResourceBudget,
 };
 use serde_json::{json, Value};
 
 use crate::backend::{Backend, CallContext, Capabilities};
 use crate::descriptors::{
-    command_from_tool, negotiate, supports_structured_content, CAPABILITIES_TOOL,
-    HELP_TOOL, INSTRUCTIONS, LATEST_PROTOCOL_VERSION, SERVER_NAME, SERVER_VERSION,
-    SESSION_TOOL_NAMES,
+    command_from_tool, negotiate, supports_structured_content, CAPABILITIES_TOOL, HELP_TOOL,
+    INSTRUCTIONS, LATEST_PROTOCOL_VERSION, SERVER_NAME, SERVER_VERSION, SESSION_TOOL_NAMES,
 };
 use crate::gate::{Gate, GateError};
 use crate::help;
@@ -460,10 +459,7 @@ impl<B: Backend> Server<B> {
                         .get("name")
                         .and_then(Value::as_str)
                         .unwrap_or(crate::SERVER_NAME);
-                    let version = client
-                        .get("version")
-                        .and_then(Value::as_str)
-                        .unwrap_or("");
+                    let version = client.get("version").and_then(Value::as_str).unwrap_or("");
                     crate::private_daemon::set_view_client(name, version);
                 }
                 let requested = params
@@ -523,7 +519,10 @@ impl<B: Backend> Server<B> {
             "prompts/list" => jsonrpc::result(id, json!({ "prompts": prompts() })),
             "prompts/get" => {
                 let name = params.get("name").and_then(Value::as_str).unwrap_or("");
-                let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+                let args = params
+                    .get("arguments")
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
                 match prompt(name, &args) {
                     Ok(result) => jsonrpc::result(id, result),
                     Err(error) => jsonrpc::error(id, &error),
@@ -532,7 +531,10 @@ impl<B: Backend> Server<B> {
             "logging/setLevel" => jsonrpc::result(id, json!({})),
             _ => jsonrpc::error(
                 id,
-                &RpcError::new(METHOD_NOT_FOUND, format!("method `{method}` is not supported")),
+                &RpcError::new(
+                    METHOD_NOT_FOUND,
+                    format!("method `{method}` is not supported"),
+                ),
             ),
         }
     }
@@ -582,9 +584,8 @@ impl<B: Backend> Server<B> {
         for token in tokens {
             token.cancel();
         }
-        let handles: Vec<JoinHandle<()>> = std::mem::take(
-            &mut *self.workers.lock().unwrap_or_else(|e| e.into_inner()),
-        );
+        let handles: Vec<JoinHandle<()>> =
+            std::mem::take(&mut *self.workers.lock().unwrap_or_else(|e| e.into_inner()));
         for handle in handles {
             let _ = handle.join();
         }
@@ -737,11 +738,9 @@ fn append_evidence_content(
         // reply still names the lossless file below, because a full-frame PNG in
         // a tool reply is context spent on pixels the agent cannot read.
         if image_mime(path).is_some() {
-            if let Some(preview) = crate::preview::image_preview(
-                &full,
-                config.max_image_side,
-                config.max_image_bytes,
-            ) {
+            if let Some(preview) =
+                crate::preview::image_preview(&full, config.max_image_side, config.max_image_bytes)
+            {
                 content.push(json!({
                     "type": "image",
                     "data": crate::base64::encode(&preview.data),
@@ -1021,14 +1020,17 @@ pub fn prompts() -> Vec<Value> {
 /// `prompts/get`: the prompt body for `verify_android_flow`.
 pub fn prompt(name: &str, args: &Value) -> Result<Value, RpcError> {
     if name != "verify_android_flow" {
-        return Err(RpcError::new(
-            INVALID_PARAMS,
-            format!("unknown prompt `{name}`"),
-        )
-        .with_data(json!({"available": ["verify_android_flow"]})));
+        return Err(
+            RpcError::new(INVALID_PARAMS, format!("unknown prompt `{name}`"))
+                .with_data(json!({"available": ["verify_android_flow"]})),
+        );
     }
     let apk = args.get("apk").and_then(Value::as_str).unwrap_or("").trim();
-    let goal = args.get("goal").and_then(Value::as_str).unwrap_or("").trim();
+    let goal = args
+        .get("goal")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
     if apk.is_empty() || goal.is_empty() {
         return Err(RpcError::new(
             INVALID_PARAMS,
@@ -1076,8 +1078,14 @@ mod tests {
         let roots = vec![root.clone()];
         assert!(path_within_allowed_roots(&inside, &roots));
         assert!(!path_within_allowed_roots(&outside, &roots));
-        assert!(!path_within_allowed_roots(&link, &roots), "a symlink out of the root");
-        assert!(!path_within_allowed_roots(&root.join("missing.png"), &roots));
+        assert!(
+            !path_within_allowed_roots(&link, &roots),
+            "a symlink out of the root"
+        );
+        assert!(!path_within_allowed_roots(
+            &root.join("missing.png"),
+            &roots
+        ));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1109,7 +1117,10 @@ mod tests {
 
     #[test]
     fn tool_lookup_resolves_meta_and_commands() {
-        assert_eq!(lookup_tool("acos_capabilities"), Some(ToolRef::Capabilities));
+        assert_eq!(
+            lookup_tool("acos_capabilities"),
+            Some(ToolRef::Capabilities)
+        );
         assert_eq!(lookup_tool("acos_help"), Some(ToolRef::Help));
         assert_eq!(
             lookup_tool("acos_run_dex"),
@@ -1188,8 +1199,10 @@ mod tests {
             "the screenshot is inlined as an image: {content:?}"
         );
         assert!(
-            content.iter().any(|c| c["type"] == "text"
-                && c["text"].as_str().unwrap().contains("lossless file:")),
+            content
+                .iter()
+                .any(|c| c["type"] == "text"
+                    && c["text"].as_str().unwrap().contains("lossless file:")),
             "the inline image names the lossless file: {content:?}"
         );
         let links: Vec<&str> = content
@@ -1218,7 +1231,9 @@ mod tests {
             Fidelity::ArtReference,
             Metrics::wall_ms(1),
         )
-        .with_value_result(json!({"screenshot": {"path": dir.join("nope.png").display().to_string()}}));
+        .with_value_result(
+            json!({"screenshot": {"path": dir.join("nope.png").display().to_string()}}),
+        );
         let missing = tool_result(&json!(13), &missing, "2025-06-18", &config);
         assert_eq!(missing["result"]["content"].as_array().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
@@ -1269,8 +1284,12 @@ mod tests {
             "the lossless frame needs a link: {links:?}"
         );
         // The inline image is described in text too (size, scale, path).
-        assert!(content.iter().any(|c| c["type"] == "text"
-            && c["text"].as_str().unwrap().contains("lossless file:")));
+        assert!(
+            content
+                .iter()
+                .any(|c| c["type"] == "text"
+                    && c["text"].as_str().unwrap().contains("lossless file:"))
+        );
         assert!(modern.pointer("/result/structuredContent").is_some());
 
         let legacy = tool_result(&json!(8), &envelope, "2025-03-26", &config);
@@ -1279,8 +1298,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|c| c["type"] == "text"
-                && c["text"].as_str().unwrap().contains("events.jsonl")));
+            .any(|c| c["type"] == "text" && c["text"].as_str().unwrap().contains("events.jsonl")));
 
         // A `..` escape in evidence must not be followed.
         let escape = Envelope::pass(

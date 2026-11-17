@@ -128,11 +128,18 @@ impl Mode {
 /// Parse the knob. Unset is `shared-fixed` (ADR-0026 §4); an empty or unknown
 /// value is refused so a typo cannot silently measure another mode.
 pub fn mode_from_env() -> Result<Mode> {
-    parse_mode(std::env::var_os(ENV_BOOT_IMAGE).as_deref().map(|v| v.to_string_lossy()).as_deref())
+    parse_mode(
+        std::env::var_os(ENV_BOOT_IMAGE)
+            .as_deref()
+            .map(|v| v.to_string_lossy())
+            .as_deref(),
+    )
 }
 
 fn parse_mode(raw: Option<&str>) -> Result<Mode> {
-    let Some(raw) = raw else { return Ok(Mode::SharedFixed) };
+    let Some(raw) = raw else {
+        return Ok(Mode::SharedFixed);
+    };
     let value = raw.trim().to_ascii_lowercase();
     match value.as_str() {
         "lz4" => Ok(Mode::Lz4),
@@ -238,7 +245,8 @@ impl Plan {
                  shared by its sessions; prep {} ms)",
                 self.dir.display(),
                 self.base,
-                self.prep_ms.map_or_else(|| "reused".to_string(), |ms| ms.to_string())
+                self.prep_ms
+                    .map_or_else(|| "reused".to_string(), |ms| ms.to_string())
             ),
         }
     }
@@ -298,7 +306,10 @@ pub fn resolve(root: &ArtRoot) -> Result<Resolution> {
             report: BootImageReport::lz4(Some(format!("{ENV_BOOT_IMAGE}=lz4"))),
         }),
         (Mode::SharedFixed, None) => match ensure_fixed(root) {
-            Ok(plan) => Ok(Resolution { report: plan.report.clone(), image: Some(plan) }),
+            Ok(plan) => Ok(Resolution {
+                report: plan.report.clone(),
+                image: Some(plan),
+            }),
             Err(error) if !explicit_knob => {
                 // The default must never be less available than LZ4 was: fall
                 // back, log it, and say so in the launch reply.
@@ -307,13 +318,20 @@ pub fn resolve(root: &ArtRoot) -> Result<Resolution> {
                     "acos-art: boot-image: {reason}; falling back to the sysroot lz4 image \
                      (boot_image.cache=fallback in the launch reply)"
                 );
-                Ok(Resolution { image: None, report: BootImageReport::lz4(Some(reason)) }.into_fallback())
+                Ok(Resolution {
+                    image: None,
+                    report: BootImageReport::lz4(Some(reason)),
+                }
+                .into_fallback())
             }
             Err(error) => Err(error),
         },
         (Mode::SharedAslr, None) => {
             let plan = ensure_aslr(root)?;
-            Ok(Resolution { report: plan.report.clone(), image: Some(plan) })
+            Ok(Resolution {
+                report: plan.report.clone(),
+                image: Some(plan),
+            })
         }
     }
 }
@@ -556,7 +574,11 @@ pub fn inputs_for_sysroot(sysroot: &Path, image_format: &str, base: u32) -> Resu
     for jar in &jars {
         fnv_file_identity(&mut hash, sysroot, jar);
     }
-    Ok(Inputs { key: format!("{hash:016x}"), jars: jars.len(), base })
+    Ok(Inputs {
+        key: format!("{hash:016x}"),
+        jars: jars.len(),
+        base,
+    })
 }
 
 /// What a cache lookup or build did.
@@ -566,7 +588,10 @@ pub enum CacheOutcome {
     Hit,
     /// An entry was built (or rebuilt after an invalid manifest). `reason` is
     /// the invalidation cause, `None` for a cold miss.
-    Built { reason: Option<String>, elapsed_ms: u128 },
+    Built {
+        reason: Option<String>,
+        elapsed_ms: u128,
+    },
 }
 
 impl CacheOutcome {
@@ -676,8 +701,7 @@ fn validate_entry(dir: &Path, key: &str) -> std::result::Result<(), String> {
     }
     for file in &manifest.files {
         let path = dir.join(&file.path);
-        let meta = fs::metadata(&path)
-            .map_err(|e| format!("{} is missing: {e}", file.path))?;
+        let meta = fs::metadata(&path).map_err(|e| format!("{} is missing: {e}", file.path))?;
         if meta.len() != file.size {
             return Err(format!(
                 "{} is {} bytes, manifest says {}",
@@ -768,18 +792,17 @@ fn use_stamp(cache: &Path, key: &str) -> PathBuf {
 /// cache that cannot be stamped still serves.
 fn touch_use_stamp(cache: &Path, key: &str) {
     let path = use_stamp(cache, key);
-    if let Ok(file) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-    {
+    if let Ok(file) = OpenOptions::new().create(true).append(true).open(&path) {
         let _ = file.set_modified(std::time::SystemTime::now());
     }
 }
 
 /// The cache key of an entry directory (`fixed-<key>` becomes `<key>`).
 fn entry_key(path: &Path) -> String {
-    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
     name.strip_prefix("fixed-").unwrap_or(&name).to_string()
 }
 
@@ -811,7 +834,9 @@ fn prune(cache: &Path, keep: &Path) {
         .filter(|entry| entry.file_name().to_string_lossy().starts_with("fixed-"))
         .map(|entry| {
             let key = entry_key(&entry.path());
-            let used = fs::metadata(use_stamp(cache, &key)).and_then(|m| m.modified()).ok();
+            let used = fs::metadata(use_stamp(cache, &key))
+                .and_then(|m| m.modified())
+                .ok();
             let mtime = used
                 .or_else(|| entry.metadata().and_then(|m| m.modified()).ok())
                 .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
@@ -852,11 +877,7 @@ fn prune(cache: &Path, keep: &Path) {
 /// Ensure a valid entry for `inputs` exists under `cache`, building with
 /// `build` when it does not. The lock is held across build + publish, so two
 /// concurrent callers produce exactly one build.
-pub fn ensure_cached<F>(
-    cache: &Path,
-    inputs: &Inputs,
-    build: F,
-) -> Result<(PathBuf, CacheOutcome)>
+pub fn ensure_cached<F>(cache: &Path, inputs: &Inputs, build: F) -> Result<(PathBuf, CacheOutcome)>
 where
     F: FnOnce(&Path) -> Result<BuildReport>,
 {
@@ -971,9 +992,7 @@ fn ensure_fixed(root: &ArtRoot) -> Result<Plan> {
     })?;
     let (cache_str, prep_ms, reason) = match &outcome {
         CacheOutcome::Hit => ("hit", None, None),
-        CacheOutcome::Built { reason, elapsed_ms } => {
-            ("built", Some(*elapsed_ms), reason.clone())
-        }
+        CacheOutcome::Built { reason, elapsed_ms } => ("built", Some(*elapsed_ms), reason.clone()),
     };
     let report = BootImageReport {
         mode: Mode::SharedFixed.as_str().into(),
@@ -1125,12 +1144,7 @@ pub struct BuildReport {
 /// Build an uncompressed boot image at `base` into `out` using the sysroot's
 /// own `dex2oat64` in a staging sandbox. This is B2's exact recipe with the
 /// base and format as arguments; the product `build-image` uses it too.
-pub fn build_to(
-    root: &ArtRoot,
-    out: &Path,
-    image_format: &str,
-    base: u32,
-) -> Result<BuildReport> {
+pub fn build_to(root: &ArtRoot, out: &Path, image_format: &str, base: u32) -> Result<BuildReport> {
     let named = out.join("x86_64");
     fs::create_dir_all(&named)?;
     root.ensure_linkerconfig(false)?;
@@ -1189,7 +1203,10 @@ pub fn build_to(
             named.join("boot.art").display()
         )));
     }
-    Ok(BuildReport { elapsed_ms, jars: jars.len() })
+    Ok(BuildReport {
+        elapsed_ms,
+        jars: jars.len(),
+    })
 }
 
 #[cfg(test)]
@@ -1217,18 +1234,32 @@ mod tests {
         fs::create_dir_all(&named)?;
         fs::write(named.join("boot.art"), vec![7u8; 64 * 1024])?;
         fs::write(named.join("boot.oat"), b"oat-payload")?;
-        Ok(BuildReport { elapsed_ms: 3, jars: 2 })
+        Ok(BuildReport {
+            elapsed_ms: 3,
+            jars: 2,
+        })
     }
 
     fn inputs_for(key: &str) -> Inputs {
-        Inputs { key: key.to_string(), jars: 2, base: ART_BASE_ADDRESS }
+        Inputs {
+            key: key.to_string(),
+            jars: 2,
+            base: ART_BASE_ADDRESS,
+        }
     }
 
     #[test]
     fn modes_parse_exactly() {
-        assert_eq!(parse_mode(None).unwrap(), Mode::SharedFixed, "unset is the H13b default");
+        assert_eq!(
+            parse_mode(None).unwrap(),
+            Mode::SharedFixed,
+            "unset is the H13b default"
+        );
         assert_eq!(parse_mode(Some("LZ4")).unwrap(), Mode::Lz4);
-        assert_eq!(parse_mode(Some(" shared-fixed ")).unwrap(), Mode::SharedFixed);
+        assert_eq!(
+            parse_mode(Some(" shared-fixed ")).unwrap(),
+            Mode::SharedFixed
+        );
         assert_eq!(parse_mode(Some("shared-aslr")).unwrap(), Mode::SharedAslr);
         assert!(parse_mode(Some("bogus")).is_err());
         assert!(parse_mode(Some("")).is_err());
@@ -1263,7 +1294,10 @@ mod tests {
         let cache = scratch("cold-then-hit");
         let inputs = inputs_for("00000000000000aa");
         let (dir, first) = ensure_cached(&cache, &inputs, fake_build).unwrap();
-        assert!(matches!(first, CacheOutcome::Built { .. }), "first run builds: {first:?}");
+        assert!(
+            matches!(first, CacheOutcome::Built { .. }),
+            "first run builds: {first:?}"
+        );
         assert!(dir.join("x86_64/boot.art").is_file());
         assert!(dir.join("manifest.json").is_file());
         // No builder call on the second run: a hit must not build.
@@ -1275,10 +1309,17 @@ mod tests {
         })
         .unwrap();
         assert_eq!(second, CacheOutcome::Hit);
-        assert_eq!(calls.load(Ordering::SeqCst), 0, "a hit never runs the builder");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "a hit never runs the builder"
+        );
         assert_eq!(dir, dir2);
         let pointer = fs::read_to_string(cache.join("current.json")).unwrap();
-        assert!(pointer.contains("00000000000000aa"), "pointer names the entry: {pointer}");
+        assert!(
+            pointer.contains("00000000000000aa"),
+            "pointer names the entry: {pointer}"
+        );
     }
 
     #[test]
@@ -1289,7 +1330,10 @@ mod tests {
         let (dir_a, first) = ensure_cached(&cache, &a, fake_build).unwrap();
         assert!(matches!(first, CacheOutcome::Built { .. }));
         let (dir_b, second) = ensure_cached(&cache, &b, fake_build).unwrap();
-        assert!(matches!(second, CacheOutcome::Built { .. }), "new inputs must rebuild");
+        assert!(
+            matches!(second, CacheOutcome::Built { .. }),
+            "new inputs must rebuild"
+        );
         assert_ne!(dir_a, dir_b);
         // The old entry stays valid for the old inputs (a checkout can go back).
         assert!(validate_entry(&dir_a, &a.key).is_ok());
@@ -1306,10 +1350,21 @@ mod tests {
         // A published entry is 0444; damage it from outside (a bad copy, media
         // corruption) the way a partial write would have left it.
         fs::set_permissions(&art, fs::Permissions::from_mode(0o644)).unwrap();
-        fs::OpenOptions::new().write(true).open(&art).unwrap().set_len(len / 2).unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&art)
+            .unwrap()
+            .set_len(len / 2)
+            .unwrap();
         let reason = validate_entry(&dir, &inputs.key).expect_err("truncation must be caught");
-        assert!(reason.contains("boot.art"), "reason names the file: {reason}");
-        assert!(reason.contains("bytes"), "reason is a size mismatch: {reason}");
+        assert!(
+            reason.contains("boot.art"),
+            "reason names the file: {reason}"
+        );
+        assert!(
+            reason.contains("bytes"),
+            "reason is a size mismatch: {reason}"
+        );
         let calls = Arc::new(AtomicUsize::new(0));
         let counter = Arc::clone(&calls);
         let (dir2, outcome) = ensure_cached(&cache, &inputs, move |out| {
@@ -1317,10 +1372,16 @@ mod tests {
             fake_build(out)
         })
         .unwrap();
-        assert!(matches!(outcome, CacheOutcome::Built { .. }), "truncation rebuilds: {outcome:?}");
+        assert!(
+            matches!(outcome, CacheOutcome::Built { .. }),
+            "truncation rebuilds: {outcome:?}"
+        );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(dir, dir2);
-        assert_eq!(fs::metadata(dir.join("x86_64/boot.art")).unwrap().len(), 64 * 1024);
+        assert_eq!(
+            fs::metadata(dir.join("x86_64/boot.art")).unwrap().len(),
+            64 * 1024
+        );
     }
 
     #[test]
@@ -1361,11 +1422,23 @@ mod tests {
                 .unwrap()
             }));
         }
-        let outcomes: Vec<CacheOutcome> = handles.into_iter().map(|h| h.join().unwrap().1).collect();
-        assert_eq!(calls.load(Ordering::SeqCst), 1, "two cooks, one build: {outcomes:?}");
-        let built = outcomes.iter().filter(|o| matches!(o, CacheOutcome::Built { .. })).count();
+        let outcomes: Vec<CacheOutcome> =
+            handles.into_iter().map(|h| h.join().unwrap().1).collect();
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "two cooks, one build: {outcomes:?}"
+        );
+        let built = outcomes
+            .iter()
+            .filter(|o| matches!(o, CacheOutcome::Built { .. }))
+            .count();
         let hit = outcomes.iter().filter(|o| **o == CacheOutcome::Hit).count();
-        assert_eq!((built, hit), (1, 1), "one builds, the other hits: {outcomes:?}");
+        assert_eq!(
+            (built, hit),
+            (1, 1),
+            "one builds, the other hits: {outcomes:?}"
+        );
     }
 
     #[test]
@@ -1376,11 +1449,20 @@ mod tests {
             Err(Error::Tool("dex2oat64 failed (log: /x/dex2oat.log)".into()))
         })
         .expect_err("a failed build must not be cached");
-        assert!(err.to_string().contains("dex2oat64 failed"), "structured error: {err}");
-        assert!(!cache.join("fixed-00000000000000ff").exists(), "no entry after a failure");
+        assert!(
+            err.to_string().contains("dex2oat64 failed"),
+            "structured error: {err}"
+        );
+        assert!(
+            !cache.join("fixed-00000000000000ff").exists(),
+            "no entry after a failure"
+        );
         // A builder that writes nothing is refused too (no half entry).
         let err = ensure_cached(&cache, &inputs, |_out| {
-            Ok(BuildReport { elapsed_ms: 1, jars: 1 })
+            Ok(BuildReport {
+                elapsed_ms: 1,
+                jars: 1,
+            })
         })
         .expect_err("an empty build is refused");
         assert!(err.to_string().contains("no "), "empty build error: {err}");

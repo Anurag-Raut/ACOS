@@ -74,7 +74,10 @@ pub fn parse_bytes(s: &str) -> Option<usize> {
         'G' => (&s[..s.len() - 1], 1024 * 1024 * 1024),
         _ => (s, 1),
     };
-    num.trim().parse::<usize>().ok().map(|n| n.saturating_mul(mult))
+    num.trim()
+        .parse::<usize>()
+        .ok()
+        .map(|n| n.saturating_mul(mult))
 }
 
 /// The last `cap` bytes of a stream, with drop accounting.
@@ -143,7 +146,11 @@ impl TailBuffer {
             rest = &rest[take..];
         }
         while self.len > self.cap {
-            let first_len = self.chunks.front().expect("non-empty when over the cap").len();
+            let first_len = self
+                .chunks
+                .front()
+                .expect("non-empty when over the cap")
+                .len();
             let evict = (self.len - self.cap).min(first_len);
             let take = self.chunks.front().expect("front exists")[..evict].to_vec();
             self.record_dropped(&take);
@@ -345,9 +352,16 @@ mod tests {
         assert!(b.len() <= 2 * CHUNK + CHUNK, "len {} over cap", b.len());
         assert_eq!(b.len() as u64 + b.dropped(), b.total());
         let text = b.to_text();
-        assert!(text.starts_with("[acos-art: capture truncated:"), "{text:.80}");
+        assert!(
+            text.starts_with("[acos-art: capture truncated:"),
+            "{text:.80}"
+        );
         // The newest line survives: a tail capture is what diagnoses a crash.
-        assert!(text.ends_with("line 19999\n"), "{:.80}", &text[text.len() - 40..]);
+        assert!(
+            text.ends_with("line 19999\n"),
+            "{:.80}",
+            &text[text.len() - 40..]
+        );
     }
 
     #[test]

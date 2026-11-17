@@ -85,7 +85,10 @@ fn stdout_spammer_is_capped_and_the_host_rss_stays_flat() {
         "retained {} bytes for a {cap}-byte cap",
         tail.len()
     );
-    assert!(tail.truncated(), "a capped capture must know it was truncated");
+    assert!(
+        tail.truncated(),
+        "a capped capture must know it was truncated"
+    );
     assert_eq!(tail.len() as u64 + tail.dropped(), tail.total());
     assert!(
         tail.to_text().starts_with("[acos-art: capture truncated:"),
@@ -168,7 +171,11 @@ fn logd_spammer_keeps_only_the_cap_and_counts_the_drops() {
         batch.stats.total
     );
     assert!(batch.stats.dropped > 0);
-    assert!(batch.stats.summary().contains("dropped"), "{}", batch.stats.summary());
+    assert!(
+        batch.stats.summary().contains("dropped"),
+        "{}",
+        batch.stats.summary()
+    );
     assert!(
         rss_after - rss_before < 32.0,
         "host RSS grew {:.1} MiB across {} logd entries",
@@ -201,7 +208,9 @@ fn stream_cap_is_configurable_but_never_absent() {
 
 #[test]
 fn drain_to_tail_on_a_finite_reader_keeps_the_whole_stream() {
-    let data: Vec<u8> = (0..1024u32).flat_map(|i| format!("line {i}\n").into_bytes()).collect();
+    let data: Vec<u8> = (0..1024u32)
+        .flat_map(|i| format!("line {i}\n").into_bytes())
+        .collect();
     let tail = drain_to_tail(&data[..], DEFAULT_STREAM_CAP);
     assert_eq!(tail.len(), data.len());
     assert!(!tail.truncated());

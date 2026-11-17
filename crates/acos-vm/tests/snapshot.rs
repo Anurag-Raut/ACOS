@@ -279,9 +279,18 @@ fn snapshot_restore_100_cycles_is_stable() {
 #[test]
 fn snapshot_is_deterministic_and_idempotent() {
     let corelib = CoreLib::Bootstrap;
-    let a = Vm::new(options(corelib, false)).unwrap().snapshot().unwrap();
-    let b = Vm::new(options(corelib, false)).unwrap().snapshot().unwrap();
-    assert_eq!(a, b, "two snapshots of the same boot state must be byte-equal");
+    let a = Vm::new(options(corelib, false))
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    let b = Vm::new(options(corelib, false))
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    assert_eq!(
+        a, b,
+        "two snapshots of the same boot state must be byte-equal"
+    );
 
     let restored = Vm::restore(&a).unwrap();
     let again = restored.snapshot().unwrap();

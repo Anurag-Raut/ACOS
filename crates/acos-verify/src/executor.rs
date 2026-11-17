@@ -389,23 +389,23 @@ pub fn run_scenario(
             failure
         } else {
             execute_step(
-            backend,
-            caps,
-            &manifest,
-            step,
-            &options.apk,
-            scenario,
-            &options.scenario_path,
-            &cause_id,
-            since_logs,
-            &all_logs,
-            log_failure.as_ref(),
-            crashed.as_ref(),
-            previous_observation.as_ref(),
-            bound_frame_seq,
-            last_frame_seq,
-            &mut capabilities_used,
-        )
+                backend,
+                caps,
+                &manifest,
+                step,
+                &options.apk,
+                scenario,
+                &options.scenario_path,
+                &cause_id,
+                since_logs,
+                &all_logs,
+                log_failure.as_ref(),
+                crashed.as_ref(),
+                previous_observation.as_ref(),
+                bound_frame_seq,
+                last_frame_seq,
+                &mut capabilities_used,
+            )
         };
         // ---- SE2: a requested content settle must be honoured ----------------
         // If a step asked for `settle: content` and the backend returned a
@@ -532,7 +532,10 @@ pub fn run_scenario(
                     bound_frame_seq = Some(observation.frame.frame_seq);
                     bound_is_fast = fast_input_step(step);
                     bound_settle = observation.settle.clone().or_else(|| {
-                        observation.input.as_ref().and_then(|input| input.settle.clone())
+                        observation
+                            .input
+                            .as_ref()
+                            .and_then(|input| input.settle.clone())
                     });
                 }
                 previous_observation = Some(observation.clone());
@@ -626,7 +629,10 @@ pub fn run_scenario(
     // Say, in the verdict itself, which space every coordinate in this run is
     // in and where the PNG starts. Without this an agent that reads a tree bound
     // and crops the PNG is off by the status-bar inset (128 px) silently.
-    if let Some(frame) = produced_frames.iter().find(|frame| frame.display_origin.is_some()) {
+    if let Some(frame) = produced_frames
+        .iter()
+        .find(|frame| frame.display_origin.is_some())
+    {
         let origin = frame.display_origin_px();
         let display = frame
             .display_size
@@ -741,7 +747,9 @@ pub fn run_scenario(
         keep_warning.clone(),
     )?;
     if let Some(warning) = keep_warning {
-        verdict.notes.push(format!("artifacts: {warning}; using `{keep_mode}`"));
+        verdict
+            .notes
+            .push(format!("artifacts: {warning}; using `{keep_mode}`"));
     }
     verdict.notes.push(format!(
         "artifacts: {} ({}): {} file(s) / {:.1} MiB kept, {} file(s) / {:.1} MiB pruned; see {}",
@@ -1058,8 +1066,11 @@ fn execute_step(
                                 "window": node.window,
                             })
                         });
-                    let mut exec =
-                        StepExec::failed(assertions::element_missing("wait_for", &wait.selector, last.as_ref()));
+                    let mut exec = StepExec::failed(assertions::element_missing(
+                        "wait_for",
+                        &wait.selector,
+                        last.as_ref(),
+                    ));
                     exec.status = Status::Timeout;
                     exec.error = Some(
                         ProtocolError::new(
@@ -1401,8 +1412,7 @@ fn execute_step(
                     // fails closed as usual.
                     let mut exec = StepExec::pass();
                     if let Ok(observation) = backend.observe() {
-                        if let Some(failure) =
-                            observation_binding_error(backend.id(), &observation)
+                        if let Some(failure) = observation_binding_error(backend.id(), &observation)
                         {
                             return failure;
                         }
@@ -1420,6 +1430,20 @@ fn execute_step(
         }
         StepRef::SetPermission(setup) => {
             environment_step(backend, caps, EnvironmentChange::Permission(setup.clone()))
+        }
+        StepRef::Wait(wait) => {
+            // A timeline step: it asserts nothing, it lets time pass (the
+            // launcher's idle kill, a timeout) so the next assertions describe
+            // the state the scenario is about. `observation.settle` records how
+            // long the wait really was, so the verdict carries the proof.
+            let started = std::time::Instant::now();
+            std::thread::sleep(std::time::Duration::from_millis(wait.ms));
+            let mut exec = StepExec::pass();
+            exec.settle = Some(serde_json::json!({
+                "waited_ms": started.elapsed().as_millis() as u64,
+                "requested_ms": wait.ms,
+            }));
+            exec
         }
         StepRef::SetLocale(setup) => {
             environment_step(backend, caps, EnvironmentChange::Locale(setup.clone()))
@@ -1485,30 +1509,35 @@ fn service_ctl_step(backend: &mut dyn Backend, ctl: &ServiceCtlStep) -> StepExec
             // The reply is the step's evidence: a reviewer reads what the module
             // actually applied (`scheduled=12`, `delivered_to=1`, the attached
             // set after a detach), not only that the step did not fail.
-            exec.assertions.push(acos_protocol::assertion::AssertionResult {
-                kind: "service_ctl".to_string(),
-                passed: mismatch.is_none(),
-                expected: Some(match &ctl.expect {
-                    Some(expect) => serde_json::json!({
-                        "module": request.module,
-                        "op": request.kind(),
-                        "expect": expect,
+            exec.assertions
+                .push(acos_protocol::assertion::AssertionResult {
+                    kind: "service_ctl".to_string(),
+                    passed: mismatch.is_none(),
+                    expected: Some(match &ctl.expect {
+                        Some(expect) => serde_json::json!({
+                            "module": request.module,
+                            "op": request.kind(),
+                            "expect": expect,
+                        }),
+                        None => serde_json::json!({
+                            "module": request.module,
+                            "op": request.kind(),
+                        }),
                     }),
-                    None => serde_json::json!({
-                        "module": request.module,
-                        "op": request.kind(),
-                    }),
-                }),
-                actual: Some(reply),
-                diff: mismatch.as_ref().map(|path| acos_protocol::assertion::AssertionDiff {
-                    expected: ctl.expect.clone().unwrap_or(serde_json::Value::Null),
-                    actual: serde_json::Value::Null,
-                    path: Some(path.clone()),
-                    detail: Some("the reply does not contain the expected JSON subset".to_string()),
-                }),
-                matched_node_ids: Vec::new(),
-                message: Some(summary),
-            });
+                    actual: Some(reply),
+                    diff: mismatch
+                        .as_ref()
+                        .map(|path| acos_protocol::assertion::AssertionDiff {
+                            expected: ctl.expect.clone().unwrap_or(serde_json::Value::Null),
+                            actual: serde_json::Value::Null,
+                            path: Some(path.clone()),
+                            detail: Some(
+                                "the reply does not contain the expected JSON subset".to_string(),
+                            ),
+                        }),
+                    matched_node_ids: Vec::new(),
+                    message: Some(summary),
+                });
             exec
         }
         Err(error) => StepExec::backend_error(&error, backend.id(), request.kind()),
@@ -1562,7 +1591,14 @@ fn json_subset(expected: &serde_json::Value, actual: &serde_json::Value) -> Opti
 /// A one-line summary of a `service_ctl` reply (evidence, never a pass claim).
 fn summarize_reply(reply: &serde_json::Value) -> String {
     let mut parts: Vec<String> = Vec::new();
-    for key in ["attached", "scheduled", "delivered_to", "applied", "delivered", "connections"] {
+    for key in [
+        "attached",
+        "scheduled",
+        "delivered_to",
+        "applied",
+        "delivered",
+        "connections",
+    ] {
         if let Some(value) = reply.get(key) {
             if !value.is_null() {
                 parts.push(format!("{key}={value}"));
@@ -1662,7 +1698,11 @@ fn observation_assertion(
         Some(ms) if ms > 0 => Some(Duration::from_millis(ms)),
         _ => None,
     };
-    let bound_frame_seq = if wait.is_some() { None } else { bound_frame_seq };
+    let bound_frame_seq = if wait.is_some() {
+        None
+    } else {
+        bound_frame_seq
+    };
     let started = Instant::now();
     // Each poll is a fresh traversal and, on ART, a stored frame; pace them so a
     // long budget cannot exhaust the guest's buffer pool (same rule, same
@@ -1708,7 +1748,9 @@ fn observation_assertion(
                     return exec;
                 }
                 interval = interval.min(
-                    wait.unwrap_or_default().saturating_sub(elapsed).max(Duration::from_millis(1)),
+                    wait.unwrap_or_default()
+                        .saturating_sub(elapsed)
+                        .max(Duration::from_millis(1)),
                 );
             }
             Err(error) => return StepExec::backend_error(&error, backend.id(), context),
@@ -1722,10 +1764,16 @@ fn observation_assertion(
 /// that only appeared after N samples is distinguishable from one that was
 /// already true on the first.
 fn annotate_assert_wait(error: &mut acos_protocol::ProtocolError, polls: u64, elapsed: Duration) {
-    let mut details = error.details.take().unwrap_or_else(|| serde_json::json!({}));
+    let mut details = error
+        .details
+        .take()
+        .unwrap_or_else(|| serde_json::json!({}));
     if let Some(object) = details.as_object_mut() {
         object.insert("polls".to_string(), serde_json::json!(polls));
-        object.insert("waited_ms".to_string(), serde_json::json!(elapsed.as_millis() as u64));
+        object.insert(
+            "waited_ms".to_string(),
+            serde_json::json!(elapsed.as_millis() as u64),
+        );
     }
     error.details = Some(details);
 }
@@ -2094,8 +2142,7 @@ fn content_settle_unhonored(step: &Step, exec: &StepExec) -> Option<StepExec> {
     let honoured = settle.as_ref().is_some_and(|settle| {
         settle.get("mode").and_then(serde_json::Value::as_str) == Some("content")
             && settle.get("settled").and_then(serde_json::Value::as_bool) == Some(true)
-            && settle.get("frame_seq").and_then(serde_json::Value::as_u64)
-                == observation_frame_seq
+            && settle.get("frame_seq").and_then(serde_json::Value::as_u64) == observation_frame_seq
     });
     if honoured {
         return None;
@@ -2248,12 +2295,14 @@ fn content_settle_geometry_failure(
     // Every assertion that takes a selector is enumerated; a new one must be
     // added here or its bounds claim would ride an un-hashed frame.
     let (claims_assertion_bounds, claims_selector_bounds) = match step.as_step() {
-        Some(StepRef::AssertText(assertion)) => {
-            (assertion.bounds.is_some(), assertion.selector.bounds.is_some())
-        }
-        Some(StepRef::AssertVisible(assertion) | StepRef::AssertNotVisible(assertion)) => {
-            (assertion.bounds.is_some(), assertion.selector.bounds.is_some())
-        }
+        Some(StepRef::AssertText(assertion)) => (
+            assertion.bounds.is_some(),
+            assertion.selector.bounds.is_some(),
+        ),
+        Some(StepRef::AssertVisible(assertion) | StepRef::AssertNotVisible(assertion)) => (
+            assertion.bounds.is_some(),
+            assertion.selector.bounds.is_some(),
+        ),
         Some(StepRef::AssertState(assertion)) => (false, assertion.selector.bounds.is_some()),
         _ => (false, false),
     };
@@ -3188,7 +3237,11 @@ mod region_tests {
 
     /// W58: a frame of the ART application area: the PNG is 8x16 but the
     /// display is 8x20 and the frame starts at display y=4 (a status bar).
-    fn app_area_observation(pixels: &[[u8; 4]], width: u32, frame_height: u32) -> SessionObservation {
+    fn app_area_observation(
+        pixels: &[[u8; 4]],
+        width: u32,
+        frame_height: u32,
+    ) -> SessionObservation {
         let frame = FrameMeta::new(
             7,
             "2026-11-11T21:00:00.000Z",
@@ -3270,7 +3323,11 @@ mod region_tests {
             max_distinct_colors: None,
             text_ocr: None,
         };
-        let evaluated = eval_region(&old_interpretation, &block_frame(), Path::new("unused.yaml"));
+        let evaluated = eval_region(
+            &old_interpretation,
+            &block_frame(),
+            Path::new("unused.yaml"),
+        );
         assert!(
             !evaluated.result.passed,
             "frame-space y must not be accepted as display-space y"
@@ -3378,6 +3435,7 @@ mod launch_gate_tests {
             clear_state: true,
             settle_timeout_ms: None,
             settle: None,
+            idle_kill_seconds: None,
         }
     }
 
@@ -3435,6 +3493,7 @@ mod launch_gate_tests {
             clear_state: false,
             settle_timeout_ms: None,
             settle: None,
+            idle_kill_seconds: None,
         };
         let failure = static_launch_assertion(&manifest, &step).expect("must fail");
         assert_eq!(failure.status, Status::Error);
@@ -3570,7 +3629,10 @@ mod content_settle_tests {
         ));
         let failure = content_settle_pixel_failure(&parsed.steps[1], Some(&content_record()))
             .expect("a content-bound screenshot comparison is a failed binding");
-        assert_eq!(failure.error.as_ref().unwrap().code, ErrorCode::AssertionFailed);
+        assert_eq!(
+            failure.error.as_ref().unwrap().code,
+            ErrorCode::AssertionFailed
+        );
     }
 
     /// SE2b: a bounds claim on a content-settled frame fails closed, exactly
@@ -3597,7 +3659,9 @@ mod content_settle_tests {
         let parsed = scenario(&format!(
             "{HEADER}  - assert_text: {{selector: {{id: title}}, text: {{contains: Welcome}}}}\n"
         ));
-        assert!(content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_none());
+        assert!(
+            content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_none()
+        );
         let parsed = scenario(&format!(
             "{HEADER}  - assert_visible: {{selector: {{id: title}}, bounds: [0, 0, 10, 10]}}\n"
         ));
@@ -3605,7 +3669,9 @@ mod content_settle_tests {
             content_settle_geometry_failure(&parsed.steps[1], Some(&strict_record())).is_none(),
             "a strict settle may back a bounds claim"
         );
-        assert!(content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_some());
+        assert!(
+            content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_some()
+        );
     }
 
     /// SE2c: `selector.bounds` is a geometry claim on every assertion kind.
@@ -3660,7 +3726,8 @@ mod content_settle_tests {
         ] {
             let parsed = scenario(&format!("{HEADER}{yaml}"));
             assert!(
-                content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_none(),
+                content_settle_geometry_failure(&parsed.steps[1], Some(&content_record()))
+                    .is_none(),
                 "an assertion without a rectangle must stay evaluable: {yaml}"
             );
         }
@@ -3711,7 +3778,10 @@ mod content_settle_tests {
             "{HEADER}  - assert_region: {{x: 0, y: 0, w: 10, h: 10, min_distinct_colors: 1}}\n"
         ));
         let fast = fast_bound_failure(parsed.steps[1].kind());
-        assert_eq!(fast.error.as_ref().unwrap().code, ErrorCode::AssertionFailed);
+        assert_eq!(
+            fast.error.as_ref().unwrap().code,
+            ErrorCode::AssertionFailed
+        );
     }
 
     /// SE2: a step that asks for content settle and gets no content record
@@ -3747,7 +3817,9 @@ mod content_settle_tests {
     /// unsettled one) is a downgrade, not a pass.
     #[test]
     fn content_settle_requires_the_settled_frame_identity() {
-        let parsed = scenario(&format!("{HEADER}  - tap: {{x: 1, y: 2, settle: content}}\n"));
+        let parsed = scenario(&format!(
+            "{HEADER}  - tap: {{x: 1, y: 2, settle: content}}\n"
+        ));
         let step = &parsed.steps[1];
         let mut exec = StepExec::pass();
         // Record for another traversal: refused.
@@ -3805,9 +3877,8 @@ mod content_settle_tests {
             reason: Some("content_settle_pixel".to_string()),
         };
         let failure = |code: ErrorCode, reason: Option<&str>| {
-            let error = ProtocolError::new(code, "boom".to_string()).with_details(
-                serde_json::json!({"reason": reason.unwrap_or("other")}),
-            );
+            let error = ProtocolError::new(code, "boom".to_string())
+                .with_details(serde_json::json!({"reason": reason.unwrap_or("other")}));
             FailureClassification {
                 code,
                 step_index: Some(2),
@@ -3817,19 +3888,36 @@ mod content_settle_tests {
         };
         // Matching code + reason: the control is accepted (status untouched).
         let mut status = Status::Fail;
-        let mut actual = Some(failure(ErrorCode::AssertionFailed, Some("content_settle_pixel")));
+        let mut actual = Some(failure(
+            ErrorCode::AssertionFailed,
+            Some("content_settle_pixel"),
+        ));
         let mut notes = Vec::new();
-        apply_expectation(Expectation::Fail, Some(&expected), &mut status, &mut actual, &mut notes);
+        apply_expectation(
+            Expectation::Fail,
+            Some(&expected),
+            &mut status,
+            &mut actual,
+            &mut notes,
+        );
         assert_eq!(status, Status::Fail);
         assert!(
-            notes.iter().any(|note| note.contains("exactly as declared")),
+            notes
+                .iter()
+                .any(|note| note.contains("exactly as declared")),
             "{notes:?}"
         );
         // Right code, wrong reason: harness error.
         let mut status = Status::Fail;
         let mut actual = Some(failure(ErrorCode::AssertionFailed, Some("something_else")));
         let mut notes = Vec::new();
-        apply_expectation(Expectation::Fail, Some(&expected), &mut status, &mut actual, &mut notes);
+        apply_expectation(
+            Expectation::Fail,
+            Some(&expected),
+            &mut status,
+            &mut actual,
+            &mut notes,
+        );
         assert_eq!(status, Status::Error);
         let actual = actual.expect("failure");
         assert_eq!(actual.code, ErrorCode::Internal);
@@ -3860,7 +3948,10 @@ mod content_settle_tests {
         .expect("parses");
         let report = parsed.validate();
         assert!(
-            report.errors.iter().any(|error| error.path.contains("expect_error")),
+            report
+                .errors
+                .iter()
+                .any(|error| error.path.contains("expect_error")),
             "expect_error on a pass scenario must be INVALID_SCENARIO: {report:?}"
         );
     }
@@ -3868,13 +3959,15 @@ mod content_settle_tests {
     /// SE2: `expect_change` (a pixel claim) cannot combine with content settle.
     #[test]
     fn expect_change_with_content_settle_is_invalid() {
-        let yaml = format!(
-            "{HEADER}  - tap: {{x: 1, y: 2, settle: content, expect_change: true}}\n"
-        );
+        let yaml =
+            format!("{HEADER}  - tap: {{x: 1, y: 2, settle: content, expect_change: true}}\n");
         let parsed = Scenario::from_yaml_str_unvalidated(&yaml).expect("parses");
         let report = parsed.validate();
         assert!(
-            report.errors.iter().any(|error| error.path.contains("expect_change")),
+            report
+                .errors
+                .iter()
+                .any(|error| error.path.contains("expect_change")),
             "content settle + expect_change must be INVALID_SCENARIO: {report:?}"
         );
     }

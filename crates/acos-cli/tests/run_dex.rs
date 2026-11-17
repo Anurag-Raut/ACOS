@@ -86,7 +86,10 @@ fn unsupported_run_reports_ok_false() {
     let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json envelope");
     assert_eq!(v["ok"], serde_json::json!(false));
     assert_eq!(v["status"], serde_json::json!("unsupported"));
-    assert_eq!(v["error"]["code"], serde_json::json!("UNSUPPORTED_JAVA_API"));
+    assert_eq!(
+        v["error"]["code"],
+        serde_json::json!("UNSUPPORTED_JAVA_API")
+    );
     let api = v["error"]["details"]["api"].as_str().unwrap_or("");
     assert!(api.contains("java/util/concurrent/Executors"), "api={api}");
 }

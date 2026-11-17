@@ -49,8 +49,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use crate::class::{Class, ClassId, InitState, Method, TypeId, TypeInfo};
 use crate::error::{VmError, VmResult};
 use crate::heap::{
-    ArrayData, ArrayObj, BuiltinData, Handle, Heap, Object, StackTraceElementData, ThreadData,
-    NULL,
+    ArrayData, ArrayObj, BuiltinData, Handle, Heap, Object, StackTraceElementData, ThreadData, NULL,
 };
 use crate::javabridge::JavaValue;
 use crate::natives::fwk_fonts::{FamilyRecordData, FontRecordData, FontState};
@@ -239,10 +238,7 @@ impl BootImage {
             dex_tables: if std::env::var_os("ACOS_BOOT_CACHE_DEX_TABLES").is_none() {
                 Vec::new()
             } else {
-                self.dex_files
-                    .iter()
-                    .map(|f| Some(f.to_tables()))
-                    .collect()
+                self.dex_files.iter().map(|f| Some(f.to_tables())).collect()
             },
         };
         borsh::to_vec(&data).expect("in-memory borsh serialization cannot fail")
@@ -591,7 +587,9 @@ fn boot_fingerprint_parts(boot_dir: Option<&Path>, dexs: &[Arc<DexFile>]) -> u64
                     mix(*b);
                 }
                 mix(b'\n');
-                if let Ok(meta) = std::fs::metadata(dir.join("dex").join(jar.trim_end_matches(".jar"))) {
+                if let Ok(meta) =
+                    std::fs::metadata(dir.join("dex").join(jar.trim_end_matches(".jar")))
+                {
                     for b in meta.len().to_le_bytes() {
                         mix(b);
                     }
@@ -641,11 +639,7 @@ fn property_hash(vm: &Vm) -> u64 {
 
 /// [`property_hash`] from the snapshot header plus the environment, so a
 /// restore can refuse a mismatch before constructing a `Vm`.
-fn property_hash_parts(
-    corelib: CoreLib,
-    boot_dir: Option<&Path>,
-    locale: &str,
-) -> u64 {
+fn property_hash_parts(corelib: CoreLib, boot_dir: Option<&Path>, locale: &str) -> u64 {
     let mut props: Vec<(String, String)> = std::env::vars()
         .filter(|(k, _)| k.starts_with("ACOS_"))
         .collect();
@@ -899,8 +893,7 @@ impl Vm {
         }
 
         // string_hashes: sorted by handle for determinism.
-        let mut sh: Vec<(Handle, i32)> =
-            self.string_hashes.iter().map(|(k, v)| (*k, *v)).collect();
+        let mut sh: Vec<(Handle, i32)> = self.string_hashes.iter().map(|(k, v)| (*k, *v)).collect();
         sh.sort_by_key(|(k, _)| *k);
         w.u32(sh.len() as u32);
         for (k, v) in sh {
@@ -954,8 +947,11 @@ impl Vm {
         // per-VM table is the only process state behind it. Priming `Typeface`
         // leaves one open (the `fonts.xml` parser's UTF-8 decoder), so the
         // table travels with the snapshot instead of refusing to snapshot.
-        let mut convs: Vec<(u64, String)> =
-            self.converters.iter().map(|(k, v)| (*k, v.clone())).collect();
+        let mut convs: Vec<(u64, String)> = self
+            .converters
+            .iter()
+            .map(|(k, v)| (*k, v.clone()))
+            .collect();
         convs.sort_by_key(|(k, _)| *k);
         w.u32(convs.len() as u32);
         for (k, v) in convs {
@@ -1509,7 +1505,9 @@ impl Vm {
 fn read_header(r: &mut Reader<'_>) -> VmResult<SnapshotHeader> {
     r.need(8)?;
     if r.remaining()[..8] != SNAPSHOT_MAGIC {
-        return Err(VmError::SnapshotFormat("bad magic (not an ACOS snapshot)".into()));
+        return Err(VmError::SnapshotFormat(
+            "bad magic (not an ACOS snapshot)".into(),
+        ));
     }
     r.pos += 8;
     let version = r.u32()?;
@@ -2319,8 +2317,8 @@ pub fn header_property_hash_offset() -> usize {
         + 1  // trace
         + 1  // gc_stress
         + 8  // heap_max
-        + 8  // boot fingerprint
-        // property hash starts here
+        + 8 // boot fingerprint
+            // property hash starts here
 }
 
 /// A helper used by tests: build a `Heap` with the given slot count. Exposed

@@ -1,0 +1,5 @@
+cgroup=/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3775883-i3778222.scope
+memory_max=1073741824
+python_exit=137
+memory_events=low 0 high 0 max 39 oom 1 oom_kill 1 oom_group_kill 0 sock_throttled 0 
+unguarded-ok 1572864000

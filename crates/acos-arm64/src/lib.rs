@@ -151,7 +151,11 @@ impl Arm64Error {
 
 impl std::fmt::Display for Arm64Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {} — remedy: {}", self.code, self.message, self.remedy)
+        write!(
+            f,
+            "{}: {} — remedy: {}",
+            self.code, self.message, self.remedy
+        )
     }
 }
 
@@ -174,8 +178,7 @@ pub const QEMU_REMEDY: &str =
      (or set ACOS_QEMU_AARCH64=/path/to/qemu-aarch64)";
 
 /// The exact remedy string used whenever the seccomp guard is missing.
-pub const GUARD_REMEDY: &str =
-    "build it with `tools/build-arm64-guard.sh` (or set \
+pub const GUARD_REMEDY: &str = "build it with `tools/build-arm64-guard.sh` (or set \
      ACOS_SECCOMP_GUARD=/path/to/libacos_seccomp_guard.so)";
 
 /// The workspace root (`crates/acos-arm64/../..`).
@@ -206,9 +209,7 @@ pub fn default_qemu() -> Result<PathBuf, Arm64Error> {
     }
     let mut candidates = vec![cache_dir().join("qemu-user/usr/bin/qemu-aarch64")];
     if let Some(path) = std::env::var_os("PATH") {
-        candidates.extend(
-            std::env::split_paths(&path).map(|dir| dir.join("qemu-aarch64")),
-        );
+        candidates.extend(std::env::split_paths(&path).map(|dir| dir.join("qemu-aarch64")));
     }
     first_file(candidates).ok_or_else(|| {
         Arm64Error::unavailable_at(
@@ -250,8 +251,7 @@ pub fn default_sysroot() -> Result<PathBuf, Arm64Error> {
 /// Validate a candidate sysroot directory: `system/bin/linker64` and
 /// `system/lib64/libc.so` must both be regular files.
 pub fn validate_sysroot(root: &Path) -> Result<PathBuf, Arm64Error> {
-    if root.join("system/bin/linker64").is_file() && root.join("system/lib64/libc.so").is_file()
-    {
+    if root.join("system/bin/linker64").is_file() && root.join("system/lib64/libc.so").is_file() {
         Ok(root.to_path_buf())
     } else {
         Err(Arm64Error::unavailable_at(
@@ -722,7 +722,11 @@ mod tests {
         let err = validate_qemu(Path::new("/nonexistent-qemu-for-test/qemu-aarch64"))
             .expect_err("no qemu should be found");
         assert_eq!(err.code, ARM64_UNAVAILABLE);
-        assert!(err.remedy.contains("fetch-qemu-aarch64.sh"), "{}", err.remedy);
+        assert!(
+            err.remedy.contains("fetch-qemu-aarch64.sh"),
+            "{}",
+            err.remedy
+        );
         assert_eq!(
             err.path.as_deref(),
             Some("/nonexistent-qemu-for-test/qemu-aarch64")
@@ -731,8 +735,8 @@ mod tests {
 
     #[test]
     fn missing_sysroot_is_arm64_unavailable_with_remedy() {
-        let err = validate_sysroot(Path::new("/nonexistent-bionic-for-test"))
-            .expect_err("no sysroot");
+        let err =
+            validate_sysroot(Path::new("/nonexistent-bionic-for-test")).expect_err("no sysroot");
         assert_eq!(err.code, ARM64_UNAVAILABLE);
         assert!(
             err.remedy.contains("fetch-bionic-sysroot.sh"),

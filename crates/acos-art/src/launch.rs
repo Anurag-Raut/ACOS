@@ -29,17 +29,15 @@ use crate::launcher::Outcome;
 use crate::logd::Logd;
 use crate::watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 use crate::{ArtRoot, Error, Result};
-use acos_binder_peer::{
-    accept, close_frame_fds, listen, read_frame, wait_for_idle, write_frame, Frame, IdleWake, Peer,
-};
+use acos_binder_peer::{close_frame_fds, listen, write_frame, Frame, Peer};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use std::os::fd::RawFd;
+use std::os::unix::io::RawFd;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -122,6 +120,20 @@ pub struct LaunchOpts {
     /// (`[{id, profile, config}]`). Empty means `core` only (today's service
     /// table plus tombstones).
     pub services: Vec<serde_json::Value>,
+    /// MPROC1: extra APKs installed into this session beside the launched one
+    /// (repeatable `--extra-apk`). Each is staged into this run's private tree,
+    /// bound read-only at `/data/app/<name>`, installed into the session's
+    /// package manager at its own uid and seeded into the activity manager's
+    /// manifest table, exactly as the launched APK is. Empty (and then free)
+    /// for every single-package launch: nothing is staged, bound or installed.
+    pub extra_apks: Vec<PathBuf>,
+    /// MPROC5c: idle kill. A **lazily spawned** secondary process that has held
+    /// nothing for this long — no started activity, no started/bound service,
+    /// no visible window — is killed (stock
+    /// `ActivityManagerConstants.MAX_CACHED_PROCESSES` / `CachedAppOptimizer`),
+    /// its `ProcessRecord` and window sessions go, and the next intent spawns it
+    /// again. `0` disables it. `--idle-kill-seconds`, default 30.
+    pub idle_kill_secs: u64,
 }
 
 impl Default for LaunchOpts {
@@ -139,6 +151,8 @@ impl Default for LaunchOpts {
             insets: acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string(),
             animations: Animations::On,
             services: Vec::new(),
+            extra_apks: Vec::new(),
+            idle_kill_secs: 30,
         }
     }
 }
@@ -213,6 +227,19 @@ pub struct LaunchResult {
     /// the heap configuration that produced it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heap: Option<serde_json::Value>,
+    /// MPROC1: every extra package this session installed beside the launched
+    /// one — `{package, uid, apk, native_library_dir}` with the **guest** paths
+    /// the package manager published. Empty for a single-package launch, so a
+    /// launch reply only carries the field when extras were asked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_packages: Option<Vec<serde_json::Value>>,
+    /// MPROC4 step 3b: the session's app processes. The activity manager's own
+    /// records (one per process tag: `tag`, `package`, `uid`, `pid`,
+    /// `app_thread`, `attached`) plus the launcher's spawn evidence (which
+    /// component resolved, why, which pid answered). Absent when the session
+    /// never had more than the primary process.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processes: Option<serde_json::Value>,
     /// H13b: `{mode, cache: hit|built|fallback|external|none, reason}` — which
     /// boot image this launch used and whether the shared-image cache hit, so a
     /// caller (and a benchmark row) can tell a warm serve from a cold one.
@@ -294,6 +321,11 @@ pub const ENV_ART_HEAP_TARGET_UTILIZATION: &str = "ACOS_ART_HEAP_TARGET_UTILIZAT
 /// frame). Both are forwarded to the cleared guest environment.
 pub const ENV_ART_EARLY_GC: &str = "ACOS_ART_EARLY_GC";
 pub const ENV_ART_GC_DELAY_MS: &str = "ACOS_ART_GC_DELAY_MS";
+
+/// MPROC1: the env spelling of [`LaunchOpts::extra_apks`] a frozen host-template
+/// child reads (see `host_zygote.rs`). The direct path uses the repeatable
+/// `--extra-apk` flags instead; both name the same list.
+pub const ENV_EXTRA_APKS: &str = "ACOSLAUNCH_EXTRA_APKS";
 
 fn valid_heap_size(text: &str) -> bool {
     let t = text.trim();
@@ -475,8 +507,686 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     launch_session(root, opts, None, &shims)
 }
 
-/// The per-session half of [`launch`].
+/// MPROC1: one extra APK staged and installed into a launch session beside the
+/// launched one.
 ///
+/// Built by [`launch_session`] before any guest exists: the staged copy is this
+/// run's own (H17), the guest paths are the ones the sandbox binds, and the uid
+/// is filled in when the host's package manager installs the package.
+#[derive(Debug, Clone)]
+struct ExtraApk {
+    /// This run's private copy of the APK.
+    staged: PathBuf,
+    /// Guest path the sandbox binds the copy at (`/data/app/<name>`).
+    guest_path: String,
+    /// Package name from the APK's manifest.
+    package: String,
+    /// Host root of this package's extracted native libraries.
+    lib_root: PathBuf,
+    /// Guest directory `lib_root` is bound at (`/data/app-lib-extra/<pkg>`).
+    guest_lib_root: String,
+    /// Guest `ApplicationInfo.nativeLibraryDir` for the package.
+    guest_lib_dir: String,
+    /// The uid the package manager assigned at install time.
+    uid: Option<i32>,
+}
+
+/// MPROC4 step 3b: one secondary app process this session can start.
+///
+/// Built from the session's own recipe (`launch_session`): the extra APK is
+/// already staged in this run's tree and installed into the package manager, so
+/// a second guest is the **same** sandbox recipe with its own run root, its own
+/// tag and its own launch argv. Nothing is re-downloaded, re-installed or
+/// re-invented.
+#[derive(Debug, Clone)]
+struct SecondarySpec {
+    /// Process tag (`ACOS_PROCESS_TAG`); `0` is the primary process.
+    tag: u32,
+    /// Package this process runs.
+    package: String,
+    /// Host path of the staged APK (this run's private copy).
+    staged: PathBuf,
+    /// Guest path the APK is bound at (`/data/app/<name>`).
+    guest_apk: String,
+    /// Host root of the package's extracted native libraries.
+    lib_root: PathBuf,
+    /// Guest directory the library root is bound at.
+    guest_lib_root: String,
+    /// Guest `ApplicationInfo.nativeLibraryDir`.
+    guest_lib_dir: String,
+    /// `ApplicationInfo.uid` the package manager assigned.
+    uid: Option<i32>,
+    /// The activity this process launches (the requested component, else the
+    /// APK's launcher activity).
+    activity: String,
+    /// Declared `<application android:name>` (empty = the framework default).
+    app_class: String,
+    /// Declared `<application android:theme>`.
+    theme: i32,
+    /// Manifest-derived `ApplicationInfo.flags` (`-1` = none).
+    app_flags: i64,
+    /// The `<activity android:configChanges>` bitmask.
+    config_changes: u32,
+    /// `ApplicationInfo.labelRes` / literal for the application.
+    app_label: (u32, String),
+    /// `ActivityInfo.labelRes` / literal for the launched activity.
+    activity_label: (u32, String),
+    /// The launcher alias's `targetActivity` (empty for a plain activity).
+    activity_target: String,
+    /// The process's own `out` directory (host path), copied into the session's
+    /// evidence at the end.
+    out_dir: PathBuf,
+    /// The process's own run root (host path).
+    run_root: PathBuf,
+}
+
+/// A running secondary process.
+struct SecondaryGuest {
+    spec: SecondarySpec,
+    child: std::process::Child,
+    cgroup: crate::cgroup::RunCgroup,
+    pid: i32,
+    /// Guest stderr tail (a dead process's reason is evidence).
+    stderr: Arc<std::sync::Mutex<TailBuffer>>,
+    /// `bwrap` argv, so the reply can state exactly how the process was started.
+    argv: Vec<String>,
+}
+
+/// Everything a secondary guest needs from the session that is not in its
+/// [`SecondarySpec`]: the shared, read-only sandbox inputs and the shared
+/// sockets.
+#[derive(Debug, Clone)]
+struct SecondaryShared {
+    root: ArtRoot,
+    /// Boot image directory (bound at `/data/img`), when the session has one.
+    image: Option<PathBuf>,
+    substrate: PathBuf,
+    art_shim: PathBuf,
+    driver: PathBuf,
+    /// The session's extracted native-library root (`/data/app-lib`).
+    native_lib_root: PathBuf,
+    /// Session socket directory (bound at `/dev/socket`; both guests share it,
+    /// so both write to the same logd).
+    sockets: PathBuf,
+    /// The peer socket file (bound at `/data/acos-launch.sock`); every guest
+    /// connects to the **same** peer.
+    sock: PathBuf,
+    /// Static-RRO idmaps (guest paths, `,`-separated; empty = none).
+    overlays: String,
+    /// Resume budget forwarded to the guest (W27).
+    resume_ms: u64,
+    /// Display geometry the guest boots at.
+    geometry: [(String, u32); 5],
+    /// `ACOSLAUNCH_SCREEN_LAYOUT` (W47).
+    screen_layout: u32,
+    /// `ACOS_ANIMATIONS` (P12).
+    animations: &'static str,
+    /// Run this guest's live probe (interactive sessions only).
+    live_probe: bool,
+}
+
+impl SecondaryShared {
+    /// The guest argv after `-cp <dex> <class>`: exactly what `LaunchMain.main`
+    /// reads for the primary process, for this package.
+    fn guest_args(&self, spec: &SecondarySpec) -> Vec<String> {
+        vec![
+            spec.guest_apk.clone(),
+            spec.package.clone(),
+            "/data/out/launch".to_string(),
+            "activity-resumed".to_string(),
+            spec.activity.clone(),
+            spec.app_class.clone(),
+            spec.theme.to_string(),
+            self.overlays.clone(),
+            spec.app_label.0.to_string(),
+            spec.app_label.1.clone(),
+            spec.activity_label.0.to_string(),
+            spec.activity_label.1.clone(),
+            spec.activity_target.clone(),
+            spec.app_flags.to_string(),
+            "manifest".to_string(),
+        ]
+    }
+
+    /// Build one secondary guest's bwrap command + dalvik argv.
+    fn command(
+        &self,
+        spec: &SecondarySpec,
+        app_meta: &str,
+        providers: &str,
+    ) -> Result<std::process::Command> {
+        let mut sb = self.root.sandbox();
+        if let Some(image) = &self.image {
+            sb.with_image(Some(image.clone()));
+        }
+        sb.run_root(&spec.run_root);
+        sb.seccomp_guest(true);
+        sb.with_shim(false);
+        sb.ro_bind(&self.art_shim, "/data/shim/libartshim.so");
+        sb.ro_bind(
+            &self.native_lib_root,
+            acos_services::native_libs::GUEST_NATIVE_LIB_ROOT,
+        );
+        sb.ro_bind(&self.substrate, "/data/app/libacosart.so");
+        sb.ro_bind(&spec.staged, &spec.guest_apk);
+        sb.ro_bind(&spec.lib_root, &spec.guest_lib_root);
+        sb.ro_bind(
+            &self.root.sysroot.join("shim/libacoshw.so"),
+            "/data/libacoshw.so",
+        );
+        sb.ro_bind(&self.driver, "/data/lib/libacos_binder_driver.so");
+        sb.ro_bind(&self.root.data.join("seccomp"), "/data/seccomp");
+        // The **same** sockets directory as the primary (both guests write to
+        // the session's logd) and the **same** peer socket file.
+        sb.rw_bind(&self.sockets, "/dev/socket");
+        sb.rw_bind(&self.sock, "/data/acos-launch.sock");
+        sb.env(
+            "LD_PRELOAD",
+            "/data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so:/data/lib/libacos_binder_driver.so",
+        );
+        sb.env("ACOSART_LOAD", "libandroid_runtime.so");
+        sb.env("E3G_SOCK", "/data/acos-launch.sock");
+        // MPROC2/MPROC4: this process names itself in the driver's handshake, so
+        // the peer puts its tag on every binder it imports and can address a
+        // delivery to it (and only to it).
+        sb.env("ACOS_PROCESS_TAG", &spec.tag.to_string());
+        sb.env("ACOS_PROCESS_NAME", &spec.package);
+        sb.env("ACOSLAUNCH_RESUME_MS", &self.resume_ms.to_string());
+        // MPROC7 (ADR-0029 amendment): this process's first launch is a
+        // host-built `ClientTransaction` (system_server owns the activity
+        // token); the guest waits for it instead of marshalling its own.
+        sb.env("ACOSLAUNCH_HOST_SCHEDULES", "1");
+        for (var, value) in &self.geometry {
+            sb.env(var, &value.to_string());
+        }
+        sb.env("ACOSLAUNCH_SCREEN_LAYOUT", &self.screen_layout.to_string());
+        sb.env(
+            "ACOSLAUNCH_CONFIG_CHANGES",
+            &spec.config_changes.to_string(),
+        );
+        sb.env("ACOS_ANIMATIONS", self.animations);
+        if !app_meta.is_empty() {
+            sb.env("ACOSLAUNCH_APP_META", app_meta);
+        }
+        if !providers.is_empty() {
+            sb.env("ACOSLAUNCH_PROVIDERS", providers);
+        }
+        if self.live_probe {
+            sb.env("ACOSLAUNCH_LIVE_PROBE", "1");
+        }
+        let mut argv: Vec<String> = Vec::new();
+        if self.image.is_some() {
+            argv.push("-Ximage:/data/img/boot.art".into());
+            argv.push("-Xnorelocate".into());
+        }
+        argv.push("-cp".into());
+        argv.push("/data/app/launch-guest/classes.dex".into());
+        argv.push(GUEST_CLASS.into());
+        argv.extend(self.guest_args(spec));
+        sb.command("/system/apex/com.android.art/bin/dalvikvm64", &argv)
+    }
+}
+
+/// Start one secondary guest (MPROC4 step 3b).
+///
+/// The process is scoped like the primary (`cgroup` scope, its own process
+/// group, `PDEATHSIG`), its own `out`/`app-data`/`dalvik-cache` live in its own
+/// run root, and its stdout/stderr are drained so nothing can block it.
+fn spawn_secondary(
+    shared: &SecondaryShared,
+    spec: &SecondarySpec,
+    app_meta: &str,
+    providers: &str,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+    stderr_sink: Arc<std::sync::Mutex<TailBuffer>>,
+) -> Result<SecondaryGuest> {
+    for sub in [
+        "out",
+        "out/launch",
+        "app-data",
+        "dalvik-cache",
+        "misc",
+        "tmp",
+    ] {
+        fs::create_dir_all(spec.run_root.join(sub))?;
+    }
+    fs::create_dir_all(spec.run_root.join("app-data").join(&spec.package))?;
+    let mut cmd = shared.command(spec, app_meta, providers)?;
+    let argv = format!("{cmd:?}");
+    let scope_info = std::fs::canonicalize(&spec.run_root)
+        .unwrap_or_else(|_| spec.run_root.clone())
+        .join("cgroup");
+    let (mut child, cgroup) = crate::cgroup::spawn_scoped(
+        crate::cgroup::MemoryLimits::from_env()?,
+        scope_info,
+        &cmd,
+        |c| {
+            unsafe {
+                c.pre_exec(move || {
+                    libc::prctl(
+                        libc::PR_SET_PDEATHSIG,
+                        libc::SIGKILL as libc::c_ulong,
+                        0,
+                        0,
+                        0,
+                    );
+                    let core = libc::rlimit {
+                        rlim_cur: 0,
+                        rlim_max: 0,
+                    };
+                    libc::setrlimit(libc::RLIMIT_CORE, &core);
+                    let nofile = libc::rlimit {
+                        rlim_cur: 4096,
+                        rlim_max: 4096,
+                    };
+                    libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
+                    crate::watchdog::relax_child_limits();
+                    crate::watchdog::apply_init_rlimit_nice();
+                    Ok(())
+                });
+            }
+            c.process_group(0);
+            c.stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        },
+    )?;
+    let pid = child.id() as i32;
+    // Both streams are drained for the process's whole life: a guest that
+    // prints must never block on a full pipe, and its probe lines
+    // (`ACOSPROBE`) feed the same tree the session serves.
+    let cap = stream_cap_from_env();
+    if let Some(out) = child.stdout.take() {
+        // The second process's own probe lines feed the session's tree, so a
+        // `tree` reply describes the window that is actually on top.
+        let probe = Arc::clone(probe_state);
+        let comp = compositor;
+        let log = spec.out_dir.join("stdout.log");
+        let tag = spec.tag;
+        std::thread::spawn(move || {
+            let _ = drain_tee_lines(out, cap, &log, probe, Some(comp), tag);
+        });
+    }
+    if let Some(err) = child.stderr.take() {
+        let sink = Arc::clone(&stderr_sink);
+        let log = spec.out_dir.join("stderr.log");
+        std::thread::spawn(move || {
+            let buf = drain_tee(err, cap, &log);
+            if let Ok(mut sink) = sink.lock() {
+                *sink = buf;
+            }
+        });
+    }
+    eprintln!(
+        "acos-art: launch: started secondary process tag={} package={} activity={} pid={pid}",
+        spec.tag, spec.package, spec.activity
+    );
+    Ok(SecondaryGuest {
+        spec: spec.clone(),
+        child,
+        cgroup,
+        pid,
+        stderr: stderr_sink,
+        argv: vec![argv],
+    })
+}
+
+/// The session's secondary processes (MPROC4 step 3b).
+///
+/// One place that owns every process the launcher started lazily: it decides
+/// whether a package already runs (the launcher is the authority on tags and
+/// pids), starts the guest the first time a component of that package needs one,
+/// and kills every one of them when the session ends.
+struct SecondaryPool {
+    specs: Vec<SecondarySpec>,
+    shared: SecondaryShared,
+    guests: std::collections::BTreeMap<u32, SecondaryGuest>,
+    /// Spawn requests received (`package`, `component`, `reason`, `tag`,
+    /// `pid`, `started`) — evidence a reply reports.
+    records: Vec<serde_json::Value>,
+    /// Requests refused because the package has no installed secondary spec.
+    uninstalled: Vec<serde_json::Value>,
+    /// Spawns that failed (`package`, `error`), never a silent drop.
+    failures: Vec<serde_json::Value>,
+    /// MPROC5c: processes the idle kill took (`tag`, package, pid, idle_ms).
+    kills: Vec<serde_json::Value>,
+    /// MPROC7: the activity manager's state. The launcher owns every process it
+    /// started, so when **it** kills or reaps one (`idle_kill`'s
+    /// waitpid/cgroup kill, `reap`'s `try_wait`) it removes the `ProcessRecord`
+    /// itself; waiting for the peer to see the socket close made the process
+    /// table depend on a transport event that may never be observed (a peer
+    /// thread blocked in a service handler, a suppressed close, an immediate
+    /// respawn under the same tag).
+    atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+    started: Instant,
+}
+
+impl SecondaryPool {
+    fn new(
+        specs: Vec<SecondarySpec>,
+        shared: SecondaryShared,
+        atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+    ) -> Self {
+        Self {
+            specs,
+            shared,
+            guests: std::collections::BTreeMap::new(),
+            records: Vec::new(),
+            uninstalled: Vec::new(),
+            failures: Vec::new(),
+            kills: Vec::new(),
+            atms,
+            started: Instant::now(),
+        }
+    }
+
+    /// The tag a package already runs under, if any.
+    fn running_tag(&self, package: &str) -> Option<u32> {
+        self.guests
+            .iter()
+            .find(|(_, g)| g.spec.package == package)
+            .map(|(tag, _)| *tag)
+    }
+
+    /// Handle one spawn request. Idempotent: a package that is already running
+    /// gets no second process (the request is the *need*, not the spawn).
+    fn spawn(
+        &mut self,
+        request: &acos_services::ams::ProcessSpawnRequest,
+        probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+        compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+    ) {
+        if let Some(tag) = self.running_tag(&request.package) {
+            self.records.push(serde_json::json!({
+                "package": request.package,
+                "component": request.component,
+                "reason": request.reason,
+                "tag": tag,
+                "spawned": false,
+                "note": "process already running",
+            }));
+            return;
+        }
+        let spec = self
+            .specs
+            .iter()
+            .find(|s| s.package == request.package)
+            .cloned();
+        let Some(mut spec) = spec else {
+            // A component of a package this session never installed cannot be
+            // run: say so (the resolution path recorded the need; the launcher
+            // is the one that cannot satisfy it).
+            self.uninstalled.push(serde_json::json!({
+                "package": request.package,
+                "component": request.component,
+                "reason": request.reason,
+                "error": "no such package was installed in this session",
+            }));
+            eprintln!(
+                "acos-art: launch: {} needs a process for {} but no such package is installed ",
+                request.package, request.component
+            );
+            return;
+        };
+        // The requested activity is what the process launches: on a device the
+        // process starts empty and AMS schedules the launch transaction; here
+        // the guest marshals its own launch transaction for the activity the
+        // request named, so a spawn is always for a real component.
+        if let Some(class) = request.component.split_once('/').map(|(_, class)| class) {
+            if !class.is_empty() {
+                let fqcn = if class.starts_with('.') {
+                    format!("{}{}", spec.package, class)
+                } else {
+                    class.to_string()
+                };
+                spec.activity = fqcn;
+            }
+        }
+        // Per-process `ProviderInfoList` + application `<meta-data>`, from this
+        // package's own manifest (the same two facts the primary receives).
+        let (app_meta, providers) = acos_services::pms::PmsState::from_apk(&spec.staged)
+            .map(|state| {
+                let app_meta = meta_spec(&state.app().meta_data);
+                let providers = provider_spec_of(&state);
+                (app_meta, providers)
+            })
+            .unwrap_or_default();
+        // MPROC7: a new process instance restarts its guest probe counter. Clear
+        // the dead instance's sample and give the new one a base above the
+        // session's current maximum, so `strict` settle still sees a *fresh*
+        // sample after an idle kill / respawn.
+        {
+            let mut state = probe_state.lock().unwrap_or_else(|e| e.into_inner());
+            let highest = state
+                .by_process
+                .values()
+                .map(|p| p.seq)
+                .chain(state.latest.as_ref().map(|p| p.seq))
+                .max()
+                .unwrap_or(0);
+            state.seq_offsets.insert(spec.tag, highest);
+            state.by_process.remove(&spec.tag);
+        }
+        let stderr = Arc::new(std::sync::Mutex::new(TailBuffer::with_cap(1 << 16)));
+        match spawn_secondary(
+            &self.shared,
+            &spec,
+            &app_meta,
+            &providers,
+            probe_state,
+            compositor,
+            Arc::clone(&stderr),
+        ) {
+            Ok(guest) => {
+                let pid = guest.pid;
+                self.records.push(serde_json::json!({
+                    "package": spec.package,
+                    "component": request.component,
+                    "reason": request.reason,
+                    "tag": spec.tag,
+                    "pid": pid,
+                    "activity": spec.activity,
+                    "spawned": true,
+                    "since_ms": self.started.elapsed().as_millis() as u64,
+                }));
+                self.guests.insert(spec.tag, guest);
+            }
+            Err(e) => {
+                eprintln!(
+                    "acos-art: launch: spawning process {} ({}) failed: {e}",
+                    spec.tag, spec.package
+                );
+                self.failures.push(serde_json::json!({
+                    "package": spec.package,
+                    "tag": spec.tag,
+                    "error": e.to_string(),
+                }));
+            }
+        }
+    }
+
+    /// MPROC5c: kill every lazily spawned process that has held nothing for
+    /// `idle`.
+    ///
+    /// The activity manager owns the rule (no started activity, no started or
+    /// bound service — [`acos_services::atms::AtmsState::idle_processes`]); the
+    /// window manager owns "no visible window" ([`WmsState::process_has_visible_window`]);
+    /// the launcher owns the process, so it is the one that kills it. The
+    /// process group goes (never one pid), the pool forgets it (so the next
+    /// intent's spawn is a real spawn again), and the guest's socket close makes
+    /// the peer drop its binder records, queue `F_DEATH` to its holders (MPROC5b's
+    /// death half) and close its window sessions.
+    fn idle_kill(
+        &mut self,
+        idle: Duration,
+        atms: &Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+        wms: &Arc<std::sync::Mutex<acos_services::wms::WmsState>>,
+    ) -> Vec<serde_json::Value> {
+        if idle.is_zero() {
+            return Vec::new();
+        }
+        let candidates = atms
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .idle_processes(idle);
+        let mut killed = Vec::new();
+        for (tag, package, idle_ms) in candidates {
+            let visible = wms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .process_has_visible_window(tag);
+            if visible {
+                continue;
+            }
+            let Some(mut guest) = self.guests.remove(&tag) else {
+                continue;
+            };
+            let sessions = wms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .sessions_of_process(tag)
+                .len();
+            let pid = guest.pid;
+            guest.cgroup.kill();
+            let _ = guest.child.kill();
+            let _ = guest.child.wait();
+            // MPROC7: the launcher killed it, so the launcher removes the
+            // activity manager's `ProcessRecord` (the peer will also observe the
+            // socket close, but the table must not depend on that).
+            self.atms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .process_died(tag);
+            let record = serde_json::json!({
+                "tag": tag,
+                "package": package,
+                "pid": pid,
+                "reason": "idle",
+                "idle_ms": idle_ms,
+                "idle_kill_secs": idle.as_secs(),
+                "window_sessions": sessions,
+            });
+            eprintln!(
+                "acos-art: launch: idle kill tag={tag} ({package}, pid {pid}) after {idle_ms}ms \
+                 idle ({} window session(s))",
+                record["window_sessions"]
+            );
+            self.records.push(record.clone());
+            self.kills.push(record.clone());
+            killed.push(record);
+        }
+        killed
+    }
+
+    /// Reap a process that ended by itself and record why (a secondary guest
+    /// that crashed must be visible, never mistaken for a running one).
+    fn reap(&mut self) -> Vec<serde_json::Value> {
+        let mut exited = Vec::new();
+        let mut gone = Vec::new();
+        for (tag, guest) in &mut self.guests {
+            match guest.child.try_wait() {
+                Ok(Some(status)) => {
+                    let stderr = guest.stderr.lock().map(|b| b.to_text()).unwrap_or_default();
+                    let record = serde_json::json!({
+                        "tag": tag,
+                        "package": guest.spec.package,
+                        "pid": guest.pid,
+                        "status": status.to_string(),
+                        "stderr_tail": tail(&stderr, 800),
+                    });
+                    eprintln!(
+                        "acos-art: launch: secondary process tag={tag} ({}) exited: {status}",
+                        guest.spec.package
+                    );
+                    exited.push(record);
+                    gone.push(*tag);
+                }
+                _ => {}
+            }
+        }
+        // MPROC7: a reaped guest is gone; the launcher (which waited for it)
+        // drops it and its `ProcessRecord`, so the next intent for its package
+        // is a real spawn even if the peer has not seen the socket close yet.
+        for tag in &gone {
+            self.guests.remove(tag);
+            self.atms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .process_died(*tag);
+        }
+        exited
+    }
+
+    /// The `processes` control module's body.
+    fn to_json(&mut self) -> serde_json::Value {
+        let guests: Vec<serde_json::Value> = self
+            .guests
+            .iter_mut()
+            .map(|(tag, guest)| {
+                serde_json::json!({
+                    "tag": tag,
+                    "package": guest.spec.package,
+                    "pid": guest.pid,
+                    "activity": guest.spec.activity,
+                    "alive": matches!(guest.child.try_wait(), Ok(None)),
+                })
+            })
+            .collect();
+        serde_json::json!({
+            "processes": guests,
+            "requests": self.records,
+            "uninstalled": self.uninstalled,
+            "failures": self.failures,
+            // MPROC5c: what the idle kill took, and the rule it applied.
+            "killed": self.kills,
+        })
+    }
+
+    /// Kill every secondary process (session end). The scope kill is what makes
+    /// this bounded: the guest's whole group goes, never one pid.
+    fn shutdown(&mut self) {
+        for (tag, mut guest) in std::mem::take(&mut self.guests) {
+            guest.cgroup.kill();
+            let _ = guest.child.kill();
+            let _ = guest.child.wait();
+            eprintln!("acos-art: launch: secondary process tag={tag} stopped (session end)");
+        }
+    }
+}
+
+/// The `ProviderInfoList` a bind request carries for one package (K3c), from
+/// that package's own parsed manifest.
+fn provider_spec_of(state: &acos_services::pms::PmsState) -> String {
+    let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
+    for p in state.providers() {
+        if p.process_name != state.app().process_name {
+            continue;
+        }
+        match seen.iter_mut().find(|(class, _)| *class == p.name) {
+            Some((_, authorities)) => authorities.push(&p.authority),
+            None => seen.push((&p.name, vec![&p.authority])),
+        }
+    }
+    seen.iter()
+        .map(|(class, authorities)| {
+            let declared = state.providers().iter().find(|p| p.name == *class);
+            let read = declared.map_or("", |p| p.read_permission.as_str());
+            let exported = declared.is_some_and(|p| p.exported);
+            let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
+            let meta = declared.map_or_else(String::new, |p| meta_spec(&p.meta_data));
+            format!(
+                "{class}|{}|{read}|{}|{}|{meta}",
+                authorities.join(";"),
+                u8::from(exported),
+                u8::from(grant_uri)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The per-session half of [`launch`].///
 /// `prebuilt` is `Some` only in a child of the ZM2 host template: the child
 /// installs its own APK into its private CoW copy of that empty service graph.
 pub(crate) fn launch_session(
@@ -509,6 +1219,53 @@ pub(crate) fn launch_session(
         Some(d) => root.run_dir_at(&d.join("run"), "launch")?,
         None => root.new_run_dir("launch")?,
     };
+    // ADR-0029: the attached module set decides what this session installs and
+    // which host endpoints it owns, so the specs are parsed **before** anything
+    // is staged or bound. `opts.services` is the launch's `services:` block; a
+    // frozen host template passes the same set in `ACOS_ART_SERVICES`.
+    let mut module_specs: Vec<acos_services::module::ModuleSpec> =
+        acos_services::module::ModuleSpec::parse_list(&serde_json::Value::Array(
+            opts.services.clone(),
+        ))
+        .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    if module_specs.is_empty() {
+        if let Ok(raw) = std::env::var("ACOS_ART_SERVICES") {
+            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
+                Error::Layout(format!("ACOS_ART_SERVICES is not JSON: {error}"))
+            })?;
+            module_specs = acos_services::module::ModuleSpec::parse_list(&value)
+                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
+        }
+    }
+    // WV8: the `webview` module owns the session's WebView socket and the
+    // provider package. With it `off` (the default) neither exists, which is
+    // Android's own "no WebView provider" path: no `com.android.webview` in the
+    // package table, `hasSystemFeature("android.software.webview")` false, no
+    // socket a `WebView` could connect to. With it `real` the launcher stages
+    // the provider APK (below) and binds this session's gate socket; the shared
+    // broker still starts only on the guest's first connect.
+    let webview_real = acos_services::modules::webview::broker_requested(&module_specs);
+    // WV4: this session's WebView socket directory (`wv/`, mounted at
+    // `/run/acos` by the sandbox). Resolved and length-checked before the guest
+    // exists: a `sun_path` overflow must read as a launch error naming the
+    // session directory, not as an unattributable `connect()` failure in the
+    // WebView.
+    let webview_socket_dir = crate::webview_socket::host_dir(run.path())?;
+    crate::webview_socket::check_sun_path(&webview_socket_dir)?;
+    // WV5b: serve this session's socket **lazily**. `start_gate` binds
+    // `<dir>/webview.sock` and starts one sleeping accept thread; the shared
+    // broker (and Chromium itself) exists only after the guest connects, which
+    // the provider does when it creates a WebView. A session without a WebView
+    // pays a socket node and a thread — measured, not assumed
+    // (`results/handoff/WV5b/REPORT.md` §3). WV8: and a session without the
+    // module pays nothing at all: the gate is the module's.
+    let webview_gate = if webview_real {
+        crate::webview_socket::start_gate(&webview_socket_dir, run.path())?
+    } else {
+        None
+    };
+    let webview_broker_socket =
+        webview_real.then(|| crate::webview_socket::broker_socket(&webview_socket_dir));
     crate::stage("run-dir");
 
     // H17: the APK is an input every guest maps (ART mmaps the dex/resources), so
@@ -530,6 +1287,84 @@ pub(crate) fn launch_session(
     let package = crate::app::apk_package(&opts.apk)?;
     crate::stage("apk-stage");
 
+    // MPROC1: extra APKs (`--extra-apk`, repeatable) are installed into this
+    // session beside the launched one. Each gets the same treatment the primary
+    // gets: a private staged copy in this run's tree (H17: never the shared
+    // `/data/app` entry), a bind over its guest path, the native-library
+    // install and a structured ABI gate. The package manager and the activity
+    // manager learn about them below, before any guest exists.
+    let mut extras: Vec<ExtraApk> = Vec::new();
+    // WV8: a module's `real` profile may install a system app the session cannot
+    // work without (the `webview` provider package). The manifest names it
+    // (`system_apps`) and `module::system_apks` resolves the host file, so a
+    // scenario needs `services: [{id: webview, profile: real}]` and not a second
+    // `extra_apks:` line that could drift from the attached set.
+    let extra_apk_paths: Vec<PathBuf> = opts
+        .extra_apks
+        .iter()
+        .cloned()
+        .chain(acos_services::module::system_apks(&module_specs))
+        .collect();
+    for extra in &extra_apk_paths {
+        let name = extra
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .filter(|n| !n.is_empty())
+            .ok_or_else(|| {
+                Error::Layout(format!(
+                    "extra APK {}: the path has no file name",
+                    extra.display()
+                ))
+            })?;
+        if name == apk_name {
+            return Err(Error::Layout(format!(
+                "extra APK {}: the launched APK is already staged as {name}",
+                extra.display()
+            )));
+        }
+        if extras
+            .iter()
+            .any(|e| e.guest_path == format!("/data/app/{name}"))
+        {
+            return Err(Error::Layout(format!(
+                "extra APK {}: another APK is already staged as {name}",
+                extra.display()
+            )));
+        }
+        let extra_package = crate::app::apk_package(extra)?;
+        if extra_package == package {
+            return Err(Error::Layout(format!(
+                "extra APK {}: package {extra_package} is the launched package",
+                extra.display()
+            )));
+        }
+        if extras.iter().any(|e| e.package == extra_package) {
+            return Err(Error::Layout(format!(
+                "extra APK {}: package {extra_package} is already installed by another APK in this session",
+                extra.display()
+            )));
+        }
+        let staged = run.dir("app").join(&name);
+        crate::app::stage_apk(extra, &staged)?;
+        crate::app::ensure_apk_mountpoint(&root.data, &name, extra)?;
+        let guest_lib_root = format!("/data/app-lib-extra/{extra_package}");
+        // An APK without native code still needs its `nativeLibraryDir` to
+        // exist (the primary's tree is created by the native-lib install for
+        // the same reason); bwrap refuses a bind whose source is missing.
+        let lib_root = run.dir("app-lib-extra").join(&extra_package);
+        fs::create_dir_all(&lib_root)?;
+        extras.push(ExtraApk {
+            staged,
+            guest_path: format!("/data/app/{name}"),
+            guest_lib_dir: format!("{guest_lib_root}/{}", acos_services::native_libs::HOST_ABI),
+            guest_lib_root,
+            lib_root,
+            package: extra_package,
+            uid: None,
+        });
+    }
+    crate::stage("extra-apk-stage");
+
     // W17: installd's native-library step. Stock Android extracts the APK's
     // `lib/<abi>/*.so` into `ApplicationInfo.nativeLibraryDir` at install time
     // and `LoadedApk` puts that directory on the class loader's native search
@@ -543,9 +1378,8 @@ pub(crate) fn launch_session(
     // (`prime_from`) and the open is dropped at the end of this block, so only the
     // small facts outlive it.
     let (native_libs, installed) = {
-        let source = acos_services::apk_facts::open_shared(&opts.apk).map_err(|e| {
-            Error::Layout(format!("native libs: open {}: {e}", opts.apk.display()))
-        })?;
+        let source = acos_services::apk_facts::open_shared(&opts.apk)
+            .map_err(|e| Error::Layout(format!("native libs: open {}: {e}", opts.apk.display())))?;
         let native_libs =
             acos_services::native_libs::install_from(&source, &opts.apk, &native_lib_root)
                 .map_err(|e| Error::Layout(format!("native libs: {e}")))?;
@@ -577,7 +1411,10 @@ pub(crate) fn launch_session(
             // before the image, the props, logd or any guest process exists.
             eprintln!("acos-art: launch: UNSUPPORTED_ABI available={available:?}: {message}");
             let result = abi_gate_result(opts, &package, available, sample);
-            let out = opts.out.clone().unwrap_or_else(|| run.dir("out").join("launch"));
+            let out = opts
+                .out
+                .clone()
+                .unwrap_or_else(|| run.dir("out").join("launch"));
             write_session_exit(&out, &result, None, None, None, None);
             // An interactive caller waits for a *ready line*: refusing without
             // one would look like a dead session (`INTERNAL`) to it, and the
@@ -599,6 +1436,59 @@ pub(crate) fn launch_session(
         acos_services::native_libs::NativeLibInstall::None => {}
     }
     crate::stage("native-libs");
+    // MPROC1: the same installd step and ABI gate for every extra APK. The
+    // libraries land in a per-package tree (`/data/app-lib-extra/<package>`)
+    // so two packages that ship a library of the same name can never shadow
+    // each other, and the package's own `nativeLibraryDir` names it below.
+    for extra in &mut extras {
+        let install = acos_services::native_libs::install(&extra.staged, &extra.lib_root)
+            .map_err(|e| Error::Layout(format!("native libs for {}: {e}", extra.package)))?;
+        match install {
+            acos_services::native_libs::NativeLibInstall::Installed { libs, .. } => {
+                eprintln!(
+                    "acos-art: launch: extra {} native libs installed={} guest={}",
+                    extra.package,
+                    libs.len(),
+                    extra.guest_lib_dir
+                );
+            }
+            acos_services::native_libs::NativeLibInstall::UnsupportedAbi {
+                available,
+                sample,
+                message,
+            } => {
+                // AOSP refuses the *package* (`INSTALL_FAILED_NO_MATCHING_ABIS`);
+                // a session cannot install this one, so the launch is refused
+                // before any guest exists, naming the extra APK's inventory.
+                eprintln!(
+                    "acos-art: launch: UNSUPPORTED_ABI ({}): {message}",
+                    extra.package
+                );
+                let result = abi_gate_result(opts, &extra.package, &available, &sample);
+                let out = opts
+                    .out
+                    .clone()
+                    .unwrap_or_else(|| run.dir("out").join("launch"));
+                write_session_exit(&out, &result, None, None, None, None);
+                if std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some() {
+                    protocol_write(&serde_json::json!({
+                        "ok": false,
+                        "cmd": "ready",
+                        "code": "UNSUPPORTED_ABI",
+                        "retryable": false,
+                        "error": message,
+                        "extra_apk": extra.package,
+                        "apk_abis": available,
+                        "host_abi": acos_services::native_libs::HOST_ABI,
+                        "libs_sample": sample,
+                    }));
+                }
+                return Ok(result);
+            }
+            acos_services::native_libs::NativeLibInstall::None => {}
+        }
+    }
+    crate::stage("extra-native-libs");
     // The declared `<application android:name>` class and `android:theme`.
     // Without the class the real `LoadedApk.makeApplication` instantiates
     // `android.app.Application` instead of the APK's own (W15: RN's
@@ -610,9 +1500,9 @@ pub(crate) fn launch_session(
     // `installed` was read from the launch's one open (above).
     let application_class = installed
         .as_ref()
-        .map(|state| state.app.class_name.clone())
+        .map(|state| state.app().class_name.clone())
         .filter(|name| !name.is_empty());
-    let application_theme = installed.as_ref().map_or(0, |state| state.app.theme);
+    let application_theme = installed.as_ref().map_or(0, |state| state.app().theme);
 
     // W24: the image's **static RROs** for `framework-res`, applied through the
     // same stock path `render-app`/the session already use (P2c/W18 #2). The
@@ -643,6 +1533,11 @@ pub(crate) fn launch_session(
         let _ = fs::remove_file(staging.join(stale));
     }
     fs::create_dir_all(run.dir("app-data").join(&package))?;
+    // MPROC1: every extra package gets the same private data root the launched
+    // package gets, so its own `dataDir` exists before it runs.
+    for extra in &extras {
+        fs::create_dir_all(run.dir("app-data").join(&extra.package))?;
+    }
     let out = opts.out.clone().unwrap_or_else(|| staging.clone());
     fs::create_dir_all(&out)?;
     // W43: a full scratch disk is a host condition and a structured, retryable
@@ -727,19 +1622,33 @@ pub(crate) fn launch_session(
         .map_err(|error| Error::Layout(format!("services: {error}")))?;
     if module_specs.is_empty() {
         if let Ok(raw) = std::env::var("ACOS_ART_SERVICES") {
-            let value: serde_json::Value = serde_json::from_str(&raw)
-                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES is not JSON: {error}")))?;
+            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
+                Error::Layout(format!("ACOS_ART_SERVICES is not JSON: {error}"))
+            })?;
             module_specs = acos_services::module::ModuleSpec::parse_list(&value)
                 .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
         }
     }
     let mut session_modules = match prebuilt {
-        Some((host, handles)) => acos_services::module::SessionModules::from_installed(host, handles),
+        Some((host, handles)) => {
+            acos_services::module::SessionModules::from_installed(host, handles)
+        }
         None => acos_services::module::SessionModules::new(),
     };
     session_modules
         .attach(&module_specs)
         .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    // WV8: publish the endpoints the launcher bound for the `webview` module.
+    // The module's `status` control op answers from these instead of recomputing
+    // a path the launcher already decided, so the two cannot name different
+    // sockets.
+    session_modules
+        .host_mut()
+        .set_webview_gate(acos_services::host::WebviewGate {
+            socket: webview_real
+                .then(|| crate::webview_socket::host_socket_path(&webview_socket_dir)),
+            broker_socket: webview_broker_socket.clone(),
+        });
     // NET5: the resolver proxy is served *after* the modules attach, because the
     // `network` module is what decides whether this session has one (ADR-0030
     // item 4). `sockets.0` is what the sandbox binds at `/dev/socket` (below), so
@@ -771,6 +1680,13 @@ pub(crate) fn launch_session(
             .expect("core publishes the session handles at attach");
         let (host, registry) = session_modules.into_parts();
         let mut host = host;
+        // MPROC8: this session runs real app processes, so the host performs
+        // AOSP's `ActiveServices` work for a guest `bindService` (create/bind in
+        // the service's own process, answer the caller's `IServiceConnection`).
+        // The in-process runtime keeps its own bind path, so the flag is a
+        // property of what this session is, stated by the only component that
+        // knows.
+        host.set_host_side_services(true);
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`
@@ -780,6 +1696,43 @@ pub(crate) fn launch_session(
         // which is how FileProvider's `FILE_PROVIDER_PATHS` XML lookup died.
         if let Err(e) = host.install_package_from_apk_as(&apk_for_peer, Some(&guest_apk)) {
             eprintln!("acos-art: launch: install_package_from_apk failed: {e}");
+        }
+        // MPROC1: each extra APK is installed into the same package manager
+        // (its own uid, its own `sourceDir`/`nativeLibraryDir`) and into the
+        // activity manager's manifest table under that same uid. A failure here
+        // fails the launch: a session that silently lacks a package the caller
+        // asked for is exactly the fake success the rules forbid.
+        for extra in &mut extras {
+            let uid = host
+                .install_extra_package_from_apk_as(
+                    &extra.staged,
+                    Some(&extra.guest_path),
+                    Some(&extra.guest_lib_dir),
+                )
+                .map_err(|e| {
+                    Error::Layout(format!(
+                        "extra APK {}: package manager install failed: {e}",
+                        extra.package
+                    ))
+                })?;
+            extra.uid = Some(uid);
+            if let Ok(object) = host.ensure("android.app.IActivityTaskManager") {
+                if let Some(atms) = object
+                    .as_any_mut()
+                    .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+                {
+                    if let Err(e) = atms.seed_manifest_from_apk_with_uid(&extra.staged, uid) {
+                        return Err(Error::Layout(format!(
+                            "extra APK {}: seed_manifest_from_apk: {e}",
+                            extra.package
+                        )));
+                    }
+                }
+            }
+            eprintln!(
+                "acos-art: launch: extra package installed {} uid={uid} apk={} native={}",
+                extra.package, extra.guest_path, extra.guest_lib_dir
+            );
         }
         // W38 (flagged, minimal): the guest's `startActivity` is resolved by the
         // host ATMS before it records a `PendingLaunch`; seed the same APK's
@@ -803,67 +1756,102 @@ pub(crate) fn launch_session(
     service_control.set_wake(peer_wakeup.write);
     let peer_control = Arc::clone(&service_control);
     let interactive = std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some();
+    // MPROC4 step 3b: the peer thread owns the `ServiceHost`, so it is the one
+    // that learns a component needs a process it cannot start itself. The
+    // launcher (this thread) owns the processes, so the request crosses over as
+    // a plain message and nothing is started from the peer thread.
+    let (spawn_tx, spawn_rx) = mpsc::channel::<acos_services::ams::ProcessSpawnRequest>();
     crate::stage("peer-setup");
     let peer_thread = std::thread::spawn(move || {
         let summary = (|| -> std::io::Result<PeerSummary> {
-            let client = loop {
-                if peer_stop.load(Ordering::Acquire) {
-                    unsafe {
-                        libc::close(listener);
-                    }
-                    return Ok(PeerSummary::default());
-                }
-                match accept(listener) {
-                    Ok(fd) => break fd,
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(Duration::from_millis(2));
-                    }
-                    Err(e) => {
-                        unsafe {
-                            libc::close(listener);
-                        }
-                        return Err(e);
-                    }
-                }
-            };
-            unsafe {
-                libc::close(listener);
-                // H4: a guest death closes this socket, which is the real wake;
-                // the timeout only bounds a stall *inside* a frame, so it is
-                // generous. ADR-0029's timed module deliveries are not polled
-                // for: the peer sleeps in `poll(2)` until the earliest module
-                // deadline (or until the guest speaks, or the stop pipe fires),
-                // so an idle session with no timed module has zero wakeups.
-                let tv = libc::timeval {
-                    tv_sec: 1,
-                    tv_usec: 0,
-                };
-                libc::setsockopt(
-                    client,
-                    libc::SOL_SOCKET,
-                    libc::SO_RCVTIMEO,
-                    &tv as *const _ as *const libc::c_void,
-                    std::mem::size_of::<libc::timeval>() as libc::socklen_t,
-                );
-            }
             // The real ServiceHost, with its package manager pointed at the APK
             // being launched: `handleBindApplication` asks for its
             // `getApplicationInfo` and must get the real package, not the
             // hello-views fixture (and never a fabricated null).
             let mut peer = Peer::with_host(peer_host, Some(peer_log));
             let mut peer_registry = peer_registry;
-            let rc = serve(
+            // MPROC2 step 3a + ADR-0029 item 4 in one loop: the session serves N
+            // tagged driver connections (one per app process) and the launcher's
+            // live module-control channel, both on the thread that owns the
+            // service table. A spawn request crosses to the launcher, which owns
+            // the processes and their tags.
+            let mut sink = |request: acos_services::ams::ProcessSpawnRequest| {
+                let _ = spawn_tx.send(request);
+            };
+            let mut pump = |peer: &mut Peer| -> Vec<(u32, Frame)> {
+                let mut frames: Vec<(u32, Frame)> = Vec::new();
+                while let Some((id, request)) = peer_control.take() {
+                    let reply = service_request(peer, &mut peer_registry, &request);
+                    let debug_reply = reply.to_string();
+                    peer_control.reply(id, reply);
+                    // A live `ctl` op can queue `system -> app` deliveries (an
+                    // SMS, a call-state event, a location fix, an auth result).
+                    // No binder transaction follows to flush them, so do it here
+                    // — with the **timed** drain, because a module parks its own
+                    // deliveries in its own object.
+                    let flushed = peer.tick();
+                    if let Ok(path) = std::env::var("ACOS_SERVICE_CTL_LOG") {
+                        use std::io::Write as _;
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&path)
+                        {
+                            let _ = writeln!(
+                                file,
+                                "ctl reply={debug_reply} flushed={} targets={:?}",
+                                flushed.len(),
+                                flushed
+                                    .iter()
+                                    .map(|(tag, f)| (tag, f.ty, f.code, f.target))
+                                    .collect::<Vec<_>>()
+                            );
+                        }
+                    }
+                    frames.extend(flushed);
+                }
+                frames
+            };
+            let served = acos_binder_peer::serve::serve_with_control(
                 &mut peer,
-                &mut peer_registry,
-                client,
+                listener,
                 &peer_stop,
-                &peer_control,
-                peer_wake_fd,
+                Some(&mut sink),
+                Some(peer_wake_fd),
+                Some(&mut pump),
             );
             unsafe {
-                libc::close(client);
+                libc::close(listener);
             }
+            let outcome = served?;
+            eprintln!(
+                "acos-art: peer: processes={:?} peak_connections={} accepted={} refused={} \
+                 closed={} frames={}/{} unroutable={}",
+                peer.tags(),
+                outcome.peak_connections,
+                outcome.accepted,
+                outcome.refused,
+                outcome.closed,
+                outcome.frames_in,
+                outcome.frames_out,
+                outcome.unroutable
+            );
             let summary = PeerSummary {
+                processes: peer
+                    .process_list()
+                    .into_iter()
+                    .map(|(tag, package, uid, pid, app_thread, attached)| {
+                        serde_json::json!({
+                            "tag": tag,
+                            "package": package,
+                            "uid": uid,
+                            "pid": pid,
+                            "app_thread": app_thread,
+                            "attached": attached,
+                        })
+                    })
+                    .collect(),
+                spawn_requests: outcome.spawns_requested,
                 calls: peer
                     .service_calls()
                     .iter()
@@ -892,10 +1880,9 @@ pub(crate) fn launch_session(
                 reverse_failed: peer.reverse_failed,
                 resource_limits: peer.resource_limits(),
             };
-            let _ = rc;
             Ok(summary)
         })();
-        let _ = tx.send(summary.unwrap_or(PeerSummary::default()));
+        let _ = tx.send(summary.unwrap_or_default());
     });
 
     // --- guest -------------------------------------------------------------
@@ -960,7 +1947,7 @@ pub(crate) fn launch_session(
     const FLAG_HARDWARE_ACCELERATED: i32 = 1 << 29;
     let mut app_flags = installed
         .as_ref()
-        .map(|state| ((state.app.flags & !FLAG_HARDWARE_ACCELERATED) | FLAG_INSTALLED) as i64)
+        .map(|state| ((state.app().flags & !FLAG_HARDWARE_ACCELERATED) | FLAG_INSTALLED) as i64)
         .unwrap_or(-1);
     // Diagnostic seam (W31): `ACOSLAUNCH_APP_FLAGS=0x…` (or decimal) lets a run
     // prove a *future* manifest derivation end to end before the host PMS owns
@@ -1095,6 +2082,102 @@ pub(crate) fn launch_session(
             &guest_args,
         )?;
     }
+    // MPROC4 step 3b: one `SecondarySpec` per installed extra package. These
+    // are the *same* session inputs the primary got (this run's staged APK, the
+    // same package manager facts), so a secondary process is a second guest of
+    // this session, not a second launch.
+    let mut secondary_specs: Vec<SecondarySpec> = Vec::new();
+    for (index, extra) in extras.iter().enumerate() {
+        let tag = (index as u32) + 1;
+        let facts = acos_services::pms::PmsState::from_apk(&extra.staged).ok();
+        let launcher = apk_launcher_activity(&extra.staged).ok();
+        let labels = acos_services::pms::manifest_labels(&extra.staged).ok();
+        let run_root = run.path().join("secondary").join(format!("tag-{tag}"));
+        let out_dir = out.join(format!("process-{tag}"));
+        let _ = fs::create_dir_all(&out_dir);
+        secondary_specs.push(SecondarySpec {
+            tag,
+            package: extra.package.clone(),
+            staged: extra.staged.clone(),
+            guest_apk: extra.guest_path.clone(),
+            lib_root: extra.lib_root.clone(),
+            guest_lib_root: extra.guest_lib_root.clone(),
+            guest_lib_dir: extra.guest_lib_dir.clone(),
+            uid: extra.uid,
+            activity: launcher
+                .as_ref()
+                .map(|l| l.component.clone())
+                .unwrap_or_default(),
+            app_class: facts
+                .as_ref()
+                .map(|state| state.app().class_name.clone())
+                .filter(|name| !name.is_empty())
+                .unwrap_or_default(),
+            theme: facts.as_ref().map_or(0, |state| state.app().theme),
+            app_flags: facts
+                .as_ref()
+                .map(|state| ((state.app().flags & !(1 << 29)) | (1 << 23)) as i64)
+                .unwrap_or(-1),
+            config_changes: launcher
+                .as_ref()
+                .map_or(0, |l| l.config_changes.max(0) as u32),
+            app_label: labels
+                .as_ref()
+                .map(|l| {
+                    (
+                        l.application.res.max(0) as u32,
+                        l.application.literal.clone().unwrap_or_default(),
+                    )
+                })
+                .unwrap_or((0, String::new())),
+            activity_label: launcher
+                .as_ref()
+                .map(|l| {
+                    (
+                        l.label.res.max(0) as u32,
+                        l.label.literal.clone().unwrap_or_default(),
+                    )
+                })
+                .unwrap_or((0, String::new())),
+            activity_target: launcher
+                .as_ref()
+                .and_then(|l| l.target.clone())
+                .unwrap_or_default(),
+            out_dir,
+            run_root,
+        });
+    }
+    let secondary_shared = SecondaryShared {
+        root: root.clone(),
+        image: boot_image.as_ref().map(|image| image.dir.clone()),
+        substrate: shims.substrate.clone(),
+        art_shim: shims.art_shim.clone(),
+        driver: shims.driver.clone(),
+        native_lib_root: native_lib_root.clone(),
+        sockets: sockets.0.clone(),
+        sock: sock.clone(),
+        overlays: overlays.guest_arg(),
+        resume_ms,
+        geometry: [
+            ("ACOSLAUNCH_WIDTH".to_string(), opts.width),
+            ("ACOSLAUNCH_PANEL_HEIGHT".to_string(), opts.panel_height),
+            ("ACOSLAUNCH_DENSITY".to_string(), opts.density_dpi),
+            ("ACOSLAUNCH_STATUS_INSET".to_string(), opts.status_inset),
+            ("ACOSLAUNCH_NAV_INSET".to_string(), opts.nav_inset),
+        ],
+        screen_layout: acos_services::wms::REFERENCE_SCREEN_LAYOUT.max(0) as u32,
+        animations: opts.animations.as_str(),
+        live_probe: interactive,
+    };
+    let mut secondary_pool =
+        SecondaryPool::new(secondary_specs, secondary_shared, Arc::clone(&live.atms));
+    if !interactive && !secondary_pool.specs.is_empty() {
+        eprintln!(
+            "acos-art: launch: {} secondary package(s) installed; a non-interactive session has \
+             no spawn loop, so no secondary process can be started in it",
+            secondary_pool.specs.len()
+        );
+    }
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
     if let Some(image) = &boot_image {
@@ -1131,6 +2214,12 @@ pub(crate) fn launch_session(
     sb.ro_bind(&shims.substrate, "/data/app/libacosart.so");
     // H17: this session's own APK shadows the shared `/data/app` entry.
     sb.ro_bind(&apk, &format!("/data/app/{apk_name}"));
+    // MPROC1: each extra package's APK and native-library tree, at the guest
+    // paths the package manager publishes for it.
+    for extra in &extras {
+        sb.ro_bind(&extra.staged, &extra.guest_path);
+        sb.ro_bind(&extra.lib_root, &extra.guest_lib_root);
+    }
     sb.ro_bind(
         &root.sysroot.join("shim/libacoshw.so"),
         "/data/libacoshw.so",
@@ -1195,6 +2284,12 @@ pub(crate) fn launch_session(
     );
     sb.env("ACOSART_LOAD", "libandroid_runtime.so");
     sb.env("E3G_SOCK", "/data/acos-launch.sock");
+    // MPROC2 step 3a: the primary app process names itself in the driver's
+    // connection handshake, so the peer can put its tag on every binder handle
+    // it imports. Secondary processes get their own tag from the spawn path
+    // (`spawn <tag>`), never from this env.
+    sb.env("ACOS_PROCESS_TAG", "0");
+    sb.env("ACOS_PROCESS_NAME", &package);
     sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
     // ADR-0029 item 1: the framework initializers the attached modules declare
     // (`ModuleManifest::process_initializers`). On a device the mainline
@@ -1295,8 +2390,8 @@ pub(crate) fn launch_session(
     // provider that reads it from `attachInfo`.
     let provider_spec = installed.as_ref().map_or_else(String::new, |state| {
         let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
-        for p in &state.providers {
-            if p.process_name != state.app.process_name {
+        for p in state.providers() {
+            if p.process_name != state.app().process_name {
                 continue;
             }
             match seen.iter_mut().find(|(class, _)| *class == p.name) {
@@ -1308,7 +2403,7 @@ pub(crate) fn launch_session(
         }
         seen.iter()
             .map(|(class, authorities)| {
-                let declared = state.providers.iter().find(|p| p.name == *class);
+                let declared = state.providers().iter().find(|p| p.name == *class);
                 let read = declared.map_or("", |p| p.read_permission.as_str());
                 let exported = declared.is_some_and(|p| p.exported);
                 let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
@@ -1360,12 +2455,12 @@ pub(crate) fn launch_session(
     // request's `ApplicationInfo` (`LoadedApk.makeApplication` hands that object
     // to the app, and `context.getApplicationInfo().metaData` reads it).
     if let Some(state) = &installed {
-        if !state.app.meta_data.is_empty() {
+        if !state.app().meta_data.is_empty() {
             eprintln!(
                 "acos-art: launch: application meta-data {} (bind ApplicationInfo.metaData)",
-                state.app.meta_data.len()
+                state.app().meta_data.len()
             );
-            sb.env("ACOSLAUNCH_APP_META", &meta_spec(&state.app.meta_data));
+            sb.env("ACOSLAUNCH_APP_META", &meta_spec(&state.app().meta_data));
         }
     }
     if std::env::var_os("ACOSLAUNCH_PROBE").is_some() {
@@ -1567,7 +2662,10 @@ pub(crate) fn launch_session(
     // Bounded capture (R1): a guest that loops on printf costs at most the cap.
     let cap = stream_cap_from_env();
     let (otx, orx) = mpsc::channel::<(u8, TailBuffer)>();
-    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState {
+        top_process: Arc::clone(&live.top_process),
+        ..ProbeState::default()
+    }));
     // W59: one trace sink for the whole interactive session. The guest's looper
     // lines and the host's tap markers share `started`, so the two clocks are
     // directly comparable (both are the same CLOCK_MONOTONIC on this host).
@@ -1612,9 +2710,10 @@ pub(crate) fn launch_session(
                     &path,
                     probe_for_out,
                     Some(compositor_for_probe),
+                    0,
                 ),
                 None => {
-                    drain_stdout_lines(out_pipe, cap, probe_for_out, Some(compositor_for_probe))
+                    drain_stdout_lines(out_pipe, cap, probe_for_out, Some(compositor_for_probe), 0)
                 }
             }
         } else {
@@ -1678,6 +2777,11 @@ pub(crate) fn launch_session(
             // ADR-0029 item 4: the attached set and the live-op channel.
             &session_module_rows,
             &service_control,
+            // MPROC4 step 3b: the session's secondary processes.
+            &mut secondary_pool,
+            spawn_rx,
+            // MPROC5c: the idle kill's timeout (`0` disables it).
+            Duration::from_secs(opts.idle_kill_secs),
         );
         match dead {
             Ok(end) => {
@@ -1728,6 +2832,9 @@ pub(crate) fn launch_session(
     // Wake the peer's idle wait: an idle session may be asleep until a deadline
     // that will never come.
     peer_wakeup.wake();
+    // MPROC4 step 3b: a secondary process never outlives the session (its whole
+    // cgroup scope goes, exactly like the primary's).
+    secondary_pool.shutdown();
     cgroup.sample();
     if status.is_some() {
         cgroup.kill();
@@ -1950,6 +3057,36 @@ pub(crate) fn launch_session(
             summary.resource_limits
         ));
     }
+    // WV4/WV5b: publish where this session's WebView socket lives on the host,
+    // and whether the lazy gate is listening on it. The guest side is fixed
+    // (`/run/acos/webview.sock`, WIRE.md §0). With the gate up, the client's
+    // connect succeeds and the *first* connect wakes the shared broker
+    // (`acos-webview --shared`, one per host); with `ACOS_WEBVIEW_GATE=0` there
+    // is no listener and the connect fails with the kernel's real ENOENT.
+    match (&webview_gate, &webview_broker_socket) {
+        (Some(_), Some(broker)) => unsupported_notes.push(format!(
+            "webview socket: {} -> guest {} (module `webview` real: lazy gate listening; the \
+             first connect starts the shared broker at {})",
+            crate::webview_socket::host_socket_path(&webview_socket_dir).display(),
+            crate::webview_socket::GUEST_SOCKET_PATH,
+            broker.display()
+        )),
+        (None, _) => unsupported_notes.push(
+            "webview: module `webview` is off (no `com.android.webview` provider package, no \
+             gate socket): `WebView` takes Android's own no-provider path. Attach it with \
+             `services: [{id: webview, profile: real}]`."
+                .to_string(),
+        ),
+        (Some(_), None) => unsupported_notes.push(format!(
+            "webview socket: {} -> guest {} (lazy gate listening; no shared broker endpoint \
+             named for this session)",
+            crate::webview_socket::host_socket_path(&webview_socket_dir).display(),
+            crate::webview_socket::GUEST_SOCKET_PATH
+        )),
+    }
+    // The gate (its listener thread and the session directory) is dropped after
+    // `result` is built and before the run dir is removed.
+    let webview_gate = webview_gate;
     let mut result = LaunchResult {
         outcome,
         code,
@@ -1991,6 +3128,35 @@ pub(crate) fn launch_session(
         notes: unsupported_notes,
         marker,
         heap: Some(crate::props::effective_heap_json()),
+        extra_packages: Some(
+            extras
+                .iter()
+                .map(|extra| {
+                    serde_json::json!({
+                        "package": extra.package,
+                        "uid": extra.uid,
+                        "apk": extra.guest_path,
+                        "native_library_dir": extra.guest_lib_dir,
+                    })
+                })
+                .collect(),
+        ),
+        processes: {
+            // MPROC4 step 3b: the activity manager's per-tag `ProcessRecord`s
+            // and the launcher's spawn table. A single-process session keeps the
+            // field absent (nothing to report, nothing invented).
+            let mut launcher = secondary_pool.to_json();
+            launcher["requests"] = secondary_pool.records.clone().into();
+            let processes = serde_json::json!({
+                "activity_manager": summary.processes,
+                "launcher": launcher,
+            });
+            let multi = summary.processes.len() > 1
+                || !secondary_pool.records.is_empty()
+                || !secondary_pool.failures.is_empty()
+                || !secondary_pool.uninstalled.is_empty();
+            multi.then_some(processes)
+        },
     };
     eprintln!(
         "acos-art: launch wall={wall_ms}ms until={} application_created={} activity_resumed={} \
@@ -2197,6 +3363,22 @@ impl ProbeWake {
 #[derive(Default)]
 struct ProbeState {
     latest: Option<ProbeSample>,
+    /// MPROC5: one sample per app process tag. A session can run several
+    /// guests, each printing its own probe lines with its own sequence counter,
+    /// so a single `latest` would serve whichever process printed last — a tree
+    /// from a window that is not on top. The served sample is the one from the
+    /// process ATMS publishes as foreground (`top_process`).
+    by_process: std::collections::BTreeMap<u32, ProbeSample>,
+    /// MPROC5: the foreground process tag (`LiveHandles::top_process`), written
+    /// by ATMS whenever the top-of-task moves.
+    top_process: Arc<std::sync::atomic::AtomicU32>,
+    /// MPROC7: per-process probe-sequence bases. A guest's probe counter starts
+    /// at 1 in every **process**, so a respawned process's samples (1, 2, ...)
+    /// are below the session's last served sequence and every later strict
+    /// settle waited forever on a "fresh" sample (`probe-floor`). When a process
+    /// is spawned, its entries are cleared and this base is set to the session's
+    /// current maximum, so its samples continue monotonically.
+    seq_offsets: std::collections::BTreeMap<u32, u64>,
     /// H15: the last `anim_callbacks` set traced, so the trace names each
     /// distinct animation callback once instead of once per sample.
     anim_traced: String,
@@ -2713,6 +3895,8 @@ fn abi_gate_result(
         stderr: String::new(),
         logs: Vec::new(),
         heap: Some(crate::props::effective_heap_json()),
+        extra_packages: None,
+        processes: None,
         notes: vec![format!(
             "UNSUPPORTED_ABI: the APK ships native code only for [{}], and this engine is \
              {host_abi}-only; no guest was started (AOSP PackageManager refuses the same \
@@ -2760,6 +3944,8 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
         stderr: String::new(),
         logs: Vec::new(),
         heap: Some(crate::props::effective_heap_json()),
+        extra_packages: None,
+        processes: None,
         notes: vec![format!(
             "HOST_DISK_FULL: {free} bytes free on the scratch filesystem, below \
              ACOS_ART_MIN_DISK_MB={} MiB; refusing to start a guest whose frames cannot be \
@@ -2772,11 +3958,15 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
 }
 
 fn latest_probe(state: &Arc<std::sync::Mutex<ProbeState>>) -> Option<ProbeSample> {
+    let state = state.lock().unwrap_or_else(|e| e.into_inner());
+    let top = state.top_process.load(std::sync::atomic::Ordering::Relaxed);
     state
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .latest
-        .clone()
+        .by_process
+        .get(&top)
+        .cloned()
+        // Before ATMS has a top (startup), the newest sample of any process is
+        // the only one there is; tag 0 is the launched app.
+        .or_else(|| state.latest.clone())
 }
 
 /// The newest guest `ACOSUNSUPPORTED` marker and its ordinal.
@@ -2827,8 +4017,9 @@ fn drain_stdout_lines<R: std::io::Read>(
     cap: usize,
     state: Arc<std::sync::Mutex<ProbeState>>,
     compositor: Option<Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>>,
+    tag: u32,
 ) -> TailBuffer {
-    drain_tee_lines(reader, cap, &PathBuf::new(), state, compositor)
+    drain_tee_lines(reader, cap, &PathBuf::new(), state, compositor, tag)
 }
 
 /// Read one `\n`-terminated line, bounding the bytes held in memory.
@@ -2877,6 +4068,7 @@ fn drain_tee_lines<R: std::io::Read>(
     tee: &Path,
     state: Arc<std::sync::Mutex<ProbeState>>,
     compositor: Option<Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>>,
+    tag: u32,
 ) -> TailBuffer {
     use std::io::Write;
     let mut tee_file = if tee.as_os_str().is_empty() {
@@ -3048,9 +4240,16 @@ fn drain_tee_lines<R: std::io::Read>(
                         set_animations_state(on);
                     }
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
-                    let newer = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
+                    // MPROC7: rebase a (re)spawned process's own counter so the
+                    // session's probe sequence stays monotonic across a respawn.
+                    let seq = seq.saturating_add(state.seq_offsets.get(&tag).copied().unwrap_or(0));
+                    let newer = state
+                        .by_process
+                        .get(&tag)
+                        .map(|p| p.seq < seq)
+                        .unwrap_or(true);
                     if newer {
-                        state.latest = Some(ProbeSample {
+                        let sample = ProbeSample {
                             seq,
                             tree,
                             at_ms: host_ms(),
@@ -3060,7 +4259,14 @@ fn drain_tee_lines<R: std::io::Read>(
                             settled,
                             pending,
                             animations_on,
-                        });
+                        };
+                        state.by_process.insert(tag, sample.clone());
+                        // `latest` stays the newest sample of **any** process; it
+                        // is the pre-ATMS fallback and the startup loop's input.
+                        let newer_any = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
+                        if newer_any {
+                            state.latest = Some(sample);
+                        }
                     }
                     // P9: wake the startup loop (and anyone else waiting on a
                     // fresh sample) instead of making it poll for this.
@@ -3443,6 +4649,181 @@ fn animations_state() -> Option<&'static str> {
         1 => Some("on"),
         2 => Some("off"),
         _ => None,
+    }
+}
+
+/// MPROC1: one session control op over a session service.
+///
+/// Only the `intents` module exists today (the capture target); any other
+/// `module`/`op` is a structured `UNSUPPORTED_ANDROID_API`, never a silent
+/// no-op. `op:"result"` also writes the scripted answer to
+/// `<staging>/activity-result.json`, which the guest's result watcher delivers
+/// as the framework's own `ActivityResultItem` transaction; the guest's ack is
+/// `<staging>/activity-result.ack`.
+fn session_ctl(
+    request: &serde_json::Value,
+    intents: &Arc<std::sync::Mutex<acos_services::intents::IntentState>>,
+    staging: &Path,
+    secondary: &mut SecondaryPool,
+) -> serde_json::Value {
+    let module = request.get("module").and_then(|v| v.as_str()).unwrap_or("");
+    let op = request.get("op").and_then(|v| v.as_str()).unwrap_or("");
+    // MPROC4 step 3b: the launcher's own view of the session's processes (tags,
+    // pids, packages, the spawn requests it served). The activity manager's
+    // `ProcessRecord` list is reported by the launch result.
+    if module == "processes" {
+        if op != "list" {
+            return serde_json::json!({
+                "ok": false, "cmd": "ctl", "module": module, "op": op,
+                "code": "BAD_REQUEST",
+                "error": format!("processes control op {op:?} does not exist (ops: list)"),
+            });
+        }
+        for record in secondary.reap() {
+            secondary.records.push(record);
+        }
+        let mut body = secondary.to_json();
+        body["ok"] = serde_json::json!(true);
+        body["cmd"] = serde_json::json!("ctl");
+        body["module"] = serde_json::json!(module);
+        body["op"] = serde_json::json!(op);
+        return body;
+    }
+    if module != "intents" {
+        return serde_json::json!({
+            "ok": false, "cmd": "ctl", "code": "UNSUPPORTED_ANDROID_API",
+            "module": module, "op": op,
+            "error": format!(
+                "no session service `{module}` is attached; the control modules this build \
+                 serves are `intents` (the intent capture target) and `processes` \
+                 (the launcher's process table)"
+            ),
+        });
+    }
+    let args = request
+        .get("args")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let mut state = intents.lock().unwrap_or_else(|e| e.into_inner());
+    match op {
+        "last" => serde_json::json!({
+            "ok": true, "cmd": "ctl", "module": module, "op": op,
+            "capture": state.last().map(|c| c.to_json()),
+        }),
+        "list" => serde_json::json!({
+            "ok": true, "cmd": "ctl", "module": module, "op": op,
+            "captures": state.list().iter().map(|c| c.to_json()).collect::<Vec<_>>(),
+        }),
+        "clear" => {
+            let cleared = state.clear();
+            serde_json::json!({
+                "ok": true, "cmd": "ctl", "module": module, "op": op, "cleared": cleared,
+            })
+        }
+        "result" => {
+            let str_arg = |key: &str| {
+                args.get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            };
+            let capture_seq = args.get("capture_seq").and_then(serde_json::Value::as_u64);
+            let result_code = args
+                .get("result_code")
+                .and_then(serde_json::Value::as_i64)
+                .and_then(|v| i32::try_from(v).ok());
+            let mut extras = std::collections::BTreeMap::new();
+            if let Some(map) = args.get("extras").and_then(serde_json::Value::as_object) {
+                for (key, value) in map {
+                    if let Some(text) = value.as_str() {
+                        extras.insert(key.clone(), text.to_string());
+                    } else {
+                        return serde_json::json!({
+                            "ok": false, "cmd": "ctl", "module": module, "op": op,
+                            "code": "BAD_REQUEST",
+                            "error": format!("extras.{key} must be a string"),
+                        });
+                    }
+                }
+            }
+            let scripted = match state.script_result(
+                capture_seq,
+                result_code,
+                str_arg("data"),
+                str_arg("mime_type"),
+                str_arg("action"),
+                extras,
+            ) {
+                Ok(scripted) => scripted,
+                Err(error) => {
+                    return serde_json::json!({
+                        "ok": false, "cmd": "ctl", "module": module, "op": op,
+                        "code": "BAD_REQUEST", "error": error.to_string(),
+                    })
+                }
+            };
+            // Hand it to the guest: the result file is the session's control
+            // channel (the guest reads only this run's own tree).
+            let path = staging.join("activity-result.json");
+            let doc = serde_json::json!({
+                "capture_seq": scripted.capture_seq,
+                "request_code": scripted.request_code,
+                "result_code": scripted.result_code,
+                "action": scripted.action,
+                "data": scripted.data,
+                "mime_type": scripted.mime_type,
+                "extras": scripted.extras,
+            });
+            let written = std::fs::write(&path, serde_json::to_vec(&doc).unwrap_or_default());
+            // Bound the wait for the guest's ack: a session whose guest is not
+            // running must say `delivered:false` instead of claiming a delivery.
+            let ack_path = staging.join("activity-result.ack");
+            let _ = std::fs::remove_file(&ack_path);
+            let deadline = std::time::Instant::now() + Duration::from_millis(2000);
+            let mut delivered = false;
+            if written.is_ok() {
+                while std::time::Instant::now() < deadline {
+                    if let Ok(text) = std::fs::read_to_string(&ack_path) {
+                        if serde_json::from_str::<serde_json::Value>(&text)
+                            .ok()
+                            .and_then(|v| v.get("capture_seq").and_then(serde_json::Value::as_u64))
+                            == Some(scripted.capture_seq)
+                        {
+                            delivered = true;
+                            break;
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            }
+            if delivered {
+                let _ = std::fs::remove_file(&path);
+                state.mark_delivered(scripted.capture_seq, acos_services::intents::now_ms());
+            }
+            // The reply names the record *after* the delivery mark, so a caller
+            // that only reads this reply sees the same `delivered`/`delivered_utc_ms`
+            // as a later `op:"last"`.
+            let mut result = state
+                .list()
+                .into_iter()
+                .find(|capture| capture.seq == scripted.capture_seq)
+                .and_then(|capture| capture.scripted_result.as_ref().map(|r| r.to_json()))
+                .unwrap_or_else(|| scripted.to_json());
+            result["delivered"] = serde_json::json!(delivered);
+            serde_json::json!({
+                "ok": true, "cmd": "ctl", "module": module, "op": op,
+                "result": result,
+                "delivered": delivered,
+                "control_file": path.display().to_string(),
+                "error": written.err().map(|e| e.to_string()),
+            })
+        }
+        other => serde_json::json!({
+            "ok": false, "cmd": "ctl", "module": module, "op": other,
+            "code": "BAD_REQUEST",
+            "error": format!(
+                "intents control op {other:?} does not exist (ops: last, list, clear, result)"
+            ),
+        }),
     }
 }
 
@@ -4415,6 +5796,10 @@ enum ServeEvent {
     Line(Option<String>),
     /// The guest process has exited (it is still waitable: `WNOWAIT`).
     ChildExited,
+    /// MPROC4 step 3b: the peer resolved a component of a package that needs a
+    /// process. The launcher owns the processes, so the request is handled on
+    /// this thread like any other session event.
+    Spawn(acos_services::ams::ProcessSpawnRequest),
 }
 
 /// VIEW1a: the live-view frame source.
@@ -4520,6 +5905,13 @@ fn interactive_serve(
     // channel to the peer thread for live attach/detach.
     modules: &[serde_json::Value],
     control: &ServiceControl,
+    // MPROC4 step 3b: the session's secondary processes, and the spawn requests
+    // the peer thread hands over.
+    secondary: &mut SecondaryPool,
+    spawn_rx: mpsc::Receiver<acos_services::ams::ProcessSpawnRequest>,
+    // MPROC5c: how long a lazily spawned process may hold nothing before it is
+    // killed (stock cached-process policy); `0` disables the kill.
+    idle_kill: Duration,
 ) -> std::io::Result<SessionEnd> {
     let mut evidence: Vec<serde_json::Value> = Vec::new();
     let mut captures = 0u64;
@@ -4769,6 +6161,19 @@ fn interactive_serve(
             }
         }
     });
+    // MPROC4 step 3b: spawn requests arrive on their own channel; forwarding
+    // them into the session's event channel keeps one event loop (no second
+    // poll path, no ordering question between a spawn and the next command).
+    {
+        let spawn_ctx = ctx.clone();
+        std::thread::spawn(move || {
+            while let Ok(request) = spawn_rx.recv() {
+                if spawn_ctx.send(ServeEvent::Spawn(request)).is_err() {
+                    return;
+                }
+            }
+        });
+    }
     // H4: child exit is a blocking kernel event, not a 100 ms poll. `WNOWAIT`
     // leaves the child reapable, so the existing `child.try_wait()`/`wait()`
     // paths still own the status and no error is retried twice.
@@ -4803,7 +6208,33 @@ fn interactive_serve(
     let mut last_capture_fnv: Option<u64> = None;
     loop {
         let deadline_left = session_deadline.saturating_duration_since(Instant::now());
-        let line = match crx.recv_timeout(deadline_left) {
+        // A secondary guest that ended by itself is evidence, not a running
+        // process: reap it before the next event is served.
+        for record in secondary.reap() {
+            evidence.push(record);
+        }
+        // MPROC5c: the idle kill runs before every wait, and the wait itself is
+        // bounded by the next idle deadline, so an idle process is killed on
+        // time without a polling timer.
+        for record in secondary.idle_kill(idle_kill, &live.atms, &live.wms) {
+            evidence.push(record);
+        }
+        let mut wait = deadline_left;
+        if !idle_kill.is_zero() {
+            let next_idle = live
+                .atms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .next_idle_deadline(idle_kill);
+            if let Some(deadline) = next_idle {
+                wait = wait.min(deadline.saturating_duration_since(Instant::now()));
+            }
+        }
+        let line = match crx.recv_timeout(wait) {
+            Ok(ServeEvent::Spawn(request)) => {
+                secondary.spawn(&request, probe_state, Arc::clone(&live.compositor));
+                continue;
+            }
             Ok(ServeEvent::Line(line)) => line,
             Ok(ServeEvent::ChildExited) => {
                 if let Some(d) = dog {
@@ -4840,6 +6271,11 @@ fn interactive_serve(
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => None,
             Err(mpsc::RecvTimeoutError::Timeout) => {
+                // An idle-kill wake is not the session cap: sweep (the next
+                // iteration does that) and keep serving.
+                if Instant::now() < session_deadline {
+                    continue;
+                }
                 // The only periodic bound left is the 900 s session cap.
                 kill_guest(child, cgroup);
                 let reply = serde_json::json!({
@@ -5324,9 +6760,16 @@ fn interactive_serve(
                     .get("rotation")
                     .and_then(|v| v.as_i64())
                     .or_else(|| {
-                        request.get("orientation").and_then(|v| v.as_str()).map(|o| {
-                            if o.eq_ignore_ascii_case("landscape") { 1 } else { 0 }
-                        })
+                        request
+                            .get("orientation")
+                            .and_then(|v| v.as_str())
+                            .map(|o| {
+                                if o.eq_ignore_ascii_case("landscape") {
+                                    1
+                                } else {
+                                    0
+                                }
+                            })
                     });
                 let Some(rotation) = rotation.filter(|r| (0..=3).contains(r)) else {
                     let reply = serde_json::json!({
@@ -5516,7 +6959,8 @@ fn interactive_serve(
                             match wm.wm.hit_test(point) {
                                 Some(window) => (
                                     Some(window),
-                                    wm.wm.windows
+                                    wm.wm
+                                        .windows
                                         .get(&window)
                                         .map(|record| (record.frame.left, record.frame.top))
                                         .unwrap_or((0, 0)),
@@ -5860,6 +7304,16 @@ fn interactive_serve(
                     "total": stats.total, "kept": entries.len(), "dropped": stats.dropped,
                 }));
             }
+            // MPROC1: the session control op (`acos_service_ctl`). The capture
+            // target is a session service, so the agent reads and scripts it
+            // through here: `{cmd:"ctl", module:"intents", op:"last"|"list"|
+            // "clear"|"result"}`. It never fabricates a handler: a capture says
+            // `handled_by:"captured"`.
+            "ctl" => {
+                let reply = session_ctl(&request, &live.intents, &staging, secondary);
+                protocol_write(&reply);
+                evidence.push(reply);
+            }
             "reset" => {
                 let reply = serde_json::json!({
                     "ok": false, "cmd": "reset", "code": "UNSUPPORTED_ANDROID_API",
@@ -6063,7 +7517,11 @@ fn encode_png_rgba_into(
         "art.encode_idat_chunk",
         t_deflate,
         m5_now_us(),
-        &format!("chunks={} body_bytes={}", zlib.len().div_ceil(IDAT_CHUNK), zlib.len()),
+        &format!(
+            "chunks={} body_bytes={}",
+            zlib.len().div_ceil(IDAT_CHUNK),
+            zlib.len()
+        ),
     );
     png_chunk(sink, b"IEND", &[], crc32);
     m5_trace(
@@ -6106,9 +7564,7 @@ fn zlib_stored_rows(out: &mut Vec<u8>, width: u32, height: u32, stride: u32, rgb
             let byte = if within == 0 {
                 0
             } else {
-                let at = y
-                    .saturating_mul(stride_bytes)
-                    .saturating_add(within - 1);
+                let at = y.saturating_mul(stride_bytes).saturating_add(within - 1);
                 if y < height as usize && within - 1 < row && at < rgba.len() {
                     rgba[at]
                 } else {
@@ -6504,6 +7960,11 @@ impl ServiceControl {
 
 #[derive(Default)]
 struct PeerSummary {
+    /// MPROC4 step 3b: the activity manager's process list at the end of the
+    /// session (`tag`, package, uid, pid, app thread, attached).
+    processes: Vec<serde_json::Value>,
+    /// Spawn requests the peer handed to the launcher.
+    spawn_requests: u64,
     calls: Vec<ServiceCall>,
     unsupported: Vec<UnsupportedCall>,
     bind_bytes: Option<usize>,
@@ -6558,7 +8019,7 @@ fn service_request(
                 None => acos_services::module::ModuleConfig::default(),
                 Some(value) => {
                     match acos_services::module::ModuleConfig::from_json("<live>", value) {
-                    Ok(config) => config,
+                        Ok(config) => config,
                         Err(error) => {
                             return serde_json::json!({
                                 "ok": false, "cmd": "services", "code": "BAD_REQUEST",
@@ -6585,13 +8046,15 @@ fn service_request(
                     "error": "detach needs a string `id`",
                 });
             };
-            modules.detach_live(peer.host_mut(), id).map(|()| serde_json::json!({
-                "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
-                    "id": id,
-                    "profile": profile.as_str(),
-                })).collect::<Vec<_>>(),
-                "modules": modules.verdict_modules(),
-            }))
+            modules.detach_live(peer.host_mut(), id).map(|()| {
+                serde_json::json!({
+                    "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                        "id": id,
+                        "profile": profile.as_str(),
+                    })).collect::<Vec<_>>(),
+                    "modules": modules.verdict_modules(),
+                })
+            })
         }
         "ctl" => {
             // `acos_service_ctl` (MCP) / a scenario `service_ctl` step: a
@@ -6685,11 +8148,7 @@ impl PeerWakeup {
     fn wake(&self) {
         let byte = 1u8;
         unsafe {
-            libc::write(
-                self.write,
-                (&byte as *const u8).cast::<libc::c_void>(),
-                1,
-            );
+            libc::write(self.write, (&byte as *const u8).cast::<libc::c_void>(), 1);
         }
     }
 }
@@ -6709,7 +8168,10 @@ fn write_out(fd: RawFd, outs: Vec<Frame>, context: &str) -> std::io::Result<()> 
         if let Err(error) = write_frame(fd, &out) {
             eprintln!(
                 "peer-trace: write_frame FAILED {context}: {error} (ty={} seq={} code={} data={})",
-                out.ty, out.seq, out.code, out.data.len()
+                out.ty,
+                out.seq,
+                out.code,
+                out.data.len()
             );
             close_frame_fds(&out);
             return Err(error);
@@ -6718,170 +8180,46 @@ fn write_out(fd: RawFd, outs: Vec<Frame>, context: &str) -> std::io::Result<()> 
     }
     Ok(())
 }
-
-fn serve(
-    peer: &mut Peer,
-    modules: &mut acos_services::module::ModuleRegistry,
-    fd: RawFd,
-    stop: &AtomicBool,
-    control: &ServiceControl,
-    wake: RawFd,
-) -> std::io::Result<()> {
-    loop {
-        // ADR-0029 item 4: drain live module requests between frames. The call
-        // loops (the socket has a 1 s receive timeout), so a live `attach` is
-        // applied within at most one idle second and before the next binder
-        // transaction is served.
-        while let Some((id, request)) = control.take() {
-            let reply = service_request(peer, modules, &request);
-            let debug_reply = reply.to_string();
-            control.reply(id, reply);
-            // A live `ctl` op can queue `system -> app` deliveries (an SMS, a
-            // call-state event, a location fix, an authentication result). No
-            // binder transaction follows to flush them, so do it here — with the
-            // **timed** drain, because a module parks its own deliveries in its
-            // own object (`ServiceObject::drain_raw_deliveries`), which the plain
-            // transaction drain does not see. The control op has returned, so no
-            // module lock is held here.
-            let flushed = peer.tick();
-            if let Ok(path) = std::env::var("ACOS_SERVICE_CTL_LOG") {
-                use std::io::Write as _;
-                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
-                    let _ = writeln!(
-                        file,
-                        "ctl reply={debug_reply} flushed={} targets={:?}",
-                        flushed.len(),
-                        flushed.iter().map(|f| (f.ty, f.code, f.target)).collect::<Vec<_>>()
-                    );
-                }
-            }
-            for out in flushed {
-                if let Err(e) = write_frame(fd, &out) {
-                    eprintln!(
-                        "peer-trace: write_frame FAILED after control op: {e} (ty={} seq={} code={} data={})",
-                        out.ty, out.seq, out.code, out.data.len()
-                    );
-                    close_frame_fds(&out);
-                    return Err(e);
-                }
-                close_frame_fds(&out);
-            }
-        }
-        // ADR-0029: the idle turn waits for whichever comes first — a guest
-        // frame, the earliest **module** delivery deadline, or the launcher's
-        // stop wake. With no timed module the wait is unbounded, so an idle
-        // session costs no wakeups at all (the fixed 20 ms poll it replaces cost
-        // 50/s and still delivered a scripted fix up to 20 ms late).
-        let deadline = peer
-            .next_timed_deadline()
-            .map(|due| due.saturating_duration_since(Instant::now()));
-        match wait_for_idle(fd, wake, deadline)? {
-            IdleWake::Wake => {
-                // Drain the wakeup byte; `stop` is the decision, and a queued
-                // module request is served at the top of the next turn.
-                let mut byte = 0u8;
-                unsafe {
-                    libc::read(wake, (&mut byte as *mut u8).cast::<libc::c_void>(), 1);
-                }
-                if stop.load(Ordering::Acquire) {
-                    return Ok(());
-                }
-                continue;
-            }
-            IdleWake::Deadline => {
-                write_out(fd, peer.tick(), "after a module deadline")?;
-                let _ = std::io::stderr().flush();
-                continue;
-            }
-            IdleWake::Frame => {}
-        }
-        let frame: Frame = match read_frame(fd) {
-            Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            // poll(2) said readable but the frame is not (a short write from a
-            // dying guest): end the session, never spin.
-            Err(e)
-                if e.kind() == std::io::ErrorKind::WouldBlock
-                    || e.kind() == std::io::ErrorKind::TimedOut =>
-            {
-                if stop.load(Ordering::Acquire) {
-                    return Ok(());
-                }
-                continue;
-            }
-            Err(e) => return Err(e),
-        };
-        // `ACOS_PEER_DEBUG=1` prints every frame the peer reads and writes. The
-        // reply/`write_frame` failure line is *not* gated: a reply the peer
-        // cannot send is the difference between a structured guest error and a
-        // main thread blocked in `transact`, so it must always be visible.
-        let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
-        if dbg {
-            eprintln!(
-                "peer-trace: in ty={} seq={} code={} flags={:#x} target={:#x} data={} offs={} fds={}",
-                frame.ty,
-                frame.seq,
-                frame.code,
-                frame.flags,
-                frame.target,
-                frame.data.len(),
-                frame.offs.len(),
-                frame.fds.len()
-            );
-        }
-        let outs = peer.handle(frame);
-        if dbg {
-            eprintln!("peer-trace: handle -> {} frames", outs.len());
-        }
-        for out in outs {
-            if let Err(e) = write_frame(fd, &out) {
-                eprintln!(
-                    "peer-trace: write_frame FAILED: {e} (ty={} seq={} code={} data={} offs={} fds={})",
-                    out.ty,
-                    out.seq,
-                    out.code,
-                    out.data.len(),
-                    out.offs.len(),
-                    out.fds.len()
-                );
-                close_frame_fds(&out);
-                return Err(e);
-            }
-            if dbg {
-                eprintln!(
-                    "peer-trace: out ty={} seq={} code={} data={} offs={} fds={:?}",
-                    out.ty,
-                    out.seq,
-                    out.code,
-                    out.data.len(),
-                    out.offs.len(),
-                    out.fds
-                );
-            }
-            close_frame_fds(&out);
-        }
-        let _ = std::io::stderr().flush();
-    }
-}
-
 /// Compile the userspace binder driver (`crates/acos-binder-peer/native`) with
 /// the NDK's bionic clang into `<data>/lib/libacos_binder_driver.so`.
+///
+/// FLAKEWIN: the driver's transaction-buffer heap is a second translation unit
+/// (`txn_heap.c` + `txn_heap.h`, host-testable on its own). It is embedded and
+/// compiled here with the driver, and it is part of the build-cache key: a heap
+/// change must never reuse a cached `.so` that still carries the old allocator.
 fn build_driver(root: &ArtRoot) -> Result<PathBuf> {
     const SOURCE: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../acos-binder-peer/native/binder_driver.c"
     ));
+    const HEAP_SOURCE: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../acos-binder-peer/native/txn_heap.c"
+    ));
+    const HEAP_HEADER: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../acos-binder-peer/native/txn_heap.h"
+    ));
     let dir = root.data.join("lib");
     fs::create_dir_all(&dir)?;
     let out = dir.join("libacos_binder_driver.so");
     let src = dir.join("binder_driver.c");
+    let heap_src = dir.join("txn_heap.c");
+    let heap_hdr = dir.join("txn_heap.h");
     let mut hash = 0xcbf2_9ce4_8422_2325u64;
-    for b in SOURCE.as_bytes() {
+    for b in SOURCE
+        .as_bytes()
+        .iter()
+        .chain(HEAP_SOURCE.as_bytes())
+        .chain(HEAP_HEADER.as_bytes())
+    {
         hash ^= u64::from(*b);
         hash = hash.wrapping_mul(0x100_0000_01b3);
     }
     let stamp = dir.join("binder_driver.hash");
     if out.is_file()
+        && heap_src.is_file()
+        && heap_hdr.is_file()
         && fs::read_to_string(&stamp)
             .map(|s| s.trim() == hash.to_string())
             .unwrap_or(false)
@@ -6889,13 +8227,17 @@ fn build_driver(root: &ArtRoot) -> Result<PathBuf> {
         return Ok(out);
     }
     fs::write(&src, SOURCE)?;
+    fs::write(&heap_src, HEAP_SOURCE)?;
+    fs::write(&heap_hdr, HEAP_HEADER)?;
     let clang = ndk_clang()?;
     // W37 (flagged call-site edit in the W36-owned launch.rs): compile once into
     // the shared content-addressed cache; a cold cohort serialises on the build
     // lock and every later launch only installs the verified `.so`.
     let cache_key = crate::build_cache::digest(&[
-        b"acos-art/binder-driver/v2",
+        b"acos-art/binder-driver/v3",
         SOURCE.as_bytes(),
+        HEAP_SOURCE.as_bytes(),
+        HEAP_HEADER.as_bytes(),
         crate::build_cache::file_id(&clang).as_bytes(),
     ]);
     let _build_lock = crate::build_cache::lock(&cache_key)?;
@@ -6917,6 +8259,9 @@ fn build_driver(root: &ArtRoot) -> Result<PathBuf> {
         ])
         .arg(&out)
         .arg(&src)
+        .arg(&heap_src)
+        .arg("-I")
+        .arg(&dir)
         .args(["-llog", "-ldl"])
         .status()?;
     if !st.success() {
@@ -7178,6 +8523,7 @@ mod probe_line_tests {
             4096,
             Arc::clone(&state),
             None,
+            0,
         );
         let out = state.lock().unwrap().clone_for_test();
         out
@@ -7187,6 +8533,9 @@ mod probe_line_tests {
         fn clone_for_test(&self) -> ProbeState {
             ProbeState {
                 latest: self.latest.clone(),
+                by_process: self.by_process.clone(),
+                seq_offsets: self.seq_offsets.clone(),
+                top_process: Arc::clone(&self.top_process),
                 unsupported: self.unsupported.clone(),
                 unsupported_seq: self.unsupported_seq,
                 probe_error: self.probe_error.clone(),
@@ -7388,8 +8737,14 @@ mod view_socket_dir_tests {
         // Separate directories: the guest mounts `guest.0` at /dev/socket, so a
         // `view.sock` there would be reachable by the app under test.
         assert_ne!(guest.0, view.0);
-        assert!(!view.0.starts_with(&guest.0), "view dir is inside the guest dir");
-        assert!(!guest.0.starts_with(&view.0), "guest dir is inside the view dir");
+        assert!(
+            !view.0.starts_with(&guest.0),
+            "view dir is inside the guest dir"
+        );
+        assert!(
+            !guest.0.starts_with(&view.0),
+            "guest dir is inside the view dir"
+        );
         assert!(view.0.to_string_lossy().contains("acos-view-"));
         assert!(guest.0.to_string_lossy().contains("acos-art-"));
         for dir in [&guest.0, &view.0] {
@@ -7403,7 +8758,10 @@ mod view_socket_dir_tests {
         // the sandbox (`sb.rw_bind(&sockets.0, "/dev/socket")` is the only socket
         // dir mount).
         let source = include_str!("launch.rs");
-        let source = source.split("mod view_socket_dir_tests").next().expect("source");
+        let source = source
+            .split("mod view_socket_dir_tests")
+            .next()
+            .expect("source");
         assert_eq!(
             source.matches("rw_bind(&sockets.0").count(),
             1,
@@ -7424,7 +8782,11 @@ mod view_socket_dir_tests {
         fs::set_permissions(&loose, fs::Permissions::from_mode(0o777)).expect("chmod");
         private_dir(&loose).expect("an owned loose directory is tightened");
         assert_eq!(
-            fs::symlink_metadata(&loose).expect("stat").permissions().mode() & 0o777,
+            fs::symlink_metadata(&loose)
+                .expect("stat")
+                .permissions()
+                .mode()
+                & 0o777,
             0o700
         );
         let file = base.0.join("file");
@@ -7432,7 +8794,10 @@ mod view_socket_dir_tests {
         assert!(private_dir(&file).is_err(), "a file is refused");
         let link = base.0.join("link");
         symlink(&loose, &link).expect("symlink");
-        assert!(private_dir(&link).is_err(), "a symlink is refused, not followed");
+        assert!(
+            private_dir(&link).is_err(),
+            "a symlink is refused, not followed"
+        );
     }
 }
 
@@ -7725,15 +9090,13 @@ mod abi_gate_tests {
         assert_eq!(abi["host_abi"], serde_json::json!("x86_64"));
         assert_eq!(
             abi["libs_sample"],
-            serde_json::json!([
-                "lib/arm64-v8a/libfoo.so",
-                "lib/armeabi-v7a/libfoo.so"
-            ])
+            serde_json::json!(["lib/arm64-v8a/libfoo.so", "lib/armeabi-v7a/libfoo.so"])
         );
         assert!(result
             .notes
             .iter()
-            .any(|n| n.starts_with("UNSUPPORTED_ABI:") && n.contains("INSTALL_FAILED_NO_MATCHING_ABIS")));
+            .any(|n| n.starts_with("UNSUPPORTED_ABI:")
+                && n.contains("INSTALL_FAILED_NO_MATCHING_ABIS")));
         // The serialized result carries the same block (a caller that only
         // keeps the JSON still has the evidence).
         let json = serde_json::to_value(&result).expect("serialize");

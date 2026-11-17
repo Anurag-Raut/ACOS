@@ -346,13 +346,21 @@ mod tests {
 
         let err = ensure_private_dir(&link).expect_err("a symlink must be refused");
         assert!(err.to_string().contains("symlink"), "{err}");
-        let mode = std::fs::metadata(&target).expect("stat").permissions().mode() & 0o777;
+        let mode = std::fs::metadata(&target)
+            .expect("stat")
+            .permissions()
+            .mode()
+            & 0o777;
         assert_eq!(mode, 0o755, "the link target was not chmod-ed");
 
         // The runtime *base* helper must not chmod through the link either.
         let err = ensure_runtime_base(&link).expect_err("0755 link target refused");
         assert!(err.to_string().contains("chmod through a link"), "{err}");
-        let mode = std::fs::metadata(&target).expect("stat").permissions().mode() & 0o777;
+        let mode = std::fs::metadata(&target)
+            .expect("stat")
+            .permissions()
+            .mode()
+            & 0o777;
         assert_eq!(mode, 0o755, "still untouched");
         let _ = std::fs::remove_dir_all(&base);
     }

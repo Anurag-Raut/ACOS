@@ -259,10 +259,7 @@ fn parse_start_element(
         let v_type = *data.get(apos + 15).ok_or_else(|| axml("short attribute"))?;
         let v_data = axml_u32(data, apos + 16)?;
         let resource_id = if a_name >= 0 {
-            resource_ids
-                .get(a_name as usize)
-                .copied()
-                .unwrap_or(0)
+            resource_ids.get(a_name as usize).copied().unwrap_or(0)
         } else {
             0
         };
@@ -395,9 +392,7 @@ impl XmlParserState {
     pub fn get_line_number(&self, doc: &XmlDocument) -> i32 {
         match doc.events.get(self.position) {
             Some(XmlEvent::StartTag(t)) => t.line as i32,
-            Some(XmlEvent::EndTag { line, .. }) | Some(XmlEvent::Text { line, .. }) => {
-                *line as i32
-            }
+            Some(XmlEvent::EndTag { line, .. }) | Some(XmlEvent::Text { line, .. }) => *line as i32,
             _ => -1,
         }
     }
@@ -501,9 +496,7 @@ impl XmlParserState {
         for (i, a) in t.attributes.iter().enumerate() {
             let ns_matches = match namespace {
                 None => a.namespace_index < 0,
-                Some(ns) => {
-                    doc.string_block.get(a.namespace_index).unwrap_or("") == ns
-                }
+                Some(ns) => doc.string_block.get(a.namespace_index).unwrap_or("") == ns,
             };
             if !ns_matches {
                 continue;

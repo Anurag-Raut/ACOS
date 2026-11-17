@@ -281,21 +281,56 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(V, "nCreateGroup", "(J)J", n_create_group_copy);
     vm.register_native(V, "nAddChild", "(JJ)V", n_add_child);
     vm.register_native(V, "nSetName", "(JLjava/lang/String;)V", n_set_name);
-    vm.register_native(V, "nSetPathString", "(JLjava/lang/String;I)V", n_set_path_string);
+    vm.register_native(
+        V,
+        "nSetPathString",
+        "(JLjava/lang/String;I)V",
+        n_set_path_string,
+    );
     vm.register_native(V, "nSetPathData", "(JJ)V", n_set_path_data);
-    vm.register_native(V, "nSetRendererViewportSize", "(JFF)V", n_set_renderer_viewport_size);
+    vm.register_native(
+        V,
+        "nSetRendererViewportSize",
+        "(JFF)V",
+        n_set_renderer_viewport_size,
+    );
     vm.register_native(V, "nSetRootAlpha", "(JF)Z", n_set_root_alpha);
     vm.register_native(V, "nGetRootAlpha", "(J)F", n_get_root_alpha);
     vm.register_native(V, "nSetAntiAlias", "(JZ)V", n_set_anti_alias);
     vm.register_native(V, "nSetAllowCaching", "(JZ)V", n_set_allow_caching);
     vm.register_native(V, "nDraw", "(JJJLandroid/graphics/Rect;ZZ)I", n_draw);
 
-    vm.register_native(V, "nGetFullPathProperties", "(J[BI)Z", n_get_full_path_properties);
+    vm.register_native(
+        V,
+        "nGetFullPathProperties",
+        "(J[BI)Z",
+        n_get_full_path_properties,
+    );
     vm.register_native(V, "nGetGroupProperties", "(J[FI)Z", n_get_group_properties);
-    vm.register_native(V, "nUpdateFullPathProperties", "(JFIFIFFFFFIII)V", n_update_full_path_properties);
-    vm.register_native(V, "nUpdateFullPathFillGradient", "(JJ)V", n_update_full_path_fill_gradient);
-    vm.register_native(V, "nUpdateFullPathStrokeGradient", "(JJ)V", n_update_full_path_stroke_gradient);
-    vm.register_native(V, "nUpdateGroupProperties", "(JFFFFFFF)V", n_update_group_properties);
+    vm.register_native(
+        V,
+        "nUpdateFullPathProperties",
+        "(JFIFIFFFFFIII)V",
+        n_update_full_path_properties,
+    );
+    vm.register_native(
+        V,
+        "nUpdateFullPathFillGradient",
+        "(JJ)V",
+        n_update_full_path_fill_gradient,
+    );
+    vm.register_native(
+        V,
+        "nUpdateFullPathStrokeGradient",
+        "(JJ)V",
+        n_update_full_path_stroke_gradient,
+    );
+    vm.register_native(
+        V,
+        "nUpdateGroupProperties",
+        "(JFFFFFFF)V",
+        n_update_group_properties,
+    );
 
     // Full path setters / getters.
     vm.register_native(V, "nSetStrokeWidth", "(JF)V", n_set_stroke_width);
@@ -336,10 +371,20 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     // by both the drawable and the parser surface.
     const PP: &str = "Landroid/util/PathParser;";
     vm.register_native(PP, "nCreateEmptyPathData", "()J", pp_create_empty);
-    vm.register_native(PP, "nCreatePathDataFromString", "(Ljava/lang/String;I)J", pp_create_from_string);
+    vm.register_native(
+        PP,
+        "nCreatePathDataFromString",
+        "(Ljava/lang/String;I)J",
+        pp_create_from_string,
+    );
     vm.register_native(PP, "nCreatePathData", "(J)J", pp_create);
     vm.register_native(PP, "nCreatePathFromPathData", "(JJ)V", pp_create_path);
-    vm.register_native(PP, "nParseStringForPath", "(JLjava/lang/String;I)V", pp_parse_string_for_path);
+    vm.register_native(
+        PP,
+        "nParseStringForPath",
+        "(JLjava/lang/String;I)V",
+        pp_parse_string_for_path,
+    );
     vm.register_native(PP, "nSetPathData", "(JJ)V", pp_set_path_data);
     vm.register_native(PP, "nFinalize", "(J)V", pp_finalize);
     vm.register_native(PP, "nCanMorph", "(JJ)Z", pp_can_morph);
@@ -353,11 +398,36 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     const AVD: &str = "Landroid/graphics/drawable/AnimatedVectorDrawable;";
     vm.register_native(AVD, "nAddAnimator", "(JJJJJII)V", n_add_animator);
     vm.register_native(AVD, "nCreateAnimatorSet", "()J", n_create_animator_set);
-    vm.register_native(AVD, "nCreateGroupPropertyHolder", "(JIFF)J", n_create_group_property_holder);
-    vm.register_native(AVD, "nCreatePathColorPropertyHolder", "(JIII)J", n_create_path_color_property_holder);
-    vm.register_native(AVD, "nCreatePathDataPropertyHolder", "(JJJ)J", n_create_path_data_property_holder);
-    vm.register_native(AVD, "nCreatePathPropertyHolder", "(JIFF)J", n_create_path_property_holder);
-    vm.register_native(AVD, "nCreateRootAlphaPropertyHolder", "(JFF)J", n_create_root_alpha_property_holder);
+    vm.register_native(
+        AVD,
+        "nCreateGroupPropertyHolder",
+        "(JIFF)J",
+        n_create_group_property_holder,
+    );
+    vm.register_native(
+        AVD,
+        "nCreatePathColorPropertyHolder",
+        "(JIII)J",
+        n_create_path_color_property_holder,
+    );
+    vm.register_native(
+        AVD,
+        "nCreatePathDataPropertyHolder",
+        "(JJJ)J",
+        n_create_path_data_property_holder,
+    );
+    vm.register_native(
+        AVD,
+        "nCreatePathPropertyHolder",
+        "(JIFF)J",
+        n_create_path_property_holder,
+    );
+    vm.register_native(
+        AVD,
+        "nCreateRootAlphaPropertyHolder",
+        "(JFF)J",
+        n_create_root_alpha_property_holder,
+    );
     vm.register_native(AVD, "nEnd", "(J)V", n_end);
     vm.register_native(AVD, "nReset", "(J)V", n_reset);
     vm.register_native(
@@ -366,9 +436,24 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(JLandroid/graphics/drawable/AnimatedVectorDrawable$VectorDrawableAnimatorRT;I)V",
         n_reverse,
     );
-    vm.register_native(AVD, "nSetPropertyHolderData", "(J[FI)V", n_set_property_holder_data_float);
-    vm.register_native(AVD, "nSetPropertyHolderData", "(J[II)V", n_set_property_holder_data_int);
-    vm.register_native(AVD, "nSetVectorDrawableTarget", "(JJ)V", n_set_vector_drawable_target);
+    vm.register_native(
+        AVD,
+        "nSetPropertyHolderData",
+        "(J[FI)V",
+        n_set_property_holder_data_float,
+    );
+    vm.register_native(
+        AVD,
+        "nSetPropertyHolderData",
+        "(J[II)V",
+        n_set_property_holder_data_int,
+    );
+    vm.register_native(
+        AVD,
+        "nSetVectorDrawableTarget",
+        "(JJ)V",
+        n_set_vector_drawable_target,
+    );
     vm.register_native(
         AVD,
         "nStart",
@@ -393,7 +478,10 @@ fn n_create_tree(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn n_create_tree_from_copy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let old = Handle::from_jlong(vm.arg_i64(ctx, 0));
     let root = Handle::from_jlong(vm.arg_i64(ctx, 1));
-    let mut t = trees().get(old).cloned().unwrap_or_else(|_| VTree::from_root(root));
+    let mut t = trees()
+        .get(old)
+        .cloned()
+        .unwrap_or_else(|_| VTree::from_root(root));
     t.root = root;
     let h = trees().insert(t);
     vm.ret_i64(ctx, h.to_jlong());
@@ -845,9 +933,17 @@ full_path_u32!(n_set_stroke_color, n_get_stroke_color, stroke_color);
 full_path_f32!(n_set_stroke_alpha, n_get_stroke_alpha, stroke_alpha);
 full_path_u32!(n_set_fill_color, n_get_fill_color, fill_color);
 full_path_f32!(n_set_fill_alpha, n_get_fill_alpha, fill_alpha);
-full_path_f32!(n_set_trim_path_start, n_get_trim_path_start, trim_path_start);
+full_path_f32!(
+    n_set_trim_path_start,
+    n_get_trim_path_start,
+    trim_path_start
+);
 full_path_f32!(n_set_trim_path_end, n_get_trim_path_end, trim_path_end);
-full_path_f32!(n_set_trim_path_offset, n_get_trim_path_offset, trim_path_offset);
+full_path_f32!(
+    n_set_trim_path_offset,
+    n_get_trim_path_offset,
+    trim_path_offset
+);
 
 group_f32!(n_set_rotation, n_get_rotation, rotation);
 group_f32!(n_set_pivot_x, n_get_pivot_x, pivot_x);
@@ -887,8 +983,16 @@ fn n_draw(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             return Ok(());
         }
     };
-    let viewport_w = if t.viewport_width > 0.0 { t.viewport_width } else { w as f32 };
-    let viewport_h = if t.viewport_height > 0.0 { t.viewport_height } else { h as f32 };
+    let viewport_w = if t.viewport_width > 0.0 {
+        t.viewport_width
+    } else {
+        w as f32
+    };
+    let viewport_h = if t.viewport_height > 0.0 {
+        t.viewport_height
+    } else {
+        h as f32
+    };
 
     let mut m = Matrix3x3::identity();
     m.pre_translate(left as f32, top as f32);
@@ -1014,11 +1118,7 @@ fn draw_full_path(
     Ok(())
 }
 
-fn apply_filter(
-    paint: &mut Paint,
-    cf: Option<acos_render::paint::ColorFilterSpec>,
-    gradient: i64,
-) {
+fn apply_filter(paint: &mut Paint, cf: Option<acos_render::paint::ColorFilterSpec>, gradient: i64) {
     if let Some(cf) = cf {
         paint.color_filter = Some(cf);
     }
@@ -1237,15 +1337,24 @@ fn is_command(b: u8) -> bool {
     matches!(
         b,
         b'M' | b'm'
-            | b'L' | b'l'
-            | b'H' | b'h'
-            | b'V' | b'v'
-            | b'C' | b'c'
-            | b'S' | b's'
-            | b'Q' | b'q'
-            | b'T' | b't'
-            | b'A' | b'a'
-            | b'Z' | b'z'
+            | b'L'
+            | b'l'
+            | b'H'
+            | b'h'
+            | b'V'
+            | b'v'
+            | b'C'
+            | b'c'
+            | b'S'
+            | b's'
+            | b'Q'
+            | b'q'
+            | b'T'
+            | b't'
+            | b'A'
+            | b'a'
+            | b'Z'
+            | b'z'
     )
 }
 
@@ -1285,7 +1394,10 @@ fn parse_path_string(s: &str) -> Result<Path, String> {
                 b'M' => b'L',
                 b'm' => b'l',
                 b'Z' | b'z' | 0 => {
-                    return Err(format!("unexpected path-data byte {:?} at {}", bytes[i] as char, i))
+                    return Err(format!(
+                        "unexpected path-data byte {:?} at {}",
+                        bytes[i] as char, i
+                    ))
                 }
                 other => other,
             }
@@ -1555,11 +1667,34 @@ fn arc_to_cubic(
 
 #[derive(Clone, Debug)]
 enum PropertyHolderKind {
-    Group { node: Handle, property_id: i32, start: f32, end: f32 },
-    Path { node: Handle, property_id: i32, start: f32, end: f32 },
-    PathColor { node: Handle, property_id: i32, start: i32, end: i32 },
-    PathData { node: Handle, start: i64, end: i64 },
-    RootAlpha { tree: Handle, start: f32, end: f32 },
+    Group {
+        node: Handle,
+        property_id: i32,
+        start: f32,
+        end: f32,
+    },
+    Path {
+        node: Handle,
+        property_id: i32,
+        start: f32,
+        end: f32,
+    },
+    PathColor {
+        node: Handle,
+        property_id: i32,
+        start: i32,
+        end: i32,
+    },
+    PathData {
+        node: Handle,
+        start: i64,
+        end: i64,
+    },
+    RootAlpha {
+        tree: Handle,
+        start: f32,
+        end: f32,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -1674,7 +1809,9 @@ fn avd_err(e: crate::natives::gfx_handles::HandleError) -> VmError {
 /// `getPropertyIndex` maps, which is the order the native tree uses.
 fn apply_holder_value(holder: &PropertyHolder, value: f32, color: i32) {
     match holder.kind {
-        PropertyHolderKind::Group { node, property_id, .. } => {
+        PropertyHolderKind::Group {
+            node, property_id, ..
+        } => {
             if let Ok(n) = nodes().get_mut(node) {
                 if let VNodeKind::Group(g) = &mut n.kind {
                     match property_id {
@@ -1690,7 +1827,9 @@ fn apply_holder_value(holder: &PropertyHolder, value: f32, color: i32) {
                 }
             }
         }
-        PropertyHolderKind::Path { node, property_id, .. } => {
+        PropertyHolderKind::Path {
+            node, property_id, ..
+        } => {
             if let Ok(n) = nodes().get_mut(node) {
                 if let VNodeKind::FullPath(p) = &mut n.kind {
                     match property_id {
@@ -1705,7 +1844,9 @@ fn apply_holder_value(holder: &PropertyHolder, value: f32, color: i32) {
                 }
             }
         }
-        PropertyHolderKind::PathColor { node, property_id, .. } => {
+        PropertyHolderKind::PathColor {
+            node, property_id, ..
+        } => {
             if let Ok(n) = nodes().get_mut(node) {
                 if let VNodeKind::FullPath(p) = &mut n.kind {
                     match property_id {
@@ -1740,7 +1881,9 @@ fn apply_holder_value(holder: &PropertyHolder, value: f32, color: i32) {
 fn apply_set(animator: &AnimatorSet, at_start: bool) {
     let holders = avd_holders();
     for child in &animator.children {
-        let Ok(h) = holders.get(child.holder) else { continue };
+        let Ok(h) = holders.get(child.holder) else {
+            continue;
+        };
         match h.kind {
             PropertyHolderKind::PathColor { start, end, .. } => {
                 let v = if at_start { start } else { end };
@@ -1750,7 +1893,11 @@ fn apply_set(animator: &AnimatorSet, at_start: bool) {
                 apply_holder_value(h, if at_start { 0.0 } else { 1.0 }, 0);
             }
             _ => {
-                let v = if at_start { h.start_value() } else { h.end_value() };
+                let v = if at_start {
+                    h.start_value()
+                } else {
+                    h.end_value()
+                };
                 apply_holder_value(h, v, 0);
             }
         }
@@ -1769,7 +1916,12 @@ fn n_create_group_property_holder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let start = vm.arg_f32(ctx, 2);
     let end = vm.arg_f32(ctx, 3);
     let h = avd_holders().insert(PropertyHolder {
-        kind: PropertyHolderKind::Group { node, property_id, start, end },
+        kind: PropertyHolderKind::Group {
+            node,
+            property_id,
+            start,
+            end,
+        },
         floats: vec![start, end],
         ints: Vec::new(),
     });
@@ -1783,7 +1935,12 @@ fn n_create_path_property_holder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let start = vm.arg_f32(ctx, 2);
     let end = vm.arg_f32(ctx, 3);
     let h = avd_holders().insert(PropertyHolder {
-        kind: PropertyHolderKind::Path { node, property_id, start, end },
+        kind: PropertyHolderKind::Path {
+            node,
+            property_id,
+            start,
+            end,
+        },
         floats: vec![start, end],
         ints: Vec::new(),
     });
@@ -1797,7 +1954,12 @@ fn n_create_path_color_property_holder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<
     let start = vm.arg_i32(ctx, 2);
     let end = vm.arg_i32(ctx, 3);
     let h = avd_holders().insert(PropertyHolder {
-        kind: PropertyHolderKind::PathColor { node, property_id, start, end },
+        kind: PropertyHolderKind::PathColor {
+            node,
+            property_id,
+            start,
+            end,
+        },
         floats: Vec::new(),
         ints: vec![start, end],
     });
@@ -1839,9 +2001,17 @@ fn n_set_property_holder_data_float(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()>
     let values = match vm.heap.get(arr) {
         Some(Object::Array(a)) => match &a.data {
             ArrayData::Float(v) => v.iter().take(len).copied().collect(),
-            _ => return Err(VmError::Internal("AnimatedVectorDrawable: expected float[]".into())),
+            _ => {
+                return Err(VmError::Internal(
+                    "AnimatedVectorDrawable: expected float[]".into(),
+                ))
+            }
         },
-        _ => return Err(VmError::Internal("AnimatedVectorDrawable: null float[]".into())),
+        _ => {
+            return Err(VmError::Internal(
+                "AnimatedVectorDrawable: null float[]".into(),
+            ))
+        }
     };
     avd_holders().get_mut(holder).map_err(avd_err)?.floats = values;
     Ok(())
@@ -1855,9 +2025,17 @@ fn n_set_property_holder_data_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let values = match vm.heap.get(arr) {
         Some(Object::Array(a)) => match &a.data {
             ArrayData::Int(v) => v.iter().take(len).copied().collect(),
-            _ => return Err(VmError::Internal("AnimatedVectorDrawable: expected int[]".into())),
+            _ => {
+                return Err(VmError::Internal(
+                    "AnimatedVectorDrawable: expected int[]".into(),
+                ))
+            }
         },
-        _ => return Err(VmError::Internal("AnimatedVectorDrawable: null int[]".into())),
+        _ => {
+            return Err(VmError::Internal(
+                "AnimatedVectorDrawable: null int[]".into(),
+            ))
+        }
     };
     avd_holders().get_mut(holder).map_err(avd_err)?.ints = values;
     Ok(())
@@ -1871,14 +2049,18 @@ fn n_add_animator(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let duration = vm.arg_i64(ctx, 4);
     let repeat_count = vm.arg_i32(ctx, 5);
     let repeat_mode = vm.arg_i32(ctx, 6);
-    avd_sets().get_mut(set).map_err(avd_err)?.children.push(ChildAnimator {
-        holder,
-        _interpolator: interpolator,
-        _start_delay: start_delay,
-        _duration: duration,
-        _repeat_count: repeat_count,
-        _repeat_mode: repeat_mode,
-    });
+    avd_sets()
+        .get_mut(set)
+        .map_err(avd_err)?
+        .children
+        .push(ChildAnimator {
+            holder,
+            _interpolator: interpolator,
+            _start_delay: start_delay,
+            _duration: duration,
+            _repeat_count: repeat_count,
+            _repeat_mode: repeat_mode,
+        });
     Ok(())
 }
 
@@ -1969,10 +2151,9 @@ mod tests {
     fn parses_the_ic_ab_back_material_path() {
         // The framework's `ic_ab_back_material.xml` pathData (relative commands
         // and no separators after the command letters).
-        let p = parse_path_string(
-            "M20,11L7.8,11l5.6,-5.6L12,4l-8,8l8,8l1.4,-1.4L7.8,13L20,13L20,11z",
-        )
-        .unwrap();
+        let p =
+            parse_path_string("M20,11L7.8,11l5.6,-5.6L12,4l-8,8l8,8l1.4,-1.4L7.8,13L20,13L20,11z")
+                .unwrap();
         assert!(!p.is_empty());
         let b = p.compute_bounds().unwrap();
         assert!(b.left >= 3.9 && b.left <= 4.1, "left {}", b.left);
@@ -2034,7 +2215,10 @@ mod tests {
         bytes[40..44].copy_from_slice(&p.stroke_miter_limit.to_le_bytes());
         bytes[44..48].copy_from_slice(&p.fill_type.to_le_bytes());
         assert_eq!(f32::from_le_bytes(bytes[0..4].try_into().unwrap()), 4.0);
-        assert_eq!(i32::from_le_bytes(bytes[4..8].try_into().unwrap()), 0xff112233u32 as i32);
+        assert_eq!(
+            i32::from_le_bytes(bytes[4..8].try_into().unwrap()),
+            0xff112233u32 as i32
+        );
         assert_eq!(f32::from_le_bytes(bytes[20..24].try_into().unwrap()), 0.1);
         assert_eq!(i32::from_le_bytes(bytes[32..36].try_into().unwrap()), 2);
         assert_eq!(i32::from_le_bytes(bytes[44..48].try_into().unwrap()), 1);

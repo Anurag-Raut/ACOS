@@ -213,10 +213,7 @@ fn os_constants_on_the_real_framework() {
 
     let got = parse_stdout(&outcome.stdout);
     let want = parse_stdout(ART_REFERENCE);
-    assert!(
-        !want.is_empty(),
-        "embedded ART reference did not parse"
-    );
+    assert!(!want.is_empty(), "embedded ART reference did not parse");
 
     // Every captured key must match real ART, except the two sandbox choices.
     for (k, v) in &want {

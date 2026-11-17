@@ -1,0 +1,14 @@
+{
+  "detail": {
+    "await_promise": "delayed-ok",
+    "host_calls_page_async": "pong:x",
+    "host_to_page": "ACOS WebView probe",
+    "page_state_after_click": "tapped",
+    "page_to_host_click": [
+      "tapped"
+    ]
+  },
+  "gate": "b",
+  "item": "JS bridge round trip both ways",
+  "passed": true
+}

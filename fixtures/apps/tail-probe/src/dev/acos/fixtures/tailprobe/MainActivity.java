@@ -11,8 +11,10 @@ import android.content.IntentFilter;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricPrompt;
 import android.os.Bundle;
+import android.os.Looper;
 import android.os.CancellationSignal;
 import android.provider.Telephony;
+import android.util.Log;
 import android.telephony.PhoneStateListener;
 import android.telephony.SmsManager;
 import android.telephony.SmsMessage;
@@ -42,12 +44,35 @@ import java.util.Set;
  * a specific line after it drives a control op.
  */
 public final class MainActivity extends Activity {
+    private static final String LOG_TAG = "tailprobe";
     private LinearLayout root;
     private TextView status;
     private TextView title;
     private TelephonyManager telephony;
     private BluetoothAdapter adapter;
     private int callStateLines;
+    private int listenerCount;
+    private int callRingingLines;
+    private final java.util.List<PhoneStateListener> listeners = new java.util.ArrayList<>();
+    /**
+     * The §2a experiment: the same listeners held only weakly, so a GC can
+     * collect them while the registration (and the host's reference on the
+     * callback binder) still exists.
+     */
+    private final java.util.List<java.lang.ref.WeakReference<PhoneStateListener>> weakListeners =
+            new java.util.ArrayList<>();
+
+    /** How many registered listeners a GC left reachable (the §2a counter). */
+    private int aliveListeners() {
+        int alive = 0;
+        for (java.lang.ref.WeakReference<PhoneStateListener> weak : weakListeners) {
+            if (weak.get() != null) {
+                alive++;
+            }
+        }
+        // A listener the app still holds strongly (the normal pattern) counts.
+        return alive + listeners.size();
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,7 +119,22 @@ public final class MainActivity extends Activity {
     }
 
     private void log(String line) {
-        status.append(line + "\n");
+        // Thread-safe evidence channel first: `android.util.Log` is a logd write
+        // and can be read back with `acos_logs`, while the `TextView` below is
+        // only safe to touch from the UI thread. Binder callbacks
+        // (`PhoneStateListener`, receivers, `IAccessibilityManagerClient`) run
+        // on whichever binder thread received the transaction, so appending
+        // directly from them makes two concurrent callbacks race on the
+        // TextView's `Editable` and silently drop lines -- which looks exactly
+        // like a callback the framework lost. Real apps marshal, so this one
+        // does too (and keeps a logd copy for the harness).
+        Log.i(LOG_TAG, line);
+        Runnable append = () -> status.append(line + "\n");
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            append.run();
+        } else {
+            status.post(append);
+        }
     }
 
     // ------------------------------------------------------------ telephony
@@ -136,6 +176,61 @@ public final class MainActivity extends Activity {
         listen.setTag("listen-calls");
         listen.setOnClickListener(view -> registerCallStateListener());
         appendToRoot(listen);
+
+        Button stop = new Button(this);
+        stop.setText("Stop listening");
+        stop.setTag("stop-listening");
+        stop.setOnClickListener(view -> {
+            PhoneStateListener listener = callListener;
+            if (listener == null) {
+                log("CALL unregister skipped (no listener)");
+                return;
+            }
+            // A real app flow: `listen(..., LISTEN_NONE)` unregisters the
+            // callback. The registry must stop delivering to it.
+            telephony.listen(listener, PhoneStateListener.LISTEN_NONE);
+            log("CALL unregistered");
+        });
+        appendToRoot(stop);
+
+        Button report = new Button(this);
+        report.setText("Report callbacks");
+        report.setTag("report-callbacks");
+        // The counter the callback itself increments, reported from the UI
+        // thread: a harness can then ask the app "how many callbacks did your
+        // Java code actually run" instead of inferring it from a log line or a
+        // TextView append (both of which a non-UI thread can lose).
+        report.setOnClickListener(view -> log("CALLTOTAL state_lines=" + callStateLines
+                + " ringing=" + callRingingLines + " listeners=" + listenerCount
+                + " held=" + listeners.size()
+                + " alive=" + aliveListeners()));
+        appendToRoot(report);
+
+        // BINDERREF2 §2a probe: move every registered listener into a
+        // `WeakReference` list (so the *app* no longer references it) and force
+        // a collection. On Android the host's strong reference on the callback
+        // binder is what keeps the Java object alive, because libbinder's
+        // `JavaBBinder` holds a JNI global reference to it. The counters say
+        // whether this guest does the same: `alive` is the number of listener
+        // objects a GC left reachable, `ringing` is how many of them ran.
+        Button weaken = new Button(this);
+        weaken.setText("Weaken listeners");
+        weaken.setTag("weaken-listeners");
+        weaken.setOnClickListener(view -> {
+            weakListeners.clear();
+            for (PhoneStateListener listener : listeners) {
+                weakListeners.add(new java.lang.ref.WeakReference<>(listener));
+            }
+            listeners.clear();
+            callListener = null;
+            System.gc();
+            System.runFinalization();
+            System.gc();
+            log("CALLWEAK listeners=" + listenerCount
+                    + " alive=" + aliveListeners()
+                    + " refs=" + weakListeners.size());
+        });
+        appendToRoot(weaken);
 
         Button send = new Button(this);
         send.setText("Send SMS");
@@ -181,15 +276,37 @@ public final class MainActivity extends Activity {
         if (telephony == null) {
             return;
         }
+        final int id = ++listenerCount;
         PhoneStateListener listener = new PhoneStateListener() {
             @Override
             public void onCallStateChanged(int state, String phoneNumber) {
-                callStateLines++;
-                log("CALL state=" + callName(state)
-                        + " number=" + (phoneNumber == null ? "null" : phoneNumber));
+                // BINDERREF2 §2a: a `oneway` callback whose Java listener the app
+                // dropped throws inside the stub and can never report it (the
+                // transaction has no reply to carry a status). Catching it here is
+                // what makes the difference between "the driver dropped it" and
+                // "the framework dispatched to a listener that is gone" visible.
+                try {
+                    callStateLines++;
+                    if (state == TelephonyManager.CALL_STATE_RINGING) {
+                        callRingingLines++;
+                    }
+                    log("CALL state=" + callName(state)
+                            + " number=" + (phoneNumber == null ? "null" : phoneNumber)
+                            + " listener=" + id);
+                } catch (Throwable error) {
+                    log("CALL-ERR listener=" + id
+                            + " error=" + error.getClass().getSimpleName()
+                            + " msg=" + error.getMessage());
+                }
             }
         };
         callListener = listener;
+        // Keep every listener reachable from Java, as a real app that stores
+        // its listeners does. A listener the app drops while it stays
+        // registered is a *different* case: see
+        // results/handoff/BINDERREF/README.md (the Java object behind a rooted
+        // node is collected, and the callback then never runs).
+        listeners.add(listener);
         try {
             telephony.listen(listener, PhoneStateListener.LISTEN_CALL_STATE);
         } catch (Throwable missing) {

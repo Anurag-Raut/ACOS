@@ -11,7 +11,9 @@ use common::{cstr, RecordingSink};
 fn c_library_all_features_including_packed_relocations() {
     let _g = common::serial();
     std::env::set_var("ACOS_TEST_ENV", "present");
-    let loader = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
+    let loader = Loader::new(
+        LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()),
+    );
 
     // Plain RELA, Android APS2 packed RELA, and RELR packed forms must all load
     // and pass the same feature checks.
@@ -20,8 +22,7 @@ fn c_library_all_features_including_packed_relocations() {
         let run: extern "C" fn() -> i32 = unsafe { common::sym(h.symbol("tc_run_all").unwrap()) };
         assert_eq!(run(), 0, "{name}: tc_run_all bitmask (0 == all pass)");
 
-        let ctor: extern "C" fn() -> i32 =
-            unsafe { common::sym(h.symbol("tc_ctor_ran").unwrap()) };
+        let ctor: extern "C" fn() -> i32 = unsafe { common::sym(h.symbol("tc_ctor_ran").unwrap()) };
         assert_eq!(ctor(), 1, "{name}: global constructor ran");
 
         let sstr: extern "C" fn() -> *const c_char =
@@ -54,7 +55,9 @@ fn log_lines_are_captured_by_the_sink() {
 
     let lines = sink.lines();
     assert!(
-        lines.iter().any(|l| l.contains("acos-testc") && l.contains("constructor ran")),
+        lines
+            .iter()
+            .any(|l| l.contains("acos-testc") && l.contains("constructor ran")),
         "constructor log captured: {lines:?}"
     );
     assert!(
@@ -78,7 +81,8 @@ fn build_testjmp() -> Option<std::path::PathBuf> {
     if !cc.is_file() || !src.is_file() {
         return None;
     }
-    let out_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp/acos-jmp");
+    let out_dir =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp/acos-jmp");
     std::fs::create_dir_all(&out_dir).ok()?;
     let so = out_dir.join("libtestjmp.so");
     let rebuilt = std::process::Command::new(&cc)
@@ -115,7 +119,8 @@ fn bionic_setjmp_longjmp_roundtrip() {
     let failed = run();
     loader.unload(&h).unwrap();
     assert_eq!(
-        failed, 0,
+        failed,
+        0,
         "bionic jmp_buf checks failed (bitmask): setjmp_roundtrip={} underscore={} \
          zero_value={} sigsetjmp_nomask={} setjmp_saves_mask={} underscore_leaves_mask={} \
          sigsetjmp_saves_mask={}",

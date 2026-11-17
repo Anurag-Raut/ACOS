@@ -82,7 +82,8 @@ fn set_int(vm: &mut Vm, obj: Handle, name: &str, value: i32) -> JResult<()> {
 }
 
 fn set_float(vm: &mut Vm, obj: Handle, name: &str, value: f32) -> JResult<()> {
-    vm.set_field(obj, name, JavaValue::Float(value)).map_err(err)
+    vm.set_field(obj, name, JavaValue::Float(value))
+        .map_err(err)
 }
 
 fn set_long(vm: &mut Vm, obj: Handle, name: &str, value: i64) -> JResult<()> {
@@ -90,7 +91,8 @@ fn set_long(vm: &mut Vm, obj: Handle, name: &str, value: i64) -> JResult<()> {
 }
 
 fn set_bool(vm: &mut Vm, obj: Handle, name: &str, value: bool) -> JResult<()> {
-    vm.set_field(obj, name, JavaValue::Boolean(value)).map_err(err)
+    vm.set_field(obj, name, JavaValue::Boolean(value))
+        .map_err(err)
 }
 
 fn set_str(vm: &mut Vm, obj: Handle, name: &str, value: &str) -> JResult<()> {

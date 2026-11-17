@@ -122,4 +122,3 @@ pub fn first_attach(log: &AttachLog) -> Option<AttachRecord> {
 pub fn is_valid_app_thread(record: &AttachRecord) -> bool {
     record.app_thread.is_some_and(|b| !b.is_null())
 }
-

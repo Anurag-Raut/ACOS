@@ -19,7 +19,9 @@ pub enum DexError {
     #[error("bad magic at offset {offset}: expected \"dex\\n\", found {found:02x?}")]
     BadMagic { offset: u64, found: [u8; 8] },
 
-    #[error("unsupported dex version {version:?} at offset {offset} (supported: 035, 037, 038, 039)")]
+    #[error(
+        "unsupported dex version {version:?} at offset {offset} (supported: 035, 037, 038, 039)"
+    )]
     UnsupportedVersion { offset: u64, version: String },
 
     #[error("bad adler32 checksum: stored {stored:#010x}, computed {computed:#010x}")]

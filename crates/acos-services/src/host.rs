@@ -34,15 +34,23 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use acos_aidl::{InterfaceInfo, MethodInfo, WireOp};
 use acos_parcel::{BinderId, BinderKind, BinderRegistry, Parcel};
 use acos_protocol::Event;
 
 use crate::codec;
-use crate::error::{codes, ServiceError, Result};
+use crate::error::{codes, Result, ServiceError};
 use crate::exception::{write_exception, write_no_exception, EX_SERVICE_SPECIFIC};
 use crate::trace::{self, CallTrace, TraceSink};
+
+/// Ceiling on binder owner records (one per app binder the service layer saw).
+///
+/// A real session exports a handful per process (`IApplicationThread`, a few
+/// `IInterface` callbacks); 8192 is generous, and exceeding it is counted, not
+/// hidden.
+pub const MAX_BINDER_OWNERS: usize = 8192;
 
 /// A binder-to-binder delivery the native layer must enqueue on the target
 /// looper (the `system -> app` direction).
@@ -76,6 +84,13 @@ const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
 const SERVICE_CALLBACK_DESCRIPTOR: &str = "android.os.IServiceCallback";
 /// `IServiceCallback.onRegistration(String, IBinder)`.
 const SERVICE_CALLBACK_ON_REGISTRATION: u32 = 1;
+
+/// Bit 32 of a binder id: every binder object owned by the **guest** JVM
+/// arrives with it (`acos-binder-peer`'s `JAVA_TAG`, tagged where the parcel is
+/// decoded). The driver owns those nodes, so a host reference on one is a
+/// reference the driver can act on even though the host's [`BinderRegistry`]
+/// never registered the handle itself.
+pub const GUEST_BINDER_TAG: u64 = 1 << 32;
 
 /// The `IServiceCallback.onRegistration(@utf8InCpp String, IBinder)` frame.
 ///
@@ -205,10 +220,113 @@ pub trait ServiceObject: Send {
     fn advance_timed(&mut self, now: std::time::Instant) {
         let _ = now;
     }
+
+    /// Binders this handler started holding a strong reference to since the
+    /// last drain (a registered callback, a stored `IIntentReceiver`, ...).
+    ///
+    /// A registration *is* a reference: the framework's `Parcel` took one when
+    /// the binder was flattened, and the service that stored the handle owns it
+    /// until it drops the registration. Reporting it here is what lets the host
+    /// keep the guest's node alive for as long as the registration exists and
+    /// release it (→ `BR_RELEASE` + `BR_DECREFS`) when it does not.
+    ///
+    /// Drained after **both** dispatch paths (the decoded `acos-aidl` `call`
+    /// and `raw_transact`), so a module uses one mechanism wherever its
+    /// interface is served. The host applies the retained set before the
+    /// released one, so a handler that re-registers the same binder in one
+    /// transaction nets out.
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        Vec::new()
+    }
+
+    /// Binders the handler dropped its registration (strong reference) for.
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        Vec::new()
+    }
+
+    /// Drop **every** reference this handler still holds and return them.
+    ///
+    /// Called when the handler goes away while the guest may still be alive:
+    /// module detach (the object is dropped, so a later transient can never
+    /// report the release) and session teardown. A handler holds its
+    /// registrations in shared state, so the release has to be reported here
+    /// rather than in `Drop` (which has no host to report to).
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        Vec::new()
+    }
+}
+
+/// A node a service created while answering a transaction, waiting for the
+/// host to install it (see [`NodeRegistrar`]).
+pub struct PendingNode {
+    binder: BinderId,
+    descriptor: &'static str,
+    object: Box<dyn ServiceObject>,
+}
+
+/// The handle a service uses to create a **new host node mid-transaction**.
+///
+/// Stock Android does exactly this inside `IWindowManager.openSession`: the
+/// system process runs `new Session(this, callback)` and answers the caller
+/// with that new `IWindowSession` binder, so every app process talks to its own
+/// session object. ACOS's `ServiceHost` owns its dispatch table (`&mut self`
+/// during `transact`), so a service cannot insert an entry itself; it allocates
+/// the binder and parks the object here, and the host installs it when the
+/// transaction that created it returns — before the caller can use the handle.
+#[derive(Clone)]
+pub struct NodeRegistrar {
+    registry: Arc<BinderRegistry>,
+    owners: Arc<Mutex<std::collections::HashMap<u64, u32>>>,
+    pending: Arc<Mutex<Vec<PendingNode>>>,
+}
+
+impl std::fmt::Debug for NodeRegistrar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NodeRegistrar")
+            .field(
+                "pending",
+                &self.pending.lock().map(|p| p.len()).unwrap_or(0),
+            )
+            .finish()
+    }
+}
+
+impl NodeRegistrar {
+    /// Allocate a binder and park `object` for installation under it.
+    pub fn register(&self, descriptor: &'static str, object: Box<dyn ServiceObject>) -> BinderId {
+        let binder = self.registry.register_local(descriptor);
+        self.pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(PendingNode {
+                binder,
+                descriptor,
+                object,
+            });
+        binder
+    }
+
+    /// The app process that owns `binder`, when the host recorded it.
+    ///
+    /// This is the same record the host keeps: a binder an app process handed
+    /// over in a request parcel is owned by that process. A window session uses
+    /// it to learn which process its `IWindow` belongs to (stock
+    /// `Session.mClientPid`, which AOSP reads from `Binder.getCallingPid`).
+    #[must_use]
+    pub fn binder_owner(&self, binder: BinderId) -> Option<u32> {
+        if binder.is_null() {
+            return None;
+        }
+        self.owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&binder.0)
+            .copied()
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Wiring {
     /// This service's own binder handle.
     pub self_binder: BinderId,
@@ -219,6 +337,9 @@ pub struct Wiring {
     /// The `IPackageInstaller` binder (`IPackageManager.getPackageInstaller`).
     /// It is an aux node: a package query names it, but ACOS never installs.
     pub package_installer: BinderId,
+    /// MPROC5c: how a service creates a new host node while answering a
+    /// transaction (AOSP's `IWindowManager.openSession` → `new Session(...)`).
+    pub nodes: NodeRegistrar,
 }
 
 impl Default for Wiring {
@@ -228,6 +349,11 @@ impl Default for Wiring {
             controller: BinderId(0),
             content_provider: BinderId(0),
             package_installer: BinderId(0),
+            nodes: NodeRegistrar {
+                registry: Arc::new(BinderRegistry::new()),
+                owners: Arc::new(Mutex::new(std::collections::HashMap::new())),
+                pending: Arc::new(Mutex::new(Vec::new())),
+            },
         }
     }
 }
@@ -306,7 +432,7 @@ struct ServiceEntry {
 
 /// The dispatcher.
 pub struct ServiceHost {
-    registry: BinderRegistry,
+    registry: Arc<BinderRegistry>,
     /// One entry per registered descriptor.
     entries: HashMap<&'static str, ServiceEntry>,
     /// Descriptor for every binder handle (including secondary binders).
@@ -319,6 +445,7 @@ pub struct ServiceHost {
     /// Binders created while answering a transaction (the `IBulkCursor` a
     /// `query` hands back), keyed by binder id.
     dynamic: HashMap<u64, Box<dyn ServiceObject>>,
+
     /// `ServiceManager` names a shipped module may provide later: AOSP's VINTF
     /// declaration (`isDeclared`), which is what lets `waitForService` wait for a
     /// service that is not running yet.
@@ -326,7 +453,27 @@ pub struct ServiceHost {
     /// Pending `IServiceManager.registerForNotifications` callbacks (ADR-0029:
     /// a live module attach is the event they wait for).
     notifications: Vec<PendingNotification>,
+
+    /// Owner process tag for every binder that lives in an app process
+    /// (MPROC2 step 3a). A host service node has no entry; an app binder is
+    /// recorded the first time its process hands it to the service layer
+    /// (`addService`, `attachApplication`, any request parcel).
+    binder_owners: Arc<Mutex<HashMap<u64, u32>>>,
+    /// Binder records refused because the table was full (never a silent drop).
+    binder_owner_drops: u64,
+    /// Nodes services parked during a transaction ([`NodeRegistrar`]).
+    pending_nodes: Arc<Mutex<Vec<PendingNode>>>,
+    /// The registrar handed to every lazily-constructed service.
+    nodes: NodeRegistrar,
     deliveries: Vec<PendingDelivery>,
+    /// Host-held strong references per binder: one per live registration
+    /// (telephony listener, `IIntentReceiver`, `IAccessibilityManagerClient`,
+    /// PendingIntent sender, ...). The count is what the peer reports to the
+    /// driver as `F_REF`, so a node exists exactly while the host references it.
+    refs: HashMap<u64, u32>,
+    /// Binders whose last host reference was dropped and that the peer still has
+    /// to tell the driver about (`F_REF` release).
+    released_binders: Vec<BinderId>,
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
     constructions: u64,
@@ -361,13 +508,39 @@ pub struct ServiceHost {
     /// (`crate::permissions`). Modules that own the name share it through this
     /// slot, exactly like the notification state.
     permission_store: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    /// MPROC8: this session runs **real app processes**, so the host performs
+    /// AOSP's `ActiveServices` work for a guest `bindService` (create/bind the
+    /// service in its own process, answer `IServiceConnection.connected` on
+    /// `publishService`, unbind/stop, and report a dead process). The in-process
+    /// runtime keeps its own bind path (`AmsState::pending_binds`), so the flag
+    /// is off there: one implementation per seam, chosen by what the session
+    /// actually is.
+    host_side_services: bool,
     /// The one way to *fire* a `PendingIntent` sender (MODNOTIF4). A module
     /// owns the notification records but the sender table and the activity
     /// start live in the AMS, so the registry publishes the delivery here
     /// instead of a module reaching into the ATMS state.
     pending_intent_fire: Option<FireSender>,
+    /// The host paths of this session's WebView endpoints, published by the
+    /// launcher (WV8 `webview` module). The module answers `status` from them
+    /// instead of recomputing a path the launcher already decided, so the two
+    /// cannot name different sockets.
+    webview_gate: Option<WebviewGate>,
     /// Overwrite logs, one per open [`RegistrationScope`].
     overwrites: Vec<Vec<(&'static str, BinderId, Factory)>>,
+}
+
+/// The host endpoints the launcher bound for a session's WebView (ADR-0031).
+///
+/// `socket` is the per-session gate the guest connects to (mounted at
+/// `/run/acos/webview.sock`); `broker_socket` is the shared daemon's endpoint,
+/// which exists only while a broker runs (one Chromium per host).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WebviewGate {
+    /// The session's gate socket (host path).
+    pub socket: Option<std::path::PathBuf>,
+    /// The shared broker's endpoint (host path), if the launcher named one.
+    pub broker_socket: Option<std::path::PathBuf>,
 }
 
 impl core::fmt::Debug for ServiceHost {
@@ -394,17 +567,33 @@ impl ServiceHost {
     /// ACOS service set.
     #[must_use]
     pub fn new() -> Self {
+        let registry = Arc::new(BinderRegistry::new());
+        let binder_owners = Arc::new(Mutex::new(HashMap::new()));
+        let pending_nodes: Arc<Mutex<Vec<PendingNode>>> = Arc::new(Mutex::new(Vec::new()));
         Self {
-            registry: BinderRegistry::new(),
+            registry: Arc::clone(&registry),
+            binder_owners: Arc::clone(&binder_owners),
+            pending_nodes: Arc::clone(&pending_nodes),
+            nodes: NodeRegistrar {
+                registry,
+                owners: binder_owners,
+                pending: pending_nodes,
+            },
             entries: HashMap::new(),
             binder_descriptors: HashMap::new(),
             names: HashMap::new(),
             aux: HashMap::new(),
             dynamic: HashMap::new(),
+
             declared: Vec::new(),
             notifications: Vec::new(),
+            host_side_services: false,
+
+            binder_owner_drops: 0,
             deliveries: Vec::new(),
             dead: HashMap::new(),
+            refs: HashMap::new(),
+            released_binders: Vec::new(),
             trace: None,
             seq: AtomicU64::new(1),
             constructions: 0,
@@ -414,8 +603,50 @@ impl ServiceHost {
             a11y_window_token: None,
             permission_store: None,
             pending_intent_fire: None,
+            webview_gate: None,
             overwrites: Vec::new(),
         }
+    }
+
+    /// MPROC5c: the handle a service uses to create a new host node while
+    /// answering a transaction.
+    #[must_use]
+    pub fn node_registrar(&self) -> NodeRegistrar {
+        self.nodes.clone()
+    }
+
+    /// Install every node a service parked during the transaction that just
+    /// ran.
+    ///
+    /// Called by [`ServiceHost::transact`] before the reply is handed back, so
+    /// the binder a reply names (a fresh `IWindowSession`) is routable the
+    /// moment the caller can use it. The peer's `direct_dispatch` path (a
+    /// registered service reached around the ownership marker) runs the object
+    /// itself, so it calls this too.
+    pub fn install_pending_nodes(&mut self) -> usize {
+        let pending: Vec<PendingNode> = {
+            let mut queue = self
+                .pending_nodes
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            std::mem::take(&mut *queue)
+        };
+        let count = pending.len();
+        for node in pending {
+            self.binder_descriptors
+                .insert(node.binder.0, node.descriptor);
+            self.dynamic.insert(node.binder.0, node.object);
+        }
+        count
+    }
+
+    /// Drop a dynamically registered node (the object that owned it is gone:
+    /// a window session's process died). A later transaction on the handle
+    /// fails structurally instead of reaching a stale object.
+    pub fn drop_dynamic_node(&mut self, binder: BinderId) -> bool {
+        self.binder_descriptors.remove(&binder.0);
+        self.registry.remove(binder);
+        self.dynamic.remove(&binder.0).is_some()
     }
 
     /// Register a service name and descriptor.
@@ -531,10 +762,125 @@ impl ServiceHost {
     }
 
     /// Register an auxiliary binder (a binder returned by another service).
-    pub fn register_aux(&mut self, descriptor: &'static str) -> BinderId {        let binder = self.registry.register_local(descriptor);
+    pub fn register_aux(&mut self, descriptor: &'static str) -> BinderId {
+        let binder = self.registry.register_local(descriptor);
         self.binder_descriptors.insert(binder.0, descriptor);
         self.aux.insert(descriptor, binder);
         binder
+    }
+
+    /// Register the host-minted activity token of process `tag` (MPROC7).
+    ///
+    /// On a device the activity token is a `Binder` created in system_server
+    /// (`ActivityRecord.token`). ACOS's system service side is the host, so the
+    /// host mints it here. Its id carries `tag` in the same bits the peer uses
+    /// for a guest-minted binder ([`crate::atms::process_tag_of`] reads bits
+    /// 34..40), so "which process owns this activity" stays derivable from the
+    /// token alone, exactly as for the guest-minted tokens of MPROC5.
+    ///
+    /// The node is routable: a transaction addressed to it reaches the host
+    /// dispatcher like any other auxiliary node (the activity token is an
+    /// opaque `Binder` to the framework; it is never used as an interface).
+    pub fn register_activity_token(&mut self, tag: u32) -> BinderId {
+        const PROCESS_TAG_SHIFT: u32 = 34;
+        const PROCESS_TAG_MASK: u64 = 0x3f;
+        const LOW_MASK: u64 = (1 << PROCESS_TAG_SHIFT) - 1;
+        let binder = self.registry.register_local("android.app.ActivityToken");
+        // Free the untagged id: only the tagged one is the token.
+        self.registry.remove(binder);
+        self.binder_descriptors.remove(&binder.0);
+        let id = (u64::from(tag) & PROCESS_TAG_MASK) << PROCESS_TAG_SHIFT | (binder.0 & LOW_MASK);
+        self.registry
+            .register_at(id, "android.app.ActivityToken", BinderKind::Local);
+        self.binder_descriptors
+            .insert(id, "android.app.ActivityToken");
+        BinderId(id)
+    }
+
+    /// Record which app process owns a binder (MPROC2 step 3a).
+    ///
+    /// Called whenever a process hands the service layer a binder of its own:
+    /// `IServiceManager.addService`, `attachApplication` (its
+    /// `IApplicationThread`) and every binder object in a request parcel. The
+    /// record is what lets a delivery be addressed to the process that can
+    /// receive it, and what a process teardown drops.
+    ///
+    /// The table is bounded: a guest that keeps exporting binders must not own
+    /// an unbounded host allocation. A refusal is counted
+    /// ([`ServiceHost::binder_owner_drops`]), never silently discarded, and the
+    /// binder is still usable — only its owner record is missing.
+    ///
+    /// Returns `true` when the owner was recorded (or already was that owner).
+    pub fn set_binder_owner(&mut self, binder: BinderId, tag: u32) -> bool {
+        if binder.is_null() {
+            return false;
+        }
+        let mut owners = self
+            .binder_owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(existing) = owners.get(&binder.0) {
+            if *existing == tag {
+                return true;
+            }
+        } else if owners.len() >= MAX_BINDER_OWNERS {
+            drop(owners);
+            self.binder_owner_drops = self.binder_owner_drops.saturating_add(1);
+            eprintln!(
+                "acos-services: ART_RESOURCE_LIMIT: binder owner table is full 
+                 ({MAX_BINDER_OWNERS} records); binder {:#x} of process {tag} is not recorded",
+                binder.0
+            );
+            return false;
+        }
+        owners.insert(binder.0, tag);
+        true
+    }
+
+    /// The app process that owns `binder`, when it is an app binder.
+    #[must_use]
+    pub fn binder_owner(&self, binder: BinderId) -> Option<u32> {
+        self.binder_owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&binder.0)
+            .copied()
+    }
+
+    /// Every binder recorded as owned by process `tag`, ascending.
+    #[must_use]
+    pub fn binders_of_process(&self, tag: u32) -> Vec<BinderId> {
+        let owners = self
+            .binder_owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut v: Vec<BinderId> = owners
+            .iter()
+            .filter(|(_, owner)| **owner == tag)
+            .map(|(id, _)| BinderId(*id))
+            .collect();
+        v.sort_unstable_by_key(|b| b.0);
+        v
+    }
+
+    /// Drop every binder record owned by process `tag` (the process exited).
+    ///
+    /// Returns how many records were dropped. A later delivery to one of those
+    /// ids fails structurally instead of reaching a stale handle.
+    pub fn drop_process_binders(&mut self, tag: u32) -> usize {
+        let mut owners = self
+            .binder_owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let before = owners.len();
+        owners.retain(|_, owner| *owner != tag);
+        before - owners.len()
+    }
+
+    /// Binder owner records refused because the table was full.
+    #[must_use]
+    pub fn binder_owner_drops(&self) -> u64 {
+        self.binder_owner_drops
     }
 
     /// Look up an auxiliary binder.
@@ -577,12 +923,7 @@ impl ServiceHost {
                 .keys()
                 .copied()
                 .find(|k| *k == desc.as_str())
-                .or_else(|| {
-                    self.aux
-                        .keys()
-                        .copied()
-                        .find(|k| *k == desc.as_str())
-                });
+                .or_else(|| self.aux.keys().copied().find(|k| *k == desc.as_str()));
             if let Some(d) = static_desc {
                 self.binder_descriptors.insert(*id, d);
                 if let Some(entry) = self.entries.get_mut(d) {
@@ -628,6 +969,59 @@ impl ServiceHost {
         self.dead.retain(|_, owner| *owner != module);
     }
 
+    /// Drop every strong reference `descriptor`'s handler holds on guest
+    /// binders and release them on the host, returning what was released.
+    ///
+    /// This is the seam for a module that installs a feed/back-end into a node
+    /// it does **not** own (the `sensors` module serves through `core`'s
+    /// `sensorservice` node, whose lifetime is the session's): the object
+    /// survives the module's scope, so `end_scope` does not see the
+    /// registrations the module caused and the module's `detach` reports them
+    /// here. A descriptor that was never constructed holds nothing.
+    pub fn release_object_refs(&mut self, descriptor: &str) -> Vec<BinderId> {
+        let held = match self.entries.get_mut(descriptor) {
+            Some(entry) => match entry.object.as_mut() {
+                Some(object) => object.release_all_refs(),
+                None => Vec::new(),
+            },
+            None => {
+                // A node registered with `register_dynamic` (the compositor, the
+                // sensor/display event connections, `location`'s
+                // `ILocationManager`) serves through the dynamic table.
+                let Some(binder) = self.binder_for_descriptor(descriptor) else {
+                    return Vec::new();
+                };
+                match self.dynamic.get_mut(&binder.0) {
+                    Some(object) => object.release_all_refs(),
+                    None => Vec::new(),
+                }
+            }
+        };
+        for id in &held {
+            self.release_binder(*id);
+        }
+        held
+    }
+
+    /// Release **every** reference every live handler holds (session teardown:
+    /// the guest process is gone, so its nodes must not stay rooted on a
+    /// long-lived peer).
+    pub fn release_all_refs(&mut self) -> Vec<BinderId> {
+        let mut held: Vec<BinderId> = Vec::new();
+        for entry in self.entries.values_mut() {
+            if let Some(object) = entry.object.as_mut() {
+                held.extend(object.release_all_refs());
+            }
+        }
+        for object in self.dynamic.values_mut() {
+            held.extend(object.release_all_refs());
+        }
+        for id in &held {
+            self.release_binder(*id);
+        }
+        held
+    }
+
     /// Snapshot the registration tables so a module's registrations can be
     /// rolled back as a unit (ADR-0029 detach).
     #[must_use]
@@ -666,7 +1060,15 @@ impl ServiceHost {
             .filter(|key| !before_entries.contains(key))
             .collect();
         for key in added_entries {
-            if let Some(entry) = self.entries.remove(key) {
+            if let Some(mut entry) = self.entries.remove(key) {
+                // The object is about to be dropped. Any callback registration
+                // it still holds has to be released *now*: `Drop` has no host to
+                // report to, and the guest may outlive the detach.
+                if let Some(mut object) = entry.object.take() {
+                    for id in object.release_all_refs() {
+                        self.release_binder(id);
+                    }
+                }
                 freed.push(entry.binder);
             }
         }
@@ -675,17 +1077,24 @@ impl ServiceHost {
         // and binder come back. The object is dropped, not kept, so the
         // restored factory constructs core's service again with its own shared
         // state (the state is behind an `Arc`, so this is not a reset).
-        let overwritten: Vec<(&'static str, BinderId, Factory)> = if self.overwrites.len() > scope.depth
-        {
-            self.overwrites.split_off(scope.depth).concat()
-        } else {
-            Vec::new()
-        };
+        let overwritten: Vec<(&'static str, BinderId, Factory)> =
+            if self.overwrites.len() > scope.depth {
+                self.overwrites.split_off(scope.depth).concat()
+            } else {
+                Vec::new()
+            };
         for (descriptor, binder, factory) in overwritten {
+            let mut dropped_refs: Vec<BinderId> = Vec::new();
             if let Some(entry) = self.entries.get_mut(descriptor) {
+                if let Some(mut object) = entry.object.take() {
+                    dropped_refs = object.release_all_refs();
+                }
                 freed.push(entry.binder);
                 self.registry.remove(entry.binder);
                 self.binder_descriptors.remove(&entry.binder.0);
+            }
+            for id in dropped_refs {
+                self.release_binder(id);
             }
             self.entries.insert(
                 descriptor,
@@ -736,7 +1145,11 @@ impl ServiceHost {
             .filter(|id| !known_dynamic.contains(id))
             .collect();
         for id in added_dynamic {
-            self.dynamic.remove(&id);
+            if let Some(mut object) = self.dynamic.remove(&id) {
+                for held in object.release_all_refs() {
+                    self.release_binder(held);
+                }
+            }
             freed.push(BinderId(id));
         }
         let added_descriptors: Vec<u64> = self
@@ -776,9 +1189,8 @@ impl ServiceHost {
         for binder in &freed {
             self.registry.remove(*binder);
         }
-        self.deliveries.retain(|delivery| {
-            !freed.iter().any(|binder| binder.0 == delivery.target.0)
-        });
+        self.deliveries
+            .retain(|delivery| !freed.iter().any(|binder| binder.0 == delivery.target.0));
         freed.sort_unstable_by_key(|binder| binder.0);
         freed.dedup_by_key(|binder| binder.0);
         freed
@@ -791,6 +1203,299 @@ impl ServiceHost {
         state: std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>,
     ) {
         self.notification = Some(state);
+    }
+
+    /// MPROC8: this session runs real app processes, so the host performs AOSP's
+    /// `ActiveServices` work for a guest `bindService` (create/bind the service
+    /// in its own process, answer the caller's `IServiceConnection` on
+    /// `publishService`, unbind/stop on `unbindService`, disconnect on process
+    /// death).
+    ///
+    /// Called by the ART launcher, which is the only component that knows the
+    /// session has guest processes; the in-process runtime keeps its own bind
+    /// path and leaves this off ([`crate::ams::AmsState::pending_binds`]).
+    pub fn set_host_side_services(&mut self, enabled: bool) {
+        if self.host_side_services == enabled {
+            return;
+        }
+        self.host_side_services = enabled;
+        if let Some(state) = self.ams_state() {
+            state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .ams
+                .host_services
+                .enabled = enabled;
+        }
+    }
+
+    /// Whether this session performs host-side service binds (MPROC8).
+    #[must_use]
+    pub fn host_side_services(&self) -> bool {
+        self.host_side_services
+    }
+
+    /// The activity manager's state, when the session has one (constructed on
+    /// first use).
+    fn ams_state(&mut self) -> Option<std::sync::Arc<Mutex<crate::atms::AtmsState>>> {
+        let object = self.ensure("android.app.IActivityTaskManager").ok()?;
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(|service| service.shared_state())
+    }
+
+    /// The `IActivityManager` calls whose answer needs the cross-service
+    /// `ActiveServices` table (MPROC8).
+    ///
+    /// AOSP's `ActivityManagerService` does this work itself; ACOS has no system
+    /// process, so the host dispatcher is where the service table lives. Each
+    /// arm only *records* and *queues*: the reply the guest sees is the activity
+    /// manager's own (a `bindService` boolean), and the app-side work is a
+    /// delivery to the process that must perform it.
+    fn host_service_hook(&mut self, method: &str, args: &[crate::value::Value]) {
+        match method {
+            "bindService" | "bindServiceInstance" => {
+                // `bindService(caller, token, Intent, resolvedType,
+                // IServiceConnection, flags, instanceName, callingPackage,
+                // userId)`.
+                let Some(intent) = args
+                    .get(2)
+                    .and_then(crate::value::Value::as_parcelable)
+                    .map(crate::ams::IntentFacts::from_parcelable)
+                else {
+                    return;
+                };
+                let connection = args
+                    .get(4)
+                    .and_then(crate::value::Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                // A host-side bind only performs work for a **resolved**
+                // component: an implicit service intent is resolved by the
+                // decoded dispatch (`AmsState::bind_service`), which is where
+                // the rule lives.
+                let Some((package, class)) = intent.component.clone() else {
+                    return;
+                };
+                let Some((service_info, app_info)) = self.service_record(&package, &class) else {
+                    return;
+                };
+                let token = self.node_registrar().register(
+                    "android.app.ServiceToken",
+                    Box::new(crate::service_bind::ServiceToken),
+                );
+                let Some(state) = self.ams_state() else {
+                    return;
+                };
+                // The target process, when it is already attached: the same
+                // `ProcessRecord` the activity launch path uses. `None` means
+                // the launcher must spawn it first, exactly like a launch.
+                let target = {
+                    let state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    if std::env::var_os("ACOS_SERVICE_BIND_TRACE").is_some() {
+                        eprintln!(
+                            "acos-services: bind {package}/{class}: processes={:?}",
+                            state
+                                .processes
+                                .iter()
+                                .map(|p| (p.tag, p.package_name.clone(), p.app_thread, p.attached))
+                                .collect::<Vec<_>>()
+                        );
+                    }
+                    state
+                        .processes
+                        .iter()
+                        .find(|p| p.package_name == package && p.attached)
+                        .and_then(|p| p.app_thread.map(|thread| (p.tag, thread)))
+                };
+                let resolved = crate::ams::DeclaredComponent {
+                    package: package.clone(),
+                    class: class.clone(),
+                    exported: service_info.exported,
+                    launch_mode: 0,
+                    filters: Vec::new(),
+                };
+                let bound = {
+                    let mut state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let result = state.ams.host_services.bind(
+                        &resolved,
+                        token,
+                        connection,
+                        &intent,
+                        &service_info,
+                        &app_info,
+                        target,
+                    );
+                    if target.is_none() && result.is_ok() {
+                        state.ams.request_process(&package, &class, "bindService");
+                    }
+                    result
+                };
+                match bound {
+                    Ok(deliveries) => {
+                        // The caller's `IServiceConnection` is a binder the host
+                        // now stores: one strong reference (BINDERREF2), which is
+                        // what keeps the caller's node rooted until the unbind.
+                        if connection != 0 {
+                            self.retain_binder(BinderId(connection));
+                        }
+                        self.deliveries.extend(deliveries);
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "acos-services: bindService({package}/{class}) could not be \
+                             recorded: {error}"
+                        );
+                    }
+                }
+            }
+            "unbindService" => {
+                let connection = args
+                    .first()
+                    .and_then(crate::value::Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                if connection == 0 {
+                    return;
+                }
+                let Some(state) = self.ams_state() else {
+                    return;
+                };
+                let (deliveries, gone) = {
+                    let mut state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    state.ams.host_services.unbind(connection)
+                };
+                if !gone.is_empty() {
+                    // The host no longer stores the caller's connection: drop
+                    // the reference it held (the driver gets the `F_REF`
+                    // release, so the caller's node may be freed).
+                    self.release_binder(BinderId(connection));
+                }
+                self.deliveries.extend(deliveries);
+            }
+            "attachApplication" => {
+                let thread = args
+                    .first()
+                    .and_then(crate::value::Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                let Some(state) = self.ams_state() else {
+                    return;
+                };
+                let record = {
+                    let state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    state
+                        .processes
+                        .iter()
+                        .find(|p| p.app_thread == Some(thread) && p.attached)
+                        .map(|p| (p.tag, p.package_name.clone()))
+                };
+                let Some((tag, package)) = record else {
+                    return;
+                };
+                let waiting = {
+                    let state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    state.ams.host_services.waiting_for_process(&package)
+                };
+                for (package, class) in waiting {
+                    let Some((info, app)) = self.service_record(&package, &class) else {
+                        continue;
+                    };
+                    let assigned = {
+                        let mut state = state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        state
+                            .ams
+                            .host_services
+                            .assign_process(tag, thread, &package, &class, &info, &app)
+                    };
+                    match assigned {
+                        Ok(deliveries) => self.deliveries.extend(deliveries),
+                        Err(error) => eprintln!(
+                            "acos-services: cannot bring up {package}/{class} for process {tag}: \
+                             {error}"
+                        ),
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// MPROC8: process `tag` died — every caller bound to one of its services
+    /// hears `connected(name, null, true)` (which `LoadedApk.ServiceDispatcher`
+    /// turns into `onServiceDisconnected`), and the host drops the references it
+    /// held on those callers' `IServiceConnection`s.
+    ///
+    /// Called by the peer when a driver connection closes, beside the activity
+    /// manager's own `ProcessRecord` teardown, so a dead process can never leave
+    /// a caller waiting for a callback that will not come.
+    pub fn service_process_died(&mut self, tag: u32) {
+        if !self.host_side_services {
+            return;
+        }
+        let Some(state) = self.ams_state() else {
+            return;
+        };
+        let (deliveries, released) = {
+            let mut state = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let deliveries = state.ams.host_services.process_died(tag);
+            (deliveries, Vec::<u64>::new())
+        };
+        let _ = released;
+        match deliveries {
+            Ok(deliveries) => {
+                for delivery in &deliveries {
+                    eprintln!(
+                        "acos-services: process {tag} died: {} to {:#x}",
+                        delivery.method, delivery.target.0
+                    );
+                }
+                self.deliveries.extend(deliveries);
+            }
+            Err(error) => {
+                eprintln!("acos-services: process {tag} died: service disconnect failed: {error}");
+            }
+        }
+    }
+
+    /// The package manager's `ServiceInfo`/`AppInfo` for `package`'s `class`
+    /// (MPROC8: the payload of `scheduleCreateService`).
+    fn service_record(
+        &mut self,
+        package: &str,
+        class: &str,
+    ) -> Option<(crate::pms::ServiceInfo, crate::pms::AppInfo)> {
+        let object = self.ensure("android.content.pm.IPackageManager").ok()?;
+        let state = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())
+            .map(|service| service.shared_state())?;
+        let state = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.packages.iter().find_map(|installed| {
+            installed
+                .services
+                .iter()
+                .find(|s| s.package_name == package && s.name == class)
+                .cloned()
+                .map(|service| (service, installed.app.clone()))
+        })
     }
 
     /// Install the accessibility state the dispatcher hooks into (called by
@@ -881,6 +1586,18 @@ impl ServiceHost {
         self.permission_store.as_ref().map(std::sync::Arc::clone)
     }
 
+    /// Publish this session's WebView endpoints (WV8: the launcher binds the
+    /// gate socket, so it is the one that knows the paths).
+    pub fn set_webview_gate(&mut self, gate: WebviewGate) {
+        self.webview_gate = Some(gate);
+    }
+
+    /// The WebView endpoints, when the launcher published them.
+    #[must_use]
+    pub fn webview_gate(&self) -> Option<&WebviewGate> {
+        self.webview_gate.as_ref()
+    }
+
     /// Enable the per-call trace.
     pub fn enable_trace(&mut self, sink: Box<dyn TraceSink>) {
         self.trace = Some(sink);
@@ -965,11 +1682,10 @@ impl ServiceHost {
         let Ok(Some(binder)) = self.check_service(name) else {
             return;
         };
-        let (fire, keep): (Vec<PendingNotification>, Vec<PendingNotification>) = std::mem::take(
-            &mut self.notifications,
-        )
-        .into_iter()
-        .partition(|notification| notification.name == name);
+        let (fire, keep): (Vec<PendingNotification>, Vec<PendingNotification>) =
+            std::mem::take(&mut self.notifications)
+                .into_iter()
+                .partition(|notification| notification.name == name);
         self.notifications = keep;
         for notification in fire {
             self.deliveries
@@ -1080,6 +1796,7 @@ impl ServiceHost {
                     .get("android.content.pm.IPackageInstaller")
                     .copied()
                     .unwrap_or(BinderId(0)),
+                nodes: self.nodes.clone(),
             };
             let object = factory(wiring);
             self.constructions += 1;
@@ -1205,16 +1922,17 @@ impl ServiceHost {
     /// an otherwise empty host); every real session attaches `core`, which
     /// registers the package manager, before any other module.
     pub fn set_system_feature(&mut self, name: &str, enabled: bool) -> Result<()> {
-        if !self.entries.contains_key("android.content.pm.IPackageManager") {
+        if !self
+            .entries
+            .contains_key("android.content.pm.IPackageManager")
+        {
             return Ok(());
         }
         let object = self.ensure("android.content.pm.IPackageManager")?;
         let service = object
             .as_any_mut()
             .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())
-            .ok_or_else(|| {
-                ServiceError::Internal("package service is not a PmsService".into())
-            })?;
+            .ok_or_else(|| ServiceError::Internal("package service is not a PmsService".into()))?;
         service.set_system_feature(name, enabled)
     }
 
@@ -1226,6 +1944,72 @@ impl ServiceHost {
     /// the app to call back in.
     pub fn queue_delivery(&mut self, delivery: PendingDelivery) {
         self.deliveries.push(delivery);
+    }
+
+    /// Take one strong reference on `id` (a service stored the binder).
+    ///
+    /// Returns the new count. Two kinds of id can be referenced:
+    ///
+    /// * a handle the [`BinderRegistry`] knows (a local node, a proxy); and
+    /// * a **guest** binder (`GUEST_BINDER_TAG`, the peer's `JAVA_TAG`), which
+    ///   is the shape every callback reaches a module as. The registry does not
+    ///   have to know it: the driver owns those nodes, and rooting them is
+    ///   exactly what the reference is for.
+    ///
+    /// A null id is refused (`0`), and so is an unknown host-local id: a
+    /// reference to a handle the host cannot name would be a reference to
+    /// nothing.
+    pub fn retain_binder(&mut self, id: BinderId) -> u32 {
+        if id.0 == 0 || (!self.registry.contains(id) && id.0 & GUEST_BINDER_TAG == 0) {
+            return 0;
+        }
+        let count = self.refs.entry(id.0).or_insert(0);
+        *count = count.saturating_add(1);
+        *count
+    }
+
+    /// Drop one strong reference. At zero the binder is queued for release, so
+    /// the peer tells the driver to unroot the node (`F_REF` release →
+    /// `BR_RELEASE` + `BR_DECREFS`). Returns the remaining count.
+    pub fn release_binder(&mut self, id: BinderId) -> u32 {
+        let Some(count) = self.refs.get_mut(&id.0) else {
+            // Nothing was held: a release for a reference the host never took
+            // must not tell the driver to unroot a node the guest may still be
+            // using (`retain` refused, `release` silently ignored).
+            return 0;
+        };
+        *count = count.saturating_sub(1);
+        let remaining = *count;
+        if remaining == 0 {
+            self.refs.remove(&id.0);
+            if !self.released_binders.contains(&id) {
+                self.released_binders.push(id);
+            }
+        }
+        remaining
+    }
+
+    /// Host-held reference count of `id` (diagnostics and tests).
+    #[must_use]
+    pub fn held_refs(&self, id: BinderId) -> u32 {
+        self.refs.get(&id.0).copied().unwrap_or(0)
+    }
+
+    /// Every binder the host currently holds a strong reference on.
+    ///
+    /// A process teardown releases exactly the ones its own driver exported
+    /// (the peer filters by owner tag), so the table never outlives a process.
+    #[must_use]
+    pub fn held_ref_ids(&self) -> Vec<BinderId> {
+        let mut ids: Vec<BinderId> = self.refs.keys().map(|id| BinderId(*id)).collect();
+        ids.sort_unstable_by_key(|b| b.0);
+        ids
+    }
+
+    /// Binders whose last host reference was dropped since the last call.
+    #[must_use]
+    pub fn take_released_binders(&mut self) -> Vec<BinderId> {
+        std::mem::take(&mut self.released_binders)
     }
 
     /// Deliver a broadcast the **host** originates (a module's control op).
@@ -1265,14 +2049,28 @@ impl ServiceHost {
         apk_path: &std::path::Path,
         guest_source_dir: Option<&str>,
     ) -> Result<()> {
+        let service = self.pms_mut()?;
+        service.set_package_from_apk_as(apk_path, guest_source_dir)
+    }
+
+    /// MPROC1: install an **additional** package into this session's package
+    /// manager (the launched APK stays installed) and return its uid.
+    pub fn install_extra_package_from_apk_as(
+        &mut self,
+        apk_path: &std::path::Path,
+        guest_source_dir: Option<&str>,
+        guest_native_lib_dir: Option<&str>,
+    ) -> Result<i32> {
+        let service = self.pms_mut()?;
+        service.install_extra_package_from_apk_as(apk_path, guest_source_dir, guest_native_lib_dir)
+    }
+
+    fn pms_mut(&mut self) -> Result<&mut crate::pms::PmsService> {
         let object = self.ensure("android.content.pm.IPackageManager")?;
-        let service = object
+        object
             .as_any_mut()
             .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())
-            .ok_or_else(|| {
-                ServiceError::Internal("package service is not a PmsService".into())
-            })?;
-        service.set_package_from_apk_as(apk_path, guest_source_dir)
+            .ok_or_else(|| ServiceError::Internal("package service is not a PmsService".into()))
     }
 
     /// Dispatch one transaction.
@@ -1290,6 +2088,9 @@ impl ServiceHost {
         let oneway = flags & 1 != 0;
         let started = trace::start();
         let result = self.transact_inner(binder, code, data, reply, oneway);
+        if result.is_ok() {
+            self.install_pending_nodes();
+        }
         let wall_ns = trace::elapsed_ns(started);
 
         if let Some(sink) = self.trace.as_mut() {
@@ -1350,10 +2151,7 @@ impl ServiceHost {
                     service: format!("binder {:#x}", binder.0),
                     interface,
                     module,
-                    attach: crate::module::attach_call(
-                        module,
-                        crate::module::Profile::Scripted,
-                    ),
+                    attach: crate::module::attach_call(module, crate::module::Profile::Scripted),
                 });
             }
             return Err(ServiceError::UnknownBinder { handle: binder.0 });
@@ -1404,17 +2202,27 @@ impl ServiceHost {
         // answered by the object itself, in the framework's own reply shape.
         if self.dynamic.contains_key(&binder.0) {
             data.enforce_interface(&descriptor)?;
-            let object = self
-                .dynamic
-                .get_mut(&binder.0)
-                .expect("checked above");
+            let object = self.dynamic.get_mut(&binder.0).expect("checked above");
             let handled = object.raw_transact(&descriptor, code, data, reply)?;
             let finished = object.finished();
             let mut raw_deliveries = object.drain_raw_deliveries();
+            let mut raw_retained = object.drain_retained();
+            let mut raw_released = object.drain_released();
+            let mut finished_refs = if finished {
+                object.release_all_refs()
+            } else {
+                Vec::new()
+            };
             if finished {
                 self.dynamic.remove(&binder.0);
             }
             self.deliveries.append(&mut raw_deliveries);
+            for id in raw_retained.drain(..) {
+                self.retain_binder(id);
+            }
+            for id in raw_released.drain(..).chain(finished_refs.drain(..)) {
+                self.release_binder(id);
+            }
             if !handled {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: descriptor,
@@ -1453,27 +2261,82 @@ impl ServiceHost {
         // Advance past the interface token now that dispatch is chosen.
         data.enforce_interface(&descriptor)?;
 
-        // MODA11Y2: `publishService` is the reply to a **system-initiated**
-        // bind. The answer is the accessibility module's (it owns the bind
-        // token and the service's connection), not the activity service's, so
-        // it is answered here before the decoded dispatch. Every other
-        // `IActivityManager` call keeps going to `AtmsService`.
-        if descriptor == "android.app.IActivityManager"
-            && method.name == "publishService"
-            && self.a11y.is_some()
-        {
+        // `publishService` is the reply to a **system-initiated** or a
+        // guest-initiated bind, and both are answered here before the decoded
+        // dispatch because the state they need is cross-service:
+        //
+        // * the accessibility module owns its own bind token (MODA11Y2): the
+        //   app reports the binder `Service.onBind` returned, and the module
+        //   answers with `IAccessibilityServiceClient.init`;
+        // * MPROC8: a bind a guest started (`bindService` for a service in
+        //   another app's package) is recorded by the host's `ActiveServices`
+        //   table, which answers every waiting `IServiceConnection`.
+        //
+        // The token decides which one it is (a token is opaque and unique), so
+        // there is exactly one owner per bind and no guessing.
+        if descriptor == "android.app.IActivityManager" && method.name == "publishService" {
             let args = codec::read_args(data, &method.args, &descriptor, &method.name)?;
-            let connection = self.accessibility_connection_node();
-            let window_token = self.accessibility_window_token();
-            let a11y = self.a11y.as_ref().and_then(std::sync::Weak::upgrade).expect("checked above");
-            let mut state = a11y
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let delivery =
-                crate::a11y_bind::on_publish_service(&mut state, connection, window_token, &args)?;
-            drop(state);
-            if let Some(delivery) = delivery {
-                self.deliveries.push(delivery);
+            let token = args
+                .first()
+                .and_then(crate::value::Value::as_binder)
+                .map(|b| b.0)
+                .unwrap_or(0);
+            // The accessibility module owns its token whenever it has a bind in
+            // flight: a token that is not that one is *its* refusal ("does not
+            // match the pending bind"), so the check runs before the general
+            // table can claim the call.
+            let a11y_pending = self
+                .a11y
+                .as_ref()
+                .and_then(std::sync::Weak::upgrade)
+                .and_then(|state| {
+                    state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .pending_bind
+                        .as_ref()
+                        .map(|pending| pending.token)
+                });
+            let mut reply_note = "<guest bind>";
+            if a11y_pending.is_some() {
+                let connection = self.accessibility_connection_node();
+                let window_token = self.accessibility_window_token();
+                let a11y = self
+                    .a11y
+                    .as_ref()
+                    .and_then(std::sync::Weak::upgrade)
+                    .expect("checked above");
+                let mut state = a11y
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let delivery = crate::a11y_bind::on_publish_service(
+                    &mut state,
+                    connection,
+                    window_token,
+                    &args,
+                )?;
+                drop(state);
+                if let Some(delivery) = delivery {
+                    self.deliveries.push(delivery);
+                }
+                reply_note = "<accessibility bind>";
+            } else if self.host_side_services {
+                let binder = args
+                    .get(2)
+                    .and_then(crate::value::Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                if let Some(state) = self.ams_state() {
+                    let published = {
+                        let mut state = state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        state.ams.host_services.publish_service(token, binder)?
+                    };
+                    if let Some(deliveries) = published {
+                        self.deliveries.extend(deliveries);
+                    }
+                }
             }
             if !oneway {
                 reply.reset();
@@ -1484,7 +2347,7 @@ impl ServiceHost {
                 interface: descriptor,
                 method: method.name.clone(),
                 args: "<publishService>".into(),
-                reply: "<accessibility bind>".into(),
+                reply: reply_note.into(),
             });
         }
 
@@ -1540,7 +2403,18 @@ impl ServiceHost {
 
         let object = self.ensure_for_binder(binder, &descriptor)?;
         let mut call = object.call(&descriptor, method, &args)?;
+        // The reference model is the same on both dispatch paths: a handler
+        // that stores a callback binder reports it here, whether its interface
+        // is decoded or hand-rolled.
+        let mut retained = object.drain_retained();
+        let mut released = object.drain_released();
         self.deliveries.append(&mut call.deliveries);
+        for id in retained.drain(..) {
+            self.retain_binder(id);
+        }
+        for id in released.drain(..) {
+            self.release_binder(id);
+        }
 
         // MODA11Y2: two system services are wired here rather than inside a
         // `ServiceObject`, because the state they need is cross-service:
@@ -1566,6 +2440,14 @@ impl ServiceHost {
                 }
             }
         }
+        // MPROC8: AOSP's `ActiveServices` for a guest-initiated bind. Every step
+        // runs here, on the thread that owns the service table, and produces the
+        // `system -> app` deliveries the peer routes (create/bind to the
+        // service's own process, `connected` to the caller's
+        // `IServiceConnection`).
+        if descriptor == "android.app.IActivityManager" && self.host_side_services {
+            self.host_service_hook(&method.name, &args);
+        }
 
         if oneway {
             return Ok(CallInfo {
@@ -1588,7 +2470,8 @@ impl ServiceHost {
         })
     }
 
-    fn ensure_for_binder(        &mut self,
+    fn ensure_for_binder(
+        &mut self,
         binder: BinderId,
         _descriptor: &str,
     ) -> Result<&mut dyn ServiceObject> {

@@ -19,7 +19,7 @@
 //!   `UNSUPPORTED_ANDROID_API`, never a silent default.
 
 use acos_parcel::binder::BinderId;
-use acos_services::clipboard::{ClipboardState, ClipFacts};
+use acos_services::clipboard::{ClipFacts, ClipboardState};
 use acos_services::{codes, ServiceError, ServiceHost, Value};
 
 const IMM: &str = "com.android.internal.view.IInputMethodManager";
@@ -44,13 +44,25 @@ fn null_obj() -> Value {
     Value::TypedObject(acos_services::Parcelable::Null)
 }
 
-fn invoke(host: &mut ServiceHost, name: &str, interface: &str, method: &str, args: &[Value]) -> Vec<Value> {
+fn invoke(
+    host: &mut ServiceHost,
+    name: &str,
+    interface: &str,
+    method: &str,
+    args: &[Value],
+) -> Vec<Value> {
     let binder = host.check_service(name).expect("lookup").expect(name);
     host.invoke(binder, interface, method, args)
         .unwrap_or_else(|e| panic!("{interface}::{method}: {e}"))
 }
 
-fn invoke_err(host: &mut ServiceHost, name: &str, interface: &str, method: &str, args: &[Value]) -> ServiceError {
+fn invoke_err(
+    host: &mut ServiceHost,
+    name: &str,
+    interface: &str,
+    method: &str,
+    args: &[Value],
+) -> ServiceError {
     let binder = host.check_service(name).expect("lookup").expect(name);
     host.invoke(binder, interface, method, args)
         .expect_err("must be a structured error")
@@ -63,7 +75,13 @@ fn invoke_err(host: &mut ServiceHost, name: &str, interface: &str, method: &str,
 #[test]
 fn ime_client_registers_and_start_input_returns_no_ime() {
     let mut host = ServiceHost::standard();
-    invoke(&mut host, "input_method", IMM, "addClient", &[binder(), binder(), Value::Int(0)]);
+    invoke(
+        &mut host,
+        "input_method",
+        IMM,
+        "addClient",
+        &[binder(), binder(), Value::Int(0)],
+    );
 
     // startInputOrWindowGainedFocus: requestId, client, token, 3 ints, EditorInfo,
     // IRemoteInputConnection, IRemoteAccessibilityInputConnection, 2 ints,
@@ -101,7 +119,8 @@ fn ime_client_registers_and_start_input_returns_no_ime() {
     // reports a visible keyboard.
     let mut ime = acos_services::ime::ImeState::new();
     ime.add_client(Some(BinderId(0x4242)), Some(BinderId(0x5151)), 0);
-    let (result, method, session) = ime.start_input(Some(BinderId(0x4242)), 1, Some(BinderId(0x5151)));
+    let (result, method, session) =
+        ime.start_input(Some(BinderId(0x4242)), 1, Some(BinderId(0x5151)));
     assert_eq!(result, acos_services::ime::BIND_NO_IME);
     assert_eq!(method, None);
     assert_eq!(session, None, "the null IME has no session");
@@ -124,10 +143,10 @@ fn ime_show_and_hide_soft_input_are_recorded_false() {
     let args = [
         binder(),
         Value::Binder(None),
-        null_obj(),               // ImeTracker.Token
+        null_obj(), // ImeTracker.Token
         Value::Int(0),
         Value::Int(0),
-        null_obj(),               // ResultReceiver (still answered)
+        null_obj(), // ResultReceiver (still answered)
         Value::Int(0),
     ];
     let show = invoke(&mut host, "input_method", IMM, "showSoftInput", &args);
@@ -196,7 +215,10 @@ fn ime_session_and_tracker_transactions_are_served() {
     }
     ime.tracker_event(7, -1);
     ime.tracker_event(7, -3);
-    assert_eq!(ime.progress_count, 22, "measured onProgress count is 22 ± 3");
+    assert_eq!(
+        ime.progress_count, 22,
+        "measured onProgress count is 22 ± 3"
+    );
     assert_eq!(ime.tracker.len(), 24);
 }
 
@@ -225,41 +247,101 @@ fn clipboard_round_trips_the_marshalled_clipdata_bytes() {
 
     // The bytes the real `ClipData.writeToParcel` produced for "World".
     let bytes: Vec<u8> = (0..64u8).collect();
-    state
-        .lock()
-        .unwrap()
-        .set_primary_clip(bytes.clone(), ClipFacts::text("World"), "dev.acos.fixtures.helloviews".into());
+    state.lock().unwrap().set_primary_clip(
+        bytes.clone(),
+        ClipFacts::text("World"),
+        "dev.acos.fixtures.helloviews".into(),
+    );
 
     let mut host = ServiceHost::standard();
     assert_eq!(
-        invoke(&mut host, "clipboard", ICLIP, "hasPrimaryClip", &[s("dev.acos.fixtures.helloviews"), s("feature"), Value::Int(0), Value::Int(0)]),
+        invoke(
+            &mut host,
+            "clipboard",
+            ICLIP,
+            "hasPrimaryClip",
+            &[
+                s("dev.acos.fixtures.helloviews"),
+                s("feature"),
+                Value::Int(0),
+                Value::Int(0)
+            ]
+        ),
         vec![Value::Bool(true)]
     );
     assert_eq!(
-        invoke(&mut host, "clipboard", ICLIP, "hasClipboardText", &[s("dev.acos.fixtures.helloviews"), s("feature"), Value::Int(0), Value::Int(0)]),
+        invoke(
+            &mut host,
+            "clipboard",
+            ICLIP,
+            "hasClipboardText",
+            &[
+                s("dev.acos.fixtures.helloviews"),
+                s("feature"),
+                Value::Int(0),
+                Value::Int(0)
+            ]
+        ),
         vec![Value::Bool(true)]
     );
     // The stored clip is returned byte-identically; `ClipData.CREATOR` reads
     // exactly what `writeToParcel` wrote.
-    let stored = state.lock().unwrap().get_primary_clip().cloned().expect("clip");
+    let stored = state
+        .lock()
+        .unwrap()
+        .get_primary_clip()
+        .cloned()
+        .expect("clip");
     assert_eq!(stored.bytes, bytes);
     assert_eq!(stored.facts.label, "");
     assert_eq!(stored.facts.mime_types, vec!["text/plain".to_string()]);
 
     // Listeners are idempotent and removable.
     let listener = Value::Binder(Some(BinderId(0x99)));
-    invoke(&mut host, "clipboard", ICLIP, "addPrimaryClipChangedListener",
-        &[listener.clone(), s("pkg"), s("feature"), Value::Int(0), Value::Int(0)]);
-    invoke(&mut host, "clipboard", ICLIP, "addPrimaryClipChangedListener",
-        &[listener.clone(), s("pkg"), s("feature"), Value::Int(0), Value::Int(0)]);
+    invoke(
+        &mut host,
+        "clipboard",
+        ICLIP,
+        "addPrimaryClipChangedListener",
+        &[
+            listener.clone(),
+            s("pkg"),
+            s("feature"),
+            Value::Int(0),
+            Value::Int(0),
+        ],
+    );
+    invoke(
+        &mut host,
+        "clipboard",
+        ICLIP,
+        "addPrimaryClipChangedListener",
+        &[
+            listener.clone(),
+            s("pkg"),
+            s("feature"),
+            Value::Int(0),
+            Value::Int(0),
+        ],
+    );
     assert_eq!(state.lock().unwrap().listeners.len(), 1);
 
-    invoke(&mut host, "clipboard", ICLIP, "clearPrimaryClip",
-        &[s("pkg"), s("feature"), Value::Int(0), Value::Int(0)]);
+    invoke(
+        &mut host,
+        "clipboard",
+        ICLIP,
+        "clearPrimaryClip",
+        &[s("pkg"), s("feature"), Value::Int(0), Value::Int(0)],
+    );
     assert!(!state.lock().unwrap().has_primary_clip());
     assert_eq!(
-        invoke(&mut host, "clipboard", ICLIP, "getPrimaryClipSource",
-            &[s("pkg"), s("feature"), Value::Int(0), Value::Int(0)]),
+        invoke(
+            &mut host,
+            "clipboard",
+            ICLIP,
+            "getPrimaryClipSource",
+            &[s("pkg"), s("feature"), Value::Int(0), Value::Int(0)]
+        ),
         vec![Value::Str(None)]
     );
 }
@@ -274,7 +356,13 @@ fn clipboard_set_primary_clip_without_a_vm_is_a_structured_error() {
         "clipboard",
         ICLIP,
         "setPrimaryClip",
-        &[null_obj(), s("pkg"), s("feature"), Value::Int(0), Value::Int(0)],
+        &[
+            null_obj(),
+            s("pkg"),
+            s("feature"),
+            Value::Int(0),
+            Value::Int(0),
+        ],
     );
     assert_eq!(err.code(), codes::UNSUPPORTED_ANDROID_API);
 }
@@ -293,25 +381,44 @@ fn app_ops_check_operation_is_denied_without_a_grant() {
         "appops",
         IAPP_OPS,
         "checkOperation",
-        &[Value::Int(1), Value::Int(10192), s("dev.acos.fixtures.helloviews")],
+        &[
+            Value::Int(1),
+            Value::Int(10192),
+            s("dev.acos.fixtures.helloviews"),
+        ],
     );
-    assert_ne!(reply, vec![Value::Int(acos_services::declared::MODE_ALLOWED)]);
+    assert_ne!(
+        reply,
+        vec![Value::Int(acos_services::declared::MODE_ALLOWED)]
+    );
     // A non-restricted op code is still answered MODE_ALLOWED.
     let benign = invoke(
         &mut host,
         "appops",
         IAPP_OPS,
         "checkOperation",
-        &[Value::Int(9999), Value::Int(10192), s("dev.acos.fixtures.helloviews")],
+        &[
+            Value::Int(9999),
+            Value::Int(10192),
+            s("dev.acos.fixtures.helloviews"),
+        ],
     );
-    assert_eq!(benign, vec![Value::Int(acos_services::declared::MODE_ALLOWED)]);
+    assert_eq!(
+        benign,
+        vec![Value::Int(acos_services::declared::MODE_ALLOWED)]
+    );
     // A state-changing op is refused, not faked.
     let err = invoke_err(
         &mut host,
         "appops",
         IAPP_OPS,
         "setMode",
-        &[Value::Int(1), Value::Int(10192), s("dev.acos.fixtures.helloviews"), Value::Int(1)],
+        &[
+            Value::Int(1),
+            Value::Int(10192),
+            s("dev.acos.fixtures.helloviews"),
+            Value::Int(1),
+        ],
     );
     assert_eq!(err.code(), codes::UNSUPPORTED_ANDROID_API);
 }
@@ -320,13 +427,31 @@ fn app_ops_check_operation_is_denied_without_a_grant() {
 fn permission_manager_denies_runtime_grants_explicitly() {
     let mut host = ServiceHost::standard();
     assert_eq!(
-        invoke(&mut host, "permission", IPERM, "getPermissionFlags",
-            &[s("android.permission.CAMERA"), s("dev.acos.fixtures.helloviews"), Value::Int(0)]),
+        invoke(
+            &mut host,
+            "permission",
+            IPERM,
+            "getPermissionFlags",
+            &[
+                s("android.permission.CAMERA"),
+                s("dev.acos.fixtures.helloviews"),
+                Value::Int(0)
+            ]
+        ),
         vec![Value::Int(0)]
     );
     assert_eq!(
-        invoke(&mut host, "permission", IPERM, "isPermissionRevokedByPolicy",
-            &[s("android.permission.CAMERA"), s("dev.acos.fixtures.helloviews"), Value::Int(0)]),
+        invoke(
+            &mut host,
+            "permission",
+            IPERM,
+            "isPermissionRevokedByPolicy",
+            &[
+                s("android.permission.CAMERA"),
+                s("dev.acos.fixtures.helloviews"),
+                Value::Int(0)
+            ]
+        ),
         vec![Value::Bool(false)]
     );
     let err = invoke_err(
@@ -334,7 +459,11 @@ fn permission_manager_denies_runtime_grants_explicitly() {
         "permission",
         IPERM,
         "grantRuntimePermission",
-        &[s("dev.acos.fixtures.helloviews"), s("android.permission.CAMERA"), Value::Int(0)],
+        &[
+            s("dev.acos.fixtures.helloviews"),
+            s("android.permission.CAMERA"),
+            Value::Int(0),
+        ],
     );
     assert_eq!(err.code(), codes::UNSUPPORTED_ANDROID_API);
 }
@@ -369,13 +498,23 @@ fn user_manager_serves_exactly_one_user() {
 fn notifications_are_reported_as_not_enabled_and_post_is_unsupported() {
     let mut host = ServiceHost::standard();
     assert_eq!(
-        invoke(&mut host, "notification", INOTIF, "areNotificationsEnabledForPackage",
-            &[s("dev.acos.fixtures.helloviews"), Value::Int(10192)]),
+        invoke(
+            &mut host,
+            "notification",
+            INOTIF,
+            "areNotificationsEnabledForPackage",
+            &[s("dev.acos.fixtures.helloviews"), Value::Int(10192)]
+        ),
         vec![Value::Bool(false)]
     );
     assert_eq!(
-        invoke(&mut host, "notification", INOTIF, "getPackageImportance",
-            &[s("dev.acos.fixtures.helloviews")]),
+        invoke(
+            &mut host,
+            "notification",
+            INOTIF,
+            "getPackageImportance",
+            &[s("dev.acos.fixtures.helloviews")]
+        ),
         vec![Value::Int(0)]
     );
     // A text toast is *not* unsupported: AOSP's `NotificationManagerService`

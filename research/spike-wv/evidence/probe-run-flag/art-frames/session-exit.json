@@ -1,0 +1,94 @@
+{
+  "abi": null,
+  "activity_resumed": true,
+  "application_created": true,
+  "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=86MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p101226-i117492.scope)",
+  "code": null,
+  "disk_free_bytes": 145256574976,
+  "guard": "seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0",
+  "guest_crash": null,
+  "guest_crash_detail": null,
+  "guest_exit": 0,
+  "guest_signal": null,
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "kept_run_dir": null,
+  "logd": "logd: 86 entries",
+  "logd_tail": [
+    "W/ziparchive: Unable to open '/data/app/webview-probe.dm': No such file or directory",
+    "D/nativeloader: Configuring clns-2 for other apk /data/app/webview-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.webview",
+    "W/ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.webview/cache: chown failed: EINVAL (Invalid argument)",
+    "W/ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.webview/code_cache: chown failed: EINVAL (Invalid argument)",
+    "V/GraphicsEnvironment: Currently set values for:",
+    "V/GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]",
+    "V/GraphicsEnvironment:   angle_gl_driver_selection_values=[]",
+    "V/GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.webview: false",
+    "V/GraphicsEnvironment: dev.acos.fixtures.webview is not listed in per-application setting",
+    "V/GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.",
+    "W/SystemServiceRegistry: No service published for: netstats",
+    "E/TrafficStats: TrafficStats not initialized, uid=10192",
+    "I/AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started",
+    "D/CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED",
+    "D/CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED",
+    "I/WVProbe: hasSystemFeature(android.software.webview)=true",
+    "I/WVProbe: WebView.getCurrentWebViewPackage()=null",
+    "I/WVProbe: myUid=10192",
+    "E/WebViewFactory: error instantiating provider\njava.lang.NullPointerException: Attempt to invoke interface method 'android.webkit.WebViewProviderResponse android.webkit.IWebViewUpdateService.waitForAndGetProvider()' on a null object reference\n\tat android.webkit.WebViewFactory.getWebViewContextAndSetProvider(WebViewFactory.java:421)\n\tat android.webkit.WebViewFactory.getProviderClass(WebViewFactory.java:493)\n\tat android.webkit.WebViewFactory.getProvider(WebViewFactory.java:348)\n\tat android.webkit.WebView.getFactory(WebView.java:2605)\n\tat android.webkit.WebView.ensureProviderCreated(WebView.java:2599)\n\tat android.webkit.WebView.setOverScrollMode(WebView.java:2667)\n\tat android.view.View.<init>(View.java:5497)\n\tat android.view.View.<init>(View.java:5638)\n\tat android.view.ViewGroup.<init>(ViewGroup.java:704)\n\tat android.widget.AbsoluteLayout.<init>(AbsoluteLayout.java:56)\n\tat android.webkit.WebView.<init>(WebView.java:421)\n\tat android.webkit.WebView.<init>(WebView.java:363)\n\tat android.webkit.WebView.<init>(WebView.java:345)\n\tat android.webkit.WebView.<init>(WebView.java:332)\n\tat android.webkit.WebView.<init>(WebView.java:322)\n\tat dev.acos.fixtures.webview.MainActivity.onCreate(MainActivity.java:88)\n\tat android.app.Activity.performCreate(Activity.java:8595)\n\tat android.app.Activity.performCreate(Activity.java:8573)\n\tat android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1456)\n\tat android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3764)\n\tat android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:3922)\n\tat android.app.servertransaction.LaunchActivityItem.execute(LaunchActivityItem.java:103)\n\tat android.app.servertransaction.TransactionExecutor.executeCallbacks(TransactionExecutor.java:139)\n\tat android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:96)\n\tat android.app.ActivityThread$H.handleMessage(ActivityThread.java:2443)\n\tat android.os.Handler.dispatchMessage(Handler.java:106)\n\tat android.os.Looper.loopOnce(Looper.java:205)\n\tat android.os.Looper.loop(Looper.java:294)\n\tat dev.acos.art.LaunchMain.run(LaunchMain.java:431)\n\tat dev.acos.art.LaunchMain.main(LaunchMain.java:224)\n",
+    "I/WVProbe: WebView FAILED: android.util.AndroidRuntimeException: java.lang.NullPointerException: Attempt to invoke interface method 'android.webkit.WebViewProviderResponse android.webkit.IWebViewUpdateService.waitForAndGetProvider()' on a null object reference\n  at android.webkit.WebViewFactory.getProvider(WebViewFactory.java:363)\n  at android.webkit.WebView.getFactory(WebView.java:2605)\n  at android.webkit.WebView.ensureProviderCreated(WebView.java:2599)\n  at android.webkit.WebView.setOverScrollMode(WebView.java:2667)",
+    "E/logdw: dev.acos.fixtures.webview.MainActivity",
+    "E/logdw: dev.acos.fixtures.webview.MainActivity",
+    "E/logdw: dev.acos.fixtures.webview.MainActivity",
+    "D/CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED"
+  ],
+  "native_crash": null,
+  "native_crash_path": null,
+  "notes": [
+    "shared-boot-image: /home/Qui/.cache/acos/art/boot-images/fixed-5424c4bb03f7d6fd (ACOS_ART_BOOT_IMAGE=shared-fixed; -Ximage:/data/img/boot.art -Xnorelocate; fixed base 0x70000000, no image ASLR; cache built)",
+    "boot_image: mode=shared-fixed cache=built dir=/home/Qui/.cache/acos/art/boot-images/fixed-5424c4bb03f7d6fd input=5424c4bb03f7d6fd base=0x70000000 prep_ms=3560 reason=no usable manifest at /home/Qui/.cache/acos/art/boot-images/fixed-5424c4bb03f7d6fd/manifest.json: No such file or directory (os error 2)",
+    "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=86MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p101226-i117492.scope)",
+    "seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0",
+    "logd: 86 entries"
+  ],
+  "outcome": "ok",
+  "retryable": false,
+  "route": "launch",
+  "stage": "teardown-evidence",
+  "stderr_tail": [
+    "ACOSART[render]: dlopen(libandroid_runtime.so) ok @0xd4e4e620c6a750f1 (default namespace, RTLD_GLOBAL)",
+    "ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)",
+    "ACOSLAUNCH MARK crash-handler installed sigchain=0x7fdc33885d40"
+  ],
+  "stderr_tail_last": "ACOSLAUNCH MARK crash-handler installed sigchain=0x7fdc33885d40",
+  "stdout_tail": [
+    "…ected\":false,\"children\":[{\"class\":\"android.widget.TextView\",\"id\":\"dev.acos.fixtures.webview:id/status\",\"text\":\"hasSystemFeature(android.software.webview)=true\\nWebView.getCurrentWebViewPackage()=null\\nmyUid=10192\\nWebView FAILED: android.util.AndroidRuntimeException: java.lang.NullPointerException: Attempt to invoke interface method 'android.webkit.WebViewProviderResponse android.webkit.IWebViewUpdateService.waitForAndGetProvider()' on a null object reference\\n  at android.webkit.WebViewFactory.getProvider(WebViewFactory.java:363)\\n  at android.webkit.WebView.getFactory(WebView.java:2605)\\n  at android.webkit.WebView.ensureProviderCreated(WebView.java:2599)\\n  at android.webkit.WebView.setOverScrollMode(WebView.java:2667)\\n\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,275][1080,969]\",\"bounds_on_screen\":\"[0,275][1080,969]\",\"visible_bounds\":\"[0,275][1080,969]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}]}]},{\"class\":\"com.android.internal.widget.ActionBarContainer\",\"id\":\"android:id/action_bar_container\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][1080,275]\",\"bounds_on_screen\":\"[0,128][1080,275]\",\"visible_bounds\":\"[0,128][1080,275]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"android.widget.Toolbar\",\"id\":\"android:id/action_bar\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][1080,275]\",\"bounds_on_screen\":\"[0,128][1080,275]\",\"visible_bounds\":\"[0,128][1080,275]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"android.widget.TextView\",\"id\":\"\",\"text\":\"ACOS WebView probe\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[42,166][563,237]\",\"bounds_on_screen\":\"[42,166][563,237]\",\"visible_bounds\":\"[42,166][563,237]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.widget.ActionMenuView\",\"id\":\"\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[1080,128][1080,275]\",\"bounds_on_screen\":\"[1080,128][1080,275]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[]}]},{\"class\":\"com.android.internal.widget.ActionBarContextView\",\"id\":\"android:id/action_context_bar\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][0,128]\",\"bounds_on_screen\":\"[0,128][0,128]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":8,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[]}]}]},{\"class\":\"android.view.View\",\"id\":\"android:id/navigationBarBackground\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,2337][1080,2400]\",\"bounds_on_screen\":\"[0,2337][1080,2400]\",\"visible_bounds\":\"[0,2337][1080,2400]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.view.View\",\"id\":\"android:id/statusBarBackground\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,0][1080,128]\",\"bounds_on_screen\":\"[0,0][1080,128]\",\"visible_bounds\":\"[0,0][1080,128]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}],\"window_count\":1,\"node_budget\":2000,\"truncated\":false,\"emit_us\":293},\"settle\":{\"settled\":true,\"pending\":[],\"frame_callbacks\":0,\"queue_due_ms\":1518,\"horizon_ms\":256,\"anim_callbacks\":[],\"draw_ms\":1794795809779,\"draw_seq\":2,\"window_stable_ms\":78,\"in_touch_mode\":true,\"view_generation\":3},\"animations\":{\"on\":true,\"scale\":1.0,\"applied\":true,\"source\":\"env:on\"}}",
+    "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {28a1a4} dev.acos.art.LaunchMain$8$1@3203410"
+  ],
+  "stdout_tail_last": "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {28a1a4} dev.acos.art.LaunchMain$8$1@3203410",
+  "utc_ms": 1794795809910,
+  "wall_ms": 341
+}

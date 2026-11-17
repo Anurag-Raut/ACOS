@@ -35,7 +35,9 @@ fn main() {
         // `exec` is denied by seccomp, so do not probe the CLI from here; the
         // child only ever serves in-process session tools.
         let backend = SessionBackend::with_cli(
-            CliBackend::new(BackendConfig::for_binary("/nonexistent/acos-confined-child")),
+            CliBackend::new(BackendConfig::for_binary(
+                "/nonexistent/acos-confined-child",
+            )),
             SessionOptions::default(),
         );
         serve(backend);
@@ -203,9 +205,7 @@ fn confined_child_profile() -> Option<ConfineProfile> {
         .map(|joined| joined.to_string_lossy().into_owned())
         .unwrap_or_default();
     if !roots.is_empty() {
-        profile
-            .env
-            .push(("ACOS_ALLOWED_ROOTS".to_string(), roots));
+        profile.env.push(("ACOS_ALLOWED_ROOTS".to_string(), roots));
     }
     Some(profile)
 }

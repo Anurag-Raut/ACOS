@@ -100,13 +100,7 @@ pub fn install_sink(sink: Box<dyn FrameSink>) {
 /// presents through the compositor and publishes into the `FrameStore`). With
 /// no runtime, the default `MemorySink` records the frame. Returns the sink's
 /// monotonic frame id (0 when the sink rejected the submission).
-pub fn submit_frame(
-    window_id: u64,
-    width: u32,
-    height: u32,
-    rgba: &[u8],
-    cause_id: i64,
-) -> u64 {
+pub fn submit_frame(window_id: u64, width: u32, height: u32, rgba: &[u8], cause_id: i64) -> u64 {
     SINK.with(|s| {
         s.borrow_mut()
             .submit_frame(window_id, width, height, rgba, cause_id)
@@ -222,7 +216,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(H, "nCreateProxy", "(ZJ)J", h_create_proxy);
     vm.register_native(H, "nDeleteProxy", "(J)V", h_delete_proxy);
     vm.register_native(H, "nDestroy", "(JJ)V", h_delete_proxy);
-    vm.register_native(H, "nSetSurface", "(JLandroid/view/Surface;Z)V", h_set_surface);
+    vm.register_native(
+        H,
+        "nSetSurface",
+        "(JLandroid/view/Surface;Z)V",
+        h_set_surface,
+    );
     vm.register_native(H, "nSetSurfaceControl", "(JJ)V", h_noop);
     vm.register_native(H, "nSyncAndDrawFrame", "(J[JI)I", h_sync_and_draw);
     vm.register_native(H, "nNotifyFramePending", "(J)V", h_noop);
@@ -234,7 +233,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(H, "nSetName", "(JLjava/lang/String;)V", h_set_name);
     vm.register_native(H, "nSetLightGeometry", "(JFFFF)V", h_light_geometry);
     vm.register_native(H, "nSetLightAlpha", "(JFF)V", h_set_light_alpha);
-    vm.register_native(H, "nRegisterAnimatingRenderNode", "(JJ)V", h_register_animating);
+    vm.register_native(
+        H,
+        "nRegisterAnimatingRenderNode",
+        "(JJ)V",
+        h_register_animating,
+    );
     vm.register_native(H, "nAllocateBuffers", "(J)V", h_noop);
     vm.register_native(H, "nLoadSystemProperties", "(J)Z", h_ret_false);
     vm.register_native(H, "nFence", "(J)V", h_noop);
@@ -249,21 +253,51 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(H, "nSetHighContrastText", "(Z)V", h_set_high_contrast_text);
     vm.register_native(H, "nSetColorMode", "(JI)F", h_set_color_mode);
     vm.register_native(H, "nSetContextPriority", "(I)V", h_noop);
-    vm.register_native(H, "nSetDisplayDensityDpi", "(I)V", h_set_display_density_dpi);
+    vm.register_native(
+        H,
+        "nSetDisplayDensityDpi",
+        "(I)V",
+        h_set_display_density_dpi,
+    );
     vm.register_native(H, "nSetIsHighEndGfx", "(Z)V", h_noop);
     vm.register_native(H, "nSetIsLowRam", "(Z)V", h_noop);
     vm.register_native(H, "nSetIsSystemOrPersistent", "(Z)V", h_noop);
     vm.register_native(H, "nSetIsolatedProcess", "(Z)V", h_noop);
     vm.register_native(H, "nSetOpaque", "(JZ)V", h_set_opaque);
-    vm.register_native(H, "nSetContentDrawBounds", "(JIIII)V", h_set_content_draw_bounds);
+    vm.register_native(
+        H,
+        "nSetContentDrawBounds",
+        "(JIIII)V",
+        h_set_content_draw_bounds,
+    );
     vm.register_native(H, "nSetForceDark", "(JZ)V", h_set_force_dark);
     vm.register_native(H, "nSetSdrWhitePoint", "(JF)V", h_set_sdr_white_point);
-    vm.register_native(H, "nSetTargetSdrHdrRatio", "(JF)V", h_set_target_sdr_hdr_ratio);
+    vm.register_native(
+        H,
+        "nSetTargetSdrHdrRatio",
+        "(JF)V",
+        h_set_target_sdr_hdr_ratio,
+    );
     vm.register_native(H, "nTrimCaches", "(I)V", h_noop);
     vm.register_native(H, "nTrimMemory", "(I)V", h_noop);
-    vm.register_native(H, "nSetFrameCallback", "(JLandroid/graphics/HardwareRenderer$FrameDrawingCallback;)V", h_set_frame_callback);
-    vm.register_native(H, "nSetFrameCompleteCallback", "(JLandroid/graphics/HardwareRenderer$FrameCompleteCallback;)V", h_set_frame_complete_callback);
-    vm.register_native(H, "nSetFrameCommitCallback", "(JLandroid/graphics/HardwareRenderer$FrameCommitCallback;)V", h_set_frame_commit_callback);
+    vm.register_native(
+        H,
+        "nSetFrameCallback",
+        "(JLandroid/graphics/HardwareRenderer$FrameDrawingCallback;)V",
+        h_set_frame_callback,
+    );
+    vm.register_native(
+        H,
+        "nSetFrameCompleteCallback",
+        "(JLandroid/graphics/HardwareRenderer$FrameCompleteCallback;)V",
+        h_set_frame_complete_callback,
+    );
+    vm.register_native(
+        H,
+        "nSetFrameCommitCallback",
+        "(JLandroid/graphics/HardwareRenderer$FrameCommitCallback;)V",
+        h_set_frame_commit_callback,
+    );
     vm.register_native(H, "nAddObserver", "(JJ)V", h_noop);
     vm.register_native(H, "nRemoveObserver", "(JJ)V", h_noop);
     // --- API-34 natives ACOS's software renderer does not consume ----------
@@ -284,17 +318,57 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(H, "nPushLayerUpdate", "(JJ)V", h_noop);
     vm.register_native(H, "nCreateTextureLayer", "(J)J", h_ret_zero_long);
     vm.register_native(H, "nDetachSurfaceTexture", "(JJ)V", h_noop);
-    vm.register_native(H, "nCreateHardwareBitmap", "(JII)Landroid/graphics/Bitmap;", h_ret_null);
+    vm.register_native(
+        H,
+        "nCreateHardwareBitmap",
+        "(JII)Landroid/graphics/Bitmap;",
+        h_ret_null,
+    );
     vm.register_native(H, "nCopyLayerInto", "(JJJ)Z", h_ret_false);
-    vm.register_native(H, "nCopySurfaceInto", "(Landroid/view/Surface;IIIILandroid/graphics/HardwareRenderer$CopyRequest;)V", h_noop);
+    vm.register_native(
+        H,
+        "nCopySurfaceInto",
+        "(Landroid/view/Surface;IIIILandroid/graphics/HardwareRenderer$CopyRequest;)V",
+        h_noop,
+    );
     vm.register_native(H, "nDestroyHardwareResources", "(J)V", h_noop);
-    vm.register_native(H, "nDumpGlobalProfileInfo", "(Ljava/io/FileDescriptor;I)V", h_noop);
-    vm.register_native(H, "nDumpProfileInfo", "(JLjava/io/FileDescriptor;I)V", h_noop);
-    vm.register_native(H, "nOverrideProperty", "(Ljava/lang/String;Ljava/lang/String;)V", h_noop);
+    vm.register_native(
+        H,
+        "nDumpGlobalProfileInfo",
+        "(Ljava/io/FileDescriptor;I)V",
+        h_noop,
+    );
+    vm.register_native(
+        H,
+        "nDumpProfileInfo",
+        "(JLjava/io/FileDescriptor;I)V",
+        h_noop,
+    );
+    vm.register_native(
+        H,
+        "nOverrideProperty",
+        "(Ljava/lang/String;Ljava/lang/String;)V",
+        h_noop,
+    );
     vm.register_native(H, "nRegisterVectorDrawableAnimator", "(JJ)V", h_noop);
-    vm.register_native(H, "nSetASurfaceTransactionCallback", "(JLandroid/graphics/HardwareRenderer$ASurfaceTransactionCallback;)V", h_noop);
-    vm.register_native(H, "nSetPictureCaptureCallback", "(JLandroid/graphics/HardwareRenderer$PictureCapturedCallback;)V", h_noop);
-    vm.register_native(H, "nSetPrepareSurfaceControlForWebviewCallback", "(JLandroid/graphics/HardwareRenderer$PrepareSurfaceControlForWebviewCallback;)V", h_noop);
+    vm.register_native(
+        H,
+        "nSetASurfaceTransactionCallback",
+        "(JLandroid/graphics/HardwareRenderer$ASurfaceTransactionCallback;)V",
+        h_noop,
+    );
+    vm.register_native(
+        H,
+        "nSetPictureCaptureCallback",
+        "(JLandroid/graphics/HardwareRenderer$PictureCapturedCallback;)V",
+        h_noop,
+    );
+    vm.register_native(
+        H,
+        "nSetPrepareSurfaceControlForWebviewCallback",
+        "(JLandroid/graphics/HardwareRenderer$PrepareSurfaceControlForWebviewCallback;)V",
+        h_noop,
+    );
     // `setupShadersDiskCache` is a static native (API 34). On a device it
     // points the HWUI/Skia shader caches at the two paths; ACOS has no native
     // shader compiler or cache, so the paths are recorded and the call is a
@@ -306,7 +380,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         h_setup_shaders_disk_cache,
     );
     const O: &str = "Landroid/graphics/HardwareRendererObserver;";
-    vm.register_native(O, "nCreateObserver", "(Ljava/lang/ref/WeakReference;Z)J", h_create_observer);
+    vm.register_native(
+        O,
+        "nCreateObserver",
+        "(Ljava/lang/ref/WeakReference;Z)J",
+        h_create_observer,
+    );
     vm.register_native(O, "nGetNextBuffer", "(J[J)I", h_ret_zero_int);
     Ok(())
 }
@@ -447,15 +526,23 @@ fn h_sync_and_draw(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             "acos-render Surface::new",
         ));
     };
-    let cause = HWUI.with(|s| s.borrow().proxies.get(h).map(|p| p.frames as i64 + 1).unwrap_or(1));
+    let cause = HWUI.with(|s| {
+        s.borrow()
+            .proxies
+            .get(h)
+            .map(|p| p.frames as i64 + 1)
+            .unwrap_or(1)
+    });
     let _ = with_ctx(|c| {
         c.surface_render_node(surface, root, cause)
             .map_err(|e| render_err("HardwareRenderer.syncAndDrawFrame", e))
     })?;
-    let rgba = with_ctx(|c| c.surface_rgba8(surface).map_err(|e| render_err("surface_rgba8", e)))?;
+    let rgba = with_ctx(|c| {
+        c.surface_rgba8(surface)
+            .map_err(|e| render_err("surface_rgba8", e))
+    })?;
     let window = bound_layer.unwrap_or_else(|| HWUI.with(|s| s.borrow().next_window));
-    let frame = SINK
-        .with(|s| s.borrow_mut().submit_frame(window, w, hgt, &rgba, cause));
+    let frame = SINK.with(|s| s.borrow_mut().submit_frame(window, w, hgt, &rgba, cause));
     // Record the frame-timeline sample and the compositor frame id (not the
     // renderer's internal raster sequence), and remember the surface for reuse.
     HWUI.with(|s| {
@@ -562,7 +649,11 @@ fn h_set_name(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = proxy(vm, ctx)?;
     let name = {
         let s = vm.arg_ref(ctx, 1);
-        if s == 0 { String::new() } else { vm.string_to_rust(s).unwrap_or_default() }
+        if s == 0 {
+            String::new()
+        } else {
+            vm.string_to_rust(s).unwrap_or_default()
+        }
     };
     HWUI.with(|s| {
         if let Ok(p) = s.borrow_mut().proxies.get_mut(h) {
@@ -702,8 +793,14 @@ pub fn recorded_renderer_config() -> Vec<(String, String)> {
     HWUI.with(|s| {
         let s = s.borrow();
         let mut out = vec![
-            ("high_contrast_text".to_string(), s.high_contrast_text.to_string()),
-            ("display_density_dpi".to_string(), s.display_density_dpi.to_string()),
+            (
+                "high_contrast_text".to_string(),
+                s.high_contrast_text.to_string(),
+            ),
+            (
+                "display_density_dpi".to_string(),
+                s.display_density_dpi.to_string(),
+            ),
         ];
         if let Some(d) = s.display_info {
             out.push(("display_info".to_string(), format!("{d:?}")));

@@ -13,7 +13,9 @@
 //! that half keeps W27's structured `UNSUPPORTED_ANDROID_API`.
 
 use acos_parcel::{BinderId, Parcel};
-use acos_services::ams::{self, AmsState, DeclaredComponent, ManifestDb, PackageRecord, START_SUCCESS};
+use acos_services::ams::{
+    self, AmsState, DeclaredComponent, ManifestDb, PackageRecord, START_SUCCESS,
+};
 use acos_services::codec;
 use acos_services::parcelable::{self, INTENT_CLASS};
 use acos_services::{Bundle, Parcelable, Value};
@@ -74,9 +76,7 @@ fn launch_intent(action: &str, package: &str, class: &str, extras: bool) -> Parc
             Value::Str(Some(PACKAGE.into())),
             Value::Parcelable(component),
             Value::Parcelable(Parcelable::Null),
-            Value::StringList(Some(vec![Some(
-                "android.intent.category.DEFAULT".into(),
-            )])),
+            Value::StringList(Some(vec![Some("android.intent.category.DEFAULT".into())])),
             Value::Parcelable(Parcelable::Null),
             Value::Parcelable(Parcelable::Null),
             Value::Int(-2),
@@ -90,9 +90,7 @@ fn launch_intent(action: &str, package: &str, class: &str, extras: bool) -> Parc
 /// writes, in the image's argument order.
 fn start_activity_parcel(intent: &Parcelable, request_code: i32, flags: i32) -> Parcel {
     let mut parcel = Parcel::new();
-    parcel
-        .write_interface_token(ATMS)
-        .expect("interface token");
+    parcel.write_interface_token(ATMS).expect("interface token");
     parcel.write_strong_binder_opt(Some(BinderId(0x4000)));
     parcel.write_string16(PACKAGE).expect("callingPackage");
     parcel.write_string16("feature").expect("callingFeatureId");
@@ -111,12 +109,7 @@ fn start_activity_parcel(intent: &Parcelable, request_code: i32, flags: i32) -> 
 #[test]
 fn the_start_activity_request_decodes_and_is_recorded() {
     let method = acos_aidl::lookup_by_name(ATMS, "startActivity").expect("the image's table");
-    let intent = launch_intent(
-        "android.intent.action.MAIN",
-        PACKAGE,
-        CLASS,
-        true,
-    );
+    let intent = launch_intent("android.intent.action.MAIN", PACKAGE, CLASS, true);
     let mut parcel = start_activity_parcel(&intent, 7, 0);
     parcel.set_data_position(0);
     // The binder token prefix (strict-mode policy, work source, header, then the
@@ -177,14 +170,16 @@ fn a_flag_the_host_does_not_honour_stays_a_structured_refusal() {
         parcel.read_int32().expect("token prefix word");
     }
     parcel.read_string16().expect("token");
-    let args = codec::read_args(&mut parcel, &method.args, ATMS, "startActivity")
-        .expect("decodes");
+    let args = codec::read_args(&mut parcel, &method.args, ATMS, "startActivity").expect("decodes");
     let mut state = AmsState::new();
     state.manifests = manifest_db();
-    let err = ams::dispatch(&mut state, ATMS, method, &args)
-        .expect_err("an unhonoured flag is refused");
+    let err =
+        ams::dispatch(&mut state, ATMS, method, &args).expect_err("an unhonoured flag is refused");
     assert!(
-        matches!(err, acos_services::ServiceError::UnsupportedAndroidApi { .. }),
+        matches!(
+            err,
+            acos_services::ServiceError::UnsupportedAndroidApi { .. }
+        ),
         "{err:?}"
     );
     assert!(state.take_pending_launches().is_empty());

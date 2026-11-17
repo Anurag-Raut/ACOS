@@ -180,7 +180,10 @@ fn unimplemented_command_returns_unsupported_never_a_pass() {
     assert_eq!(envelope["ok"], false);
     assert_eq!(envelope["status"], "unsupported");
     assert_eq!(envelope["error"]["code"], "UNSUPPORTED_BACKEND");
-    assert!(envelope["error"]["hint"].as_str().unwrap().contains("unsupported"));
+    assert!(envelope["error"]["hint"]
+        .as_str()
+        .unwrap()
+        .contains("unsupported"));
     assert_eq!(envelope["error"]["details"]["available"], false);
 }
 
@@ -251,10 +254,7 @@ fn invalid_params_are_rejected() {
     let missing_name = client.request("tools/call", json!({"arguments": {}}));
     assert_eq!(missing_name["error"]["code"], -32602);
 
-    let unknown_tool = client.request(
-        "tools/call",
-        json!({"name": "acos_nope", "arguments": {}}),
-    );
+    let unknown_tool = client.request("tools/call", json!({"name": "acos_nope", "arguments": {}}));
     assert_eq!(unknown_tool["error"]["code"], -32602);
 
     let bad_arguments = client.request(
@@ -308,10 +308,7 @@ fn path_escape_attempts_are_rejected() {
 fn missing_required_argument_is_invalid_argument() {
     let mut client = McpClient::with_real_acos();
     client.initialize("2025-03-26");
-    let response = client.call_tool(
-        "acos_inspect",
-        json!({"base": {"request_id": "t_missing"}}),
-    );
+    let response = client.call_tool("acos_inspect", json!({"base": {"request_id": "t_missing"}}));
     assert!(is_error(&response));
     let envelope = envelope_of(&response);
     assert_eq!(envelope["error"]["code"], "INVALID_ARGUMENT");
@@ -390,10 +387,7 @@ fn concurrency_limit_serialises_calls() {
     let backend = backend_for(
         &script,
         vec![
-            (
-                "ACOS_TEST_MARKER".to_string(),
-                marker.display().to_string(),
-            ),
+            ("ACOS_TEST_MARKER".to_string(), marker.display().to_string()),
             ("ACOS_TEST_SLEEP_SECS".to_string(), "0.4".to_string()),
         ],
     );
@@ -447,15 +441,15 @@ fn capabilities_tool_reports_available_commands() {
     let envelope = envelope_of(&response);
     assert_eq!(envelope["status"], "pass");
     let commands = envelope["result"]["commands"].as_array().unwrap();
-    let inspect = commands
-        .iter()
-        .find(|c| c["command"] == "inspect")
-        .unwrap();
+    let inspect = commands.iter().find(|c| c["command"] == "inspect").unwrap();
     assert_eq!(inspect["available"], true);
     assert_eq!(inspect["fidelity"], "static-analysis");
     let run = commands.iter().find(|c| c["command"] == "run").unwrap();
     assert_eq!(run["available"], false);
-    assert!(envelope["result"]["binary"].as_str().unwrap().contains("acos"));
+    assert!(envelope["result"]["binary"]
+        .as_str()
+        .unwrap()
+        .contains("acos"));
 }
 
 #[test]
@@ -469,7 +463,10 @@ fn help_tool_returns_the_agent_workflow() {
     assert!(result["loop"].as_str().unwrap().contains("inspect"));
     assert!(result["workflow"].as_array().unwrap().len() >= 5);
     assert!(result["error_playbook"].as_array().unwrap().len() >= 5);
-    assert!(result["markdown"].as_str().unwrap().contains("acos_inspect"));
+    assert!(result["markdown"]
+        .as_str()
+        .unwrap()
+        .contains("acos_inspect"));
     let supported = result["supported"].as_array().unwrap();
     assert!(supported.iter().any(|v| v == "acos_inspect"));
 }
@@ -478,10 +475,7 @@ fn help_tool_returns_the_agent_workflow() {
 fn doctor_tool_returns_the_preflight_report() {
     let mut client = McpClient::with_real_acos();
     client.initialize("2025-03-26");
-    let response = client.call_tool(
-        "acos_doctor",
-        json!({"base": {"request_id": "t_doctor"}}),
-    );
+    let response = client.call_tool("acos_doctor", json!({"base": {"request_id": "t_doctor"}}));
     let envelope = envelope_of(&response);
     let report = &envelope["result"];
     assert!(

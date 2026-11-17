@@ -24,7 +24,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "isDefinedImpl", "(I)Z", is_defined);
     vm.register_native(c, "isIdeographicImpl", "(I)Z", is_ideographic);
     vm.register_native(c, "isMirroredImpl", "(I)Z", ret_false);
-    vm.register_native(c, "isIdentifierIgnorableImpl", "(I)Z", is_identifier_ignorable);
+    vm.register_native(
+        c,
+        "isIdentifierIgnorableImpl",
+        "(I)Z",
+        is_identifier_ignorable,
+    );
     vm.register_native(c, "isUnicodeIdentifierStartImpl", "(I)Z", is_letter);
     vm.register_native(c, "isUnicodeIdentifierPartImpl", "(I)Z", is_letter_or_digit);
     vm.register_native(c, "toUpperCaseImpl", "(I)I", to_upper);
@@ -52,7 +57,8 @@ macro_rules! pred {
     };
 }
 
-pred!(is_digit, |c: char| c.is_ascii_digit() || (c as u32 > 0x7f && c.is_numeric()));
+pred!(is_digit, |c: char| c.is_ascii_digit()
+    || (c as u32 > 0x7f && c.is_numeric()));
 pred!(is_letter, |c: char| c.is_alphabetic());
 pred!(is_letter_or_digit, |c: char| c.is_alphanumeric());
 pred!(is_whitespace, |c: char| c.is_whitespace());

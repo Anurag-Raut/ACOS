@@ -169,10 +169,10 @@ impl ParcelError {
             | Self::BadInterfaceTokenHeader { .. }
             | Self::AshmemUnsupported => -22, // -EINVAL
             Self::InterfaceTokenMismatch { .. } | Self::FdsNotAllowed => -1, // -EPERM
-            Self::UnknownBinder(_) => -22,       // -EINVAL
-            Self::StaleHandle(_) => -22,         // -EINVAL
-            Self::Fd(_) => -5,                   // -EIO
-            Self::IdentityLifo => -22,           // -EINVAL
+            Self::UnknownBinder(_) => -22,                                   // -EINVAL
+            Self::StaleHandle(_) => -22,                                     // -EINVAL
+            Self::Fd(_) => -5,                                               // -EIO
+            Self::IdentityLifo => -22,                                       // -EINVAL
         }
     }
 }
@@ -193,10 +193,7 @@ mod tests {
                 available: 0,
             },
             ParcelError::BadPosition { pos: 9, size: 0 },
-            ParcelError::BadObject {
-                offset: 1,
-                size: 0,
-            },
+            ParcelError::BadObject { offset: 1, size: 0 },
             ParcelError::NotABinder { offset: 0, ty: 0 },
             ParcelError::NotAFileDescriptor { offset: 0, ty: 0 },
             ParcelError::BadString("x"),

@@ -307,9 +307,16 @@ impl Client {
             .create(true)
             .append(true)
             .open(dir.join("supervisor.log"))
-            .map_err(|e| ProtoError { code: ErrorCode::Io, message: e.to_string() })?;
+            .map_err(|e| ProtoError {
+                code: ErrorCode::Io,
+                message: e.to_string(),
+            })?;
         let mut cmd = Command::new("unshare");
-        cmd.arg("--user").arg("--map-root-user").arg("--").arg(exe).arg("serve");
+        cmd.arg("--user")
+            .arg("--map-root-user")
+            .arg("--")
+            .arg(exe)
+            .arg("serve");
         // Inside `--map-root-user` the supervisor's euid is 0, so it cannot
         // derive the user's runtime directory itself: it is handed over
         // explicitly (the same directory the client bound the socket in).
@@ -413,7 +420,9 @@ impl Client {
 
     /// One session's state, without the relay-wide probes `status()` runs.
     pub fn session(&mut self, name: &str) -> Result<SessionInfo, ProtoError> {
-        let mut r = self.request(&Request::Session { session: name.to_string() })?;
+        let mut r = self.request(&Request::Session {
+            session: name.to_string(),
+        })?;
         r.session.take().ok_or_else(|| no_payload(&r))
     }
 
@@ -512,13 +521,18 @@ impl Client {
 
     /// Tear a session down (veth, rules, guest).
     pub fn detach(&mut self, session: &str) -> Result<SessionInfo, ProtoError> {
-        let mut r = self.request(&Request::Detach { session: session.to_string() })?;
+        let mut r = self.request(&Request::Detach {
+            session: session.to_string(),
+        })?;
         r.session.take().ok_or_else(|| no_payload(&r))
     }
 
     /// Per-session online/offline.
     pub fn offline(&mut self, session: &str, offline: bool) -> Result<SessionInfo, ProtoError> {
-        let mut r = self.request(&Request::Offline { session: session.to_string(), offline })?;
+        let mut r = self.request(&Request::Offline {
+            session: session.to_string(),
+            offline,
+        })?;
         r.session.take().ok_or_else(|| no_payload(&r))
     }
 
@@ -530,7 +544,12 @@ impl Client {
         jitter_ms: u32,
         loss_pct: u32,
     ) -> Result<SessionInfo, ProtoError> {
-        let mut r = self.request(&Request::Delay { session: session.to_string(), ms, jitter_ms, loss_pct })?;
+        let mut r = self.request(&Request::Delay {
+            session: session.to_string(),
+            ms,
+            jitter_ms,
+            loss_pct,
+        })?;
         r.session.take().ok_or_else(|| no_payload(&r))
     }
 
@@ -553,13 +572,21 @@ impl Client {
     /// until the next `ensure_up`.
     pub fn kill_pasta(&mut self, hold: bool) -> Result<(), ProtoError> {
         let mut r = self.request(&Request::KillPasta { hold })?;
-        if r.ok { Ok(()) } else { Err(payload_error(&r)) }
+        if r.ok {
+            Ok(())
+        } else {
+            Err(payload_error(&r))
+        }
     }
 
     /// Stop the supervisor and the relay netns.
     pub fn shutdown(&mut self) -> Result<(), ProtoError> {
         let mut r = self.request(&Request::Shutdown)?;
-        if r.ok { Ok(()) } else { Err(payload_error(&r)) }
+        if r.ok {
+            Ok(())
+        } else {
+            Err(payload_error(&r))
+        }
     }
 }
 
@@ -570,8 +597,12 @@ fn send_with_fds(
     fds: &[std::os::unix::io::RawFd],
 ) -> Result<(), ProtoError> {
     use std::os::unix::io::AsRawFd;
-    let mut iov = libc::iovec { iov_base: line.as_ptr() as *mut _, iov_len: line.len() };
-    let space = unsafe { libc::CMSG_SPACE((fds.len() * std::mem::size_of::<i32>()) as u32) } as usize;
+    let mut iov = libc::iovec {
+        iov_base: line.as_ptr() as *mut _,
+        iov_len: line.len(),
+    };
+    let space =
+        unsafe { libc::CMSG_SPACE((fds.len() * std::mem::size_of::<i32>()) as u32) } as usize;
     let mut control = vec![0u8; space];
     let mut msg: libc::msghdr = unsafe { std::mem::zeroed() };
     msg.msg_iov = &mut iov;
@@ -582,8 +613,7 @@ fn send_with_fds(
         let cmsg = libc::CMSG_FIRSTHDR(&msg);
         (*cmsg).cmsg_level = libc::SOL_SOCKET;
         (*cmsg).cmsg_type = libc::SCM_RIGHTS;
-        (*cmsg).cmsg_len =
-            libc::CMSG_LEN((fds.len() * std::mem::size_of::<i32>()) as u32) as usize;
+        (*cmsg).cmsg_len = libc::CMSG_LEN((fds.len() * std::mem::size_of::<i32>()) as u32) as usize;
         let data = libc::CMSG_DATA(cmsg).cast::<std::os::unix::io::RawFd>();
         for (i, fd) in fds.iter().enumerate() {
             *data.add(i) = *fd;
@@ -615,7 +645,11 @@ fn gone_within(window: Duration) -> bool {
 /// pid can never be hit.
 fn terminate(pid: i32) {
     let exe = std::fs::read_link(format!("/proc/{pid}/exe"))
-        .map(|p| p.to_string_lossy().trim_end_matches(" (deleted)").to_string())
+        .map(|p| {
+            p.to_string_lossy()
+                .trim_end_matches(" (deleted)")
+                .to_string()
+        })
         .unwrap_or_default();
     if exe.is_empty() || !exe.contains("acos-netd") {
         eprintln!("acos-netd: not signalling pid {pid} (exe {exe:?})");
@@ -657,7 +691,10 @@ pub fn stale_reason(running: &crate::proto::SupervisorInfo) -> Option<String> {
 }
 
 fn io(e: std::io::Error) -> ProtoError {
-    ProtoError { code: ErrorCode::Io, message: e.to_string() }
+    ProtoError {
+        code: ErrorCode::Io,
+        message: e.to_string(),
+    }
 }
 
 fn payload_error(r: &Reply) -> ProtoError {
@@ -669,7 +706,10 @@ fn payload_error(r: &Reply) -> ProtoError {
 
 fn no_payload(r: &Reply) -> ProtoError {
     if r.ok {
-        ProtoError { code: ErrorCode::Io, message: "reply is missing its payload".into() }
+        ProtoError {
+            code: ErrorCode::Io,
+            message: "reply is missing its payload".into(),
+        }
     } else {
         payload_error(r)
     }

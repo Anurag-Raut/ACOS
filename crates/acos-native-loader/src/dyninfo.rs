@@ -318,9 +318,7 @@ impl DynInfo {
             info.android_packed = Some((va, android_sz, android_has_addend));
         }
 
-        info.bind_now = info.bind_now
-            || (info.flags & 0x8) != 0
-            || (info.flags1 & 0x1) != 0;
+        info.bind_now = info.bind_now || (info.flags & 0x8) != 0 || (info.flags1 & 0x1) != 0;
 
         // String table.
         if strtab_va != 0 {
@@ -463,7 +461,10 @@ impl DynInfo {
     /// `VERSYM_HIDDEN` (bit 15) set means the definition is only reachable
     /// through an explicitly versioned reference; `dlsym` must skip it.
     pub fn is_hidden_version(&self, idx: usize) -> bool {
-        self.versym.get(idx).map(|v| v & 0x8000 != 0).unwrap_or(false)
+        self.versym
+            .get(idx)
+            .map(|v| v & 0x8000 != 0)
+            .unwrap_or(false)
     }
 
     /// Version string associated with symbol `idx`, if any.

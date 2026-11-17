@@ -37,12 +37,7 @@ fn shader(kind: u32, source: &str) -> u32 {
         let cstr = CString::new(source).unwrap();
         let ptrs = [cstr.as_ptr() as usize];
         let lengths = [source.len() as i32];
-        ffi::gl_shader_source(
-            shader,
-            1,
-            ptrs.as_ptr() as usize,
-            lengths.as_ptr() as usize,
-        );
+        ffi::gl_shader_source(shader, 1, ptrs.as_ptr() as usize, lengths.as_ptr() as usize);
         ffi::gl_compile_shader(shader);
         let mut status: i32 = -1;
         ffi::gl_get_shaderiv(shader, c::COMPILE_STATUS, &mut status as *mut i32 as usize);
@@ -55,8 +50,8 @@ fn shader(kind: u32, source: &str) -> u32 {
                 &mut len as *mut i32 as usize,
                 buf.as_mut_ptr() as usize,
             );
-            let log = String::from_utf8_lossy(&buf.map(|b| b as u8)[..len.max(0) as usize])
-                .to_string();
+            let log =
+                String::from_utf8_lossy(&buf.map(|b| b as u8)[..len.max(0) as usize]).to_string();
             panic!("shader rejected: {log}");
         }
         shader
@@ -88,7 +83,11 @@ fn setup(host: &Arc<egl::RecordedWindowHost>) -> Ctx {
         let mut major = 0;
         let mut minor = 0;
         assert_eq!(
-            ffi::egl_initialize(display, &mut major as *mut i32 as usize, &mut minor as *mut i32 as usize),
+            ffi::egl_initialize(
+                display,
+                &mut major as *mut i32 as usize,
+                &mut minor as *mut i32 as usize
+            ),
             egl::EGL_TRUE
         );
         let attribs = [
@@ -119,12 +118,8 @@ fn setup(host: &Arc<egl::RecordedWindowHost>) -> Ctx {
         let surface = ffi::egl_create_window_surface(display, configs[0], WINDOW, 0);
         assert_ne!(surface, egl::EGL_NO_HANDLE, "window surface");
         let context_attribs = [egl::attrib::CONTEXT_CLIENT_VERSION, 2, egl::attrib::NONE, 0];
-        let context = ffi::egl_create_context(
-            display,
-            configs[0],
-            0,
-            context_attribs.as_ptr() as usize,
-        );
+        let context =
+            ffi::egl_create_context(display, configs[0], 0, context_attribs.as_ptr() as usize);
         assert_ne!(context, egl::EGL_NO_HANDLE, "context");
         assert_eq!(
             ffi::egl_make_current(display, surface, surface, context),
@@ -209,10 +204,7 @@ fn egl_context_draws_and_swaps_a_frame_to_the_host() {
 
     // Tearing down releases the surface and the context.
     unsafe {
-        assert_eq!(
-            ffi::egl_make_current(ctx.display, 0, 0, 0),
-            egl::EGL_TRUE
-        );
+        assert_eq!(ffi::egl_make_current(ctx.display, 0, 0, 0), egl::EGL_TRUE);
         assert_eq!(
             ffi::egl_destroy_context(ctx.display, ctx.context),
             egl::EGL_TRUE
@@ -332,23 +324,15 @@ fn unknown_entry_points_are_reported_not_silent() {
     let _ = acos_gles::drain_events();
     unsafe {
         // Compressed textures are advertised nowhere; the call must fail loudly.
-        ffi::gl_compressed_tex_image2d(
-            c::TEXTURE_2D,
-            0,
-            c::RGBA as i32,
-            4,
-            4,
-            0,
-            64,
-            0,
-        );
+        ffi::gl_compressed_tex_image2d(c::TEXTURE_2D, 0, c::RGBA as i32, 4, 4, 0, 64, 0);
         assert_eq!(ffi::gl_get_error(), c::INVALID_OPERATION);
         assert_eq!(ffi::gl_get_error(), c::NO_ERROR, "error state clears");
     }
     let events = acos_gles::drain_events();
     assert!(
-        events.iter().any(|e| e.kind == "UNSUPPORTED_GLES"
-            && e.call == "glCompressedTexImage2D"),
+        events
+            .iter()
+            .any(|e| e.kind == "UNSUPPORTED_GLES" && e.call == "glCompressedTexImage2D"),
         "structured UNSUPPORTED_GLES event: {events:?}"
     );
     egl::reset();
@@ -372,24 +356,25 @@ fn client_side_vertex_arrays_draw_without_a_buffer() {
             ffi::gl_get_attrib_location(program, n.as_ptr() as usize)
         };
         ffi::gl_enable_vertex_attrib_array(attr as u32);
-        ffi::gl_vertex_attrib_pointer(
-            attr as u32,
-            2,
-            c::FLOAT,
-            0,
-            0,
-            vertices.as_ptr() as usize,
-        );
+        ffi::gl_vertex_attrib_pointer(attr as u32, 2, c::FLOAT, 0, 0, vertices.as_ptr() as usize);
         ffi::gl_clear_color(0.0, 0.0, 0.0, 1.0);
         ffi::gl_clear(c::COLOR_BUFFER_BIT);
         ffi::gl_draw_arrays(c::TRIANGLES, 0, 3);
         assert_eq!(ffi::gl_get_error(), c::NO_ERROR, "client array draw");
-        assert_eq!(ffi::egl_swap_buffers(ctx.display, ctx.surface), egl::EGL_TRUE);
+        assert_eq!(
+            ffi::egl_swap_buffers(ctx.display, ctx.surface),
+            egl::EGL_TRUE
+        );
     }
     let frame = host.last_frame().expect("frame");
     let px = |x: u32, y: u32| -> [u8; 4] {
         let i = ((y * SIZE + x) * 4) as usize;
-        [frame.rgba[i], frame.rgba[i + 1], frame.rgba[i + 2], frame.rgba[i + 3]]
+        [
+            frame.rgba[i],
+            frame.rgba[i + 1],
+            frame.rgba[i + 2],
+            frame.rgba[i + 3],
+        ]
     };
     assert_eq!(px(0, SIZE - 1), [0, 255, 0, 255], "client triangle drawn");
     egl::reset();
@@ -436,8 +421,8 @@ fn copy_tex_image_and_generate_mipmap_sample_without_error() {
         assert_eq!(ffi::gl_get_error(), c::NO_ERROR, "copy + mipmap");
 
         let vertices: [f32; 24] = [
-            -1.0, -1.0, 0.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 0.0, 0.0,
-            -1.0, 1.0, 0.0, 0.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+            -1.0, -1.0, 0.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 0.0, 0.0, -1.0, 1.0, 0.0, 0.0,
+            1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
         ];
         let mut buffer = 0u32;
         ffi::gl_gen_buffers(1, &mut buffer as *mut u32 as usize);
@@ -462,12 +447,20 @@ fn copy_tex_image_and_generate_mipmap_sample_without_error() {
         ffi::gl_vertex_attrib_pointer(uv as u32, 2, c::FLOAT, 0, 16, 8);
         ffi::gl_draw_arrays(c::TRIANGLES, 0, 6);
         assert_eq!(ffi::gl_get_error(), c::NO_ERROR, "textured draw");
-        assert_eq!(ffi::egl_swap_buffers(ctx.display, ctx.surface), egl::EGL_TRUE);
+        assert_eq!(
+            ffi::egl_swap_buffers(ctx.display, ctx.surface),
+            egl::EGL_TRUE
+        );
     }
     let frame = host.last_frame().expect("frame");
     let px = |x: u32, y: u32| -> [u8; 4] {
         let i = ((y * SIZE + x) * 4) as usize;
-        [frame.rgba[i], frame.rgba[i + 1], frame.rgba[i + 2], frame.rgba[i + 3]]
+        [
+            frame.rgba[i],
+            frame.rgba[i + 1],
+            frame.rgba[i + 2],
+            frame.rgba[i + 3],
+        ]
     };
     // The copied colour survives mip generation and is sampled everywhere.
     assert_eq!(px(0, 0), [51, 102, 204, 255]);

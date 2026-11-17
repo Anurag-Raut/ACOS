@@ -31,9 +31,7 @@ fn fixture(name: &str) -> Option<PathBuf> {
 
 fn launch(apk: &Path, native: bool) -> Value {
     let mut cmd = Command::cargo_bin("acos").expect("acos binary");
-    cmd.current_dir(repo_root())
-        .arg("launch")
-        .arg("--json");
+    cmd.current_dir(repo_root()).arg("launch").arg("--json");
     if native {
         cmd.arg("--native");
     }

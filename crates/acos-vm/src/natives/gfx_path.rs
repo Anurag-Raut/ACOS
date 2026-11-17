@@ -95,7 +95,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(p, "nSetFillType", "(JI)V", path_set_fill);
     vm.register_native(p, "nIsEmpty", "(J)Z", path_is_empty);
     vm.register_native(p, "nIsRect", "(JLandroid/graphics/RectF;)Z", path_is_rect);
-    vm.register_native(p, "nComputeBounds", "(JLandroid/graphics/RectF;)V", path_compute_bounds);
+    vm.register_native(
+        p,
+        "nComputeBounds",
+        "(JLandroid/graphics/RectF;)V",
+        path_compute_bounds,
+    );
     vm.register_native(p, "nMoveTo", "(JFF)V", path_move_to);
     vm.register_native(p, "nRMoveTo", "(JFF)V", path_rmove_to);
     vm.register_native(p, "nLineTo", "(JFF)V", path_line_to);
@@ -127,7 +132,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(p, "nIncReserve", "(JI)V", noop);
     vm.register_native(p, "nIsConvex", "(J)Z", path_is_convex);
     vm.register_native(p, "nInterpolate", "(JJFJ)Z", unsupported_interpolate);
-    vm.register_native(p, "nIsInterpolatable", "(JJ)Z", unsupported_interpolate_bool);
+    vm.register_native(
+        p,
+        "nIsInterpolatable",
+        "(JJ)Z",
+        unsupported_interpolate_bool,
+    );
 
     let r = "Landroid/graphics/Region;";
     vm.register_native(r, "nativeConstructor", "()J", region_init);
@@ -135,15 +145,40 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(r, "nativeSetRect", "(JIIII)Z", region_set_rect);
     vm.register_native(r, "nativeSetRegion", "(JJ)V", region_set_region);
     vm.register_native(r, "nativeSetPath", "(JJJ)Z", region_set_path);
-    vm.register_native(r, "nativeGetBounds", "(JLandroid/graphics/Rect;)Z", region_get_bounds);
+    vm.register_native(
+        r,
+        "nativeGetBounds",
+        "(JLandroid/graphics/Rect;)Z",
+        region_get_bounds,
+    );
     vm.register_native(r, "nativeOp", "(JIIIII)Z", region_op_rect);
-    vm.register_native(r, "nativeOp", "(JLandroid/graphics/Rect;JI)Z", region_op_rect_dst);
+    vm.register_native(
+        r,
+        "nativeOp",
+        "(JLandroid/graphics/Rect;JI)Z",
+        region_op_rect_dst,
+    );
     vm.register_native(r, "nativeOp", "(JJJI)Z", region_op_region);
     vm.register_native(r, "nativeGetBoundaryPath", "(JJ)Z", region_boundary);
     vm.register_native(r, "nativeEquals", "(JJ)Z", region_equals);
-    vm.register_native(r, "nativeToString", "(J)Ljava/lang/String;", region_to_string);
-    vm.register_native(r, "nativeWriteToParcel", "(JLandroid/os/Parcel;)Z", unsupported_parcel);
-    vm.register_native(r, "nativeCreateFromParcel", "(Landroid/os/Parcel;)J", unsupported_parcel_from);
+    vm.register_native(
+        r,
+        "nativeToString",
+        "(J)Ljava/lang/String;",
+        region_to_string,
+    );
+    vm.register_native(
+        r,
+        "nativeWriteToParcel",
+        "(JLandroid/os/Parcel;)Z",
+        unsupported_parcel,
+    );
+    vm.register_native(
+        r,
+        "nativeCreateFromParcel",
+        "(Landroid/os/Parcel;)J",
+        unsupported_parcel_from,
+    );
     Ok(())
 }
 
@@ -190,7 +225,10 @@ fn path_get_fill(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn path_set_fill(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let o = vm.arg_i32(ctx, 1);
     let ft = FillType::from_ordinal(o).ok_or_else(|| {
-        VmError::unsupported_api(format!("Path.FillType ordinal {o}"), "android.graphics.Path")
+        VmError::unsupported_api(
+            format!("Path.FillType ordinal {o}"),
+            "android.graphics.Path",
+        )
     })?;
     with_path(vm.arg_i64(ctx, 0), |p| p.set_fill_type(ft))?;
     Ok(())
@@ -469,9 +507,8 @@ fn path_transform_to(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn path_op(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let op = PathOp::from_ordinal(vm.arg_i32(ctx, 2)).ok_or_else(|| {
-        VmError::unsupported_api("Path.Op ordinal", "android.graphics.Path")
-    })?;
+    let op = PathOp::from_ordinal(vm.arg_i32(ctx, 2))
+        .ok_or_else(|| VmError::unsupported_api("Path.Op ordinal", "android.graphics.Path"))?;
     let _ = op;
     Err(VmError::unsupported_api(
         "Path.nOp (boolean path ops)",
@@ -650,8 +687,9 @@ fn region_op_rect_dst(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let src = read_region(vm.arg_i64(ctx, 0), |r| r.clone())?;
     let other = Region::from_rect(Rect::new(l, t, r, b));
     let mut out = src;
-    out.op(&other, op)
-        .map_err(|e| VmError::unsupported_api(format!("Region.op: {e}"), "android.graphics.Region"))?;
+    out.op(&other, op).map_err(|e| {
+        VmError::unsupported_api(format!("Region.op: {e}"), "android.graphics.Region")
+    })?;
     let nonempty = !out.is_empty();
     let mut g = regions();
     *g.get_mut(Handle::from_jlong(dst)).map_err(region_err)? = out;
@@ -665,8 +703,9 @@ fn region_op_region(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let op = region_op(vm.arg_i32(ctx, 3))?;
     let src = read_region(vm.arg_i64(ctx, 0), |r| r.clone())?;
     let mut out = src;
-    out.op(&other, op)
-        .map_err(|e| VmError::unsupported_api(format!("Region.op: {e}"), "android.graphics.Region"))?;
+    out.op(&other, op).map_err(|e| {
+        VmError::unsupported_api(format!("Region.op: {e}"), "android.graphics.Region")
+    })?;
     let nonempty = !out.is_empty();
     let mut g = regions();
     *g.get_mut(Handle::from_jlong(dst)).map_err(region_err)? = out;
@@ -678,7 +717,9 @@ fn region_boundary(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let path_h = vm.arg_i64(ctx, 1);
     let boundary = read_region(vm.arg_i64(ctx, 0), |r| r.boundary_path())?;
     let nonempty = !boundary.is_empty();
-    *paths().get_mut(Handle::from_jlong(path_h)).map_err(path_err)? = boundary;
+    *paths()
+        .get_mut(Handle::from_jlong(path_h))
+        .map_err(path_err)? = boundary;
     vm.ret_bool(ctx, nonempty);
     Ok(())
 }

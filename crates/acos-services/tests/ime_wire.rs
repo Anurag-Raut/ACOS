@@ -101,7 +101,10 @@ fn the_captured_editor_info_decodes_to_the_live_fields() {
     // The `writeTypedObject` presence word.
     assert_eq!(data.read_int32().expect("editor presence"), 1);
     let editor = read_editor_info(&mut data).expect("image EditorInfo");
-    assert_eq!(editor.package_name.as_deref(), Some("dev.acos.fixtures.counter"));
+    assert_eq!(
+        editor.package_name.as_deref(),
+        Some("dev.acos.fixtures.counter")
+    );
     assert!(editor.input_type >= 0);
     // The next argument is a real strong binder (`IRemoteInputConnection`).
     assert!(data.read_strong_binder().is_ok());
@@ -114,7 +117,18 @@ fn every_truncation_inside_the_editor_info_is_a_structured_error() {
     // realistic "short parcel" failure.
     let full = CAPTURED.len();
     let mut refusals = 0usize;
-    for cut in [full - 1, full - 3, full / 2, full / 3, 120, 118, 116, 112, 108, 104] {
+    for cut in [
+        full - 1,
+        full - 3,
+        full / 2,
+        full / 3,
+        120,
+        118,
+        116,
+        112,
+        108,
+        104,
+    ] {
         let mut data = Parcel::new();
         data.unmarshall(&CAPTURED[..cut]);
         data.set_wire_null_stability(true);
@@ -168,7 +182,10 @@ fn a_text_field_editor_info_with_spanned_surrounding_text_is_consumed_in_full() 
     }
     assert_eq!(probe.read_int32().expect("presence"), 1);
     let editor = read_editor_info(&mut probe).expect("EditorInfo");
-    assert_eq!(editor.package_name.as_deref(), Some("dev.acos.fixtures.textinput"));
+    assert_eq!(
+        editor.package_name.as_deref(),
+        Some("dev.acos.fixtures.textinput")
+    );
     assert_eq!(editor.input_type, 1, "TYPE_CLASS_TEXT");
     assert_eq!(editor.hint_text.as_deref(), Some("Type something"));
     assert!(editor.has_initial_surrounding_text);
@@ -235,7 +252,9 @@ fn the_image_ime_tracker_token_is_binder_then_string8_not_int_then_string16() {
     // The tag/r75 shape `[int id][string16 tag]` must not decode as a token.
     let mut legacy = Parcel::new();
     legacy.write_int32(7);
-    legacy.write_string16_opt(Some("showSoftInput")).expect("string");
+    legacy
+        .write_string16_opt(Some("showSoftInput"))
+        .expect("string");
     legacy.set_data_position(0);
     assert!(
         read_ime_tracker_token(&mut legacy).is_err(),
@@ -311,5 +330,9 @@ fn a_typed_object_class_with_no_verified_codec_is_unsupported() {
         &mut false,
     )
     .is_ok());
-    let _ = (EDITOR_INFO_CLASS, RESULT_RECEIVER_CLASS, EditorInfo::default());
+    let _ = (
+        EDITOR_INFO_CLASS,
+        RESULT_RECEIVER_CLASS,
+        EditorInfo::default(),
+    );
 }

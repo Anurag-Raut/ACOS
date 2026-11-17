@@ -75,7 +75,10 @@ impl std::fmt::Debug for Parcel {
             .field("pos", &self.pos)
             .field("data_size", &self.data.len())
             .field("objects", &self.objects)
-            .field("fds", &self.fds.iter().map(ParcelFd::as_raw_fd).collect::<Vec<_>>())
+            .field(
+                "fds",
+                &self.fds.iter().map(ParcelFd::as_raw_fd).collect::<Vec<_>>(),
+            )
             .field("allow_fds", &self.allow_fds)
             .finish()
     }
@@ -733,7 +736,26 @@ impl Parcel {
     }
 
     /// Write `String16[]`: `int32 count` then each `String16`.
+    ///
+    /// This is `Parcel.writeStringArray` (AOSP `Parcel.java:1867`, which
+    /// delegates to `writeString16Array`). Null *elements* are possible in a
+    /// Java `String[]`; use [`Parcel::write_string16_array_nullable`] for those.
     pub fn write_string16_array(&mut self, v: Option<&[&str]>) -> Result<()> {
+        match v {
+            Some(v) => {
+                let items: Vec<Option<&str>> = v.iter().map(|s| Some(*s)).collect();
+                self.write_string16_array_nullable(Some(&items))
+            }
+            None => self.write_string16_array_nullable(None),
+        }
+    }
+
+    /// Write `String16[]` allowing `null` elements (`int32 -1` each).
+    ///
+    /// A `null` element and an empty string are **not** the same on the wire:
+    /// `null` is a single `-1` word, `""` is a `0` length word plus its 4-byte
+    /// NUL padding. Writing one for the other desynchronises the reader.
+    pub fn write_string16_array_nullable(&mut self, v: Option<&[Option<&str>]>) -> Result<()> {
         let Some(v) = v else {
             self.write_int32(-1);
             return Ok(());
@@ -746,19 +768,57 @@ impl Parcel {
         }
         self.write_int32(v.len() as i32);
         for s in v {
-            self.write_string16(s)?;
+            self.write_string16_opt(*s)?;
+        }
+        Ok(())
+    }
+
+    /// Write `String8[]`: `int32 count` then each `String8`.
+    ///
+    /// This is `Parcel.writeString8Array` (AOSP `Parcel.java:1881`), the
+    /// encoding the `android.content.pm` parcelables (`PackageInfo`,
+    /// `ApplicationInfo`, `ComponentInfo`, `InstrumentationInfo`) use for their
+    /// `String[]` fields. It is **not** wire-compatible with
+    /// [`Parcel::write_string16_array`] = `writeStringArray`: every element's
+    /// length word counts UTF-8 **bytes** and the payload is one byte per ASCII
+    /// character, not two. Writing the wrong one shifts the whole rest of the
+    /// parcel (found on `getPackageInfo(..., GET_SIGNATURES|GET_META_DATA)`,
+    /// which made the framework allocate a 7 676 737 936-byte `String[]`).
+    pub fn write_string8_array(&mut self, v: Option<&[Option<&str>]>) -> Result<()> {
+        let Some(v) = v else {
+            self.write_int32(-1);
+            return Ok(());
+        };
+        if v.len() > i32::MAX as usize {
+            return Err(ParcelError::BadLength {
+                len: v.len(),
+                max: i32::MAX as usize,
+            });
+        }
+        self.write_int32(v.len() as i32);
+        for s in v {
+            self.write_string8_opt(*s)?;
         }
         Ok(())
     }
 
     /// Read `String16[]`.
     pub fn read_string16_array(&mut self) -> Result<Option<Vec<Option<String>>>> {
+        self.read_string_array(false)
+    }
+
+    /// Read `String8[]` (`Parcel.createString8Array`).
+    pub fn read_string8_array(&mut self) -> Result<Option<Vec<Option<String>>>> {
+        self.read_string_array(true)
+    }
+
+    fn read_string_array(&mut self, eight_bit: bool) -> Result<Option<Vec<Option<String>>>> {
         let len = self.read_int32()?;
         if len < 0 {
             return Ok(None);
         }
         let n = len as usize;
-        // Every `String16` carries at least its 4-byte length word, so a count
+        // Every element carries at least its 4-byte length word, so a count
         // that cannot fit in the remaining payload is malformed. Reject it
         // before allocating the backing vector: a guest `int32` of
         // `i32::MAX` must never drive a multi-GB `Vec::with_capacity`.
@@ -774,7 +834,11 @@ impl Parcel {
         }
         let mut v = Vec::with_capacity(n);
         for _ in 0..n {
-            v.push(self.read_string16()?);
+            v.push(if eight_bit {
+                self.read_string8()?
+            } else {
+                self.read_string16()?
+            });
         }
         Ok(Some(v))
     }
@@ -1105,6 +1169,31 @@ impl Parcel {
         self.objects.len()
     }
 
+    /// The binder ids this parcel carries, in object-table order (MPROC2 3a).
+    ///
+    /// A `system_server`-side caller that receives a request has to know *which
+    /// binders the caller handed over* — those belong to the caller's process,
+    /// and a delivery to one of them must be routed back there. File-descriptor
+    /// objects are skipped (their `id` is a descriptor, not a binder id), and an
+    /// object whose offset is out of range is ignored rather than read past the
+    /// buffer.
+    #[must_use]
+    pub fn binder_ids(&self) -> Vec<BinderId> {
+        let mut out = Vec::new();
+        for &o in &self.objects {
+            if o + FLAT_OBJECT_SIZE > self.data.len() {
+                continue;
+            }
+            let mut bytes = [0u8; FLAT_OBJECT_SIZE];
+            bytes.copy_from_slice(&self.data[o..o + FLAT_OBJECT_SIZE]);
+            let obj = FlatObject::from_bytes(&bytes);
+            if obj.is_binder() && obj.id != 0 {
+                out.push(BinderId(obj.id));
+            }
+        }
+        out
+    }
+
     // ------------------------------------------------------------------
     // append / marshal / recycle
     // ------------------------------------------------------------------
@@ -1217,6 +1306,20 @@ impl Parcel {
         }
     }
 
+    /// Replace the parcel contents with `bytes` plus the object table the wire
+    /// carried (the binder driver's `offsets` array), in one step.
+    ///
+    /// [`Parcel::unmarshall`] copies bytes only; the importer installs each
+    /// rewritten object position through [`Parcel::register_object`].
+    pub fn unmarshall_with_objects(&mut self, bytes: &[u8], offsets: &[usize]) {
+        self.unmarshall(bytes);
+        for offset in offsets {
+            if offset.saturating_add(FLAT_OBJECT_SIZE) <= self.data.len() {
+                self.register_object(*offset);
+            }
+        }
+    }
+
     /// `nativeFreeBuffer` / `Parcel.recycle`: drop data, objects and fds.
     pub fn recycle(&mut self) {
         self.reset();
@@ -1238,10 +1341,7 @@ impl Parcel {
     pub fn enforce_no_data_avail(&self) -> Result<()> {
         let n = self.data_avail();
         if n > 0 {
-            Err(ParcelError::BadLength {
-                len: n,
-                max: 0,
-            })
+            Err(ParcelError::BadLength { len: n, max: 0 })
         } else {
             Ok(())
         }
@@ -1380,7 +1480,10 @@ impl ParcelTable {
     /// Number of live parcels.
     #[must_use]
     pub fn len(&self) -> usize {
-        lock(&self.slots).iter().filter(|s| s.parcel.is_some()).count()
+        lock(&self.slots)
+            .iter()
+            .filter(|s| s.parcel.is_some())
+            .count()
     }
 
     /// `true` when no parcels are live.

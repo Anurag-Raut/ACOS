@@ -105,6 +105,49 @@ fn a_session_without_such_a_module_forwards_no_initializer() {
     assert_eq!(registry.process_initializers(), Vec::new());
 }
 
+/// Both at once: two entries, in the registry's (standard-set) order so the
+/// guest's log line is the same for every run.
+#[test]
+fn two_attached_modules_forward_two_initializers_in_attach_order() {
+    let (mut host, mut registry) = session();
+    registry
+        .attach(
+            &mut host,
+            "hw.bluetooth",
+            Profile::Stub,
+            &ModuleConfig::default(),
+        )
+        .expect("bluetooth attaches");
+    registry
+        .attach(
+            &mut host,
+            "net.telephony",
+            Profile::Stub,
+            &ModuleConfig::default(),
+        )
+        .expect("telephony attaches");
+    let classes: Vec<&str> = registry
+        .process_initializers()
+        .iter()
+        .map(|initializer| initializer.class)
+        .collect();
+    assert_eq!(
+        classes,
+        vec![
+            "android.telephony.TelephonyFrameworkInitializer",
+            "android.bluetooth.BluetoothFrameworkInitializer",
+        ]
+    );
+}
+
+/// A module that needs no initializer declares none — the field is not a
+/// catch-all.
+#[test]
+fn modules_that_need_no_initializer_declare_none() {
+    let (_host, registry) = session();
+    assert_eq!(registry.process_initializers(), Vec::new());
+}
+
 /// The manifest JSON still carries the (empty) list, so an agent reading the
 /// capability tables sees the promise and its evidence shape.
 #[test]

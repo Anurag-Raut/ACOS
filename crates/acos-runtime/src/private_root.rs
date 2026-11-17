@@ -226,7 +226,11 @@ mod tests {
         assert_eq!(err.0, RootError::WritableByOthers);
         assert_eq!(err.0.code(), "ROOT_WRITABLE_BY_OTHERS");
         assert_eq!(err.0.protocol_code(), "UNSAFE_PATH");
-        assert!(err.1.contains("ACOS_SESSION_ROOT"), "names the knob: {}", err.1);
+        assert!(
+            err.1.contains("ACOS_SESSION_ROOT"),
+            "names the knob: {}",
+            err.1
+        );
         assert!(err.1.contains("777"), "names the mode: {}", err.1);
     }
 

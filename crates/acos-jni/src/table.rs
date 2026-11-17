@@ -595,7 +595,9 @@ fn build_native_table() -> [usize; JNI_SLOT_COUNT] {
 
 fn build_invoke_table() -> [usize; 8] {
     [
-        0, 0, 0,
+        0,
+        0,
+        0,
         crate::jni::vm_DestroyJavaVM as *const () as usize,
         crate::jni::vm_AttachCurrentThread as *const () as usize,
         crate::jni::vm_DetachCurrentThread as *const () as usize,

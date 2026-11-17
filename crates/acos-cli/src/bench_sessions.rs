@@ -45,7 +45,7 @@ use acos_vm::Handle;
 use serde_json::{json, Value};
 
 use super::bench::{
-    boot_only, build_runtime, file_sha256, kib, kb_value, parse_session_counts, read_memory,
+    boot_only, build_runtime, file_sha256, kb_value, kib, parse_session_counts, read_memory,
     resolve_apk, round3, settle, spawn_child, stats, BenchArgs, BenchFailure,
 };
 
@@ -364,7 +364,10 @@ fn account(
     }
 
     for method in &vm.methods {
-        if let MethodImpl::Dex { code: Some(code), .. } = &method.imp {
+        if let MethodImpl::Dex {
+            code: Some(code), ..
+        } = &method.imp
+        {
             b.method_code_slots += std::mem::size_of_val(code);
             let ptr = Arc::as_ptr(code) as usize;
             let first = match &mut seen_code {
@@ -404,8 +407,7 @@ fn dex_parsed_bytes(file: &DexFile) -> usize {
         n += s.capacity();
     }
     // Lazily-built compact class index (`hash -> def_idx` entries + buckets).
-    n += file.class_index().len()
-        * (std::mem::size_of::<u64>() + std::mem::size_of::<usize>() + 1);
+    n += file.class_index().len() * (std::mem::size_of::<u64>() + std::mem::size_of::<usize>() + 1);
     n
 }
 
@@ -528,11 +530,13 @@ fn misc_bytes(vm: &Vm) -> usize {
         n += class.capacity() + name.capacity() + sig.capacity();
         n += std::mem::size_of_val(f) + 1;
     }
-    n += vm.monitors.len() * (std::mem::size_of::<Handle>() + std::mem::size_of::<(usize, u32)>() + 1);
+    n += vm.monitors.len()
+        * (std::mem::size_of::<Handle>() + std::mem::size_of::<(usize, u32)>() + 1);
     n += vm.int_cache.len() * (std::mem::size_of::<i32>() + std::mem::size_of::<Handle>() + 1);
     n += vm.converters.len() * (std::mem::size_of::<u64>() + std::mem::size_of::<String>() + 8);
     n += vm.string_hashes.len() * (std::mem::size_of::<Handle>() + std::mem::size_of::<i32>() + 1);
-    n += vm.throwable_stacks.len() * (std::mem::size_of::<Handle>() + 2 * std::mem::size_of::<usize>() + 1);
+    n += vm.throwable_stacks.len()
+        * (std::mem::size_of::<Handle>() + 2 * std::mem::size_of::<usize>() + 1);
     n += vm.native_roots.capacity() * std::mem::size_of::<Handle>();
     n += vm.builtin_alloc.len() * (std::mem::size_of::<u32>() + std::mem::size_of::<usize>() + 1);
     n += vm.threads.len() * std::mem::size_of::<acos_vm::vm::ThreadRT>();

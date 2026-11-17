@@ -4,8 +4,8 @@
 use acos_parcel::{BinderId, Parcel};
 use acos_services::ams::IntentFacts;
 use acos_services::module::{ModuleConfig, ModuleRegistry, Profile};
-use acos_services::{ServiceError, ServiceHost};
 use acos_services::value::DynamicValue;
+use acos_services::{ServiceError, ServiceHost};
 
 fn java_binder(wire: u64) -> u64 {
     (1 << 32) | wire
@@ -15,7 +15,12 @@ fn attach(module: &str) -> (ServiceHost, ModuleRegistry) {
     let mut host = ServiceHost::standard();
     let mut registry = ModuleRegistry::standard();
     registry
-        .attach(&mut host, module, Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            module,
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .expect("module attaches");
     (host, registry)
 }
@@ -25,13 +30,21 @@ fn open(host: &mut ServiceHost, name: &str, code: u32) -> (u32, Parcel) {
         .check_service(name)
         .expect("lookup")
         .unwrap_or_else(|| panic!("{name} did not resolve"));
-    let descriptor = host.descriptor_of(binder).unwrap_or("<unknown>").to_string();
+    let descriptor = host
+        .descriptor_of(binder)
+        .unwrap_or("<unknown>")
+        .to_string();
     let mut data = Parcel::new();
     data.write_interface_token(&descriptor).expect("token");
     (code, data)
 }
 
-fn transact(host: &mut ServiceHost, name: &str, code: u32, data: Parcel) -> Result<Parcel, ServiceError> {
+fn transact(
+    host: &mut ServiceHost,
+    name: &str,
+    code: u32,
+    data: Parcel,
+) -> Result<Parcel, ServiceError> {
     let binder = host.check_service(name).unwrap().unwrap();
     let mut data = data;
     data.set_data_position(0);
@@ -71,7 +84,9 @@ fn adapter_state_via_receiver(host: &mut ServiceHost, receiver: u64) -> Option<i
     let mut payload = delivery.data.clone();
     payload.set_data_position(0);
     payload
-        .enforce_interface("com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver")
+        .enforce_interface(
+            "com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver",
+        )
         .expect("ISynchronousResultReceiver token");
     assert_eq!(payload.read_int32().unwrap(), 1, "Result is a typed object");
     // Image order: `mObject` first, then `mException`.
@@ -112,7 +127,11 @@ fn the_manager_hands_out_the_adapter_and_the_scripted_state_answers() {
     let (code, mut data) = open(&mut host, "bluetooth_manager", 1);
     data.write_strong_binder(BinderId(java_binder(21))); // IBluetoothManagerCallback
     let mut reply = transact(&mut host, "bluetooth_manager", code, data).expect("registerAdapter");
-    let returned = reply.read_strong_binder().unwrap().expect("adapter binder").0;
+    let returned = reply
+        .read_strong_binder()
+        .unwrap()
+        .expect("adapter binder")
+        .0;
     assert_eq!(
         returned & 0xffff_ffff,
         adapter_binder & 0xffff_ffff,
@@ -130,9 +149,18 @@ fn the_manager_hands_out_the_adapter_and_the_scripted_state_answers() {
 
     // `set {on: true}` broadcasts ACTION_STATE_CHANGED and calls the manager
     // callback.
-    register_receiver(&mut host, java_binder(31), "android.bluetooth.adapter.action.STATE_CHANGED");
+    register_receiver(
+        &mut host,
+        java_binder(31),
+        "android.bluetooth.adapter.action.STATE_CHANGED",
+    );
     let value = registry
-        .control(&mut host, "hw.bluetooth", "set", &serde_json::json!({"on": true}))
+        .control(
+            &mut host,
+            "hw.bluetooth",
+            "set",
+            &serde_json::json!({"on": true}),
+        )
         .expect("set on");
     assert_eq!(value["broadcast_matched"], 1);
     assert_eq!(value["callbacks_delivered"], 1);
@@ -207,8 +235,7 @@ fn get_remote_name_answers_the_scripted_device_name() {
             .expect("ISynchronousResultReceiver token");
         assert_eq!(payload.read_int32().unwrap(), 1, "Result is a typed object");
         let value = acos_services::parcelable::read_dynamic(&mut payload).expect("mObject");
-        let exception =
-            acos_services::parcelable::read_dynamic(&mut payload).expect("mException");
+        let exception = acos_services::parcelable::read_dynamic(&mut payload).expect("mException");
         assert!(matches!(exception, DynamicValue::Null));
         Some(value)
     }
@@ -238,7 +265,6 @@ fn get_bonded_devices_answers_a_real_list_of_bluetooth_device_parcels() {
     data.write_int32(0);
     let _ = transact(&mut host, "bluetooth_manager", code, data).expect("enable");
 
-
     // `getBondedDevices(AttributionSource, SynchronousResultReceiver)` is oneway:
     // the request carries the attribution source (data only) and the client's
     // result receiver binder.
@@ -259,8 +285,10 @@ fn get_bonded_devices_answers_a_real_list_of_bluetooth_device_parcels() {
     );
     let mut data = delivery.data.clone();
     data.set_data_position(0);
-    data.enforce_interface("com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver")
-        .unwrap();
+    data.enforce_interface(
+        "com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver",
+    )
+    .unwrap();
     assert_eq!(data.read_int32().unwrap(), 1, "Result is a typed object");
     // `Result.writeToParcel` writes `mObject` then `mException` (image dex:
     // `SynchronousResultReceiver$Result.writeToParcel`), and the client's
@@ -268,8 +296,7 @@ fn get_bonded_devices_answers_a_real_list_of_bluetooth_device_parcels() {
     // `RuntimeException` — the reverse order is a `ClassCastException` in the
     // client and a lost result.
     let value = acos_services::parcelable::read_dynamic(&mut data).expect("Result.mObject");
-    let exception =
-        acos_services::parcelable::read_dynamic(&mut data).expect("Result.mException");
+    let exception = acos_services::parcelable::read_dynamic(&mut data).expect("Result.mException");
     assert!(matches!(
         exception,
         acos_services::value::DynamicValue::Null
@@ -281,7 +308,10 @@ fn get_bonded_devices_answers_a_real_list_of_bluetooth_device_parcels() {
     let acos_services::value::DynamicValue::Parcelable(parcelable) = &items[0] else {
         panic!("expected a BLUETOOTH_DEVICE parcelable, got {:?}", items[0]);
     };
-    assert_eq!(parcelable.class(), Some("android.bluetooth.BluetoothDevice"));
+    assert_eq!(
+        parcelable.class(),
+        Some("android.bluetooth.BluetoothDevice")
+    );
     assert_eq!(
         parcelable.field(0).and_then(|v| v.as_str()),
         Some("11:22:33:44:55:66")
@@ -307,7 +337,12 @@ fn a_scripted_scan_broadcasts_action_found_with_the_device_parcel() {
         "android.bluetooth.adapter.action.DISCOVERY_FINISHED",
     );
     let _ = registry
-        .control(&mut host, "hw.bluetooth", "set", &serde_json::json!({"on": true}))
+        .control(
+            &mut host,
+            "hw.bluetooth",
+            "set",
+            &serde_json::json!({"on": true}),
+        )
         .expect("on");
     let _ = host.take_deliveries();
 
@@ -323,7 +358,8 @@ fn a_scripted_scan_broadcasts_action_found_with_the_device_parcel() {
         .expect("ACTION_FOUND");
     let mut data = found.data.clone();
     data.set_data_position(0);
-    data.enforce_interface("android.content.IIntentReceiver").unwrap();
+    data.enforce_interface("android.content.IIntentReceiver")
+        .unwrap();
     assert_eq!(data.read_int32().unwrap(), 1);
     let intent = acos_services::parcelable::read_intent(&mut data).expect("Intent");
     let facts = IntentFacts::from_parcelable(&intent);
@@ -461,7 +497,12 @@ fn both_modules_report_their_gaps_and_refuse_an_unsupported_profile() {
     let mut registry = ModuleRegistry::standard();
     for module in ["hw.bluetooth", "hw.biometric"] {
         registry
-            .attach(&mut host, module, Profile::Scripted, &ModuleConfig::default())
+            .attach(
+                &mut host,
+                module,
+                Profile::Scripted,
+                &ModuleConfig::default(),
+            )
             .unwrap();
         let report = registry
             .reports()
@@ -494,7 +535,12 @@ fn the_vibrator_scripted_profile_records_pattern_identity() {
         assert_eq!(index < 2, true);
     }
     let value = registry
-        .control(&mut host, "feedback.vibrator", "patterns", &serde_json::Value::Null)
+        .control(
+            &mut host,
+            "feedback.vibrator",
+            "patterns",
+            &serde_json::Value::Null,
+        )
         .expect("patterns");
     let patterns = value["patterns"].as_array().expect("patterns[]");
     assert_eq!(patterns.len(), 2);
@@ -509,7 +555,12 @@ fn the_vibrator_scripted_profile_records_pattern_identity() {
         "two different patterns have different hashes"
     );
     let calls = registry
-        .control(&mut host, "feedback.vibrator", "calls", &serde_json::Value::Null)
+        .control(
+            &mut host,
+            "feedback.vibrator",
+            "calls",
+            &serde_json::Value::Null,
+        )
         .expect("calls");
     assert_eq!(calls["vibrate_calls"], 2);
 }

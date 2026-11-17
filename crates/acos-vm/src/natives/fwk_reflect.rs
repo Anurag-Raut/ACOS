@@ -139,7 +139,12 @@ fn empty_field_array(vm: &mut Vm) -> VmResult<Handle> {
 }
 
 /// Materialise one `java.lang.reflect.Field` exactly like `natives::reflect`.
-pub(crate) fn make_field(vm: &mut Vm, cid: ClassId, def: &FieldDef, idx: usize) -> VmResult<Handle> {
+pub(crate) fn make_field(
+    vm: &mut Vm,
+    cid: ClassId,
+    def: &FieldDef,
+    idx: usize,
+) -> VmResult<Handle> {
     let field_class = vm.load_class("Ljava/lang/reflect/Field;")?;
     let obj = vm.alloc_instance(field_class)?;
     vm.native_roots.push(obj);
@@ -290,7 +295,9 @@ fn ctor_new_instance0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             "acos_vm::natives::fwk_reflect",
         ));
     }
-    let dc = vm.get_instance_field_by_name(this, "declaringClass").unwrap_or(NULL);
+    let dc = vm
+        .get_instance_field_by_name(this, "declaringClass")
+        .unwrap_or(NULL);
     let Some(cid) = vm.class_id_of_class_object(dc) else {
         return Err(vm.throw_new("Ljava/lang/InstantiationException;", None));
     };

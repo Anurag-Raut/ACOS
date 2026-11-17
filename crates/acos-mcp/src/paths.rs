@@ -47,7 +47,10 @@ pub fn acos_home() -> Option<PathBuf> {
 #[must_use]
 pub fn dev_root() -> Option<PathBuf> {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    manifest.parent().and_then(Path::parent).map(Path::to_path_buf)
+    manifest
+        .parent()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
 }
 
 /// A read-only file that ships with the tree, resolved against the runtime
@@ -114,7 +117,10 @@ mod tests {
     fn unset_keeps_the_legacy_developer_lookup() {
         // A cwd-relative file that exists is returned as-is (cargo runs unit
         // tests with the crate directory as the cwd).
-        assert_eq!(runtime_path_with(None, "Cargo.toml"), PathBuf::from("Cargo.toml"));
+        assert_eq!(
+            runtime_path_with(None, "Cargo.toml"),
+            PathBuf::from("Cargo.toml")
+        );
         // A path that only exists in the checkout resolves to the checkout,
         // exactly as before REL1c.
         let checkout_owned = "crates/acos-mcp/Cargo.toml";

@@ -16,11 +16,11 @@ mod common;
 
 use std::collections::HashMap;
 
-use common::{compile_case, run_case_args};
 use acos_services::ams::IntentFacts;
 use acos_services::parcelable;
 use acos_services::value::{DynamicValue, Parcelable, Value};
 use acos_services::Bundle;
+use common::{compile_case, run_case_args};
 
 fn rect(left: i32, top: i32, right: i32, bottom: i32) -> Value {
     Value::Parcelable(Parcelable::ordered(
@@ -40,7 +40,7 @@ fn configuration_value() -> Parcelable {
     let window = Parcelable::ordered(
         "android.app.WindowConfiguration",
         vec![
-            rect(0, 0, 1080, 2400),                       // mBounds (Nested)
+            rect(0, 0, 1080, 2400), // mBounds (Nested)
             Value::TypedObject(Parcelable::ordered(
                 "android.graphics.Rect",
                 vec![
@@ -50,13 +50,13 @@ fn configuration_value() -> Parcelable {
                     Value::Int(2337),
                 ],
             )), // mAppBounds
-            rect(0, 0, 1080, 2400),                       // mMaxBounds (Nested)
-            Value::Int(1), // mWindowingMode
-            Value::Int(1), // mActivityType
-            Value::Int(0), // mAlwaysOnTop
-            Value::Int(0), // mRotation
-            Value::Int(1), // mDisplayWindowingMode
-            Value::Int(0), // mDisplayRotation
+            rect(0, 0, 1080, 2400), // mMaxBounds (Nested)
+            Value::Int(1),          // mWindowingMode
+            Value::Int(1),          // mActivityType
+            Value::Int(0),          // mAlwaysOnTop
+            Value::Int(0),          // mRotation
+            Value::Int(1),          // mDisplayWindowingMode
+            Value::Int(0),          // mDisplayRotation
         ],
     );
     let locale = Value::TypedObject(Parcelable::ordered(
@@ -70,24 +70,24 @@ fn configuration_value() -> Parcelable {
             Value::Int(310), // mcc
             Value::Int(260), // mnc
             locale,
-            Value::Int(1), // userSetLocale (setLocales sets it true)
-            Value::Int(3), // touchscreen
-            Value::Int(2), // keyboard
-            Value::Int(1), // keyboardHidden
-            Value::Int(1), // hardKeyboardHidden
-            Value::Int(1), // navigation
-            Value::Int(2), // navigationHidden
-            Value::Int(2), // orientation
+            Value::Int(1),    // userSetLocale (setLocales sets it true)
+            Value::Int(3),    // touchscreen
+            Value::Int(2),    // keyboard
+            Value::Int(1),    // keyboardHidden
+            Value::Int(1),    // hardKeyboardHidden
+            Value::Int(1),    // navigation
+            Value::Int(2),    // navigationHidden
+            Value::Int(2),    // orientation
             Value::Int(0x20), // screenLayout
-            Value::Int(0), // colorMode
+            Value::Int(0),    // colorMode
             Value::Int(0x11), // uiMode
-            Value::Int(411), // screenWidthDp
-            Value::Int(914), // screenHeightDp
-            Value::Int(411), // smallestScreenWidthDp
-            Value::Int(420), // densityDpi
-            Value::Int(411), // compatScreenWidthDp
-            Value::Int(914), // compatScreenHeightDp
-            Value::Int(411), // compatSmallestScreenWidthDp
+            Value::Int(411),  // screenWidthDp
+            Value::Int(914),  // screenHeightDp
+            Value::Int(411),  // smallestScreenWidthDp
+            Value::Int(420),  // densityDpi
+            Value::Int(411),  // compatScreenWidthDp
+            Value::Int(914),  // compatScreenHeightDp
+            Value::Int(411),  // compatSmallestScreenWidthDp
             Value::Parcelable(window),
             Value::Int(7),   // assetsSeq
             Value::Int(3),   // seq
@@ -100,10 +100,7 @@ fn configuration_value() -> Parcelable {
 fn persistable_bundle_value() -> Parcelable {
     let mut b = Bundle::new();
     b.put("name", Value::Str(Some("helloviews".into())));
-    Parcelable::ordered(
-        "android.os.PersistableBundle",
-        vec![Value::Bundle(Some(b))],
-    )
+    Parcelable::ordered("android.os.PersistableBundle", vec![Value::Bundle(Some(b))])
 }
 
 /// A `ServiceInfo` in the exact API-34 `writeToParcel` order, with the nested
@@ -139,22 +136,22 @@ fn instrumentation_info_value() -> Parcelable {
             Value::Int(0), // showBadge
             // InstrumentationInfo
             Value::Str8(Some("dev.acos.fixtures".into())), // targetPackage
-            Value::Str8(None),                          // targetProcesses
+            Value::Str8(None),                             // targetProcesses
             Value::Str8(Some("/data/app/base.apk".into())), // sourceDir
             Value::Str8(Some("/data/app/base.apk".into())), // publicSourceDir
-            Value::StringArray(None),                   // splitNames
-            Value::StringArray(None),                   // splitSourceDirs
-            Value::StringArray(None),                   // splitPublicSourceDirs
-            Value::List(None),                          // splitDependencies (SparseArray null)
+            Value::StringArray(None),                      // splitNames
+            Value::StringArray(None),                      // splitSourceDirs
+            Value::StringArray(None),                      // splitPublicSourceDirs
+            Value::List(None),                             // splitDependencies (SparseArray null)
             Value::Str8(Some("/data/user/0/dev.acos.fixtures".into())), // dataDir
             Value::Str8(Some("/data/user_de/0/dev.acos.fixtures".into())), // deviceProtectedDataDir
             Value::Str8(Some("/data/user/0/dev.acos.fixtures".into())), // credentialProtectedDataDir
-            Value::Str8(None), // primaryCpuAbi
-            Value::Str8(None), // secondaryCpuAbi
-            Value::Str8(Some("/data/app/lib".into())), // nativeLibraryDir
-            Value::Str8(None), // secondaryNativeLibraryDir
-            Value::Int(0),     // handleProfiling
-            Value::Int(1),     // functionalTest
+            Value::Str8(None),                                          // primaryCpuAbi
+            Value::Str8(None),                                          // secondaryCpuAbi
+            Value::Str8(Some("/data/app/lib".into())),                  // nativeLibraryDir
+            Value::Str8(None),                                          // secondaryNativeLibraryDir
+            Value::Int(0),                                              // handleProfiling
+            Value::Int(1),                                              // functionalTest
         ],
     )
 }
@@ -180,10 +177,10 @@ fn permission_info_value() -> Parcelable {
             Value::Int(0), // flags
             Value::Str8(Some("android.permission-group.NETWORK".into())), // group
             Value::Str8(None), // backgroundPermission
-            Value::Int(0),     // descriptionRes
-            Value::Int(0),     // requestRes
-            Value::Str(None),  // nonLocalizedDescription
-            Value::Int(0),     // knownCerts (empty ForStringSet: `unparcel` maps -1 to empty)
+            Value::Int(0), // descriptionRes
+            Value::Int(0), // requestRes
+            Value::Str(None), // nonLocalizedDescription
+            Value::Int(0), // knownCerts (empty ForStringSet: `unparcel` maps -1 to empty)
         ],
     )
 }
@@ -212,22 +209,91 @@ fn resolve_info_value(app: &acos_services::pms::AppInfo) -> Parcelable {
                 present: false,
                 values: Vec::new(),
             },
-            Value::Int(0),        // priority
-            Value::Int(0),        // preferredOrder
+            Value::Int(0),         // priority
+            Value::Int(0),         // preferredOrder
             Value::Int(0x10_0000), // match
-            Value::Int(-1),       // specificIndex
-            Value::Int(0),        // labelRes
-            Value::Str(None),     // nonLocalizedLabel
-            Value::Int(0),        // icon
-            Value::Str8(None),    // resolvePackageName
-            Value::Int(0),        // targetUserId
-            Value::Int(0),        // system
-            Value::Int(0),        // noResourceId
-            Value::Int(0),        // iconResourceId
-            Value::Int(0),        // handleAllWebDataURI
-            Value::Int(0),        // mAutoResolutionAllowed
-            Value::Int(0),        // isInstantAppAvailable
-            Value::Int(-2),       // userHandle == USER_CURRENT
+            Value::Int(-1),        // specificIndex
+            Value::Int(0),         // labelRes
+            Value::Str(None),      // nonLocalizedLabel
+            Value::Int(0),         // icon
+            Value::Str8(None),     // resolvePackageName
+            Value::Int(0),         // targetUserId
+            Value::Int(0),         // system
+            Value::Int(0),         // noResourceId
+            Value::Int(0),         // iconResourceId
+            Value::Int(0),         // handleAllWebDataURI
+            Value::Int(0),         // mAutoResolutionAllowed
+            Value::Int(0),         // isInstantAppAvailable
+            Value::Int(-2),        // userHandle == USER_CURRENT
+        ],
+    )
+}
+
+/// REL3P: the `PackageInfo` shape a `getPackageInfo(pkg, 0x100024c0)` reply
+/// carries — non-empty `splitNames` / `requestedPermissions` (both
+/// `writeString8Array` in the image's `PackageInfo.writeToParcel`) and a
+/// one-element `Signature[]`. `applicationInfo` is null so the value is a pure
+/// function of these fields and `ParcelableCompareMain.packageInfoArrays()`
+/// builds the identical object for a byte-for-byte comparison.
+fn package_info_arrays_value() -> Parcelable {
+    Parcelable::ordered(
+        "android.content.pm.PackageInfo",
+        vec![
+            Value::Str8(Some("dev.acos.fixtures.pmsprobe".into())),
+            Value::StringArray(Some(vec![Some("config.xxhdpi".into())])), // splitNames (String8[])
+            Value::Int(7),                                                // versionCode
+            Value::Int(0),                                                // versionCodeMajor
+            Value::Str8(Some("1.0".into())),                              // versionName
+            Value::Int(0),                                                // baseRevisionCode
+            Value::IntArray(None),                                        // splitRevisionCodes
+            Value::Str8(None),                                            // sharedUserId
+            Value::Int(0),                                                // sharedUserLabel
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // applicationInfo
+            Value::Long(1),                                               // firstInstallTime
+            Value::Long(2),                                               // lastUpdateTime
+            Value::IntArray(None),                                        // gids
+            Value::List(None),                                            // activities
+            Value::List(None),                                            // receivers
+            Value::List(None),                                            // services
+            Value::List(None),                                            // providers
+            Value::List(None),                                            // instrumentation
+            Value::List(None),                                            // permissions
+            Value::StringArray(Some(vec![
+                Some("android.permission.INTERNET".into()),
+                Some("android.permission.VIBRATE".into()),
+            ])), // requestedPermissions (String8[])
+            Value::IntArray(Some(vec![1, 1])), // requestedPermissionsFlags
+            Value::List(Some(vec![Value::Parcelable(Parcelable::ordered(
+                "android.content.pm.Signature",
+                vec![Value::ByteArray(Some(vec![
+                    0x30, 0x82, 0x01, 0x0a, 0x0d, 0x0e,
+                ]))],
+            ))])), // signatures
+            Value::List(None),                 // configPreferences
+            Value::List(None),                 // reqFeatures
+            Value::List(None),                 // featureGroups
+            Value::List(None),                 // attributions
+            Value::Int(0),                     // installLocation
+            Value::Int(0),                     // isStub
+            Value::Int(0),                     // coreApp
+            Value::Int(0),                     // requiredForAllUsers
+            Value::Str8(None),                 // restrictedAccountType
+            Value::Str8(None),                 // requiredAccountType
+            Value::Str8(None),                 // overlayTarget
+            Value::Str8(None),                 // overlayCategory
+            Value::Int(0),                     // overlayPriority
+            Value::Bool(false),                // mOverlayIsStatic
+            Value::Int(0),                     // compileSdkVersion
+            Value::Str8(None),                 // compileSdkVersionCodename
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // signingInfo
+            Value::Bool(false),                // isApex
+            Value::Bool(false),                // isActiveApex
         ],
     )
 }
@@ -305,8 +371,8 @@ fn notification_value(content_intent: Option<u64>) -> Parcelable {
     Parcelable::ordered(
         "android.app.Notification",
         vec![
-            Value::Int(1),     // version
-            Value::Binder(None), // mAllowlistToken
+            Value::Int(1),                  // version
+            Value::Binder(None),            // mAllowlistToken
             Value::Long(1_700_000_000_000), // when
             Value::Long(1_700_000_000_000), // creationTime
             Value::Cond {
@@ -325,28 +391,28 @@ fn notification_value(content_intent: Option<u64>) -> Parcelable {
                     ],
                 ))],
             },
-            Value::Int(1), // number
-            content,       // contentIntent
-            absent(),      // deleteIntent
-            absent(),      // tickerText
-            absent(),      // tickerView
-            absent(),      // contentView
-            absent(),      // mLargeIcon
-            Value::Int(0),     // defaults
-            Value::Int(0x10),  // flags (FLAG_ONGOING_EVENT)
-            absent(),          // sound
-            Value::Int(0),     // audioStreamType
-            absent(),          // audioAttributes
-            Value::LongArray(None), // vibrate
-            Value::Int(0),     // ledARGB
-            Value::Int(0),     // ledOnMS
-            Value::Int(0),     // ledOffMS
-            Value::Int(0),     // iconLevel
-            absent(),          // fullScreenIntent
-            Value::Int(0),     // priority (PRIORITY_DEFAULT)
-            Value::Str8(None), // category
+            Value::Int(1),                             // number
+            content,                                   // contentIntent
+            absent(),                                  // deleteIntent
+            absent(),                                  // tickerText
+            absent(),                                  // tickerView
+            absent(),                                  // contentView
+            absent(),                                  // mLargeIcon
+            Value::Int(0),                             // defaults
+            Value::Int(0x10),                          // flags (FLAG_ONGOING_EVENT)
+            absent(),                                  // sound
+            Value::Int(0),                             // audioStreamType
+            absent(),                                  // audioAttributes
+            Value::LongArray(None),                    // vibrate
+            Value::Int(0),                             // ledARGB
+            Value::Int(0),                             // ledOnMS
+            Value::Int(0),                             // ledOffMS
+            Value::Int(0),                             // iconLevel
+            absent(),                                  // fullScreenIntent
+            Value::Int(0),                             // priority (PRIORITY_DEFAULT)
+            Value::Str8(None),                         // category
             Value::Str8(Some("fixture-group".into())), // mGroupKey
-            Value::Str8(None), // mSortKey
+            Value::Str8(None),                         // mSortKey
             Value::Bundle(Some({
                 let mut b = Bundle::new();
                 b.put("android.title", Value::Str(Some("hello".into())));
@@ -363,16 +429,16 @@ fn notification_value(content_intent: Option<u64>) -> Parcelable {
                 present: true,
                 values: vec![Value::Str8(Some("fixture-channel".into()))],
             },
-            Value::Long(0), // mTimeout
-            absent(),       // mShortcutId
-            absent(),       // mLocusId
-            Value::Int(0),  // mBadgeIcon
-            absent(),       // mSettingsText
-            Value::Int(0),  // mGroupAlertBehavior
-            absent(),       // mBubbleMetadata
+            Value::Long(0),    // mTimeout
+            absent(),          // mShortcutId
+            absent(),          // mLocusId
+            Value::Int(0),     // mBadgeIcon
+            absent(),          // mSettingsText
+            Value::Int(0),     // mGroupAlertBehavior
+            absent(),          // mBubbleMetadata
             Value::Bool(true), // mAllowSystemGeneratedContextualActions (the image's default)
-            Value::Int(0),  // mFgsDeferBehavior
-            all_pending,    // allPendingIntents
+            Value::Int(0),     // mFgsDeferBehavior
+            all_pending,       // allPendingIntents
         ],
     )
 }
@@ -381,14 +447,14 @@ fn notification_value(content_intent: Option<u64>) -> Parcelable {
 /// expected FILL_IN_* change mask)`, mirroring the Java builders in
 /// `ParcelableCompareMain.java` field for field.
 fn fill_in_cases() -> Vec<(&'static str, IntentFacts, IntentFacts, i32, i32)> {
-    use acos_services::fill_in::{
-        FILL_IN_ACTION, FILL_IN_CATEGORIES, FILL_IN_COMPONENT, FILL_IN_DATA,
-        FILL_IN_IDENTIFIER, FILL_IN_PACKAGE, FILL_IN_SELECTOR, FILL_IN_SOURCE_BOUNDS,
-    };
     use acos_services::ams::Extra;
+    use acos_services::fill_in::{
+        FILL_IN_ACTION, FILL_IN_CATEGORIES, FILL_IN_COMPONENT, FILL_IN_DATA, FILL_IN_IDENTIFIER,
+        FILL_IN_PACKAGE, FILL_IN_SELECTOR, FILL_IN_SOURCE_BOUNDS,
+    };
 
     let mut empty_fill = IntentFacts::action("android.intent.action.VIEW");
-    empty_fill.type_ = Some("text/plain".into());
+    empty_fill.mime_type = Some("text/plain".into());
     empty_fill.identifier = Some("id-1".into());
     empty_fill.package = Some("dev.acos.fixtures.pifillin".into());
     empty_fill.categories = vec![
@@ -428,9 +494,9 @@ fn fill_in_cases() -> Vec<(&'static str, IntentFacts, IntentFacts, i32, i32)> {
     extras_fill.extras.insert("shared".into(), Extra::Int(2));
 
     let mut typed_stored = IntentFacts::default();
-    typed_stored.type_ = Some("text/plain".into());
+    typed_stored.mime_type = Some("text/plain".into());
     let mut typed_fill = IntentFacts::default();
-    typed_fill.type_ = Some("image/png".into());
+    typed_fill.mime_type = Some("image/png".into());
 
     let mut selector_stored = IntentFacts::action("outer.action");
     selector_stored.selector = None;
@@ -561,6 +627,38 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         "Configuration real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
         writes.get("configuration"),
         hex(&config_bytes)
+    );
+    let pkg_arrays = package_info_arrays_value();
+    let pkg_arrays_bytes = encoded(&pkg_arrays);
+    assert_eq!(
+        writes.get("package_info_arrays").map(String::as_str),
+        Some(hex(&pkg_arrays_bytes).as_str()),
+        "PackageInfo real-Java bytes differ from the Rust codec (String8[] fields)\njava={:?}\nrust={}",
+        writes.get("package_info_arrays"),
+        hex(&pkg_arrays_bytes)
+    );
+    // REL3P2: the two `android.net` replies ACOS serves today
+    // (`getNetworkCapabilities` / `getLinkProperties`) against the real
+    // framework writers. The assertions below compare the *production*
+    // builders, so a change in `connectivity.rs` that stops being
+    // framework-exact fails here.
+    let caps = acos_services::connectivity::default_network_capabilities();
+    let caps_bytes = encoded(&caps);
+    assert_eq!(
+        writes.get("network_capabilities").map(String::as_str),
+        Some(hex(&caps_bytes).as_str()),
+        "NetworkCapabilities real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("network_capabilities"),
+        hex(&caps_bytes)
+    );
+    let link = acos_services::connectivity::default_link_properties();
+    let link_bytes = encoded(&link);
+    assert_eq!(
+        writes.get("link_properties").map(String::as_str),
+        Some(hex(&link_bytes).as_str()),
+        "LinkProperties real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("link_properties"),
+        hex(&link_bytes)
     );
     let bundle = persistable_bundle_value();
     let bundle_bytes = encoded(&bundle);
@@ -721,10 +819,13 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         format!("application_info={}", hex(&app_bytes)),
         format!("activity_info={}", hex(&act_bytes)),
         format!("package_info={}", hex(&pkg_bytes)),
+        format!("package_info_arrays={}", hex(&pkg_arrays_bytes)),
         format!("service_info={}", hex(&service_bytes)),
         format!("instrumentation_info={}", hex(&instrumentation_bytes)),
         format!("permission_info={}", hex(&permission_bytes)),
         format!("resolve_info={}", hex(&resolve_bytes)),
+        format!("network_capabilities={}", hex(&caps_bytes)),
+        format!("link_properties={}", hex(&link_bytes)),
     ];
     let mut args = args;
     for (name, bytes) in &fill_in_bytes {
@@ -745,9 +846,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
             outcome.stdout
         );
         assert!(
-            outcome
-                .stdout
-                .contains(&format!("roundtrip.{name}=")),
+            outcome.stdout.contains(&format!("roundtrip.{name}=")),
             "the real Intent did not re-emit {name}:\n{}",
             outcome.stdout
         );
@@ -762,10 +861,13 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         "application_info",
         "activity_info",
         "package_info",
+        "package_info_arrays",
         "service_info",
         "instrumentation_info",
         "permission_info",
         "resolve_info",
+        "network_capabilities",
+        "link_properties",
     ] {
         assert!(
             outcome.stdout.contains(&format!("read.{name}=ok")),
@@ -792,10 +894,13 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         ("application_info", &app_bytes),
         ("activity_info", &act_bytes),
         ("package_info", &pkg_bytes),
+        ("package_info_arrays", &pkg_arrays_bytes),
         ("service_info", &service_bytes),
         ("instrumentation_info", &instrumentation_bytes),
         ("permission_info", &permission_bytes),
         ("resolve_info", &resolve_bytes),
+        ("network_capabilities", &caps_bytes),
+        ("link_properties", &link_bytes),
     ] {
         assert_eq!(
             roundtrips.get(name).map(String::as_str),
@@ -885,4 +990,95 @@ fn parse_roundtrips(stdout: &str) -> HashMap<String, String> {
             Some((name.to_string(), hex.to_string()))
         })
         .collect()
+}
+
+/// WV2 wall 4: the `webviewupdate` peer's `waitForAndGetProvider` reply must
+/// decode with the **framework's** `PackageInfo.<init>`, not with ACOS's own
+/// reader.
+///
+/// This reply is the one parcel in the provider-load path that has no Java
+/// materialiser: `WebViewUpdateService` writes the installed provider record
+/// with the Rust codec (`acos_services::parcelable`), so a field-order or
+/// encoding difference between the codec and the image's
+/// `PackageInfo.writeToParcel` desynchronises `PackageInfo.<init>` — the image
+/// reported `OutOfMemoryError: Failed to allocate a 7676737936 byte allocation
+/// at Parcel.createString8Array` (`PackageInfo.<init>`), which is a garbage
+/// array count read out of the wrong offset, not a memory problem.
+///
+/// The value is built exactly as the peer builds it (the installed provider
+/// record, flags 0) and handed to the real `PackageInfo.CREATOR`, which checks
+/// `packageName`, `versionCode`, the nested `ApplicationInfo` (`packageName`,
+/// `sourceDir`, `uid`), `requestedPermissions` and `splitNames`, and then
+/// `enforceNoDataAvail()` — so a missing or extra field anywhere in the payload
+/// fails here, with or without an OOM.
+#[test]
+fn webview_provider_package_info_reads_back_in_the_framework_order() {
+    use acos_services::pms::{AppInfo, PackageInfo as PmsPackageInfo};
+
+    let Some(dex) = compile_case(&["ParcelableCompareMain"]) else {
+        eprintln!("SKIP webview_provider_package_info_reads_back_in_the_framework_order: toolchain unavailable");
+        return;
+    };
+
+    // The provider record: parsed from the real provider APK when the fixture
+    // is built, otherwise the same values the install path produces (the codec
+    // is what is under test, and both paths go through
+    // `PackageInfo::to_parcelable_with_flags`).
+    let apk = common::repo_root().join("fixtures/build/apps/webview-provider.apk");
+    let (app, package) = match acos_services::pms::PmsState::from_apk(&apk) {
+        Ok(state) => {
+            let record = state
+                .lookup(Some("com.android.webview"))
+                .expect("the provider APK declares com.android.webview");
+            (record.app.clone(), record.package.clone())
+        }
+        Err(_) => {
+            eprintln!(
+                "note: {} is not built; using the install path's values",
+                apk.display()
+            );
+            let mut app = AppInfo::hello_views_fallback(std::path::Path::new(
+                "/data/app/com.android.webview.apk",
+            ));
+            app.package_name = "com.android.webview".into();
+            app.name = "com.android.webview".into();
+            app.process_name = "com.android.webview".into();
+            app.class_name = String::new();
+            app.source_dir = "/data/app/com.android.webview.apk".into();
+            app.public_source_dir = "/data/app/com.android.webview.apk".into();
+            app.data_dir = "/data/data/com.android.webview".into();
+            app.uid = 10193;
+            let package = PmsPackageInfo {
+                package_name: "com.android.webview".into(),
+                version_code: 1,
+                version_name: "1.0".into(),
+                application: app.clone(),
+                activities: Vec::new(),
+                requested_permissions: vec!["android.permission.INTERNET".into()],
+                first_install_time: 0,
+                last_update_time: 0,
+                signatures: Vec::new(),
+            };
+            (app, package)
+        }
+    };
+    let _ = &app;
+    let bytes = encoded(&package.to_parcelable_with_flags(0));
+
+    let args = vec![format!("package_info_provider={}", hex(&bytes))];
+    let (_rt, outcome) = run_case_args(&dex, "ParcelableCompareMain", &args);
+    assert!(
+        outcome.vm_error.is_none() && outcome.exit_code == 0,
+        "the real framework could not read the webviewupdate reply ({} bytes): \
+         vm_error={:?}\nstdout:\n{}\nstderr:\n{}",
+        bytes.len(),
+        outcome.vm_error,
+        outcome.stdout,
+        outcome.stderr
+    );
+    assert!(
+        outcome.stdout.contains("read.package_info_provider=ok"),
+        "the framework reader did not accept the reply:\n{}",
+        outcome.stdout
+    );
 }

@@ -198,7 +198,9 @@ fn scan_procs() -> Vec<Proc> {
     let root = repo_root();
     let root_s = root.to_string_lossy().to_string();
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir("/proc") else { return out };
+    let Ok(rd) = std::fs::read_dir("/proc") else {
+        return out;
+    };
     for entry in rd.flatten() {
         let name = entry.file_name();
         let Some(pid) = name.to_str().and_then(|s| s.parse::<u32>().ok()) else {
@@ -213,12 +215,16 @@ fn scan_procs() -> Vec<Proc> {
         };
         let comm = comm.trim().to_string();
         // Fields after "(comm)": 0 state, 1 ppid, … 19 starttime.
-        let Some(rest) = stat.rfind(')').and_then(|i| stat.get(i + 2..)) else { continue };
+        let Some(rest) = stat.rfind(')').and_then(|i| stat.get(i + 2..)) else {
+            continue;
+        };
         let fields: Vec<&str> = rest.split_whitespace().collect();
         if fields.len() < 20 {
             continue;
         }
-        let Ok(start) = fields[19].parse::<u64>() else { continue };
+        let Ok(start) = fields[19].parse::<u64>() else {
+            continue;
+        };
         let cmd = read_cmdline(&dir);
         let cwd = read_cwd(&dir);
         // Match the process NAME or the command line. W53 narrowed this to
@@ -294,7 +300,10 @@ struct Scope {
 
 impl Scope {
     fn new() -> Self {
-        Scope { roots: Vec::new(), markers: Vec::new() }
+        Scope {
+            roots: Vec::new(),
+            markers: Vec::new(),
+        }
     }
 
     /// Register this test's private run directories (the seeded `/data` copy and
@@ -322,7 +331,10 @@ impl Scope {
     /// only; [`Scope::reap`] stays strict).
     fn procs(&self) -> Vec<Proc> {
         if host_wide_diagnostic() {
-            let mut all: Vec<Proc> = scan_procs().into_iter().filter(|p| !p.is_zombie()).collect();
+            let mut all: Vec<Proc> = scan_procs()
+                .into_iter()
+                .filter(|p| !p.is_zombie())
+                .collect();
             all.sort_by_key(|p| p.pid);
             return all;
         }
@@ -331,7 +343,10 @@ impl Scope {
 
     /// The strict ownership closure (never widened by the diagnostic knob).
     fn owned(&self) -> Vec<Proc> {
-        let all: Vec<Proc> = scan_procs().into_iter().filter(|p| !p.is_zombie()).collect();
+        let all: Vec<Proc> = scan_procs()
+            .into_iter()
+            .filter(|p| !p.is_zombie())
+            .collect();
         let root_pids: BTreeSet<u32> = self.roots.iter().map(|(pid, _)| *pid).collect();
         let min_start = self
             .roots
@@ -447,7 +462,9 @@ struct Reaper(Option<Child>);
 
 impl Reaper {
     fn spawn(cmd: &mut Command, what: &str) -> Reaper {
-        Reaper(Some(cmd.spawn().unwrap_or_else(|e| panic!("spawn {what}: {e}"))))
+        Reaper(Some(
+            cmd.spawn().unwrap_or_else(|e| panic!("spawn {what}: {e}")),
+        ))
     }
     fn pid(&self) -> u32 {
         self.child().id()
@@ -478,7 +495,9 @@ impl Reaper {
     /// with the pid available for [`Scope::add_root`]).
     fn wait_with_output(&mut self) -> std::process::Output {
         let child = self.0.take().expect("the child was already collected");
-        child.wait_with_output().expect("collect the child's output")
+        child
+            .wait_with_output()
+            .expect("collect the child's output")
     }
 }
 
@@ -568,7 +587,11 @@ fn render_app_leaves_no_processes_or_scratch_behind() {
 
     let sessions_after = dir_entries(&data.join("session"));
     let new: Vec<&String> = sessions_after.difference(&sessions_before).collect();
-    assert!(new.is_empty(), "render-app left scratch behind under {}/session: {new:?}", data.display());
+    assert!(
+        new.is_empty(),
+        "render-app left scratch behind under {}/session: {new:?}",
+        data.display()
+    );
 
     // S4: the per-run writable root (dalvik-cache, tmp, out, socket) must be
     // removed on the normal exit path, not merely emptied.
@@ -722,7 +745,9 @@ fn toolchain_d8() -> Option<PathBuf> {
     roots.push(home.join("Android/Sdk"));
     for root in roots {
         let bt = root.join("build-tools");
-        let Ok(rd) = std::fs::read_dir(&bt) else { continue };
+        let Ok(rd) = std::fs::read_dir(&bt) else {
+            continue;
+        };
         let mut versions: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
         versions.sort();
         for v in versions.into_iter().rev() {
@@ -823,17 +848,30 @@ fn guest_cannot_overwrite_boot_art_or_the_classpath() {
         .find(|p| p.join("x86_64/boot.art").is_file());
 
     let mut inputs: Vec<(&str, PathBuf)> = vec![
-        ("/data/system/environ/classpath", data.join("system/environ/classpath")),
+        (
+            "/data/system/environ/classpath",
+            data.join("system/environ/classpath"),
+        ),
         ("/data/acos.properties", data.join("acos.properties")),
         ("/data/shim/libartshim.so", data.join("shim/libartshim.so")),
-        ("/data/app/guest/classes.dex", data.join("app/guest/classes.dex")),
-        ("/linkerconfig/ld.config.txt", data.join("linkerconfig/ld.config.txt")),
+        (
+            "/data/app/guest/classes.dex",
+            data.join("app/guest/classes.dex"),
+        ),
+        (
+            "/linkerconfig/ld.config.txt",
+            data.join("linkerconfig/ld.config.txt"),
+        ),
     ];
     if let Some(img) = &image {
         inputs.push(("/data/img/x86_64/boot.art", img.join("x86_64/boot.art")));
     }
     for (_, host) in &inputs {
-        assert!(host.is_file(), "canary target missing on the host: {}", host.display());
+        assert!(
+            host.is_file(),
+            "canary target missing on the host: {}",
+            host.display()
+        );
     }
     let before: Vec<String> = inputs.iter().map(|(_, h)| md5(h)).collect();
 
@@ -867,11 +905,17 @@ fn guest_cannot_overwrite_boot_art_or_the_classpath() {
     }
     let after: Vec<String> = inputs.iter().map(|(_, h)| md5(h)).collect();
     // The host-side proof: the bytes are identical, not just the guest's opinion.
-    assert_eq!(before, after, "a shared input changed on the host during the canary run");
+    assert_eq!(
+        before, after,
+        "a shared input changed on the host during the canary run"
+    );
 
     // And the run root is gone, so the canary left nothing behind either.
     let runs = dir_entries(&data.join("runs"));
-    assert!(runs.is_empty(), "canary run left per-run roots behind: {runs:?}");
+    assert!(
+        runs.is_empty(),
+        "canary run left per-run roots behind: {runs:?}"
+    );
 
     let _ = std::fs::remove_dir_all(&scratch);
 }
@@ -950,7 +994,10 @@ fn guest_crash_still_removes_the_run_root() {
     let survivors = scope.wait_until_clean(Duration::from_secs(3));
     let detail = describe(&survivors);
     scope.reap(&survivors);
-    assert!(survivors.is_empty(), "a crashed guest left processes behind:{detail}");
+    assert!(
+        survivors.is_empty(),
+        "a crashed guest left processes behind:{detail}"
+    );
 
     let runs = dir_entries(&data.join("runs"));
     assert!(
@@ -1005,9 +1052,15 @@ fn janitor_reaps_stale_runs_and_keeps_live_ones() {
     };
     let stale = mk("stale", Some("pid=999999\nstart=1\ntag=stale\n".into()));
     let no_owner = mk("no-owner", None);
-    let dead_fresh = mk("dead-fresh", Some("pid=999998\nstart=1\ntag=fresh\n".into()));
+    let dead_fresh = mk(
+        "dead-fresh",
+        Some("pid=999998\nstart=1\ntag=fresh\n".into()),
+    );
     let (pid, start) = own_pid_start();
-    let live = mk("live", Some(format!("pid={pid}\nstart={start}\ntag=live\n")));
+    let live = mk(
+        "live",
+        Some(format!("pid={pid}\nstart={start}\ntag=live\n")),
+    );
     for d in [stale.as_path(), no_owner.as_path(), live.as_path()] {
         age(&d.join("owner"), "2 hours ago");
         age(d, "2 hours ago");
@@ -1017,10 +1070,19 @@ fn janitor_reaps_stale_runs_and_keeps_live_ones() {
     // is kept in case its owner is still finishing.
     let out = launcher("janitor", &data).output().expect("janitor");
     assert!(out.status.success(), "janitor failed: {out:?}");
-    assert!(!stale.exists(), "janitor kept a stale run dir with no live owner");
-    assert!(!no_owner.exists(), "janitor kept an old run dir with no owner record");
+    assert!(
+        !stale.exists(),
+        "janitor kept a stale run dir with no live owner"
+    );
+    assert!(
+        !no_owner.exists(),
+        "janitor kept an old run dir with no owner record"
+    );
     assert!(live.exists(), "janitor reaped a LIVE run dir (pid {pid})");
-    assert!(dead_fresh.exists(), "janitor reaped a fresh run dir before the TTL");
+    assert!(
+        dead_fresh.exists(),
+        "janitor reaped a fresh run dir before the TTL"
+    );
 
     // Zero TTL: the SIGKILL case — the pid is gone, the age does not matter.
     let out = launcher("janitor", &data)
@@ -1028,8 +1090,14 @@ fn janitor_reaps_stale_runs_and_keeps_live_ones() {
         .output()
         .expect("janitor (ttl=0)");
     assert!(out.status.success(), "janitor failed: {out:?}");
-    assert!(!dead_fresh.exists(), "a zero-TTL sweep must reap a dead owner's run dir");
-    assert!(live.exists(), "a zero-TTL sweep must still keep a live run dir");
+    assert!(
+        !dead_fresh.exists(),
+        "a zero-TTL sweep must reap a dead owner's run dir"
+    );
+    assert!(
+        live.exists(),
+        "a zero-TTL sweep must still keep a live run dir"
+    );
 
     let _ = std::fs::remove_dir_all(&scratch);
 }
@@ -1044,7 +1112,10 @@ fn r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans() {
     let Some(()) = require_art() else { return };
     let dex = repo_root().join("fixtures/build/dexprogs/01_hello/classes.dex");
     if !dex.is_file() {
-        eprintln!("SKIP watchdog test: no {} (build the dex corpus)", dex.display());
+        eprintln!(
+            "SKIP watchdog test: no {} (build the dex corpus)",
+            dex.display()
+        );
         return;
     }
     let scratch = scratch("watchdog");
@@ -1076,17 +1147,26 @@ fn r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans() {
 
     let stderr = String::from_utf8_lossy(&out.stderr).to_string();
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(!out.status.success(), "a 1 MiB ceiling must not end in success (rc={:?})", out.status.code());
+    assert!(
+        !out.status.success(),
+        "a 1 MiB ceiling must not end in success (rc={:?})",
+        out.status.code()
+    );
     // The structured result is the contract: a kill that is not *reported* is
     // the incident again (a silent OOM victim).
-    let json_start = stdout.find('{').unwrap_or_else(|| panic!("no JSON on stdout: {stdout}"));
+    let json_start = stdout
+        .find('{')
+        .unwrap_or_else(|| panic!("no JSON on stdout: {stdout}"));
     let json: serde_json::Value =
         serde_json::from_str(&stdout[json_start..]).expect("run --json emits valid JSON");
     assert_eq!(json["outcome"], "unsupported", "json={json}");
     assert_eq!(json["code"], "HOST_MEMORY_LIMIT", "json={json}");
     let diags = json["diagnostics"].to_string();
     assert!(diags.contains("HOST_MEMORY_LIMIT"), "diagnostics={diags}");
-    assert!(diags.contains("ACOS_ART_RSS_MAX"), "the trip must name its knob: {diags}");
+    assert!(
+        diags.contains("ACOS_ART_RSS_MAX"),
+        "the trip must name its knob: {diags}"
+    );
     assert!(
         stderr.contains("HOST_MEMORY_LIMIT"),
         "the watchdog must say so on stderr too: {stderr}"
@@ -1168,7 +1248,10 @@ fn log_spam_keeps_the_launcher_peak_rss_under_256_mib() {
         }
         if Instant::now() >= deadline {
             let tail = std::fs::read_to_string(scratch.join("session.log")).unwrap_or_default();
-            panic!("no logd sink under {} within 60 s:\n{tail}", data.join("runs").display());
+            panic!(
+                "no logd sink under {} within 60 s:\n{tail}",
+                data.join("runs").display()
+            );
         }
         std::thread::sleep(Duration::from_millis(25));
     }
@@ -1198,7 +1281,9 @@ fn log_spam_keeps_the_launcher_peak_rss_under_256_mib() {
     let frame = log_frame(900);
     let target: u64 = 300 * 1024 * 1024;
     let sock_dg = UnixDatagram::unbound().expect("unbound datagram socket");
-    sock_dg.set_nonblocking(true).expect("non-blocking logdw writer");
+    sock_dg
+        .set_nonblocking(true)
+        .expect("non-blocking logdw writer");
     sock_dg.connect(&logdw).expect("connect logdw");
     let mut sent: u64 = 0;
     let mut spins: u64 = 0;
@@ -1296,7 +1381,11 @@ fn leak_scan_is_scoped_to_this_tests_own_processes() {
         .arg(&fake)
         .status()
         .expect("cp /bin/sleep");
-    assert!(st.success(), "could not stage the fake guest at {}", fake.display());
+    assert!(
+        st.success(),
+        "could not stage the fake guest at {}",
+        fake.display()
+    );
 
     let before = snapshot();
     let mut scope = Scope::new();
@@ -1348,13 +1437,18 @@ fn leak_scan_is_scoped_to_this_tests_own_processes() {
         pids
     );
     let foreign_named = scope.foreign(&before).iter().any(|p| p.pid == foreign.id());
-    assert!(foreign_named, "the foreign guest must be *reported* (never killed):{foreign_desc}");
+    assert!(
+        foreign_named,
+        "the foreign guest must be *reported* (never killed):{foreign_desc}"
+    );
 
     // The survivor check still fires for our own leak...
     let survivors = scope.wait_until_clean(Duration::from_secs(1));
     assert_eq!(
         survivors.iter().map(|p| p.pid).collect::<BTreeSet<_>>(),
-        [own_marker.id(), own_root.id()].into_iter().collect::<BTreeSet<_>>(),
+        [own_marker.id(), own_root.id()]
+            .into_iter()
+            .collect::<BTreeSet<_>>(),
         "the clean-check did not report exactly this run's two stand-in guests"
     );
 
@@ -1377,7 +1471,10 @@ fn leak_scan_is_scoped_to_this_tests_own_processes() {
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(own_gone, "reap did not clear this test's own (stand-in) leaked guests");
+    assert!(
+        own_gone,
+        "reap did not clear this test's own (stand-in) leaked guests"
+    );
     assert!(
         alive(&mut foreign),
         "reap killed another run's guest (pid {}) — the W52 r2 sweep is back",

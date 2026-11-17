@@ -35,7 +35,10 @@ fn notification() -> Parcelable {
             Value::Int(2), // TYPE_RESOURCE
             Value::Str(Some("dev.acos.fixtures.notifpermprobe".into())),
             Value::Int(0x7f_01_0001),
-            Value::Cond { present: false, values: vec![] },
+            Value::Cond {
+                present: false,
+                values: vec![],
+            },
             Value::Int(5), // BlendMode.SRC_IN
         ],
     );
@@ -46,7 +49,10 @@ fn notification() -> Parcelable {
             Value::Binder(None), // mAllowlistToken
             Value::Long(1_700_000_000_000),
             Value::Long(1_700_000_000_000),
-            Value::Cond { present: true, values: vec![Value::Parcelable(icon)] },
+            Value::Cond {
+                present: true,
+                values: vec![Value::Parcelable(icon)],
+            },
             Value::Int(1), // number
             Value::Cond {
                 present: true,
@@ -55,22 +61,46 @@ fn notification() -> Parcelable {
                     vec![Value::Binder(Some(BinderId(11)))],
                 ))],
             },
-            Value::Cond { present: false, values: vec![] }, // deleteIntent
-            Value::Cond { present: false, values: vec![] }, // tickerText
-            Value::Cond { present: false, values: vec![] }, // tickerView
-            Value::Cond { present: false, values: vec![] }, // contentView
-            Value::Cond { present: false, values: vec![] }, // mLargeIcon
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // deleteIntent
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // tickerText
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // tickerView
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // contentView
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // mLargeIcon
             Value::Int(0),
             Value::Int(0x10),
-            Value::Cond { present: false, values: vec![] }, // sound
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // sound
             Value::Int(0),
-            Value::Cond { present: false, values: vec![] }, // audioAttributes
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // audioAttributes
             Value::LongArray(None),
             Value::Int(0),
             Value::Int(0),
             Value::Int(0),
             Value::Int(0),
-            Value::Cond { present: false, values: vec![] }, // fullScreenIntent
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // fullScreenIntent
             Value::Int(0),
             Value::Str8(None), // category
             Value::Str8(None), // mGroupKey
@@ -79,9 +109,15 @@ fn notification() -> Parcelable {
             Value::List(Some(vec![Value::Parcelable(Parcelable::ordered(
                 "android.app.Notification$Action",
                 vec![
-                    Value::Cond { present: false, values: vec![] },
+                    Value::Cond {
+                        present: false,
+                        values: vec![],
+                    },
                     Value::Str(Some("Reply".into())),
-                    Value::Cond { present: false, values: vec![] },
+                    Value::Cond {
+                        present: false,
+                        values: vec![],
+                    },
                     Value::Bundle(None),
                     Value::List(None),
                     Value::Int(1),
@@ -90,22 +126,43 @@ fn notification() -> Parcelable {
                     Value::Int(0),
                 ],
             ))])),
-            Value::Cond { present: false, values: vec![] }, // bigContentView
-            Value::Cond { present: false, values: vec![] }, // headsUpContentView
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // bigContentView
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // headsUpContentView
             Value::Int(1),
-            Value::Cond { present: false, values: vec![] }, // publicVersion
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // publicVersion
             Value::Int(0),
             Value::Cond {
                 present: true,
                 values: vec![Value::Str8(Some("probe-channel".into()))],
             },
             Value::Long(0),
-            Value::Cond { present: false, values: vec![] }, // mShortcutId
-            Value::Cond { present: false, values: vec![] }, // mLocusId
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // mShortcutId
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // mLocusId
             Value::Int(0),
-            Value::Cond { present: false, values: vec![] }, // mSettingsText
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // mSettingsText
             Value::Int(0),
-            Value::Cond { present: false, values: vec![] }, // mBubbleMetadata
+            Value::Cond {
+                present: false,
+                values: vec![],
+            }, // mBubbleMetadata
             Value::Bool(false),
             Value::Int(0),
             Value::List(None), // allPendingIntents (null ArraySet)
@@ -116,7 +173,8 @@ fn notification() -> Parcelable {
 /// The proxy's request bytes for `enqueueNotificationWithTag`.
 fn enqueue_request() -> Parcel {
     let mut data = Parcel::new();
-    data.write_interface_token(NOTIFICATION_MANAGER).expect("token");
+    data.write_interface_token(NOTIFICATION_MANAGER)
+        .expect("token");
     data.write_string16_opt(Some("dev.acos.fixtures.notifpermprobe"))
         .expect("pkg");
     data.write_string16_opt(None).expect("opPkg");
@@ -137,7 +195,8 @@ fn a_real_notify_request_decodes_into_the_service() {
     host.set_notification_state(Arc::clone(&state));
     let service_state = Arc::clone(&state);
     let binder = host.register("notification", NOTIFICATION_MANAGER, move |_w| {
-        Box::new(NotificationService::new(Arc::clone(&service_state))) as Box<dyn acos_services::ServiceObject>
+        Box::new(NotificationService::new(Arc::clone(&service_state)))
+            as Box<dyn acos_services::ServiceObject>
     });
 
     let mut data = enqueue_request();
@@ -175,8 +234,8 @@ fn the_decoded_notification_re_encodes_byte_for_byte() {
     write_payload(&mut first, &value).expect("encode");
     let bytes = first.marshall();
     first.set_data_position(0);
-    let decoded =
-        acos_services::parcelable::read_payload("android.app.Notification", &mut first).expect("decode");
+    let decoded = acos_services::parcelable::read_payload("android.app.Notification", &mut first)
+        .expect("decode");
     assert_eq!(decoded, value);
     let mut second = Parcel::new();
     write_payload(&mut second, &decoded).expect("re-encode");

@@ -150,12 +150,22 @@ impl RnNode {
     /// nearest clickable ancestor. Exact match wins over substring.
     #[must_use]
     pub fn tag_for_text(&self, text: &str) -> Option<i32> {
-        self.find_text(text, false).or_else(|| self.find_text(text, true))
+        self.find_text(text, false)
+            .or_else(|| self.find_text(text, true))
     }
 
     fn find_text(&self, text: &str, substring: bool) -> Option<i32> {
-        fn search(node: &RnNode, text: &str, substring: bool, ancestor: Option<i32>) -> Option<i32> {
-            let here = if node.clickable { Some(node.tag) } else { ancestor };
+        fn search(
+            node: &RnNode,
+            text: &str,
+            substring: bool,
+            ancestor: Option<i32>,
+        ) -> Option<i32> {
+            let here = if node.clickable {
+                Some(node.tag)
+            } else {
+                ancestor
+            };
             let matched = node.text.as_deref().is_some_and(|t| {
                 if substring {
                     t.contains(text)
@@ -185,7 +195,11 @@ impl RnNode {
     #[must_use]
     pub fn tag_for_test_id(&self, id: &str) -> Option<i32> {
         fn search(node: &RnNode, id: &str, ancestor: Option<i32>) -> Option<i32> {
-            let here = if node.clickable { Some(node.tag) } else { ancestor };
+            let here = if node.clickable {
+                Some(node.tag)
+            } else {
+                ancestor
+            };
             if node.test_id.as_deref() == Some(id) {
                 if node.clickable {
                     return Some(node.tag);
@@ -382,10 +396,7 @@ impl TreeBuilder {
             .into_iter()
             .map(|tag| self.build_node(tag, 0))
             .collect();
-        RnTree {
-            roots,
-            op_count: 0,
-        }
+        RnTree { roots, op_count: 0 }
     }
 
     fn build_node(&self, tag: i32, depth: usize) -> RnNode {
@@ -482,15 +493,21 @@ mod tests {
     fn detect_requires_runtime_and_bundle() {
         // No runtime library.
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-        zip.start_file("assets/index.android.bundle", zip::write::SimpleFileOptions::default())
-            .unwrap();
+        zip.start_file(
+            "assets/index.android.bundle",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
         let bytes = zip.finish().unwrap().into_inner();
         assert!(detect_bytes(&bytes).unwrap().is_none());
 
         // Runtime but no bundle.
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-        zip.start_file("lib/x86_64/libhermes.so", zip::write::SimpleFileOptions::default())
-            .unwrap();
+        zip.start_file(
+            "lib/x86_64/libhermes.so",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
         let bytes = zip.finish().unwrap().into_inner();
         assert!(detect_bytes(&bytes).unwrap().is_none());
     }
@@ -498,12 +515,21 @@ mod tests {
     #[test]
     fn detect_recognises_react_native() {
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-        zip.start_file("lib/x86_64/libreactnative.so", zip::write::SimpleFileOptions::default())
-            .unwrap();
-        zip.start_file("lib/x86_64/libhermes.so", zip::write::SimpleFileOptions::default())
-            .unwrap();
-        zip.start_file("assets/index.android.bundle", zip::write::SimpleFileOptions::default())
-            .unwrap();
+        zip.start_file(
+            "lib/x86_64/libreactnative.so",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+        zip.start_file(
+            "lib/x86_64/libhermes.so",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+        zip.start_file(
+            "assets/index.android.bundle",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
         let bytes = zip.finish().unwrap().into_inner();
         let apk = detect_bytes(&bytes).unwrap().unwrap();
         assert_eq!(apk.native_abis, vec!["x86_64"]);
@@ -552,7 +578,10 @@ mod tests {
         let root = &tree.roots[0];
         assert_eq!(root.tag, 1);
         assert_eq!(root.children[0].tag, 25);
-        assert_eq!(tree.find(|n| n.tag == 5).unwrap().text.as_deref(), Some("Hello ACOS"));
+        assert_eq!(
+            tree.find(|n| n.tag == 5).unwrap().text.as_deref(),
+            Some("Hello ACOS")
+        );
         // `tap --text TAP ME` resolves through the RCTText to the touchable.
         assert_eq!(tree.tag_for_text("TAP ME"), Some(17));
         assert_eq!(tree.tag_for_test_id("hello-button"), Some(17));

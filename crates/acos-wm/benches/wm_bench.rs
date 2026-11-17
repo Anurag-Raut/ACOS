@@ -367,43 +367,70 @@ fn main() {
         bench_legacy_two_layer(),
     ));
     out.push('\n');
-    out.push_str(&row("compose, 1 opaque layer (full damage)", bench_compose_full({
-        let mut c = new_compositor();
-        let l = c.create_layer(None, "app", 0);
-        c.set_buffer(l, content_bitmap(1), 1, 1).unwrap();
-        c
-    })));
+    out.push_str(&row(
+        "compose, 1 opaque layer (full damage)",
+        bench_compose_full({
+            let mut c = new_compositor();
+            let l = c.create_layer(None, "app", 0);
+            c.set_buffer(l, content_bitmap(1), 1, 1).unwrap();
+            c
+        }),
+    ));
     out.push('\n');
-    out.push_str(&row("present, 1 opaque layer (full damage)", bench_present_full({
-        let mut c = new_compositor();
-        let l = c.create_layer(None, "app", 0);
-        c.set_buffer(l, content_bitmap(1), 1, 1).unwrap();
-        c
-    })));
+    out.push_str(&row(
+        "present, 1 opaque layer (full damage)",
+        bench_present_full({
+            let mut c = new_compositor();
+            let l = c.create_layer(None, "app", 0);
+            c.set_buffer(l, content_bitmap(1), 1, 1).unwrap();
+            c
+        }),
+    ));
     out.push('\n');
-    out.push_str(&row("compose, 1 opaque layer (200x100 damage)", bench_compose_damage({
-        let mut c = new_compositor();
-        let l = c.create_layer(None, "app", 0);
-        c.set_buffer(l, content_bitmap(1), 1, 1).unwrap();
-        c
-    })));
+    out.push_str(&row(
+        "compose, 1 opaque layer (200x100 damage)",
+        bench_compose_damage({
+            let mut c = new_compositor();
+            let l = c.create_layer(None, "app", 0);
+            c.set_buffer(l, content_bitmap(1), 1, 1).unwrap();
+            c
+        }),
+    ));
     out.push('\n');
-    out.push_str(&row("present, 1 opaque layer (200x100 damage)", bench_present_damage({
-        let mut c = new_compositor();
-        let l = c.create_layer(None, "app", 0);
-        c.set_buffer(l, content_bitmap(1), 1, 1).unwrap();
-        c
-    })));
+    out.push_str(&row(
+        "present, 1 opaque layer (200x100 damage)",
+        bench_present_damage({
+            let mut c = new_compositor();
+            let l = c.create_layer(None, "app", 0);
+            c.set_buffer(l, content_bitmap(1), 1, 1).unwrap();
+            c
+        }),
+    ));
     out.push('\n');
-    out.push_str(&row("compose, app + translucent IME (full)", bench_compose_full(two_layer_scene())));
+    out.push_str(&row(
+        "compose, app + translucent IME (full)",
+        bench_compose_full(two_layer_scene()),
+    ));
     out.push('\n');
-    out.push_str(&row("present, app + translucent IME (full)", bench_present_full(two_layer_scene())));
+    out.push_str(&row(
+        "present, app + translucent IME (full)",
+        bench_present_full(two_layer_scene()),
+    ));
     out.push('\n');
-    out.push_str(&row("compose, app + IME (200x100 damage)", bench_compose_damage(two_layer_scene())));
+    out.push_str(&row(
+        "compose, app + IME (200x100 damage)",
+        bench_compose_damage(two_layer_scene()),
+    ));
     out.push('\n');
-    out.push_str(&row("present, app + IME (200x100 damage)", bench_present_damage(two_layer_scene())));
+    out.push_str(&row(
+        "present, app + IME (200x100 damage)",
+        bench_present_damage(two_layer_scene()),
+    ));
     out.push('\n');
-    out.push_str(&row("present, no change (skipped)", bench_present_noop(two_layer_scene())));
+    out.push_str(&row(
+        "present, no change (skipped)",
+        bench_present_noop(two_layer_scene()),
+    ));
     out.push('\n');
     out.push_str(&row(
         "commit 1080x2400 buffer, no-alpha declared",

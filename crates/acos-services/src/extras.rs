@@ -23,7 +23,7 @@
 
 use acos_aidl::MethodInfo;
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, ServiceObject};
 use crate::value::{Parcelable, Value};
 
@@ -174,7 +174,12 @@ impl ThermalService {
 }
 
 impl ServiceObject for ThermalService {
-    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &MethodInfo,
+        _args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "android.os.IThermalService" {
             return Err(unsupported(interface, method));
         }
@@ -182,14 +187,16 @@ impl ServiceObject for ThermalService {
             // `PowerManager.THERMAL_STATUS_NONE`.
             "getCurrentThermalStatus" => vec![Value::Int(0)],
             "getThermalHeadroom" => vec![Value::Float(1.0)],
-            "getCurrentTemperatures" | "getCurrentTemperaturesWithType" => vec![
-                Value::List(Some(Vec::new())),
-            ],
+            "getCurrentTemperatures" | "getCurrentTemperaturesWithType" => {
+                vec![Value::List(Some(Vec::new()))]
+            }
             "getCurrentCoolingDevices" | "getCurrentCoolingDevicesWithType" => {
                 vec![Value::List(Some(Vec::new()))]
             }
-            "registerThermalEventListener" | "registerThermalEventListenerWithType"
-            | "unregisterThermalEventListener" | "registerThermalStatusListener"
+            "registerThermalEventListener"
+            | "registerThermalEventListenerWithType"
+            | "unregisterThermalEventListener"
+            | "registerThermalStatusListener"
             | "unregisterThermalStatusListener" => vec![Value::Bool(true)],
             _ => return Err(unsupported(interface, method)),
         };
@@ -346,7 +353,9 @@ impl ServiceObject for ShortcutService {
                 // (it has no rate limiter yet).
                 vec![Value::Bool(true)]
             }
-            "removeDynamicShortcuts" | "removeAllDynamicShortcuts" | "removeLongLivedShortcuts"
+            "removeDynamicShortcuts"
+            | "removeAllDynamicShortcuts"
+            | "removeLongLivedShortcuts"
             | "enableShortcuts" => {
                 let package = str_arg(args, 0).unwrap_or_default();
                 let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -358,11 +367,9 @@ impl ServiceObject for ShortcutService {
                         let ids: Vec<String> = args
                             .get(1)
                             .and_then(|v| match v {
-                                Value::StringList(Some(list)) => Some(
-                                    list.iter()
-                                        .filter_map(|s| s.clone())
-                                        .collect::<Vec<_>>(),
-                                ),
+                                Value::StringList(Some(list)) => {
+                                    Some(list.iter().filter_map(|s| s.clone()).collect::<Vec<_>>())
+                                }
                                 _ => None,
                             })
                             .unwrap_or_default();
@@ -373,8 +380,9 @@ impl ServiceObject for ShortcutService {
                 }
                 Vec::new()
             }
-            "reportShortcutUsed" | "resetThrottling" | "onApplicationActive"
-            | "applyRestore" => Vec::new(),
+            "reportShortcutUsed" | "resetThrottling" | "onApplicationActive" | "applyRestore" => {
+                Vec::new()
+            }
             // Pinning needs a launcher UI; the platform reports false for a
             // device without a pinning-capable launcher.
             "requestPinShortcut" | "createShortcutResultIntent" | "disableShortcuts" => {
@@ -481,7 +489,8 @@ impl ServiceObject for JobSchedulerService {
             "canRunUserInitiatedJobs" | "hasRunUserInitiatedJobsPermission" => {
                 vec![Value::Bool(false)]
             }
-            "registerUserVisibleJobObserver" | "unregisterUserVisibleJobObserver"
+            "registerUserVisibleJobObserver"
+            | "unregisterUserVisibleJobObserver"
             | "notePendingUserRequestedAppStop" => Vec::new(),
             _ => return Err(unsupported(interface, method)),
         };
@@ -552,9 +561,14 @@ impl ServiceObject for PowerService {
                     .push((tag, level));
                 Vec::new()
             }
-            "releaseWakeLock" | "releaseWakeLockAsync" | "updateWakeLockUids"
-            | "updateWakeLockUidsAsync" | "updateWakeLockWorkSource" | "updateWakeLockCallback"
-            | "boostScreenBrightness" | "userActivity" => Vec::new(),
+            "releaseWakeLock"
+            | "releaseWakeLockAsync"
+            | "updateWakeLockUids"
+            | "updateWakeLockUidsAsync"
+            | "updateWakeLockWorkSource"
+            | "updateWakeLockCallback"
+            | "boostScreenBrightness"
+            | "userActivity" => Vec::new(),
             // `PowerManager.isWakeLockLevelSupported` on an always-awake host:
             // the partial/screen levels exist, doze/proximity do not.
             "isWakeLockLevelSupported" => {
@@ -562,11 +576,17 @@ impl ServiceObject for PowerService {
                 vec![Value::Bool(matches!(level, 1 | 6 | 10))]
             }
             "isInteractive" | "isDisplayInteractive" => vec![Value::Bool(true)],
-            "isPowerSaveMode" | "areAutoPowerSaveModesEnabled" | "isDeviceIdleMode"
-            | "isLightDeviceIdleMode" | "isLowPowerStandbySupported"
-            | "isLowPowerStandbyEnabled" | "isExemptFromLowPowerStandby"
-            | "isScreenBrightnessBoosted" | "isAmbientDisplayAvailable"
-            | "isAmbientDisplaySuppressed" | "isBatteryDischargePredictionPersonalized" => {
+            "isPowerSaveMode"
+            | "areAutoPowerSaveModesEnabled"
+            | "isDeviceIdleMode"
+            | "isLightDeviceIdleMode"
+            | "isLowPowerStandbySupported"
+            | "isLowPowerStandbyEnabled"
+            | "isExemptFromLowPowerStandby"
+            | "isScreenBrightnessBoosted"
+            | "isAmbientDisplayAvailable"
+            | "isAmbientDisplaySuppressed"
+            | "isBatteryDischargePredictionPersonalized" => {
                 vec![Value::Bool(false)]
             }
             // Apps commonly ask whether they are exempt from battery
@@ -577,10 +597,17 @@ impl ServiceObject for PowerService {
                 vec![Value::Int(0)]
             }
             "getPowerSaveState" => vec![typed_null()],
-            "setPowerModeChecked" | "setPowerSaveModeEnabled" | "setDynamicPowerSaveHint"
+            "setPowerModeChecked"
+            | "setPowerSaveModeEnabled"
+            | "setDynamicPowerSaveHint"
             | "setAdaptivePowerSaveEnabled" => vec![Value::Bool(false)],
-            "setPowerBoost" | "setPowerMode" | "setStayOnSetting" | "setDozeAfterScreenOff"
-            | "suppressAmbientDisplay" | "setAttentionLight" | "nap" => Vec::new(),
+            "setPowerBoost"
+            | "setPowerMode"
+            | "setStayOnSetting"
+            | "setDozeAfterScreenOff"
+            | "suppressAmbientDisplay"
+            | "setAttentionLight"
+            | "nap" => Vec::new(),
             // Real device-state changes (sleep, reboot, shutdown, suspend) are
             // not something a guest may perform.
             _ => return Err(unsupported(interface, method)),
@@ -613,7 +640,12 @@ fn empty_accounts() -> Value {
 }
 
 impl ServiceObject for AccountService {
-    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &MethodInfo,
+        _args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "android.accounts.IAccountManager" {
             return Err(unsupported(interface, method));
         }
@@ -631,8 +663,13 @@ impl ServiceObject for AccountService {
             "someUserHasAccount" | "accountAuthenticated" | "hasAccountAccess" => {
                 vec![Value::Bool(false)]
             }
-            "invalidateAuthToken" | "setAuthToken" | "setPassword" | "clearPassword"
-            | "setUserData" | "registerAccountListener" | "unregisterAccountListener"
+            "invalidateAuthToken"
+            | "setAuthToken"
+            | "setPassword"
+            | "clearPassword"
+            | "setUserData"
+            | "registerAccountListener"
+            | "unregisterAccountListener"
             | "onAccountAccessed" => Vec::new(),
             // Adding/removing an account, and the callback-driven auth flows,
             // mutate device state or need an authenticator UI ACOS does not
@@ -684,7 +721,12 @@ impl RestrictionsService {
 }
 
 impl ServiceObject for RestrictionsService {
-    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &MethodInfo,
+        _args: &[Value],
+    ) -> Result<CallResult> {
         Err(unsupported(interface, method))
     }
 
@@ -827,7 +869,12 @@ impl TrustService {
 }
 
 impl ServiceObject for TrustService {
-    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &MethodInfo,
+        _args: &[Value],
+    ) -> Result<CallResult> {
         Err(unsupported(interface, method))
     }
 
@@ -842,8 +889,10 @@ impl ServiceObject for TrustService {
             return Ok(false);
         }
         match code {
-            TRUST_IS_DEVICE_LOCKED | TRUST_IS_DEVICE_SECURE
-            | TRUST_IS_TRUST_USUALLY_MANAGED | TRUST_IS_ACTIVE_UNLOCK_RUNNING => {
+            TRUST_IS_DEVICE_LOCKED
+            | TRUST_IS_DEVICE_SECURE
+            | TRUST_IS_TRUST_USUALLY_MANAGED
+            | TRUST_IS_ACTIVE_UNLOCK_RUNNING => {
                 crate::exception::write_no_exception(reply);
                 reply.write_int32(0);
                 Ok(true)
@@ -914,9 +963,18 @@ mod tests {
         };
         let volume = items[0].as_parcelable().expect("a StorageVolume");
         assert_eq!(volume.class(), Some("android.os.storage.StorageVolume"));
-        assert_eq!(volume.field(1).and_then(Value::as_str), Some("/storage/emulated/0"));
+        assert_eq!(
+            volume.field(1).and_then(Value::as_str),
+            Some("/storage/emulated/0")
+        );
         assert_eq!(volume.field(13).and_then(Value::as_str), Some("mounted"));
-        assert_eq!(volume.field(10).and_then(Value::as_parcelable).map(Parcelable::class), Some(Some("android.os.UserHandle")));
+        assert_eq!(
+            volume
+                .field(10)
+                .and_then(Value::as_parcelable)
+                .map(Parcelable::class),
+            Some(Some("android.os.UserHandle"))
+        );
 
         // Write the one-element array exactly as `writeTypedArray` does, then
         // read it back through the codec: count, presence marker, payload.
@@ -933,8 +991,9 @@ mod tests {
         let n = parcel.read_int32().expect("count");
         assert_eq!(n, 1);
         assert_eq!(parcel.read_int32().expect("presence"), 1);
-        let decoded = crate::parcelable::read_payload("android.os.storage.StorageVolume", &mut parcel)
-            .expect("decodes");
+        let decoded =
+            crate::parcelable::read_payload("android.os.storage.StorageVolume", &mut parcel)
+                .expect("decodes");
         assert_eq!(decoded.class(), Some("android.os.storage.StorageVolume"));
     }
 
@@ -952,19 +1011,15 @@ mod tests {
             )[0],
             Value::Int(MAX_SHORTCUTS_PER_ACTIVITY)
         );
-        let mut jobs = JobSchedulerService::new(std::sync::Arc::new(std::sync::Mutex::new(
-            JobState::new(),
-        )));
+        let mut jobs =
+            JobSchedulerService::new(std::sync::Arc::new(std::sync::Mutex::new(JobState::new())));
         let job = Parcelable::ordered("android.app.job.JobInfo", vec![Value::Int(42)]);
         assert_eq!(
             call(
                 &mut jobs,
                 "android.app.job.IJobScheduler",
                 "schedule",
-                &[
-                    Value::Str(Some("pkg".into())),
-                    Value::TypedObject(job),
-                ],
+                &[Value::Str(Some("pkg".into())), Value::TypedObject(job),],
             )[0],
             Value::Int(JOB_RESULT_SUCCESS)
         );
@@ -975,12 +1030,7 @@ mod tests {
         let mut power = PowerService::new(std::sync::Arc::new(std::sync::Mutex::new(
             PowerState::new(),
         )));
-        let reply = call(
-            &mut power,
-            "android.os.IPowerManager",
-            "isInteractive",
-            &[],
-        );
+        let reply = call(&mut power, "android.os.IPowerManager", "isInteractive", &[]);
         assert_eq!(reply, vec![Value::Bool(true)]);
         let mut accounts = AccountService::new();
         let reply = call(

@@ -35,6 +35,8 @@ USAGE:
                      [--panel-height PX] [--status-inset PX] [--nav-inset PX]
                      [--density DPI] [--insets carve|report]
                      [--animations on|off]
+                     [--extra-apk FILE]...  # install more packages in this
+                                            # session (repeatable)
   acos-art session --apk FILE [--out DIR] [--package PKG] [--activity CLASS]
                      [--width PX] [--panel-height PX] [--status-inset PX]
                      [--nav-inset PX] [--density DPI] [--session-id ID]
@@ -120,15 +122,21 @@ fn real_main() -> Result<ExitCode> {
     let mut apk: Option<PathBuf> = None;
     let mut until = "application-created".to_string();
     let mut animations = acos_art::launch::Animations::On;
+    let mut extra_apks: Vec<PathBuf> = Vec::new();
+    // MPROC5c: the idle kill's timeout. `ACOSLAUNCH_IDLE_KILL_SECS` is the
+    // plan/env spelling the zygote path already uses; the flag overrides it.
+    let mut idle_kill_secs = std::env::var("ACOSLAUNCH_IDLE_KILL_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(30u64);
     let mut package: Option<String> = None;
     let mut layout: Option<String> = None;
     let mut size: (u32, u32, u32) = (1080, 2062, 420);
     let mut panel_height = 2400u32;
     let mut status_inset = 128u32;
     let mut nav_inset = 63u32;
-    let mut insets = std::env::var("ACOS_WM_INSETS").unwrap_or_else(|_| {
-        acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string()
-    });
+    let mut insets = std::env::var("ACOS_WM_INSETS")
+        .unwrap_or_else(|_| acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string());
     let mut all_caps = acos_art::app::AllCaps::Device;
     let mut activity: Option<String> = None;
     let mut session_id: Option<String> = None;
@@ -186,12 +194,19 @@ fn real_main() -> Result<ExitCode> {
                 let value = next(&mut i)?;
                 animations = acos_art::launch::Animations::parse(&value).map_err(Error::Layout)?;
             }
+
             // ADR-0029 item 4: `--service id[:profile][,config]`, repeatable.
             "--service" => {
                 let spec = acos_services::module::ModuleSpec::parse(&next(&mut i)?)
                     .map_err(|error| Error::Layout(error.to_string()))?;
                 services.push(spec.to_json());
             }
+
+            // MPROC1: repeatable; each APK is installed into the session beside
+            // the launched one, at its own uid, with its own guest paths.
+            "--extra-apk" => extra_apks.push(PathBuf::from(next(&mut i)?)),
+            // MPROC5c: the idle kill's timeout (0 disables it; tests set small).
+            "--idle-kill-seconds" => idle_kill_secs = next(&mut i)?.parse().unwrap_or(30),
             "--package" => package = Some(next(&mut i)?),
             "--activity" => activity = Some(next(&mut i)?),
             "--session-id" => session_id = Some(next(&mut i)?),
@@ -392,7 +407,10 @@ fn real_main() -> Result<ExitCode> {
                 nav_inset,
                 insets,
                 animations,
+
                 services,
+                extra_apks,
+                idle_kill_secs,
             };
             let res = acos_art::launch::launch(&root, &opts)?;
             println!("{}", serde_json::to_string_pretty(&res).unwrap());
@@ -452,10 +470,8 @@ fn verify(
     rlimit_as_mb: u64,
     json: bool,
 ) -> Result<ExitCode> {
-    let programs = programs
-        .unwrap_or_else(|| crate::asset_path("fixtures/build/dexprogs"));
-    let expected = expected
-        .unwrap_or_else(|| crate::asset_path("fixtures/expected-art/dexprogs"));
+    let programs = programs.unwrap_or_else(|| crate::asset_path("fixtures/build/dexprogs"));
+    let expected = expected.unwrap_or_else(|| crate::asset_path("fixtures/expected-art/dexprogs"));
     let mut names: Vec<String> = std::fs::read_dir(&expected)?
         .filter_map(|e| e.ok())
         .filter_map(|e| {
@@ -620,12 +636,8 @@ fn build_image(root: &ArtRoot, out: Option<PathBuf>, force: bool) -> Result<Path
     }
     // H13: the boot-image builder is shared with the `shared-aslr` preparation
     // path. `build-image` keeps the product's stock LZ4 format and fixed base.
-    let report = acos_art::boot_image::build_to(
-        root,
-        &out,
-        "lz4",
-        acos_art::boot_image::ART_BASE_ADDRESS,
-    )?;
+    let report =
+        acos_art::boot_image::build_to(root, &out, "lz4", acos_art::boot_image::ART_BASE_ADDRESS)?;
     if !named.join("boot.art").is_file() {
         return Err(Error::Layout(format!(
             "dex2oat produced no {}",

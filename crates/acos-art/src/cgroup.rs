@@ -57,7 +57,10 @@ pub struct MemoryLimits {
 
 impl Default for MemoryLimits {
     fn default() -> Self {
-        Self { mem_bytes: DEFAULT_MEM_MAX, pids_max: DEFAULT_PIDS_MAX }
+        Self {
+            mem_bytes: DEFAULT_MEM_MAX,
+            pids_max: DEFAULT_PIDS_MAX,
+        }
     }
 }
 
@@ -85,7 +88,8 @@ impl MemoryLimits {
             })?;
             if n == 0 {
                 return Err(Error::CgroupUnavailable(
-                    "ACOS_ART_PIDS_MAX=0: an unbounded process count is refused (fail closed)".into(),
+                    "ACOS_ART_PIDS_MAX=0: an unbounded process count is refused (fail closed)"
+                        .into(),
                 ));
             }
             limits.pids_max = n;
@@ -188,16 +192,22 @@ fn host_scope_capability() -> Result<(bool, bool)> {
     // Older systemd has no `MemoryOOMGroup=`; the memory ceiling is still
     // mandatory, only the group-kill refinement is dropped (measured in
     // results/art-runtime/S5.md).
-    let oom_group = run_probe(&["--user", "--scope", "-q", "-p", "MemoryOOMGroup=yes", "true"])
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+    let oom_group = run_probe(&[
+        "--user",
+        "--scope",
+        "-q",
+        "-p",
+        "MemoryOOMGroup=yes",
+        "true",
+    ])
+    .map(|o| o.status.success())
+    .unwrap_or(false);
     let found = (true, oom_group);
     capability().answer = Some(found);
     if let Some(path) = &cache {
         // Atomic (temp + rename): a concurrent launcher never reads a torn file.
-        let body = format!(
-            "{{\"boot_id\":\"{boot_id}\",\"scope_ok\":true,\"oom_group\":{oom_group}}}\n"
-        );
+        let body =
+            format!("{{\"boot_id\":\"{boot_id}\",\"scope_ok\":true,\"oom_group\":{oom_group}}}\n");
         let _ = crate::publish_atomic(path, body.as_bytes());
     }
     Ok(found)
@@ -223,8 +233,11 @@ struct CapabilityCache {
     probe_dir: Option<PathBuf>,
 }
 
-static CAPABILITY: Mutex<CapabilityCache> =
-    Mutex::new(CapabilityCache { root: None, answer: None, probe_dir: None });
+static CAPABILITY: Mutex<CapabilityCache> = Mutex::new(CapabilityCache {
+    root: None,
+    answer: None,
+    probe_dir: None,
+});
 
 fn capability() -> MutexGuard<'static, CapabilityCache> {
     CAPABILITY.lock().unwrap_or_else(|e| e.into_inner())
@@ -474,7 +487,8 @@ impl RunCgroup {
 /// sandbox so the recorded cgroup is the one the guest runs in. `$0` is the
 /// info file, `$@` the command. A failure to record aborts the run (exit 90)
 /// rather than running unproven.
-const SCOPE_SHELL: &str = "cat /proc/self/cgroup > \"$1\" 2>/dev/null || exit 90; shift; exec \"$@\"";
+const SCOPE_SHELL: &str =
+    "cat /proc/self/cgroup > \"$1\" 2>/dev/null || exit 90; shift; exec \"$@\"";
 
 /// The `0::/…` line of a cgroup v2 `/proc/self/cgroup` dump.
 fn cgroup_v2_path(text: &str) -> Option<String> {
@@ -497,7 +511,9 @@ fn processes_in(dir: &Path) -> Vec<i32> {
 }
 
 fn read_trim(path: &Path) -> Option<String> {
-    std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|s| s.trim().to_string())
 }
 
 #[cfg(test)]
@@ -516,7 +532,10 @@ mod tests {
         assert_eq!(parse_capability(record, ""), None);
         // Garbage, a truncated write, or a missing key: probes.
         assert_eq!(parse_capability("{", "abc-123"), None);
-        assert_eq!(parse_capability(r#"{"boot_id":"abc-123"}"#, "abc-123"), None);
+        assert_eq!(
+            parse_capability(r#"{"boot_id":"abc-123"}"#, "abc-123"),
+            None
+        );
         assert_eq!(
             parse_capability(r#"{"boot_id":"abc-123","scope_ok":true}"#, "abc-123"),
             None
@@ -556,7 +575,11 @@ mod tests {
         let fake_bin = dir.join("fake-bin");
         std::fs::create_dir_all(&fake_bin).unwrap();
         let fake = fake_bin.join("systemd-run");
-        std::fs::write(&fake, "#!/bin/sh\necho 'Failed to connect to bus' >&2\nexit 1\n").unwrap();
+        std::fs::write(
+            &fake,
+            "#!/bin/sh\necho 'Failed to connect to bus' >&2\nexit 1\n",
+        )
+        .unwrap();
         std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
 
         // Cold root, failing probe: refused, and a refusal is not stamped as a
@@ -624,14 +647,20 @@ mod tests {
         assert!(matches!(err, Error::CgroupUnavailable(_)));
         std::env::remove_var("ACOS_ART_MEM_MAX");
         std::env::set_var("ACOS_ART_MEM_MAX", "1536M");
-        assert_eq!(MemoryLimits::from_env().unwrap().mem_bytes, 1536 * 1024 * 1024);
+        assert_eq!(
+            MemoryLimits::from_env().unwrap().mem_bytes,
+            1536 * 1024 * 1024
+        );
         std::env::remove_var("ACOS_ART_MEM_MAX");
     }
 
     #[test]
     fn wrap_puts_the_command_behind_systemd_run_with_the_limits() {
         let info = PathBuf::from("/tmp/should-not-be-used");
-        let limits = MemoryLimits { mem_bytes: 64 * 1024 * 1024, pids_max: 32 };
+        let limits = MemoryLimits {
+            mem_bytes: 64 * 1024 * 1024,
+            pids_max: 32,
+        };
         let cg = RunCgroup {
             limits,
             cg: PathBuf::new(),
@@ -644,8 +673,10 @@ mod tests {
         inner.args(["--tmpfs", "/", "--", "/bin/true"]);
         let wrapped = cg.wrap(&inner).expect("wrap");
         assert_eq!(wrapped.get_program(), "systemd-run");
-        let args: Vec<String> =
-            wrapped.get_args().map(|a| a.to_string_lossy().to_string()).collect();
+        let args: Vec<String> = wrapped
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
         for want in [
             "--user",
             "--scope",
@@ -656,9 +687,16 @@ mod tests {
         ] {
             assert!(args.iter().any(|a| a == want), "missing {want} in {args:?}");
         }
-        assert!(args.iter().any(|a| a == "MemoryOOMGroup=yes"), "oom.group when supported");
+        assert!(
+            args.iter().any(|a| a == "MemoryOOMGroup=yes"),
+            "oom.group when supported"
+        );
         // The sandbox argv is passed through untouched, after the info file.
-        let tail: Vec<&str> = args.iter().skip_while(|a| *a != "sh").map(String::as_str).collect();
+        let tail: Vec<&str> = args
+            .iter()
+            .skip_while(|a| *a != "sh")
+            .map(String::as_str)
+            .collect();
         assert_eq!(tail[1], info.display().to_string());
         assert_eq!(tail[2], "bwrap");
         assert_eq!(&tail[3..], &["--tmpfs", "/", "--", "/bin/true"]);

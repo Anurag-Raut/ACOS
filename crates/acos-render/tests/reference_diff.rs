@@ -23,8 +23,8 @@ fn repo_root() -> PathBuf {
 }
 
 fn reference_png() -> Option<PathBuf> {
-    let p = repo_root()
-        .join("fixtures/reference/hello-views/art-api34-x86_64/screenshot_initial.png");
+    let p =
+        repo_root().join("fixtures/reference/hello-views/art-api34-x86_64/screenshot_initial.png");
     p.exists().then_some(p)
 }
 
@@ -37,7 +37,8 @@ fn hello_views_scene_diff_vs_art_reference() {
         );
         return;
     };
-    let scene_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/scenes/hello-views.json");
+    let scene_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/scenes/hello-views.json");
     let scene = Scene::load(&scene_path).expect("load hello-views scene");
 
     let mut ctx = RenderContext::new();
@@ -108,7 +109,10 @@ fn hello_views_scene_diff_vs_art_reference() {
         report.global_ssim
     );
     // The renderer must not have produced an empty/placeholder frame.
-    assert!(!report.identical, "synthetic frame must not be pixel-identical");
+    assert!(
+        !report.identical,
+        "synthetic frame must not be pixel-identical"
+    );
     assert!(report.differing_pixels > 0);
 }
 

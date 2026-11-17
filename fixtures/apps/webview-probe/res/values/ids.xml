@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="status" type="id" />
+    <item name="webview" type="id" />
+    <item name="webview2" type="id" />
+    <item name="webview3" type="id" />
+    <item name="webview4" type="id" />
+</resources>

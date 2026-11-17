@@ -47,8 +47,18 @@ fn decode_method(handle: i64) -> Option<MethodId> {
 }
 
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
-    vm.register_native(PVH, "nGetFloatMethod", "(Ljava/lang/Class;Ljava/lang/String;)J", n_get_float_method);
-    vm.register_native(PVH, "nGetIntMethod", "(Ljava/lang/Class;Ljava/lang/String;)J", n_get_int_method);
+    vm.register_native(
+        PVH,
+        "nGetFloatMethod",
+        "(Ljava/lang/Class;Ljava/lang/String;)J",
+        n_get_float_method,
+    );
+    vm.register_native(
+        PVH,
+        "nGetIntMethod",
+        "(Ljava/lang/Class;Ljava/lang/String;)J",
+        n_get_int_method,
+    );
     vm.register_native(
         PVH,
         "nGetMultipleFloatMethod",
@@ -62,10 +72,30 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         n_get_multiple_int_method,
     );
 
-    vm.register_native(PVH, "nCallFloatMethod", "(Ljava/lang/Object;JF)V", n_call_float_method);
-    vm.register_native(PVH, "nCallIntMethod", "(Ljava/lang/Object;JI)V", n_call_int_method);
-    vm.register_native(PVH, "nCallTwoFloatMethod", "(Ljava/lang/Object;JFF)V", n_call_two_float_method);
-    vm.register_native(PVH, "nCallTwoIntMethod", "(Ljava/lang/Object;JII)V", n_call_two_int_method);
+    vm.register_native(
+        PVH,
+        "nCallFloatMethod",
+        "(Ljava/lang/Object;JF)V",
+        n_call_float_method,
+    );
+    vm.register_native(
+        PVH,
+        "nCallIntMethod",
+        "(Ljava/lang/Object;JI)V",
+        n_call_int_method,
+    );
+    vm.register_native(
+        PVH,
+        "nCallTwoFloatMethod",
+        "(Ljava/lang/Object;JFF)V",
+        n_call_two_float_method,
+    );
+    vm.register_native(
+        PVH,
+        "nCallTwoIntMethod",
+        "(Ljava/lang/Object;JII)V",
+        n_call_two_int_method,
+    );
     vm.register_native(
         PVH,
         "nCallFourFloatMethod",
@@ -236,7 +266,12 @@ fn n_call_multiple_float_method(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let values = match vm.heap.get(arr) {
         Some(crate::heap::Object::Array(a)) => match &a.data {
             ArrayData::Float(v) => v.clone(),
-            _ => return Err(vm.throw_new("Ljava/lang/IllegalArgumentException;", Some("expected float[]"))),
+            _ => {
+                return Err(vm.throw_new(
+                    "Ljava/lang/IllegalArgumentException;",
+                    Some("expected float[]"),
+                ))
+            }
         },
         _ => return Err(vm.throw_new("Ljava/lang/NullPointerException;", Some("values is null"))),
     };
@@ -249,7 +284,12 @@ fn n_call_multiple_int_method(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let values = match vm.heap.get(arr) {
         Some(crate::heap::Object::Array(a)) => match &a.data {
             ArrayData::Int(v) => v.clone(),
-            _ => return Err(vm.throw_new("Ljava/lang/IllegalArgumentException;", Some("expected int[]"))),
+            _ => {
+                return Err(vm.throw_new(
+                    "Ljava/lang/IllegalArgumentException;",
+                    Some("expected int[]"),
+                ))
+            }
         },
         _ => return Err(vm.throw_new("Ljava/lang/NullPointerException;", Some("values is null"))),
     };

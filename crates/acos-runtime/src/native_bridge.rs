@@ -91,10 +91,7 @@ impl NativeBridge {
     /// * on success every host-ABI library is extracted into
     ///   `<vfs_root>/data/user/0/<pkg>/lib/<abi>/` and a JNI runtime is created
     ///   with that directory as its search path.
-    pub fn prepare(
-        apk_path: &Path,
-        vfs_root: &Path,
-    ) -> Result<Option<NativeBridge>, SessionError> {
+    pub fn prepare(apk_path: &Path, vfs_root: &Path) -> Result<Option<NativeBridge>, SessionError> {
         let apk = Apk::open(apk_path).map_err(|e| {
             error(
                 e.code(),
@@ -172,12 +169,7 @@ impl NativeBridge {
         // its `native` methods now: `Vm::bind_dex_native` applies the JNI
         // dispatcher when the declaring class is parsed.
         for (class, name, sig) in &self.natives {
-            vm.register_native(
-                class,
-                name,
-                sig,
-                acos_vm::natives::jni_glue::bridge(),
-            );
+            vm.register_native(class, name, sig, acos_vm::natives::jni_glue::bridge());
         }
         Ok(())
     }
@@ -250,7 +242,11 @@ fn sanitise_package(package: &str) -> String {
     }
 }
 
-fn error(code: &'static str, message: impl Into<String>, details: Vec<(&str, String)>) -> SessionError {
+fn error(
+    code: &'static str,
+    message: impl Into<String>,
+    details: Vec<(&str, String)>,
+) -> SessionError {
     SessionError {
         code,
         message: message.into(),

@@ -66,7 +66,16 @@ fn compile_case() -> Option<PathBuf> {
     let stub_java = stub_src.join("android/graphics/Typeface.java");
     if !stub_jar.is_file() {
         let ok = Command::new(&javac)
-            .args(["-source", "8", "-target", "8", "-nowarn", "-encoding", "UTF-8", "-cp"])
+            .args([
+                "-source",
+                "8",
+                "-target",
+                "8",
+                "-nowarn",
+                "-encoding",
+                "UTF-8",
+                "-cp",
+            ])
             .arg(&android_jar)
             .args(["-d"])
             .arg(&stub_classes)
@@ -105,7 +114,16 @@ fn compile_case() -> Option<PathBuf> {
     let classes = out.join("classes");
     std::fs::create_dir_all(&classes).ok()?;
     let ok = Command::new(&javac)
-        .args(["-source", "8", "-target", "8", "-nowarn", "-encoding", "UTF-8", "-cp"])
+        .args([
+            "-source",
+            "8",
+            "-target",
+            "8",
+            "-nowarn",
+            "-encoding",
+            "UTF-8",
+            "-cp",
+        ])
         .arg(format!("{}:{}", stub_jar.display(), android_jar.display()))
         .args(["-d"])
         .arg(&classes)
@@ -171,8 +189,7 @@ fn run_case() -> Result<String, String> {
 }
 
 fn line_value<'a>(out: &'a str, key: &str) -> Option<&'a str> {
-    out.lines()
-        .find_map(|l| l.strip_prefix(&format!("{key}=")))
+    out.lines().find_map(|l| l.strip_prefix(&format!("{key}=")))
 }
 
 /// The width `acos-render` — the same shaping engine `Paint` routes through —
@@ -208,7 +225,11 @@ fn font_natives_typeface_and_measure_on_the_real_framework() {
 
     eprintln!("--- FontNativesMain output ---\n{out}");
     assert_eq!(line_value(&out, "default.present"), Some("true"), "{out}");
-    assert_eq!(line_value(&out, "default.family"), Some("sans-serif"), "{out}");
+    assert_eq!(
+        line_value(&out, "default.family"),
+        Some("sans-serif"),
+        "{out}"
+    );
     assert_eq!(line_value(&out, "default.style"), Some("0"), "{out}");
     assert_eq!(line_value(&out, "bold.present"), Some("true"), "{out}");
     assert_eq!(line_value(&out, "bold.style"), Some("1"), "{out}");
@@ -237,14 +258,24 @@ fn font_natives_typeface_and_measure_on_the_real_framework() {
 
     assert_eq!(line_value(&out, "family.size"), Some("1"), "{out}");
     assert_eq!(line_value(&out, "font.weight"), Some("700"), "{out}");
-    assert_eq!(line_value(&out, "font.file"), Some("Roboto-Regular.ttf"), "{out}");
+    assert_eq!(
+        line_value(&out, "font.file"),
+        Some("Roboto-Regular.ttf"),
+        "{out}"
+    );
     assert!(line_value(&out, "font.axes").is_some(), "{out}");
     assert!(
-        line_value(&out, "font.ascent").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0) < 0.0,
+        line_value(&out, "font.ascent")
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(0.0)
+            < 0.0,
         "ascent must be negative: {out}"
     );
     assert!(
-        line_value(&out, "font.descent").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0) > 0.0,
+        line_value(&out, "font.descent")
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(0.0)
+            > 0.0,
         "descent must be positive: {out}"
     );
     assert_eq!(line_value(&out, "glyph.rect"), Some("true,true"), "{out}");

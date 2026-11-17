@@ -182,8 +182,7 @@ impl ZygoteHost {
 
     /// The keeper pids this host is responsible for (a leak check reads these).
     pub fn keeper_pids(&self) -> Vec<u32> {
-        self.lock()
-            .keeper_pids()
+        self.lock().keeper_pids()
     }
 
     /// Where this host keeps its plan directories.
@@ -308,14 +307,8 @@ impl ZygoteHost {
             )));
         }
         if keepers.keeper_mut(key).is_none() {
-            let keeper = PersistentZygote::start(
-                &self.root,
-                key.clone(),
-                binary,
-                apk,
-                &keeper_env,
-                &build,
-            )?;
+            let keeper =
+                PersistentZygote::start(&self.root, key.clone(), binary, apk, &keeper_env, &build)?;
             keepers.insert(key.clone(), keeper);
         }
         let keeper = keepers
@@ -361,7 +354,9 @@ impl ZygoteHost {
 
     /// The keeper's `epoch=<n>`. Unchanged across a reset, new after a restart.
     pub fn boot_epoch(&self, key: &ZygoteKey) -> Option<String> {
-        self.lock().keeper_mut(key).map(|k| k.boot_epoch().to_string())
+        self.lock()
+            .keeper_mut(key)
+            .map(|k| k.boot_epoch().to_string())
     }
 
     /// The epoch of a keeper that is **still alive**, or `None`. ZPROD4: the
@@ -420,10 +415,7 @@ impl ZygoteHost {
                         None => serde_json::Value::Null,
                     },
                 );
-                zygote.insert(
-                    "repointed".into(),
-                    serde_json::json!(false),
-                );
+                zygote.insert("repointed".into(), serde_json::json!(false));
             }
         }
         backend
@@ -472,7 +464,11 @@ fn sunded_len(path: &Path) -> usize {
 
 /// The longest root that can still host a worst-case session's socket.
 fn max_root_len() -> usize {
-    SUN_PATH_MAX - 1 - LONGEST_SOCKET_LEAF.len() - WORST_KEY_DIR.len() - WORST_TAG_DIGITS
+    SUN_PATH_MAX
+        - 1
+        - LONGEST_SOCKET_LEAF.len()
+        - WORST_KEY_DIR.len()
+        - WORST_TAG_DIGITS
         - "/plan".len()
         - 2
 }
@@ -511,7 +507,9 @@ fn open_short_root() -> Option<PathBuf> {
 }
 
 fn sweep_short_roots(parent: &Path, own_pid: u32) {
-    let Ok(entries) = std::fs::read_dir(parent) else { return };
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return;
+    };
     for entry in entries.flatten() {
         let name = entry.file_name();
         let Some(pid) = name
@@ -560,7 +558,10 @@ pub fn reply_fields(
 ) -> Option<serde_json::Map<String, serde_json::Value>> {
     let facts = facts?;
     let mut out = serde_json::Map::new();
-    out.insert("isolation".into(), serde_json::json!(ISOLATION_ZYGOTE_CHILD));
+    out.insert(
+        "isolation".into(),
+        serde_json::json!(ISOLATION_ZYGOTE_CHILD),
+    );
     out.insert("child_pid".into(), serde_json::json!(facts.child_pid));
     out.insert(
         "previous_child_pid".into(),
@@ -578,7 +579,10 @@ pub fn reply_fields(
         serde_json::json!(facts.boot_epoch),
     );
     out.insert("zygote_tag".into(), serde_json::json!(facts.tag));
-    out.insert("memory_scope".into(), serde_json::json!(MEMORY_SCOPE_ZYGOTE));
+    out.insert(
+        "memory_scope".into(),
+        serde_json::json!(MEMORY_SCOPE_ZYGOTE),
+    );
     Some(out)
 }
 
@@ -598,6 +602,7 @@ mod tests {
             density: 420,
             insets: "report".into(),
             animations: "on".into(),
+            extra_apks: Vec::new(),
         }
     }
 
@@ -667,10 +672,16 @@ done < "$plan/cmd"
             Some(value) => std::env::set_var(ENV_ZYGOTE, value),
             None => std::env::remove_var(ENV_ZYGOTE),
         }
-        assert!(!host.enabled(), "the zygote is opt-in (ADR-0026 decision 1)");
+        assert!(
+            !host.enabled(),
+            "the zygote is opt-in (ADR-0026 decision 1)"
+        );
         assert_eq!(host.keeper_count(), 0);
         assert!(host.keeper_pids().is_empty());
-        assert!(!dir.join("zygote").exists(), "no keeper directory with the flag off");
+        assert!(
+            !dir.join("zygote").exists(),
+            "no keeper directory with the flag off"
+        );
         // The disabled host is the same object the flag-off engine holds.
         assert!(!ZygoteHost::disabled().enabled());
         let _ = fs::remove_dir_all(&dir);
@@ -687,7 +698,10 @@ done < "$plan/cmd"
             boot_epoch: "1".into(),
         };
         let fields = reply_fields(Some(&facts), Some(99)).expect("a zygote child states its facts");
-        assert_eq!(fields["isolation"], serde_json::json!(ISOLATION_ZYGOTE_CHILD));
+        assert_eq!(
+            fields["isolation"],
+            serde_json::json!(ISOLATION_ZYGOTE_CHILD)
+        );
         assert_eq!(fields["child_pid"], serde_json::json!(101));
         assert_eq!(fields["previous_child_pid"], serde_json::json!(99));
         assert_eq!(fields["run_root"], serde_json::json!("/plan/3/run"));
@@ -724,9 +738,19 @@ done < "$plan/cmd"
             BackendError::Protocol { details, .. } => details.clone().unwrap(),
             other => panic!("expected a structured protocol error, got {other:?}"),
         };
-        assert_eq!(details["zygote"]["fallback"], "none (a zygote failure never runs the exec path)");
-        assert!(details["memory_scope"].as_str().unwrap().contains("shared-scope"));
-        assert_eq!(host.keeper_count(), 0, "a dead keeper is not kept in the registry");
+        assert_eq!(
+            details["zygote"]["fallback"],
+            "none (a zygote failure never runs the exec path)"
+        );
+        assert!(details["memory_scope"]
+            .as_str()
+            .unwrap()
+            .contains("shared-scope"));
+        assert_eq!(
+            host.keeper_count(),
+            0,
+            "a dead keeper is not kept in the registry"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -786,7 +810,10 @@ done < "$plan/cmd"
         );
         assert!(text.starts_with("ZYGOTE_DEAD"), "{text}");
         assert!(text.contains("session launcher"), "{text}");
-        assert!(text.contains("exit status: 3"), "the exit status is named: {text}");
+        assert!(
+            text.contains("exit status: 3"),
+            "the exit status is named: {text}"
+        );
         assert!(
             text.contains("path must be shorter than SUN_LEN"),
             "the launcher's own diagnosis travels with the failure: {text}"
@@ -817,10 +844,20 @@ done < "$plan/cmd"
         let text = error.to_string();
         assert!(text.contains("too long for an AF_UNIX socket"), "{text}");
         assert!(text.contains(ENV_ZYGOTE_ROOT), "the fix is named: {text}");
-        assert!(text.contains("peer.sock"), "the failing path is named: {text}");
-        assert_eq!(host.keeper_count(), 0, "the keeper must not boot for a refused root");
+        assert!(
+            text.contains("peer.sock"),
+            "the failing path is named: {text}"
+        );
+        assert_eq!(
+            host.keeper_count(),
+            0,
+            "the keeper must not boot for a refused root"
+        );
         assert_eq!(host.keeper_pids().len(), 0, "and nothing is left running");
-        assert!(!host.root().join("zygote").exists(), "no plan tree was written");
+        assert!(
+            !host.root().join("zygote").exists(),
+            "no plan tree was written"
+        );
         // The boundary itself: a session whose socket fits is accepted.
         let fits = PathBuf::from("/tmp").join("z");
         assert!(sun_path_overflow(&fits.join(WORST_KEY_DIR).join("plan/0")).is_none());
@@ -838,7 +875,10 @@ done < "$plan/cmd"
         std::env::remove_var(ENV_ZYGOTE_ROOT);
         let deep = PathBuf::from("/home/somebody/a-fairly-long-worktree-name/.cache/h6")
             .join("r1-a/latency/sessions");
-        assert!(!sun_budget_fits(&deep), "the bench-shaped root does not fit");
+        assert!(
+            !sun_budget_fits(&deep),
+            "the bench-shaped root does not fit"
+        );
         let host = ZygoteHost::for_artifacts(&deep);
         let session = host.session_dir(&key(), 7);
         assert!(
@@ -868,7 +908,11 @@ done < "$plan/cmd"
         // A root this host created goes away with the host (serve exit).
         let owned = host.root().to_path_buf();
         host.shutdown_all();
-        assert!(!owned.exists(), "an owned root is removed on shutdown: {}", owned.display());
+        assert!(
+            !owned.exists(),
+            "an owned root is removed on shutdown: {}",
+            owned.display()
+        );
     }
 
     #[test]
@@ -923,7 +967,10 @@ done < "$plan/cmd"
             details["zygote"]["session_boot_epoch"],
             serde_json::json!(epoch1)
         );
-        assert_eq!(details["zygote"]["keeper_boot_epoch"], serde_json::Value::Null);
+        assert_eq!(
+            details["zygote"]["keeper_boot_epoch"],
+            serde_json::Value::Null
+        );
         assert_eq!(details["zygote"]["repointed"], serde_json::json!(false));
 
         // (2) The next request boots a new keeper: new epoch, fresh fork.
@@ -937,7 +984,11 @@ done < "$plan/cmd"
         let epoch2 = host.boot_epoch(&k).unwrap();
         assert_ne!(epoch1, epoch2, "a restarted zygote has a new boot epoch");
         assert_ne!(child0.child_pid, child1.child_pid);
-        assert_eq!(host.keeper_count(), 1, "a dead keeper is replaced, not duplicated");
+        assert_eq!(
+            host.keeper_count(),
+            1,
+            "a dead keeper is replaced, not duplicated"
+        );
         assert_ne!(
             host.keeper_pids()[0],
             keeper1,
@@ -983,12 +1034,16 @@ done < "$plan/cmd"
         fs::create_dir_all(&build).unwrap();
         let host = host_with(&dir, &build);
         let k = key();
-        let tag0 = host.prepare(&k, &script, Path::new("/apks/counter.apk"), None).unwrap();
+        let tag0 = host
+            .prepare(&k, &script, Path::new("/apks/counter.apk"), None)
+            .unwrap();
         publish_argv(&host, &k, tag0);
         let child0 = host
             .wait_contract_and_spawn(&k, tag0, Duration::from_secs(5), || None)
             .unwrap();
-        let tag1 = host.prepare(&k, &script, Path::new("/apks/counter.apk"), None).unwrap();
+        let tag1 = host
+            .prepare(&k, &script, Path::new("/apks/counter.apk"), None)
+            .unwrap();
         publish_argv(&host, &k, tag1);
         let child1 = host
             .wait_contract_and_spawn(&k, tag1, Duration::from_secs(5), || None)
@@ -1011,7 +1066,11 @@ done < "$plan/cmd"
             .wait_contract_and_spawn(&k, tag0, Duration::from_secs(5), || None)
             .unwrap();
         assert_ne!(fresh.child_pid, child0.child_pid, "a genuinely fresh child");
-        assert_eq!(host.boot_epoch(&k).unwrap(), epoch, "epoch is stable across a reset");
+        assert_eq!(
+            host.boot_epoch(&k).unwrap(),
+            epoch,
+            "epoch is stable across a reset"
+        );
         assert!(fresh.run_root.ends_with(format!("{tag0}/run")));
 
         host.shutdown_all();

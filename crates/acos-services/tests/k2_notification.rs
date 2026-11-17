@@ -21,13 +21,25 @@ fn channel(id: &str, group: Option<&str>) -> Parcelable {
     Parcelable::ordered(
         "android.app.NotificationChannel",
         vec![
-            Value::Cond { present: true, values: vec![Value::Str(Some(id.into()))] },
-            Value::Cond { present: true, values: vec![Value::Str(Some("Messages".into()))] },
-            Value::Cond { present: false, values: Vec::new() },
+            Value::Cond {
+                present: true,
+                values: vec![Value::Str(Some(id.into()))],
+            },
+            Value::Cond {
+                present: true,
+                values: vec![Value::Str(Some("Messages".into()))],
+            },
+            Value::Cond {
+                present: false,
+                values: Vec::new(),
+            },
             Value::Int(3),
             Value::Byte(0),
             Value::Int(-1000),
-            Value::Cond { present: false, values: Vec::new() },
+            Value::Cond {
+                present: false,
+                values: Vec::new(),
+            },
             Value::Byte(0),
             Value::LongArray(None),
             Value::Int(0),
@@ -37,9 +49,14 @@ fn channel(id: &str, group: Option<&str>) -> Parcelable {
             Value::Byte(0),
             Value::Cond {
                 present: group.is_some(),
-                values: group.map(|g| vec![Value::Str(Some(g.into()))]).unwrap_or_default(),
+                values: group
+                    .map(|g| vec![Value::Str(Some(g.into()))])
+                    .unwrap_or_default(),
             },
-            Value::Cond { present: false, values: Vec::new() },
+            Value::Cond {
+                present: false,
+                values: Vec::new(),
+            },
             Value::Int(0),
             Value::Bool(false),
             Value::Int(0),
@@ -67,7 +84,10 @@ fn create(service: &mut NotificationService, package: &str, channels: Vec<Parcel
     service
         .call(
             "android.app.INotificationManager",
-            method("android.app.INotificationManager", "createNotificationChannels"),
+            method(
+                "android.app.INotificationManager",
+                "createNotificationChannels",
+            ),
             &[Value::Str(Some(package.into())), arg],
         )
         .expect("createNotificationChannels decodes and succeeds");
@@ -116,10 +136,13 @@ fn a_channel_with_audio_attributes_round_trips() {
         .expect("get")
         .reply;
     assert_eq!(
-        reply[0].as_parcelable().and_then(|p| p.field(0)).and_then(|v| match v {
-            Value::Cond { values, .. } => values[0].as_str(),
-            _ => None,
-        }),
+        reply[0]
+            .as_parcelable()
+            .and_then(|p| p.field(0))
+            .and_then(|v| match v {
+                Value::Cond { values, .. } => values[0].as_str(),
+                _ => None,
+            }),
         Some("alerts")
     );
 }
@@ -142,10 +165,13 @@ fn create_then_get_returns_the_same_channel() {
         .expect("getNotificationChannel")
         .reply;
     let got = reply[0].as_parcelable().expect("a channel");
-    assert_eq!(got.field(0).and_then(|v| match v {
-        Value::Cond { values, .. } => values[0].as_str(),
-        _ => None,
-    }), Some("messages"));
+    assert_eq!(
+        got.field(0).and_then(|v| match v {
+            Value::Cond { values, .. } => values[0].as_str(),
+            _ => None,
+        }),
+        Some("messages")
+    );
 }
 
 #[test]
@@ -155,7 +181,10 @@ fn created_channel_list_is_a_parceled_list_slice_with_the_image_layout() {
     let reply = service
         .call(
             "android.app.INotificationManager",
-            method("android.app.INotificationManager", "getNotificationChannels"),
+            method(
+                "android.app.INotificationManager",
+                "getNotificationChannels",
+            ),
             &[
                 Value::Str(Some("pkg".into())),
                 Value::Str(None),
@@ -173,7 +202,11 @@ fn created_channel_list_is_a_parceled_list_slice_with_the_image_layout() {
     let mut parcel = acos_parcel::Parcel::new();
     acos_services::codec::write_reply(
         &mut parcel,
-        &method("android.app.INotificationManager", "getNotificationChannels").reply,
+        &method(
+            "android.app.INotificationManager",
+            "getNotificationChannels",
+        )
+        .reply,
         &reply,
         "android.app.INotificationManager",
         "getNotificationChannels",
@@ -213,27 +246,23 @@ fn an_unknown_channel_is_null_not_an_error() {
         )
         .expect("getNotificationChannel")
         .reply;
-    assert!(matches!(
-        &reply[0],
-        Value::TypedObject(Parcelable::Null)
-    ));
+    assert!(matches!(&reply[0], Value::TypedObject(Parcelable::Null)));
 }
-
 
 /// The dispatcher's create-call override decodes the real channel list when the
 /// image bytes are understood, and falls back to consuming it opaquely rather
 /// than rejecting the transaction.
 #[test]
 fn create_request_decodes_or_falls_back_without_rejecting() {
-    let m = method("android.app.INotificationManager", "createNotificationChannels");
+    let m = method(
+        "android.app.INotificationManager",
+        "createNotificationChannels",
+    );
     let slice = parceled_list_of(vec![Value::Parcelable(channel("messages", None))]);
     let mut request = acos_services::codec::build_request(
         "android.app.INotificationManager",
         m,
-        &[
-            Value::Str(Some("pkg".into())),
-            Value::TypedObject(slice),
-        ],
+        &[Value::Str(Some("pkg".into())), Value::TypedObject(slice)],
     )
     .expect("request builds");
     request.set_data_position(0);
@@ -247,7 +276,8 @@ fn create_request_decodes_or_falls_back_without_rejecting() {
     )
     .expect("override")
     .expect("override applies");
-    assert!(values[1].as_parcelable().is_some(), "the channel slice decoded");
-
-
+    assert!(
+        values[1].as_parcelable().is_some(),
+        "the channel slice decoded"
+    );
 }

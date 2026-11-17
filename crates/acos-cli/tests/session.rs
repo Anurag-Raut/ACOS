@@ -97,7 +97,10 @@ fn launch_counter_reports_the_honest_stage_ladder() {
 
     // The boot classpath may be absent on a non-oracle host: skip loudly.
     let Some(result) = v.get("result").filter(|r| !r.is_null()) else {
-        assert!(!out.status.success(), "a launch without a ladder cannot pass");
+        assert!(
+            !out.status.success(),
+            "a launch without a ladder cannot pass"
+        );
         assert_eq!(v["ok"], false);
         let error = &v["error"];
         let message = error["message"].as_str().unwrap_or("");
@@ -112,7 +115,10 @@ fn launch_counter_reports_the_honest_stage_ladder() {
 
     if !passed {
         // A non-pass envelope carries an error and `ok:false`.
-        assert!(!out.status.success(), "a non-pass launch must exit non-zero");
+        assert!(
+            !out.status.success(),
+            "a non-pass launch must exit non-zero"
+        );
         assert_eq!(v["ok"], false);
         let error = &v["error"];
         assert!(error["code"].as_str().is_some_and(|c| !c.is_empty()));

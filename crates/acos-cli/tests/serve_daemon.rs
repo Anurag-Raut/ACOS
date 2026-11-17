@@ -84,8 +84,7 @@ fn daemon_holds_a_native_session_across_cli_invocations_and_idles_out() {
         "240",
     ]);
     let launch_json = parse_json(&launch.stdout);
-    if launch_json["error"].is_object()
-        && launch_json["error"]["code"] == "CONFINEMENT_UNAVAILABLE"
+    if launch_json["error"].is_object() && launch_json["error"]["code"] == "CONFINEMENT_UNAVAILABLE"
     {
         eprintln!("SKIP: confinement unavailable on this host: {launch_json:#?}");
         return;

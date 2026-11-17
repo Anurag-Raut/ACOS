@@ -140,7 +140,10 @@ fn end_to_end_mcp_session_over_stdio() {
     let envelope = envelope_of(&inspect);
     assert_eq!(envelope["status"], "pass");
     assert_eq!(envelope["fidelity"], "static-analysis");
-    assert_eq!(envelope["result"]["package"], "dev.acos.fixtures.helloviews");
+    assert_eq!(
+        envelope["result"]["package"],
+        "dev.acos.fixtures.helloviews"
+    );
 
     // 4. tools/call run-dex
     let run_dex = client.request(

@@ -98,7 +98,10 @@ fn pid_alive(pid: i32) -> bool {
         return false;
     };
     // Field 3 is the state; a zombie (`Z`) is dead for our purposes.
-    stat.rsplit(')').next().and_then(|s| s.trim_start().chars().next()) != Some('Z')
+    stat.rsplit(')')
+        .next()
+        .and_then(|s| s.trim_start().chars().next())
+        != Some('Z')
 }
 
 /// The supervisor's state. One instance per host.
@@ -150,7 +153,11 @@ impl Relay {
 
     fn log(&self, msg: &str) {
         let path = self.state_dir.join("netd.log");
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
             let _ = writeln!(f, "{msg}");
         }
     }
@@ -228,8 +235,14 @@ impl Relay {
             code: ErrorCode::RelayCommand,
             message: format!("relay reply: {e} ({line:?})"),
         })?;
-        let rc = v.get("rc").and_then(serde_json::Value::as_i64).unwrap_or(-1);
-        let out = v.get("out").and_then(serde_json::Value::as_str).unwrap_or("");
+        let rc = v
+            .get("rc")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(-1);
+        let out = v
+            .get("out")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
         if rc != 0 {
             return Err(ProtoError {
                 code: ErrorCode::RelayCommand,
@@ -323,12 +336,18 @@ impl Relay {
         }
         Err(ProtoError {
             code: ErrorCode::NetworkUnavailable,
-            message: format!("pasta did not create {} in the relay netns", plan::RELAY_IFACE),
+            message: format!(
+                "pasta did not create {} in the relay netns",
+                plan::RELAY_IFACE
+            ),
         })
     }
 
     fn pasta_version(&self) -> Option<String> {
-        let out = Command::new(self.pasta_bin()).arg("--version").output().ok()?;
+        let out = Command::new(self.pasta_bin())
+            .arg("--version")
+            .output()
+            .ok()?;
         let text = String::from_utf8_lossy(&out.stdout);
         let line = text.lines().next().unwrap_or("").trim().to_string();
         line.split_whitespace().last().map(str::to_string)
@@ -411,7 +430,10 @@ impl Relay {
         if !self.up && self.fabric_pid.is_some() {
             // Restart the relay: sessions keep their veths and default routes,
             // so they recover as soon as pasta has configured the tap again.
-            match self.start_pasta().and_then(|()| self.fabric_run_all(&plan::relay_rules())) {
+            match self
+                .start_pasta()
+                .and_then(|()| self.fabric_run_all(&plan::relay_rules()))
+            {
                 Ok(()) => {
                     self.up = true;
                     self.down_reason = None;
@@ -510,7 +532,10 @@ impl Relay {
         }
         self.require_up()?;
         if argv.is_empty() {
-            return Err(ProtoError { code: ErrorCode::Invalid, message: "empty argv".into() });
+            return Err(ProtoError {
+                code: ErrorCode::Invalid,
+                message: "empty argv".into(),
+            });
         }
         let net = self.alloc(session, *index)?;
         let ready = self.state_dir.join(format!("ready-{}.txt", net.idx));
@@ -550,7 +575,12 @@ impl Relay {
         // user namespace as the relay netns, which is what lets the fabric move
         // the session's veth end into it.
         let mut cmd = Command::new("unshare");
-        cmd.arg("-n").arg("--").arg("/bin/sh").arg("-c").arg(&shim).arg("acos-session");
+        cmd.arg("-n")
+            .arg("--")
+            .arg("/bin/sh")
+            .arg("-c")
+            .arg(&shim)
+            .arg("acos-session");
         cmd.args(argv);
         cmd.stdin(stdin_f).stdout(stdout_f).stderr(stderr_f);
         if die_with_relay.unwrap_or(true) {
@@ -646,7 +676,12 @@ impl Relay {
 
     /// Attach an already-running netns (harness/tests). The caller must be in the
     /// supervisor's user namespace for the veth move to be permitted.
-    pub fn attach(&mut self, session: &str, netns_pid: u32, index: Option<u32>) -> Result<SessionInfo, ProtoError> {
+    pub fn attach(
+        &mut self,
+        session: &str,
+        netns_pid: u32,
+        index: Option<u32>,
+    ) -> Result<SessionInfo, ProtoError> {
         self.require_up()?;
         let net = self.alloc(session, index)?;
         if !Path::new(&format!("/proc/{netns_pid}/ns/net")).exists() {
@@ -771,12 +806,43 @@ impl Relay {
         })
     }
 
-    /// Drop or restore a session's traffic. A one-rule change in the relay netns:
-    /// nothing in the guest participates, so it also works mid-request.
+    /// Drop or restore a session's traffic, the way a phone loses and regains a
+    /// network.
+    ///
+    /// `offline` is two changes, in this order (NET6): the relay's own drop rule
+    /// (fail closed at the packet level), then **inside the session netns** the
+    /// default route is removed and the session's live TCP sockets are destroyed
+    /// ([`plan::session_offline_cmds`]). `online` restores one route and removes
+    /// the rule. Without the guest-side half, an app whose socket is already open
+    /// has nothing to observe: that was the NET5 finding, and it is why the
+    /// guest-side half is not optional (a failure there is a structured error,
+    /// never a half-applied "offline").
     pub fn set_offline(&mut self, name: &str, offline: bool) -> Result<SessionInfo, ProtoError> {
         self.require_up()?;
-        let net = self.session_mut(name)?.net.clone();
-        self.fabric_run(&plan::offline_rule(&net, offline))?;
+        let (net, pid) = {
+            let s = self.sessions.get_mut(name).ok_or_else(|| ProtoError {
+                code: ErrorCode::NoSuchSession,
+                message: format!("no session {name}"),
+            })?;
+            (s.net.clone(), s.pid)
+        };
+        if offline {
+            self.fabric_run(&plan::offline_rule(&net, true))?;
+            if let Some(pid) = pid.filter(|p| *p > 0) {
+                let pid = u32::try_from(pid).unwrap_or(0);
+                for cmd in plan::session_offline_cmds(&net, pid) {
+                    self.fabric_run(&cmd)?;
+                }
+            }
+        } else {
+            if let Some(pid) = pid.filter(|p| *p > 0) {
+                let pid = u32::try_from(pid).unwrap_or(0);
+                for cmd in plan::session_online_cmds(&net, pid) {
+                    self.fabric_run(&cmd)?;
+                }
+            }
+            self.fabric_run(&plan::offline_rule(&net, false))?;
+        }
         let s = self.session_mut(name)?;
         s.offline = offline;
         Ok(s.info())
@@ -820,7 +886,10 @@ impl Relay {
     ) -> Result<StatusInfo, ProtoError> {
         self.require_up()?;
         if port == 0 {
-            return Err(ProtoError { code: ErrorCode::Invalid, message: "port 0".into() });
+            return Err(ProtoError {
+                code: ErrorCode::Invalid,
+                message: "port 0".into(),
+            });
         }
         let targets: Vec<String> = match session {
             Some(name) => {
@@ -866,10 +935,7 @@ impl Relay {
         } else {
             self.host_ports.remove(&port);
         }
-        self.log(&format!(
-            "hostport {port} on={on} sessions={:?}",
-            targets
-        ));
+        self.log(&format!("hostport {port} on={on} sessions={:?}", targets));
         Ok(self.status())
     }
 
@@ -940,7 +1006,11 @@ impl Relay {
         let _ = child.kill();
         let _ = child.wait();
         self.hold_down = hold;
-        self.down(if hold { "pasta killed (held down)".into() } else { "pasta killed".into() });
+        self.down(if hold {
+            "pasta killed (held down)".into()
+        } else {
+            "pasta killed".into()
+        });
         Ok(())
     }
 
@@ -954,7 +1024,14 @@ impl Relay {
             .map(|out| {
                 out.lines()
                     .filter_map(|l| {
-                        let name = l.split(':').nth(1)?.trim().split('@').next()?.trim().to_string();
+                        let name = l
+                            .split(':')
+                            .nth(1)?
+                            .trim()
+                            .split('@')
+                            .next()?
+                            .trim()
+                            .to_string();
                         name.starts_with(plan::VETH_PREFIX).then_some(name)
                     })
                     .collect::<Vec<_>>()
@@ -974,9 +1051,16 @@ impl Relay {
         StatusInfo {
             up: self.up && alive,
             supervisor: self.identity.clone(),
-            down_reason: if self.up && alive { None } else { self.down_reason.clone() },
+            down_reason: if self.up && alive {
+                None
+            } else {
+                self.down_reason.clone()
+            },
             fabric_pid: self.fabric_pid,
-            pasta_pid: self.pasta.as_ref().map(|c| i32::try_from(c.id()).unwrap_or(-1)),
+            pasta_pid: self
+                .pasta
+                .as_ref()
+                .map(|c| i32::try_from(c.id()).unwrap_or(-1)),
             pasta_version: self.pasta_version.clone(),
             pasta_tag_expected: plan::PASTA_TAG.to_string(),
             host_ports: self.host_ports.iter().copied().collect(),
@@ -1116,14 +1200,20 @@ fn move_to_cgroup(pid: u32, path: &str) -> Result<(), String> {
 }
 
 fn self_log(dir: &Path, msg: &str) {
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("netd.log"))
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("netd.log"))
     {
         let _ = writeln!(f, "{msg}");
     }
 }
 
 fn io_err(e: std::io::Error) -> ProtoError {
-    ProtoError { code: ErrorCode::Io, message: e.to_string() }
+    ProtoError {
+        code: ErrorCode::Io,
+        message: e.to_string(),
+    }
 }
 
 fn tail(s: &str) -> String {
@@ -1185,7 +1275,9 @@ pub fn run_fabric(socket: &Path) -> std::io::Result<()> {
     // the second line of defence (the guest never sees this filesystem).
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600))?;
-    let _ = Command::new("ip").args(["link", "set", "lo", "up"]).status();
+    let _ = Command::new("ip")
+        .args(["link", "set", "lo", "up"])
+        .status();
     for conn in listener.incoming() {
         let Ok(mut c) = conn else { continue };
         if !same_uid(&c) {

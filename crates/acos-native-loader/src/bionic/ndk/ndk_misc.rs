@@ -53,12 +53,7 @@ pub unsafe extern "C" fn achoreographer_getinstance() -> *mut c_void {
     handle(id)
 }
 
-fn post(
-    frame_time_nanos: i64,
-    cb: FrameCallback,
-    data: *mut c_void,
-    symbol: &'static str,
-) -> u64 {
+fn post(frame_time_nanos: i64, cb: FrameCallback, data: *mut c_void, symbol: &'static str) -> u64 {
     static TRACED: AtomicUsize = AtomicUsize::new(0);
     if TRACED.fetch_add(1, Ordering::Relaxed) < 16 {
         eprintln!(
@@ -505,14 +500,23 @@ pub fn table() -> Vec<(&'static str, *const c_void)> {
             achoreographer_postvsynccallback as *const c_void,
         ),
         ("AConfiguration_new", aconfiguration_new as *const c_void),
-        ("AConfiguration_delete", aconfiguration_delete as *const c_void),
+        (
+            "AConfiguration_delete",
+            aconfiguration_delete as *const c_void,
+        ),
         (
             "AConfiguration_fromAssetManager",
             aconfiguration_fromassetmanager as *const c_void,
         ),
         ("AConfiguration_copy", aconfiguration_copy as *const c_void),
-        ("AConfiguration_getMcc", aconfiguration_getmcc as *const c_void),
-        ("AConfiguration_getMnc", aconfiguration_getmnc as *const c_void),
+        (
+            "AConfiguration_getMcc",
+            aconfiguration_getmcc as *const c_void,
+        ),
+        (
+            "AConfiguration_getMnc",
+            aconfiguration_getmnc as *const c_void,
+        ),
         (
             "AConfiguration_getOrientation",
             aconfiguration_getorientation as *const c_void,

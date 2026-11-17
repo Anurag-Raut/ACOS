@@ -429,10 +429,9 @@ fn ssim_luma_masked(
     for y in 0..h {
         for x in 0..w {
             let v = masked[y * w + x] as u32;
-            prefix[(y + 1) * (w + 1) + x + 1] = v
-                + prefix[y * (w + 1) + x + 1]
-                + prefix[(y + 1) * (w + 1) + x]
-                - prefix[y * (w + 1) + x];
+            prefix[(y + 1) * (w + 1) + x + 1] =
+                v + prefix[y * (w + 1) + x + 1] + prefix[(y + 1) * (w + 1) + x]
+                    - prefix[y * (w + 1) + x];
         }
     }
     // Compute in i64: the four terms are ordered only after the full
@@ -508,8 +507,7 @@ fn global_ssim_luma_masked(a: &[f32], b: &[f32], masked: &[bool]) -> f64 {
     // Standard SSIM stabilisers on the 0..255 luma scale.
     const C1: f64 = (0.01 * 255.0) * (0.01 * 255.0);
     const C2: f64 = (0.03 * 255.0) * (0.03 * 255.0);
-    ((2.0 * ma * mb + C1) * (2.0 * vab + C2))
-        / ((ma * ma + mb * mb + C1) * (vaa + vbb + C2))
+    ((2.0 * ma * mb + C1) * (2.0 * vab + C2)) / ((ma * ma + mb * mb + C1) * (vaa + vbb + C2))
 }
 
 /// Build an RGBA heat map: unchanged pixels are dark grey, changed pixels go
@@ -563,10 +561,7 @@ pub fn decoded_from_rgba8(width: u32, height: u32, rgba: &[u8]) -> RenderResult<
     let n = width as usize * height as usize;
     if rgba.len() != n * 4 {
         return Err(RenderError::InvalidArgument {
-            msg: format!(
-                "rgba length {} does not match {width}x{height}",
-                rgba.len()
-            ),
+            msg: format!("rgba length {} does not match {width}x{height}", rgba.len()),
         });
     }
     let mut pixels = Vec::with_capacity(n);

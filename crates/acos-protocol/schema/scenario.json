@@ -187,6 +187,13 @@
             "reference-only"
           ],
           "type": "string"
+        },
+        {
+          "description": "Real Google ART, driven through `acos-art session` (MPROC5c).\n\nThe scenario only means something on the real framework: a second guest process, its own `IWindowSession`, and the host's process/window teardown have no Rust-VM equivalent. The runner must execute it with `--engine art`; there is no silent fallback to another engine.",
+          "enum": [
+            "art"
+          ],
+          "type": "string"
         }
       ]
     },
@@ -474,6 +481,15 @@
           },
           "description": "String extras.",
           "type": "object"
+        },
+        "idle_kill_seconds": {
+          "description": "MPROC7: the launcher's idle kill, in seconds, for this session (`0` disables it). A lazily spawned secondary process that starts no activity and holds no started/bound service is killed after this long, and the next intent respawns it. Launch-time (the launcher owns the timer): a scenario that proves the idle kill sets this small, exactly as `acos-art launch --idle-kill-seconds` / `ACOSLAUNCH_IDLE_KILL_SECS`.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "intent_action": {
           "description": "Intent action.",
@@ -1496,6 +1512,17 @@
           ],
           "description": "Type text."
         },
+        "wait": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WaitStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wait for a fixed number of milliseconds (a timeline step)."
+        },
         "wait_for": {
           "anyOf": [
             {
@@ -1857,6 +1884,21 @@
       ],
       "type": "object"
     },
+    "WaitStep": {
+      "description": "`wait`: a fixed timeline delay.\n\nIt asserts nothing; it exists so a scenario can prove **time-based** behaviour (the launcher's idle kill, a timeout) because that is what the test is about. It is **never** a synchronisation primitive: waiting a fixed number of milliseconds before an assertion races the app (too early on a fast host, flaky on a loaded one). Use `wait_for` or an assertion's own `timeout_ms` to wait for a state the app reaches. The step's observation records `waited_ms`, so the verdict shows the delay actually elapsed.",
+      "properties": {
+        "ms": {
+          "description": "Milliseconds to wait (1..=600000).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ms"
+      ],
+      "type": "object"
+    },
     "WindowOrderAssertion": {
       "description": "`assert_windows`: the window stack in policy z order, bottom first.\n\nThis is the LAYER1 assertion: it reads the tree's `windows[]` block (the host's AOSP layer policy, not insertion order), so an application overlay that is drawn and tapped above an activity can only pass when the reported stack actually says so.",
       "properties": {
@@ -1982,6 +2024,16 @@
       ],
       "default": "pass",
       "description": "Expected outcome."
+    },
+    "extra_apks": {
+      "description": "MPROC1: extra APKs installed into the session beside `app`, each at its own uid and reachable through `PackageManager`/`createPackageContext`.\n\nPaths are workspace-relative or absolute, resolved like `app`. A scenario that names packages here is self-contained: the run installs exactly this set, or fails with a structured error naming the APK.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
     },
     "fallback": {
       "allOf": [

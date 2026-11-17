@@ -18,12 +18,7 @@ use acos_jni::{jni, JniConfig, JniRuntime};
 use acos_vm::{Vm, VmOptions};
 
 extern "C" {
-    fn acosrjni_CallObjectMethodA(
-        env: usize,
-        obj: usize,
-        mid: usize,
-        args: *const u64,
-    ) -> usize;
+    fn acosrjni_CallObjectMethodA(env: usize, obj: usize, mid: usize, args: *const u64) -> usize;
     fn acosrjni_CallNonvirtualObjectMethodA(
         env: usize,
         obj: usize,
@@ -100,14 +95,11 @@ fn nonvirtual_call_uses_the_named_class_not_the_override() {
 
     // Virtual dispatch sees the runtime class (Derived).
     // SAFETY: live receiver, method ID and no arguments.
-    let virtual_result = unsafe {
-        acosrjni_CallObjectMethodA(env, obj, mid, std::ptr::null())
-    };
+    let virtual_result = unsafe { acosrjni_CallObjectMethodA(env, obj, mid, std::ptr::null()) };
     // Non-virtual dispatch resolves `who` on Base.
     // SAFETY: as above; `base` is the class the method ID was derived from.
-    let nonvirtual_result = unsafe {
-        acosrjni_CallNonvirtualObjectMethodA(env, obj, base, mid, std::ptr::null())
-    };
+    let nonvirtual_result =
+        unsafe { acosrjni_CallNonvirtualObjectMethodA(env, obj, base, mid, std::ptr::null()) };
 
     assert_eq!(rt.take_error(), None, "no structured JNI error");
     assert_eq!(string_of(env, virtual_result), "derived");

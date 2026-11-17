@@ -1,0 +1,40 @@
+{
+  "gate": "e",
+  "item": "extra memory per additional session (WebView) <= 60 MiB",
+  "passed": false,
+  "per_extra_session_pss_mib": 32.0,
+  "per_extra_session_rss_mib": 138.0,
+  "policy": "one Chromium per host, one browser context per session",
+  "snapshots": [
+    {
+      "label": "0 sessions (idle)",
+      "procs": 6,
+      "total_pss_mib": 202.0,
+      "total_rss_mib": 457.8
+    },
+    {
+      "label": "1 session",
+      "procs": 7,
+      "total_pss_mib": 260.8,
+      "total_rss_mib": 595.5
+    },
+    {
+      "label": "3 sessions",
+      "procs": 9,
+      "total_pss_mib": 324.9,
+      "total_rss_mib": 871.5
+    },
+    {
+      "label": "3 -> 1 after closing 2",
+      "procs": 7,
+      "total_pss_mib": 261.1,
+      "total_rss_mib": 595.6
+    },
+    {
+      "label": "0 sessions after closing all",
+      "procs": 6,
+      "total_pss_mib": 202.5,
+      "total_rss_mib": 458.4
+    }
+  ]
+}

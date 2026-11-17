@@ -185,13 +185,15 @@ impl NetworkModule {
     }
 
     fn session(&self) -> Result<&str> {
-        self.relay_session.as_deref().ok_or(ServiceError::ModuleRejected {
-            module: MODULE_ID,
-            detail: "this module has no session id, so it cannot address a relay session; a \
+        self.relay_session
+            .as_deref()
+            .ok_or(ServiceError::ModuleRejected {
+                module: MODULE_ID,
+                detail: "this module has no session id, so it cannot address a relay session; a \
                      `real` profile needs one (the launcher publishes ACOS_ART_SESSION_ID, or pass \
                      `config: {\"session\": \"<id>\"}`)"
-                .to_string(),
-        })
+                    .to_string(),
+            })
     }
 }
 
@@ -225,7 +227,10 @@ fn relay_error(error: ProtoError, session: Option<&str>) -> ServiceError {
         },
         _ => ServiceError::ModuleRejected {
             module: MODULE_ID,
-            detail: format!("{} ({:?}, relay session `{name}`)", error.message, error.code),
+            detail: format!(
+                "{} ({:?}, relay session `{name}`)",
+                error.message, error.code
+            ),
         },
     }
 }
@@ -248,8 +253,14 @@ fn run_action(action: &NetAction, relay_session: &str) -> Result<Value> {
     })?;
     let outcome = match action {
         NetAction::Status => {
-            let st = c.status().map_err(|e| relay_error(e, Some(relay_session)))?;
-            let row = st.sessions.iter().find(|s| s.name == relay_session).cloned();
+            let st = c
+                .status()
+                .map_err(|e| relay_error(e, Some(relay_session)))?;
+            let row = st
+                .sessions
+                .iter()
+                .find(|s| s.name == relay_session)
+                .cloned();
             json!({
                 "action": "status",
                 "relay": {
@@ -272,7 +283,11 @@ fn run_action(action: &NetAction, relay_session: &str) -> Result<Value> {
                 .map_err(|e| relay_error(e, Some(relay_session)))?;
             json!({"action": action.name(), "session": s})
         }
-        NetAction::Delay { ms, jitter_ms, loss_pct } => {
+        NetAction::Delay {
+            ms,
+            jitter_ms,
+            loss_pct,
+        } => {
             let s = c
                 .delay(relay_session, *ms, *jitter_ms, *loss_pct)
                 .map_err(|e| relay_error(e, Some(relay_session)))?;
@@ -347,9 +362,9 @@ impl Module for NetworkModule {
         ));
         let factory_state = std::sync::Arc::clone(&state);
         _host.register(CONNECTIVITY_NAME, CONNECTIVITY_DESCRIPTOR, move |_wiring| {
-            Box::new(crate::connectivity::ConnectivityService::new(std::sync::Arc::clone(
-                &factory_state,
-            ))) as Box<dyn crate::host::ServiceObject>
+            Box::new(crate::connectivity::ConnectivityService::new(
+                std::sync::Arc::clone(&factory_state),
+            )) as Box<dyn crate::host::ServiceObject>
         });
         self.connectivity = Some(state);
         Ok(())
@@ -363,7 +378,7 @@ impl Module for NetworkModule {
         Ok(())
     }
 
-    fn control(&mut self, _host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
+    fn control(&mut self, host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         if self.profile != Profile::Real {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
@@ -393,7 +408,31 @@ impl Module for NetworkModule {
                 detail: error.message,
             }
         })?;
-        run_action(&action, &relay_session)
+        let outcome = run_action(&action, &relay_session)?;
+        // NET6: `offline`/`online` are the app-visible network state too, not just
+        // a packet filter. After the relay accepted the change (it removed the
+        // session's default route and destroyed its live sockets, inside the
+        // session netns):
+        //
+        // * the resolver proxy this process serves answers `EAI_NODATA` while
+        //   offline (Android's `UnknownHostException`), so a *new* lookup is
+        //   bounded without pretending an interface exists;
+        // * `ConnectivityManager` loses or regains its default network and every
+        //   registered `NetworkCallback` gets `onLost` / `onAvailable` (queued on
+        //   the host, which delivers them after this control request).
+        if let NetAction::Offline(offline) = action {
+            crate::network::set_offline(offline);
+            if let Some(state) = &self.connectivity {
+                let deliveries = {
+                    let mut state = state.lock().unwrap();
+                    state.set_default_network(!offline)
+                };
+                for delivery in deliveries {
+                    host.queue_delivery(delivery);
+                }
+            }
+        }
+        Ok(outcome)
     }
 
     fn report(&self) -> ModuleReport {

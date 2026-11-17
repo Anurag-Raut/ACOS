@@ -176,11 +176,7 @@ impl FlutterDriver for RealDriver {
         }
         let (seq, width, height, png) = match self.session.frame() {
             Some(frame) => {
-                let png = if with_png {
-                    Some(frame.png()?)
-                } else {
-                    None
-                };
+                let png = if with_png { Some(frame.png()?) } else { None };
                 (frame.seq, frame.width, frame.height, png)
             }
             None => (0, 0, 0, None),
@@ -374,7 +370,11 @@ impl FlutterWorker {
     /// explicitly destroyed the session).
     fn shutdown(mut self) {
         let (reply_tx, reply_rx) = mpsc::channel();
-        if self.tx.send(FlutterCommand::Shutdown { reply: reply_tx }).is_ok() {
+        if self
+            .tx
+            .send(FlutterCommand::Shutdown { reply: reply_tx })
+            .is_ok()
+        {
             let _ = reply_rx.recv_timeout(Duration::from_secs(10));
         }
         if let Some(join) = self.join.take() {
@@ -492,11 +492,7 @@ impl FlutterSessions {
 
     /// Drop a held session, returning whether one existed.
     pub fn remove(&self, id: &str) -> bool {
-        let worker = self
-            .held
-            .lock()
-            .map(|mut m| m.remove(id))
-            .unwrap_or(None);
+        let worker = self.held.lock().map(|mut m| m.remove(id)).unwrap_or(None);
         match worker {
             Some(worker) => {
                 worker.shutdown();
@@ -525,11 +521,7 @@ impl FlutterSessions {
 
     /// Pump until at least one frame is present, then return the newest frame
     /// (and optionally its encoded PNG).
-    pub fn observe(
-        &self,
-        id: &str,
-        with_png: bool,
-    ) -> Result<FlutterObserve, FlutterSessionError> {
+    pub fn observe(&self, id: &str, with_png: bool) -> Result<FlutterObserve, FlutterSessionError> {
         self.worker(id)?.observe(with_png)
     }
 
@@ -688,9 +680,7 @@ mod tests {
         let main_id = thread::current().id();
         let (worker, threads, calls) = fake_worker(Duration::ZERO);
         // Drive several different commands, some from fresh caller threads.
-        let callers: Vec<_> = (0..3)
-            .map(|_| thread::spawn(|| ()))
-            .collect();
+        let callers: Vec<_> = (0..3).map(|_| thread::spawn(|| ())).collect();
         for handle in callers {
             handle.join().unwrap();
         }
@@ -710,7 +700,11 @@ mod tests {
             1,
             "every command must run on one thread; got {ids:?}"
         );
-        assert_ne!(ids.iter().next().copied(), Some(main_id), "worker must not be the caller");
+        assert_ne!(
+            ids.iter().next().copied(),
+            Some(main_id),
+            "worker must not be the caller"
+        );
         assert_eq!(calls.load(Ordering::SeqCst), seen.len());
     }
 
@@ -720,7 +714,10 @@ mod tests {
         worker.timeout = Duration::from_millis(50);
         let start = Instant::now();
         let err = worker.observe(false).unwrap_err();
-        assert!(start.elapsed() < Duration::from_millis(400), "must not block");
+        assert!(
+            start.elapsed() < Duration::from_millis(400),
+            "must not block"
+        );
         assert_eq!(err.code(), "TIMEOUT");
         // The worker thread itself is still alive; destroying it is bounded.
         worker.shutdown();

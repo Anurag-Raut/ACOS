@@ -1,0 +1,17 @@
+1794811231901     78  I WVProbe: hasSystemFeature(android.software.webview)=true
+1794811231901     79  I WVProbe: WebView.getCurrentWebViewPackage()=PackageInfo{fb4a44c com.android.webview}
+1794811231901     80  I WVProbe: myUid=10192
+1794811231901     81  I WVProbe: own getPackageInfo(0x100024c0) -> dev.acos.fixtures.webview sigs=1
+1794811231901     82  I WebViewFactory: Loading com.android.webview version 1.0 (code 1)
+1794811231901     83  W ziparchive: Unable to open '/data/app/webview-provider.dm': No such file or directory
+1794811231901     84  W ziparchive: Unable to open '/data/app/webview-provider.dm': No such file or directory
+1794811231901     85  D nativeloader: Configuring clns-3 for other apk /data/app/webview-provider.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib-extra/com.android.webview/x86_64, permitted_path=/data:/mnt/expand
+1794811231901     86  E WebViewLibraryLoader: can't load with relro file; address space not reserved
+1794811231901     87  I ACOSWvProvider: create(WebViewDelegate present)
+1794811231901     88  E : No implementation found for void android.net.LocalSocketImpl.connectLocal(java.io.FileDescriptor, java.lang.String, int) (tried Java_android_net_LocalSocketImpl_connectLocal and Java_android_net_LocalSocketImpl_connectLocal__Ljava_io_FileDescriptor_2Ljava_lang_String_2I) - is the library loaded, e.g. System.loadLibrary?
+1794811231901     89  I WVProbe: WebView FAILED: java.lang.UnsatisfiedLinkError: No implementation found for void android.net.LocalSocketImpl.connectLocal(java.io.FileDescriptor, java.lang.String, int) (tried Java_android_net_LocalSocketImpl_connectLocal and Java_android_net_LocalSocketImpl_connectLocal__Ljava_io_FileDescriptor_2Ljava_lang_String_2I) - is the library loaded, e.g. System.loadLibrary?
+  at android.net.LocalSocketImpl.connectLocal(Native Method)
+  at android.net.LocalSocketImpl.connect(LocalSocketImpl.java:259)
+  at android.net.LocalSocket.connect(LocalSocket.java:162)
+  at com.android.webview.chromium.AcosSessionSocket.open(AcosSessionSocket.java:30)
+1794811231901     90  E logdw: dev.acos.fixtures.webview.MainActivity

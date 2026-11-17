@@ -170,7 +170,10 @@ fn trace(vm: &mut Vm) {
         ),
         ("nativeAsyncTraceForTrackEnd", "(JLjava/lang/String;I)V"),
         ("nativeInstant", "(JLjava/lang/String;)V"),
-        ("nativeInstantForTrack", "(JLjava/lang/String;Ljava/lang/String;)V"),
+        (
+            "nativeInstantForTrack",
+            "(JLjava/lang/String;Ljava/lang/String;)V",
+        ),
         ("nativeTraceCounter", "(JLjava/lang/String;J)V"),
     ] {
         vm.register_native(c, name, sig, trace_noop);
@@ -210,14 +213,19 @@ fn process(vm: &mut Vm) {
         "(II)V",
         process_set_thread_priority_for,
     );
+    vm.register_native(c, "getThreadPriority", "(I)I", process_get_thread_priority);
     vm.register_native(
         c,
-        "getThreadPriority",
-        "(I)I",
-        process_get_thread_priority,
+        "getUidForName",
+        "(Ljava/lang/String;)I",
+        process_uid_for_name,
     );
-    vm.register_native(c, "getUidForName", "(Ljava/lang/String;)I", process_uid_for_name);
-    vm.register_native(c, "setArgV0Native", "(Ljava/lang/String;)V", process_set_argv0);
+    vm.register_native(
+        c,
+        "setArgV0Native",
+        "(Ljava/lang/String;)V",
+        process_set_argv0,
+    );
 }
 
 /// The process name recorded by `Process.setArgV0` (`ActivityThread` sets it to
@@ -238,7 +246,10 @@ fn process_set_argv0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 /// The process name last set by `Process.setArgV0` (empty until set).
 #[must_use]
 pub fn arg_v0() -> String {
-    process_name().lock().unwrap_or_else(|p| p.into_inner()).clone()
+    process_name()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone()
 }
 
 fn process_set_thread_priority(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -358,7 +369,10 @@ fn graphics_environment(vm: &mut Vm) {
             "setGpuStats",
             "(Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;I)V",
         ),
-        ("setLayerPaths", "(Ljava/lang/ClassLoader;Ljava/lang/String;)V"),
+        (
+            "setLayerPaths",
+            "(Ljava/lang/ClassLoader;Ljava/lang/String;)V",
+        ),
     ] {
         vm.register_native(c, name, sig, ge_config_accepted);
     }

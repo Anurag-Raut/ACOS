@@ -19,8 +19,8 @@ use acos_services::parcelable::{
     INTENT_ORIGINAL, INTENT_PACKAGE, INTENT_SELECTOR, INTENT_TYPE, MAX_INTENT_CATEGORIES,
     MAX_INTENT_DEPTH,
 };
-use acos_services::{Bundle, Parcelable, Value};
 use acos_services::ServiceError;
+use acos_services::{Bundle, Parcelable, Value};
 
 const COMPONENT: &str = "android.content.ComponentName";
 const RECT: &str = "android.graphics.Rect";
@@ -38,12 +38,7 @@ fn component(package: &str, class: &str) -> Parcelable {
 fn rect(l: i32, t: i32, r: i32, b: i32) -> Parcelable {
     Parcelable::ordered(
         RECT,
-        vec![
-            Value::Int(l),
-            Value::Int(t),
-            Value::Int(r),
-            Value::Int(b),
-        ],
+        vec![Value::Int(l), Value::Int(t), Value::Int(r), Value::Int(b)],
     )
 }
 
@@ -165,15 +160,21 @@ fn the_intent_wire_is_string8_for_its_own_fields_and_string16_for_the_component(
     parcel.set_data_position(0);
     assert_eq!(parcel.read_string8().expect("action"), Some("ab".into()));
     assert_eq!(parcel.read_int32().expect("data"), 0);
-    assert_eq!(
-        parcel.read_string8().expect("type"),
-        Some("text/x".into())
-    );
+    assert_eq!(parcel.read_string8().expect("type"), Some("text/x".into()));
     assert_eq!(parcel.read_string8().expect("identifier"), None);
     assert_eq!(parcel.read_int32().expect("flags"), 0x10);
-    assert_eq!(parcel.read_string8().expect("package"), Some("pkg.n".into()));
-    assert_eq!(parcel.read_string16().expect("component pkg"), Some("p".into()));
-    assert_eq!(parcel.read_string16().expect("component class"), Some("c".into()));
+    assert_eq!(
+        parcel.read_string8().expect("package"),
+        Some("pkg.n".into())
+    );
+    assert_eq!(
+        parcel.read_string16().expect("component pkg"),
+        Some("p".into())
+    );
+    assert_eq!(
+        parcel.read_string16().expect("component class"),
+        Some("c".into())
+    );
     assert_eq!(parcel.read_int32().expect("sourceBounds"), 0);
     assert_eq!(parcel.read_int32().expect("categories"), 0);
     assert_eq!(parcel.read_int32().expect("selector"), 0);
@@ -256,7 +257,10 @@ fn a_non_null_data_uri_is_refused_structured_not_guessed() {
     wire.write_int32(1); // non-null data
     wire.set_data_position(0);
     let err = read_payload(INTENT_CLASS, &mut wire).expect_err("a data Uri must be refused");
-    assert!(matches!(err, ServiceError::UnsupportedParcelable { .. }), "{err:?}");
+    assert!(
+        matches!(err, ServiceError::UnsupportedParcelable { .. }),
+        "{err:?}"
+    );
 }
 
 #[test]

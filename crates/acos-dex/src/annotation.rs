@@ -103,8 +103,10 @@ pub fn parse_directory(r: &Reader, off: u32) -> DexResult<AnnotationsDirectory> 
         let method_idx = r.u32(cursor)?;
         let list_off = r.u32(cursor + 4)?;
         cursor += 8;
-        dir.parameter_annotations
-            .push((method_idx, AnnotationsDirectory::read_set_ref_list(r, list_off)?));
+        dir.parameter_annotations.push((
+            method_idx,
+            AnnotationsDirectory::read_set_ref_list(r, list_off)?,
+        ));
     }
 
     Ok(dir)

@@ -196,7 +196,9 @@ impl CipherAlg {
 enum DigestCtx {
     /// Created but not yet `EVP_DigestInit_ex`'d.
     Empty,
-    Ready { digest: Box<dyn DynDigest> },
+    Ready {
+        digest: Box<dyn DynDigest>,
+    },
 }
 
 /// An `HMAC_CTX`.
@@ -489,18 +491,33 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(NC, "EVP_has_aes_hardware", "()I", evp_has_aes_hardware);
 
     // MessageDigest.
-    vm.register_native(NC, "EVP_get_digestbyname", "(Ljava/lang/String;)J", evp_get_digestbyname);
+    vm.register_native(
+        NC,
+        "EVP_get_digestbyname",
+        "(Ljava/lang/String;)J",
+        evp_get_digestbyname,
+    );
     vm.register_native(NC, "EVP_MD_size", "(J)I", evp_md_size);
     vm.register_native(NC, "EVP_MD_CTX_create", "()J", evp_md_ctx_create);
     vm.register_native(NC, "EVP_MD_CTX_destroy", "(J)V", evp_md_ctx_destroy);
-    vm.register_native(NC, "EVP_MD_CTX_cleanup", &format!("({MD_CTX})V"), evp_md_ctx_cleanup);
+    vm.register_native(
+        NC,
+        "EVP_MD_CTX_cleanup",
+        &format!("({MD_CTX})V"),
+        evp_md_ctx_cleanup,
+    );
     vm.register_native(
         NC,
         "EVP_MD_CTX_copy_ex",
         &format!("({MD_CTX}{MD_CTX})I"),
         evp_md_ctx_copy_ex,
     );
-    vm.register_native(NC, "EVP_DigestInit_ex", &format!("({MD_CTX}J)I"), evp_digest_init);
+    vm.register_native(
+        NC,
+        "EVP_DigestInit_ex",
+        &format!("({MD_CTX}J)I"),
+        evp_digest_init,
+    );
     vm.register_native(
         NC,
         "EVP_DigestUpdate",
@@ -523,13 +540,13 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     // HMAC.
     vm.register_native(NC, "HMAC_CTX_new", "()J", hmac_ctx_new);
     vm.register_native(NC, "HMAC_CTX_free", "(J)V", hmac_ctx_free);
+    vm.register_native(NC, "HMAC_Init_ex", &format!("({HMAC_CTX}[BJ)V"), hmac_init);
     vm.register_native(
         NC,
-        "HMAC_Init_ex",
-        &format!("({HMAC_CTX}[BJ)V"),
-        hmac_init,
+        "HMAC_Update",
+        &format!("({HMAC_CTX}[BII)V"),
+        hmac_update,
     );
-    vm.register_native(NC, "HMAC_Update", &format!("({HMAC_CTX}[BII)V"), hmac_update);
     vm.register_native(
         NC,
         "HMAC_UpdateDirect",
@@ -542,7 +559,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(NC, "RAND_bytes", "([B)V", rand_bytes);
 
     // EVP cipher (AES-ECB/CBC/CTR).
-    vm.register_native(NC, "EVP_get_cipherbyname", "(Ljava/lang/String;)J", evp_get_cipherbyname);
+    vm.register_native(
+        NC,
+        "EVP_get_cipherbyname",
+        "(Ljava/lang/String;)J",
+        evp_get_cipherbyname,
+    );
     vm.register_native(NC, "EVP_CIPHER_iv_length", "(J)I", evp_cipher_iv_length);
     vm.register_native(NC, "EVP_CIPHER_CTX_new", "()J", evp_cipher_ctx_new);
     vm.register_native(NC, "EVP_CIPHER_CTX_free", "(J)V", evp_cipher_ctx_free);
@@ -597,7 +619,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
 
     // `DirectByteBuffer` addresses are not used by this surface; returning 0
     // makes the Java callers fall back to the heap-array path.
-    vm.register_native(NC, "getDirectBufferAddress", "(Ljava/nio/Buffer;)J", direct_address_zero);
+    vm.register_native(
+        NC,
+        "getDirectBufferAddress",
+        "(Ljava/nio/Buffer;)J",
+        direct_address_zero,
+    );
     Ok(())
 }
 
@@ -666,8 +693,9 @@ fn evp_md_ctx_destroy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn evp_md_ctx_cleanup(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_MD_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_MD_CTX".into(),
+    })?;
     STATE.with(|s| {
         if let Some(c) = s.borrow_mut().digests.get_mut(&id) {
             *c = DigestCtx::Empty;
@@ -678,10 +706,12 @@ fn evp_md_ctx_cleanup(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn evp_md_ctx_copy_ex(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let dst = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_MD_CTX".into() })?;
-    let src = ref_address(vm, vm.arg_ref(ctx, 1))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_MD_CTX".into() })?;
+    let dst = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_MD_CTX".into(),
+    })?;
+    let src = ref_address(vm, vm.arg_ref(ctx, 1)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_MD_CTX".into(),
+    })?;
     let ok = STATE.with(|st| {
         let mut st = st.borrow_mut();
         let copy = match st.digests.get(&src) {
@@ -703,8 +733,9 @@ fn evp_md_ctx_copy_ex(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn evp_digest_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_MD_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_MD_CTX".into(),
+    })?;
     let kind = MdKind::from_id(vm.arg_i64(ctx, 1))
         .ok_or_else(|| VmError::Internal("EVP_DigestInit_ex: unknown digest".into()))?;
     let ok = STATE.with(|s| {
@@ -723,8 +754,9 @@ fn evp_digest_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn evp_digest_update(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_MD_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_MD_CTX".into(),
+    })?;
     let off = vm.arg_i32(ctx, 2).max(0) as usize;
     let len = vm.arg_i32(ctx, 3).max(0) as usize;
     let data = arg_bytes(vm, ctx, 1, off, len)
@@ -746,8 +778,9 @@ fn evp_digest_update_direct(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn evp_digest_final(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_MD_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_MD_CTX".into(),
+    })?;
     let out = vm.arg_ref(ctx, 1);
     let out_off = vm.arg_i32(ctx, 2).max(0) as usize;
     let out_bytes = STATE.with(|s| match s.borrow_mut().digests.get_mut(&id) {
@@ -758,7 +791,9 @@ fn evp_digest_final(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         _ => None,
     });
     let Some(bytes) = out_bytes else {
-        return Err(VmError::Internal("EVP_DigestFinal_ex: context not initialised".into()));
+        return Err(VmError::Internal(
+            "EVP_DigestFinal_ex: context not initialised".into(),
+        ));
     };
     if !write_bytes(vm, out, out_off, &bytes) {
         return Err(vm.throw_new(
@@ -788,8 +823,9 @@ fn hmac_ctx_free(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn hmac_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "HMAC_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "HMAC_CTX".into(),
+    })?;
     let key = byte_vec(vm, vm.arg_ref(ctx, 1));
     let kind = MdKind::from_id(vm.arg_i64(ctx, 2))
         .ok_or_else(|| VmError::Internal("HMAC_Init_ex: unknown digest".into()))?;
@@ -809,8 +845,9 @@ fn hmac_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn hmac_update(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "HMAC_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "HMAC_CTX".into(),
+    })?;
     let off = vm.arg_i32(ctx, 2).max(0) as usize;
     let len = vm.arg_i32(ctx, 3).max(0) as usize;
     let data = arg_bytes(vm, ctx, 1, off, len)
@@ -829,8 +866,9 @@ fn hmac_update_direct(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn hmac_final(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "HMAC_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "HMAC_CTX".into(),
+    })?;
     let bytes = STATE.with(|st| {
         let mut st = st.borrow_mut();
         let slot = st.hmacs.get_mut(&id)?;
@@ -841,7 +879,9 @@ fn hmac_final(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
     });
     let Some(bytes) = bytes else {
-        return Err(VmError::Internal("HMAC_Final: context not initialised".into()));
+        return Err(VmError::Internal(
+            "HMAC_Final: context not initialised".into(),
+        ));
     };
     let h = byte_array(vm, bytes)?;
     vm.ret_ref(ctx, h);
@@ -897,8 +937,9 @@ fn evp_cipher_ctx_free(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn evp_cipher_ctx_block_size(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_CIPHER_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_CIPHER_CTX".into(),
+    })?;
     let n = STATE.with(|s| {
         s.borrow()
             .ciphers
@@ -919,8 +960,9 @@ fn evp_cipher_ctx_set_key_length(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn evp_cipher_ctx_set_padding(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_CIPHER_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_CIPHER_CTX".into(),
+    })?;
     let pad = vm.arg_bool(ctx, 1);
     STATE.with(|s| {
         if let Some(c) = s.borrow_mut().ciphers.get_mut(&id) {
@@ -933,8 +975,9 @@ fn evp_cipher_ctx_set_padding(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 /// Number of buffered bytes the context is holding back (`get_EVP_CIPHER_CTX_buf_len`).
 fn evp_cipher_ctx_buf_len(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_CIPHER_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_CIPHER_CTX".into(),
+    })?;
     let n = STATE.with(|s| {
         s.borrow()
             .ciphers
@@ -948,8 +991,9 @@ fn evp_cipher_ctx_buf_len(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 /// Whether `EVP_CipherFinal_ex` has run (`get_EVP_CIPHER_CTX_final_used`).
 fn evp_cipher_ctx_final_used(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_CIPHER_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_CIPHER_CTX".into(),
+    })?;
     let used = STATE.with(|s| {
         s.borrow()
             .ciphers
@@ -962,8 +1006,9 @@ fn evp_cipher_ctx_final_used(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn evp_cipher_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_CIPHER_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_CIPHER_CTX".into(),
+    })?;
     let cipher_id = vm.arg_i64(ctx, 1);
     let key = vm.arg_ref(ctx, 2);
     let iv = vm.arg_ref(ctx, 3);
@@ -1025,8 +1070,9 @@ fn evp_cipher_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn evp_cipher_update(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_CIPHER_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_CIPHER_CTX".into(),
+    })?;
     // OpenSSL contract: `EVP_CipherUpdate(ctx, out, outLen, in, inLen)`.
     let out = vm.arg_ref(ctx, 1);
     let out_off = vm.arg_i32(ctx, 2).max(0) as usize;
@@ -1040,7 +1086,9 @@ fn evp_cipher_update(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         ciphers_update(s.ciphers.get_mut(&id), &input)
     });
     let Some(output) = produced else {
-        return Err(VmError::Internal("EVP_CipherUpdate: context not initialised".into()));
+        return Err(VmError::Internal(
+            "EVP_CipherUpdate: context not initialised".into(),
+        ));
     };
     if !write_bytes(vm, out, out_off, &output) {
         return Err(vm.throw_new(
@@ -1053,8 +1101,9 @@ fn evp_cipher_update(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn evp_cipher_final(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let id = ref_address(vm, vm.arg_ref(ctx, 0))
-        .ok_or_else(|| VmError::StaleHandle { what: "EVP_CIPHER_CTX".into() })?;
+    let id = ref_address(vm, vm.arg_ref(ctx, 0)).ok_or_else(|| VmError::StaleHandle {
+        what: "EVP_CIPHER_CTX".into(),
+    })?;
     let out = vm.arg_ref(ctx, 1);
     let out_off = vm.arg_i32(ctx, 2).max(0) as usize;
     let result = STATE.with(|s| {
@@ -1262,12 +1311,7 @@ mod tests {
             0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93,
             0x17, 0x2a,
         ];
-        let ct = ctr_apply(
-            CipherAlg::Aes128Ctr,
-            &key,
-            &mut iv,
-            &pt,
-        );
+        let ct = ctr_apply(CipherAlg::Aes128Ctr, &key, &mut iv, &pt);
         assert_eq!(
             ct,
             vec![
@@ -1287,7 +1331,12 @@ mod tests {
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
             0xee, 0xff,
         ];
-        assert!(CipherCtx::aes_block(CipherAlg::Aes128Ecb, &key, &mut block, true));
+        assert!(CipherCtx::aes_block(
+            CipherAlg::Aes128Ecb,
+            &key,
+            &mut block,
+            true
+        ));
         assert_eq!(
             block,
             [

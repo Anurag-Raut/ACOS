@@ -196,7 +196,9 @@ fn reflection_static_set_survives_compiled_getstatic() {
         return;
     };
     if !real_corelib_available() {
-        eprintln!("SKIP reflection_static_set_survives_compiled_getstatic: real boot classpath absent");
+        eprintln!(
+            "SKIP reflection_static_set_survives_compiled_getstatic: real boot classpath absent"
+        );
         return;
     }
     for (ir, stress) in [(true, false), (false, false), (true, true), (false, true)] {
@@ -220,7 +222,9 @@ fn reflection_static_set_survives_compiled_getstatic() {
 #[test]
 fn thread_stack_traces_are_non_empty_under_real_corelib() {
     let Some(dex) = compile_case("VmStackMain") else {
-        eprintln!("SKIP thread_stack_traces_are_non_empty_under_real_corelib: javac/d8 unavailable");
+        eprintln!(
+            "SKIP thread_stack_traces_are_non_empty_under_real_corelib: javac/d8 unavailable"
+        );
         return;
     };
     if !real_corelib_available() {
@@ -256,7 +260,9 @@ fn thread_stack_traces_are_non_empty_under_real_corelib() {
 #[test]
 fn atomic_reference_varhandle_surface_under_real_corelib() {
     let Some(dex) = compile_case("AtomicReferenceMain") else {
-        eprintln!("SKIP atomic_reference_varhandle_surface_under_real_corelib: javac/d8 unavailable");
+        eprintln!(
+            "SKIP atomic_reference_varhandle_surface_under_real_corelib: javac/d8 unavailable"
+        );
         return;
     };
     if !real_corelib_available() {

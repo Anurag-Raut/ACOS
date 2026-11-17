@@ -11,6 +11,8 @@ clone(){ n=$1; url=$2; shift 2; [ -d "$n" ] && return 0
 # out of huge surrounding directories.
 add(){ n=$1; shift; [ -d "$n" ] || return 0; git -C "$n" sparse-checkout add --skip-checks "$@"; }
 B=https://android.googlesource.com/platform
+clone native $B/frameworks/native libs/binder libs/binder/ndk include/binder libs/ui libs/gui
+clone base $B/frameworks/base core/jni libs/hwui libs/androidfw core/java/android/os core/java/com/android/internal/os core/java/android/webkit
 # `libs/sensor` + `services/sensorservice` are the native sensor service the
 # `sensors` module serves (ISensorServer/ISensorEventConnection wire, the
 # `Sensor::flatten` layout and the `ASensorEvent` packet the BitTube carries).

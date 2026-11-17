@@ -503,7 +503,9 @@ pub fn native_interface_table() -> [usize; JNI_SLOT_COUNT] {
 /// Build the `JNIInvokeInterface` table (3 reserved + 5 functions).
 pub fn invoke_interface_table() -> [usize; 8] {
     [
-        0, 0, 0,
+        0,
+        0,
+        0,
         super::jni_impl::vm_DestroyJavaVM as *const () as usize,
         super::jni_impl::vm_AttachCurrentThread as *const () as usize,
         super::jni_impl::vm_DetachCurrentThread as *const () as usize,

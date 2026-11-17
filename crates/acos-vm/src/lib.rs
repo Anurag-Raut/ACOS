@@ -32,9 +32,9 @@ pub mod vm;
 
 pub use error::{VmError, VmResult};
 pub use heap::{Handle, Object};
+pub use javabridge::{BridgeError, BridgeResult, JavaValue};
 pub use limits::HostGuard;
 pub use vfs::{Vfs, VfsConfig};
-pub use javabridge::{BridgeError, BridgeResult, JavaValue};
 pub use vm::{
     descriptor_to_dotted, CoreLib, Metrics, NativeTrace, RunOutcome, Uncaught, Vm, VmOptions,
 };

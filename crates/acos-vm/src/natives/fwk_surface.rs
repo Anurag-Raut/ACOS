@@ -369,52 +369,168 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         ("nativeGetTransactionId", "(J)J", native_get_transaction_id),
         ("nativeSetPosition", "(JJFF)V", native_set_position),
         ("nativeSetLayer", "(JJI)V", native_set_layer),
-        ("nativeSetRelativeLayer", "(JJJI)V", native_set_relative_layer),
+        (
+            "nativeSetRelativeLayer",
+            "(JJJI)V",
+            native_set_relative_layer,
+        ),
         ("nativeSetAlpha", "(JJF)V", native_set_alpha),
         ("nativeSetMatrix", "(JJFFFF)V", native_set_matrix),
         ("nativeSetWindowCrop", "(JJIIII)V", native_set_window_crop),
-        ("nativeSetCrop", "(JJLandroid/graphics/Rect;)V", native_set_crop),
+        (
+            "nativeSetCrop",
+            "(JJLandroid/graphics/Rect;)V",
+            native_set_crop,
+        ),
         ("nativeSetFlags", "(JJII)V", native_set_flags),
         ("nativeSetTransformHint", "(JI)V", native_set_transform_hint),
         ("nativeSetLayerStack", "(JJI)V", native_set_layer_stack),
-        ("nativeSetBuffer", "(JJLandroid/hardware/HardwareBuffer;JLjava/util/function/Consumer;)V", native_set_buffer),
+        (
+            "nativeSetBuffer",
+            "(JJLandroid/hardware/HardwareBuffer;JLjava/util/function/Consumer;)V",
+            native_set_buffer,
+        ),
         ("nativeUnsetBuffer", "(JJ)V", native_unset_buffer),
-        ("nativeSetBufferTransform", "(JJI)V", native_set_buffer_transform),
+        (
+            "nativeSetBufferTransform",
+            "(JJI)V",
+            native_set_buffer_transform,
+        ),
         ("nativeSetScale", "(JJFF)V", native_set_scale),
-        ("nativeSetFixedTransformHint", "(JJI)V", native_set_fixed_transform_hint),
-        ("nativeSetFrameTimelineVsync", "(JJ)V", native_set_frame_timeline_vsync),
-        ("nativeSetAnimationTransaction", "(J)V", native_set_animation_transaction),
-        ("nativeSetEarlyWakeupStart", "(J)V", native_set_early_wakeup_start),
-        ("nativeSetEarlyWakeupEnd", "(J)V", native_set_early_wakeup_end),
+        (
+            "nativeSetFixedTransformHint",
+            "(JJI)V",
+            native_set_fixed_transform_hint,
+        ),
+        (
+            "nativeSetFrameTimelineVsync",
+            "(JJ)V",
+            native_set_frame_timeline_vsync,
+        ),
+        (
+            "nativeSetAnimationTransaction",
+            "(J)V",
+            native_set_animation_transaction,
+        ),
+        (
+            "nativeSetEarlyWakeupStart",
+            "(J)V",
+            native_set_early_wakeup_start,
+        ),
+        (
+            "nativeSetEarlyWakeupEnd",
+            "(J)V",
+            native_set_early_wakeup_end,
+        ),
         ("nativeReparent", "(JJJ)V", native_reparent),
-        ("nativeSetDefaultApplyToken", "(Landroid/os/IBinder;)V", native_set_default_apply_token),
-        ("nativeGetDefaultApplyToken", "()Landroid/os/IBinder;", native_get_default_apply_token),
-        ("nativeWriteTransactionToParcel", "(JLandroid/os/Parcel;)V", native_write_transaction_to_parcel),
-        ("nativeReadTransactionFromParcel", "(Landroid/os/Parcel;)J", native_read_transaction_from_parcel),
-        ("nativeWriteToParcel", "(JLandroid/os/Parcel;)V", native_write_to_parcel),
-        ("nativeReadFromParcel", "(Landroid/os/Parcel;)J", native_read_from_parcel),
+        (
+            "nativeSetDefaultApplyToken",
+            "(Landroid/os/IBinder;)V",
+            native_set_default_apply_token,
+        ),
+        (
+            "nativeGetDefaultApplyToken",
+            "()Landroid/os/IBinder;",
+            native_get_default_apply_token,
+        ),
+        (
+            "nativeWriteTransactionToParcel",
+            "(JLandroid/os/Parcel;)V",
+            native_write_transaction_to_parcel,
+        ),
+        (
+            "nativeReadTransactionFromParcel",
+            "(Landroid/os/Parcel;)J",
+            native_read_transaction_from_parcel,
+        ),
+        (
+            "nativeWriteToParcel",
+            "(JLandroid/os/Parcel;)V",
+            native_write_to_parcel,
+        ),
+        (
+            "nativeReadFromParcel",
+            "(Landroid/os/Parcel;)J",
+            native_read_from_parcel,
+        ),
         ("nativeDisconnect", "(J)V", native_disconnect),
         ("nativeGetLayerId", "(J)I", native_get_layer_id),
         ("nativeGetHandle", "(J)J", native_get_handle),
-        ("nativeCopyFromSurfaceControl", "(J)J", native_copy_from_surface_control),
-        ("nativeGetNativeSurfaceControlFinalizer", "()J", surface_control_finalizer),
-        ("nativeGetNativeTransactionFinalizer", "()J", transaction_finalizer),
-        ("nativeSetTrustedOverlay", "(JJZ)V", native_record_trusted_overlay),
+        (
+            "nativeCopyFromSurfaceControl",
+            "(J)J",
+            native_copy_from_surface_control,
+        ),
+        (
+            "nativeGetNativeSurfaceControlFinalizer",
+            "()J",
+            surface_control_finalizer,
+        ),
+        (
+            "nativeGetNativeTransactionFinalizer",
+            "()J",
+            transaction_finalizer,
+        ),
+        (
+            "nativeSetTrustedOverlay",
+            "(JJZ)V",
+            native_record_trusted_overlay,
+        ),
         ("nativeSetDropInputMode", "(JJI)V", native_record_drop_input),
         ("nativeSetFrameRate", "(JJFII)V", native_record_frame_rate),
-        ("nativeSetFrameRateSelectionPriority", "(JJI)V", native_record_frame_rate_priority),
+        (
+            "nativeSetFrameRateSelectionPriority",
+            "(JJI)V",
+            native_record_frame_rate_priority,
+        ),
         ("nativeSetCachingHint", "(JJI)V", native_record_caching_hint),
         ("nativeSetDataSpace", "(JJI)V", native_record_data_space),
-        ("nativeSetExtendedRangeBrightness", "(JJFF)V", native_record_extended_range),
-        ("nativeSetShadowRadius", "(JJF)V", native_record_shadow_radius),
-        ("nativeSetCornerRadius", "(JJF)V", native_record_corner_radius),
-        ("nativeSetBackgroundBlurRadius", "(JJI)V", native_record_blur_radius),
+        (
+            "nativeSetExtendedRangeBrightness",
+            "(JJFF)V",
+            native_record_extended_range,
+        ),
+        (
+            "nativeSetShadowRadius",
+            "(JJF)V",
+            native_record_shadow_radius,
+        ),
+        (
+            "nativeSetCornerRadius",
+            "(JJF)V",
+            native_record_corner_radius,
+        ),
+        (
+            "nativeSetBackgroundBlurRadius",
+            "(JJI)V",
+            native_record_blur_radius,
+        ),
         ("nativeSetColor", "(JJ[F)V", native_record_color),
-        ("nativeSetColorTransform", "(JJ[F[F)V", native_record_color_transform),
-        ("nativeSetColorSpaceAgnostic", "(JJZ)V", native_record_color_space_agnostic),
-        ("nativeSetDestinationFrame", "(JJIIII)V", native_record_destination_frame),
-        ("nativeSetGeometry", "(JJLandroid/graphics/Rect;Landroid/graphics/Rect;J)V", native_record_geometry),
-        ("nativeSetMetadata", "(JJILandroid/os/Parcel;)V", native_record_metadata),
+        (
+            "nativeSetColorTransform",
+            "(JJ[F[F)V",
+            native_record_color_transform,
+        ),
+        (
+            "nativeSetColorSpaceAgnostic",
+            "(JJZ)V",
+            native_record_color_space_agnostic,
+        ),
+        (
+            "nativeSetDestinationFrame",
+            "(JJIIII)V",
+            native_record_destination_frame,
+        ),
+        (
+            "nativeSetGeometry",
+            "(JJLandroid/graphics/Rect;Landroid/graphics/Rect;J)V",
+            native_record_geometry,
+        ),
+        (
+            "nativeSetMetadata",
+            "(JJILandroid/os/Parcel;)V",
+            native_record_metadata,
+        ),
         // `SurfaceControl.nativeSanitize(long, int, int)` clamps a layer's
         // buffer size to the display bounds for an ImageReader surface. ACOS's
         // software compositor has no calibration/sanitisation pass, so the
@@ -429,12 +545,32 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
 
     let surface = "Landroid/view/Surface;";
     vm.register_native(surface, "nativeIsValid", "(J)Z", surface_is_valid);
-    vm.register_native(surface, "nativeCreateFromSurfaceControl", "(J)J", surface_from_control);
-    vm.register_native(surface, "nativeGetFromSurfaceControl", "(JJ)J", surface_get_from_control);
-    vm.register_native(surface, "nativeGetFromBlastBufferQueue", "(JJ)J", surface_from_queue);
+    vm.register_native(
+        surface,
+        "nativeCreateFromSurfaceControl",
+        "(J)J",
+        surface_from_control,
+    );
+    vm.register_native(
+        surface,
+        "nativeGetFromSurfaceControl",
+        "(JJ)J",
+        surface_get_from_control,
+    );
+    vm.register_native(
+        surface,
+        "nativeGetFromBlastBufferQueue",
+        "(JJ)J",
+        surface_from_queue,
+    );
     vm.register_native(surface, "nativeGetWidth", "(J)I", surface_width);
     vm.register_native(surface, "nativeGetHeight", "(J)I", surface_height);
-    vm.register_native(surface, "nativeGetNextFrameNumber", "(J)J", surface_next_frame);
+    vm.register_native(
+        surface,
+        "nativeGetNextFrameNumber",
+        "(J)J",
+        surface_next_frame,
+    );
     vm.register_native(surface, "nativeRelease", "(J)V", surface_release);
     vm.register_native(surface, "nativeDestroy", "(J)V", surface_release);
 
@@ -443,16 +579,56 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(session, "nativeDestroy", "(J)V", session_destroy);
 
     let blast = "Landroid/graphics/BLASTBufferQueue;";
-    vm.register_native(blast, "nativeCreate", "(Ljava/lang/String;Z)J", blast_create);
+    vm.register_native(
+        blast,
+        "nativeCreate",
+        "(Ljava/lang/String;Z)J",
+        blast_create,
+    );
     vm.register_native(blast, "nativeDestroy", "(J)V", blast_destroy);
     vm.register_native(blast, "nativeUpdate", "(JJJJI)V", blast_update);
-    vm.register_native(blast, "nativeGetSurface", "(JZ)Landroid/view/Surface;", blast_get_surface);
-    vm.register_native(blast, "nativeMergeWithNextTransaction", "(JJJ)V", blast_merge);
-    vm.register_native(blast, "nativeApplyPendingTransactions", "(JJ)V", blast_apply_pending);
-    vm.register_native(blast, "nativeIsSameSurfaceControl", "(JJ)Z", blast_same_control);
-    vm.register_native(blast, "nativeGetLastAcquiredFrameNum", "(J)J", blast_last_frame);
-    vm.register_native(blast, "nativeClearSyncTransaction", "(J)V", blast_clear_sync);
-    vm.register_native(blast, "nativeGatherPendingTransactions", "(JJ)Landroid/view/SurfaceControl$Transaction;", blast_gather);
+    vm.register_native(
+        blast,
+        "nativeGetSurface",
+        "(JZ)Landroid/view/Surface;",
+        blast_get_surface,
+    );
+    vm.register_native(
+        blast,
+        "nativeMergeWithNextTransaction",
+        "(JJJ)V",
+        blast_merge,
+    );
+    vm.register_native(
+        blast,
+        "nativeApplyPendingTransactions",
+        "(JJ)V",
+        blast_apply_pending,
+    );
+    vm.register_native(
+        blast,
+        "nativeIsSameSurfaceControl",
+        "(JJ)Z",
+        blast_same_control,
+    );
+    vm.register_native(
+        blast,
+        "nativeGetLastAcquiredFrameNum",
+        "(J)J",
+        blast_last_frame,
+    );
+    vm.register_native(
+        blast,
+        "nativeClearSyncTransaction",
+        "(J)V",
+        blast_clear_sync,
+    );
+    vm.register_native(
+        blast,
+        "nativeGatherPendingTransactions",
+        "(JJ)Landroid/view/SurfaceControl$Transaction;",
+        blast_gather,
+    );
 
     // The framework wraps every native SurfaceControl/Transaction in a
     // `NativeAllocationRegistry`; on `release()`/GC it calls this with the
@@ -547,7 +723,9 @@ fn read_bytes_from_parcel(ph: u64) -> Option<Vec<u8>> {
 fn stale_error(vm: &mut Vm, handle: u64) -> VmError {
     vm.throw_new(
         "Ljava/lang/IllegalStateException;",
-        Some(&format!("SurfaceControl: stale/unknown layer handle {handle}")),
+        Some(&format!(
+            "SurfaceControl: stale/unknown layer handle {handle}"
+        )),
     )
 }
 
@@ -561,7 +739,9 @@ fn bridge_err(e: crate::javabridge::BridgeError) -> VmError {
 fn missing_transaction(vm: &mut Vm, handle: u64) -> VmError {
     vm.throw_new(
         "Ljava/lang/IllegalStateException;",
-        Some(&format!("SurfaceControl.Transaction: stale/unknown handle {handle}")),
+        Some(&format!(
+            "SurfaceControl.Transaction: stale/unknown handle {handle}"
+        )),
     )
 }
 
@@ -633,7 +813,13 @@ pub fn encode_ops(ops: &[SurfaceOp]) -> Vec<u8> {
                 put_u64(&mut out, *layer);
                 put_f32(&mut out, *alpha);
             }
-            SurfaceOp::Matrix { layer, dsdx, dtdx, dtdy, dsdy } => {
+            SurfaceOp::Matrix {
+                layer,
+                dsdx,
+                dtdx,
+                dtdy,
+                dsdy,
+            } => {
                 out.push(TAG_MATRIX);
                 put_u64(&mut out, *layer);
                 put_f32(&mut out, *dsdx);
@@ -670,7 +856,10 @@ pub fn encode_ops(ops: &[SurfaceOp]) -> Vec<u8> {
                 put_u64(&mut out, *layer);
                 put_i32(&mut out, *stack);
             }
-            SurfaceOp::Buffer { layer, frame_number } => {
+            SurfaceOp::Buffer {
+                layer,
+                frame_number,
+            } => {
                 out.push(TAG_BUFFER);
                 put_u64(&mut out, *layer);
                 put_u64(&mut out, *frame_number);
@@ -770,11 +959,31 @@ pub fn decode_ops(bytes: &[u8]) -> Option<Vec<SurfaceOp>> {
     for _ in 0..count {
         let tag = r.u8()?;
         let op = match tag {
-            TAG_POSITION => SurfaceOp::Position { layer: r.u64()?, x: r.f32()?, y: r.f32()? },
-            TAG_LAYER => SurfaceOp::Layer { layer: r.u64()?, z: r.i32()? },
-            TAG_RELATIVE => SurfaceOp::RelativeLayer { layer: r.u64()?, relative: r.u64()?, z: r.i32()? },
-            TAG_ALPHA => SurfaceOp::Alpha { layer: r.u64()?, alpha: r.f32()? },
-            TAG_MATRIX => SurfaceOp::Matrix { layer: r.u64()?, dsdx: r.f32()?, dtdx: r.f32()?, dtdy: r.f32()?, dsdy: r.f32()? },
+            TAG_POSITION => SurfaceOp::Position {
+                layer: r.u64()?,
+                x: r.f32()?,
+                y: r.f32()?,
+            },
+            TAG_LAYER => SurfaceOp::Layer {
+                layer: r.u64()?,
+                z: r.i32()?,
+            },
+            TAG_RELATIVE => SurfaceOp::RelativeLayer {
+                layer: r.u64()?,
+                relative: r.u64()?,
+                z: r.i32()?,
+            },
+            TAG_ALPHA => SurfaceOp::Alpha {
+                layer: r.u64()?,
+                alpha: r.f32()?,
+            },
+            TAG_MATRIX => SurfaceOp::Matrix {
+                layer: r.u64()?,
+                dsdx: r.f32()?,
+                dtdx: r.f32()?,
+                dtdy: r.f32()?,
+                dsdy: r.f32()?,
+            },
             TAG_CROP => {
                 let layer = r.u64()?;
                 let rect = if r.u8()? == 1 {
@@ -784,19 +993,45 @@ pub fn decode_ops(bytes: &[u8]) -> Option<Vec<SurfaceOp>> {
                 };
                 SurfaceOp::Crop { layer, rect }
             }
-            TAG_FLAGS => SurfaceOp::Flags { layer: r.u64()?, flags: r.i32()?, mask: r.i32()? },
-            TAG_TRANSFORM_HINT => SurfaceOp::TransformHint { layer: r.u64()?, hint: r.i32()? },
-            TAG_LAYER_STACK => SurfaceOp::LayerStack { layer: r.u64()?, stack: r.i32()? },
-            TAG_BUFFER => SurfaceOp::Buffer { layer: r.u64()?, frame_number: r.u64()? },
+            TAG_FLAGS => SurfaceOp::Flags {
+                layer: r.u64()?,
+                flags: r.i32()?,
+                mask: r.i32()?,
+            },
+            TAG_TRANSFORM_HINT => SurfaceOp::TransformHint {
+                layer: r.u64()?,
+                hint: r.i32()?,
+            },
+            TAG_LAYER_STACK => SurfaceOp::LayerStack {
+                layer: r.u64()?,
+                stack: r.i32()?,
+            },
+            TAG_BUFFER => SurfaceOp::Buffer {
+                layer: r.u64()?,
+                frame_number: r.u64()?,
+            },
             TAG_UNSET_BUFFER => SurfaceOp::UnsetBuffer { layer: r.u64()? },
-            TAG_BUFFER_TRANSFORM => SurfaceOp::BufferTransform { layer: r.u64()?, transform: r.i32()? },
-            TAG_SCALE => SurfaceOp::Scale { layer: r.u64()?, sx: r.f32()?, sy: r.f32()? },
-            TAG_FIXED_TRANSFORM => SurfaceOp::FixedTransformHint { layer: r.u64()?, hint: r.i32()? },
+            TAG_BUFFER_TRANSFORM => SurfaceOp::BufferTransform {
+                layer: r.u64()?,
+                transform: r.i32()?,
+            },
+            TAG_SCALE => SurfaceOp::Scale {
+                layer: r.u64()?,
+                sx: r.f32()?,
+                sy: r.f32()?,
+            },
+            TAG_FIXED_TRANSFORM => SurfaceOp::FixedTransformHint {
+                layer: r.u64()?,
+                hint: r.i32()?,
+            },
             TAG_FRAME_TIMELINE => SurfaceOp::FrameTimelineVsync { vsync_id: r.i64()? },
             TAG_ANIMATION => SurfaceOp::Animation,
             TAG_EARLY_START => SurfaceOp::EarlyWakeupStart,
             TAG_EARLY_END => SurfaceOp::EarlyWakeupEnd,
-            TAG_REPARENT => SurfaceOp::Reparent { layer: r.u64()?, new_parent: r.u64()? },
+            TAG_REPARENT => SurfaceOp::Reparent {
+                layer: r.u64()?,
+                new_parent: r.u64()?,
+            },
             TAG_RECORDED => {
                 let t = r.u16()?;
                 let args = [r.i64()?, r.i64()?, r.i64()?, r.i64()?];
@@ -893,7 +1128,13 @@ fn apply_to_state(st: &mut SurfaceState, ops: &[SurfaceOp]) -> Result<u64, u64> 
                     l.generation = gen;
                 }
             }
-            SurfaceOp::Matrix { layer, dsdx, dtdx, dtdy, dsdy } => {
+            SurfaceOp::Matrix {
+                layer,
+                dsdx,
+                dtdx,
+                dtdy,
+                dsdy,
+            } => {
                 if let Some(l) = st.layers.get_mut(layer) {
                     l.matrix = [*dsdx, *dtdx, *dtdy, *dsdy];
                     l.generation = gen;
@@ -923,7 +1164,10 @@ fn apply_to_state(st: &mut SurfaceState, ops: &[SurfaceOp]) -> Result<u64, u64> 
                     l.generation = gen;
                 }
             }
-            SurfaceOp::Buffer { layer, frame_number } => {
+            SurfaceOp::Buffer {
+                layer,
+                frame_number,
+            } => {
                 if let Some(l) = st.layers.get_mut(layer) {
                     l.buffer_frame = Some(*frame_number);
                     l.generation = gen;
@@ -1017,8 +1261,10 @@ fn native_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     }
     let handle = with_state(|st| {
         let handle = st.alloc();
-        st.layers
-            .insert(handle, LayerRecord::new(handle, name.clone(), width, height));
+        st.layers.insert(
+            handle,
+            LayerRecord::new(handle, name.clone(), width, height),
+        );
         handle
     });
     if let Some(layer_id) = with_backend(|b| b.create_layer(handle, &name, width, height)) {
@@ -1063,13 +1309,14 @@ fn native_get_transaction_id(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_apply_transaction(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 0) as u64;
-    let (ops, listeners) = STATE.with(|s| {
-        s.borrow()
-            .transactions
-            .get(&handle)
-            .map(|t| (t.ops.clone(), t.listeners.clone()))
-    })
-    .ok_or_else(|| missing_transaction(vm, handle))?;
+    let (ops, listeners) = STATE
+        .with(|s| {
+            s.borrow()
+                .transactions
+                .get(&handle)
+                .map(|t| (t.ops.clone(), t.listeners.clone()))
+        })
+        .ok_or_else(|| missing_transaction(vm, handle))?;
     apply_ops(vm, &ops)?;
     // A real buffer submission is the frame-publish signal (advisor rule).
     if ops.iter().any(|o| matches!(o, SurfaceOp::Buffer { .. })) {
@@ -1146,7 +1393,11 @@ fn native_clear_transaction(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     outcome.map_err(|()| missing_transaction(vm, handle))
 }
 
-fn with_txn_op(vm: &mut Vm, ctx: NativeCtx, f: impl FnOnce(&mut SurfaceState) -> Option<SurfaceOp>) -> VmResult<()> {
+fn with_txn_op(
+    vm: &mut Vm,
+    ctx: NativeCtx,
+    f: impl FnOnce(&mut SurfaceState) -> Option<SurfaceOp>,
+) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 0) as u64;
     let outcome = with_state(|st| -> Result<(), ()> {
         if !st.transactions.contains_key(&handle) {
@@ -1180,7 +1431,9 @@ fn native_set_relative_layer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let layer = vm.arg_i64(ctx, 1) as u64;
     let relative = vm.arg_i64(ctx, 2) as u64;
     let z = vm.arg_i32(ctx, 3);
-    with_txn_op(vm, ctx, |_| Some(SurfaceOp::RelativeLayer { layer, relative, z }))
+    with_txn_op(vm, ctx, |_| {
+        Some(SurfaceOp::RelativeLayer { layer, relative, z })
+    })
 }
 
 fn native_set_alpha(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -1195,13 +1448,31 @@ fn native_set_matrix(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let dtdx = vm.arg_f32(ctx, 3);
     let dtdy = vm.arg_f32(ctx, 4);
     let dsdy = vm.arg_f32(ctx, 5);
-    with_txn_op(vm, ctx, |_| Some(SurfaceOp::Matrix { layer, dsdx, dtdx, dtdy, dsdy }))
+    with_txn_op(vm, ctx, |_| {
+        Some(SurfaceOp::Matrix {
+            layer,
+            dsdx,
+            dtdx,
+            dtdy,
+            dsdy,
+        })
+    })
 }
 
 fn native_set_window_crop(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let layer = vm.arg_i64(ctx, 1) as u64;
-    let rect = [vm.arg_i32(ctx, 2), vm.arg_i32(ctx, 3), vm.arg_i32(ctx, 4), vm.arg_i32(ctx, 5)];
-    with_txn_op(vm, ctx, |_| Some(SurfaceOp::Crop { layer, rect: Some(rect) }))
+    let rect = [
+        vm.arg_i32(ctx, 2),
+        vm.arg_i32(ctx, 3),
+        vm.arg_i32(ctx, 4),
+        vm.arg_i32(ctx, 5),
+    ];
+    with_txn_op(vm, ctx, |_| {
+        Some(SurfaceOp::Crop {
+            layer,
+            rect: Some(rect),
+        })
+    })
 }
 
 fn native_set_crop(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -1212,10 +1483,22 @@ fn native_set_crop(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         None
     } else {
         Some([
-            vm.get_field(rect_obj, "left").ok().and_then(jv_i32).unwrap_or(0),
-            vm.get_field(rect_obj, "top").ok().and_then(jv_i32).unwrap_or(0),
-            vm.get_field(rect_obj, "right").ok().and_then(jv_i32).unwrap_or(0),
-            vm.get_field(rect_obj, "bottom").ok().and_then(jv_i32).unwrap_or(0),
+            vm.get_field(rect_obj, "left")
+                .ok()
+                .and_then(jv_i32)
+                .unwrap_or(0),
+            vm.get_field(rect_obj, "top")
+                .ok()
+                .and_then(jv_i32)
+                .unwrap_or(0),
+            vm.get_field(rect_obj, "right")
+                .ok()
+                .and_then(jv_i32)
+                .unwrap_or(0),
+            vm.get_field(rect_obj, "bottom")
+                .ok()
+                .and_then(jv_i32)
+                .unwrap_or(0),
         ])
     };
     with_txn_op(vm, ctx, |_| Some(SurfaceOp::Crop { layer, rect }))
@@ -1254,7 +1537,12 @@ fn native_set_layer_stack(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn native_set_buffer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let layer = vm.arg_i64(ctx, 1) as u64;
     let frame_number = vm.arg_i64(ctx, 3) as u64;
-    with_txn_op(vm, ctx, |_| Some(SurfaceOp::Buffer { layer, frame_number }))
+    with_txn_op(vm, ctx, |_| {
+        Some(SurfaceOp::Buffer {
+            layer,
+            frame_number,
+        })
+    })
 }
 
 fn native_unset_buffer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -1265,7 +1553,9 @@ fn native_unset_buffer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn native_set_buffer_transform(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let layer = vm.arg_i64(ctx, 1) as u64;
     let transform = vm.arg_i32(ctx, 2);
-    with_txn_op(vm, ctx, |_| Some(SurfaceOp::BufferTransform { layer, transform }))
+    with_txn_op(vm, ctx, |_| {
+        Some(SurfaceOp::BufferTransform { layer, transform })
+    })
 }
 
 fn native_set_scale(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -1278,12 +1568,16 @@ fn native_set_scale(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn native_set_fixed_transform_hint(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let layer = vm.arg_i64(ctx, 1) as u64;
     let hint = vm.arg_i32(ctx, 2);
-    with_txn_op(vm, ctx, |_| Some(SurfaceOp::FixedTransformHint { layer, hint }))
+    with_txn_op(vm, ctx, |_| {
+        Some(SurfaceOp::FixedTransformHint { layer, hint })
+    })
 }
 
 fn native_set_frame_timeline_vsync(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let vsync_id = vm.arg_i64(ctx, 1);
-    with_txn_op(vm, ctx, |_| Some(SurfaceOp::FrameTimelineVsync { vsync_id }))
+    with_txn_op(vm, ctx, |_| {
+        Some(SurfaceOp::FrameTimelineVsync { vsync_id })
+    })
 }
 
 fn native_set_animation_transaction(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -1335,7 +1629,11 @@ fn native_get_default_apply_token(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         vm.ret_ref(ctx, NULL);
     } else {
         let proxy = vm
-            .new_instance_ctor("android.os.BinderProxy", "(J)V", &[JavaValue::Long(id as i64)])
+            .new_instance_ctor(
+                "android.os.BinderProxy",
+                "(J)V",
+                &[JavaValue::Long(id as i64)],
+            )
             .unwrap_or(NULL);
         vm.ret_ref(ctx, proxy);
     }
@@ -1434,10 +1732,12 @@ fn native_write_to_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     })
     .ok()
     .and_then(Result::ok)
-    .ok_or_else(|| vm.throw_new(
-        "Ljava/lang/IllegalStateException;",
-        Some("nativeWriteToParcel: malformed parcel"),
-    ))?;
+    .ok_or_else(|| {
+        vm.throw_new(
+            "Ljava/lang/IllegalStateException;",
+            Some("nativeWriteToParcel: malformed parcel"),
+        )
+    })?;
     Ok(())
 }
 
@@ -1988,7 +2288,10 @@ fn blast_merge(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         ));
     };
     let mut merged = ops;
-    merged.push(SurfaceOp::Buffer { layer, frame_number: frame });
+    merged.push(SurfaceOp::Buffer {
+        layer,
+        frame_number: frame,
+    });
     apply_ops(vm, &merged)?;
     STATE.with(|s| s.borrow_mut().presented_frames += 1);
     Ok(())
@@ -2070,20 +2373,56 @@ mod tests {
     #[test]
     fn ops_round_trip_is_byte_stable() {
         let ops = vec![
-            SurfaceOp::Position { layer: 7, x: 3.5, y: -1.25 },
-            SurfaceOp::Alpha { layer: 7, alpha: 0.5 },
+            SurfaceOp::Position {
+                layer: 7,
+                x: 3.5,
+                y: -1.25,
+            },
+            SurfaceOp::Alpha {
+                layer: 7,
+                alpha: 0.5,
+            },
             SurfaceOp::Layer { layer: 7, z: -3 },
-            SurfaceOp::Crop { layer: 7, rect: Some([1, 2, 30, 40]) },
-            SurfaceOp::Crop { layer: 7, rect: None },
-            SurfaceOp::Flags { layer: 7, flags: 4, mask: 4 },
-            SurfaceOp::Buffer { layer: 7, frame_number: 99 },
-            SurfaceOp::Matrix { layer: 7, dsdx: 1.0, dtdx: 0.0, dtdy: 0.0, dsdy: 1.0 },
-            SurfaceOp::Reparent { layer: 7, new_parent: 0 },
-            SurfaceOp::Recorded { tag: 100, args: [1, -2, 3, -4] },
+            SurfaceOp::Crop {
+                layer: 7,
+                rect: Some([1, 2, 30, 40]),
+            },
+            SurfaceOp::Crop {
+                layer: 7,
+                rect: None,
+            },
+            SurfaceOp::Flags {
+                layer: 7,
+                flags: 4,
+                mask: 4,
+            },
+            SurfaceOp::Buffer {
+                layer: 7,
+                frame_number: 99,
+            },
+            SurfaceOp::Matrix {
+                layer: 7,
+                dsdx: 1.0,
+                dtdx: 0.0,
+                dtdy: 0.0,
+                dsdy: 1.0,
+            },
+            SurfaceOp::Reparent {
+                layer: 7,
+                new_parent: 0,
+            },
+            SurfaceOp::Recorded {
+                tag: 100,
+                args: [1, -2, 3, -4],
+            },
         ];
         let bytes = encode_ops(&ops);
         let decoded = decode_ops(&bytes).expect("decode");
         assert_eq!(decoded, ops, "decode must reproduce every field");
-        assert_eq!(encode_ops(&decoded), bytes, "re-encode must be byte-identical");
+        assert_eq!(
+            encode_ops(&decoded),
+            bytes,
+            "re-encode must be byte-identical"
+        );
     }
 }

@@ -30,7 +30,14 @@ pub const AGENT_GUIDE: &str = include_str!("../../../docs/AGENT_GUIDE.md");
 ///
 /// `overview` is the skeleton `acos_help` returns with no topic; `all` is the
 /// whole guide (not a section, so it is not in this list).
-pub const TOPICS: &[&str] = &["overview", "workflow", "cli", "scenarios", "errors", "limits"];
+pub const TOPICS: &[&str] = &[
+    "overview",
+    "workflow",
+    "cli",
+    "scenarios",
+    "errors",
+    "limits",
+];
 
 /// `topic: "all"` returns everything.
 pub const ALL_TOPIC: &str = "all";

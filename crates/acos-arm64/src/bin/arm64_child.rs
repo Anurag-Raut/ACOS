@@ -138,9 +138,6 @@ fn run() -> i32 {
 
     // `exec` only returns on failure.
     let err = command.exec();
-    eprintln!(
-        "arm64_child: exec {} failed: {err}",
-        qemu.to_string_lossy()
-    );
+    eprintln!("arm64_child: exec {} failed: {err}", qemu.to_string_lossy());
     EXIT_EXEC_FAILED
 }

@@ -256,7 +256,10 @@ impl Vm {
         let desc = component_descriptor(elem_desc);
         let data = self.build_array_data(&desc, values)?;
         let h = self
-            .alloc(Object::Array(crate::heap::ArrayObj { elem_desc: desc, data }))
+            .alloc(Object::Array(crate::heap::ArrayObj {
+                elem_desc: desc,
+                data,
+            }))
             .map_err(BridgeError::from)?;
         self.bridge_root(h);
         Ok(h)
@@ -265,11 +268,13 @@ impl Vm {
     /// Create a rooted zeroed Java array of `len` elements.
     pub fn new_array_empty(&mut self, elem_desc: &str, len: usize) -> BridgeResult<Handle> {
         let desc = component_descriptor(elem_desc);
-        let data = crate::heap::new_array_data(&desc, len).map_err(|e| {
-            BridgeError::BadArrayType(format!("{desc}: {e}"))
-        })?;
+        let data = crate::heap::new_array_data(&desc, len)
+            .map_err(|e| BridgeError::BadArrayType(format!("{desc}: {e}")))?;
         let h = self
-            .alloc(Object::Array(crate::heap::ArrayObj { elem_desc: desc, data }))
+            .alloc(Object::Array(crate::heap::ArrayObj {
+                elem_desc: desc,
+                data,
+            }))
             .map_err(BridgeError::from)?;
         self.bridge_root(h);
         Ok(h)
@@ -362,8 +367,12 @@ impl Vm {
     pub fn reflected_field_parts(&self, obj: Handle) -> Option<(String, String, String, bool)> {
         let dc = self.get_instance_field_by_name(obj, "declaringClass")?;
         let cid = self.class_id_of_class_object(dc)?;
-        let idx = self.get_instance_field_by_name(obj, "artFieldIndex").unwrap_or(0) as usize;
-        let access = self.get_instance_field_by_name(obj, "accessFlags").unwrap_or(0);
+        let idx = self
+            .get_instance_field_by_name(obj, "artFieldIndex")
+            .unwrap_or(0) as usize;
+        let access = self
+            .get_instance_field_by_name(obj, "accessFlags")
+            .unwrap_or(0);
         let is_static = access & acos_dex::access::STATIC != 0;
         let c = &self.classes[cid as usize];
         let def = if is_static {
@@ -538,13 +547,13 @@ impl Vm {
             _ => return Err(BridgeError::DeadHandle(array)),
         };
         let words = self.encode_desc(&elem_desc, &value).map_err(|e| match e {
-            BridgeError::FieldTypeMismatch { declared, provided, .. } => {
-                BridgeError::ArrayElementType {
-                    index,
-                    expected: declared,
-                    provided,
-                }
-            }
+            BridgeError::FieldTypeMismatch {
+                declared, provided, ..
+            } => BridgeError::ArrayElementType {
+                index,
+                expected: declared,
+                provided,
+            },
             other => other,
         })?;
         let a = match self.heap.get_mut(array) {
@@ -569,8 +578,7 @@ impl Vm {
 
     /// Convert a Java `String` handle to a Rust `String`.
     pub fn java_string_to_rust(&self, h: Handle) -> BridgeResult<String> {
-        self.string_to_rust(h)
-            .ok_or(BridgeError::DeadHandle(h))
+        self.string_to_rust(h).ok_or(BridgeError::DeadHandle(h))
     }
 
     // ---- root management -------------------------------------------------
@@ -726,15 +734,15 @@ impl Vm {
         for (i, (&p, v)) in params.iter().zip(args.iter()).enumerate() {
             let desc = self.type_desc(p).to_string();
             let encoded = self.encode_desc(&desc, v).map_err(|e| match e {
-                BridgeError::FieldTypeMismatch { declared, provided, .. } => {
-                    BridgeError::ArgType {
-                        class: class.to_string(),
-                        name: format!("{name}{sig}"),
-                        index: i,
-                        expected: declared,
-                        provided,
-                    }
-                }
+                BridgeError::FieldTypeMismatch {
+                    declared, provided, ..
+                } => BridgeError::ArgType {
+                    class: class.to_string(),
+                    name: format!("{name}{sig}"),
+                    index: i,
+                    expected: declared,
+                    provided,
+                },
                 other => other,
             })?;
             if type_width(self.type_kind(p)) == 2 {
@@ -786,13 +794,18 @@ impl Vm {
     /// static field with the same name is a hard error (the caller should use
     /// the static field API).
     fn find_field(&mut self, obj: Handle, name: &str) -> BridgeResult<(String, FieldDef)> {
-        let class = self.class_of_object(obj).ok_or(BridgeError::DeadHandle(obj))?;
+        let class = self
+            .class_of_object(obj)
+            .ok_or(BridgeError::DeadHandle(obj))?;
         let start_name = self.class_desc_of_id(class);
         let mut cur = Some(class);
         while let Some(c) = cur {
             let (instance, statics) = {
                 let cl = &self.classes[c as usize];
-                (cl.declared_instance_fields.clone(), cl.declared_static_fields.clone())
+                (
+                    cl.declared_instance_fields.clone(),
+                    cl.declared_static_fields.clone(),
+                )
             };
             if let Some(f) = instance.iter().find(|f| f.name == name) {
                 return Ok((start_name, f.clone()));
@@ -873,14 +886,14 @@ impl Vm {
         value: &JavaValue,
     ) -> BridgeResult<Vec<u32>> {
         self.encode_desc(&field.desc, value).map_err(|e| match e {
-            BridgeError::FieldTypeMismatch { declared, provided, .. } => {
-                BridgeError::FieldTypeMismatch {
-                    class: class.to_string(),
-                    field: field.name.clone(),
-                    declared,
-                    provided,
-                }
-            }
+            BridgeError::FieldTypeMismatch {
+                declared, provided, ..
+            } => BridgeError::FieldTypeMismatch {
+                class: class.to_string(),
+                field: field.name.clone(),
+                declared,
+                provided,
+            },
             other => other,
         })
     }
@@ -930,17 +943,15 @@ impl Vm {
                     other => return Err(self.mismatch(desc, other)),
                 };
                 if h != NULL {
-                    let want = self.load_class(desc).map_err(|_| {
-                        BridgeError::FieldTypeMismatch {
-                            class: String::new(),
-                            field: String::new(),
-                            declared: desc.to_string(),
-                            provided: value.kind().to_string(),
-                        }
-                    })?;
-                    let got = self
-                        .class_of_object(h)
-                        .ok_or(BridgeError::DeadHandle(h))?;
+                    let want =
+                        self.load_class(desc)
+                            .map_err(|_| BridgeError::FieldTypeMismatch {
+                                class: String::new(),
+                                field: String::new(),
+                                declared: desc.to_string(),
+                                provided: value.kind().to_string(),
+                            })?;
+                    let got = self.class_of_object(h).ok_or(BridgeError::DeadHandle(h))?;
                     if !self.is_assignable(got, want).map_err(BridgeError::from)? {
                         return Err(self.mismatch(desc, value));
                     }
@@ -976,9 +987,7 @@ impl Vm {
             Some(b'I') => JavaValue::Int(w0 as i32),
             Some(b'J') => JavaValue::Long(((w0 as u64) | ((w1 as u64) << 32)) as i64),
             Some(b'F') => JavaValue::Float(f32::from_bits(w0)),
-            Some(b'D') => {
-                JavaValue::Double(f64::from_bits((w0 as u64) | ((w1 as u64) << 32)))
-            }
+            Some(b'D') => JavaValue::Double(f64::from_bits((w0 as u64) | ((w1 as u64) << 32))),
             Some(b'L') | Some(b'[') => {
                 if w0 == NULL {
                     JavaValue::Null
@@ -1013,13 +1022,13 @@ impl Vm {
         let mut words: Vec<u32> = Vec::with_capacity(values.len());
         for (i, v) in values.iter().enumerate() {
             let enc = self.encode_desc(elem_desc, v).map_err(|e| match e {
-                BridgeError::FieldTypeMismatch { declared, provided, .. } => {
-                    BridgeError::ArrayElementType {
-                        index: i,
-                        expected: declared,
-                        provided,
-                    }
-                }
+                BridgeError::FieldTypeMismatch {
+                    declared, provided, ..
+                } => BridgeError::ArrayElementType {
+                    index: i,
+                    expected: declared,
+                    provided,
+                },
                 other => other,
             })?;
             words.push(enc[0]);
@@ -1114,12 +1123,18 @@ mod tests {
 
     #[test]
     fn descriptors_are_normalised() {
-        assert_eq!(class_descriptor("android.graphics.Rect"), "Landroid/graphics/Rect;");
+        assert_eq!(
+            class_descriptor("android.graphics.Rect"),
+            "Landroid/graphics/Rect;"
+        );
         assert_eq!(class_descriptor("java/lang/String"), "Ljava/lang/String;");
         assert_eq!(class_descriptor("Ljava/lang/String;"), "Ljava/lang/String;");
         assert_eq!(component_descriptor("I"), "I");
         assert_eq!(component_descriptor("[I"), "[I");
-        assert_eq!(component_descriptor("java.lang.String"), "Ljava/lang/String;");
+        assert_eq!(
+            component_descriptor("java.lang.String"),
+            "Ljava/lang/String;"
+        );
     }
 
     #[test]

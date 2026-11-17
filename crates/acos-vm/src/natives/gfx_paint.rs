@@ -16,7 +16,9 @@ use std::sync::{Mutex, OnceLock};
 
 use acos_render::color::PorterDuffMode;
 use acos_render::matrix::Matrix3x3;
-use acos_render::paint::{ColorFilterSpec, PaintStyle, ShaderSpec, StrokeCap, StrokeJoin, TileMode};
+use acos_render::paint::{
+    ColorFilterSpec, PaintStyle, ShaderSpec, StrokeCap, StrokeJoin, TileMode,
+};
 use acos_render::path::Path;
 
 use crate::heap::{ArrayData, Object};
@@ -180,9 +182,7 @@ pub fn shader_spec(handle: i64) -> Option<ShaderSpec> {
 }
 
 fn store_shader(spec: ShaderSpec) -> VmResult<i64> {
-    Ok(lock_shaders()?
-        .insert(spec)
-        .to_jlong())
+    Ok(lock_shaders()?.insert(spec).to_jlong())
 }
 
 fn tile_mode(ordinal: i32) -> TileMode {
@@ -197,9 +197,13 @@ fn color_array(vm: &Vm, h: u32) -> VmResult<Vec<u32>> {
     match vm.heap.get(h) {
         Some(Object::Array(a)) => match &a.data {
             ArrayData::Long(v) => Ok(v.iter().map(|c| (*c >> 32) as u32).collect()),
-            _ => Err(VmError::Internal("shader colours: expected long[]".to_string())),
+            _ => Err(VmError::Internal(
+                "shader colours: expected long[]".to_string(),
+            )),
         },
-        _ => Err(VmError::Internal("shader colours: expected long[]".to_string())),
+        _ => Err(VmError::Internal(
+            "shader colours: expected long[]".to_string(),
+        )),
     }
 }
 
@@ -210,7 +214,9 @@ fn optional_float_array(vm: &Vm, h: u32) -> VmResult<Option<Vec<f32>>> {
     match vm.heap.get(h) {
         Some(Object::Array(a)) => match &a.data {
             ArrayData::Float(v) => Ok(Some(v.clone())),
-            _ => Err(VmError::Internal("shader positions: expected float[]".to_string())),
+            _ => Err(VmError::Internal(
+                "shader positions: expected float[]".to_string(),
+            )),
         },
         _ => Ok(None),
     }
@@ -407,8 +413,18 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(p, "nGetWordSpacing", "(J)F", paint_get_word_spacing);
     vm.register_native(p, "nSetHinting", "(JI)V", paint_set_hinting);
     vm.register_native(p, "nGetHinting", "(J)I", paint_get_hinting);
-    vm.register_native(p, "nSetElegantTextHeight", "(JZ)V", paint_set_elegant_text_height);
-    vm.register_native(p, "nIsElegantTextHeight", "(J)Z", paint_is_elegant_text_height);
+    vm.register_native(
+        p,
+        "nSetElegantTextHeight",
+        "(JZ)V",
+        paint_set_elegant_text_height,
+    );
+    vm.register_native(
+        p,
+        "nIsElegantTextHeight",
+        "(J)Z",
+        paint_is_elegant_text_height,
+    );
     vm.register_native(p, "nSetStartHyphenEdit", "(JI)V", paint_set_start_hyphen);
     vm.register_native(p, "nGetStartHyphenEdit", "(J)I", paint_get_start_hyphen);
     vm.register_native(p, "nSetEndHyphenEdit", "(JI)V", paint_set_end_hyphen);
@@ -422,62 +438,232 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(p, "nSetXfermode", "(JI)V", paint_set_xfermode);
     vm.register_native(p, "nSetShadowLayer", "(JFFFJJ)V", paint_set_shadow);
     vm.register_native(p, "nHasShadowLayer", "(J)Z", paint_has_shadow);
-    vm.register_native(p, "nGetUnderlinePosition", "(J)F", paint_get_underline_position);
-    vm.register_native(p, "nGetUnderlineThickness", "(J)F", paint_get_underline_thickness);
-    vm.register_native(p, "nGetStrikeThruPosition", "(J)F", paint_get_strike_position);
-    vm.register_native(p, "nGetStrikeThruThickness", "(J)F", paint_get_strike_thickness);
-    vm.register_native(p, "nSetTextLocales", "(JLjava/lang/String;)I", paint_set_text_locales);
-    vm.register_native(p, "nSetTextLocalesByMinikinLocaleListId", "(JI)V", paint_set_text_locales_id);
-    vm.register_native(p, "nSetFontFeatureSettings", "(JLjava/lang/String;)V", paint_set_font_features);
-    vm.register_native(p, "nSetFontVariationSettings", "(JLjava/lang/String;)V", paint_set_font_variations);
+    vm.register_native(
+        p,
+        "nGetUnderlinePosition",
+        "(J)F",
+        paint_get_underline_position,
+    );
+    vm.register_native(
+        p,
+        "nGetUnderlineThickness",
+        "(J)F",
+        paint_get_underline_thickness,
+    );
+    vm.register_native(
+        p,
+        "nGetStrikeThruPosition",
+        "(J)F",
+        paint_get_strike_position,
+    );
+    vm.register_native(
+        p,
+        "nGetStrikeThruThickness",
+        "(J)F",
+        paint_get_strike_thickness,
+    );
+    vm.register_native(
+        p,
+        "nSetTextLocales",
+        "(JLjava/lang/String;)I",
+        paint_set_text_locales,
+    );
+    vm.register_native(
+        p,
+        "nSetTextLocalesByMinikinLocaleListId",
+        "(JI)V",
+        paint_set_text_locales_id,
+    );
+    vm.register_native(
+        p,
+        "nSetFontFeatureSettings",
+        "(JLjava/lang/String;)V",
+        paint_set_font_features,
+    );
+    vm.register_native(
+        p,
+        "nSetFontVariationSettings",
+        "(JLjava/lang/String;)V",
+        paint_set_font_variations,
+    );
 
     // Text measurement (routed through acos-render shaping).
-    vm.register_native(p, "nGetFontMetrics", "(JLandroid/graphics/Paint$FontMetrics;)F", paint_font_metrics);
-    vm.register_native(p, "nGetFontMetricsInt", "(JLandroid/graphics/Paint$FontMetricsInt;)I", paint_font_metrics_int);
-    vm.register_native(p, "nGetFontMetricsIntForText", "(JLjava/lang/String;IIIIZLandroid/graphics/Paint$FontMetricsInt;)V", paint_font_metrics_text_string);
-    vm.register_native(p, "nGetFontMetricsIntForText", "(J[CIIIIZLandroid/graphics/Paint$FontMetricsInt;)V", paint_font_metrics_text_chars);
-    vm.register_native(p, "nGetTextAdvances", "(JLjava/lang/String;IIIII[FI)F", paint_text_advances_string);
-    vm.register_native(p, "nGetTextAdvances", "(J[CIIIII[FI)F", paint_text_advances_chars);
-    vm.register_native(p, "nGetRunCharacterAdvance", "(J[CIIIIZI[FI)F", paint_run_char_advance);
+    vm.register_native(
+        p,
+        "nGetFontMetrics",
+        "(JLandroid/graphics/Paint$FontMetrics;)F",
+        paint_font_metrics,
+    );
+    vm.register_native(
+        p,
+        "nGetFontMetricsInt",
+        "(JLandroid/graphics/Paint$FontMetricsInt;)I",
+        paint_font_metrics_int,
+    );
+    vm.register_native(
+        p,
+        "nGetFontMetricsIntForText",
+        "(JLjava/lang/String;IIIIZLandroid/graphics/Paint$FontMetricsInt;)V",
+        paint_font_metrics_text_string,
+    );
+    vm.register_native(
+        p,
+        "nGetFontMetricsIntForText",
+        "(J[CIIIIZLandroid/graphics/Paint$FontMetricsInt;)V",
+        paint_font_metrics_text_chars,
+    );
+    vm.register_native(
+        p,
+        "nGetTextAdvances",
+        "(JLjava/lang/String;IIIII[FI)F",
+        paint_text_advances_string,
+    );
+    vm.register_native(
+        p,
+        "nGetTextAdvances",
+        "(J[CIIIII[FI)F",
+        paint_text_advances_chars,
+    );
+    vm.register_native(
+        p,
+        "nGetRunCharacterAdvance",
+        "(J[CIIIIZI[FI)F",
+        paint_run_char_advance,
+    );
     vm.register_native(p, "nGetRunAdvance", "(J[CIIIIZI)F", paint_run_advance);
-    vm.register_native(p, "nGetOffsetForAdvance", "(J[CIIIIZF)I", paint_offset_for_advance);
-    vm.register_native(p, "nGetStringBounds", "(JLjava/lang/String;IIILandroid/graphics/Rect;)V", paint_string_bounds);
-    vm.register_native(p, "nGetCharArrayBounds", "(J[CIIILandroid/graphics/Rect;)V", paint_char_array_bounds);
-    vm.register_native(p, "nBreakText", "(JLjava/lang/String;ZFI[F)I", paint_break_text_string);
+    vm.register_native(
+        p,
+        "nGetOffsetForAdvance",
+        "(J[CIIIIZF)I",
+        paint_offset_for_advance,
+    );
+    vm.register_native(
+        p,
+        "nGetStringBounds",
+        "(JLjava/lang/String;IIILandroid/graphics/Rect;)V",
+        paint_string_bounds,
+    );
+    vm.register_native(
+        p,
+        "nGetCharArrayBounds",
+        "(J[CIIILandroid/graphics/Rect;)V",
+        paint_char_array_bounds,
+    );
+    vm.register_native(
+        p,
+        "nBreakText",
+        "(JLjava/lang/String;ZFI[F)I",
+        paint_break_text_string,
+    );
     vm.register_native(p, "nBreakText", "(J[CIIFI[F)I", paint_break_text_chars);
     vm.register_native(p, "nAscent", "(J)F", paint_ascent);
     vm.register_native(p, "nDescent", "(J)F", paint_descent);
     vm.register_native(p, "nHasGlyph", "(JILjava/lang/String;)Z", paint_has_glyph);
     vm.register_native(p, "nEqualsForTextMeasurement", "(JJ)Z", paint_equals_text);
     vm.register_native(p, "nGetTextPath", "(JI[CIIFFJ)V", paint_text_path_chars);
-    vm.register_native(p, "nGetTextPath", "(JILjava/lang/String;IIFFJ)V", paint_text_path_string);
-    vm.register_native(p, "nGetTextRunCursor", "(J[CIIIII)I", paint_text_run_cursor_chars);
-    vm.register_native(p, "nGetTextRunCursor", "(JLjava/lang/String;IIIII)I", paint_text_run_cursor_string);
+    vm.register_native(
+        p,
+        "nGetTextPath",
+        "(JILjava/lang/String;IIFFJ)V",
+        paint_text_path_string,
+    );
+    vm.register_native(
+        p,
+        "nGetTextRunCursor",
+        "(J[CIIIII)I",
+        paint_text_run_cursor_chars,
+    );
+    vm.register_native(
+        p,
+        "nGetTextRunCursor",
+        "(JLjava/lang/String;IIIII)I",
+        paint_text_run_cursor_string,
+    );
     vm.register_native(p, "nGetFillPath", "(JJJ)Z", paint_get_fill_path);
 
     // Shaders (W75-A): gradient, bitmap-tile and compose shaders. A shader
     // handle is an `acos_render::paint::ShaderSpec`; `Paint.nSetShader` stores
     // it and the record-time snapshot resolves it into the frozen render paint.
-    vm.register_native("Landroid/graphics/LinearGradient;", "nativeCreate", "(JFFFF[J[FIJ)J", lg_native_create);
-    vm.register_native("Landroid/graphics/RadialGradient;", "nativeCreate", "(JFFFFFF[J[FIJ)J", rg_native_create);
-    vm.register_native("Landroid/graphics/SweepGradient;", "nativeCreate", "(JFF[J[FJ)J", sg_native_create);
-    vm.register_native("Landroid/graphics/BitmapShader;", "nativeCreate", "(JJIIZZ)J", bs_native_create);
-    vm.register_native("Landroid/graphics/BitmapShader;", "nativeCreateWithMaxAniso", "(JJIIIZ)J", bs_native_create_aniso);
-    vm.register_native("Landroid/graphics/ComposeShader;", "nativeCreate", "(JJJI)J", cs_native_create);
-    vm.register_native("Landroid/graphics/Shader;", "nativeGetFinalizer", "()J", release_func);
+    vm.register_native(
+        "Landroid/graphics/LinearGradient;",
+        "nativeCreate",
+        "(JFFFF[J[FIJ)J",
+        lg_native_create,
+    );
+    vm.register_native(
+        "Landroid/graphics/RadialGradient;",
+        "nativeCreate",
+        "(JFFFFFF[J[FIJ)J",
+        rg_native_create,
+    );
+    vm.register_native(
+        "Landroid/graphics/SweepGradient;",
+        "nativeCreate",
+        "(JFF[J[FJ)J",
+        sg_native_create,
+    );
+    vm.register_native(
+        "Landroid/graphics/BitmapShader;",
+        "nativeCreate",
+        "(JJIIZZ)J",
+        bs_native_create,
+    );
+    vm.register_native(
+        "Landroid/graphics/BitmapShader;",
+        "nativeCreateWithMaxAniso",
+        "(JJIIIZ)J",
+        bs_native_create_aniso,
+    );
+    vm.register_native(
+        "Landroid/graphics/ComposeShader;",
+        "nativeCreate",
+        "(JJJI)J",
+        cs_native_create,
+    );
+    vm.register_native(
+        "Landroid/graphics/Shader;",
+        "nativeGetFinalizer",
+        "()J",
+        release_func,
+    );
 
     // `ColorSpace$Rgb` is constructed during `android.graphics` static init
     // (`new Paint()` transitively creates the sRGB colour space). ACOS models
     // it as an opaque handle: the renderer always works in sRGB/linear space,
     // so no RGB->XYZ transform state is needed. A non-sRGB space would change
     // that and is reported as unsupported by the renderer's conversion path.
-    vm.register_native("Landroid/graphics/ColorSpace$Rgb;", "nativeCreate", "(FFFFFFF[F)J", colorspace_rgb_create);
-    vm.register_native("Landroid/graphics/ColorSpace$Rgb;", "nativeGetNativeFinalizer", "()J", release_func);
+    vm.register_native(
+        "Landroid/graphics/ColorSpace$Rgb;",
+        "nativeCreate",
+        "(FFFFFFF[F)J",
+        colorspace_rgb_create,
+    );
+    vm.register_native(
+        "Landroid/graphics/ColorSpace$Rgb;",
+        "nativeGetNativeFinalizer",
+        "()J",
+        release_func,
+    );
 
     // Colour filters.
-    vm.register_native("Landroid/graphics/BlendModeColorFilter;", "native_CreateBlendModeFilter", "(II)J", filter_create);
-    vm.register_native("Landroid/graphics/PorterDuffColorFilter;", "native_CreateBlendModeFilter", "(II)J", filter_create);
-    vm.register_native("Landroid/graphics/ColorFilter;", "nativeGetFinalizer", "()J", release_func);
+    vm.register_native(
+        "Landroid/graphics/BlendModeColorFilter;",
+        "native_CreateBlendModeFilter",
+        "(II)J",
+        filter_create,
+    );
+    vm.register_native(
+        "Landroid/graphics/PorterDuffColorFilter;",
+        "native_CreateBlendModeFilter",
+        "(II)J",
+        filter_create,
+    );
+    vm.register_native(
+        "Landroid/graphics/ColorFilter;",
+        "nativeGetFinalizer",
+        "()J",
+        release_func,
+    );
     Ok(())
 }
 
@@ -681,12 +867,18 @@ fn cs_native_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let _local = local_matrix(vm.arg_i64(ctx, 0))?;
     let a = vm.arg_i64(ctx, 1);
     let b = vm.arg_i64(ctx, 2);
-    let mode = PorterDuffMode::from_ordinal(vm.arg_i32(ctx, 3))
-        .ok_or_else(|| VmError::unsupported_api("ComposeShader mode", format!("ordinal {}", vm.arg_i32(ctx, 3))))?;
-    let sa = shader_spec(a)
-        .ok_or_else(|| VmError::unsupported_api("ComposeShader shaderA", "unresolved shader handle"))?;
-    let sb = shader_spec(b)
-        .ok_or_else(|| VmError::unsupported_api("ComposeShader shaderB", "unresolved shader handle"))?;
+    let mode = PorterDuffMode::from_ordinal(vm.arg_i32(ctx, 3)).ok_or_else(|| {
+        VmError::unsupported_api(
+            "ComposeShader mode",
+            format!("ordinal {}", vm.arg_i32(ctx, 3)),
+        )
+    })?;
+    let sa = shader_spec(a).ok_or_else(|| {
+        VmError::unsupported_api("ComposeShader shaderA", "unresolved shader handle")
+    })?;
+    let sb = shader_spec(b).ok_or_else(|| {
+        VmError::unsupported_api("ComposeShader shaderB", "unresolved shader handle")
+    })?;
     let spec = ShaderSpec::Compose {
         a: Box::new(sa),
         b: Box::new(sb),
@@ -714,7 +906,9 @@ fn paint_set_shadow(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let dx = vm.arg_f32(ctx, 2);
     let dy = vm.arg_f32(ctx, 3);
     let color = vm.arg_i64(ctx, 4) as u32;
-    with_paint(vm.arg_i64(ctx, 0), |r| r.shadow = Some((radius, dx, dy, color)))?;
+    with_paint(vm.arg_i64(ctx, 0), |r| {
+        r.shadow = Some((radius, dx, dy, color))
+    })?;
     Ok(())
 }
 
@@ -879,7 +1073,11 @@ fn paint_text_advances_chars(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let index = vm.arg_i32(ctx, 8).max(0) as usize;
     let all = gfx_text::char_array(vm, text_h)?;
     let end = end.min(all.len());
-    let slice = if start <= end { &all[start..end] } else { &[][..] };
+    let slice = if start <= end {
+        &all[start..end]
+    } else {
+        &[][..]
+    };
     let mut out = vec![0.0f32; slice.len()];
     let total = gfx_text::advances(slice, &attrs, &mut out)?;
     write_float_array(vm, arr, index, out.len(), &out)?;
@@ -896,7 +1094,11 @@ fn paint_text_advances_string(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let index = vm.arg_i32(ctx, 8).max(0) as usize;
     let units: Vec<u16> = s.encode_utf16().collect();
     let end = end.min(units.len());
-    let slice = if start <= end { &units[start..end] } else { &[][..] };
+    let slice = if start <= end {
+        &units[start..end]
+    } else {
+        &[][..]
+    };
     let mut out = vec![0.0f32; slice.len()];
     let total = gfx_text::advances(slice, &attrs, &mut out)?;
     write_float_array(vm, arr, index, out.len(), &out)?;
@@ -915,7 +1117,11 @@ fn paint_run_char_advance(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let index = vm.arg_i32(ctx, 9).max(0) as usize;
     let all = gfx_text::char_array(vm, text_h)?;
     let end = end.min(all.len());
-    let slice = if start <= end { &all[start..end] } else { &[][..] };
+    let slice = if start <= end {
+        &all[start..end]
+    } else {
+        &[][..]
+    };
     let mut out = vec![0.0f32; slice.len()];
     let total = gfx_text::advances(slice, &attrs, &mut out)?;
     write_float_array(vm, arr, index, slice.len(), &out)?;
@@ -1130,7 +1336,8 @@ fn text_run_cursor(
     }
     let mut off = offset.clamp(start as i32, end as i32) as usize;
     // Never inside a surrogate pair.
-    if off > start && off < end && is_low_surrogate(units[off]) && is_high_surrogate(units[off - 1]) {
+    if off > start && off < end && is_low_surrogate(units[off]) && is_high_surrogate(units[off - 1])
+    {
         off = if cursor_opt == CURSOR_AT_OR_BEFORE {
             off - 1
         } else {

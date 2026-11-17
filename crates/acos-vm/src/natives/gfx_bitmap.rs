@@ -72,12 +72,32 @@ fn int_array(vm: &Vm, h: u32) -> Option<Vec<i32>> {
 /// Register the `Bitmap` natives ACOS can honour.
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     const BM: &str = "Landroid/graphics/Bitmap;";
-    vm.register_native(BM, "nativeCreate", "([IIIIIIZJ)Landroid/graphics/Bitmap;", b_create);
+    vm.register_native(
+        BM,
+        "nativeCreate",
+        "([IIIIIIZJ)Landroid/graphics/Bitmap;",
+        b_create,
+    );
     vm.register_native(BM, "nativeGetNativeFinalizer", "()J", b_zero_long);
     vm.register_native(BM, "nativeCopy", "(JIZ)Landroid/graphics/Bitmap;", b_copy);
-    vm.register_native(BM, "nativeCopyAshmem", "(J)Landroid/graphics/Bitmap;", b_copy_same);
-    vm.register_native(BM, "nativeCopyAshmemConfig", "(JI)Landroid/graphics/Bitmap;", b_copy_config);
-    vm.register_native(BM, "nativeCopyPreserveInternalConfig", "(J)Landroid/graphics/Bitmap;", b_copy_same);
+    vm.register_native(
+        BM,
+        "nativeCopyAshmem",
+        "(J)Landroid/graphics/Bitmap;",
+        b_copy_same,
+    );
+    vm.register_native(
+        BM,
+        "nativeCopyAshmemConfig",
+        "(JI)Landroid/graphics/Bitmap;",
+        b_copy_config,
+    );
+    vm.register_native(
+        BM,
+        "nativeCopyPreserveInternalConfig",
+        "(J)Landroid/graphics/Bitmap;",
+        b_copy_same,
+    );
     vm.register_native(BM, "nativeConfig", "(J)I", b_config);
     vm.register_native(BM, "nativeRowBytes", "(J)I", b_row_bytes);
     vm.register_native(BM, "nativeGetAllocationByteCount", "(J)I", b_alloc_bytes);
@@ -100,12 +120,22 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(BM, "nativeIsBackedByAshmem", "(J)Z", b_false);
     vm.register_native(BM, "nativeIsSRGB", "(J)Z", b_true);
     vm.register_native(BM, "nativeIsSRGBLinear", "(J)Z", b_false);
-    vm.register_native(BM, "nativeComputeColorSpace", "(J)Landroid/graphics/ColorSpace;", b_null_ref);
+    vm.register_native(
+        BM,
+        "nativeComputeColorSpace",
+        "(J)Landroid/graphics/ColorSpace;",
+        b_null_ref,
+    );
     vm.register_native(BM, "nativeSetColorSpace", "(JJ)V", b_noop);
     vm.register_native(BM, "nativeGetAshmemFD", "(J)I", b_minus_one);
     vm.register_native(BM, "nativeHasMipMap", "(J)Z", b_false);
     vm.register_native(BM, "nativeSetHasMipMap", "(JZ)V", b_noop);
-    vm.register_native(BM, "nativeExtractAlpha", "(JJ[I)Landroid/graphics/Bitmap;", b_extract_alpha);
+    vm.register_native(
+        BM,
+        "nativeExtractAlpha",
+        "(JJ[I)Landroid/graphics/Bitmap;",
+        b_extract_alpha,
+    );
     vm.register_native(BM, "nativeGetColor", "(JII)J", b_get_color);
 
     const BF: &str = "Landroid/graphics/BitmapFactory;";
@@ -124,9 +154,19 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
 
     const ID: &str = "Landroid/graphics/ImageDecoder;";
     vm.register_native(ID, "nCreate", "(Ljava/io/InputStream;[BZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;", id_create_stream);
-    vm.register_native(ID, "nCreate", "([BIIZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;", id_create_bytes);
+    vm.register_native(
+        ID,
+        "nCreate",
+        "([BIIZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;",
+        id_create_bytes,
+    );
     vm.register_native(ID, "nCreate", "(Ljava/nio/ByteBuffer;IIZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;", id_create_unsupported);
-    vm.register_native(ID, "nCreate", "(JZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;", id_create_unsupported);
+    vm.register_native(
+        ID,
+        "nCreate",
+        "(JZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;",
+        id_create_unsupported,
+    );
     vm.register_native(ID, "nCreate", "(Ljava/io/FileDescriptor;JZLandroid/graphics/ImageDecoder$Source;)Landroid/graphics/ImageDecoder;", id_create_unsupported);
     vm.register_native(
         ID,
@@ -134,10 +174,30 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(JLandroid/graphics/ImageDecoder;ZIILandroid/graphics/Rect;ZIZZZJZ)Landroid/graphics/Bitmap;",
         id_decode_bitmap,
     );
-    vm.register_native(ID, "nGetSampledSize", "(JI)Landroid/util/Size;", id_get_sampled_size);
-    vm.register_native(ID, "nGetMimeType", "(J)Ljava/lang/String;", id_get_mime_type);
-    vm.register_native(ID, "nGetColorSpace", "(J)Landroid/graphics/ColorSpace;", b_null_ref);
-    vm.register_native(ID, "nGetPadding", "(JLandroid/graphics/Rect;)V", id_get_padding);
+    vm.register_native(
+        ID,
+        "nGetSampledSize",
+        "(JI)Landroid/util/Size;",
+        id_get_sampled_size,
+    );
+    vm.register_native(
+        ID,
+        "nGetMimeType",
+        "(J)Ljava/lang/String;",
+        id_get_mime_type,
+    );
+    vm.register_native(
+        ID,
+        "nGetColorSpace",
+        "(J)Landroid/graphics/ColorSpace;",
+        b_null_ref,
+    );
+    vm.register_native(
+        ID,
+        "nGetPadding",
+        "(JLandroid/graphics/Rect;)V",
+        id_get_padding,
+    );
     vm.register_native(ID, "nClose", "(J)V", id_close);
     Ok(())
 }
@@ -217,14 +277,20 @@ fn b_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn b_copy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let src = bitmap(vm, ctx, 0)?;
     let config = BitmapConfig::from_ordinal(vm.arg_i32(ctx, 1));
-    let h = with_ctx(|c| c.bitmap_copy(src, config).map_err(|e| render_err("Bitmap.copy", e)))?;
+    let h = with_ctx(|c| {
+        c.bitmap_copy(src, config)
+            .map_err(|e| render_err("Bitmap.copy", e))
+    })?;
     vm.ret_i64(ctx, gj(h));
     Ok(())
 }
 
 fn b_copy_same(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let src = bitmap(vm, ctx, 0)?;
-    let h = with_ctx(|c| c.bitmap_copy(src, None).map_err(|e| render_err("Bitmap.copy", e)))?;
+    let h = with_ctx(|c| {
+        c.bitmap_copy(src, None)
+            .map_err(|e| render_err("Bitmap.copy", e))
+    })?;
     vm.ret_i64(ctx, gj(h));
     Ok(())
 }
@@ -232,14 +298,20 @@ fn b_copy_same(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn b_copy_config(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let src = bitmap(vm, ctx, 0)?;
     let config = BitmapConfig::from_ordinal(vm.arg_i32(ctx, 1));
-    let h = with_ctx(|c| c.bitmap_copy(src, config).map_err(|e| render_err("Bitmap.copy", e)))?;
+    let h = with_ctx(|c| {
+        c.bitmap_copy(src, config)
+            .map_err(|e| render_err("Bitmap.copy", e))
+    })?;
     vm.ret_i64(ctx, gj(h));
     Ok(())
 }
 
 fn b_config(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let b = bitmap(vm, ctx, 0)?;
-    let v = with_ctx(|c| c.bitmap_config(b).map_err(|e| render_err("Bitmap.getConfig", e)))?;
+    let v = with_ctx(|c| {
+        c.bitmap_config(b)
+            .map_err(|e| render_err("Bitmap.getConfig", e))
+    })?;
     vm.ret_i32(ctx, v);
     Ok(())
 }
@@ -321,29 +393,45 @@ fn b_set_immutable(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn b_erase(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let b = bitmap(vm, ctx, 0)?;
     let c = vm.arg_i32(ctx, 1) as u32;
-    with_ctx(|ctx| ctx.bitmap_erase(b, c).map_err(|e| render_err("Bitmap.eraseColor", e)))?;
+    with_ctx(|ctx| {
+        ctx.bitmap_erase(b, c)
+            .map_err(|e| render_err("Bitmap.eraseColor", e))
+    })?;
     Ok(())
 }
 
 fn b_erase_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let b = bitmap(vm, ctx, 0)?;
     let c = vm.arg_i64(ctx, 1) as u32;
-    with_ctx(|ctx| ctx.bitmap_erase(b, c).map_err(|e| render_err("Bitmap.eraseColor", e)))?;
+    with_ctx(|ctx| {
+        ctx.bitmap_erase(b, c)
+            .map_err(|e| render_err("Bitmap.eraseColor", e))
+    })?;
     Ok(())
 }
 
 fn b_get_pixel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let b = bitmap(vm, ctx, 0)?;
     let (x, y) = (vm.arg_i32(ctx, 1), vm.arg_i32(ctx, 2));
-    let c = with_ctx(|c| c.bitmap_get_pixel(b, x, y).map_err(|e| render_err("Bitmap.getPixel", e)))?;
+    let c = with_ctx(|c| {
+        c.bitmap_get_pixel(b, x, y)
+            .map_err(|e| render_err("Bitmap.getPixel", e))
+    })?;
     vm.ret_i32(ctx, c as i32);
     Ok(())
 }
 
 fn b_set_pixel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let b = bitmap(vm, ctx, 0)?;
-    let (x, y, c) = (vm.arg_i32(ctx, 1), vm.arg_i32(ctx, 2), vm.arg_i32(ctx, 3) as u32);
-    with_ctx(|ctx| ctx.bitmap_set_pixel(b, x, y, c).map_err(|e| render_err("Bitmap.setPixel", e)))?;
+    let (x, y, c) = (
+        vm.arg_i32(ctx, 1),
+        vm.arg_i32(ctx, 2),
+        vm.arg_i32(ctx, 3) as u32,
+    );
+    with_ctx(|ctx| {
+        ctx.bitmap_set_pixel(b, x, y, c)
+            .map_err(|e| render_err("Bitmap.setPixel", e))
+    })?;
     Ok(())
 }
 
@@ -358,7 +446,10 @@ fn b_get_pixels(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         vm.arg_i32(ctx, 6),
         vm.arg_i32(ctx, 7),
     );
-    let pixels = with_ctx(|c| c.bitmap_pixels(b).map_err(|e| render_err("Bitmap.getPixels", e)))?;
+    let pixels = with_ctx(|c| {
+        c.bitmap_pixels(b)
+            .map_err(|e| render_err("Bitmap.getPixels", e))
+    })?;
     let bw = with_ctx(|c| c.bitmaps.get(b).map(|x| x.width())).unwrap_or(0) as i32;
     if let Some(Object::Array(a)) = vm.heap.get_mut(arr) {
         if let ArrayData::Int(dst) = &mut a.data {
@@ -429,7 +520,9 @@ fn b_same_as(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let a = bitmap(vm, ctx, 0)?;
     let b = bitmap(vm, ctx, 1)?;
     let same = with_ctx(|c| match (c.bitmaps.get(a), c.bitmaps.get(b)) {
-        (Some(x), Some(y)) => x.width() == y.width() && x.height() == y.height() && x.pixels() == y.pixels(),
+        (Some(x), Some(y)) => {
+            x.width() == y.width() && x.height() == y.height() && x.pixels() == y.pixels()
+        }
         _ => false,
     });
     vm.ret_bool(ctx, same);
@@ -438,7 +531,10 @@ fn b_same_as(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn b_extract_alpha(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let src = bitmap(vm, ctx, 0)?;
-    let h = with_ctx(|c| c.bitmap_extract_alpha(src).map_err(|e| render_err("Bitmap.extractAlpha", e)))?;
+    let h = with_ctx(|c| {
+        c.bitmap_extract_alpha(src)
+            .map_err(|e| render_err("Bitmap.extractAlpha", e))
+    })?;
     vm.ret_i64(ctx, gj(h));
     Ok(())
 }
@@ -448,7 +544,10 @@ fn b_get_color(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     // sRGB ARGB in the low 32 bits (the high bits are the colorspace encoding).
     let b = bitmap(vm, ctx, 0)?;
     let (x, y) = (vm.arg_i32(ctx, 1), vm.arg_i32(ctx, 2));
-    let c = with_ctx(|c| c.bitmap_get_pixel(b, x, y).map_err(|e| render_err("Bitmap.getColor", e)))?;
+    let c = with_ctx(|c| {
+        c.bitmap_get_pixel(b, x, y)
+            .map_err(|e| render_err("Bitmap.getColor", e))
+    })?;
     vm.ret_i64(ctx, c as i64);
     Ok(())
 }
@@ -465,19 +564,18 @@ fn bridge(e: crate::javabridge::BridgeError) -> VmError {
 }
 
 /// Wrap an `acos-render` bitmap handle in an `android.graphics.Bitmap` object.
-fn wrap_bitmap(
-    vm: &mut Vm,
-    h: acos_render::Handle,
-    nine_patch: Option<&[u8]>,
-) -> VmResult<u32> {
+fn wrap_bitmap(vm: &mut Vm, h: acos_render::Handle, nine_patch: Option<&[u8]>) -> VmResult<u32> {
     let (w, ht) = with_ctx(|c| {
         c.bitmaps
             .get(h)
             .map(|b| (b.width() as i32, b.height() as i32))
             .unwrap_or((0, 0))
     });
-    let obj = vm.new_instance("Landroid/graphics/Bitmap;").map_err(bridge)?;
-    vm.set_field(obj, "mNativePtr", JavaValue::Long(gj(h))).map_err(bridge)?;
+    let obj = vm
+        .new_instance("Landroid/graphics/Bitmap;")
+        .map_err(bridge)?;
+    vm.set_field(obj, "mNativePtr", JavaValue::Long(gj(h)))
+        .map_err(bridge)?;
     let _ = vm.set_field(obj, "mWidth", JavaValue::Int(w));
     let _ = vm.set_field(obj, "mHeight", JavaValue::Int(ht));
     let _ = vm.set_field(obj, "mDensity", JavaValue::Int(0));
@@ -505,12 +603,8 @@ fn png_nine_patch_chunk(bytes: &[u8]) -> Option<Vec<u8>> {
     }
     let mut pos = 8usize;
     while pos + 8 <= bytes.len() {
-        let len = u32::from_be_bytes([
-            bytes[pos],
-            bytes[pos + 1],
-            bytes[pos + 2],
-            bytes[pos + 3],
-        ]) as usize;
+        let len = u32::from_be_bytes([bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]])
+            as usize;
         let ty = &bytes[pos + 4..pos + 8];
         let data_start = pos + 8;
         let Some(data_end) = data_start.checked_add(len) else {
@@ -581,7 +675,9 @@ fn read_stream(vm: &mut Vm, stream: u32, storage: u32) -> VmResult<Vec<u8>> {
         _ => 0,
     };
     if cap == 0 {
-        return Err(VmError::Internal("ImageDecoder: empty scratch buffer".into()));
+        return Err(VmError::Internal(
+            "ImageDecoder: empty scratch buffer".into(),
+        ));
     }
     let mut out = Vec::new();
     loop {
@@ -590,7 +686,11 @@ fn read_stream(vm: &mut Vm, stream: u32, storage: u32) -> VmResult<Vec<u8>> {
             .map_err(bridge)?;
         let n = match n {
             JavaValue::Int(n) => n,
-            _ => return Err(VmError::Internal("InputStream.read returned non-int".into())),
+            _ => {
+                return Err(VmError::Internal(
+                    "InputStream.read returned non-int".into(),
+                ))
+            }
         };
         if n <= 0 {
             break;
@@ -652,7 +752,12 @@ fn source_density_scale(vm: &mut Vm, source: u32) -> f32 {
         return 1.0;
     }
     let dst = vm
-        .call_method(source, "getResources", "()Landroid/content/res/Resources;", &[])
+        .call_method(
+            source,
+            "getResources",
+            "()Landroid/content/res/Resources;",
+            &[],
+        )
         .ok()
         .and_then(|v| match v {
             JavaValue::Object(r) if r != 0 => Some(r),
@@ -696,7 +801,13 @@ fn decoder_density_scale(handle: u64) -> f32 {
     })
 }
 
-fn new_decoder_object(vm: &mut Vm, handle: u64, width: i32, height: i32, animated: bool) -> VmResult<u32> {
+fn new_decoder_object(
+    vm: &mut Vm,
+    handle: u64,
+    width: i32,
+    height: i32,
+    animated: bool,
+) -> VmResult<u32> {
     vm.new_instance_ctor(
         "Landroid/graphics/ImageDecoder;",
         "(JIIZZ)V",
@@ -715,7 +826,11 @@ fn decode_bytes(bytes: &[u8]) -> VmResult<(ImageFormat, i32, i32)> {
     let img = acos_render::image::decode(bytes).map_err(|e| {
         VmError::unsupported_api(format!("ImageDecoder decode: {e}"), "acos-render")
     })?;
-    Ok((acos_render::image::sniff(bytes), img.width as i32, img.height as i32))
+    Ok((
+        acos_render::image::sniff(bytes),
+        img.width as i32,
+        img.height as i32,
+    ))
 }
 
 fn id_create_stream(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -756,11 +871,10 @@ fn id_create_unsupported(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn id_decode_bitmap(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 0) as u64;
-    let (bytes, _format, _w, _h, _animated) = decoder_state(handle).ok_or_else(|| {
-        VmError::StaleHandle {
+    let (bytes, _format, _w, _h, _animated) =
+        decoder_state(handle).ok_or_else(|| VmError::StaleHandle {
             what: format!("ImageDecoder handle {handle:#x}"),
-        }
-    })?;
+        })?;
     let h = with_ctx(|c| c.bitmap_create_from_bytes(&bytes))
         .map_err(|e| render_err("ImageDecoder.decodeBitmap", e))?;
     let chunk = png_nine_patch_chunk(&bytes);
@@ -772,11 +886,10 @@ fn id_decode_bitmap(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn id_get_sampled_size(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 0) as u64;
     let sample = vm.arg_i32(ctx, 1).max(1);
-    let (_bytes, _format, w, h, _animated) = decoder_state(handle).ok_or_else(|| {
-        VmError::StaleHandle {
+    let (_bytes, _format, w, h, _animated) =
+        decoder_state(handle).ok_or_else(|| VmError::StaleHandle {
             what: format!("ImageDecoder handle {handle:#x}"),
-        }
-    })?;
+        })?;
     let sw = (w / sample).max(1);
     let sh = (h / sample).max(1);
     let size = vm
@@ -832,7 +945,10 @@ fn options_just_bounds(vm: &mut Vm, opts: u32) -> bool {
     if opts == 0 {
         return false;
     }
-    matches!(vm.get_field(opts, "inJustDecodeBounds"), Ok(JavaValue::Boolean(true)))
+    matches!(
+        vm.get_field(opts, "inJustDecodeBounds"),
+        Ok(JavaValue::Boolean(true))
+    )
 }
 
 fn set_options_outputs(vm: &mut Vm, opts: u32, w: i32, h: i32, format: ImageFormat) {
@@ -841,7 +957,11 @@ fn set_options_outputs(vm: &mut Vm, opts: u32, w: i32, h: i32, format: ImageForm
     }
     let _ = vm.set_field(opts, "outWidth", JavaValue::Int(w));
     let _ = vm.set_field(opts, "outHeight", JavaValue::Int(h));
-    let _ = vm.set_field(opts, "outConfig", JavaValue::Int(BitmapConfig::Rgba8888 as i32));
+    let _ = vm.set_field(
+        opts,
+        "outConfig",
+        JavaValue::Int(BitmapConfig::Rgba8888 as i32),
+    );
     if let Ok(mime) = vm.new_string(mime_for(format)) {
         let _ = vm.set_field(opts, "outMimeType", JavaValue::Object(mime));
     }

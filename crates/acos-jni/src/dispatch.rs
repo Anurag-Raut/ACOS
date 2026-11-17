@@ -226,8 +226,7 @@ pub fn host_abi_supported() -> bool {
 
 fn abi_error() -> CallFailure {
     structured(JniError::Unsupported {
-        slot: "native ABI trampoline (x86_64 System V only; >8 float args unsupported)"
-            .into(),
+        slot: "native ABI trampoline (x86_64 System V only; >8 float args unsupported)".into(),
     })
 }
 
@@ -260,11 +259,11 @@ core::arch::global_asm!(
     "  push r14",
     "  push r15",
     "  sub rsp, 16",
-    "  mov r12, rdi",              // f
-    "  mov r13, rsi",              // ints
-    "  mov r14, rdx",              // n_ints
-    "  mov r15, rcx",              // floats
-    "  mov [rsp], r8",             // want_float
+    "  mov r12, rdi",  // f
+    "  mov r13, rsi",  // ints
+    "  mov r14, rdx",  // n_ints
+    "  mov r15, rcx",  // floats
+    "  mov [rsp], r8", // want_float
     // extra = max(0, n_ints - 6) * 8
     "  xor ebx, ebx",
     "  cmp r14, 6",
@@ -453,6 +452,9 @@ mod abi_tests {
     fn integer_arguments_past_the_sixth_use_the_stack() {
         let ints: Vec<u64> = (1..=10).collect();
         let got = call(take_many_ints as usize, &ints, &[], false) as i64;
-        assert_eq!(got, 1 + 2 * 2 + 3 * 3 + 4 * 4 + 5 * 5 + 6 * 6 + 7 * 7 + 8 * 8 + 9 * 9 + 10 * 10);
+        assert_eq!(
+            got,
+            1 + 2 * 2 + 3 * 3 + 4 * 4 + 5 * 5 + 6 * 6 + 7 * 7 + 8 * 8 + 9 * 9 + 10 * 10
+        );
     }
 }

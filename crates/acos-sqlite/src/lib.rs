@@ -226,13 +226,16 @@ impl Database {
     ) -> Result<i64, EngineError> {
         let mut stmt = self.conn.prepare(sql).map_err(engine_error)?;
         let values: Vec<Value> = binds.iter().map(|v| v.to_owned()).collect();
-        let mut rows = stmt.query(rusqlite::params_from_iter(values.iter()))
+        let mut rows = stmt
+            .query(rusqlite::params_from_iter(values.iter()))
             .map_err(engine_error)?;
         match rows.next().map_err(engine_error)? {
             Some(_) if throw_on_row => Err(EngineError {
                 code: rusqlite::ffi::SQLITE_MISUSE,
                 extended: rusqlite::ffi::SQLITE_MISUSE,
-                message: "Queries can be performed using SQLiteDatabase query or rawQuery methods only.".to_string(),
+                message:
+                    "Queries can be performed using SQLiteDatabase query or rawQuery methods only."
+                        .to_string(),
             }),
             _ => Ok(self.conn.changes() as i64),
         }
@@ -305,7 +308,8 @@ impl Database {
             );
         }
         let values: Vec<Value> = binds.iter().map(|v| v.to_owned()).collect();
-        let mut rows = stmt.query(rusqlite::params_from_iter(values.iter()))
+        let mut rows = stmt
+            .query(rusqlite::params_from_iter(values.iter()))
             .map_err(engine_error)?;
         let mut out = QueryResult {
             columns,
@@ -314,9 +318,7 @@ impl Database {
         while let Some(row) = rows.next().map_err(engine_error)? {
             let mut vals = Vec::with_capacity(column_count);
             for i in 0..column_count {
-                vals.push(SqlValue::from_ref(
-                    row.get_ref(i).map_err(engine_error)?,
-                ));
+                vals.push(SqlValue::from_ref(row.get_ref(i).map_err(engine_error)?));
             }
             out.rows.push(vals);
             if let Some(limit) = limit {
@@ -336,11 +338,7 @@ impl Database {
     /// `sqlite3_column_name`.
     pub fn column_name(&self, sql: &str, index: usize) -> Result<String, EngineError> {
         let meta = self.prepare_meta(sql)?;
-        Ok(meta
-            .column_names
-            .get(index)
-            .cloned()
-            .unwrap_or_default())
+        Ok(meta.column_names.get(index).cloned().unwrap_or_default())
     }
 
     pub fn parameter_count(&self, sql: &str) -> Result<usize, EngineError> {
@@ -459,8 +457,7 @@ impl Registry {
 /// SQLite primary result codes referenced by the native error mapper.
 pub mod code {
     pub use rusqlite::ffi::{
-        SQLITE_BUSY, SQLITE_CANTOPEN, SQLITE_CONSTRAINT, SQLITE_CORRUPT, SQLITE_ERROR,
-        SQLITE_FULL, SQLITE_IOERR, SQLITE_LOCKED, SQLITE_MISUSE, SQLITE_NOTADB,
-        SQLITE_PERM, SQLITE_READONLY,
+        SQLITE_BUSY, SQLITE_CANTOPEN, SQLITE_CONSTRAINT, SQLITE_CORRUPT, SQLITE_ERROR, SQLITE_FULL,
+        SQLITE_IOERR, SQLITE_LOCKED, SQLITE_MISUSE, SQLITE_NOTADB, SQLITE_PERM, SQLITE_READONLY,
     };
 }

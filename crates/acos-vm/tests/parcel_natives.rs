@@ -112,7 +112,9 @@ fn compile_case(name: &str) -> Option<PathBuf> {
 #[test]
 fn parcel_round_trips_on_the_real_framework() {
     let Some(dex) = compile_case("ParcelMain") else {
-        eprintln!("SKIP parcel_round_trips_on_the_real_framework: javac/d8/android.jar unavailable");
+        eprintln!(
+            "SKIP parcel_round_trips_on_the_real_framework: javac/d8/android.jar unavailable"
+        );
         return;
     };
     let options = VmOptions {

@@ -44,26 +44,42 @@ fn hello_jni_end_to_end() {
     let thiz = jni.new_instance("dev/acos/fixtures/hellojni/MainActivity") as *mut c_void;
 
     // --- stringFromJNI ------------------------------------------------------
-    let f: unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void =
-        unsafe { common::sym(h.symbol("Java_dev_acos_fixtures_hellojni_MainActivity_stringFromJNI").unwrap()) };
+    let f: unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void = unsafe {
+        common::sym(
+            h.symbol("Java_dev_acos_fixtures_hellojni_MainActivity_stringFromJNI")
+                .unwrap(),
+        )
+    };
     let js = unsafe { f(env, thiz) };
     assert_eq!(jni.string_of(js as *mut _), "Hello from native C");
 
     // --- add(int,int) -------------------------------------------------------
-    let f: unsafe extern "C" fn(*mut c_void, *mut c_void, i32, i32) -> i32 =
-        unsafe { common::sym(h.symbol("Java_dev_acos_fixtures_hellojni_MainActivity_add").unwrap()) };
+    let f: unsafe extern "C" fn(*mut c_void, *mut c_void, i32, i32) -> i32 = unsafe {
+        common::sym(
+            h.symbol("Java_dev_acos_fixtures_hellojni_MainActivity_add")
+                .unwrap(),
+        )
+    };
     assert_eq!(unsafe { f(env, thiz, 20, 22) }, 42);
 
     // --- sumArray(int[]) ----------------------------------------------------
-    let f: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i32 =
-        unsafe { common::sym(h.symbol("Java_dev_acos_fixtures_hellojni_MainActivity_sumArray").unwrap()) };
+    let f: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i32 = unsafe {
+        common::sym(
+            h.symbol("Java_dev_acos_fixtures_hellojni_MainActivity_sumArray")
+                .unwrap(),
+        )
+    };
     let arr = jni.new_int_array(&[1, 2, 3, 4, 5]) as *mut c_void;
     assert_eq!(unsafe { f(env, thiz, arr) }, 15);
 
     // --- callBack(): native -> Java static int + instance void --------------
     jni.clear_calls();
-    let f: unsafe extern "C" fn(*mut c_void, *mut c_void) =
-        unsafe { common::sym(h.symbol("Java_dev_acos_fixtures_hellojni_MainActivity_callBack").unwrap()) };
+    let f: unsafe extern "C" fn(*mut c_void, *mut c_void) = unsafe {
+        common::sym(
+            h.symbol("Java_dev_acos_fixtures_hellojni_MainActivity_callBack")
+                .unwrap(),
+        )
+    };
     unsafe { f(env, thiz) };
     let calls = jni.calls();
     assert_eq!(calls.len(), 2, "two Java calls observed: {calls:?}");
@@ -86,8 +102,12 @@ fn hello_jni_end_to_end() {
     assert_eq!(jni.string_of(out as *mut _), "echo!");
 
     // --- throwFromJNI(): ThrowNew ------------------------------------------
-    let f: unsafe extern "C" fn(*mut c_void, *mut c_void) =
-        unsafe { common::sym(h.symbol("Java_dev_acos_fixtures_hellojni_MainActivity_throwFromJNI").unwrap()) };
+    let f: unsafe extern "C" fn(*mut c_void, *mut c_void) = unsafe {
+        common::sym(
+            h.symbol("Java_dev_acos_fixtures_hellojni_MainActivity_throwFromJNI")
+                .unwrap(),
+        )
+    };
     unsafe { f(env, thiz) };
     let ex = jni.pending_exception().expect("exception pending");
     assert_eq!(ex.class, "java/lang/IllegalStateException");

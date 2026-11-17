@@ -467,8 +467,8 @@ const METHODOLOGY: &str = "BENCHMARKS.md §2: >=20 samples (p50/p95 nearest-rank
 // ---------------------------------------------------------------------------
 
 fn bench_process_start(args: &BenchArgs) -> Result<Value, BenchFailure> {
-    let exe = std::env::current_exe()
-        .map_err(|e| BenchFailure::internal(format!("current_exe: {e}")))?;
+    let exe =
+        std::env::current_exe().map_err(|e| BenchFailure::internal(format!("current_exe: {e}")))?;
     let mut wall = Vec::new();
     let mut internal = Vec::new();
     let mut classes = 0usize;
@@ -960,7 +960,9 @@ fn worker_frame_probe(apk: &Path, runs: usize, warmup: usize) -> Result<Value, S
             ..SessionOptions::default()
         });
         let t = Instant::now();
-        let report = fresh.launch(apk).map_err(|e| format!("reset relaunch: {e:?}"))?;
+        let report = fresh
+            .launch(apk)
+            .map_err(|e| format!("reset relaunch: {e:?}"))?;
         let reset = t.elapsed().as_secs_f64() * 1000.0;
         let published2 = fresh.status().map(|s| s.published_frames).unwrap_or(0);
         let reset_ok = published2 > 0;
@@ -1376,8 +1378,8 @@ fn boot_probe(
 ) -> Result<Probe, BenchFailure> {
     use acos_runtime::atms_boot::{first_attach, install_recording_atms, is_valid_app_thread};
     use acos_runtime::Runtime;
-    use acos_vm::javabridge::JavaValue;
     use acos_vm::heap::{Handle, NULL};
+    use acos_vm::javabridge::JavaValue;
 
     let corelib = parse_corelib(&args.corelib)?;
     let started = Instant::now();
@@ -1398,10 +1400,7 @@ fn boot_probe(
             classes: vm.classes.len() as u64,
             clinits: vm.metrics.clinit_count,
             instructions: vm.metrics.instructions,
-            natives: vm
-                .native_trace
-                .as_ref()
-                .map_or(0, |t| t.hits.len() as u64),
+            natives: vm.native_trace.as_ref().map_or(0, |t| t.hits.len() as u64),
         });
     };
 
@@ -1476,7 +1475,11 @@ fn boot_probe(
             "attachApplication arrived without a valid IApplicationThread binder",
         ));
     }
-    push_stage("attach-application", t.elapsed().as_secs_f64() * 1000.0, rt.vm());
+    push_stage(
+        "attach-application",
+        t.elapsed().as_secs_f64() * 1000.0,
+        rt.vm(),
+    );
     let boot_ms = boot_started.elapsed().as_secs_f64() * 1000.0;
 
     let mut probe = Probe {
@@ -1491,11 +1494,7 @@ fn boot_probe(
         boot_classpath_classes,
         clinits: rt.vm().metrics.clinit_count,
         instructions: rt.vm().metrics.instructions,
-        natives: rt
-            .vm()
-            .native_trace
-            .as_ref()
-            .map_or(0, |t| t.hits.len()),
+        natives: rt.vm().native_trace.as_ref().map_or(0, |t| t.hits.len()),
         launch_ms: f64::NAN,
         transaction_ms: f64::NAN,
         transaction_phase_ms: f64::NAN,
@@ -1515,12 +1514,8 @@ fn boot_probe(
         // half and measures bindApplication + Application.onCreate + the launch
         // ClientTransaction + Activity.onCreate/onResume + quitSafely.
         let app = app_info(apk)?;
-        let report = acos_runtime::session_pool::launch_from_template_loaded(
-            &mut rt,
-            apk,
-            thread,
-            &app,
-        );
+        let report =
+            acos_runtime::session_pool::launch_from_template_loaded(&mut rt, apk, thread, &app);
         probe.bind_ms = report.bind_ms;
         probe.phase_ms = report.app_phase_ms;
         probe.transaction_ms = report.transaction_ms;
@@ -1612,8 +1607,9 @@ fn parse_corelib(name: &str) -> Result<acos_vm::CoreLib, BenchFailure> {
 
 fn run_program(path: &Path, main: &str, corelib: &str) -> Result<(u64, u64), BenchFailure> {
     let corelib = parse_corelib(corelib)?;
-    let bytes = std::fs::read(path)
-        .map_err(|e| BenchFailure::new(ErrorCode::ApkIo, format!("read {}: {e}", path.display())))?;
+    let bytes = std::fs::read(path).map_err(|e| {
+        BenchFailure::new(ErrorCode::ApkIo, format!("read {}: {e}", path.display()))
+    })?;
     let mut vm = acos_vm::Vm::new(acos_vm::VmOptions {
         corelib,
         ..acos_vm::VmOptions::default()
@@ -1699,8 +1695,7 @@ fn child_body(mode: &str, args: &BenchArgs) -> Result<Value, BenchFailure> {
                 .vm()
                 .threads
                 .iter()
-                .all(|t| !matches!(t.status, acos_vm::vm::ThreadStatus::Running))
-                ;
+                .all(|t| !matches!(t.status, acos_vm::vm::ThreadStatus::Running));
             let before = cpu_ticks()
                 .ok_or_else(|| BenchFailure::internal("could not read /proc/self/stat"))?;
             let t0 = Instant::now();
@@ -1753,8 +1748,8 @@ pub(crate) fn boot_only(rt: &mut acos_runtime::Runtime, apk: &Path) -> Result<()
 }
 
 pub(crate) fn spawn_child(extra: &[&str]) -> Result<Value, BenchFailure> {
-    let exe = std::env::current_exe()
-        .map_err(|e| BenchFailure::internal(format!("current_exe: {e}")))?;
+    let exe =
+        std::env::current_exe().map_err(|e| BenchFailure::internal(format!("current_exe: {e}")))?;
     let output = Command::new(&exe)
         .args(extra)
         .stdout(Stdio::piped())
@@ -2029,10 +2024,7 @@ pub(crate) fn file_sha256(path: &Path) -> String {
 // ---------------------------------------------------------------------------
 
 fn print_text(doc: &Value) {
-    let metric = doc
-        .get("metric")
-        .and_then(Value::as_str)
-        .unwrap_or("bench");
+    let metric = doc.get("metric").and_then(Value::as_str).unwrap_or("bench");
     println!("### acos bench {metric}");
     if let Some(measured) = doc.get("measured").and_then(Value::as_object) {
         for (name, value) in measured {
@@ -2168,8 +2160,7 @@ mod tests {
             Metrics::wall_ms(5),
         )
         .with_result(doc)
-        .expect("result")
-        ;
+        .expect("result");
         let envelope = validate_roundtrip(envelope).expect("valid envelope");
         assert!(envelope.ok());
         assert_eq!(envelope.status().as_str(), "pass");

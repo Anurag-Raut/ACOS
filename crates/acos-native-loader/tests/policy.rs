@@ -8,7 +8,9 @@ use acos_native_loader::{Loader, LoaderConfig, LoaderError, MissingPolicy};
 #[test]
 fn strict_mode_reports_all_missing_symbols() {
     let _g = common::serial();
-    let loader = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
+    let loader = Loader::new(
+        LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()),
+    );
     let err = loader
         .load_file(&common::data("libtestmissing.so"))
         .err()
@@ -16,10 +18,15 @@ fn strict_mode_reports_all_missing_symbols() {
     assert_eq!(err.code(), "UNSUPPORTED_NATIVE_SYMBOL");
     match err {
         LoaderError::UnsupportedSymbols(libs) => {
-            assert!(libs.iter().any(|l| l.library.contains("libtestmissing")), "{libs:?}");
             assert!(
-                libs.iter()
-                    .any(|l| l.symbols.iter().any(|s| s == "acos_definitely_missing_symbol")),
+                libs.iter().any(|l| l.library.contains("libtestmissing")),
+                "{libs:?}"
+            );
+            assert!(
+                libs.iter().any(|l| l
+                    .symbols
+                    .iter()
+                    .any(|s| s == "acos_definitely_missing_symbol")),
                 "missing symbol listed: {libs:?}"
             );
         }
@@ -78,7 +85,9 @@ fn missing_dependency_is_structured() {
 #[test]
 fn dlopen_refuses_an_absolute_host_path() {
     let _g = common::serial();
-    let _loader = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
+    let _loader = Loader::new(
+        LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()),
+    );
     let c = std::ffi::CString::new("/lib/x86_64-linux-gnu/libc.so.6").unwrap();
     let h = unsafe { acos_native_loader::bionic::dl::dlopen(c.as_ptr(), 0) };
     assert!(

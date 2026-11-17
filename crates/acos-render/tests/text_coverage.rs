@@ -295,7 +295,10 @@ fn text_coverage_matches_device_reference() {
     }
     let reference_png = reference_path();
     if !reference_png.exists() {
-        eprintln!("SKIP: no reference screenshot at {}", reference_png.display());
+        eprintln!(
+            "SKIP: no reference screenshot at {}",
+            reference_png.display()
+        );
         return;
     }
 

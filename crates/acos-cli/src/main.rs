@@ -3,12 +3,12 @@
 //! Implements exactly one command so far: `acos inspect <apk> [--json]`.
 //! Unimplemented subcommands deliberately do not exist yet.
 
-mod bench;
 mod artifacts_gc;
+mod bench;
 mod bench_pool;
+mod bench_sessions;
 mod doctor;
 mod engine;
-mod bench_sessions;
 mod failure;
 mod frame_diff;
 mod launch;
@@ -558,7 +558,10 @@ fn run_dex(args: RunDexArgs) -> ExitCode {
                 &request_id,
                 args.json,
                 "VM_INTERNAL",
-                &format!("unknown --corelib value {:?} (expected bootstrap|real)", args.corelib),
+                &format!(
+                    "unknown --corelib value {:?} (expected bootstrap|real)",
+                    args.corelib
+                ),
                 None,
                 started,
             )
@@ -578,9 +581,7 @@ fn run_dex(args: RunDexArgs) -> ExitCode {
 
     let images = match load_dex_images(&args.path) {
         Ok(i) => i,
-        Err(msg) => {
-            return run_error(&request_id, args.json, "VM_INTERNAL", &msg, None, started)
-        }
+        Err(msg) => return run_error(&request_id, args.json, "VM_INTERNAL", &msg, None, started),
     };
     let image_read_ms = started.elapsed().as_millis();
 
@@ -588,7 +589,14 @@ fn run_dex(args: RunDexArgs) -> ExitCode {
     let mut vm = match Vm::new(options) {
         Ok(v) => v,
         Err(e) => {
-            return run_error(&request_id, args.json, e.code(), &e.to_string(), None, started)
+            return run_error(
+                &request_id,
+                args.json,
+                e.code(),
+                &e.to_string(),
+                None,
+                started,
+            )
         }
     };
     let vm_new_ms = vm_started.elapsed().as_millis();
@@ -743,9 +751,7 @@ fn run_error(
 fn vm_error_details(e: &VmError) -> Option<Value> {
     match e {
         VmError::UnsupportedApi { api, at } => Some(json!({"api": api, "at": at})),
-        VmError::UnsupportedBytecode { opcode, at } => {
-            Some(json!({"opcode": opcode, "at": at}))
-        }
+        VmError::UnsupportedBytecode { opcode, at } => Some(json!({"opcode": opcode, "at": at})),
         _ => None,
     }
 }

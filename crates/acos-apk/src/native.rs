@@ -118,14 +118,7 @@ pub fn missing_native_libs(apk: &Apk, abi: &str) -> Vec<NativeLibWarning> {
             continue;
         };
         for needed in elf_needed(&bytes) {
-            record(
-                &mut warnings,
-                &present,
-                &needed,
-                abi,
-                "elf-needed",
-                name,
-            );
+            record(&mut warnings, &present, &needed, abi, "elf-needed", name);
         }
     }
 
@@ -234,9 +227,8 @@ pub fn elf_needed(data: &[u8]) -> Vec<String> {
             .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
     };
     let u64_at = |off: usize| -> Option<u64> {
-        data.get(off..off + 8).map(|b| {
-            u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
-        })
+        data.get(off..off + 8)
+            .map(|b| u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
     };
 
     let (shoff, shentsize, shnum, _shstrndx) = if is64 {
@@ -547,8 +539,19 @@ fn load_library_string_indices(data: &[u8], code_off: usize, methods: &[u32]) ->
             }
         } else if !matches!(
             name.split(['-', '/']).next().unwrap_or(""),
-            "nop" | "invoke" | "if" | "goto" | "return" | "iput" | "aput" | "sput" | "monitor"
-                | "throw" | "packed" | "sparse" | "fill"
+            "nop"
+                | "invoke"
+                | "if"
+                | "goto"
+                | "return"
+                | "iput"
+                | "aput"
+                | "sput"
+                | "monitor"
+                | "throw"
+                | "packed"
+                | "sparse"
+                | "fill"
         ) {
             // Anything else may overwrite its first register (`move`, `new`,
             // `iget`, arithmetic, …): the remembered constant is gone.
@@ -560,7 +563,12 @@ fn load_library_string_indices(data: &[u8], code_off: usize, methods: &[u32]) ->
 }
 
 /// Decode one `string_data_item` of a DEX string table (MUTF-8, NUL-terminated).
-fn dex_string(data: &[u8], string_ids_off: u32, string_ids_size: u32, index: u32) -> Option<String> {
+fn dex_string(
+    data: &[u8],
+    string_ids_off: u32,
+    string_ids_size: u32,
+    index: u32,
+) -> Option<String> {
     if index >= string_ids_size {
         return None;
     }
@@ -830,6 +838,9 @@ mod tests {
         ]))
         .unwrap();
         let warnings = missing_native_libs(&without_hermes, "x86_64");
-        assert!(warnings.iter().any(|w| w.lib == "libjscexecutor.so"), "{warnings:?}");
+        assert!(
+            warnings.iter().any(|w| w.lib == "libjscexecutor.so"),
+            "{warnings:?}"
+        );
     }
 }

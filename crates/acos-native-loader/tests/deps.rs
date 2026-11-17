@@ -7,7 +7,9 @@ use acos_native_loader::{Loader, LoaderConfig};
 #[test]
 fn dependency_order_and_interposition() {
     let _g = common::serial();
-    let loader = Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
+    let loader = Loader::new(
+        LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()),
+    );
     let h = loader.load_file(&common::data("libtestuser.so")).unwrap();
 
     // user_run checks: dep_greet, dep_calls_hook (dep's undefined symbol binds
@@ -18,8 +20,7 @@ fn dependency_order_and_interposition() {
     assert_eq!(run(), 0, "user_run bitmask (0 == all pass)");
 
     // Constructors run dependencies-first.
-    let order: extern "C" fn(i32) -> i32 =
-        unsafe { common::sym(h.symbol("user_order").unwrap()) };
+    let order: extern "C" fn(i32) -> i32 = unsafe { common::sym(h.symbol("user_order").unwrap()) };
     assert_eq!(order(0), 1, "dependency constructor runs first");
     assert_eq!(order(1), 2, "dependent constructor runs second");
 

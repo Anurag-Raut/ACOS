@@ -236,8 +236,8 @@ impl<'a> Scanner<'a> {
         stub: &ClassDef,
         stub_desc: &str,
     ) -> Result<InterfaceInfo, DecodeError> {
-        let interface_dotted =
-            interface_for_stub(stub_desc).ok_or_else(|| DecodeError::NoClass(stub_desc.to_string()))?;
+        let interface_dotted = interface_for_stub(stub_desc)
+            .ok_or_else(|| DecodeError::NoClass(stub_desc.to_string()))?;
         let proxy_desc = proxy_for_stub(stub_desc);
         self.decode_pair(stub, stub_desc, &proxy_desc, &interface_dotted)
     }
@@ -272,7 +272,9 @@ impl<'a> Scanner<'a> {
 
         // The proxy carries the canonical argument/reply layouts.
         let proxy = self.dex.find_class(proxy_desc);
-        let proxy_methods = proxy.map(|p| class_methods(self.dex, p)).unwrap_or_default();
+        let proxy_methods = proxy
+            .map(|p| class_methods(self.dex, p))
+            .unwrap_or_default();
 
         let first_call_transaction = dispatch.keys().copied().min().unwrap_or(1);
         let mut methods = Vec::with_capacity(dispatch.len());
@@ -395,8 +397,7 @@ impl<'a> Scanner<'a> {
                             // `onTransact$<method>$(Parcel, Parcel)` trampolines;
                             // descend into the trampoline to find the real call.
                             if m.name.starts_with("onTransact$") && depth < 4 {
-                                if let Some(syn) =
-                                    stub_methods.iter().find(|sm| sm.name == m.name)
+                                if let Some(syn) = stub_methods.iter().find(|sm| sm.name == m.name)
                                 {
                                     if syn.code_off != 0 {
                                         if let Ok(syn_code) = self.dex.code_item(syn.code_off) {
@@ -556,7 +557,9 @@ impl<'a> Scanner<'a> {
                             }
                         }
                     } else if insn.opcode.byte() == 0x6e && recv == Some(reply_reg) {
-                        if let Some(end) = self.emit_call(insns, pc, c.len(), &types, &mut info.reply) {
+                        if let Some(end) =
+                            self.emit_call(insns, pc, c.len(), &types, &mut info.reply)
+                        {
                             pc = end;
                             continue;
                         }
@@ -671,7 +674,12 @@ impl<'a> Scanner<'a> {
 
     /// If `readStrongBinder` is followed by `<Iface>$Stub.asInterface`, return
     /// the dotted interface name.
-    fn binder_iface_after(&self, insns: &[u16], invoke_pc: usize, result_reg: u16) -> Option<String> {
+    fn binder_iface_after(
+        &self,
+        insns: &[u16],
+        invoke_pc: usize,
+        result_reg: u16,
+    ) -> Option<String> {
         let mut pc = invoke_pc;
         for _ in 0..10 {
             let insn = decode(insns, pc).ok()?;
@@ -812,7 +820,8 @@ impl<'a> Scanner<'a> {
             return None;
         }
         let insn = decode(insns, pc).ok()?;
-        self.is_write_int_of(insns, pc, insn.regs[1]).then_some(insn.regs[1])
+        self.is_write_int_of(insns, pc, insn.regs[1])
+            .then_some(insn.regs[1])
     }
 
     /// The last `const*` written to `reg` before `before_pc`, if any.
@@ -979,10 +988,22 @@ impl<'a> Scanner<'a> {
         let write = m.name.starts_with("write");
         let op = |w: WireOp, r: WireOp| if write { Call::Write(w) } else { Call::Read(r) };
         match m.name {
-            "writeInterfaceToken" | "readException" | "writeNoException"
-            | "enforceNoDataAvail" | "recycle" | "setDataPosition" | "dataSize" | "dataAvail"
-            | "dataPosition" | "appendFrom" | "marshall" | "unmarshall" | "setDataSize"
-            | "hasFileDescriptors" | "markSensitive" | "setDataPositionToEnd" => Call::Header,
+            "writeInterfaceToken"
+            | "readException"
+            | "writeNoException"
+            | "enforceNoDataAvail"
+            | "recycle"
+            | "setDataPosition"
+            | "dataSize"
+            | "dataAvail"
+            | "dataPosition"
+            | "appendFrom"
+            | "marshall"
+            | "unmarshall"
+            | "setDataSize"
+            | "hasFileDescriptors"
+            | "markSensitive"
+            | "setDataPositionToEnd" => Call::Header,
             "writeInt" | "readInt" => op(WireOp::I32, WireOp::I32),
             "writeLong" | "readLong" => op(WireOp::I64, WireOp::I64),
             "writeFloat" | "readFloat" => op(WireOp::F32, WireOp::F32),
@@ -1026,9 +1047,13 @@ impl<'a> Scanner<'a> {
             "writeStringArray" | "createStringArray" | "readStringArray" => {
                 op(WireOp::StringArray, WireOp::StringArray)
             }
-            "writeStringList" | "readStringList" | "createStringArrayList"
+            "writeStringList"
+            | "readStringList"
+            | "createStringArrayList"
             | "writeStringArrayList" => op(WireOp::StringList, WireOp::StringList),
-            "writeBinderList" | "readBinderList" | "createBinderArrayList"
+            "writeBinderList"
+            | "readBinderList"
+            | "createBinderArrayList"
             | "writeBinderArrayList" => op(WireOp::BinderList, WireOp::BinderList),
             "writeRawFileDescriptor" | "readRawFileDescriptor" => op(WireOp::RawFd, WireOp::RawFd),
             "writeTypedArray" | "createTypedArray" | "readTypedArray" => {

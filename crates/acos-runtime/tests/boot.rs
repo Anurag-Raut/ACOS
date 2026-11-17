@@ -56,7 +56,10 @@ fn activity_thread_attach_reaches_atms_attach_application() {
     let report = match rt.boot_app_process(&apk) {
         Ok(r) => r,
         Err(e) => {
-            panic!("framework boot failed at {e} (elapsed {:?})", started.elapsed());
+            panic!(
+                "framework boot failed at {e} (elapsed {:?})",
+                started.elapsed()
+            );
         }
     };
 

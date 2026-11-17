@@ -13,8 +13,8 @@ use acos_services::exception::NO_EXCEPTION;
 use acos_services::surface_client;
 use acos_services::ServiceHost;
 use acos_wm::codec::{
-    ClientWindowFrames, InsetsSourceControlArray, InsetsState, LayoutParams,
-    MergedConfiguration, ParcelCodec, SurfaceControlInfo,
+    ClientWindowFrames, InsetsSourceControlArray, InsetsState, LayoutParams, MergedConfiguration,
+    ParcelCodec, SurfaceControlInfo,
 };
 
 const IWINDOW_MANAGER: &str = "android.view.IWindowManager";
@@ -26,12 +26,7 @@ const ADD_TO_DISPLAY_AS_USER: u32 = 2;
 const RELAYOUT: u32 = 5;
 const CREATE_SURFACE: u32 = 1;
 
-fn transact(
-    host: &mut ServiceHost,
-    binder: BinderId,
-    code: u32,
-    data: &mut Parcel,
-) -> Parcel {
+fn transact(host: &mut ServiceHost, binder: BinderId, code: u32, data: &mut Parcel) -> Parcel {
     let mut reply = Parcel::new();
     host.transact(binder, code, data, &mut reply, 0)
         .expect("transaction");
@@ -142,7 +137,12 @@ fn relayout_binds_the_window_surface_to_the_compositor_client() {
     let session = open_session(&mut host);
     let window = BinderId(0x5701);
 
-    let mut add = transact(&mut host, session, ADD_TO_DISPLAY_AS_USER, &mut add_request(window));
+    let mut add = transact(
+        &mut host,
+        session,
+        ADD_TO_DISPLAY_AS_USER,
+        &mut add_request(window),
+    );
     assert_eq!(add.read_int32().expect("exception"), NO_EXCEPTION);
 
     let mut reply = transact(&mut host, session, RELAYOUT, &mut relayout_request(window));

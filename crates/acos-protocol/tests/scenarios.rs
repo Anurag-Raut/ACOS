@@ -346,7 +346,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 y: None,
                 timeout_ms: None,
                 settle_timeout_ms: None,
-            settle: None,
+                settle: None,
                 expect_change: false,
             }),
             ..Step::default()
@@ -361,7 +361,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 y: Some(2),
                 timeout_ms: None,
                 settle_timeout_ms: None,
-            settle: None,
+                settle: None,
                 expect_change: false,
             }),
             ..Step::default()
@@ -376,7 +376,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 y: None,
                 timeout_ms: None,
                 settle_timeout_ms: None,
-            settle: None,
+                settle: None,
                 expect_change: false,
             }),
             ..Step::default()
@@ -391,7 +391,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 y: None,
                 timeout_ms: Some(0),
                 settle_timeout_ms: None,
-            settle: None,
+                settle: None,
                 expect_change: false,
             }),
             ..Step::default()
@@ -405,7 +405,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 text: String::new(),
                 clear: false,
                 settle_timeout_ms: None,
-            settle: None,
+                settle: None,
                 expect_change: false,
             }),
             ..Step::default()
@@ -419,7 +419,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 text: "x".to_string(),
                 clear: false,
                 settle_timeout_ms: None,
-            settle: None,
+                settle: None,
                 expect_change: false,
             }),
             ..Step::default()
@@ -763,7 +763,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
             key: Some(KeyStep {
                 key: KeyName::Back,
                 settle_timeout_ms: None,
-            settle: None,
+                settle: None,
                 expect_change: false,
             }),
             // A key step is valid; make it invalid by adding a second kind.

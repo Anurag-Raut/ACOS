@@ -94,9 +94,7 @@ pub fn compare_png(
     let (bw, bh, baseline_rgba) = decode_rgba8(baseline).map_err(|e| format!("baseline: {e}"))?;
     let (aw, ah, actual_rgba) = decode_rgba8(actual).map_err(|e| format!("actual: {e}"))?;
     if (bw, bh) != (aw, ah) {
-        return Err(format!(
-            "baseline is {bw}x{bh} but the frame is {aw}x{ah}"
-        ));
+        return Err(format!("baseline is {bw}x{bh} but the frame is {aw}x{ah}"));
     }
 
     let width = bw;
@@ -159,9 +157,7 @@ pub(crate) fn decode_rgba8(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), String> 
     let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
     let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
     let mut buffer = vec![0u8; reader.output_buffer_size()];
-    let info = reader
-        .next_frame(&mut buffer)
-        .map_err(|e| e.to_string())?;
+    let info = reader.next_frame(&mut buffer).map_err(|e| e.to_string())?;
     if info.bit_depth != png::BitDepth::Eight {
         return Err(format!("unsupported PNG bit depth {:?}", info.bit_depth));
     }

@@ -146,7 +146,11 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
         std::fs::remove_file(&props_path)?;
     }
 
-    let shim_built = if opts.shim { Some(crate::build_shim(&root.data.join("shim"))?) } else { None };
+    let shim_built = if opts.shim {
+        Some(crate::build_shim(&root.data.join("shim"))?)
+    } else {
+        None
+    };
     // Private per-run data root (S4): the guest writes only here (and to the
     // read-only shared inputs), and the tree is gone when this function returns.
     let run = root.new_run_dir("run")?;
@@ -162,9 +166,10 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     let mut cp_dev = Vec::new();
     let mut dex_names = Vec::new();
     for (i, dex) in opts.dex.iter().enumerate() {
-        let file = dex.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| {
-            format!("classes{i}.dex")
-        });
+        let file = dex
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_else(|| format!("classes{i}.dex"));
         let name = format!("{i:02}_{file}");
         std::fs::copy(dex, task.join(&name))?;
         cp_dev.push(format!("/data/task/{name}"));
@@ -239,7 +244,13 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     let rlimit_as = opts.rlimit_as_mb;
     unsafe {
         cmd.pre_exec(move || {
-            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
+            libc::prctl(
+                libc::PR_SET_PDEATHSIG,
+                libc::SIGKILL as libc::c_ulong,
+                0,
+                0,
+                0,
+            );
             if rlimit_as > 0 {
                 let lim = libc::rlimit {
                     rlim_cur: rlimit_as * 1024 * 1024,
@@ -249,9 +260,15 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
                     return Err(std::io::Error::last_os_error());
                 }
             }
-            let core = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+            let core = libc::rlimit {
+                rlim_cur: 0,
+                rlim_max: 0,
+            };
             libc::setrlimit(libc::RLIMIT_CORE, &core);
-            let nofile = libc::rlimit { rlim_cur: 4096, rlim_max: 4096 };
+            let nofile = libc::rlimit {
+                rlim_cur: 4096,
+                rlim_max: 4096,
+            };
             libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
             // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
             crate::watchdog::apply_init_rlimit_nice();
@@ -260,7 +277,9 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     }
     cmd.process_group(0);
     let mut cmd = cmd; // pre_exec/process_group return &mut Command
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut command: Command = cmd;
 
     let started = Instant::now();
@@ -324,7 +343,9 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
                 break None;
             }
         }
-        if wall_tick.is_none() || wall_tick.is_some_and(|t: Instant| t.elapsed() > Duration::from_millis(100)) {
+        if wall_tick.is_none()
+            || wall_tick.is_some_and(|t: Instant| t.elapsed() > Duration::from_millis(100))
+        {
             cgroup.sample();
             wall_tick = Some(Instant::now());
         }
@@ -540,10 +561,19 @@ pub fn classify(
             if let Some(msg) = stderr.lines().find(|l| !l.trim().is_empty()) {
                 diags.push(format!("first stderr line: {msg}"));
             }
-            return (Outcome::Unsupported, Some("UNSUPPORTED_SYSCALL".into()), diags);
+            return (
+                Outcome::Unsupported,
+                Some("UNSUPPORTED_SYSCALL".into()),
+                diags,
+            );
         }
         if let Some(e) = &fatal_log {
-            diags.push(format!("ART [{}] {}: {}", e.priority_name(), e.tag, e.message));
+            diags.push(format!(
+                "ART [{}] {}: {}",
+                e.priority_name(),
+                e.tag,
+                e.message
+            ));
         }
         // A deliberate failure (exit 1 + uncaught exception in main) is the
         // program's verdict, not an engine failure — and ART logs fatal-looking
@@ -558,11 +588,17 @@ pub fn classify(
         }
         if combined.contains("Scudo ERROR") || combined.contains("out of memory") {
             diags.push("host memory limit hit (see ACOS_HOST_RSS_MAX / guarded.sh; RLIMIT_AS is not usable for ART)".into());
-            return (Outcome::Unsupported, Some("HOST_MEMORY_LIMIT".into()), diags);
+            return (
+                Outcome::Unsupported,
+                Some("HOST_MEMORY_LIMIT".into()),
+                diags,
+            );
         }
         // A fatal CHECK now aborts for real (the shim no longer suppresses the
         // aborter), so the signal and the fatal log entry arrive together.
-        let fatal_check = logs.iter().find(|e| e.message.contains("Check failed") || e.message.contains("CHECK failed"));
+        let fatal_check = logs
+            .iter()
+            .find(|e| e.message.contains("Check failed") || e.message.contains("CHECK failed"));
         if let Some(e) = fatal_check.or(fatal_log.as_ref()) {
             if fatal_check.is_some() || e.tag == "art_aborter" {
                 diags.push(format!("ART CHECK failed: {}", e.message));
@@ -589,21 +625,34 @@ pub fn classify(
     }
     if combined.contains("Scudo ERROR") || combined.contains("out of memory") {
         diags.push("host memory limit hit (see ACOS_HOST_RSS_MAX / guarded.sh; RLIMIT_AS is not usable for ART)".into());
-        return (Outcome::Unsupported, Some("HOST_MEMORY_LIMIT".into()), diags);
+        return (
+            Outcome::Unsupported,
+            Some("HOST_MEMORY_LIMIT".into()),
+            diags,
+        );
     }
     if let Some(c) = &check_text {
         diags.push(c.clone());
         return (Outcome::Crash, Some("ART_FATAL_CHECK".into()), diags);
     }
     if let Some(e) = &fatal_log {
-        diags.push(format!("ART [{}] {}: {}", e.priority_name(), e.tag, e.message));
+        diags.push(format!(
+            "ART [{}] {}: {}",
+            e.priority_name(),
+            e.tag,
+            e.message
+        ));
         // An ART fatal log without a signal is still a crash, unless the process
         // exited 0 (some LOG(FATAL) paths are recovered).
         if exit != Some(0) {
             let is_check = e.tag == "art_aborter"
                 || e.message.contains("Check failed")
                 || e.message.contains("CHECK failed");
-            let code = if is_check { "ART_FATAL_CHECK" } else { "ART_FATAL_LOG" };
+            let code = if is_check {
+                "ART_FATAL_CHECK"
+            } else {
+                "ART_FATAL_LOG"
+            };
             return (Outcome::Crash, Some(code.into()), diags);
         }
     }
@@ -655,7 +704,11 @@ mod tests {
     use crate::logd::LogEntry;
 
     fn entry(prio: i32, tag: &str, msg: &str) -> LogEntry {
-        LogEntry { prio, tag: tag.into(), message: msg.into() }
+        LogEntry {
+            prio,
+            tag: tag.into(),
+            message: msg.into(),
+        }
     }
 
     #[test]
@@ -667,7 +720,14 @@ mod tests {
 
     #[test]
     fn segv_is_art_crash() {
-        let (o, c, d) = classify(None, Some(libc::SIGSEGV), false, "", &[], Duration::from_secs(1));
+        let (o, c, d) = classify(
+            None,
+            Some(libc::SIGSEGV),
+            false,
+            "",
+            &[],
+            Duration::from_secs(1),
+        );
         assert_eq!(o, Outcome::Crash);
         assert_eq!(c.as_deref(), Some("ART_CRASH"));
         assert!(d.iter().any(|x| x.contains("SIGSEGV")));
@@ -691,8 +751,19 @@ mod tests {
     fn sigabrt_from_fatal_check_is_art_fatal_check() {
         // Fatal-abort behaviour restored: the CHECK now really dies of SIGABRT,
         // and the recorded message must still classify as a CHECK, not CRASH.
-        let logs = [entry(7, "", "Check failed: !location.empty() No mainline framework library found")];
-        let (o, c, d) = classify(None, Some(libc::SIGABRT), false, "", &logs, Duration::from_secs(1));
+        let logs = [entry(
+            7,
+            "",
+            "Check failed: !location.empty() No mainline framework library found",
+        )];
+        let (o, c, d) = classify(
+            None,
+            Some(libc::SIGABRT),
+            false,
+            "",
+            &logs,
+            Duration::from_secs(1),
+        );
         assert_eq!(o, Outcome::Crash);
         assert_eq!(c.as_deref(), Some("ART_FATAL_CHECK"));
         assert!(d.iter().any(|x| x.contains("SIGABRT")));
@@ -722,7 +793,14 @@ mod tests {
 
     #[test]
     fn sigsys_is_unsupported() {
-        let (o, c, _) = classify(None, Some(libc::SIGSYS), false, "", &[], Duration::from_secs(1));
+        let (o, c, _) = classify(
+            None,
+            Some(libc::SIGSYS),
+            false,
+            "",
+            &[],
+            Duration::from_secs(1),
+        );
         assert_eq!(o, Outcome::Unsupported);
         assert_eq!(c.as_deref(), Some("UNSUPPORTED_SYSCALL"));
     }

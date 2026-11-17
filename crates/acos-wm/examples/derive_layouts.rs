@@ -13,7 +13,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use acos_dex::{DexFile, disasm::disassemble};
+use acos_dex::{disasm::disassemble, DexFile};
 
 /// `(class descriptor, method name)` pairs whose layouts `codec.rs` implements.
 const TARGETS: &[(&str, &str)] = &[
@@ -27,7 +27,10 @@ const TARGETS: &[(&str, &str)] = &[
     ("Landroid/util/MergedConfiguration;", "writeToParcel"),
     ("Landroid/window/ClientWindowFrames;", "writeToParcel"),
     ("Landroid/view/SurfaceControl;", "writeToParcel"),
-    ("Landroid/view/DisplayCutout$ParcelableWrapper;", "writeCutoutToParcel"),
+    (
+        "Landroid/view/DisplayCutout$ParcelableWrapper;",
+        "writeCutoutToParcel",
+    ),
     ("Landroid/view/RoundedCorner;", "writeToParcel"),
     ("Landroid/view/RoundedCorners;", "writeToParcel"),
     ("Landroid/view/PrivacyIndicatorBounds;", "writeToParcel"),
@@ -98,7 +101,13 @@ fn main() {
     std::fs::create_dir_all(&out_dir).expect("create results/wm");
 
     let mut dexes = Vec::new();
-    for name in ["classes.dex", "classes2.dex", "classes3.dex", "classes4.dex", "classes5.dex"] {
+    for name in [
+        "classes.dex",
+        "classes2.dex",
+        "classes3.dex",
+        "classes4.dex",
+        "classes5.dex",
+    ] {
         let path = dex_dir.join(name);
         match std::fs::read(&path) {
             Ok(data) => match DexFile::parse(Arc::<[u8]>::from(data)) {

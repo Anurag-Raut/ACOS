@@ -47,7 +47,8 @@ fn main() {
 
     // Cold: first shaping + first FreeType rasterisation.
     let cold_start = Instant::now();
-    ctx.canvas_draw_text(surface, &text, 8.0, 80.0, paint).unwrap();
+    ctx.canvas_draw_text(surface, &text, 8.0, 80.0, paint)
+        .unwrap();
     let cold_ms = cold_start.elapsed().as_secs_f64() * 1000.0;
     let (rss_after_cold, _) = rss_kb().unwrap_or((0, 0));
 
@@ -55,7 +56,8 @@ fn main() {
     for i in 0..ITER {
         let x = 8.0 + (i % 4) as f32 * 0.25;
         let t = Instant::now();
-        ctx.canvas_draw_text(surface, &text, x, 80.0, paint).unwrap();
+        ctx.canvas_draw_text(surface, &text, x, 80.0, paint)
+            .unwrap();
         times.push(t.elapsed().as_secs_f64() * 1000.0);
     }
     let (rss_after, hwm_after) = rss_kb().unwrap_or((0, 0));

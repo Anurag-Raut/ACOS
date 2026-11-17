@@ -123,7 +123,11 @@ impl Path {
     /// is exact for `weight == 1` and a very close approximation otherwise.
     pub fn conic_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, weight: f32) {
         let last = self.last_point().unwrap_or(PointF::new(x1, y1));
-        let w = if weight.is_finite() { weight.max(0.0) } else { 1.0 };
+        let w = if weight.is_finite() {
+            weight.max(0.0)
+        } else {
+            1.0
+        };
         if (w - 1.0).abs() < 1e-6 {
             self.quad_to(x1, y1, x2, y2);
             return;
@@ -177,7 +181,13 @@ impl Path {
     }
 
     pub fn add_circle(&mut self, cx: f32, cy: f32, radius: f32, direction_ccw: bool) {
-        self.add_oval(cx - radius, cy - radius, cx + radius, cy + radius, direction_ccw);
+        self.add_oval(
+            cx - radius,
+            cy - radius,
+            cx + radius,
+            cy + radius,
+            direction_ccw,
+        );
     }
 
     /// Android `Path.addRoundRect` (uniform or elliptical radii).
@@ -458,7 +468,13 @@ impl Path {
                     current.push(cursor);
                 }
                 Verb::QuadTo(x1, y1, x2, y2) => {
-                    flatten_quad(cursor, PointF::new(x1, y1), PointF::new(x2, y2), tol, &mut current);
+                    flatten_quad(
+                        cursor,
+                        PointF::new(x1, y1),
+                        PointF::new(x2, y2),
+                        tol,
+                        &mut current,
+                    );
                     cursor = PointF::new(x2, y2);
                 }
                 Verb::CubicTo(x1, y1, x2, y2, x3, y3) => {
@@ -754,7 +770,11 @@ mod tests {
         let mut p = Path::new();
         p.add_rect(0.0, 0.0, 10.0, 10.0, false);
         let pm = PathMeasure::new(&p, false);
-        assert!((pm.total_length() - 40.0).abs() < 0.5, "{}", pm.total_length());
+        assert!(
+            (pm.total_length() - 40.0).abs() < 0.5,
+            "{}",
+            pm.total_length()
+        );
         let (pos, tan) = pm.get_pos_tan(5.0).unwrap();
         assert!((pos.x - 5.0).abs() < 0.1);
         assert!((tan.x - 1.0).abs() < 0.01);

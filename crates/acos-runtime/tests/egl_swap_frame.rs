@@ -56,12 +56,8 @@ fn egl_swap_publishes_a_completed_frame() {
         loader_has_gles(),
         "the loader must resolve eglGetDisplay from acos-gles, not its trap"
     );
-    let window = acos_jni::ndk_host::register_native_window(
-        SIZE as i32,
-        SIZE as i32,
-        layer,
-        SURFACE,
-    );
+    let window =
+        acos_jni::ndk_host::register_native_window(SIZE as i32, SIZE as i32, layer, SURFACE);
 
     // Nothing is published before a real swap.
     assert!(store.latest().is_none());
@@ -108,9 +104,13 @@ fn egl_swap_publishes_a_completed_frame() {
         );
         let surface = ffi::egl_create_window_surface(display, config[0], window as usize, 0);
         assert_ne!(surface, 0, "window surface over the ANativeWindow");
-        let cattribs = [acos_gles::egl::attrib::CONTEXT_CLIENT_VERSION, 2, acos_gles::egl::attrib::NONE, 0];
-        let context =
-            ffi::egl_create_context(display, config[0], 0, cattribs.as_ptr() as usize);
+        let cattribs = [
+            acos_gles::egl::attrib::CONTEXT_CLIENT_VERSION,
+            2,
+            acos_gles::egl::attrib::NONE,
+            0,
+        ];
+        let context = ffi::egl_create_context(display, config[0], 0, cattribs.as_ptr() as usize);
         assert_ne!(context, 0);
         assert_eq!(ffi::egl_make_current(display, surface, surface, context), 1);
         ffi::gl_viewport(0, 0, SIZE as i32, SIZE as i32);
@@ -203,7 +203,13 @@ fn egl_swap_publishes_a_completed_frame() {
 
     // A second swap publishes a second, strictly newer frame.
     unsafe {
-        assert_eq!(ffi::egl_swap_buffers(acos_gles::egl::current_display(), acos_gles::egl::current_surface(false)), 1);
+        assert_eq!(
+            ffi::egl_swap_buffers(
+                acos_gles::egl::current_display(),
+                acos_gles::egl::current_surface(false)
+            ),
+            1
+        );
     }
     assert_eq!(store.published_count(), 2);
     assert_eq!(store.latest().expect("frame 2").frame_id, 2);

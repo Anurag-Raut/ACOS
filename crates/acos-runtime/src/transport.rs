@@ -115,7 +115,12 @@ impl BinderTransport for ServiceTransport {
         // A local `Binder` carries its `BBinder` id in `mObject`.
         if let Ok(JavaValue::Long(v)) = vm.get_field(obj, "mObject") {
             let id = BinderId(v as u64);
-            insert_bounded(&mut self.locals.borrow_mut(), id.0, obj, MAX_BINDER_IDENTITIES);
+            insert_bounded(
+                &mut self.locals.borrow_mut(),
+                id.0,
+                obj,
+                MAX_BINDER_IDENTITIES,
+            );
             vm.root_handle(obj);
             // Keep a re-entrancy-safe mirror for reply parcelables read while
             // this transport is already borrowed (e.g. a published provider
@@ -146,7 +151,12 @@ impl BinderTransport for ServiceTransport {
                 &[JavaValue::Long(id.0 as i64)],
             )
             .ok()?;
-        insert_bounded(&mut self.proxies.borrow_mut(), id.0, proxy, MAX_BINDER_IDENTITIES);
+        insert_bounded(
+            &mut self.proxies.borrow_mut(),
+            id.0,
+            proxy,
+            MAX_BINDER_IDENTITIES,
+        );
         Some(proxy)
     }
 
@@ -165,7 +175,6 @@ impl BinderTransport for ServiceTransport {
         // The interface token is needed after the handler runs, to choose the
         // reply encoder; grab it before the dispatcher consumes it.
         let descriptor = data.peek_interface_token().ok().flatten();
-
 
         // WMS (T-29) is routed here: it owns the `acos-wm` policy state and the
         // DEX-derived parcelable codecs, which the generic `Value` codec cannot
@@ -188,11 +197,15 @@ impl BinderTransport for ServiceTransport {
                 // `InputBindResult` (T-38 follow-up): the request carries a real
                 // `EditorInfo` and the reply is a framework parcelable the
                 // generic codec cannot express.
-                let result = crate::ime_java::transact(vm, binder, code, data, reply, flags)
-                    .map(|_| ());
+                let result =
+                    crate::ime_java::transact(vm, binder, code, data, reply, flags).map(|_| ());
                 (result, Vec::new())
             } else if crate::clipboard_java::owns(descriptor.as_deref())
-                && code_owns_method(descriptor.as_deref(), code, crate::clipboard_java::owns_method)
+                && code_owns_method(
+                    descriptor.as_deref(),
+                    code,
+                    crate::clipboard_java::owns_method,
+                )
             {
                 // `setPrimaryClip`/`getPrimaryClip`/`getPrimaryClipDescription`
                 // carry/return a real `ClipData`; `setPrimaryClip` also emits
@@ -205,8 +218,8 @@ impl BinderTransport for ServiceTransport {
                 && code_owns_method(descriptor.as_deref(), code, crate::user_java::owns_method)
             {
                 // `getUserInfo`/`getUsers`/... return a real `UserInfo`.
-                let result = crate::user_java::transact(vm, binder, code, data, reply, flags)
-                    .map(|_| ());
+                let result =
+                    crate::user_java::transact(vm, binder, code, data, reply, flags).map(|_| ());
                 (result, Vec::new())
             } else if descriptor.as_deref() == Some("android.content.IContentProvider")
                 && self.locals.borrow().contains_key(&binder.0)
@@ -217,11 +230,7 @@ impl BinderTransport for ServiceTransport {
                 // `ContentProviderNative.onTransact` parses the request and
                 // marshals the reply (including `Cursor` ->
                 // `BulkCursorDescriptor`). No CRUD payload is hand-written.
-                let target = *self
-                    .locals
-                    .borrow()
-                    .get(&binder.0)
-                    .expect("checked above");
+                let target = *self.locals.borrow().get(&binder.0).expect("checked above");
                 let request = data.clone();
                 match acos_vm::natives::binder::dispatch_local_binder(
                     vm, target, code, request, flags,
@@ -230,7 +239,10 @@ impl BinderTransport for ServiceTransport {
                         *reply = handler_reply;
                         (Ok(()), Vec::new())
                     }
-                    Err(e) => (Err(format!("IContentProvider local dispatch: {e}")), Vec::new()),
+                    Err(e) => (
+                        Err(format!("IContentProvider local dispatch: {e}")),
+                        Vec::new(),
+                    ),
                 }
             } else if crate::ams_java::owns(descriptor.as_deref())
                 && code_owns_method(descriptor.as_deref(), code, crate::ams_java::owns_method)
@@ -240,8 +252,7 @@ impl BinderTransport for ServiceTransport {
                 // are marshalled here; the state machine is `acos-services::ams`.
                 match crate::ams_java::transact(vm, binder, code, data, reply, flags) {
                     Ok(_) => {
-                        let deliveries =
-                            crate::ams_java::take_deliveries(vm).unwrap_or_default();
+                        let deliveries = crate::ams_java::take_deliveries(vm).unwrap_or_default();
                         (Ok(()), deliveries)
                     }
                     Err(e) => (Err(e), Vec::new()),
@@ -300,6 +311,25 @@ impl BinderTransport for ServiceTransport {
                     }
                 }
             }
+            // WV2: `ACOS_PARCEL_DUMP` records the reply bytes as the guest
+            // reads them — after every materialiser has had its turn. This is
+            // the byte stream a framework-side desync is a fact about; the
+            // Rust-codec view (`acos-services`) is dumped separately by the
+            // service that wrote it.
+            if acos_services::parcel_dump::enabled() {
+                if let Some(descriptor) = descriptor.as_deref().filter(|d| {
+                    *d == "android.content.pm.IPackageManager"
+                        || *d == "android.webkit.IWebViewUpdateService"
+                }) {
+                    let method = acos_aidl::lookup(descriptor, code)
+                        .map(|m| m.name.clone())
+                        .unwrap_or_else(|| format!("code{code}"));
+                    acos_services::parcel_dump::dump(
+                        &format!("reply.{descriptor}.{method}"),
+                        reply,
+                    );
+                }
+            }
         }
 
         result.map(|()| deliveries)
@@ -350,11 +380,7 @@ impl BinderTransport for ServiceTransport {
 
 /// True when the decoded method for `(descriptor, code)` is owned by the
 /// marshaller `owns_method` predicate.
-fn code_owns_method(
-    descriptor: Option<&str>,
-    code: u32,
-    owns_method: fn(&str) -> bool,
-) -> bool {
+fn code_owns_method(descriptor: Option<&str>, code: u32, owns_method: fn(&str) -> bool) -> bool {
     descriptor
         .and_then(|d| acos_aidl::lookup(d, code))
         .is_some_and(|m| owns_method(&m.name))

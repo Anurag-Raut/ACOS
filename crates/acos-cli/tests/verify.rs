@@ -18,7 +18,8 @@ fn workspace() -> PathBuf {
 fn scratch(name: &str) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("acos-cli-verify-{}-{n}-{name}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("acos-cli-verify-{}-{n}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     dir
 }
@@ -112,10 +113,8 @@ fn verify_json_matches_the_envelope_schema() {
     assert_eq!(value["error"]["code"], "ASSERTION_FAILED");
 
     let schema: Value = serde_json::from_str(
-        &std::fs::read_to_string(
-            workspace().join("crates/acos-protocol/schema/envelope.json"),
-        )
-        .expect("read schema"),
+        &std::fs::read_to_string(workspace().join("crates/acos-protocol/schema/envelope.json"))
+            .expect("read schema"),
     )
     .expect("schema JSON");
     assert_matches_schema(&schema, &value, "$");
@@ -156,7 +155,10 @@ fn run_reference_verify(artifacts: &Path, extra: &[&str]) -> std::process::Outpu
 fn a_second_run_into_the_same_artifacts_dir_is_refused_until_overwrite() {
     let artifacts = scratch("owned");
     let first = run_reference_verify(&artifacts, &[]);
-    assert!(!first.status.success(), "the negative scenario fails by design");
+    assert!(
+        !first.status.success(),
+        "the negative scenario fails by design"
+    );
     let first_verdict: Value =
         serde_json::from_slice(&std::fs::read(artifacts.join("verdict.json")).unwrap())
             .expect("first run wrote a verdict");
@@ -165,9 +167,8 @@ fn a_second_run_into_the_same_artifacts_dir_is_refused_until_overwrite() {
         .expect("a run id")
         .to_string();
     // The marker names the owner before any step runs.
-    let marker: Value =
-        serde_json::from_slice(&std::fs::read(artifacts.join("run.json")).unwrap())
-            .expect("run.json");
+    let marker: Value = serde_json::from_slice(&std::fs::read(artifacts.join("run.json")).unwrap())
+        .expect("run.json");
     assert_eq!(marker["request_id"], first_run.as_str());
 
     // A second run into the same directory is a structured refusal, not a
@@ -202,10 +203,7 @@ fn a_second_run_into_the_same_artifacts_dir_is_refused_until_overwrite() {
     let third_verdict: Value =
         serde_json::from_slice(&std::fs::read(artifacts.join("verdict.json")).unwrap()).unwrap();
     assert_ne!(third_verdict["request_id"], first_run.as_str());
-    assert_eq!(
-        third_verdict["artifacts_overwrote_run"],
-        first_run.as_str()
-    );
+    assert_eq!(third_verdict["artifacts_overwrote_run"], first_run.as_str());
     let marker: Value =
         serde_json::from_slice(&std::fs::read(artifacts.join("run.json")).unwrap()).unwrap();
     assert_eq!(marker["overwrote_run_id"], first_run.as_str());
@@ -284,17 +282,25 @@ fn a_rerun_into_the_default_artifacts_dir_replaces_the_previous_run() {
     };
     let dir = cwd.join("out/wrong-text");
     let first = run();
-    assert!(!first.status.success(), "the negative scenario fails by design");
-    let first_run = serde_json::from_slice::<Value>(&std::fs::read(dir.join("verdict.json")).unwrap())
-        .unwrap()["request_id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    assert!(
+        !first.status.success(),
+        "the negative scenario fails by design"
+    );
+    let first_run =
+        serde_json::from_slice::<Value>(&std::fs::read(dir.join("verdict.json")).unwrap()).unwrap()
+            ["request_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
     let second = run();
     let envelope: Value = serde_json::from_slice(&second.stdout).expect("JSON envelope");
-    assert_eq!(envelope["status"], "fail", "a rerun is a real run, not a refusal: {envelope}");
+    assert_eq!(
+        envelope["status"], "fail",
+        "a rerun is a real run, not a refusal: {envelope}"
+    );
     assert_ne!(envelope["error"]["code"], "INVALID_ARGUMENT");
-    let verdict: Value = serde_json::from_slice(&std::fs::read(dir.join("verdict.json")).unwrap()).unwrap();
+    let verdict: Value =
+        serde_json::from_slice(&std::fs::read(dir.join("verdict.json")).unwrap()).unwrap();
     assert_ne!(verdict["request_id"], first_run.as_str());
     assert_eq!(verdict["artifacts_overwrote_run"], first_run.as_str());
     let _ = std::fs::remove_dir_all(&cwd);

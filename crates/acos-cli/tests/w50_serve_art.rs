@@ -44,7 +44,9 @@ fn scratch(tag: &str) -> PathBuf {
     // fits and fall back to a short hash of it when it does not (still inside
     // this checkout's `.cache`, never /tmp).
     let pid = std::process::id();
-    let mut dir = repo_root().join(".cache").join(format!("w50-test-{tag}-{pid}"));
+    let mut dir = repo_root()
+        .join(".cache")
+        .join(format!("w50-test-{tag}-{pid}"));
     let budget = 107 - "/serve.sock".len();
     if dir.as_os_str().len() > budget {
         let mut hash = 0xcbf2_9ce4_8422_2325u64;
@@ -138,7 +140,9 @@ struct Conn {
 impl Conn {
     fn new(path: &Path) -> Conn {
         let stream = UnixStream::connect(path).expect("connect to serve socket");
-        stream.set_read_timeout(Some(Duration::from_secs(240))).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(240)))
+            .unwrap();
         Conn {
             writer: stream.try_clone().unwrap(),
             reader: BufReader::new(stream),
@@ -264,7 +268,10 @@ fn serve_flag_rejects_an_unknown_engine() {
         .env("ACOS_RUNTIME_DIR", dir.join("runtime"))
         .output()
         .expect("run acos serve");
-    assert!(!output.status.success(), "an unknown engine must refuse to start");
+    assert!(
+        !output.status.success(),
+        "an unknown engine must refuse to start"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("unknown --engine"), "{stderr}");
     let _ = std::fs::remove_dir_all(&dir);
@@ -311,7 +318,11 @@ fn art_agent_loop_over_the_socket() {
 
     let after = conn.call("acos_observe_tree", json!({"base": b}));
     let count = find_node(&after["result"]["tree"], "count").expect("count node");
-    assert_eq!(count["text"], json!("1"), "the tap must increment the counter");
+    assert_eq!(
+        count["text"],
+        json!("1"),
+        "the tap must increment the counter"
+    );
 
     let asserted = conn.call(
         "acos_assert",
@@ -334,7 +345,9 @@ fn art_agent_loop_over_the_socket() {
     );
     assert_eq!(shot["ok"], json!(true), "{shot:#?}");
     assert_eq!(shot["result"]["evidence_label"], json!("host-pixel"));
-    let bytes = std::fs::metadata(&shot_path).expect("screenshot written").len();
+    let bytes = std::fs::metadata(&shot_path)
+        .expect("screenshot written")
+        .len();
     assert!(bytes > 1000, "PNG too small: {bytes}");
     assert_eq!(
         std::fs::read(&shot_path).unwrap()[..4],
@@ -385,7 +398,10 @@ fn art_agent_loop_over_the_socket() {
 fn find_node<'a>(nodes: &'a Value, resource: &str) -> Option<&'a Value> {
     let array = nodes.as_array()?;
     for node in array {
-        let rid = node.get("resource_id").and_then(Value::as_str).unwrap_or("");
+        let rid = node
+            .get("resource_id")
+            .and_then(Value::as_str)
+            .unwrap_or("");
         if rid == resource || rid.ends_with(&format!(":id/{resource}")) {
             return Some(node);
         }

@@ -133,7 +133,10 @@ fn fw_surface_control(p: &mut Parcel) -> FwSurface {
         let client = fw_read_strong_binder(p);
         let handle = fw_read_strong_binder(p);
         let layer_id = p.read_int32().expect("surface layerId");
-        let layer_name = p.read_string16().expect("surface layerName").unwrap_or_default();
+        let layer_name = p
+            .read_string16()
+            .expect("surface layerName")
+            .unwrap_or_default();
         let transform_hint = p.read_int32().expect("surface transformHint");
         let w = p.read_int32().expect("surface native width");
         let h = p.read_int32().expect("surface native height");
@@ -181,9 +184,7 @@ fn fw_insets_source_control(p: &mut Parcel) -> (i32, i32, Option<FwSurface>) {
 fn fw_insets_control_array(p: &mut Parcel) -> Vec<Option<(i32, i32, Option<FwSurface>)>> {
     let n = p.read_int32().expect("controls count");
     (0..n.max(0))
-        .map(|_| {
-            fw_typed(p, fw_insets_source_control)
-        })
+        .map(|_| fw_typed(p, fw_insets_source_control))
         .collect()
 }
 
@@ -208,7 +209,9 @@ fn add_request(window: BinderId) -> Parcel {
     data.write_interface_token(IWINDOW_SESSION).expect("token");
     data.write_strong_binder_opt(Some(window));
     data.write_int32(1);
-    app_params().write_to_parcel(&mut data).expect("LayoutParams");
+    app_params()
+        .write_to_parcel(&mut data)
+        .expect("LayoutParams");
     data.write_int32(0); // viewVisibility
     data.write_int32(-1); // layerStackId
     data.write_int32(0); // userId
@@ -232,7 +235,10 @@ fn open_session(host: &mut ServiceHost) -> BinderId {
         NO_EXCEPTION,
         "the reply must start with writeNoException"
     );
-    reply.read_strong_binder().expect("session").expect("session")
+    reply
+        .read_strong_binder()
+        .expect("session")
+        .expect("session")
 }
 
 // ---------------------------------------------------------------------------
@@ -468,8 +474,8 @@ fn a_null_client_binder_is_unexpected_null_and_aborts_the_parse() {
                 "Parcel::readStrongBinder returns UNEXPECTED_NULL for a readable null binder"
             );
         }
-        StrictBinder::Some(_) => panic!(
-            "control {id:#x}: a null client must not read as a binder (this is the W2 bug)"
-        ),
+        StrictBinder::Some(_) => {
+            panic!("control {id:#x}: a null client must not read as a binder (this is the W2 bug)")
+        }
     }
 }

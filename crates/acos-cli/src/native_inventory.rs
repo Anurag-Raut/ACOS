@@ -54,7 +54,11 @@ pub fn run(args: NativeInventoryArgs) -> ExitCode {
                         eprintln!("error: cannot write {}: {e}", p.display());
                         return ExitCode::FAILURE;
                     }
-                    println!("wrote {} ({} libraries)", p.display(), report.libraries.len());
+                    println!(
+                        "wrote {} ({} libraries)",
+                        p.display(),
+                        report.libraries.len()
+                    );
                 }
                 _ => println!("{json}"),
             }
@@ -98,7 +102,9 @@ fn inventory_apk(path: &Path, abi: &str) -> Result<Vec<LibraryInventory>, String
     let suffix = format!("lib/{abi}/");
     let mut out = Vec::new();
     for i in 0..zip.len() {
-        let mut entry = zip.by_index(i).map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut entry = zip
+            .by_index(i)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
         let name = entry.name().to_string();
         if !name.starts_with(&suffix) || !name.ends_with(".so") || entry.is_dir() {
             continue;
@@ -114,10 +120,7 @@ fn inventory_apk(path: &Path, abi: &str) -> Result<Vec<LibraryInventory>, String
         }
     }
     if out.is_empty() {
-        return Err(format!(
-            "{}: no lib/{abi}/*.so entries",
-            path.display()
-        ));
+        return Err(format!("{}: no lib/{abi}/*.so entries", path.display()));
     }
     Ok(out)
 }

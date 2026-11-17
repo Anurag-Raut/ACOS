@@ -236,7 +236,10 @@ fn rn_launch_observe_tree_tap_round_trip() {
     );
     let logs_env = envelope_of(&logs);
     assert_eq!(logs_env["status"], "pass", "{logs_env:#?}");
-    assert!(logs_env["result"]["count"].as_u64().unwrap_or(0) > 0, "{logs_env:#?}");
+    assert!(
+        logs_env["result"]["count"].as_u64().unwrap_or(0) > 0,
+        "{logs_env:#?}"
+    );
 
     let summary = json!({
         "nodes_initial": first_nodes,

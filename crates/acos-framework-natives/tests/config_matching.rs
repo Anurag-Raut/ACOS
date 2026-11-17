@@ -89,7 +89,11 @@ fn density_nearest_rule_calibrated_against_aapt2() {
     for (req_density, a, b, expected) in cases {
         let ca = with(|c| c.density = a);
         let cb = with(|c| c.density = b);
-        let winner = pick(&[ca.clone(), cb.clone()], &with(|r| r.density = req_density)).unwrap();
+        let winner = pick(
+            &[ca.clone(), cb.clone()],
+            &with(|r| r.density = req_density),
+        )
+        .unwrap();
         assert_eq!(
             winner.density, expected,
             "request {req_density} of ({a},{b}) should pick {expected}"
@@ -126,13 +130,19 @@ fn orientation_and_night_and_uimode() {
     let port = with(|c| c.orientation = ORIENTATION_PORT);
     let land = with(|c| c.orientation = ORIENTATION_LAND);
     assert!(port.matches(&req) && !land.matches(&req));
-    assert_eq!(pick(&[land, port], &req).unwrap().orientation, ORIENTATION_PORT);
+    assert_eq!(
+        pick(&[land, port], &req).unwrap().orientation,
+        ORIENTATION_PORT
+    );
 
     let night_req = with(|r| r.ui_mode = UI_MODE_NIGHT_YES);
     let night = with(|c| c.ui_mode = UI_MODE_NIGHT_YES);
     let day = with(|c| c.ui_mode = UI_MODE_NIGHT_NO);
     assert!(night.matches(&night_req) && !day.matches(&night_req));
-    assert_eq!(pick(&[day, night], &night_req).unwrap().ui_mode, UI_MODE_NIGHT_YES);
+    assert_eq!(
+        pick(&[day, night], &night_req).unwrap().ui_mode,
+        UI_MODE_NIGHT_YES
+    );
 
     let tv_req = with(|r| r.ui_mode = UI_MODE_TYPE_TELEVISION);
     let tv = with(|c| c.ui_mode = UI_MODE_TYPE_TELEVISION);
@@ -157,7 +167,10 @@ fn sdk_version_and_layout_direction() {
     let rtl = with(|c| c.screen_layout = LAYOUTDIR_RTL);
     let ltr = with(|c| c.screen_layout = LAYOUTDIR_LTR);
     assert!(rtl.matches(&rtl_req) && !ltr.matches(&rtl_req));
-    assert_eq!(pick(&[ltr, rtl], &rtl_req).unwrap().screen_layout, LAYOUTDIR_RTL);
+    assert_eq!(
+        pick(&[ltr, rtl], &rtl_req).unwrap().screen_layout,
+        LAYOUTDIR_RTL
+    );
 }
 
 #[test]

@@ -1,0 +1,10 @@
+{
+  "mode": "referenced",
+  "decision": "prune-unreferenced",
+  "reason": "passing run (mode `referenced`): declared evidence plus the first and last frame kept, intermediate frames and mirrored captures pruned",
+  "kept_files": 13,
+  "kept_bytes": 1135979,
+  "pruned_files": 0,
+  "pruned_bytes": 0,
+  "pruned": []
+}

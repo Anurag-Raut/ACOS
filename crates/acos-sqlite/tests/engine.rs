@@ -29,19 +29,39 @@ fn crud_transactions_and_constraints() {
     }
     assert_eq!(last_id, 3);
     assert_eq!(
-        db.query_all("SELECT COUNT(*) FROM notes", &[], None).unwrap().rows[0][0],
+        db.query_all("SELECT COUNT(*) FROM notes", &[], None)
+            .unwrap()
+            .rows[0][0],
         SqlValue::Integer(3)
     );
 
     // update / delete
-    assert_eq!(db.execute("UPDATE notes SET body = 'alpha-1' WHERE body = 'alpha'", &[], false).unwrap(), 1);
-    assert_eq!(db.execute("DELETE FROM notes WHERE body = 'beta'", &[], false).unwrap(), 1);
+    assert_eq!(
+        db.execute(
+            "UPDATE notes SET body = 'alpha-1' WHERE body = 'alpha'",
+            &[],
+            false
+        )
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        db.execute("DELETE FROM notes WHERE body = 'beta'", &[], false)
+            .unwrap(),
+        1
+    );
 
     // transaction commit
     db.execute("BEGIN EXCLUSIVE;", &[], false).unwrap();
-    db.execute("INSERT INTO notes (body) VALUES ('tx')", &[], false).unwrap();
+    db.execute("INSERT INTO notes (body) VALUES ('tx')", &[], false)
+        .unwrap();
     db.execute("COMMIT;", &[], false).unwrap();
-    let count = |db: &Database| match db.query_all("SELECT COUNT(*) FROM notes", &[], None).unwrap().rows[0][0].clone() {
+    let count = |db: &Database| match db
+        .query_all("SELECT COUNT(*) FROM notes", &[], None)
+        .unwrap()
+        .rows[0][0]
+        .clone()
+    {
         SqlValue::Integer(i) => i,
         _ => -1,
     };
@@ -49,17 +69,22 @@ fn crud_transactions_and_constraints() {
 
     // transaction rollback
     db.execute("BEGIN EXCLUSIVE;", &[], false).unwrap();
-    db.execute("INSERT INTO notes (body) VALUES ('rollback')", &[], false).unwrap();
+    db.execute("INSERT INTO notes (body) VALUES ('rollback')", &[], false)
+        .unwrap();
     db.execute("ROLLBACK;", &[], false).unwrap();
     assert_eq!(count(&db), after_tx);
 
     // constraint error codes
-    let unique = db.execute("INSERT INTO notes (body) VALUES ('alpha-1')", &[], false).unwrap_err();
+    let unique = db
+        .execute("INSERT INTO notes (body) VALUES ('alpha-1')", &[], false)
+        .unwrap_err();
     assert_eq!(unique.code, 19);
     assert_eq!(unique.extended, 2067);
     assert_eq!(unique.message, "UNIQUE constraint failed: notes.body");
 
-    let notnull = db.execute("INSERT INTO notes (body) VALUES (NULL)", &[], false).unwrap_err();
+    let notnull = db
+        .execute("INSERT INTO notes (body) VALUES (NULL)", &[], false)
+        .unwrap_err();
     assert_eq!(notnull.code, 19);
     assert_eq!(notnull.extended, 1299);
     assert_eq!(notnull.message, "NOT NULL constraint failed: notes.body");
@@ -68,15 +93,21 @@ fn crud_transactions_and_constraints() {
 #[test]
 fn blob_null_and_types() {
     let db = Database::open(":memory:", false, true).unwrap();
-    db.execute("CREATE TABLE t (_id INTEGER PRIMARY KEY, i INTEGER, r REAL, t TEXT, b BLOB, n TEXT)", &[], false)
-        .unwrap();
+    db.execute(
+        "CREATE TABLE t (_id INTEGER PRIMARY KEY, i INTEGER, r REAL, t TEXT, b BLOB, n TEXT)",
+        &[],
+        false,
+    )
+    .unwrap();
     db.execute(
         "INSERT INTO t (_id, i, r, t, b) VALUES (1, 42, 3.5, 'text', ?)",
         &[SqlValue::Blob(vec![0x00, 0xff, 0x10, 0xab])],
         false,
     )
     .unwrap();
-    let q = db.query_all("SELECT i, r, t, b, n FROM t", &[], None).unwrap();
+    let q = db
+        .query_all("SELECT i, r, t, b, n FROM t", &[], None)
+        .unwrap();
     assert_eq!(q.rows.len(), 1);
     assert_eq!(q.rows[0][0], SqlValue::Integer(42));
     assert_eq!(q.rows[0][1], SqlValue::Real(3.5));
@@ -101,10 +132,8 @@ fn prepare_errors_carry_primary_code() {
 /// arbitrary host files. Android's app sandbox cannot be escaped this way.
 #[test]
 fn attach_database_cannot_escape_the_vfs_root() {
-    let dir = std::env::temp_dir().join(format!(
-        "acos-sqlite-attach-escape-{}",
-        std::process::id()
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("acos-sqlite-attach-escape-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create scratch dir");
     let app = dir.join("app.db");
@@ -118,7 +147,10 @@ fn attach_database_cannot_escape_the_vfs_root() {
         attached.is_err(),
         "ATTACH to a path outside the sandbox must be refused"
     );
-    assert!(!outside.exists(), "ATTACH created a host file outside the sandbox");
+    assert!(
+        !outside.exists(),
+        "ATTACH created a host file outside the sandbox"
+    );
 
     let vacuum_out = dir.join("vacuum-escaped.db");
     let _ = std::fs::remove_file(&vacuum_out);
@@ -127,5 +159,8 @@ fn attach_database_cannot_escape_the_vfs_root() {
         db.execute(&sql, &[], false).is_err(),
         "VACUUM INTO a path outside the sandbox must be refused"
     );
-    assert!(!vacuum_out.exists(), "VACUUM INTO created a host file outside the sandbox");
+    assert!(
+        !vacuum_out.exists(),
+        "VACUUM INTO created a host file outside the sandbox"
+    );
 }

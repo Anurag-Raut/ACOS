@@ -71,7 +71,8 @@ fn native_fixture_exercises_slots_through_jni_table() {
     // SAFETY: the runtime is attached and bound to `vm` for this thread.
     let pass = unsafe { f(env, std::ptr::null_mut()) };
     assert_eq!(
-        pass, 0x7FF,
+        pass,
+        0x7FF,
         "fixture slot checks bitmask (0b{:011b}); no structured error: {:?}",
         pass,
         rt.take_error()
@@ -119,8 +120,7 @@ fn native_fixture_worker_brokers_java_call() {
         .symbol("acos_jni_test_broker_worker")
         .expect("acos_jni_test_broker_worker export");
 
-    type WorkerFn =
-        unsafe extern "C" fn(*mut c_void, *mut c_void, unsafe extern "C" fn()) -> i32;
+    type WorkerFn = unsafe extern "C" fn(*mut c_void, *mut c_void, unsafe extern "C" fn()) -> i32;
     // SAFETY: symbol is the fixture entry point `jint (JNIEnv*, jclass, void (*)(void))`.
     let f: WorkerFn = unsafe { std::mem::transmute(sym) };
     // SAFETY: `acos_jni_broker_pump` has C ABI `extern "C" fn() -> usize`; the
@@ -131,7 +131,8 @@ fn native_fixture_worker_brokers_java_call() {
     // SAFETY: the runtime is attached and bound to `vm` for this thread.
     let pass = unsafe { f(env, std::ptr::null_mut(), pump) };
     assert_eq!(
-        pass, 1,
+        pass,
+        1,
         "native worker broker call returned {pass}; error: {:?}",
         rt.take_error()
     );

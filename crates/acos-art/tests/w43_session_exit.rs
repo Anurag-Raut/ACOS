@@ -30,7 +30,10 @@ fn enospc_and_edquot_are_host_disk_full_and_other_errors_are_not() {
     let edquot = std::io::Error::from_raw_os_error(122);
     let enoent = std::io::Error::from_raw_os_error(2);
     let epipe = std::io::Error::from_raw_os_error(32);
-    assert!(is_disk_full(&enospc), "ENOSPC is the scratch disk being full");
+    assert!(
+        is_disk_full(&enospc),
+        "ENOSPC is the scratch disk being full"
+    );
     assert!(is_disk_full(&edquot), "EDQUOT is the same host condition");
     assert!(!is_disk_full(&enoent));
     assert!(!is_disk_full(&epipe));
@@ -39,8 +42,17 @@ fn enospc_and_edquot_are_host_disk_full_and_other_errors_are_not() {
 #[test]
 fn the_preflight_refuses_only_below_the_threshold() {
     let min = 512 * 1024 * 1024;
-    assert!(disk_full_for_run(Some(min - 1), min), "one byte short is a refusal");
-    assert!(!disk_full_for_run(Some(min), min), "exactly the threshold is allowed");
+    assert!(
+        disk_full_for_run(Some(min - 1), min),
+        "one byte short is a refusal"
+    );
+    assert!(
+        !disk_full_for_run(Some(min), min),
+        "exactly the threshold is allowed"
+    );
     assert!(!disk_full_for_run(Some(min * 4), min));
-    assert!(!disk_full_for_run(None, min), "unknown free space is not a refusal");
+    assert!(
+        !disk_full_for_run(None, min),
+        "unknown free space is not a refusal"
+    );
 }

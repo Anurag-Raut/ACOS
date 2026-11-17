@@ -17,6 +17,7 @@
 #   fixtures/build/apps/svg-viewbox.apk
 #   fixtures/build/apps/offscreen-pager.apk
 #   fixtures/build/apps/insets-probe.apk
+#   fixtures/build/apps/multi-package-probe.apk
 #   fixtures/build/apps/sensor-probe.apk   (MODSENS: native sensorservice feed)
 #   fixtures/build/apps/notif-perm-probe.apk (MODNOTIF5: notifications + POST_NOTIFICATIONS gate)
 #   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
@@ -164,15 +165,94 @@ build_apk() {
     echo "build-apps: [$name] -> $out ($(stat -c '%s' "$out") bytes)"
 }
 
+# --- webview-provider (ADR-0031) --------------------------------------------
+#
+# The WebView provider is not a normal app: the framework's
+# `WebViewFactoryProvider`/`WebViewProvider`/`WebViewDelegate`/`WebView$PrivateAccess`
+# are hidden, so the sources compile against generated compile-time stubs
+# (`tools/gen-webview-provider.py`, from the API-34 image's own dex) instead of
+# against `android.jar` alone. The stubs are **not** dexed: the image's boot
+# classpath supplies those classes at runtime.
+build_provider_apk() {
+    local name="$1"
+    local app_dir="$APPS_DIR/$name"
+    local work="$BUILD_DIR/$name"
+    local out="$BUILD_DIR/$name.apk"
+
+    rm -rf "$work"
+    mkdir -p "$work/stub-classes" "$work/classes" "$work/dex"
+
+    echo "build-apps: [$name] generating hidden-API stubs + provider surface"
+    python3 "$ROOT/tools/gen-webview-provider.py"
+
+    echo "build-apps: [$name] compiling hidden-API stubs (compile-time only)"
+    # shellcheck disable=SC2046
+    javac --release 11 -encoding UTF-8 -cp "$ANDROID_JAR" -d "$work/stub-classes" \
+        $(find "$app_dir/hidden-stubs" -name '*.java')
+
+    echo "build-apps: [$name] linking manifest"
+    "$AAPT2" link \
+        -o "$work/base.apk" \
+        -I "$ANDROID_JAR" \
+        --manifest "$app_dir/AndroidManifest.xml" \
+        --min-sdk-version 26 \
+        --target-sdk-version 34
+
+    echo "build-apps: [$name] compiling java (stubs first: they own the hidden names)"
+    # shellcheck disable=SC2046
+    javac --release 11 -encoding UTF-8 \
+        -cp "$work/stub-classes:$ANDROID_JAR" -d "$work/classes" \
+        $(find "$app_dir/src" -name '*.java')
+
+    echo "build-apps: [$name] dexing (provider classes only, never the stubs)"
+    # shellcheck disable=SC2046
+    "$D8" --lib "$ANDROID_JAR" --min-api 26 --output "$work/dex" \
+        $(find "$work/classes" -name '*.class')
+
+    python3 "$APPEND_PY" "$work/base.apk" "$work/dex/classes.dex"
+
+    echo "build-apps: [$name] aligning"
+    rm -f "$out" "$work/aligned.apk"
+    "$ZIPALIGN" -f 4 "$work/base.apk" "$work/aligned.apk"
+
+    echo "build-apps: [$name] signing"
+    "$APKSIGNER" sign \
+        --ks "$KEYSTORE" \
+        --ks-pass "pass:$KEY_PASS" \
+        --key-pass "pass:$KEY_PASS" \
+        --ks-key-alias "$KEY_ALIAS" \
+        --v1-signing-enabled true \
+        --v2-signing-enabled true \
+        --v3-signing-enabled true \
+        --out "$out" \
+        "$work/aligned.apk"
+
+    echo "build-apps: [$name] verifying"
+    "$APKSIGNER" verify --verbose "$out" >/dev/null
+    "$AAPT2" dump badging "$out" | sed 's/^/    /' | head -n 8
+    echo "build-apps: [$name] -> $out ($(stat -c '%s' "$out") bytes)"
+}
+
 # K5b: `ACOS_APP_ONLY="a b"` builds just the named fixtures, so one app can be
 # iterated without rebuilding the whole corpus.
 if [ -n "${ACOS_APP_ONLY:-}" ]; then
     for app in $ACOS_APP_ONLY; do
-        build_apk "$app"
+        if [ "$app" = "webview-provider" ]; then
+            build_provider_apk "$app"
+        elif [ "$app" = "webview-probe" ]; then
+            # WV6: the probe serves its page from its own APK assets through
+            # the broker's request interception.
+            build_apk "$app" "$APPS_DIR/webview-probe/assets:assets"
+        else
+            build_apk "$app"
+        fi
     done
     echo "build-apps: done (ACOS_APP_ONLY=$ACOS_APP_ONLY) -> $BUILD_DIR"
     exit 0
 fi
+
+# --- webview-provider (ADR-0031: the host-Chromium WebView provider) --------
+build_provider_apk webview-provider
 
 # --- hello-views -------------------------------------------------------------
 build_apk hello-views
@@ -231,6 +311,23 @@ for app in counter todo-list multi-activity form-validation settle-lab thread-he
     build_apk "$app"
 done
 
+# multi-package-probe (MPROC1) is the multi-package session fixture: it asks
+# `PackageManager` about a second installed package (`dev.acos.fixtures.counter`)
+# and builds that package's Context/resources. It needs no second APK at build
+# time; the session installs `counter.apk` with `--extra-apk`.
+build_apk multi-package-probe
+
+# intent-probe (MPROC1 step 2) drives the two intents a device routes to another
+# app: an implicit ACTION_SEND text share (`startActivity`) and an
+# ACTION_GET_CONTENT image pick (`startActivityForResult`, requestCode 42).
+build_apk intent-probe
+
+# pms-parcel is the REL3P fixture: it calls
+# getPackageInfo(own package, GET_SIGNATURES|GET_META_DATA|GET_PERMISSIONS =
+# 0x100024c0) and shows the signature / requested-permission counts the
+# framework decoded from the ACOS PMS reply. It is the app-visible check that
+# `PackageInfo.writeToParcel`'s String8 arrays are encoded as String8.
+build_apk pms-parcel
 # a11y-probe is the ADR-0029 accessibility-module fixture: reads the real
 # AccessibilityManager state (enabled + installed/enabled lists) and sends a
 # real event through IAccessibilityManager.sendAccessibilityEvent.
@@ -245,6 +342,9 @@ build_apk tail-probe
 # updates from a scripted track and the geocoder state on screen, so a scenario
 # can assert what the app really received (fixtures/apps/location-probe).
 build_apk location-probe
+# MPROC4: the two-process pair (proc-a starts/binds components of proc-b).
+build_apk proc-a
+build_apk proc-b
 
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
@@ -257,6 +357,11 @@ build_apk net-check
 
 # --- keystore-probe ----------------------------------------------------------
 build_apk keystore-probe
+
+# SPIKE-WV (ADR-0031 gate, research/spike-wv/): webview-probe creates a real
+# android.webkit.WebView and reports the exact outcome (uid, hasSystemFeature,
+# provider discovery, load, JS) into its UI tree and logcat tag WVProbe.
+build_apk webview-probe "$APPS_DIR/webview-probe/assets:assets"
 
 # insets-probe is the W7 window-model fixture: an edge-to-edge Activity that
 # prints the frame and the reported system-bar insets. It is the only fixture

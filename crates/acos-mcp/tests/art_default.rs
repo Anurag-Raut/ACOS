@@ -194,7 +194,10 @@ impl Server {
             if let Some(status) = self.child.try_wait().expect("try_wait") {
                 return status;
             }
-            assert!(Instant::now() < deadline, "acos-mcp did not exit on stdin EOF");
+            assert!(
+                Instant::now() < deadline,
+                "acos-mcp did not exit on stdin EOF"
+            );
             std::thread::sleep(Duration::from_millis(20));
         }
     }
@@ -395,7 +398,10 @@ fn verify_schema_advertises_engine_and_defaults_to_art() {
                 .filter_map(Value::as_str),
         );
     }
-    assert!(!variants.is_empty(), "engine schema has no enum: {resolved}");
+    assert!(
+        !variants.is_empty(),
+        "engine schema has no enum: {resolved}"
+    );
     assert!(variants.contains(&"art"), "{variants:?}");
     assert!(variants.contains(&"rust-vm"), "{variants:?}");
 
@@ -420,7 +426,10 @@ fn verify_schema_advertises_engine_and_defaults_to_art() {
         .iter()
         .filter_map(Value::as_str)
         .collect();
-    let index = argv.iter().position(|a| *a == "--engine").expect("--engine");
+    let index = argv
+        .iter()
+        .position(|a| *a == "--engine")
+        .expect("--engine");
     assert_eq!(argv[index + 1], "art", "argv: {argv:?}");
     server.close();
 }
@@ -436,10 +445,7 @@ fn private_daemon_is_reaped_when_the_server_exits() {
         ("ACOS_FAKE_PID_FILE", &pid_file),
     ]);
     server.initialize();
-    let envelope = server.tool(
-        "acos_status",
-        json!({"base": {"request_id": "req_reap"}}),
-    );
+    let envelope = server.tool("acos_status", json!({"base": {"request_id": "req_reap"}}));
     assert_eq!(envelope["status"], "pass", "{envelope}");
     let daemon_pid: u32 = std::fs::read_to_string(&pid_file)
         .expect("daemon pid file")

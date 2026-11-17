@@ -15,12 +15,12 @@ use std::sync::Arc;
 
 use crate::bitmap::{Bitmap, BitmapConfig};
 use crate::canvas::{self, Canvas, CanvasTarget, ClipOp};
+use crate::color::{AndroidBlendMode, PorterDuffMode};
 use crate::error::{RenderError, RenderResult};
 use crate::geom::{NinePatchChunk, Outline, Rect, RectF};
 use crate::handle::{Handle, HandleTable};
 use crate::image;
 use crate::matrix::Matrix3x3;
-use crate::color::{AndroidBlendMode, PorterDuffMode};
 use crate::paint::{
     BlurStyle, ColorFilterSpec, MaskFilterSpec, Paint, PaintStyle, PathEffectSpec,
     RenderEffectSpec, ShaderSpec, StrokeCap, StrokeJoin, TextAlign, TileMode,
@@ -159,19 +159,15 @@ impl RenderContext {
     }
 
     pub fn text_engine(&self) -> RenderResult<&TextEngine> {
-        self.text
-            .as_ref()
-            .ok_or_else(|| RenderError::FontNotFound {
-                name: "no font collection loaded (set ACOS_FONT_DIR)".to_string(),
-            })
+        self.text.as_ref().ok_or_else(|| RenderError::FontNotFound {
+            name: "no font collection loaded (set ACOS_FONT_DIR)".to_string(),
+        })
     }
 
     fn text_engine_mut(&mut self) -> RenderResult<&mut TextEngine> {
-        self.text
-            .as_mut()
-            .ok_or_else(|| RenderError::FontNotFound {
-                name: "no font collection loaded (set ACOS_FONT_DIR)".to_string(),
-            })
+        self.text.as_mut().ok_or_else(|| RenderError::FontNotFound {
+            name: "no font collection loaded (set ACOS_FONT_DIR)".to_string(),
+        })
     }
 
     /// Record or escalate an unsupported op.
@@ -199,7 +195,12 @@ impl RenderContext {
     // Bitmaps
     // -----------------------------------------------------------------
 
-    pub fn bitmap_create(&mut self, width: u32, height: u32, config: BitmapConfig) -> RenderResult<Handle> {
+    pub fn bitmap_create(
+        &mut self,
+        width: u32,
+        height: u32,
+        config: BitmapConfig,
+    ) -> RenderResult<Handle> {
         Ok(self.bitmaps.insert(Bitmap::new(width, height, config)?))
     }
 
@@ -210,15 +211,28 @@ impl RenderContext {
     }
 
     pub fn bitmap_erase(&mut self, bitmap: Handle, argb: u32) -> RenderResult<()> {
-        self.bitmaps.get_mut(bitmap).ok_or(RenderError::BadHandle)?.erase(argb);
+        self.bitmaps
+            .get_mut(bitmap)
+            .ok_or(RenderError::BadHandle)?
+            .erase(argb);
         Ok(())
     }
 
     pub fn bitmap_get_pixel(&self, bitmap: Handle, x: i32, y: i32) -> RenderResult<u32> {
-        Ok(self.bitmaps.get(bitmap).ok_or(RenderError::BadHandle)?.get_pixel(x, y))
+        Ok(self
+            .bitmaps
+            .get(bitmap)
+            .ok_or(RenderError::BadHandle)?
+            .get_pixel(x, y))
     }
 
-    pub fn bitmap_set_pixel(&mut self, bitmap: Handle, x: i32, y: i32, argb: u32) -> RenderResult<()> {
+    pub fn bitmap_set_pixel(
+        &mut self,
+        bitmap: Handle,
+        x: i32,
+        y: i32,
+        argb: u32,
+    ) -> RenderResult<()> {
         self.bitmaps
             .get_mut(bitmap)
             .ok_or(RenderError::BadHandle)?
@@ -227,19 +241,39 @@ impl RenderContext {
     }
 
     pub fn bitmap_width(&self, bitmap: Handle) -> RenderResult<u32> {
-        Ok(self.bitmaps.get(bitmap).ok_or(RenderError::BadHandle)?.width())
+        Ok(self
+            .bitmaps
+            .get(bitmap)
+            .ok_or(RenderError::BadHandle)?
+            .width())
     }
 
     pub fn bitmap_height(&self, bitmap: Handle) -> RenderResult<u32> {
-        Ok(self.bitmaps.get(bitmap).ok_or(RenderError::BadHandle)?.height())
+        Ok(self
+            .bitmaps
+            .get(bitmap)
+            .ok_or(RenderError::BadHandle)?
+            .height())
     }
 
     pub fn bitmap_config(&self, bitmap: Handle) -> RenderResult<i32> {
-        Ok(self.bitmaps.get(bitmap).ok_or(RenderError::BadHandle)?.config() as i32)
+        Ok(self
+            .bitmaps
+            .get(bitmap)
+            .ok_or(RenderError::BadHandle)?
+            .config() as i32)
     }
 
-    pub fn bitmap_copy(&mut self, bitmap: Handle, config: Option<BitmapConfig>) -> RenderResult<Handle> {
-        let b = self.bitmaps.get(bitmap).ok_or(RenderError::BadHandle)?.copy(config, true)?;
+    pub fn bitmap_copy(
+        &mut self,
+        bitmap: Handle,
+        config: Option<BitmapConfig>,
+    ) -> RenderResult<Handle> {
+        let b = self
+            .bitmaps
+            .get(bitmap)
+            .ok_or(RenderError::BadHandle)?
+            .copy(config, true)?;
         Ok(self.bitmaps.insert(b))
     }
 
@@ -253,7 +287,12 @@ impl RenderContext {
     }
 
     pub fn bitmap_pixels(&self, bitmap: Handle) -> RenderResult<Vec<u32>> {
-        Ok(self.bitmaps.get(bitmap).ok_or(RenderError::BadHandle)?.pixels().to_vec())
+        Ok(self
+            .bitmaps
+            .get(bitmap)
+            .ok_or(RenderError::BadHandle)?
+            .pixels()
+            .to_vec())
     }
 
     /// Android `Bitmap.compress(PNG, quality, stream)`.
@@ -291,7 +330,10 @@ impl RenderContext {
         let canvas = self
             .canvases
             .insert(Canvas::new(w, h, Some(CanvasTarget::Surface(surface))));
-        self.surfaces.get_mut(surface).unwrap().ensure_canvas(canvas);
+        self.surfaces
+            .get_mut(surface)
+            .unwrap()
+            .ensure_canvas(canvas);
         Ok(canvas)
     }
 
@@ -313,8 +355,14 @@ impl RenderContext {
             .get(surface)
             .and_then(|s| s.canvas)
             .ok_or(RenderError::BadHandle)?;
-        let surface_ref = self.surfaces.get_mut(surface).ok_or(RenderError::BadHandle)?;
-        let canvas_ref = self.canvases.get_mut(canvas_h).ok_or(RenderError::BadHandle)?;
+        let surface_ref = self
+            .surfaces
+            .get_mut(surface)
+            .ok_or(RenderError::BadHandle)?;
+        let canvas_ref = self
+            .canvases
+            .get_mut(canvas_h)
+            .ok_or(RenderError::BadHandle)?;
         let canvas::Canvas {
             state,
             layers,
@@ -338,8 +386,14 @@ impl RenderContext {
             .get(surface)
             .and_then(|s| s.canvas)
             .ok_or(RenderError::BadHandle)?;
-        let surface_ref = self.surfaces.get_mut(surface).ok_or(RenderError::BadHandle)?;
-        let canvas_ref = self.canvases.get_mut(canvas_h).ok_or(RenderError::BadHandle)?;
+        let surface_ref = self
+            .surfaces
+            .get_mut(surface)
+            .ok_or(RenderError::BadHandle)?;
+        let canvas_ref = self
+            .canvases
+            .get_mut(canvas_h)
+            .ok_or(RenderError::BadHandle)?;
         Ok(canvas_ref.restore(&mut surface_ref.pixmap))
     }
 
@@ -349,8 +403,14 @@ impl RenderContext {
             .get(surface)
             .and_then(|s| s.canvas)
             .ok_or(RenderError::BadHandle)?;
-        let surface_ref = self.surfaces.get_mut(surface).ok_or(RenderError::BadHandle)?;
-        let canvas_ref = self.canvases.get_mut(canvas_h).ok_or(RenderError::BadHandle)?;
+        let surface_ref = self
+            .surfaces
+            .get_mut(surface)
+            .ok_or(RenderError::BadHandle)?;
+        let canvas_ref = self
+            .canvases
+            .get_mut(canvas_h)
+            .ok_or(RenderError::BadHandle)?;
         canvas_ref.restore_to_count(&mut surface_ref.pixmap, count);
         Ok(())
     }
@@ -365,7 +425,9 @@ impl RenderContext {
             .get(surface)
             .and_then(|s| s.canvas)
             .ok_or(RenderError::BadHandle)?;
-        self.canvases.get_mut(canvas_h).ok_or(RenderError::BadHandle)
+        self.canvases
+            .get_mut(canvas_h)
+            .ok_or(RenderError::BadHandle)
     }
 
     fn surface_canvas(&self, surface: Handle) -> RenderResult<&Canvas> {
@@ -383,7 +445,8 @@ impl RenderContext {
         bounds: Option<RectF>,
         alpha: u8,
     ) -> RenderResult<i32> {
-        self.surface_canvas_mut(surface)?.save_layer_alpha(bounds, alpha)
+        self.surface_canvas_mut(surface)?
+            .save_layer_alpha(bounds, alpha)
     }
 
     pub fn canvas_concat(&mut self, surface: Handle, matrix: Handle) -> RenderResult<()> {
@@ -432,7 +495,13 @@ impl RenderContext {
         self.surface_canvas_mut(surface)?.clip_rect(rect, op, aa)
     }
 
-    pub fn canvas_clip_path(&mut self, surface: Handle, path: Handle, op: ClipOp, aa: bool) -> RenderResult<()> {
+    pub fn canvas_clip_path(
+        &mut self,
+        surface: Handle,
+        path: Handle,
+        op: ClipOp,
+        aa: bool,
+    ) -> RenderResult<()> {
         let p = self.paths.get(path).ok_or(RenderError::BadHandle)?.clone();
         self.surface_canvas_mut(surface)?.clip_path(&p, op, aa)
     }
@@ -456,11 +525,19 @@ impl RenderContext {
     }
 
     pub fn canvas_width(&self, surface: Handle) -> RenderResult<u32> {
-        Ok(self.surfaces.get(surface).ok_or(RenderError::BadHandle)?.width)
+        Ok(self
+            .surfaces
+            .get(surface)
+            .ok_or(RenderError::BadHandle)?
+            .width)
     }
 
     pub fn canvas_height(&self, surface: Handle) -> RenderResult<u32> {
-        Ok(self.surfaces.get(surface).ok_or(RenderError::BadHandle)?.height)
+        Ok(self
+            .surfaces
+            .get(surface)
+            .ok_or(RenderError::BadHandle)?
+            .height)
     }
 
     pub fn canvas_is_opaque(&mut self, surface: Handle) -> RenderResult<bool> {
@@ -471,7 +548,12 @@ impl RenderContext {
     // Surfaces + frame contract
     // -----------------------------------------------------------------
 
-    pub fn surface_create(&mut self, width: u32, height: u32, density: f32) -> RenderResult<Handle> {
+    pub fn surface_create(
+        &mut self,
+        width: u32,
+        height: u32,
+        density: f32,
+    ) -> RenderResult<Handle> {
         Ok(self.surfaces.insert(Surface::new(width, height, density)?))
     }
 
@@ -486,7 +568,11 @@ impl RenderContext {
     }
 
     pub fn surface_capture(&self, surface: Handle) -> RenderResult<Option<Frame>> {
-        Ok(self.surfaces.get(surface).ok_or(RenderError::BadHandle)?.capture())
+        Ok(self
+            .surfaces
+            .get(surface)
+            .ok_or(RenderError::BadHandle)?
+            .capture())
     }
 
     pub fn surface_capture_fresh(&self, surface: Handle, after_seq: u64) -> RenderResult<Frame> {
@@ -497,7 +583,11 @@ impl RenderContext {
     }
 
     pub fn surface_last_seq(&self, surface: Handle) -> RenderResult<u64> {
-        Ok(self.surfaces.get(surface).ok_or(RenderError::BadHandle)?.last_seq())
+        Ok(self
+            .surfaces
+            .get(surface)
+            .ok_or(RenderError::BadHandle)?
+            .last_seq())
     }
 
     /// Encode the latest frame as PNG with the requested setting.
@@ -576,7 +666,8 @@ impl RenderContext {
     }
 
     pub fn paint_set_stroke_join(&mut self, paint: Handle, join: i32) -> RenderResult<()> {
-        let join = StrokeJoin::from_ordinal(join).ok_or_else(|| RenderError::invalid("bad Join"))?;
+        let join =
+            StrokeJoin::from_ordinal(join).ok_or_else(|| RenderError::invalid("bad Join"))?;
         self.paint_mut(paint)?.stroke_join = join;
         Ok(())
     }
@@ -737,18 +828,33 @@ impl RenderContext {
         Ok(())
     }
 
-    pub fn paint_set_color_filter_matrix(&mut self, paint: Handle, matrix: [f32; 20]) -> RenderResult<()> {
+    pub fn paint_set_color_filter_matrix(
+        &mut self,
+        paint: Handle,
+        matrix: [f32; 20],
+    ) -> RenderResult<()> {
         self.paint_mut(paint)?.color_filter = Some(ColorFilterSpec::ColorMatrix { matrix });
         Ok(())
     }
 
-    pub fn paint_set_mask_filter_blur(&mut self, paint: Handle, radius: f32, style: i32) -> RenderResult<()> {
-        let style = BlurStyle::from_ordinal(style).ok_or_else(|| RenderError::invalid("bad Blur style"))?;
+    pub fn paint_set_mask_filter_blur(
+        &mut self,
+        paint: Handle,
+        radius: f32,
+        style: i32,
+    ) -> RenderResult<()> {
+        let style =
+            BlurStyle::from_ordinal(style).ok_or_else(|| RenderError::invalid("bad Blur style"))?;
         self.paint_mut(paint)?.mask_filter = Some(MaskFilterSpec::Blur { radius, style });
         Ok(())
     }
 
-    pub fn paint_set_path_effect_dash(&mut self, paint: Handle, intervals: Vec<f32>, phase: f32) -> RenderResult<()> {
+    pub fn paint_set_path_effect_dash(
+        &mut self,
+        paint: Handle,
+        intervals: Vec<f32>,
+        phase: f32,
+    ) -> RenderResult<()> {
         self.paint_mut(paint)?.path_effect = Some(PathEffectSpec::Dash { intervals, phase });
         Ok(())
     }
@@ -786,7 +892,8 @@ impl RenderContext {
     }
 
     pub fn paint_set_text_align(&mut self, paint: Handle, align: i32) -> RenderResult<()> {
-        let align = TextAlign::from_ordinal(align).ok_or_else(|| RenderError::invalid("bad Align"))?;
+        let align =
+            TextAlign::from_ordinal(align).ok_or_else(|| RenderError::invalid("bad Align"))?;
         self.paint_mut(paint)?.text_align = align;
         Ok(())
     }
@@ -821,12 +928,20 @@ impl RenderContext {
         Ok(())
     }
 
-    pub fn paint_set_font_feature_settings(&mut self, paint: Handle, settings: Option<String>) -> RenderResult<()> {
+    pub fn paint_set_font_feature_settings(
+        &mut self,
+        paint: Handle,
+        settings: Option<String>,
+    ) -> RenderResult<()> {
         self.paint_mut(paint)?.font_feature_settings = settings;
         Ok(())
     }
 
-    pub fn paint_set_font_variation_settings(&mut self, paint: Handle, settings: Option<String>) -> RenderResult<()> {
+    pub fn paint_set_font_variation_settings(
+        &mut self,
+        paint: Handle,
+        settings: Option<String>,
+    ) -> RenderResult<()> {
         self.paint_mut(paint)?.font_variation_settings = settings;
         Ok(())
     }
@@ -843,7 +958,12 @@ impl RenderContext {
     // Typefaces
     // -----------------------------------------------------------------
 
-    pub fn typeface_create(&mut self, family: Option<&str>, weight: u16, italic: bool) -> RenderResult<Handle> {
+    pub fn typeface_create(
+        &mut self,
+        family: Option<&str>,
+        weight: u16,
+        italic: bool,
+    ) -> RenderResult<Handle> {
         let font = self
             .text_engine()?
             .fonts()
@@ -864,7 +984,11 @@ impl RenderContext {
     }
 
     pub fn typeface_weight(&self, typeface: Handle) -> RenderResult<i32> {
-        Ok(self.typefaces.get(typeface).ok_or(RenderError::BadHandle)?.weight as i32)
+        Ok(self
+            .typefaces
+            .get(typeface)
+            .ok_or(RenderError::BadHandle)?
+            .weight as i32)
     }
 
     // -----------------------------------------------------------------
@@ -894,7 +1018,14 @@ impl RenderContext {
         Ok(())
     }
 
-    pub fn path_quad_to(&mut self, path: Handle, x1: f32, y1: f32, x2: f32, y2: f32) -> RenderResult<()> {
+    pub fn path_quad_to(
+        &mut self,
+        path: Handle,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+    ) -> RenderResult<()> {
         self.path_mut(path)?.quad_to(x1, y1, x2, y2);
         Ok(())
     }
@@ -913,7 +1044,15 @@ impl RenderContext {
         Ok(())
     }
 
-    pub fn path_conic_to(&mut self, path: Handle, x1: f32, y1: f32, x2: f32, y2: f32, w: f32) -> RenderResult<()> {
+    pub fn path_conic_to(
+        &mut self,
+        path: Handle,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        w: f32,
+    ) -> RenderResult<()> {
         self.path_mut(path)?.conic_to(x1, y1, x2, y2, w);
         Ok(())
     }
@@ -931,21 +1070,37 @@ impl RenderContext {
     }
 
     pub fn path_add_rect(&mut self, path: Handle, r: RectF, ccw: bool) -> RenderResult<()> {
-        self.path_mut(path)?.add_rect(r.left, r.top, r.right, r.bottom, ccw);
+        self.path_mut(path)?
+            .add_rect(r.left, r.top, r.right, r.bottom, ccw);
         Ok(())
     }
 
-    pub fn path_add_round_rect(&mut self, path: Handle, r: RectF, rx: f32, ry: f32, ccw: bool) -> RenderResult<()> {
+    pub fn path_add_round_rect(
+        &mut self,
+        path: Handle,
+        r: RectF,
+        rx: f32,
+        ry: f32,
+        ccw: bool,
+    ) -> RenderResult<()> {
         self.path_mut(path)?.add_round_rect(&r, rx, ry, ccw);
         Ok(())
     }
 
     pub fn path_add_oval(&mut self, path: Handle, r: RectF, ccw: bool) -> RenderResult<()> {
-        self.path_mut(path)?.add_oval(r.left, r.top, r.right, r.bottom, ccw);
+        self.path_mut(path)?
+            .add_oval(r.left, r.top, r.right, r.bottom, ccw);
         Ok(())
     }
 
-    pub fn path_add_circle(&mut self, path: Handle, cx: f32, cy: f32, radius: f32, ccw: bool) -> RenderResult<()> {
+    pub fn path_add_circle(
+        &mut self,
+        path: Handle,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        ccw: bool,
+    ) -> RenderResult<()> {
         self.path_mut(path)?.add_circle(cx, cy, radius, ccw);
         Ok(())
     }
@@ -972,21 +1127,34 @@ impl RenderContext {
     }
 
     pub fn path_set_fill_type(&mut self, path: Handle, fill: i32) -> RenderResult<()> {
-        let ft = FillType::from_ordinal(fill).ok_or_else(|| RenderError::invalid("bad FillType"))?;
+        let ft =
+            FillType::from_ordinal(fill).ok_or_else(|| RenderError::invalid("bad FillType"))?;
         self.path_mut(path)?.set_fill_type(ft);
         Ok(())
     }
 
     pub fn path_get_fill_type(&self, path: Handle) -> RenderResult<i32> {
-        Ok(self.paths.get(path).ok_or(RenderError::BadHandle)?.fill_type() as i32)
+        Ok(self
+            .paths
+            .get(path)
+            .ok_or(RenderError::BadHandle)?
+            .fill_type() as i32)
     }
 
     pub fn path_compute_bounds(&self, path: Handle) -> RenderResult<Option<RectF>> {
-        Ok(self.paths.get(path).ok_or(RenderError::BadHandle)?.compute_bounds())
+        Ok(self
+            .paths
+            .get(path)
+            .ok_or(RenderError::BadHandle)?
+            .compute_bounds())
     }
 
     pub fn path_is_empty(&self, path: Handle) -> RenderResult<bool> {
-        Ok(self.paths.get(path).ok_or(RenderError::BadHandle)?.is_empty())
+        Ok(self
+            .paths
+            .get(path)
+            .ok_or(RenderError::BadHandle)?
+            .is_empty())
     }
 
     pub fn path_transform(&mut self, path: Handle, matrix: Handle) -> RenderResult<()> {
@@ -1023,7 +1191,10 @@ impl RenderContext {
     }
 
     fn matrix_set(&mut self, matrix: Handle, m: Matrix3x3) -> RenderResult<()> {
-        *self.matrices.get_mut(matrix).ok_or(RenderError::BadHandle)? = m;
+        *self
+            .matrices
+            .get_mut(matrix)
+            .ok_or(RenderError::BadHandle)? = m;
         Ok(())
     }
 
@@ -1076,7 +1247,14 @@ impl RenderContext {
         self.matrix_set(matrix, m)
     }
 
-    pub fn matrix_set_scale(&mut self, matrix: Handle, sx: f32, sy: f32, px: f32, py: f32) -> RenderResult<()> {
+    pub fn matrix_set_scale(
+        &mut self,
+        matrix: Handle,
+        sx: f32,
+        sy: f32,
+        px: f32,
+        py: f32,
+    ) -> RenderResult<()> {
         let mut m = Matrix3x3::identity();
         m.set_scale_pivot(sx, sy, px, py);
         self.matrix_set(matrix, m)
@@ -1094,13 +1272,26 @@ impl RenderContext {
         self.matrix_set(matrix, m)
     }
 
-    pub fn matrix_set_rotate(&mut self, matrix: Handle, degrees: f32, px: f32, py: f32) -> RenderResult<()> {
+    pub fn matrix_set_rotate(
+        &mut self,
+        matrix: Handle,
+        degrees: f32,
+        px: f32,
+        py: f32,
+    ) -> RenderResult<()> {
         let mut m = Matrix3x3::identity();
         m.set_rotate_pivot(degrees, px, py);
         self.matrix_set(matrix, m)
     }
 
-    pub fn matrix_set_skew(&mut self, matrix: Handle, kx: f32, ky: f32, px: f32, py: f32) -> RenderResult<()> {
+    pub fn matrix_set_skew(
+        &mut self,
+        matrix: Handle,
+        kx: f32,
+        ky: f32,
+        px: f32,
+        py: f32,
+    ) -> RenderResult<()> {
         let mut m = Matrix3x3::identity();
         m.set_skew_pivot(kx, ky, px, py);
         self.matrix_set(matrix, m)
@@ -1131,7 +1322,11 @@ impl RenderContext {
         }
     }
 
-    pub fn matrix_map_points(&self, matrix: Handle, points: &mut [crate::geom::PointF]) -> RenderResult<()> {
+    pub fn matrix_map_points(
+        &self,
+        matrix: Handle,
+        points: &mut [crate::geom::PointF],
+    ) -> RenderResult<()> {
         self.matrix_get(matrix)?.map_points(points);
         Ok(())
     }
@@ -1197,7 +1392,12 @@ impl RenderContext {
         Ok(!reg.is_empty())
     }
 
-    pub fn region_set_path(&mut self, region: Handle, path: Handle, clip: Option<Handle>) -> RenderResult<bool> {
+    pub fn region_set_path(
+        &mut self,
+        region: Handle,
+        path: Handle,
+        clip: Option<Handle>,
+    ) -> RenderResult<bool> {
         let p = self.paths.get(path).ok_or(RenderError::BadHandle)?.clone();
         let c = match clip {
             Some(h) => Some(self.regions.get(h).ok_or(RenderError::BadHandle)?.clone()),
@@ -1209,47 +1409,95 @@ impl RenderContext {
     }
 
     pub fn region_set_region(&mut self, region: Handle, other: Handle) -> RenderResult<()> {
-        let o = self.regions.get(other).ok_or(RenderError::BadHandle)?.clone();
-        self.regions.get_mut(region).ok_or(RenderError::BadHandle)?.set_region(&o);
+        let o = self
+            .regions
+            .get(other)
+            .ok_or(RenderError::BadHandle)?
+            .clone();
+        self.regions
+            .get_mut(region)
+            .ok_or(RenderError::BadHandle)?
+            .set_region(&o);
         Ok(())
     }
 
     pub fn region_op(&mut self, region: Handle, other: Handle, op: i32) -> RenderResult<bool> {
         let op = RegionOp::from_ordinal(op).ok_or_else(|| RenderError::invalid("bad Region.Op"))?;
-        let o = self.regions.get(other).ok_or(RenderError::BadHandle)?.clone();
-        self.regions.get_mut(region).ok_or(RenderError::BadHandle)?.op(&o, op)
+        let o = self
+            .regions
+            .get(other)
+            .ok_or(RenderError::BadHandle)?
+            .clone();
+        self.regions
+            .get_mut(region)
+            .ok_or(RenderError::BadHandle)?
+            .op(&o, op)
     }
 
     pub fn region_contains(&self, region: Handle, x: i32, y: i32) -> RenderResult<bool> {
-        Ok(self.regions.get(region).ok_or(RenderError::BadHandle)?.contains(x, y))
+        Ok(self
+            .regions
+            .get(region)
+            .ok_or(RenderError::BadHandle)?
+            .contains(x, y))
     }
 
     pub fn region_is_empty(&self, region: Handle) -> RenderResult<bool> {
-        Ok(self.regions.get(region).ok_or(RenderError::BadHandle)?.is_empty())
+        Ok(self
+            .regions
+            .get(region)
+            .ok_or(RenderError::BadHandle)?
+            .is_empty())
     }
 
     pub fn region_bounds(&self, region: Handle) -> RenderResult<Option<Rect>> {
-        Ok(self.regions.get(region).ok_or(RenderError::BadHandle)?.bounds())
+        Ok(self
+            .regions
+            .get(region)
+            .ok_or(RenderError::BadHandle)?
+            .bounds())
     }
 
     pub fn region_quick_reject(&self, region: Handle, r: Rect) -> RenderResult<bool> {
-        Ok(self.regions.get(region).ok_or(RenderError::BadHandle)?.quick_reject(r))
+        Ok(self
+            .regions
+            .get(region)
+            .ok_or(RenderError::BadHandle)?
+            .quick_reject(r))
     }
 
-    pub fn region_translate(&mut self, region: Handle, dx: i32, dy: i32, out: Handle) -> RenderResult<()> {
-        let t = self.regions.get(region).ok_or(RenderError::BadHandle)?.translated(dx, dy);
+    pub fn region_translate(
+        &mut self,
+        region: Handle,
+        dx: i32,
+        dy: i32,
+        out: Handle,
+    ) -> RenderResult<()> {
+        let t = self
+            .regions
+            .get(region)
+            .ok_or(RenderError::BadHandle)?
+            .translated(dx, dy);
         *self.regions.get_mut(out).ok_or(RenderError::BadHandle)? = t;
         Ok(())
     }
 
     pub fn region_scale(&mut self, region: Handle, scale: f32, out: Handle) -> RenderResult<()> {
-        let t = self.regions.get(region).ok_or(RenderError::BadHandle)?.scaled(scale);
+        let t = self
+            .regions
+            .get(region)
+            .ok_or(RenderError::BadHandle)?
+            .scaled(scale);
         *self.regions.get_mut(out).ok_or(RenderError::BadHandle)? = t;
         Ok(())
     }
 
     pub fn region_boundary_path(&mut self, region: Handle) -> RenderResult<Handle> {
-        let p = self.regions.get(region).ok_or(RenderError::BadHandle)?.boundary_path();
+        let p = self
+            .regions
+            .get(region)
+            .ok_or(RenderError::BadHandle)?
+            .boundary_path();
         Ok(self.paths.insert(p))
     }
 
@@ -1293,7 +1541,9 @@ impl RenderContext {
         out: &mut [f32],
     ) -> RenderResult<f32> {
         let style = self.text_style_for(paint)?;
-        Ok(self.text_engine_mut()?.get_text_run_advances(text, &style, out))
+        Ok(self
+            .text_engine_mut()?
+            .get_text_run_advances(text, &style, out))
     }
 
     pub fn paint_get_font_metrics(&mut self, paint: Handle) -> RenderResult<FontMetrics> {
@@ -1306,24 +1556,45 @@ impl RenderContext {
         Ok(self.text_engine()?.font_metrics_int(&style))
     }
 
-    pub fn paint_get_text_bounds(&mut self, paint: Handle, text: &[u16]) -> RenderResult<Option<RectF>> {
+    pub fn paint_get_text_bounds(
+        &mut self,
+        paint: Handle,
+        text: &[u16],
+    ) -> RenderResult<Option<RectF>> {
         let style = self.text_style_for(paint)?;
         Ok(self.text_engine_mut()?.text_bounds(text, &style))
     }
 
-    pub fn paint_break_text(&mut self, paint: Handle, text: &[u16], max_width: f32) -> RenderResult<f32> {
+    pub fn paint_break_text(
+        &mut self,
+        paint: Handle,
+        text: &[u16],
+        max_width: f32,
+    ) -> RenderResult<f32> {
         let style = self.text_style_for(paint)?;
         Ok(self.text_engine_mut()?.break_text(text, &style, max_width))
     }
 
-    pub fn paint_get_run_advance(&mut self, paint: Handle, text: &[u16], index: usize) -> RenderResult<f32> {
+    pub fn paint_get_run_advance(
+        &mut self,
+        paint: Handle,
+        text: &[u16],
+        index: usize,
+    ) -> RenderResult<f32> {
         let style = self.text_style_for(paint)?;
         Ok(self.text_engine_mut()?.get_run_advance(text, &style, index))
     }
 
-    pub fn paint_get_offset_for_advance(&mut self, paint: Handle, text: &[u16], advance: f32) -> RenderResult<usize> {
+    pub fn paint_get_offset_for_advance(
+        &mut self,
+        paint: Handle,
+        text: &[u16],
+        advance: f32,
+    ) -> RenderResult<usize> {
         let style = self.text_style_for(paint)?;
-        Ok(self.text_engine_mut()?.get_offset_for_advance(text, &style, advance))
+        Ok(self
+            .text_engine_mut()?
+            .get_offset_for_advance(text, &style, advance))
     }
 
     pub fn paint_has_glyph(&self, paint: Handle, ch: char) -> RenderResult<bool> {
@@ -1331,7 +1602,13 @@ impl RenderContext {
         Ok(self.text_engine()?.has_glyph(ch, &style))
     }
 
-    pub fn paint_get_text_path(&mut self, paint: Handle, text: &[u16], x: f32, y: f32) -> RenderResult<Handle> {
+    pub fn paint_get_text_path(
+        &mut self,
+        paint: Handle,
+        text: &[u16],
+        x: f32,
+        y: f32,
+    ) -> RenderResult<Handle> {
         let style = self.text_style_for(paint)?;
         let path = self.text_engine_mut()?.text_path(text, x, y, &style);
         Ok(self.paths.insert(path))
@@ -1360,9 +1637,14 @@ impl RenderContext {
 
     /// Build a tiny-skia paint for `paint`, resolving any bitmap/sweep shader
     /// into `owned` first (caller keeps it alive).
-    fn prepare_paint<'a>(&mut self, paint: &Paint, owned: &'a mut Vec<tiny_skia::Pixmap>) -> tiny_skia::Paint<'a> {
+    fn prepare_paint<'a>(
+        &mut self,
+        paint: &Paint,
+        owned: &'a mut Vec<tiny_skia::Pixmap>,
+    ) -> tiny_skia::Paint<'a> {
         if matches!(paint.path_effect, Some(PathEffectSpec::Corner { .. })) {
-            self.unsupported("PathEffect CornerPathEffect (not applied)").ok();
+            self.unsupported("PathEffect CornerPathEffect (not applied)")
+                .ok();
         }
         let mut sk = tiny_skia::Paint {
             anti_alias: paint.anti_alias,
@@ -1381,7 +1663,9 @@ impl RenderContext {
                 local,
             }) => {
                 let stops = make_stops(colors, positions.as_deref());
-                let ts = local.to_affine().unwrap_or(tiny_skia::Transform::identity());
+                let ts = local
+                    .to_affine()
+                    .unwrap_or(tiny_skia::Transform::identity());
                 if let Some(s) = tiny_skia::LinearGradient::new(
                     tiny_skia::Point::from_xy(start.0, start.1),
                     tiny_skia::Point::from_xy(end.0, end.1),
@@ -1404,7 +1688,9 @@ impl RenderContext {
                 focal,
             }) => {
                 let stops = make_stops(colors, positions.as_deref());
-                let ts = local.to_affine().unwrap_or(tiny_skia::Transform::identity());
+                let ts = local
+                    .to_affine()
+                    .unwrap_or(tiny_skia::Transform::identity());
                 if let Some(s) = tiny_skia::RadialGradient::new(
                     tiny_skia::Point::from_xy(focal.0, focal.1),
                     tiny_skia::Point::from_xy(center.0, center.1),
@@ -1458,7 +1744,9 @@ impl RenderContext {
                 if let Some(b) = self.bitmaps.get(*bitmap) {
                     if let Ok(pm) = b.to_pixmap() {
                         owned.push(pm);
-                        let ts = local.to_affine().unwrap_or(tiny_skia::Transform::identity());
+                        let ts = local
+                            .to_affine()
+                            .unwrap_or(tiny_skia::Transform::identity());
                         let pm_ref = owned.last().unwrap();
                         let shader = tiny_skia::Pattern::new(
                             pm_ref.as_ref(),
@@ -1485,7 +1773,12 @@ impl RenderContext {
     }
 
     /// Fill a path on a surface with a prepared paint.
-    fn draw_path_with_paint(&mut self, surface: Handle, path: &Path, paint: &Paint) -> RenderResult<()> {
+    fn draw_path_with_paint(
+        &mut self,
+        surface: Handle,
+        path: &Path,
+        paint: &Paint,
+    ) -> RenderResult<()> {
         let Some(sk_path) = path.build_tiny_skia() else {
             return Ok(());
         };
@@ -1548,7 +1841,13 @@ impl RenderContext {
             pm.fill(tiny_skia::Color::TRANSPARENT);
             // Evaluate in the path's local space; the final `emit_shape`
             // applies the canvas matrix.
-            pm.fill_path(&sk_path, &sk, fill_rule, tiny_skia::Transform::identity(), None);
+            pm.fill_path(
+                &sk_path,
+                &sk,
+                fill_rule,
+                tiny_skia::Transform::identity(),
+                None,
+            );
             Some(pm)
         };
         let Some(mut dst) = render_one(self, shader_b) else {
@@ -1604,13 +1903,23 @@ impl RenderContext {
         Ok(())
     }
 
-    pub fn canvas_draw_path(&mut self, surface: Handle, path: Handle, paint: Handle) -> RenderResult<()> {
+    pub fn canvas_draw_path(
+        &mut self,
+        surface: Handle,
+        path: Handle,
+        paint: Handle,
+    ) -> RenderResult<()> {
         let p = self.paths.get(path).ok_or(RenderError::BadHandle)?.clone();
         let paint = self.paint_ref(paint)?.clone();
         self.draw_path_with_paint(surface, &p, &paint)
     }
 
-    pub fn canvas_draw_rect(&mut self, surface: Handle, rect: RectF, paint: Handle) -> RenderResult<()> {
+    pub fn canvas_draw_rect(
+        &mut self,
+        surface: Handle,
+        rect: RectF,
+        paint: Handle,
+    ) -> RenderResult<()> {
         let mut p = Path::new();
         p.add_rect(rect.left, rect.top, rect.right, rect.bottom, false);
         let paint = self.paint_ref(paint)?.clone();
@@ -1631,7 +1940,12 @@ impl RenderContext {
         self.draw_path_with_paint(surface, &p, &paint)
     }
 
-    pub fn canvas_draw_oval(&mut self, surface: Handle, rect: RectF, paint: Handle) -> RenderResult<()> {
+    pub fn canvas_draw_oval(
+        &mut self,
+        surface: Handle,
+        rect: RectF,
+        paint: Handle,
+    ) -> RenderResult<()> {
         let mut p = Path::new();
         p.add_oval(rect.left, rect.top, rect.right, rect.bottom, false);
         let paint = self.paint_ref(paint)?.clone();
@@ -1697,7 +2011,13 @@ impl RenderContext {
         self.draw_path_with_paint(surface, &p, &paint)
     }
 
-    pub fn canvas_draw_point(&mut self, surface: Handle, x: f32, y: f32, paint: Handle) -> RenderResult<()> {
+    pub fn canvas_draw_point(
+        &mut self,
+        surface: Handle,
+        x: f32,
+        y: f32,
+        paint: Handle,
+    ) -> RenderResult<()> {
         let mut paint = self.paint_ref(paint)?.clone();
         if paint.style == PaintStyle::Fill && paint.stroke_width == 0.0 {
             paint.style = PaintStyle::Stroke;
@@ -1730,7 +2050,12 @@ impl RenderContext {
     }
 
     /// Android `Canvas.drawLines(float[] pts, int offset, int count, Paint)`.
-    pub fn canvas_draw_lines(&mut self, surface: Handle, points: &[f32], paint: Handle) -> RenderResult<()> {
+    pub fn canvas_draw_lines(
+        &mut self,
+        surface: Handle,
+        points: &[f32],
+        paint: Handle,
+    ) -> RenderResult<()> {
         let p = self.paint_ref(paint)?.clone();
         let mut path = Path::new();
         for pair in points.chunks_exact(4) {
@@ -1741,7 +2066,12 @@ impl RenderContext {
     }
 
     /// Android `Canvas.drawPoints(float[] pts, int offset, int count, Paint)`.
-    pub fn canvas_draw_points(&mut self, surface: Handle, points: &[f32], paint: Handle) -> RenderResult<()> {
+    pub fn canvas_draw_points(
+        &mut self,
+        surface: Handle,
+        points: &[f32],
+        paint: Handle,
+    ) -> RenderResult<()> {
         let mut p = self.paint_ref(paint)?.clone();
         if p.style == PaintStyle::Fill && p.stroke_width == 0.0 {
             p.style = PaintStyle::Stroke;
@@ -1762,7 +2092,11 @@ impl RenderContext {
         matrix: Handle,
         paint: Option<Handle>,
     ) -> RenderResult<()> {
-        let pm = self.bitmaps.get(bitmap).ok_or(RenderError::BadHandle)?.to_pixmap()?;
+        let pm = self
+            .bitmaps
+            .get(bitmap)
+            .ok_or(RenderError::BadHandle)?
+            .to_pixmap()?;
         let m = *self.matrices.get(matrix).ok_or(RenderError::BadHandle)?;
         let canvas_m = self.surface_canvas(surface)?.state.matrix;
         let combined = canvas_m.mul(&m);
@@ -1777,7 +2111,13 @@ impl RenderContext {
         let (w, h) = (pm.width() as f32, pm.height() as f32);
         let quality = tiny_skia::FilterQuality::Bilinear;
         let sk_paint = tiny_skia::Paint {
-            shader: tiny_skia::Pattern::new(pm.as_ref(), tiny_skia::SpreadMode::Pad, quality, 1.0, local),
+            shader: tiny_skia::Pattern::new(
+                pm.as_ref(),
+                tiny_skia::SpreadMode::Pad,
+                quality,
+                1.0,
+                local,
+            ),
             blend_mode: paint.blend_mode,
             anti_alias: true,
             force_hq_pipeline: false,
@@ -1789,7 +2129,13 @@ impl RenderContext {
         };
         {
             let (state, target) = self.canvas_parts_mut(surface)?;
-            target.fill_path(&sk_path, &sk_paint, tiny_skia::FillRule::Winding, tiny_skia::Transform::identity(), state.clip.as_ref());
+            target.fill_path(
+                &sk_path,
+                &sk_paint,
+                tiny_skia::FillRule::Winding,
+                tiny_skia::Transform::identity(),
+                state.clip.as_ref(),
+            );
         }
         self.raster_ops += 1;
         Ok(())
@@ -1808,7 +2154,9 @@ impl RenderContext {
             let p = self.paint_ref(paint)?;
             (p.alpha as u8, p.blend_mode)
         };
-        let count = self.surface_canvas_mut(surface)?.save_layer_alpha(bounds, alpha)?;
+        let count = self
+            .surface_canvas_mut(surface)?
+            .save_layer_alpha(bounds, alpha)?;
         self.surface_canvas_mut(surface)?.set_top_layer_blend(blend);
         Ok(count)
     }
@@ -1975,10 +2323,7 @@ impl RenderContext {
         max_width: f32,
         mode: crate::render_node::EllipsizeMode,
     ) -> RenderResult<()> {
-        if text.is_empty()
-            || max_width <= 0.0
-            || mode == crate::render_node::EllipsizeMode::None
-        {
+        if text.is_empty() || max_width <= 0.0 || mode == crate::render_node::EllipsizeMode::None {
             return self.canvas_draw_text(surface, text, x, y, paint);
         }
         let style = self.text_style_for(paint)?;
@@ -2115,7 +2460,14 @@ impl RenderContext {
         self.render_nodes.insert(RenderNode::new(name))
     }
 
-    pub fn render_node_set_bounds(&mut self, node: Handle, l: i32, t: i32, r: i32, b: i32) -> RenderResult<()> {
+    pub fn render_node_set_bounds(
+        &mut self,
+        node: Handle,
+        l: i32,
+        t: i32,
+        r: i32,
+        b: i32,
+    ) -> RenderResult<()> {
         self.render_nodes
             .get_mut(node)
             .ok_or(RenderError::BadHandle)?
@@ -2124,12 +2476,23 @@ impl RenderContext {
     }
 
     pub fn render_node_set_alpha(&mut self, node: Handle, alpha: f32) -> RenderResult<()> {
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.set_alpha(alpha);
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .set_alpha(alpha);
         Ok(())
     }
 
-    pub fn render_node_set_translation(&mut self, node: Handle, x: f32, y: f32) -> RenderResult<()> {
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.set_translation(x, y);
+    pub fn render_node_set_translation(
+        &mut self,
+        node: Handle,
+        x: f32,
+        y: f32,
+    ) -> RenderResult<()> {
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .set_translation(x, y);
         Ok(())
     }
 
@@ -2142,16 +2505,28 @@ impl RenderContext {
     }
 
     pub fn render_node_set_scale(&mut self, node: Handle, x: f32, y: f32) -> RenderResult<()> {
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.set_scale(x, y);
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .set_scale(x, y);
         Ok(())
     }
 
     pub fn render_node_set_rotation(&mut self, node: Handle, deg: f32) -> RenderResult<()> {
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.set_rotation(deg);
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .set_rotation(deg);
         Ok(())
     }
 
-    pub fn render_node_set_rotation_xyz(&mut self, node: Handle, x: f32, y: f32, z: f32) -> RenderResult<()> {
+    pub fn render_node_set_rotation_xyz(
+        &mut self,
+        node: Handle,
+        x: f32,
+        y: f32,
+        z: f32,
+    ) -> RenderResult<()> {
         self.render_nodes
             .get_mut(node)
             .ok_or(RenderError::BadHandle)?
@@ -2160,7 +2535,10 @@ impl RenderContext {
     }
 
     pub fn render_node_set_pivot(&mut self, node: Handle, x: f32, y: f32) -> RenderResult<()> {
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.set_pivot(x, y);
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .set_pivot(x, y);
         Ok(())
     }
 
@@ -2198,11 +2576,19 @@ impl RenderContext {
     }
 
     pub fn render_node_set_outline_rect(&mut self, node: Handle, r: RectF) -> RenderResult<()> {
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.set_outline_rect(r);
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .set_outline_rect(r);
         Ok(())
     }
 
-    pub fn render_node_set_outline_path(&mut self, node: Handle, path: Handle, alpha: f32) -> RenderResult<()> {
+    pub fn render_node_set_outline_path(
+        &mut self,
+        node: Handle,
+        path: Handle,
+        alpha: f32,
+    ) -> RenderResult<()> {
         let p = self.paths.get(path).ok_or(RenderError::BadHandle)?.clone();
         self.render_nodes
             .get_mut(node)
@@ -2212,12 +2598,18 @@ impl RenderContext {
     }
 
     pub fn render_node_set_outline_none(&mut self, node: Handle) -> RenderResult<()> {
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.set_outline_none();
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .set_outline_none();
         Ok(())
     }
 
     pub fn render_node_set_elevation(&mut self, node: Handle, e: f32) -> RenderResult<()> {
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.set_elevation(e);
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .set_elevation(e);
         Ok(())
     }
 
@@ -2229,7 +2621,10 @@ impl RenderContext {
         ambient: u32,
         spot: u32,
     ) -> RenderResult<()> {
-        let n = self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?;
+        let n = self
+            .render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?;
         n.ambient_shadow_color = ambient;
         n.spot_shadow_color = spot;
         Ok(())
@@ -2244,12 +2639,20 @@ impl RenderContext {
     }
 
     pub fn render_node_set_layer_type(&mut self, node: Handle, layer: i32) -> RenderResult<()> {
-        let lt = LayerType::from_ordinal(layer).ok_or_else(|| RenderError::invalid("bad LayerType"))?;
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.set_layer_type(lt);
+        let lt =
+            LayerType::from_ordinal(layer).ok_or_else(|| RenderError::invalid("bad LayerType"))?;
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .set_layer_type(lt);
         Ok(())
     }
 
-    pub fn render_node_set_layer_paint(&mut self, node: Handle, paint: Option<Handle>) -> RenderResult<()> {
+    pub fn render_node_set_layer_paint(
+        &mut self,
+        node: Handle,
+        paint: Option<Handle>,
+    ) -> RenderResult<()> {
         self.render_nodes
             .get_mut(node)
             .ok_or(RenderError::BadHandle)?
@@ -2261,7 +2664,10 @@ impl RenderContext {
         if !self.render_nodes.contains(child) {
             return Err(RenderError::BadHandle);
         }
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.add_child(child);
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .add_child(child);
         Ok(())
     }
 
@@ -2283,7 +2689,10 @@ impl RenderContext {
 
     /// Append a recorded op (the `RecordingCanvas.nDraw*` sink).
     pub fn render_node_push_op(&mut self, node: Handle, op: DisplayOp) -> RenderResult<()> {
-        self.render_nodes.get_mut(node).ok_or(RenderError::BadHandle)?.push_op(op);
+        self.render_nodes
+            .get_mut(node)
+            .ok_or(RenderError::BadHandle)?
+            .push_op(op);
         Ok(())
     }
 
@@ -2309,7 +2718,12 @@ impl RenderContext {
     ///
     /// If the tree version is unchanged since the last render, no raster work
     /// happens: a new frame sequence is produced reusing the previous pixels.
-    pub fn surface_render_node(&mut self, surface: Handle, root: Handle, cause_id: i64) -> RenderResult<u64> {
+    pub fn surface_render_node(
+        &mut self,
+        surface: Handle,
+        root: Handle,
+        cause_id: i64,
+    ) -> RenderResult<u64> {
         if !self.render_nodes.contains(root) {
             return Err(RenderError::BadHandle);
         }
@@ -2328,7 +2742,10 @@ impl RenderContext {
         // Fresh raster.
         self.canvas_for_surface(surface)?;
         {
-            let s = self.surfaces.get_mut(surface).ok_or(RenderError::BadHandle)?;
+            let s = self
+                .surfaces
+                .get_mut(surface)
+                .ok_or(RenderError::BadHandle)?;
             s.pixmap.fill(tiny_skia::Color::TRANSPARENT);
         }
         self.surface_canvas_mut(surface)?.reset_state();
@@ -2386,7 +2803,10 @@ impl RenderContext {
         // Seed the scratch surface from the base snapshot so drawing composites
         // over the bitmap's original content (Android `Canvas(bitmap)`).
         {
-            let s = self.surfaces.get_mut(surface).ok_or(RenderError::BadHandle)?;
+            let s = self
+                .surfaces
+                .get_mut(surface)
+                .ok_or(RenderError::BadHandle)?;
             s.pixmap.fill(tiny_skia::Color::TRANSPARENT);
             for (d, &word) in s.pixmap.pixels_mut().iter_mut().zip(base.iter()) {
                 *d = tiny_skia::PremultipliedColorU8::from_rgba(
@@ -2403,7 +2823,11 @@ impl RenderContext {
         self.unsupported_ops.clear();
         self.render_node_recursive(surface, root, 0)?;
         {
-            let pm = &self.surfaces.get(surface).ok_or(RenderError::BadHandle)?.pixmap;
+            let pm = &self
+                .surfaces
+                .get(surface)
+                .ok_or(RenderError::BadHandle)?
+                .pixmap;
             self.bitmaps
                 .get_mut(bitmap)
                 .ok_or(RenderError::BadHandle)?
@@ -2415,7 +2839,12 @@ impl RenderContext {
         Ok(())
     }
 
-    fn render_node_recursive(&mut self, surface: Handle, node: Handle, depth: usize) -> RenderResult<()> {
+    fn render_node_recursive(
+        &mut self,
+        surface: Handle,
+        node: Handle,
+        depth: usize,
+    ) -> RenderResult<()> {
         if depth > 512 {
             return Err(RenderError::invalid("render node recursion too deep"));
         }
@@ -2431,12 +2860,7 @@ impl RenderContext {
             elevation: n.elevation,
             ambient_shadow_color: n.ambient_shadow_color,
             spot_shadow_color: n.spot_shadow_color,
-            local_bounds: RectF::new(
-                0.0,
-                0.0,
-                n.width() as f32,
-                n.height() as f32,
-            ),
+            local_bounds: RectF::new(0.0, 0.0, n.width() as f32, n.height() as f32),
             render_effect: n.render_effect.clone(),
         };
         let ops = n.display_list.clone();
@@ -2510,18 +2934,27 @@ impl RenderContext {
 
     /// Apply a node `RenderEffect` to the topmost active save-layer. The layer
     /// holds the node's rasterised content (including children).
-    fn apply_render_effect(&mut self, surface: Handle, effect: &RenderEffectSpec) -> RenderResult<()> {
+    fn apply_render_effect(
+        &mut self,
+        surface: Handle,
+        effect: &RenderEffectSpec,
+    ) -> RenderResult<()> {
         let canvas_h = self
             .surfaces
             .get(surface)
             .and_then(|s| s.canvas)
             .ok_or(RenderError::BadHandle)?;
-        let canvas = self.canvases.get_mut(canvas_h).ok_or(RenderError::BadHandle)?;
+        let canvas = self
+            .canvases
+            .get_mut(canvas_h)
+            .ok_or(RenderError::BadHandle)?;
         let Some(pixmap) = canvas.top_layer_mut() else {
             return Ok(());
         };
         match effect {
-            RenderEffectSpec::Blur { sigma_x, sigma_y, .. } => {
+            RenderEffectSpec::Blur {
+                sigma_x, sigma_y, ..
+            } => {
                 // `box_blur` is isotropic; use the geometric mean of the two
                 // sigmas so an anisotropic blur spreads by the same area.
                 let sigma = (*sigma_x * *sigma_y).max(0.0).sqrt();
@@ -2739,7 +3172,11 @@ fn make_sweep_pixmap(colors: &[u32], positions: Option<&[f32]>) -> tiny_skia::Pi
     pm
 }
 
-fn sample_gradient(colors: &[u32], positions: Option<&[f32]>, t: f32) -> tiny_skia::PremultipliedColorU8 {
+fn sample_gradient(
+    colors: &[u32],
+    positions: Option<&[f32]>,
+    t: f32,
+) -> tiny_skia::PremultipliedColorU8 {
     if colors.is_empty() {
         return tiny_skia::PremultipliedColorU8::TRANSPARENT;
     }

@@ -112,13 +112,13 @@ fn get_component_enabled_setting_answers_the_stock_default() {
     assert_eq!(get_setting(&mut host, PACKAGE, ACTIVITY, 0), DEFAULT);
     // A component the package never declared answers DEFAULT too (stock
     // `PackageManagerService` looks the setting up, not the component).
-    assert_eq!(
-        get_setting(&mut host, PACKAGE, "no.such.Class", 0),
-        DEFAULT
-    );
+    assert_eq!(get_setting(&mut host, PACKAGE, "no.such.Class", 0), DEFAULT);
     // An unrelated package: DEFAULT, never an error and never another
     // component's setting.
-    assert_eq!(get_setting(&mut host, "com.example.other", ACTIVITY, 10), DEFAULT);
+    assert_eq!(
+        get_setting(&mut host, "com.example.other", ACTIVITY, 10),
+        DEFAULT
+    );
 }
 
 #[test]
@@ -146,7 +146,11 @@ fn an_out_of_range_state_is_rejected_and_changes_nothing() {
     for bad in [-1, 5, 1000, i32::MAX, i32::MIN] {
         let err = set_setting(&mut host, PACKAGE, ACTIVITY, bad).expect_err("invalid state");
         match err {
-            ServiceError::BadRequest { interface, method, detail } => {
+            ServiceError::BadRequest {
+                interface,
+                method,
+                detail,
+            } => {
                 assert_eq!(interface, IPACKAGE_MANAGER);
                 assert_eq!(method, "setComponentEnabledSetting");
                 assert!(

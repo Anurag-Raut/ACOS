@@ -86,7 +86,11 @@ impl TlsThread {
                 // SAFETY: copy at most `size` bytes into the freshly allocated
                 // block; `init.len() <= size` by construction.
                 unsafe {
-                    std::ptr::copy_nonoverlapping(info.init.as_ptr(), ptr, info.init.len().min(size));
+                    std::ptr::copy_nonoverlapping(
+                        info.init.as_ptr(),
+                        ptr,
+                        info.init.len().min(size),
+                    );
                 }
             }
             slot.ptr = ptr;

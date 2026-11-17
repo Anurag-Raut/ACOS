@@ -19,10 +19,10 @@ use std::collections::HashMap;
 
 use acos_render::BitmapConfig;
 
-use crate::natives::gfx_state::{self, rh};
 use crate::natives::fwk_res;
 use crate::natives::fwk_surface as surface;
 use crate::natives::gfx_hwui;
+use crate::natives::gfx_state::{self, rh};
 
 /// `AndroidBitmapInfo` values backed by a real `acos-render::Bitmap`.
 ///
@@ -278,8 +278,12 @@ pub fn configuration() -> Configuration {
     let Some(c) = fwk_res::ndk_manager_config(manager) else {
         return Configuration::default();
     };
-    let lang = String::from_utf8_lossy(&c.language).trim_matches('\0').to_string();
-    let country = String::from_utf8_lossy(&c.country).trim_matches('\0').to_string();
+    let lang = String::from_utf8_lossy(&c.language)
+        .trim_matches('\0')
+        .to_string();
+    let country = String::from_utf8_lossy(&c.country)
+        .trim_matches('\0')
+        .to_string();
     let locale = if country.is_empty() {
         lang
     } else {
@@ -347,21 +351,18 @@ pub fn vsync_interval_nanos() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::natives::{fwk_res, gfx_hwui, gfx_state};
     use acos_framework_natives::res::assets::ApkAssets;
     use acos_framework_natives::res::manager::AssetManager;
     use acos_render::BitmapConfig;
-    use crate::natives::{fwk_res, gfx_hwui, gfx_state};
 
     fn apk_bytes() -> Vec<u8> {
         use std::io::Write;
         let mut buf = Vec::new();
         {
             let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
-            zip.start_file(
-                "assets/hello.txt",
-                zip::write::SimpleFileOptions::default(),
-            )
-            .unwrap();
+            zip.start_file("assets/hello.txt", zip::write::SimpleFileOptions::default())
+                .unwrap();
             zip.write_all(b"hello-acos!!").unwrap();
             zip.finish().unwrap();
         }
@@ -411,7 +412,10 @@ mod tests {
             )
         });
         let info = bitmap_lock(handle).unwrap();
-        assert_eq!((info.width, info.height, info.stride, info.format), (4, 3, 16, 1));
+        assert_eq!(
+            (info.width, info.height, info.stride, info.format),
+            (4, 3, 16, 1)
+        );
         // The locked address is the bitmap's own pixel store (`acos-vm`
         // forbids `unsafe`, so compare pointers rather than dereferencing).
         let owned = gfx_state::with_ctx(|c| {
@@ -432,7 +436,10 @@ mod tests {
         });
         gfx_state::with_ctx(|c| {
             assert_eq!(
-                c.bitmaps.get(gfx_state::rh(handle)).unwrap().get_pixel(0, 0),
+                c.bitmaps
+                    .get(gfx_state::rh(handle))
+                    .unwrap()
+                    .get_pixel(0, 0),
                 0xFF11_2233,
                 "the store write is visible to Bitmap.getPixel"
             );
@@ -464,11 +471,13 @@ mod tests {
                 rgba: &[u8],
                 cause_id: i64,
             ) -> u64 {
-                self.0
-                    .calls
-                    .lock()
-                    .unwrap()
-                    .push((window_id, width, height, rgba.to_vec(), cause_id));
+                self.0.calls.lock().unwrap().push((
+                    window_id,
+                    width,
+                    height,
+                    rgba.to_vec(),
+                    cause_id,
+                ));
                 self.0.seq.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
             }
         }

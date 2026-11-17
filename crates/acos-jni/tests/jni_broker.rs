@@ -67,7 +67,12 @@ fn class(env: usize, name: &str) -> usize {
 fn static_method(env: usize, cls: usize, name: &str, sig: &str) -> usize {
     let (n, s) = (c(name), c(sig));
     let m = unsafe { jni::jni_GetStaticMethodID(env, cls, n.as_ptr(), s.as_ptr()) };
-    assert_ne!(m, 0, "GetStaticMethodID({name}{sig}): {:?}", take_worker_error());
+    assert_ne!(
+        m,
+        0,
+        "GetStaticMethodID({name}{sig}): {:?}",
+        take_worker_error()
+    );
     m
 }
 
@@ -82,7 +87,9 @@ fn string_of(env: usize, h: usize) -> String {
     assert_ne!(h, 0, "null jstring");
     let chars = unsafe { jni::jni_GetStringUTFChars(env, h, std::ptr::null_mut()) };
     assert!(!chars.is_null(), "GetStringUTFChars null");
-    let text = unsafe { CStr::from_ptr(chars) }.to_string_lossy().into_owned();
+    let text = unsafe { CStr::from_ptr(chars) }
+        .to_string_lossy()
+        .into_owned();
     unsafe { jni::jni_ReleaseStringUTFChars(env, h, chars) };
     text
 }
@@ -375,9 +382,7 @@ fn attach_current_thread_and_call() {
 
     let h = std::thread::spawn(move || {
         let mut env = 0usize;
-        let rc = unsafe {
-            jni::vm_AttachCurrentThread(jvm, &mut env, std::ptr::null_mut())
-        };
+        let rc = unsafe { jni::vm_AttachCurrentThread(jvm, &mut env, std::ptr::null_mut()) };
         assert_eq!(rc, 0, "AttachCurrentThread");
         assert_ne!(env, 0);
         let cls = class(env, "dev/acos/fixtures/broker/BrokerTarget");
@@ -394,4 +399,3 @@ fn attach_current_thread_and_call() {
     drop(rt);
     drop(vm);
 }
-

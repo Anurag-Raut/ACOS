@@ -1,0 +1,2 @@
+acos-webview: shared broker on /home/Qui/.t3/worktrees/acos/t3-1793f866-f21b7b<pid>cb0d/.cache/lv/e<pid>-two-sessions/run/broker.sock (engine=157.0.8103.78, idle=10s, pid=<pid>)
+acos-webview: no session for 10s, exiting (/home/Qui/.t3/worktrees/acos/t3-1793f866-f21b7b<pid>cb0d/.cache/lv/e<pid>-two-sessions/run/broker.sock)

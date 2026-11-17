@@ -63,7 +63,7 @@ use std::sync::{Arc, Mutex};
 use acos_aidl::MethodInfo;
 use acos_parcel::{BinderId, Parcel};
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, PendingDelivery, ServiceObject};
 use crate::parcelable;
 use crate::value::{Parcelable, Value};
@@ -165,6 +165,14 @@ pub const CAP_NOT_VCN_MANAGED: u32 = 28;
 
 /// `ConnectivityManager.CALLBACK_AVAILABLE`.
 pub const CALLBACK_AVAILABLE: i32 = 2;
+/// `ConnectivityManager.CALLBACK_LOSING` (`NetworkCallback.onLosing`).
+pub const CALLBACK_LOSING: i32 = 3;
+/// `ConnectivityManager.CALLBACK_LOST` (`NetworkCallback.onLost`).
+///
+/// **4, not 3**: `CALLBACK_LOSING` is 3 (ConnectivityManager.java:4248-4250).
+/// NET6 measured the difference — sending 3 called `onLosing`, so an app
+/// listening for `onLost` never saw the network go away.
+pub const CALLBACK_LOST: i32 = 4;
 /// `ConnectivityManager.CALLBACK_CAP_CHANGED`.
 pub const CALLBACK_CAP_CHANGED: i32 = 6;
 /// `ConnectivityManager.CALLBACK_IP_CHANGED`.
@@ -304,6 +312,12 @@ pub struct RequestRecord {
 /// `IConnectivityManager` state.
 #[derive(Debug, Default)]
 pub struct ConnectivityState {
+    /// Is there a default network at all? `false` while the `network` module's
+    /// `offline` control is in effect (NET6): `getActiveNetwork()` answers
+    /// `null`, every registered callback got `onLost`, and a new registration
+    /// gets no `onAvailable` until `online` restores it — exactly the state
+    /// Android presents when the only network is lost.
+    pub default_up: bool,
     /// Recorded proxy lookups (`Network` presence marker).
     pub proxy_lookups: u32,
     /// Live requests, in registration order.
@@ -312,17 +326,77 @@ pub struct ConnectivityState {
     pub callbacks_sent: u64,
     /// Requests released (evidence counter).
     pub released: u64,
+    /// Live requests' `IMessenger` callbacks as host-held strong references
+    /// (`crate::refs`): `registerNetworkCallback`/`listenForNetwork` take one,
+    /// `releaseNetworkRequest`/`unregisterNetworkCallback` drop it.
+    pub refs: crate::refs::GuestRefs,
     next_request_id: i32,
 }
 
 impl ConnectivityState {
-    /// New empty state.
+    /// New empty state, with the session's default network up (the module
+    /// publishes `offline` only when its control is used).
     #[must_use]
     pub fn new() -> Self {
         Self {
             next_request_id: 1,
+            default_up: true,
             ..Self::default()
         }
+    }
+
+    /// Move the default network between up and down, returning the callback
+    /// messages the change produces for every live request.
+    ///
+    /// * up → down: one `CALLBACK_LOST` per request (AOSP's
+    ///   `ConnectivityService` sends only `Network` with `onLost`);
+    /// * down → up: the four registration messages again
+    ///   ([`callback_messages`]), i.e. `onAvailable`, `onCapabilitiesChanged`,
+    ///   `onLinkPropertiesChanged`, `onBlockedStatusChanged` — what Android
+    ///   delivers when a network reappears.
+    ///
+    /// A no-op when the state does not change: a doubled `offline` must not fire
+    /// a second `onLost` (Android does not either).
+    pub fn set_default_network(&mut self, up: bool) -> Vec<PendingDelivery> {
+        if self.default_up == up {
+            return Vec::new();
+        }
+        self.default_up = up;
+        let mut out = Vec::new();
+        for record in self.requests.values() {
+            let Some(target) = record.messenger else {
+                continue;
+            };
+            if up {
+                for (code, _arg1, data) in callback_messages(&record.request) {
+                    out.push(PendingDelivery {
+                        target,
+                        interface: "android.os.IMessenger".to_string(),
+                        code: IMESSENGER_SEND,
+                        method: callback_method(code).to_string(),
+                        data,
+                    });
+                }
+            } else {
+                out.push(PendingDelivery {
+                    target,
+                    interface: "android.os.IMessenger".to_string(),
+                    code: IMESSENGER_SEND,
+                    method: "CALLBACK_LOST".to_string(),
+                    data: encode_message(
+                        CALLBACK_LOST,
+                        0,
+                        &[
+                            ("NetworkRequest", &record.request),
+                            ("Network", &network_parcelable()),
+                        ],
+                    )
+                    .expect("callback bundle"),
+                });
+            }
+        }
+        self.callbacks_sent += out.len() as u64;
+        out
     }
 
     fn allocate_id(&mut self) -> i32 {
@@ -356,30 +430,38 @@ pub fn network_parcelable() -> Parcelable {
 }
 
 /// `android.net.NetworkCapabilities` of the emulated default network.
+///
+/// The value list is `NetworkCapabilities.writeToParcel`'s field order, one
+/// value per [`crate::parcelable`] field op: the two nullable parcelables are
+/// `writeParcelable(null)` (`NamedParcelable(Null)`), `mUids` is a `null`
+/// `ArraySet` (`writeInt(-1)`, no elements), the underlying networks are a
+/// `null` `writeTypedList` (`-1`). The byte stream is unchanged from the RET1
+/// reply; only the ops that describe it changed, so a future non-null
+/// specifier, uid set or underlying network encodes in the framework's order.
 #[must_use]
 pub fn default_network_capabilities() -> Parcelable {
     Parcelable::ordered(
         "android.net.NetworkCapabilities",
         vec![
             Value::Long(default_capabilities_bits()),
-            Value::Long(0),                                      // forbidden
-            Value::Long(1i64 << TRANSPORT_WIFI),                 // transports
-            Value::Int(0),                                       // link up kbps
-            Value::Int(0),                                       // link down kbps
-            Value::Str(None),                                    // NetworkSpecifier
-            Value::Str(None),                                    // TransportInfo
-            Value::Int(i32::MIN),                                // SIGNAL_STRENGTH_UNSPECIFIED
-            Value::Int(-1),                                      // mUids (null ArraySet)
-            Value::IntArray(Some(Vec::new())),                   // mAllowedUids
-            Value::Str(None),                                    // mSSID
-            Value::Bool(false),                                  // mPrivateDnsBroken
-            Value::IntArray(Some(Vec::new())),                   // administrator uids
-            Value::Int(1000),                                    // owner uid (system)
-            Value::Int(1000),                                    // requestor uid
-            Value::Str(Some("android".to_string())),             // requestor package
-            Value::IntArray(Some(Vec::new())),                   // mSubIds
-            Value::Int(-1),                                      // underlying networks (null)
-            Value::Int(0),                                       // enterprise ids
+            Value::Long(0),                           // forbidden
+            Value::Long(1i64 << TRANSPORT_WIFI),      // transports
+            Value::Int(0),                            // link up kbps
+            Value::Int(0),                            // link down kbps
+            Value::NamedParcelable(Parcelable::Null), // NetworkSpecifier
+            Value::NamedParcelable(Parcelable::Null), // TransportInfo
+            Value::Int(i32::MIN),                     // SIGNAL_STRENGTH_UNSPECIFIED
+            Value::List(None),                        // mUids (null ArraySet)
+            Value::IntArray(Some(Vec::new())),        // mAllowedUids
+            Value::Str(None),                         // mSSID
+            Value::Bool(false),                       // mPrivateDnsBroken
+            Value::IntArray(Some(Vec::new())),        // administrator uids
+            Value::Int(1000),                         // owner uid (system)
+            Value::Int(1000),                         // requestor uid
+            Value::Str(Some("android".to_string())),  // requestor package
+            Value::IntArray(Some(Vec::new())),        // mSubIds
+            Value::List(None),                        // underlying networks (null)
+            Value::Int(0),                            // enterprise ids
         ],
     )
 }
@@ -399,6 +481,12 @@ pub fn default_network_capabilities() -> Parcelable {
 /// (`169.254.2.1`, which is also the DHCP server) and the DHCP-answered DNS
 /// server (`1.1.1.1`, `spike_net::pasta_args`' `-D`). Nothing is invented: the
 /// values are the ones the namespace actually has.
+///
+/// The value list follows the framework's writer field for field: the list
+/// counts are [`Value::List`]s consumed by [`crate::parcelable::FieldOp::Counted`]
+/// (or [`Value::List`] for `writeList`), the HTTP proxy is an absent
+/// [`Value::Cond`] (a `writeByte(0)` marker), and every `writeParcelable(null)`
+/// is a [`Value::NamedParcelable`] holding [`Parcelable::Null`].
 #[must_use]
 pub fn default_link_properties() -> Parcelable {
     let (addrs, dns, dhcp, routes) = if spike_net_enabled() {
@@ -420,23 +508,26 @@ pub fn default_link_properties() -> Parcelable {
         "android.net.LinkProperties",
         vec![
             Value::Str(Some("wlan0".to_string())),
-            addrs,          // link addresses
-            dns,            // DNS servers
+            addrs,                         // link addresses
+            dns,                           // DNS servers
             Value::List(Some(Vec::new())), // validated private DNS servers
-            Value::Bool(false), // usePrivateDns
-            Value::Str(None),   // privateDnsServerName
+            Value::Bool(false),            // usePrivateDns
+            Value::Str(None),              // privateDnsServerName
             Value::List(Some(Vec::new())), // PCSCF servers
-            Value::Str(None),   // domains
-            dhcp,               // dhcp server address
-            Value::Int(1500),   // mtu
-            Value::Str(None),   // tcpBufferSizes
-            routes,             // routes
-            Value::Byte(0),     // httpProxy presence
-            Value::Str(None),   // nat64Prefix
-            Value::Int(0),      // stacked links
-            Value::Bool(false), // wakeOnLanSupported
-            Value::Str(None),   // captivePortalApiUrl
-            Value::Str(None),   // captivePortalData
+            Value::Str(None),              // domains
+            dhcp,                          // dhcp server address
+            Value::Int(1500),              // mtu
+            Value::Str(None),              // tcpBufferSizes
+            routes,                        // routes
+            Value::Cond {
+                present: false,
+                values: Vec::new(),
+            }, // httpProxy
+            Value::NamedParcelable(Parcelable::Null), // nat64Prefix
+            Value::List(Some(Vec::new())), // stacked links (`writeList`)
+            Value::Bool(false),            // wakeOnLanSupported
+            Value::NamedParcelable(Parcelable::Null), // captivePortalApiUrl
+            Value::NamedParcelable(Parcelable::Null), // captivePortalData
         ],
     )
 }
@@ -534,8 +625,16 @@ pub fn network_request(
 /// Encode `android.os.Message.writeToParcel` for one callback message.
 ///
 /// The layout is `what`, `arg1`, `arg2`, the `obj` presence marker (always 0
-/// here), `when`, the data bundle, the `replyTo` messenger (a null strong
-/// binder is a single `0` word, not a flat object) and the two uid words.
+/// here), `when`, the data bundle, the `replyTo` messenger (a null strong binder
+/// is a single `0` word, not a flat object) and `sendingUid`.
+///
+/// **The image has one uid word, not two.** `android-14.0.0_r75`'s
+/// `Message.writeToParcel` ends at `sendingUid`; the r75 source cache also shows
+/// `workSourceUid`. NET6 measured the difference end to end: an extra word made
+/// the app's `IMessenger.Stub.onTransact` answer
+/// `Parcel data not fully consumed, unread size: 4`, so `NetworkCallback.onLost`
+/// and `onAvailable` never fired. The image is authoritative (per the common
+/// brief), and `net1_connectivity` pins the byte count.
 #[must_use]
 pub fn encode_message(
     what: i32,
@@ -559,7 +658,6 @@ pub fn encode_message(
     // messenger is `writeStrongBinder(null)` == one `0` word.
     parcel.write_int32(0);
     parcel.write_int32(0); // sendingUid
-    parcel.write_int32(0); // workSourceUid
     parcel.set_data_position(0);
     Ok(parcel)
 }
@@ -638,6 +736,17 @@ pub fn callback_messages(request: &Parcelable) -> Vec<(i32, i32, Parcel)> {
     out
 }
 
+/// The `method` label a callback delivery carries (evidence, not wire).
+fn callback_method(code: i32) -> &'static str {
+    match code {
+        CALLBACK_AVAILABLE => "CALLBACK_AVAILABLE",
+        CALLBACK_CAP_CHANGED => "CALLBACK_CAP_CHANGED",
+        CALLBACK_IP_CHANGED => "CALLBACK_IP_CHANGED",
+        CALLBACK_LOST => "CALLBACK_LOST",
+        _ => "CALLBACK_BLK_CHANGED",
+    }
+}
+
 fn messenger_binder(value: Option<&Value>) -> Option<BinderId> {
     match value {
         Some(Value::Parcelable(Parcelable::Ordered { class, values }))
@@ -681,22 +790,20 @@ impl ConnectivityService {
         let request_id = state.allocate_id();
         let reply = network_request(capabilities, legacy_type, request_id, kind);
         let mut deliveries = Vec::new();
-        if let Some(target) = messenger {
+        // NET6: a registration while the session is offline is parked, not
+        // answered: Android delivers nothing to a default-network callback until
+        // a network exists (the app sees `onLost` if it registered earlier, and
+        // nothing at all if it registers later).
+        if let Some(target) = messenger.filter(|_| state.default_up) {
             // AOSP `ConnectivityService.callCallbackForRequest` returns early
             // when the request has no messenger (the system default request),
             // and ACOS follows it: no messenger, no callback messages.
             for (code, _arg1, data) in callback_messages(&reply) {
-                let method = match code {
-                    CALLBACK_AVAILABLE => "CALLBACK_AVAILABLE",
-                    CALLBACK_CAP_CHANGED => "CALLBACK_CAP_CHANGED",
-                    CALLBACK_IP_CHANGED => "CALLBACK_IP_CHANGED",
-                    _ => "CALLBACK_BLK_CHANGED",
-                };
                 deliveries.push(PendingDelivery {
                     target,
                     interface: "android.os.IMessenger".to_string(),
                     code: IMESSENGER_SEND,
-                    method: method.to_string(),
+                    method: callback_method(code).to_string(),
                     data,
                 });
             }
@@ -720,6 +827,21 @@ impl ConnectivityService {
 }
 
 impl ServiceObject for ConnectivityService {
+    /// Registered network callbacks are host-held strong references
+    /// (`registerNetworkCallback`/`releaseNetworkRequest`), drained through the
+    /// shared `ConnectivityState::refs` ledger.
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        self.state.lock().unwrap().refs.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        self.state.lock().unwrap().refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.state.lock().unwrap().refs.release_all()
+    }
+
     fn call(&mut self, interface: &str, method: &MethodInfo, args: &[Value]) -> Result<CallResult> {
         if interface != "android.net.IConnectivityManager" {
             return Err(ServiceError::UnsupportedAndroidApi {
@@ -729,18 +851,30 @@ impl ServiceObject for ConnectivityService {
             });
         }
         let mut state = self.state.lock().unwrap();
+        // NET6: while the `network` module's `offline` control is in effect there
+        // is no default network, and every question about it answers the way
+        // Android answers with none: `null`, an empty list, or `false`.
+        let up = state.default_up;
         let mut deliveries = Vec::new();
         let reply = match method.name.as_str() {
             // ---- network queries -------------------------------------------
-            "getActiveNetwork" | "getActiveNetworkForUid" => vec![Value::Parcelable(network_parcelable())],
+            "getActiveNetwork" | "getActiveNetworkForUid" => vec![Value::Parcelable(if up {
+                network_parcelable()
+            } else {
+                Parcelable::Null
+            })],
             "getActiveNetworkInfo" | "getActiveNetworkInfoForUid" => {
-                vec![Value::Parcelable(default_network_info())]
+                vec![Value::Parcelable(if up {
+                    default_network_info()
+                } else {
+                    Parcelable::Null
+                })]
             }
             "getNetworkInfoForUid" => {
                 // `NetInfo`'s legacy path: `getNetworkInfoForUid(Network, uid,
                 // ignoreBlocked)` answers the `NetworkInfo` of the network it
                 // was given, or `null` for a network ACOS does not know.
-                if args.first().is_some_and(is_default_network) {
+                if up && args.first().is_some_and(is_default_network) {
                     vec![Value::Parcelable(default_network_info())]
                 } else {
                     vec![Value::Parcelable(Parcelable::Null)]
@@ -749,46 +883,56 @@ impl ServiceObject for ConnectivityService {
             "getNetworkInfo" => {
                 // `getNetworkInfo(TYPE_WIFI)` describes the emulated network;
                 // every other legacy type has no network in ACOS.
-                if args.first().and_then(Value::as_int) == Some(LEGACY_TYPE_WIFI) {
+                if up && args.first().and_then(Value::as_int) == Some(LEGACY_TYPE_WIFI) {
                     vec![Value::Parcelable(default_network_info())]
                 } else {
                     vec![Value::Parcelable(Parcelable::Null)]
                 }
             }
             "getNetworkForType" => {
-                if args.first().and_then(Value::as_int) == Some(LEGACY_TYPE_WIFI) {
+                if up && args.first().and_then(Value::as_int) == Some(LEGACY_TYPE_WIFI) {
                     vec![Value::Parcelable(network_parcelable())]
                 } else {
                     vec![Value::Parcelable(Parcelable::Null)]
                 }
             }
-            "getAllNetworks" => vec![Value::List(Some(vec![Value::Parcelable(
-                network_parcelable(),
-            )]))],
-            "getAllNetworkInfo" => vec![Value::List(Some(vec![Value::Parcelable(
-                default_network_info(),
-            )]))],
+            "getAllNetworks" => vec![Value::List(Some(if up {
+                vec![Value::Parcelable(network_parcelable())]
+            } else {
+                Vec::new()
+            }))],
+            "getAllNetworkInfo" => vec![Value::List(Some(if up {
+                vec![Value::Parcelable(default_network_info())]
+            } else {
+                Vec::new()
+            }))],
             "getNetworkCapabilities" | "getNetworkCapabilitiesForPackage" => {
                 // AOSP answers `null` for a null/unknown `Network`.
-                if args.first().is_some_and(is_default_network) {
+                if up && args.first().is_some_and(is_default_network) {
                     vec![Value::Parcelable(default_network_capabilities())]
                 } else {
                     vec![Value::Parcelable(Parcelable::Null)]
                 }
             }
-            "getDefaultNetworkCapabilitiesForUser" => vec![Value::List(Some(vec![
-                Value::Parcelable(default_network_capabilities()),
-            ]))],
-            "getActiveLinkProperties" => vec![Value::Parcelable(default_link_properties())],
+            "getDefaultNetworkCapabilitiesForUser" => vec![Value::List(Some(if up {
+                vec![Value::Parcelable(default_network_capabilities())]
+            } else {
+                Vec::new()
+            }))],
+            "getActiveLinkProperties" => vec![Value::Parcelable(if up {
+                default_link_properties()
+            } else {
+                Parcelable::Null
+            })],
             "getLinkProperties" => {
-                if args.first().is_some_and(is_default_network) {
+                if up && args.first().is_some_and(is_default_network) {
                     vec![Value::Parcelable(default_link_properties())]
                 } else {
                     vec![Value::Parcelable(Parcelable::Null)]
                 }
             }
             "getLinkPropertiesForType" => {
-                if args.first().and_then(Value::as_int) == Some(LEGACY_TYPE_WIFI) {
+                if up && args.first().and_then(Value::as_int) == Some(LEGACY_TYPE_WIFI) {
                     vec![Value::Parcelable(default_link_properties())]
                 } else {
                     vec![Value::Parcelable(Parcelable::Null)]
@@ -801,9 +945,8 @@ impl ServiceObject for ConnectivityService {
                 state.proxy_lookups += 1;
                 vec![Value::Parcelable(Parcelable::Null)]
             }
-            "isActiveNetworkMetered" | "shouldAvoidBadWifi" | "isDefaultNetworkActive" => {
-                vec![Value::Bool(false)]
-            }
+            "isActiveNetworkMetered" | "shouldAvoidBadWifi" => vec![Value::Bool(false)],
+            "isDefaultNetworkActive" => vec![Value::Bool(up)],
             "getMultipathPreference" => vec![Value::Int(0)],
             "getRestrictBackgroundStatusByCaller" => vec![Value::Int(0)],
             "getCaptivePortalServerUrl" => vec![Value::Str(Some(
@@ -857,13 +1000,22 @@ impl ServiceObject for ConnectivityService {
                     (_, caps) => caps,
                 };
                 let messenger = messenger_binder(args.get(3));
-                let legacy_type = args.get(6).and_then(Value::as_int).unwrap_or(LEGACY_TYPE_NONE);
+                let legacy_type = args
+                    .get(6)
+                    .and_then(Value::as_int)
+                    .unwrap_or(LEGACY_TYPE_NONE);
                 let callback_flags = args.get(7).and_then(Value::as_int).unwrap_or(0);
                 let package = args
                     .get(8)
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_string();
+                if let Some(messenger) = messenger {
+                    // A registered callback is a strong reference on the guest's
+                    // messenger (a repeat registration of the same binder is not
+                    // a second one).
+                    state.refs.hold(messenger);
+                }
                 let (request, queued) = self.register(
                     &mut state,
                     kind,
@@ -886,6 +1038,9 @@ impl ServiceObject for ConnectivityService {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_string();
+                if let Some(messenger) = messenger {
+                    state.refs.hold(messenger);
+                }
                 let (request, queued) = self.register(
                     &mut state,
                     RequestType::Listen,
@@ -905,13 +1060,17 @@ impl ServiceObject for ConnectivityService {
                     method: method.name.clone(),
                     detail: "NetworkRequest argument carries no requestId".into(),
                 })?;
-                if state.requests.remove(&id).is_none() {
+                let removed = state.requests.remove(&id);
+                if removed.is_none() {
                     // AOSP: `IllegalArgumentException("Unknown NetworkRequest")`.
                     return Err(ServiceError::BadRequest {
                         interface: interface.to_string(),
                         method: method.name.clone(),
                         detail: format!("unknown NetworkRequest id {id}"),
                     });
+                }
+                if let Some(messenger) = removed.and_then(|record| record.messenger) {
+                    state.refs.release(messenger);
                 }
                 state.released += 1;
                 Vec::new()

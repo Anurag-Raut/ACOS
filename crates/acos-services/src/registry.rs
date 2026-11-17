@@ -197,6 +197,19 @@ pub struct LiveHandles {
     /// is a WMS operation, so the interactive session drives the same state the
     /// `IWindowSession` relayout replies are computed from.
     pub wms: std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>,
+    /// MPROC1: the intent capture target (the broker's own state). The session
+    /// control op reads and scripts it; the activity manager writes to it when
+    /// an implicit intent has no installed target.
+    pub intents: std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>,
+    /// MPROC5: the foreground process tag ATMS publishes when the top-of-task
+    /// moves. The launcher serves the top process's probe sample (tree, and the
+    /// frame evidence a screenshot reply names) from it.
+    pub top_process: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    /// MPROC5c: the activity manager's state. The launcher's idle kill reads the
+    /// process table from it (a process with no started activity and no
+    /// started/bound service is a candidate) and the peer removes the record
+    /// when the process dies.
+    pub atms: std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>,
 }
 
 /// Install the standard ACOS service set on `host`.
@@ -228,7 +241,8 @@ pub fn install_with_handles_and_insets(
     host.register_aux("android.content.pm.IPackageInstaller");
 
     // WMS state machine (T-29); the runtime transport owns the wire codecs.
-    let wms_state = crate::wms::install_with_insets(host, insets);
+    let wms_install = crate::wms::install_with_insets(host, insets);
+    let wms_state = Arc::clone(&wms_install.state);
 
     // W-R T2: the frame clock. `android.gui.ISurfaceComposer` is served under
     // the `ServiceManager` name `SurfaceFlinger` (that is how
@@ -245,13 +259,16 @@ pub fn install_with_handles_and_insets(
         crate::compositor_client::DisplayDescriptor::reference(),
     );
 
-    // W1: the `IWindowSession` node. `IWindowManager.openSession` answers this
-    // binder; every `ViewRootImpl` window call lands here, byte-exact (see
-    // `window_session.rs`). `IWindowId` is an aux binder so `getWindowId`
-    // returns a routable handle instead of a fabricated id.
-    // The accessibility state is created before the window session so the
-    // session can be given the window-stack sink: a bound service must learn
-    // about a window added after its first `getWindows()` (AOSP
+    // W1/MPROC5c: the `IWindowSession` node is created **per openSession call**
+    // (stock `WindowManagerService.openSession` → `new Session(this, callback)`),
+    // so every app process has its own session id and its own node; a caller
+    // that addresses another process's window arrives on the wrong node and is
+    // refused. `IWindowId` is an aux binder so `getWindowId` returns a routable
+    // handle instead of a fabricated id.
+    //
+    // The accessibility state is created before the sessions so each one can be
+    // given the window-stack sink: a bound service must learn about a window
+    // added after its first `getWindows()` (AOSP
     // `AccessibilityWindowManager` -> `TYPE_WINDOWS_CHANGED`).
     let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
     let a11y = Arc::new(Mutex::new(crate::misc::A11yState::with_settings(
@@ -264,31 +281,43 @@ pub fn install_with_handles_and_insets(
     // InputChannel as a scenario `back`, so keep a handle before the session
     // service takes the original.
     let a11y_input = input_host.clone();
-    let live = LiveHandles {
-        input: input_host.clone(),
-        compositor: Arc::clone(&compositor),
-        wms: Arc::clone(&wms_state),
-    };
-    let session_binder = host.register_dynamic(
-        "android.view.IWindowSession",
-        Box::new(
-            crate::window_session::WindowSessionService::new(session_state, window_id)
-                .with_compositor(Arc::clone(&compositor))
-                // I2: the one authoritative InputChannel producer. It publishes
-                // real FOCUS/TOUCH_MODE messages on `addToDisplayAsUser` and,
-                // when `ACOS_INPUT_TAP`/`ACOS_INPUT_KEY` is set, injects after
-                // the first relayout and logs the FINISHED/TIMELINE replies.
-                .with_input(input_host)
-                // MODA11Y6: the bound service hears about the stack the way
-                // AOSP's accessibility window manager reports it, so its own
-                // `getWindows()` sees a window added after its first query.
-                .with_window_changes(crate::registry::a11y_window_changes(Arc::clone(&a11y))),
-        ),
-    );
+    // MPROC1: the intent capture target. One state per session, shared by the
+    // activity manager (which captures an unresolvable share/pick/view) and
+    // the broker service (which the session control op reads and scripts).
+    let intents = Arc::new(Mutex::new(crate::intents::IntentState::new()));
+    // MPROC5: the **foreground process tag**. ATMS publishes it whenever the
+    // top-of-task moves; the launcher reads it so the tree/screenshot it serves
+    // come from the process whose window is actually on top, not from whichever
+    // guest printed the last probe sample.
+    let top_process = Arc::new(std::sync::atomic::AtomicU32::new(0));
+    // The per-call session factory: `openSession` asks it for a new session and
+    // gets that session's own host node (registered through the host's
+    // `NodeRegistrar`, which installs it before the reply reaches the guest).
+    let sessions = crate::window_session::SessionFactory::new(
+        Arc::clone(&session_state),
+        window_id,
+        host.node_registrar(),
+    )
+    .with_compositor(Arc::clone(&compositor))
+    // I2: the one authoritative InputChannel producer. It publishes real
+    // FOCUS/TOUCH_MODE messages on `addToDisplayAsUser` and, when
+    // `ACOS_INPUT_TAP`/`ACOS_INPUT_KEY` is set, injects after the first
+    // relayout and logs the FINISHED/TIMELINE replies.
+    .with_input(input_host.clone())
+    // MODA11Y6: the bound service hears about the stack the way AOSP's
+    // accessibility window manager reports it, so its own `getWindows()` sees a
+    // window added after its first query.
+    .with_window_changes(crate::registry::a11y_window_changes(Arc::clone(&a11y)));
+    *wms_install
+        .sessions
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(sessions);
+    // A session death destroys its windows' layers; give the state the
+    // compositor registry it needs for that (W42).
     wms_state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .host_session = session_binder;
+        .set_compositor(Arc::clone(&compositor));
 
     // Shared state. The PMS parses the APK lazily inside its factory so
     // installing the host touches no package data.
@@ -300,7 +329,23 @@ pub fn install_with_handles_and_insets(
     let mut atms_state = crate::atms::AtmsState::new();
     atms_state.runtime_permissions = Some(Arc::clone(&permissions));
     atms_state.ams.runtime_permissions = Some(Arc::clone(&permissions));
+    // MPROC5: ATMS publishes the foreground process tag here (`top_process`).
+    atms_state.top_process = Some(Arc::clone(&top_process));
+    // MPROC1: the activity manager captures an unresolvable share/pick/view into
+    // the same state the broker service (and the session control op) reads.
+    atms_state.ams.intents = Some(Arc::clone(&intents));
     let atms = Arc::new(Mutex::new(atms_state));
+    // The handles a live session drives: the same input producer the window
+    // sessions use, the compositor state, the window state, the intent capture
+    // target, the foreground process tag and the activity manager's state.
+    let live = LiveHandles {
+        input: input_host.clone(),
+        compositor: Arc::clone(&compositor),
+        wms: Arc::clone(&wms_state),
+        intents: Arc::clone(&intents),
+        top_process: Arc::clone(&top_process),
+        atms: Arc::clone(&atms),
+    };
     // MODNOTIF4: the `IIntentSender` node pool. A `PendingIntent` is only a
     // strong binder to one of these (`PendingIntent.writeToParcel`), so the
     // binders exist before any app asks for one; `getIntentSender` fills a slot
@@ -325,9 +370,7 @@ pub fn install_with_handles_and_insets(
     // the AMS's (`send_pending_intent`), so the registry publishes it here.
     let fire_atms = Arc::clone(&atms);
     host.set_pending_intent_fire(Arc::new(
-        move |binder: u64,
-              code: i32,
-              fill_in: Option<crate::ams::IntentFacts>| {
+        move |binder: u64, code: i32, fill_in: Option<crate::ams::IntentFacts>| {
             fire_atms
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -335,9 +378,10 @@ pub fn install_with_handles_and_insets(
                 .send_pending_intent_with_fill_in(
                     binder,
                     code,
-                    fill_in
-                        .as_ref()
-                        .map_or(crate::pending_intent::FillIn::None, crate::pending_intent::FillIn::Intent),
+                    fill_in.as_ref().map_or(
+                        crate::pending_intent::FillIn::None,
+                        crate::pending_intent::FillIn::Intent,
+                    ),
                 )
         },
     ));
@@ -363,6 +407,10 @@ pub fn install_with_handles_and_insets(
         a11y_state.windows = Some(Arc::clone(&wms_state));
         // MODA11Y4: the same input channels the session's Back uses.
         a11y_state.input = Some(a11y_input);
+        // MODA11YNATIVE: `takeScreenshot` captures the composited frame and
+        // answers the `FLAG_SECURE` question from the same C1 state the
+        // session's captures read.
+        a11y_state.compositor = Some(Arc::clone(&compositor));
     }
     host.set_accessibility_state(Arc::clone(&a11y));
     let input = Arc::new(Mutex::new(crate::misc::InputState::new()));
@@ -412,6 +460,10 @@ pub fn install_with_handles_and_insets(
             )) as Box<dyn ServiceObject>
         },
     );
+    // MPROC1: the capture target itself. It has no process and no app-facing
+    // AIDL surface; it is a session service so the control op and
+    // `ServiceManager` can name it.
+    let intents_service = Arc::clone(&intents);
     host.register("package", "android.content.pm.IPackageManager", {
         // One PMS state for the session (MODA11Y2 reads the installed service
         // list from it), wired to the one runtime-permission table (MODNOTIF2).
@@ -433,8 +485,8 @@ pub fn install_with_handles_and_insets(
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
                 if store.package.is_empty() {
                     store.set_install_time(
-                        &state.package.package_name.clone(),
-                        &state.granted_permissions.clone(),
+                        &state.primary().package.package_name.clone(),
+                        &state.primary().granted_permissions.clone(),
                     );
                 }
             }
@@ -442,6 +494,34 @@ pub fn install_with_handles_and_insets(
             Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
         }
     });
+    host.register(
+        crate::intents::SERVICE_NAME,
+        crate::intents::DESCRIPTOR,
+        move |_w| {
+            Box::new(crate::intents::IntentBrokerService::new(Arc::clone(
+                &intents_service,
+            ))) as Box<dyn ServiceObject>
+        },
+    );
+    // ADR-0031: the `webviewupdate` peer is wall 3 of
+    // `WebViewFactory.getProvider()` — `getUpdateService()` ->
+    // `ServiceManager.getService("webviewupdate")` -> a null service NPEs inside
+    // `waitForAndGetProvider()` and surfaces as
+    // `MissingWebViewPackageException`. It answers from the **same** package
+    // state `PackageManager` serves (`pms_shared`, the one the accessibility
+    // module and the runtime-permission table are wired to), so the provider
+    // record cannot drift from the package's own record; with no provider
+    // package installed it answers "no provider" (null record, non-OK status),
+    // never a fake success. It is published here, after the single PMS
+    // registration above and never as a second `package` factory: a second
+    // factory would replace MODNOTIF2's one-store PMS with a table-less one.
+    host.register_dynamic_named(
+        "webviewupdate",
+        crate::webview::DESCRIPTOR,
+        Box::new(crate::webview::WebViewUpdateService::new(Arc::clone(
+            &pms_shared,
+        ))),
+    );
     host.register(
         "display",
         "android.hardware.display.IDisplayManager",

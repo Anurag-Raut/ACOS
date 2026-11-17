@@ -30,5 +30,9 @@ fn load_unload_1000_times_does_not_leak_mappings() {
         after <= before + 2,
         "mapping count grew from {before} to {after} over 1000 load/unload cycles"
     );
-    assert_eq!(loader.report().libraries.len(), 0, "no libraries left registered");
+    assert_eq!(
+        loader.report().libraries.len(),
+        0,
+        "no libraries left registered"
+    );
 }

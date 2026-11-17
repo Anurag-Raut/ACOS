@@ -98,7 +98,10 @@ pub fn run(args: ArtifactsGcArgs) -> ExitCode {
                         acos_protocol::Metrics::wall_ms(0),
                     )
                 });
-                println!("{}", serde_json::to_string_pretty(&envelope).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&envelope).unwrap_or_default()
+                );
             } else {
                 print_text(&report);
             }
@@ -171,7 +174,10 @@ fn collect(
     dry_run: bool,
 ) -> Result<serde_json::Value, String> {
     if !root.is_dir() {
-        return Err(format!("artifacts root {} is not a directory", root.display()));
+        return Err(format!(
+            "artifacts root {} is not a directory",
+            root.display()
+        ));
     }
     let mut runs = scan_runs(root)?;
 
@@ -259,7 +265,9 @@ fn scan_runs(root: &Path) -> Result<Vec<RunDir>, String> {
             .map_err(|error| format!("cannot read {}: {error}", current.display()))?;
         for entry in entries.flatten() {
             let path = entry.path();
-            let Ok(kind) = entry.file_type() else { continue };
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
             if !kind.is_dir() || kind.is_symlink() {
                 continue;
             }
@@ -337,7 +345,9 @@ fn usage(dir: &Path) -> (u64, u64) {
             continue;
         };
         for entry in entries.flatten() {
-            let Ok(kind) = entry.file_type() else { continue };
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
             if kind.is_dir() {
                 stack.push(entry.path());
             } else if kind.is_file() {
@@ -447,7 +457,10 @@ mod tests {
         let report = collect(&root, Duration::from_secs(24 * h), 1, false).unwrap();
         assert_eq!(report["dry_run"], false);
         // Newest of each scenario survives.
-        assert!(newest.is_dir(), "keep-last keeps the newest run of a scenario");
+        assert!(
+            newest.is_dir(),
+            "keep-last keeps the newest run of a scenario"
+        );
         assert!(recent_fail.is_dir(), "a recent failure is never pruned");
         // The older one of each scenario goes.
         assert!(!middle.is_dir(), "an old passing run is pruned");

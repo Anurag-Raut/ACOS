@@ -62,7 +62,8 @@ fn concurrent_sessions_keep_independent_frames() {
     b.add_window(BinderId(2), LayoutParams::application("pkg", "B"), 0)
         .unwrap();
 
-    let mut red = acos_render::Bitmap::new(1080, 2400, acos_render::BitmapConfig::Rgba8888).unwrap();
+    let mut red =
+        acos_render::Bitmap::new(1080, 2400, acos_render::BitmapConfig::Rgba8888).unwrap();
     red.erase(0xffff_0000);
     let mut green =
         acos_render::Bitmap::new(1080, 2400, acos_render::BitmapConfig::Rgba8888).unwrap();

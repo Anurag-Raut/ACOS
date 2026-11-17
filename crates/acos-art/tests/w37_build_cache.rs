@@ -54,9 +54,20 @@ fn second_build_is_a_cache_hit() {
     assert!(!first.reused, "cold cache must build");
     assert_eq!(runs.load(Ordering::SeqCst), 1);
     // Staging is inside the cache root (never /tmp), as the directives require.
-    let staged = first.staged_from.as_deref().expect("a build has a staging dir");
-    assert!(staged.starts_with(root.join(".tmp")), "{}", staged.display());
-    assert_eq!(build_cache::cache_root(), root, "the isolated root is what the cache uses");
+    let staged = first
+        .staged_from
+        .as_deref()
+        .expect("a build has a staging dir");
+    assert!(
+        staged.starts_with(root.join(".tmp")),
+        "{}",
+        staged.display()
+    );
+    assert_eq!(
+        build_cache::cache_root(),
+        root,
+        "the isolated root is what the cache uses"
+    );
 
     let dest = dir.join("dest1");
     build_cache::install(&first, &["artifact.bin"], &dest).unwrap();
@@ -72,7 +83,10 @@ fn second_build_is_a_cache_hit() {
     assert!(second.reused, "second call must reuse the entry");
     assert_eq!(runs.load(Ordering::SeqCst), 1, "builder ran twice");
     assert_eq!(second.dir, first.dir, "same content-addressed entry");
-    assert_eq!(fs::read(second.path("artifact.bin")).unwrap(), b"first-build");
+    assert_eq!(
+        fs::read(second.path("artifact.bin")).unwrap(),
+        b"first-build"
+    );
 }
 
 #[test]

@@ -20,7 +20,13 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.c_thread = id;
     let p = access::PUBLIC;
     vm.add_native(id, "<init>", "()V", p, thread_init);
-    vm.add_native(id, "<init>", "(Ljava/lang/Runnable;)V", p, thread_init_runnable);
+    vm.add_native(
+        id,
+        "<init>",
+        "(Ljava/lang/Runnable;)V",
+        p,
+        thread_init_runnable,
+    );
     vm.add_native(id, "<init>", "(Ljava/lang/String;)V", p, thread_init_name);
     vm.add_native(id, "start", "()V", p, thread_start);
     vm.add_native(id, "run", "()V", p, thread_run);
@@ -30,9 +36,27 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.add_native(id, "setName", "(Ljava/lang/String;)V", p, thread_set_name);
     vm.add_native(id, "getId", "()J", p, thread_get_id);
     vm.add_native(id, "setDaemon", "(Z)V", p, thread_set_daemon);
-    vm.add_native(id, "currentThread", "()Ljava/lang/Thread;", access::PUBLIC | access::STATIC, thread_current);
-    vm.add_native(id, "sleep", "(J)V", access::PUBLIC | access::STATIC, thread_sleep);
-    vm.add_native(id, "yield", "()V", access::PUBLIC | access::STATIC, thread_yield);
+    vm.add_native(
+        id,
+        "currentThread",
+        "()Ljava/lang/Thread;",
+        access::PUBLIC | access::STATIC,
+        thread_current,
+    );
+    vm.add_native(
+        id,
+        "sleep",
+        "(J)V",
+        access::PUBLIC | access::STATIC,
+        thread_sleep,
+    );
+    vm.add_native(
+        id,
+        "yield",
+        "()V",
+        access::PUBLIC | access::STATIC,
+        thread_yield,
+    );
     vm.link_class(id)?;
     Ok(())
 }
@@ -120,7 +144,11 @@ fn thread_join(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     };
     let alive = matches!(
         vm.threads[target].status,
-        ThreadStatus::Runnable | ThreadStatus::Running | ThreadStatus::BlockedMonitor(_) | ThreadStatus::Sleeping | ThreadStatus::Waiting
+        ThreadStatus::Runnable
+            | ThreadStatus::Running
+            | ThreadStatus::BlockedMonitor(_)
+            | ThreadStatus::Sleeping
+            | ThreadStatus::Waiting
     ) && !vm.threads[target].frames.is_empty();
     if alive {
         vm.threads[cur].status = ThreadStatus::Waiting;

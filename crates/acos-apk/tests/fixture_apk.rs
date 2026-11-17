@@ -138,7 +138,10 @@ fn gaten_apk_reports_its_alias_launcher() {
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk");
     if !path.is_file() {
-        eprintln!("SKIP gaten_apk_reports_its_alias_launcher: {} missing", path.display());
+        eprintln!(
+            "SKIP gaten_apk_reports_its_alias_launcher: {} missing",
+            path.display()
+        );
         return;
     }
     let apk = Apk::open(&path).expect("open gaten");
@@ -189,4 +192,41 @@ fn gaten_apk_reports_its_alias_launcher() {
         .services
         .iter()
         .any(|s| s.intent_filters.iter().any(|f| !f.actions.is_empty())));
+}
+
+/// REL3P: a real v2+v3 signed fixture APK must yield its signer certificate.
+///
+/// The signers sequence (one length-prefixed signer, itself a length-prefixed
+/// signed data + signatures + public key) used to be parsed one nesting level
+/// off, so the reader consumed the whole signer as the signed data and failed
+/// with `truncated signatures`. Every APK `tools/build-apps.sh` produces was
+/// affected, which made `PackageInfo.signatures` (a `GET_SIGNATURES` reply)
+/// an empty array — a phone reports the signer certificate there.
+#[test]
+fn signed_fixture_reports_its_signer_certificate() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/hello-views.apk");
+    let apk = acos_apk::Apk::open(&path).expect("open fixture APK");
+    assert_eq!(
+        apk.signing_certificates_error, None,
+        "signing block must parse"
+    );
+    assert_eq!(apk.signing_certificates.len(), 1, "one signer certificate");
+    let cert = &apk.signing_certificates[0];
+    // A DER SEQUENCE, not a signature blob: `30 82 <len16>`.
+    assert_eq!(cert.first(), Some(&0x30), "certificate is a DER SEQUENCE");
+    assert_eq!(cert.get(1), Some(&0x82), "DER long-form length");
+    // The certificate is the one `apksigner verify --print-certs
+    // crates/acos-apk/tests/data/hello-views.apk` reports ("Signer #1
+    // certificate SHA-256 digest: fc297f51...6a9f"): its DER length and the
+    // issuer/validity prefix are pinned here so a wrong blob (a signature, a
+    // chain member, a different scheme) fails loudly without a hash dependency.
+    assert_eq!(cert.len(), 791, "certificate DER length");
+    assert_eq!(
+        &cert[..16],
+        &[
+            0x30, 0x82, 0x03, 0x13, 0x30, 0x82, 0x01, 0xfb, 0xa0, 0x03, 0x02, 0x01, 0x02, 0x02,
+            0x08, 0x35,
+        ],
+        "certificate DER prefix (SEQUENCE, tbsCertificate, version v3, serial 0x34..)"
+    );
 }

@@ -100,7 +100,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(Ljava/lang/String;)Ljava/lang/String;",
         ret_filter,
     );
-    vm.register_native(c, "isValidCompilerFilter", "(Ljava/lang/String;)Z", ret_true);
+    vm.register_native(
+        c,
+        "isValidCompilerFilter",
+        "(Ljava/lang/String;)Z",
+        ret_true,
+    );
     vm.register_native(
         c,
         "isProfileGuidedCompilerFilter",
@@ -119,12 +124,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(Ljava/lang/String;)Z",
         ret_true,
     );
-    vm.register_native(
-        c,
-        "isReadOnlyJavaDclEnforced",
-        "()Z",
-        ret_false,
-    );
+    vm.register_native(c, "isReadOnlyJavaDclEnforced", "()Z", ret_false);
     // `BaseDexClassLoader.reportClassLoaderChain()` (called at the end of the
     // `PathClassLoader` constructor) reaches this native. It is part of the
     // dexopt class-loader-context protocol, not class loading itself.
@@ -243,9 +243,8 @@ fn register_dex_bytes(vm: &mut Vm, bytes: Vec<u8>) -> VmResult<u32> {
 
 /// Register every `classes*.dex` entry of a zip container (APK/JAR).
 fn register_zip(vm: &mut Vm, bytes: Vec<u8>) -> VmResult<Vec<u32>> {
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| {
-        VmError::Internal(format!("DexFile: not a zip container: {e}"))
-    })?;
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+        .map_err(|e| VmError::Internal(format!("DexFile: not a zip container: {e}")))?;
     let mut names: Vec<String> = (0..archive.len())
         .filter_map(|i| archive.by_index_raw(i).ok().map(|f| f.name().to_string()))
         .filter(|n| is_dex_entry(n))
@@ -253,9 +252,9 @@ fn register_zip(vm: &mut Vm, bytes: Vec<u8>) -> VmResult<Vec<u32>> {
     names.sort();
     let mut indices = Vec::new();
     for name in names {
-        let mut file = archive.by_name(&name).map_err(|e| {
-            VmError::Internal(format!("DexFile: zip entry {name}: {e}"))
-        })?;
+        let mut file = archive
+            .by_name(&name)
+            .map_err(|e| VmError::Internal(format!("DexFile: zip entry {name}: {e}")))?;
         let mut buf = Vec::with_capacity(file.size() as usize);
         file.read_to_end(&mut buf)
             .map_err(|e| VmError::Internal(format!("DexFile: read {name}: {e}")))?;
@@ -268,8 +267,7 @@ fn is_dex_entry(name: &str) -> bool {
     let Some(base) = name.rsplit('/').next() else {
         return false;
     };
-    base == "classes.dex"
-        || (base.starts_with("classes") && base.ends_with(".dex"))
+    base == "classes.dex" || (base.starts_with("classes") && base.ends_with(".dex"))
 }
 
 fn bridge(e: crate::javabridge::BridgeError) -> VmError {
@@ -290,10 +288,7 @@ fn open_source(vm: &mut Vm, source: &str) -> VmResult<OpenedDex> {
     if let Ok(meta) = vm.vfs.stat(source, true) {
         if meta.mode & 0o170000 == 0o040000 {
             let entries = vm.vfs.list(source).map_err(|e| {
-                vm.throw_new(
-                    "Ljava/io/IOException;",
-                    Some(&format!("{source}: {e}")),
-                )
+                vm.throw_new("Ljava/io/IOException;", Some(&format!("{source}: {e}")))
             })?;
             let mut dexs: Vec<String> = entries
                 .into_iter()
@@ -304,7 +299,10 @@ fn open_source(vm: &mut Vm, source: &str) -> VmResult<OpenedDex> {
             for name in dexs {
                 let guest = format!("{source}/{name}");
                 let bytes = read_guest_file(vm, &guest).map_err(|e| {
-                    vm.throw_new("Ljava/io/IOException;", Some(&format!("{guest}: errno {e}")))
+                    vm.throw_new(
+                        "Ljava/io/IOException;",
+                        Some(&format!("{guest}: errno {e}")),
+                    )
                 })?;
                 indices.push(register_dex_bytes(vm, bytes)?);
             }
@@ -453,10 +451,7 @@ fn define_class(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let dexs = cookie_dexs(vm, cookie)?;
     let desc = binary_name_to_desc(&name);
     for dex in dexs {
-        let defines = vm.dexs[dex as usize]
-            .file
-            .find_class_index(&desc)
-            .is_some();
+        let defines = vm.dexs[dex as usize].file.find_class_index(&desc).is_some();
         if !defines {
             continue;
         }
@@ -557,9 +552,7 @@ fn ret_filter(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 /// terminal answer rather than a fabricated context that would only fail
 /// downstream.
 fn compute_class_loader_contexts(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let arr = vm
-        .new_array_empty("java.lang.String", 0)
-        .map_err(bridge)?;
+    let arr = vm.new_array_empty("java.lang.String", 0).map_err(bridge)?;
     vm.ret_ref(ctx, arr);
     Ok(())
 }

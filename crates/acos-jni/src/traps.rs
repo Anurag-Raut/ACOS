@@ -6,5 +6,29 @@
 //! structured error. It never aborts the host process and never guesses.
 #![allow(non_snake_case, clippy::too_many_arguments)]
 
-pub unsafe extern "C" fn trap_DefineClass(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { crate::jni::unsupported("DefineClass"); 0 }
-pub unsafe extern "C" fn trap_FatalError(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { crate::jni::unsupported("FatalError"); 0 }
+pub unsafe extern "C" fn trap_DefineClass(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    crate::jni::unsupported("DefineClass");
+    0
+}
+pub unsafe extern "C" fn trap_FatalError(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    crate::jni::unsupported("FatalError");
+    0
+}

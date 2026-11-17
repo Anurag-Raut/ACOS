@@ -88,10 +88,7 @@ pub fn sanitize_env(pairs: &[(String, String)]) -> Result<String, String> {
     // borrow of `environ` is live.
     let rc = unsafe { libc::clearenv() };
     if rc != 0 {
-        return Err(format!(
-            "clearenv: {}",
-            std::io::Error::last_os_error()
-        ));
+        return Err(format!("clearenv: {}", std::io::Error::last_os_error()));
     }
     for (key, value) in pairs {
         let ck = CString::new(key.as_str()).map_err(|e| format!("env key {key:?}: {e}"))?;

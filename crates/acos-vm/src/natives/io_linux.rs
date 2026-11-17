@@ -218,7 +218,12 @@ pub(crate) fn install(vm: &mut Vm) {
     );
     vm.register_native(c, "getpgid", "(I)I", linux_getpgid);
     vm.register_native(c, "strsignal", "(I)Ljava/lang/String;", linux_strsignal);
-    vm.register_native(c, "gai_strerror", "(I)Ljava/lang/String;", linux_gai_strerror);
+    vm.register_native(
+        c,
+        "gai_strerror",
+        "(I)Ljava/lang/String;",
+        linux_gai_strerror,
+    );
     vm.register_native(c, "environ", "()[Ljava/lang/String;", linux_environ);
     vm.register_native(c, "sysconf", "(I)J", linux_sysconf);
     // Local-only socket pairs and anonymous memory fds, both tracked by the
@@ -1404,12 +1409,7 @@ fn unix_file_system(vm: &mut Vm) {
     );
     vm.register_native(c, "getLength", "(Ljava/io/File;)J", ufs_get_length);
     vm.register_native(c, "delete0", "(Ljava/io/File;)Z", ufs_delete0);
-    vm.register_native(
-        c,
-        "rename0",
-        "(Ljava/io/File;Ljava/io/File;)Z",
-        ufs_rename0,
-    );
+    vm.register_native(c, "rename0", "(Ljava/io/File;Ljava/io/File;)Z", ufs_rename0);
     vm.register_native(
         c,
         "getLastModifiedTime0",
@@ -1584,9 +1584,9 @@ fn ufs_rename0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 /// or group+other (the AOSP `UnixFileSystem_setPermission0` mapping).
 fn permission_mask(access: i32, owneronly: bool) -> u32 {
     let owner_bit = match access {
-        4 => 0o400,  // ACCESS_READ
-        2 => 0o200,  // ACCESS_WRITE
-        1 => 0o100,  // ACCESS_EXECUTE
+        4 => 0o400, // ACCESS_READ
+        2 => 0o200, // ACCESS_WRITE
+        1 => 0o100, // ACCESS_EXECUTE
         _ => return 0,
     };
     if owneronly {

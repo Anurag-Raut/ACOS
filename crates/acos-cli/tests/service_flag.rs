@@ -52,9 +52,7 @@ fn a_bad_service_spec_is_invalid_argument_before_any_session() {
         "{log}"
     );
     assert!(
-        json.pointer("/error/details/field")
-            .and_then(Value::as_str)
-            == Some("service"),
+        json.pointer("/error/details/field").and_then(Value::as_str) == Some("service"),
         "{log}"
     );
 }

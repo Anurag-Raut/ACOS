@@ -174,25 +174,25 @@ impl RnDriver for RealDriver {
     }
 
     fn tap_text(&mut self, text: &str) -> Result<i32, RnSessionError> {
-        let tag = self
-            .session
-            .tree()
-            .tag_for_text(text)
-            .ok_or_else(|| RnSessionError::NoTarget {
-                query: format!("text={text}"),
-            })?;
+        let tag =
+            self.session
+                .tree()
+                .tag_for_text(text)
+                .ok_or_else(|| RnSessionError::NoTarget {
+                    query: format!("text={text}"),
+                })?;
         self.session.tap_tag(tag)?;
         Ok(tag)
     }
 
     fn tap_test_id(&mut self, id: &str) -> Result<i32, RnSessionError> {
-        let tag = self
-            .session
-            .tree()
-            .tag_for_test_id(id)
-            .ok_or_else(|| RnSessionError::NoTarget {
-                query: format!("testID={id}"),
-            })?;
+        let tag =
+            self.session
+                .tree()
+                .tag_for_test_id(id)
+                .ok_or_else(|| RnSessionError::NoTarget {
+                    query: format!("testID={id}"),
+                })?;
         self.session.tap_tag(tag)?;
         Ok(tag)
     }
@@ -320,10 +320,7 @@ struct RnWorker {
 }
 
 impl RnWorker {
-    fn send<T>(
-        &self,
-        make: impl FnOnce(Sender<T>) -> RnCommand,
-    ) -> Result<T, RnSessionError> {
+    fn send<T>(&self, make: impl FnOnce(Sender<T>) -> RnCommand) -> Result<T, RnSessionError> {
         let (reply_tx, reply_rx) = mpsc::channel();
         self.tx
             .send(make(reply_tx))
@@ -375,7 +372,11 @@ impl RnWorker {
     /// is detached rather than joined.
     fn shutdown(mut self) {
         let (reply_tx, reply_rx) = mpsc::channel();
-        if self.tx.send(RnCommand::Shutdown { reply: reply_tx }).is_ok() {
+        if self
+            .tx
+            .send(RnCommand::Shutdown { reply: reply_tx })
+            .is_ok()
+        {
             let _ = reply_rx.recv_timeout(Duration::from_secs(10));
         }
         if let Some(join) = self.join.take() {
@@ -406,10 +407,7 @@ fn spawn_worker<D: RnDriver + Send + 'static>(
 }
 
 /// Spawn the worker and run detection + `RnSession::launch` **on it**.
-fn spawn_real_worker(
-    apk: PathBuf,
-    scratch: PathBuf,
-) -> Result<RnWorker, RnSessionError> {
+fn spawn_real_worker(apk: PathBuf, scratch: PathBuf) -> Result<RnWorker, RnSessionError> {
     let (tx, rx) = mpsc::channel();
     let (ready_tx, ready_rx) = mpsc::channel::<Result<u128, RnSessionError>>();
     let timeout = COMMAND_TIMEOUT + Duration::from_secs(30);
@@ -495,11 +493,7 @@ impl RnSessions {
 
     /// Drop a held session, returning whether one existed.
     pub fn remove(&self, id: &str) -> bool {
-        let worker = self
-            .held
-            .lock()
-            .map(|mut m| m.remove(id))
-            .unwrap_or(None);
+        let worker = self.held.lock().map(|mut m| m.remove(id)).unwrap_or(None);
         match worker {
             Some(worker) => {
                 worker.shutdown();
@@ -661,7 +655,10 @@ mod tests {
         worker.tree().unwrap();
         worker.tap_text("TAP ME").unwrap();
         worker.tap_test_id("hello-button").unwrap();
-        assert_eq!(worker.frame().unwrap_err().code(), "UNSUPPORTED_RN_NO_RENDERER");
+        assert_eq!(
+            worker.frame().unwrap_err().code(),
+            "UNSUPPORTED_RN_NO_RENDERER"
+        );
         worker.status().unwrap();
         assert!(worker.logs().is_empty());
         worker.shutdown();

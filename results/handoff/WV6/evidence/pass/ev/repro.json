@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/webview-probe.apk",
+  "apk_sha256": "f4da07799e7e6b8351af4c4e821694b3913fc78b9ed2737ece282ecf8b74f1fa",
+  "scenario_path": "scenarios/webview-probe.yaml",
+  "scenario_sha256": "f8087bc7c9da810d63905604e656b7ba08eb1d436e008e184eb1e7b3777aa935",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

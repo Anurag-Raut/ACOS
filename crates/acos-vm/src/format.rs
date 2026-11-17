@@ -250,8 +250,7 @@ mod tests {
     /// itself contains no such values (see `fixtures/README.md`).
     #[test]
     fn float_string_matches_jvm_reference() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/float_strings.txt");
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/float_strings.txt");
         let data = std::fs::read_to_string(&path)
             .unwrap_or_else(|_| panic!("missing test table {path:?}"));
         let mut checked = 0;
@@ -275,7 +274,12 @@ mod tests {
             checked += 1;
         }
         assert!(checked >= 60, "expected >=60 float cases, got {checked}");
-        assert!(mismatches.is_empty(), "{} mismatches:\n{}", mismatches.len(), mismatches.join("\n"));
+        assert!(
+            mismatches.is_empty(),
+            "{} mismatches:\n{}",
+            mismatches.len(),
+            mismatches.join("\n")
+        );
     }
 
     #[test]

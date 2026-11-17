@@ -143,8 +143,7 @@ fn main() {
     let mut last_diff: Option<String> = None;
     for _ in 0..iters {
         let t = Instant::now();
-        let (mut vm, stats): (Vm, RestoreStats) =
-            Vm::restore_with_stats(&snap).expect("restore");
+        let (mut vm, stats): (Vm, RestoreStats) = Vm::restore_with_stats(&snap).expect("restore");
         restore_nanos.push(t.elapsed().as_nanos());
         copy_nanos.push(stats.copy_nanos as u128);
         let tr = Instant::now();
@@ -155,10 +154,7 @@ fn main() {
         } else if last_diff.is_none() {
             last_diff = Some(format!(
                 "exit {} vs {}, stdout {} vs {} bytes",
-                r.exit,
-                fresh_res.exit,
-                r.stdout_len,
-                fresh_res.stdout_len
+                r.exit, fresh_res.exit, r.stdout_len, fresh_res.stdout_len
             ));
         }
     }

@@ -1,0 +1,2045 @@
+## scanning 83 boot-classpath DEX dirs: abx am android.hidl.base-V1.0-java android.hidl.manager-V1.0-java android.net.ipsec.ike android.test.base android.test.mock android.test.runner apache-xml appwidget bmgr bouncycastle bu com.android.future.usb.accessory com.android.location.provider com.android.media.remotedisplay com.android.mediadrm.signer com.android.nfc_extras conscrypt content core-icu4j core-libart core-oj ext framework framework-adservices framework-appsearch framework-bluetooth framework-configinfrastructure framework-connectivity framework-connectivity-t framework-devicelock framework-graphics framework-healthfitness framework-mediaprovider framework-ondevicepersonalization framework-permission framework-permission-s framework-scheduling framework-sdkextensions framework-sdksandbox framework-statsd framework-tethering framework-uwb framework-virtualization framework-wifi hid ims-common incident-helper-cmd javax.obex lockagent locksettings monkey okhttp org.apache.http.legacy requestsync service-adservices service-appsearch service-art service-bluetooth service-configinfrastructure service-connectivity service-devicelock service-healthfitness service-media-s service-ondevicepersonalization service-permission service-rkp service-scheduling service-sdksandbox service-statsd service-uwb service-wifi services sm svc telecom telephony-common uiautomator uinput updatable-media voip-common vr
+
+### android.graphics.Rect | Full | matched 4/4 | full=true
+ACOS:
+  Int
+  Int
+  Int
+  Int
+IMAGE:
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+
+### android.graphics.Point | Full | matched 2/2 | full=true
+ACOS:
+  Int
+  Int
+IMAGE:
+  writeInt
+  writeInt
+
+### android.content.ComponentName | Curated | matched 0/1 | full=false
+ACOS:
+  Str16
+  Str16
+IMAGE:
+  writeParcelable
+  delegate Landroid/content/ComponentName;
+
+### android.content.pm.PackageItemInfo | Full | matched 9/9 | full=true
+ACOS:
+  Str8
+  Str8
+  Int
+  CharSequence
+  Int
+  Int
+  Bundle
+  Int
+  Int
+IMAGE:
+  writeString8
+  writeString8
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeBundle
+  writeInt
+  writeInt
+
+### android.content.pm.ApplicationInfo | Full | matched 84/84 | full=true
+ACOS:
+  Int
+  Str8
+  Str8
+  Int
+  CharSequence
+  Int
+  Int
+  Bundle
+  Int
+  Int
+  Str8
+  Str8
+  Str8
+  Str8
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Cond([Long, Long])
+  Str8
+  Str8
+  Str8
+  Str8
+  String8Array
+  String8Array
+  String8Array
+  SparseArray
+  Str8
+  Str8
+  Str8
+  Int
+  Str8
+  Str8
+  String8Array
+  String8Array
+  Str8
+  Str8
+  String8Array
+  TypedList("android.content.pm.SharedLibraryInfo")
+  Str8
+  Str8
+  Str8
+  Int
+  Int
+  Int
+  Long
+  Int
+  Int
+  Int
+  Str8
+  Str8
+  Int
+  Int
+  Int
+  Int
+  Bool
+  Int
+  Int
+  Int
+  Str8
+  String8Array
+  Int
+  Str8
+  Str8
+  Int
+  Int
+  Int
+  Int
+  Str8
+  Int
+  Int
+  Int
+  Int
+  Long
+  Cond([Str16, Str16])
+  Int
+  Int
+IMAGE:
+  writeInt
+  writeString8
+  writeString8
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeBundle
+  writeInt
+  writeInt
+  writeString8
+  writeString8
+  writeString8
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeLong
+  writeLong
+  writeString8
+  writeString8
+  writeString8
+  writeString8
+  writeString8Array
+  writeString8Array
+  writeString8Array
+  writeSparseArray
+  writeString8
+  writeString8
+  writeString8
+  writeInt
+  writeString8
+  writeString8
+  writeString8Array
+  writeString8Array
+  writeString8
+  writeString8
+  writeString8Array
+  writeTypedList
+  writeString8
+  writeString8
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeLong
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeBoolean
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeString8Array
+  writeInt
+  writeString8
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeLong
+  writeInt
+  writeString
+  writeString
+  writeInt
+  writeInt
+
+### android.content.pm.ComponentInfo | Full | matched 17/17 | full=true
+ACOS:
+  Str8
+  Str8
+  Int
+  CharSequence
+  Int
+  Int
+  Bundle
+  Int
+  Int
+  Nested("android.content.pm.ApplicationInfo")
+  Str8
+  Str8
+  String8Array
+  Int
+  Int
+  Int
+  Int
+IMAGE:
+  writeString8
+  writeString8
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeBundle
+  writeInt
+  writeInt
+  writeParcelable
+  writeString8
+  writeString8
+  writeString8Array
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  delegate Landroid/content/pm/ApplicationInfo;
+
+### android.content.pm.ActivityInfo | Full | matched 45/45 | full=true
+ACOS:
+  Str8
+  Str8
+  Int
+  CharSequence
+  Int
+  Int
+  Bundle
+  Int
+  Int
+  Nested("android.content.pm.ApplicationInfo")
+  Str8
+  Str8
+  String8Array
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Str8
+  Str8
+  Str8
+  Str8
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Str8
+  Int
+  Int
+  Int
+  Cond([Nested("android.content.pm.ActivityInfo$WindowLayout")])
+  Int
+  Str8
+  Int
+  Int
+  Float
+  Float
+  Bool
+  Int
+  Str8
+IMAGE:
+  writeString8
+  writeString8
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeBundle
+  writeInt
+  writeInt
+  writeParcelable
+  writeString8
+  writeString8
+  writeString8Array
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeString8
+  writeString8
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeParcelable
+  writeInt
+  writeString8
+  writeInt
+  writeInt
+  writeFloat
+  writeFloat
+  writeBoolean
+  writeInt
+  writeString8
+  delegate Landroid/content/pm/ApplicationInfo;
+  delegate Landroid/content/pm/ActivityInfo$WindowLayout;
+
+### android.content.pm.PackageInfo | Full | matched 43/43 | full=true
+ACOS:
+  Str8
+  String8Array
+  Int
+  Int
+  Str8
+  Int
+  IntArray
+  Str8
+  Int
+  Cond([Nested("android.content.pm.ApplicationInfo")])
+  Long
+  Long
+  IntArray
+  TypedArray("android.content.pm.ActivityInfo")
+  TypedArray("android.content.pm.ActivityInfo")
+  TypedArray("android.content.pm.ServiceInfo")
+  TypedArray("android.content.pm.ProviderInfo")
+  TypedArray("android.content.pm.InstrumentationInfo")
+  TypedArray("android.content.pm.PermissionInfo")
+  String8Array
+  IntArray
+  TypedArray("android.content.pm.Signature")
+  TypedArray("android.content.pm.ConfigurationInfo")
+  TypedArray("android.content.pm.FeatureInfo")
+  TypedArray("android.content.pm.FeatureGroupInfo")
+  TypedArray("android.content.pm.Attribution")
+  Int
+  Int
+  Int
+  Int
+  Str8
+  Str8
+  Str8
+  Str8
+  Int
+  Bool
+  Int
+  Str8
+  Cond([Nested("android.content.pm.SigningInfo")])
+  Bool
+  Bool
+IMAGE:
+  writeString8
+  writeString8Array
+  writeInt
+  writeInt
+  writeString8
+  writeInt
+  writeIntArray
+  writeString8
+  writeInt
+  writeInt
+  writeParcelable
+  writeLong
+  writeLong
+  writeIntArray
+  writeTypedArray
+  writeTypedArray
+  writeTypedArray
+  writeTypedArray
+  writeTypedArray
+  writeTypedArray
+  writeString8Array
+  writeIntArray
+  writeTypedArray
+  writeTypedArray
+  writeTypedArray
+  writeTypedArray
+  writeTypedArray
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeString8
+  writeString8
+  writeString8
+  writeInt
+  writeBoolean
+  writeInt
+  writeString8
+  writeInt
+  writeParcelable
+  writeBoolean
+  writeBoolean
+  delegate Landroid/content/pm/ApplicationInfo;
+  delegate Landroid/content/pm/SigningInfo;
+
+### android.content.pm.Signature | Full | matched 1/1 | full=true
+ACOS:
+  ByteArray
+IMAGE:
+  writeByteArray
+
+### android.content.pm.ProviderInfo | Full | matched 28/28 | full=true
+ACOS:
+  Str8
+  Str8
+  Int
+  CharSequence
+  Int
+  Int
+  Bundle
+  Int
+  Int
+  Nested("android.content.pm.ApplicationInfo")
+  Str8
+  Str8
+  String8Array
+  Int
+  Int
+  Int
+  Int
+  Str8
+  Str8
+  Str8
+  Int
+  Int
+  TypedArray("android.content.pm.PathPermission")
+  TypedArray("android.content.pm.PathPermission")
+  Int
+  Int
+  Int
+  Int
+IMAGE:
+  writeString8
+  writeString8
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeBundle
+  writeInt
+  writeInt
+  writeParcelable
+  writeString8
+  writeString8
+  writeString8Array
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeString8
+  writeString8
+  writeInt
+  writeInt
+  writeTypedArray
+  writeTypedArray
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  delegate Landroid/content/pm/ApplicationInfo;
+
+### android.content.pm.ServiceInfo | Full | matched 20/20 | full=true
+ACOS:
+  Str8
+  Str8
+  Int
+  CharSequence
+  Int
+  Int
+  Bundle
+  Int
+  Int
+  Nested("android.content.pm.ApplicationInfo")
+  Str8
+  Str8
+  String8Array
+  Int
+  Int
+  Int
+  Int
+  Str8
+  Int
+  Int
+IMAGE:
+  writeString8
+  writeString8
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeBundle
+  writeInt
+  writeInt
+  writeParcelable
+  writeString8
+  writeString8
+  writeString8Array
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeInt
+  writeInt
+  delegate Landroid/content/pm/ApplicationInfo;
+
+### android.content.pm.InstrumentationInfo | Full | matched 26/26 | full=true
+ACOS:
+  Str8
+  Str8
+  Int
+  CharSequence
+  Int
+  Int
+  Bundle
+  Int
+  Int
+  Str8
+  Str8
+  Str8
+  Str8
+  String8Array
+  String8Array
+  String8Array
+  SparseArray
+  Str8
+  Str8
+  Str8
+  Str8
+  Str8
+  Str8
+  Str8
+  Int
+  Int
+IMAGE:
+  writeString8
+  writeString8
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeBundle
+  writeInt
+  writeInt
+  writeString8
+  writeString8
+  writeString8
+  writeString8
+  writeString8Array
+  writeString8Array
+  writeString8Array
+  writeSparseArray
+  writeString8
+  writeString8
+  writeString8
+  writeString8
+  writeString8
+  writeString8
+  writeString8
+  writeInt
+  writeInt
+
+### android.content.pm.PermissionInfo | Full | matched 17/17 | full=true
+ACOS:
+  Str8
+  Str8
+  Int
+  CharSequence
+  Int
+  Int
+  Bundle
+  Int
+  Int
+  Int
+  Int
+  Str8
+  Str8
+  Int
+  Int
+  CharSequence
+  Int
+IMAGE:
+  writeString8
+  writeString8
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeBundle
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeString8
+  writeInt
+  writeInt
+  writeString
+  writeInt
+
+### android.content.pm.ResolveInfo | Full | matched 20/20 | full=true
+ACOS:
+  Cond([Nested("android.content.pm.ActivityInfo")])
+  Cond([Nested("android.content.IntentFilter")])
+  Int
+  Int
+  Int
+  Int
+  Int
+  CharSequence
+  Int
+  Str8
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+IMAGE:
+  writeInt
+  writeParcelable
+  writeInt
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString
+  writeInt
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  delegate Landroid/content/pm/ActivityInfo;
+  delegate Landroid/content/IntentFilter;
+
+### android.content.pm.FeatureInfo | Full | matched 4/4 | full=true
+ACOS:
+  Str8
+  Int
+  Int
+  Int
+IMAGE:
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+
+### android.app.ContentProviderHolder | Full | matched 5/5 | full=true
+ACOS:
+  Nested("android.content.pm.ProviderInfo")
+  Binder
+  Binder
+  Int
+  Int
+IMAGE:
+  writeParcelable
+  writeStrongBinder
+  writeStrongBinder
+  writeInt
+  writeInt
+  delegate Landroid/content/pm/ProviderInfo;
+
+### android.view.DisplayInfo | Prefix | matched 24/52 | full=false
+ACOS:
+  Int
+  Int
+  Int
+  Int
+  Int
+  Named("android.view.DisplayAddress")
+  Named("android.hardware.display.DeviceProductInfo")
+  Str8
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Cutout
+  Int
+  Int
+  Float
+  Int
+  Int
+  CountedNested("android.view.Display$Mode")
+  Int
+  IntArray
+  Named("android.view.Display$HdrCapabilities")
+  Bool
+  Int
+  Float
+  Float
+  Long
+  Long
+  Int
+  Int
+  Int
+  Str8
+  Str8
+  Int
+  Float
+  Float
+  Float
+  Float
+  Typed("android.view.RoundedCorners")
+  IntArray
+  Int
+  Typed("android.view.DisplayShape")
+  Typed("android.view.SurfaceControl$RefreshRateRange")
+  Float
+  SparseArray
+  Str8
+IMAGE:
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeParcelable
+  writeParcelable
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeParcelable
+  writeInt
+  writeInt
+  writeFloat
+  writeInt
+  writeInt
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeParcelable
+  writeBoolean
+  writeInt
+  writeFloat
+  writeFloat
+  writeLong
+  writeLong
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeString8
+  writeInt
+  writeFloat
+  writeFloat
+  writeFloat
+  writeFloat
+  writeTypedObject
+  writeInt
+  writeInt
+  writeInt
+  writeTypedObject
+  writeTypedObject
+  writeFloat
+  writeSparseArray
+  writeString8
+  delegate Landroid/view/DisplayCutout$ParcelableWrapper;
+  delegate Landroid/view/Display$Mode;
+
+### android.view.Display$Mode | Full | matched 6/6 | full=true
+ACOS:
+  Int
+  Int
+  Int
+  Float
+  FloatArray
+  IntArray
+IMAGE:
+  writeInt
+  writeInt
+  writeInt
+  writeFloat
+  writeFloatArray
+  writeIntArray
+
+### android.view.DisplayShape | Full | matched 8/8 | full=true
+ACOS:
+  Str8
+  Int
+  Int
+  Float
+  Int
+  Int
+  Int
+  Float
+IMAGE:
+  writeString8
+  writeInt
+  writeInt
+  writeFloat
+  writeInt
+  writeInt
+  writeInt
+  writeFloat
+
+### android.view.SurfaceControl$RefreshRateRange | Full | matched 2/2 | full=true
+ACOS:
+  Float
+  Float
+IMAGE:
+  writeFloat
+  writeFloat
+
+### android.graphics.Insets | Full | matched 4/4 | full=true
+ACOS:
+  Int
+  Int
+  Int
+  Int
+IMAGE:
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+
+### android.os.LocaleList | Full | matched 1/1 | full=true
+ACOS:
+  Str8
+IMAGE:
+  writeString8
+
+### android.app.WindowConfiguration | Full | matched 9/9 | full=true
+ACOS:
+  Nested("android.graphics.Rect")
+  Typed("android.graphics.Rect")
+  Nested("android.graphics.Rect")
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+IMAGE:
+  writeParcelable
+  writeTypedObject
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  delegate Landroid/graphics/Rect;
+  delegate Landroid/graphics/Rect;
+
+### android.content.res.Configuration | Full | matched 27/27 | full=true
+ACOS:
+  Float
+  Int
+  Int
+  Typed("android.os.LocaleList")
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Nested("android.app.WindowConfiguration")
+  Int
+  Int
+  Int
+  Int
+IMAGE:
+  writeFloat
+  writeInt
+  writeInt
+  writeTypedObject
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  delegate Landroid/app/WindowConfiguration;
+
+### android.app.ActivityManager$TaskDescription | Curated | matched 3/31 | full=false
+ACOS:
+  Cond([Str16])
+  Cond([Unsupported("android.graphics.drawable.Icon")])
+  Int
+  Int
+  Int
+  Int
+  Bool
+  Bool
+  Int
+  Int
+  Int
+  Cond([Str16])
+  Int
+IMAGE:
+  writeInt
+  writeString
+  writeInt
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeBoolean
+  writeBoolean
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeBoolean
+  writeBoolean
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString
+  writeInt
+  delegate Landroid/graphics/drawable/Icon;
+  delegate Landroid/graphics/drawable/Icon;
+
+### android.window.SizeConfigurationBuckets | Full | matched 5/5 | full=true
+ACOS:
+  Byte
+  IntArray
+  IntArray
+  IntArray
+  IntArray
+IMAGE:
+  writeByte
+  writeIntArray
+  writeIntArray
+  writeIntArray
+  writeIntArray
+
+### android.view.autofill.AutofillId | Curated | matched 2/4 | full=false
+ACOS:
+  Int
+  Int
+IMAGE:
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+
+### android.view.autofill.AutofillValue | Curated | matched 1/1 | full=false
+ACOS:
+  Int
+  Dynamic
+IMAGE:
+  writeInt
+
+### android.view.InputDevice | Prefix | matched 21/28 | full=false
+ACOS:
+  Nested("android.view.KeyCharacterMap")
+  Int
+  Int
+  Int
+  Str16
+  Int
+  Int
+  Str16
+  Int
+  Int
+  Int
+  Str8
+  Str8
+  Int
+  Int
+  Int
+  Int
+  Int
+  Nested("android.hardware.input.HostUsiVersion")
+  Int
+  Int
+IMAGE:
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeString
+  writeInt
+  writeInt
+  writeInt
+  writeString8
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeFloat
+  writeFloat
+  writeFloat
+  writeFloat
+  writeFloat
+  delegate Landroid/view/KeyCharacterMap;
+  delegate Landroid/hardware/input/HostUsiVersion;
+
+### android.view.KeyCharacterMap | Curated | no writeToParcel (no writeToParcel)
+ACOS:
+  Raw
+
+### android.hardware.input.HostUsiVersion | Curated | matched 2/2 | full=true
+ACOS:
+  Int
+  Int
+IMAGE:
+  writeInt
+  writeInt
+
+### android.hardware.OverlayProperties | Curated | matched 0/2 | full=false
+ACOS:
+  Bool
+  Bool
+IMAGE:
+  writeInt
+  writeInt
+
+### android.os.ParcelFileDescriptor | Curated | matched 2/3 | full=false
+ACOS:
+  Int
+  Fd
+IMAGE:
+  writeInt
+  writeFileDescriptor
+  writeFileDescriptor
+
+### android.os.Bundle | Curated | no writeToParcel (no writeToParcel)
+ACOS:
+  Bundle
+
+### android.util.MemoryIntArray | Curated | matched 1/1 | full=true
+ACOS:
+  Named("android.os.ParcelFileDescriptor")
+IMAGE:
+  writeParcelable
+
+### android.os.IBinder | Curated | no writeToParcel (no writeToParcel)
+ACOS:
+  Int
+
+### android.view.textservice.SpellCheckerInfo | Curated | matched 0/5 | full=false
+ACOS:
+  Str16
+IMAGE:
+  writeInt
+  writeString
+  writeString
+  writeParcelable
+  writeTypedList
+  delegate Landroid/content/pm/ResolveInfo;
+
+### android.view.textservice.SpellCheckerSubtype | Curated | matched 2/5 | full=false
+ACOS:
+  Int
+  Str16
+IMAGE:
+  writeInt
+  writeString
+  writeString
+  writeString
+  writeInt
+
+### android.app.ActivityManager$RunningAppProcessInfo | Curated | matched 0/16 | full=false
+ACOS:
+  Int
+  Str16
+IMAGE:
+  writeString
+  writeInt
+  writeInt
+  writeStringArray
+  writeStringArray
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeLong
+  delegate Landroid/content/ComponentName;
+
+### android.app.servertransaction.ClientTransaction | Full | matched 5/5 | full=true
+ACOS:
+  Bool
+  Binder
+  Named("android.app.servertransaction.ActivityLifecycleItem")
+  Bool
+  ParcelableList("android.app.servertransaction.ClientTransactionItem")
+IMAGE:
+  writeBoolean
+  writeStrongBinder
+  writeParcelable
+  writeBoolean
+  writeParcelableList
+
+### android.content.AttributionSource | Curated | matched 0/1 | full=false
+ACOS:
+  Int
+  Int
+  Int
+  Str16
+  Str16
+  Binder
+  StringArray
+  TypedArray("android.content.AttributionSourceState")
+IMAGE:
+  writeParcelable
+  delegate Landroid/content/AttributionSourceState;
+
+### android.content.AttributionSourceState | Curated | matched 8/9 | full=false
+ACOS:
+  Int
+  Int
+  Int
+  Str16
+  Str16
+  Binder
+  StringArray
+  TypedArray("android.content.AttributionSourceState")
+IMAGE:
+  writeInt
+  writeInt
+  writeInt
+  writeString
+  writeString
+  writeStrongBinder
+  writeStringArray
+  writeTypedArray
+  writeInt
+
+### android.net.Uri | Curated | matched 1/1 | full=false
+ACOS:
+  Int
+  Str8
+IMAGE:
+  writeInt
+
+### com.android.internal.infra.AndroidFuture | Curated | matched 0/3 | full=false
+ACOS:
+  Int
+IMAGE:
+  writeBoolean
+  writeBoolean
+  writeValue
+
+### android.view.accessibility.AccessibilityManager$ClientInfo | Curated | no writeToParcel (class not found: android.view.accessibility.AccessibilityManager$ClientInfo)
+ACOS:
+  Int
+
+### android.content.pm.ProviderInfoList | Full | matched 1/1 | full=true
+ACOS:
+  TypedList("android.content.pm.ProviderInfo")
+IMAGE:
+  writeTypedList
+
+### android.app.ProfilerInfo | Full | matched 9/9 | full=true
+ACOS:
+  Str16
+  Cond([Nested("android.os.ParcelFileDescriptor")])
+  Int
+  Int
+  Int
+  Str16
+  Bool
+  Int
+IMAGE:
+  writeString
+  writeInt
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeString
+  writeBoolean
+  writeInt
+  delegate Landroid/os/ParcelFileDescriptor;
+
+### android.content.res.CompatibilityInfo | Full | matched 4/4 | full=true
+ACOS:
+  Int
+  Int
+  Float
+  Float
+IMAGE:
+  writeInt
+  writeInt
+  writeFloat
+  writeFloat
+
+### android.content.AutofillOptions | Curated | matched 1/8 | full=false
+ACOS:
+  Int
+IMAGE:
+  writeInt
+  writeBoolean
+  writeBoolean
+  writeArraySet
+  writeLong
+  writeInt
+  writeString
+  writeLong
+
+### android.content.ContentCaptureOptions | Curated | matched 0/8 | full=false
+ACOS:
+  Int
+IMAGE:
+  writeBoolean
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeBoolean
+  writeArraySet
+
+### android.os.SharedMemory | Curated | matched 0/1 | full=false
+ACOS:
+  Int
+IMAGE:
+  writeFileDescriptor
+
+### android.app.assist.AssistStructure | Curated | matched 1/4 | full=false
+ACOS:
+  Int
+IMAGE:
+  writeInt
+  writeParcelable
+  writeInt
+  writeStrongBinder
+  delegate Landroid/content/ComponentName;
+
+### android.app.assist.AssistContent | Curated | matched 1/11 | full=false
+ACOS:
+  Int
+IMAGE:
+  writeInt
+  writeParcelable
+  writeInt
+  writeParcelable
+  writeInt
+  writeParcelable
+  writeInt
+  writeString
+  writeInt
+  writeBundle
+  writeInt
+  delegate Landroid/content/Intent;
+  delegate Landroid/content/ClipData;
+  delegate Landroid/net/Uri;
+
+### android.content.ContentValues | Curated | matched 0/2 | full=false
+ACOS:
+  Bundle
+IMAGE:
+  writeInt
+  writeArrayMap
+
+### android.view.inputmethod.ImeTracker$Token | Curated | matched 0/2 | full=false
+ACOS:
+  Int
+  Str16
+IMAGE:
+  writeStrongBinder
+  writeString8
+
+### android.app.ResultInfo | Full | matched 5/5 | full=true
+ACOS:
+  Str16
+  Int
+  Int
+  Cond([Nested("android.content.Intent")])
+IMAGE:
+  writeString
+  writeInt
+  writeInt
+  writeInt
+  writeParcelable
+  delegate Landroid/content/Intent;
+
+### android.os.PersistableBundle | Curated | no writeToParcel (no writeToParcel)
+ACOS:
+  PersistableBundle
+
+### android.app.servertransaction.LaunchActivityItem | Full | matched 21/21 | full=true
+ACOS:
+  Typed("android.content.Intent")
+  Int
+  Typed("android.content.pm.ActivityInfo")
+  Typed("android.content.res.Configuration")
+  Typed("android.content.res.Configuration")
+  Int
+  Str16
+  Interface
+  Int
+  Bundle
+  PersistableBundle
+  TypedList("android.app.ResultInfo")
+  TypedList("android.content.Intent")
+  Bundle
+  Bool
+  Typed("android.app.ProfilerInfo")
+  Binder
+  Interface
+  Binder
+  Bool
+  Binder
+IMAGE:
+  writeTypedObject
+  writeInt
+  writeTypedObject
+  writeTypedObject
+  writeTypedObject
+  writeInt
+  writeString
+  writeStrongInterface
+  writeInt
+  writeBundle
+  writePersistableBundle
+  writeTypedList
+  writeTypedList
+  writeBundle
+  writeBoolean
+  writeTypedObject
+  writeStrongBinder
+  writeStrongInterface
+  writeStrongBinder
+  writeBoolean
+  writeStrongBinder
+
+### android.app.servertransaction.ResumeActivityItem | Full | matched 4/4 | full=true
+ACOS:
+  Int
+  Bool
+  Bool
+  Bool
+IMAGE:
+  writeInt
+  writeBoolean
+  writeBoolean
+  writeBoolean
+
+### android.app.servertransaction.ActivityRelaunchItem | Full | matched 5/5 | full=true
+ACOS:
+  TypedList("android.app.ResultInfo")
+  TypedList("android.content.Intent")
+  Int
+  Typed("android.util.MergedConfiguration")
+  Bool
+IMAGE:
+  writeTypedList
+  writeTypedList
+  writeInt
+  writeTypedObject
+  writeBoolean
+
+### android.window.ClientWindowFrames | Full | matched 6/6 | full=true
+ACOS:
+  Nested("android.graphics.Rect")
+  Nested("android.graphics.Rect")
+  Nested("android.graphics.Rect")
+  Typed("android.graphics.Rect")
+  Bool
+  Float
+IMAGE:
+  writeParcelable
+  writeParcelable
+  writeParcelable
+  writeTypedObject
+  writeBoolean
+  writeFloat
+  delegate Landroid/graphics/Rect;
+  delegate Landroid/graphics/Rect;
+  delegate Landroid/graphics/Rect;
+
+### android.util.MergedConfiguration | Full | matched 3/3 | full=true
+ACOS:
+  Nested("android.content.res.Configuration")
+  Nested("android.content.res.Configuration")
+  Nested("android.content.res.Configuration")
+IMAGE:
+  writeParcelable
+  writeParcelable
+  writeParcelable
+  delegate Landroid/content/res/Configuration;
+  delegate Landroid/content/res/Configuration;
+  delegate Landroid/content/res/Configuration;
+
+### android.graphics.Insets | Full | matched 4/4 | full=true
+ACOS:
+  Int
+  Int
+  Int
+  Int
+IMAGE:
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+
+### android.view.InsetsSource | Full | matched 8/8 | full=true
+ACOS:
+  Int
+  Int
+  Nested("android.graphics.Rect")
+  Cond([Nested("android.graphics.Rect")])
+  Bool
+  Int
+  Bool
+IMAGE:
+  writeInt
+  writeInt
+  writeParcelable
+  writeInt
+  writeParcelable
+  writeBoolean
+  writeInt
+  writeBoolean
+  delegate Landroid/graphics/Rect;
+  delegate Landroid/graphics/Rect;
+
+### android.view.InsetsSourceControl | Full | matched 7/7 | full=true
+ACOS:
+  Int
+  Int
+  Typed("android.view.SurfaceControl")
+  Bool
+  Typed("android.graphics.Point")
+  Typed("android.graphics.Insets")
+  Bool
+IMAGE:
+  writeInt
+  writeInt
+  writeTypedObject
+  writeBoolean
+  writeTypedObject
+  writeTypedObject
+  writeBoolean
+
+### android.view.InsetsSourceControl$Array | Full | matched 1/1 | full=true
+ACOS:
+  TypedArray("android.view.InsetsSourceControl")
+IMAGE:
+  writeTypedArray
+
+### android.view.InsetsState | Full | matched 8/8 | full=true
+ACOS:
+  Nested("android.graphics.Rect")
+  Nested("android.view.DisplayCutout$ParcelableWrapper")
+  Typed("android.view.RoundedCorners")
+  Nested("android.graphics.Rect")
+  Typed("android.view.PrivacyIndicatorBounds")
+  Typed("android.view.DisplayShape")
+  CountedTyped("android.view.InsetsSource")
+IMAGE:
+  writeParcelable
+  writeParcelable
+  writeTypedObject
+  writeParcelable
+  writeTypedObject
+  writeTypedObject
+  writeInt
+  writeTypedObject
+  delegate Landroid/graphics/Rect;
+  delegate Landroid/view/DisplayCutout$ParcelableWrapper;
+  delegate Landroid/graphics/Rect;
+
+### android.view.RoundedCorners | Full | matched 2/2 | full=true
+ACOS:
+  Cond([TypedArray("android.view.RoundedCorner")])
+IMAGE:
+  writeInt
+  writeTypedArray
+
+### android.view.PrivacyIndicatorBounds | Full | matched 2/2 | full=true
+ACOS:
+  TypedArray("android.graphics.Rect")
+  Int
+IMAGE:
+  writeTypedArray
+  writeInt
+
+### android.view.DisplayShape | Full | matched 8/8 | full=true
+ACOS:
+  Str8
+  Int
+  Int
+  Float
+  Int
+  Int
+  Int
+  Float
+IMAGE:
+  writeString8
+  writeInt
+  writeInt
+  writeFloat
+  writeInt
+  writeInt
+  writeInt
+  writeFloat
+
+### android.view.DisplayCutout$ParcelableWrapper | Full | matched 1/1 | full=true
+ACOS:
+  Nested("android.view.DisplayCutout")
+IMAGE:
+  writeParcelable
+  delegate Landroid/view/DisplayCutout$ParcelableWrapper;
+
+### android.view.DisplayCutout | Curated | no writeToParcel (no writeToParcel)
+ACOS:
+  Cond([Typed("android.graphics.Rect"), TypedArray("android.graphics.Rect"), Typed("android.graphics.Insets"), Int, Int, Int, Int, Float, Str16, Int, Float, Float])
+
+### android.app.ApplicationErrorReport$ParcelableCrashInfo | Curated | no writeToParcel (no writeToParcel)
+ACOS:
+  Str16
+  Str16
+  Str16
+  Str16
+  Str16
+  Str16
+  Int
+  Str16
+  Str16
+
+### android.os.PatternMatcher | Full | matched 3/3 | full=true
+ACOS:
+  Str16
+  Int
+  IntArray
+IMAGE:
+  writeString
+  writeInt
+  writeIntArray
+
+### android.content.IntentFilter$AuthorityEntry | Full | matched 4/4 | full=true
+ACOS:
+  Str16
+  Str16
+  Int
+  Int
+IMAGE:
+  writeString
+  writeString
+  writeInt
+  writeInt
+
+### android.content.IntentFilter | Full | matched 25/25 | full=true
+ACOS:
+  StringArray
+  Cond([StringList])
+  Cond([StringList])
+  Cond([StringList])
+  Cond([StringList])
+  Cond([StringList])
+  Cond([CountedNested("android.os.PatternMatcher")])
+  Cond([CountedNested("android.content.IntentFilter$AuthorityEntry")])
+  Cond([CountedNested("android.os.PatternMatcher")])
+  Int
+  Int
+  Int
+  Int
+  Int
+  Int
+  Cond([PersistableBundle])
+IMAGE:
+  writeStringArray
+  writeInt
+  writeStringList
+  writeInt
+  writeStringList
+  writeInt
+  writeStringList
+  writeInt
+  writeStringList
+  writeInt
+  writeStringList
+  writeInt
+  writeParcelable
+  writeInt
+  writeParcelable
+  writeInt
+  writeParcelable
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeParcelable
+  delegate Landroid/os/PatternMatcher;
+  delegate Landroid/content/IntentFilter$AuthorityEntry;
+  delegate Landroid/os/PatternMatcher;
+  delegate Landroid/os/PersistableBundle;
+
+### android.app.ActivityManager$MemoryInfo | Full | matched 9/9 | full=true
+ACOS:
+  Long
+  Long
+  Long
+  Long
+  Int
+  Long
+  Long
+  Long
+  Long
+IMAGE:
+  writeLong
+  writeLong
+  writeLong
+  writeLong
+  writeInt
+  writeLong
+  writeLong
+  writeLong
+  writeLong
+
+### android.content.pm.InstallSourceInfo | Prefix | matched 6/6 | full=true
+ACOS:
+  Str16
+  Named("android.content.pm.SigningInfo")
+  Str16
+  Str16
+  Str8
+  Int
+IMAGE:
+  writeString
+  writeParcelable
+  writeString
+  writeString
+  writeString8
+  writeInt
+
+### android.net.Network | Full | matched 1/1 | full=true
+ACOS:
+  Int
+IMAGE:
+  writeInt
+
+### android.os.Messenger | Full | matched 1/1 | full=true
+ACOS:
+  Binder
+IMAGE:
+  writeStrongBinder
+
+### android.net.NetworkCapabilities | Full | matched 20/20 | full=true
+ACOS:
+  Long
+  Long
+  Long
+  Int
+  Int
+  Named("android.net.NetworkSpecifier")
+  Named("android.net.TransportInfo")
+  Int
+  Counted([Named("android.net.UidRange")])
+  IntArray
+  Str16
+  Bool
+  IntArray
+  Int
+  Int
+  Str16
+  IntArray
+  TypedList("android.net.Network")
+  Int
+IMAGE:
+  writeLong
+  writeLong
+  writeLong
+  writeInt
+  writeInt
+  writeParcelable
+  writeParcelable
+  writeInt
+  writeInt
+  writeParcelable
+  writeIntArray
+  writeString
+  writeBoolean
+  writeIntArray
+  writeInt
+  writeInt
+  writeString
+  writeIntArray
+  writeTypedList
+  writeInt
+
+### android.net.NetworkRequest | Full | matched 4/4 | full=true
+ACOS:
+  Nested("android.net.NetworkCapabilities")
+  Int
+  Int
+  Str16
+IMAGE:
+  writeParcelable
+  writeInt
+  writeInt
+  writeString
+  delegate Landroid/net/NetworkCapabilities;
+
+### android.net.LinkProperties | Full | matched 32/32 | full=true
+ACOS:
+  Str16
+  Counted([Named("android.net.LinkAddress")])
+  Counted([ByteArray, Bool, Int])
+  Counted([ByteArray, Bool, Int])
+  Bool
+  Str16
+  Counted([ByteArray, Bool, Int])
+  Str16
+  Address
+  Int
+  Str16
+  Counted([Named("android.net.RouteInfo")])
+  ByteCond([Named("android.net.ProxyInfo")])
+  Named("android.net.IpPrefix")
+  ValueList
+  Bool
+  Named("android.net.CaptivePortalApiUrl")
+  Named("android.net.CaptivePortalData")
+IMAGE:
+  writeString
+  writeInt
+  writeParcelable
+  writeInt
+  writeByteArray
+  writeBoolean
+  writeInt
+  writeInt
+  writeByteArray
+  writeBoolean
+  writeInt
+  writeBoolean
+  writeString
+  writeInt
+  writeByteArray
+  writeBoolean
+  writeInt
+  writeString
+  writeByteArray
+  writeBoolean
+  writeInt
+  writeInt
+  writeString
+  writeInt
+  writeParcelable
+  writeByte
+  writeParcelable
+  writeParcelable
+  writeList
+  writeBoolean
+  writeParcelable
+  writeParcelable
+
+### android.net.NetworkInfo | Full | matched 11/11 | full=true
+ACOS:
+  Int
+  Int
+  Str16
+  Str16
+  Str16
+  Str16
+  Int
+  Int
+  Int
+  Str16
+  Str16
+IMAGE:
+  writeInt
+  writeInt
+  writeString
+  writeString
+  writeString
+  writeString
+  writeInt
+  writeInt
+  writeInt
+  writeString
+  writeString
+
+### android.app.NotificationChannel | Prefix | matched 32/32 | full=true
+ACOS:
+  ByteCond([Str16])
+  ByteCond([Str16])
+  ByteCond([Str16])
+  Int
+  Byte
+  Int
+  ByteCond([Nested("android.net.Uri")])
+  Byte
+  LongArray
+  Int
+  Byte
+  Byte
+  Byte
+  Byte
+  ByteCond([Str16])
+  Cond([Nested("android.media.AudioAttributes")])
+  Int
+  Bool
+  Int
+  Int
+  Str16
+  Str16
+  Bool
+  Bool
+  Long
+  Bool
+IMAGE:
+  writeByte
+  writeString
+  writeByte
+  writeString
+  writeByte
+  writeString
+  writeInt
+  writeByte
+  writeInt
+  writeByte
+  writeParcelable
+  writeByte
+  writeLongArray
+  writeInt
+  writeByte
+  writeByte
+  writeByte
+  writeByte
+  writeByte
+  writeString
+  writeInt
+  writeParcelable
+  writeInt
+  writeBoolean
+  writeInt
+  writeInt
+  writeString
+  writeString
+  writeBoolean
+  writeBoolean
+  writeLong
+  writeBoolean
+  delegate Landroid/net/Uri;
+  delegate Landroid/media/AudioAttributes;
+
+### android.app.NotificationChannelGroup | Prefix | matched 10/10 | full=true
+ACOS:
+  ByteCond([Str16])
+  ByteCond([Str16])
+  ByteCond([Str16])
+  ByteCond([Named("android.content.pm.ParceledListSlice")])
+  Bool
+  Int
+IMAGE:
+  writeByte
+  writeString
+  writeByte
+  writeString
+  writeByte
+  writeString
+  writeByte
+  writeParcelable
+  writeBoolean
+  writeInt
+
+### android.os.storage.StorageVolume | Full | matched 15/15 | full=true
+ACOS:
+  Str8
+  Str8
+  Str8
+  Str8
+  Int
+  Int
+  Int
+  Int
+  Int
+  Long
+  Named("android.os.UserHandle")
+  Cond([Str8])
+  Str8
+  Str8
+IMAGE:
+  writeString8
+  writeString8
+  writeString8
+  writeString8
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeLong
+  writeParcelable
+  writeInt
+  writeString8
+  writeString8
+  writeString8
+
+### android.os.UserHandle | Curated | matched 0/1 | full=false
+ACOS:
+  Int
+IMAGE:
+  writeParcelable
+  delegate Landroid/os/UserHandle;
+
+### android.media.AudioAttributes | Prefix | matched 5/10 | full=false
+ACOS:
+  Int
+  Int
+  Int
+  Int
+  Int
+  StringArray
+  Str16
+  Int
+  Bundle
+IMAGE:
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeInt
+  writeString
+  writeInt
+  writeBundle
+  writeInt
+  writeBundle
+

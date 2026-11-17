@@ -155,7 +155,10 @@ impl Logd {
         // 10/s idle timer per session without delaying teardown.
         sock.set_read_timeout(Some(Duration::from_secs(1)))?;
         let entries: Arc<Mutex<Vec<LogEntry>>> = Arc::new(Mutex::new(Vec::new()));
-        let stats = Arc::new(Mutex::new(LogStats { cap, ..LogStats::default() }));
+        let stats = Arc::new(Mutex::new(LogStats {
+            cap,
+            ..LogStats::default()
+        }));
         let first_dropped: Arc<Mutex<Option<LogEntry>>> = Arc::new(Mutex::new(None));
         let stop = Arc::new(AtomicBool::new(false));
         // A separate unconnected socket that can send to `path`; a zero-length
@@ -271,7 +274,11 @@ impl Logd {
         let mut stats = *self.stats.lock().unwrap();
         stats.kept = v.len();
         let first_dropped = self.first_dropped.lock().unwrap().take();
-        LogBatch { entries: v, stats, first_dropped }
+        LogBatch {
+            entries: v,
+            stats,
+            first_dropped,
+        }
     }
 
     fn drain(&self) {
@@ -317,7 +324,11 @@ fn parse_frame(buf: &[u8]) -> Option<LogEntry> {
     if message.len() < 4 {
         return None;
     }
-    Some(LogEntry { prio: 6, tag: "logdw".to_string(), message })
+    Some(LogEntry {
+        prio: 6,
+        tag: "logdw".to_string(),
+        message,
+    })
 }
 
 fn longest_printable_run(buf: &[u8]) -> String {
@@ -397,9 +408,19 @@ mod tests {
             batch.entries.len()
         );
         assert_eq!(batch.stats.cap, 1000);
-        assert_eq!(batch.stats.total, batch.stats.kept as u64 + batch.stats.dropped);
-        assert!(batch.stats.dropped > 0, "a spammer must trip the cap: {:?}", batch.stats);
-        assert!(batch.first_dropped.is_some(), "the first dropped entry is kept as a sample");
+        assert_eq!(
+            batch.stats.total,
+            batch.stats.kept as u64 + batch.stats.dropped
+        );
+        assert!(
+            batch.stats.dropped > 0,
+            "a spammer must trip the cap: {:?}",
+            batch.stats
+        );
+        assert!(
+            batch.first_dropped.is_some(),
+            "the first dropped entry is kept as a sample"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

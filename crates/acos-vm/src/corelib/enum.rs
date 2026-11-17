@@ -14,20 +14,19 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         Some("Ljava/lang/Object;"),
         &["Ljava/lang/Comparable;", "Ljava/io/Serializable;"],
     )?;
-    vm.add_instance_field(id, "name", "Ljava/lang/String;", access::PRIVATE | access::FINAL);
+    vm.add_instance_field(
+        id,
+        "name",
+        "Ljava/lang/String;",
+        access::PRIVATE | access::FINAL,
+    );
     vm.add_instance_field(id, "ordinal", "I", access::PRIVATE | access::FINAL);
     let p = access::PUBLIC;
     vm.add_native(id, "<init>", "(Ljava/lang/String;I)V", p, enum_init);
     vm.add_native(id, "name", "()Ljava/lang/String;", p, enum_name);
     vm.add_native(id, "ordinal", "()I", p, enum_ordinal);
     vm.add_native(id, "toString", "()Ljava/lang/String;", p, enum_name);
-    vm.add_native(
-        id,
-        "compareTo",
-        "(Ljava/lang/Enum;)I",
-        p,
-        enum_compare_to,
-    );
+    vm.add_native(id, "compareTo", "(Ljava/lang/Enum;)I", p, enum_compare_to);
     vm.add_native(
         id,
         "compareTo",

@@ -28,15 +28,31 @@ fn pair(args: &[String], flag: &str) -> String {
 #[test]
 fn relay_pasta_args_keep_the_host_boundary_and_match_link_properties() {
     let args = plan::relay_pasta_args();
-    assert!(args.iter().any(|a| a == "--no-splice"), "no splice: {args:?}");
-    assert!(args.iter().any(|a| a == "--no-map-gw"), "no gateway mapping by itself");
+    assert!(
+        args.iter().any(|a| a == "--no-splice"),
+        "no splice: {args:?}"
+    );
+    assert!(
+        args.iter().any(|a| a == "--no-map-gw"),
+        "no gateway mapping by itself"
+    );
     // The map address is the relay's own gateway, and it is the *only* way to
     // the host's loopback: NET3 measured that a `-T` forward cannot serve a
     // relay session (see the plan's doc comment), so the map is the path and the
     // per-session gate is what makes it safe.
-    assert_eq!(pair(&args, "--map-host-loopback"), plan::host_loopback_map());
-    assert_eq!(plan::host_loopback_map(), plan::ip(connectivity::NET_GUEST_GATEWAY));
-    assert_eq!(pair(&args, "-t"), "none", "host ports are never auto-forwarded");
+    assert_eq!(
+        pair(&args, "--map-host-loopback"),
+        plan::host_loopback_map()
+    );
+    assert_eq!(
+        plan::host_loopback_map(),
+        plan::ip(connectivity::NET_GUEST_GATEWAY)
+    );
+    assert_eq!(
+        pair(&args, "-t"),
+        "none",
+        "host ports are never auto-forwarded"
+    );
     assert_eq!(pair(&args, "-u"), "none");
     assert_eq!(pair(&args, "-T"), "none");
     assert_eq!(pair(&args, "-U"), "none");
@@ -52,7 +68,11 @@ fn relay_pasta_args_keep_the_host_boundary_and_match_link_properties() {
     );
     assert_eq!(pair(&args, "-g"), plan::ip(connectivity::NET_GUEST_GATEWAY));
     assert_eq!(pair(&args, "-D"), plan::ip(connectivity::NET_DNS_SERVER));
-    assert_eq!(args.last().map(String::as_str), Some("--"), "argv ends at --");
+    assert_eq!(
+        args.last().map(String::as_str),
+        Some("--"),
+        "argv ends at --"
+    );
 }
 
 /// No host port is a pasta forward, ever.
@@ -79,9 +99,18 @@ fn relay_pasta_args_never_forward_a_host_port() {
 #[test]
 fn relay_rules_drop_lan_link_local_cgnat_and_host_loopback() {
     let rules = plan::relay_rules();
-    for cidr in ["192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12", "169.254.0.0/16", "100.64.0.0/10", "127.0.0.0/8"] {
+    for cidr in [
+        "192.168.0.0/16",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "169.254.0.0/16",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+    ] {
         assert!(
-            rules.iter().any(|r| r.contains(&format!("-i acosv+ -d {cidr} -j DROP"))),
+            rules
+                .iter()
+                .any(|r| r.contains(&format!("-i acosv+ -d {cidr} -j DROP"))),
             "{cidr} must be dropped for session traffic: {rules:?}"
         );
     }
@@ -90,10 +119,17 @@ fn relay_rules_drop_lan_link_local_cgnat_and_host_loopback() {
     // connection could never come back.
     let established = joined.find("ESTABLISHED,RELATED").expect("conntrack rule");
     let first_drop = joined.find("-d 192.168.0.0/16").expect("a drop rule");
-    assert!(established < first_drop, "conntrack accept must precede the drops");
+    assert!(
+        established < first_drop,
+        "conntrack accept must precede the drops"
+    );
     // Everything that is not explicitly allowed out of tap0 is dropped.
-    assert!(rules.iter().any(|r| r == "iptables -w -A FORWARD -i acosv+ -j DROP"));
-    assert!(rules.iter().any(|r| r.contains("iptables -w -A FORWARD -o tap0 -j ACCEPT")));
+    assert!(rules
+        .iter()
+        .any(|r| r == "iptables -w -A FORWARD -i acosv+ -j DROP"));
+    assert!(rules
+        .iter()
+        .any(|r| r.contains("iptables -w -A FORWARD -o tap0 -j ACCEPT")));
     assert!(rules.iter().any(|r| r.contains("MASQUERADE")));
 }
 
@@ -139,7 +175,10 @@ fn veth_attach_moves_the_peer_into_the_session_netns() {
     assert_eq!(rules[1], "ip link set acoss7 netns /proc/4242/ns/net");
     assert_eq!(rules[2], "ip addr add 10.163.7.1/30 dev acosv7");
     assert_eq!(rules[3], "ip link set acosv7 up");
-    assert_eq!(plan::veth_detach_rules(&n), vec!["ip link del acosv7".to_string()]);
+    assert_eq!(
+        plan::veth_detach_rules(&n),
+        vec!["ip link del acosv7".to_string()]
+    );
 }
 
 /// Per-session controls touch one veth and nothing else.
@@ -154,14 +193,21 @@ fn controls_are_per_session() {
     assert!(on.contains("-D ACOS-SESS -i acosv1 -j DROP"), "{on}");
 
     let shaped = plan::netem_rule(&b, 400, 20, 5);
-    assert!(shaped.contains("dev acosv2 root netem delay 400ms 20ms loss 5%"), "{shaped}");
+    assert!(
+        shaped.contains("dev acosv2 root netem delay 400ms 20ms loss 5%"),
+        "{shaped}"
+    );
     assert!(plan::netem_rule(&b, 0, 0, 0).contains("dev acosv2 root netem"));
     assert_eq!(plan::netem_clear_rule(&b), "tc qdisc del dev acosv2 root");
 
     // Host ports: default deny the whole host loopback at attach, then one
     // ACCEPT per opted-in port, inserted above that DROP.
     let deny = plan::hostport_default_rules(&b);
-    assert_eq!(deny.len(), 2, "tcp is reset, everything else is rejected: {deny:?}");
+    assert_eq!(
+        deny.len(),
+        2,
+        "tcp is reset, everything else is rejected: {deny:?}"
+    );
     assert_eq!(
         deny[0],
         format!(
@@ -207,17 +253,32 @@ fn controls_are_per_session() {
 fn session_shim_configures_then_execs_and_fails_closed() {
     let n = net(3);
     let shim = plan::session_shim(&n, "/run/x/ready-3.txt");
-    assert!(shim.contains("/proc/self/net/dev"), "waits for the veth in its own netns, without an exec per poll");
-    assert!(shim.contains("addr add 10.163.3.2/30 dev acoss3"), "one `ip -batch` exec, not four: {shim}");
-    assert!(shim.contains("link set lo up"), "the session's own loopback is up (a forwarder binds it): {shim}");
+    assert!(
+        shim.contains("/proc/self/net/dev"),
+        "waits for the veth in its own netns, without an exec per poll"
+    );
+    assert!(
+        shim.contains("addr add 10.163.3.2/30 dev acoss3"),
+        "one `ip -batch` exec, not four: {shim}"
+    );
+    assert!(
+        shim.contains("link set lo up"),
+        "the session's own loopback is up (a forwarder binds it): {shim}"
+    );
     assert!(shim.contains("route add default via 10.163.3.1"));
-    assert!(shim.contains("via 10.163.3.1"), "the default route is verified, not assumed");
+    assert!(
+        shim.contains("via 10.163.3.1"),
+        "the default route is verified, not assumed"
+    );
     assert!(shim.contains("/run/x/ready-3.txt"));
     let ready = shim.find("ready-3.txt").expect("ready file");
     let exec = shim.find("exec \"$@\"").expect("the guest runs");
-    assert!(ready < exec, "the timestamp is written before the guest starts");
+    assert!(
+        ready < exec,
+        "the timestamp is written before the guest starts"
+    );
     // Every failure path exits before the guest can run.
-    assert!(shim.rfind("|| fail") .expect("a fail path") < exec);
+    assert!(shim.rfind("|| fail").expect("a fail path") < exec);
     assert!(shim.contains(&format!("exit {}", plan::SHIM_FAIL_EXIT)));
     assert!(shim.contains("no-veth") && shim.contains("no-default-route"));
 }
@@ -226,7 +287,10 @@ fn session_shim_configures_then_execs_and_fails_closed() {
 /// success.
 #[test]
 fn protocol_round_trips_and_fails_closed() {
-    let req = Request::Offline { session: "joplin".into(), offline: true };
+    let req = Request::Offline {
+        session: "joplin".into(),
+        offline: true,
+    };
     let line = proto::encode(&req);
     assert!(line.ends_with('\n'));
     match proto::decode_request(&line).expect("a request") {
@@ -239,7 +303,10 @@ fn protocol_round_trips_and_fails_closed() {
     let reply = proto::Reply::fail(ErrorCode::NetworkUnavailable, "pasta died");
     let json = serde_json::to_value(&reply).expect("json");
     assert_eq!(json["ok"], serde_json::json!(false));
-    assert_eq!(json["error"]["code"], serde_json::json!("network-unavailable"));
+    assert_eq!(
+        json["error"]["code"],
+        serde_json::json!("network-unavailable")
+    );
     assert!(proto::decode_request("{\"op\":\"nope\"}").is_err());
 }
 
@@ -249,11 +316,20 @@ fn protocol_round_trips_and_fails_closed() {
 fn net_arm_is_explicit() {
     let prev = std::env::var_os(acos_netd::client::ARM_ENV);
     std::env::set_var(acos_netd::client::ARM_ENV, "base");
-    assert_eq!(acos_netd::client::Arm::from_env().expect("base"), acos_netd::client::Arm::Base);
+    assert_eq!(
+        acos_netd::client::Arm::from_env().expect("base"),
+        acos_netd::client::Arm::Base
+    );
     std::env::set_var(acos_netd::client::ARM_ENV, "relay");
-    assert_eq!(acos_netd::client::Arm::from_env().expect("relay"), acos_netd::client::Arm::Relay);
+    assert_eq!(
+        acos_netd::client::Arm::from_env().expect("relay"),
+        acos_netd::client::Arm::Relay
+    );
     std::env::set_var(acos_netd::client::ARM_ENV, "railly");
-    assert!(acos_netd::client::Arm::from_env().is_err(), "a typo must not pick an arm");
+    assert!(
+        acos_netd::client::Arm::from_env().is_err(),
+        "a typo must not pick an arm"
+    );
     match prev {
         Some(v) => std::env::set_var(acos_netd::client::ARM_ENV, v),
         None => std::env::remove_var(acos_netd::client::ARM_ENV),

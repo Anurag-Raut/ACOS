@@ -180,7 +180,12 @@ fn attach(stack: &mut [ViewNode], roots: &mut Vec<ViewNode>, node: ViewNode) {
 
 fn node_from_attrs(body: &str, counter: usize) -> Result<ViewNode, String> {
     let attrs = parse_attrs(body);
-    let get = |key: &str| attrs.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+    let get = |key: &str| {
+        attrs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+    };
     let bounds = get("bounds")
         .and_then(|s| s.parse::<Bounds>().ok())
         .map(|b| b.0)
@@ -247,7 +252,11 @@ fn parse_quoted(s: &str) -> (String, usize) {
         }
     }
     let value = s[start..end].to_string();
-    let consumed = if end < s.len() { end + quote.len_utf8() } else { end };
+    let consumed = if end < s.len() {
+        end + quote.len_utf8()
+    } else {
+        end
+    };
     (value, consumed)
 }
 
@@ -340,8 +349,14 @@ fn push_finished(stack: &mut [(usize, ViewNode)], roots: &mut Vec<ViewNode>, nod
 
 fn view_node_from_device(raw: &Value, counter: usize) -> ViewNode {
     let rect = raw.get("rect");
-    let x = rect.and_then(|r| r.get("x")).and_then(Value::as_i64).unwrap_or(0) as i32;
-    let y = rect.and_then(|r| r.get("y")).and_then(Value::as_i64).unwrap_or(0) as i32;
+    let x = rect
+        .and_then(|r| r.get("x"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0) as i32;
+    let y = rect
+        .and_then(|r| r.get("y"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0) as i32;
     let w = rect
         .and_then(|r| r.get("width"))
         .and_then(Value::as_i64)
@@ -442,11 +457,7 @@ fn acos_node_from_json(raw: &Value, counter: &mut usize) -> ViewNode {
     let children = raw
         .get("children")
         .and_then(Value::as_array)
-        .map(|cs| {
-            cs.iter()
-                .map(|c| acos_node_from_json(c, counter))
-                .collect()
-        })
+        .map(|cs| cs.iter().map(|c| acos_node_from_json(c, counter)).collect())
         .unwrap_or_default();
     ViewNode {
         id: raw
@@ -539,7 +550,10 @@ mod tests {
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].text, "hi");
         assert_eq!(parsed[0].bounds, [1, 2, 3, 4]);
-        assert_eq!(tree_text(&tree), "android.widget.TextView | pkg:id/x | hi | [1,2,3,4]");
+        assert_eq!(
+            tree_text(&tree),
+            "android.widget.TextView | pkg:id/x | hi | [1,2,3,4]"
+        );
     }
 
     #[test]
@@ -550,7 +564,9 @@ mod tests {
         let value: Value = serde_json::from_str(&text).unwrap();
         let roots = parse_agent_device_snapshot(&value).unwrap();
         let flat = flatten(&roots);
-        assert!(flat.iter().any(|n| n.resource_id == "dev.acos.fixtures.counter:id/count"));
+        assert!(flat
+            .iter()
+            .any(|n| n.resource_id == "dev.acos.fixtures.counter:id/count"));
         // Depth is preserved: the status-bar clock is a root, the app content
         // is nested.
         assert!(flat.len() > 5);

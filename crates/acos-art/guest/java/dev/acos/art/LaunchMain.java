@@ -10,6 +10,8 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcel;
 import android.view.View;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -428,9 +430,16 @@ public final class LaunchMain {
         byte[] display = buildDisplayInfoReply();
         pushReplyTemplate("android.hardware.display.IDisplayManager", 1, display);
         System.out.println("ACOSLAUNCH MARK displayinfo-reply-pushed bytes=" + display.length);
-        byte[] appInfo = buildApplicationInfoReply();
-        pushReplyTemplate("android.content.pm.IPackageManager", 9, appInfo);
-        System.out.println("ACOSLAUNCH MARK applicationinfo-reply-pushed bytes=" + appInfo.length);
+        // MPROC1: `IPackageManager.getApplicationInfo` (code 9) is **not**
+        // answered from a guest-built template any more. The template ignored
+        // the request's package argument, so with a second package installed
+        // `getApplicationInfo("other.package")` (and therefore
+        // `createPackageContext`, `LoadedApk` for that package, and every
+        // per-package resolver) returned the launched app's own
+        // `ApplicationInfo`. The host package manager answers code 9 for the
+        // package the caller asked for, and its codec is the API-34
+        // `ApplicationInfo.writeToParcel` layout (proved by the multi-package
+        // probe + `scenarios/mproc1-*.yaml`).
         byte[] instr = buildInstrumentationInfoReply();
         // `getInstrumentationInfoAsUser(ComponentName, int, int)` = 44 on API 34.
         pushReplyTemplate("android.content.pm.IPackageManager", 44, instr);
@@ -468,6 +477,13 @@ public final class LaunchMain {
         // the real `Application` to exist, then (for activity-resumed) sends the
         // one ClientTransaction AMS would send.
         startWatcher(thread, at, appThread);
+        // MPROC1: the scripted activity-result watcher. The agent scripts the
+        // answer a share sheet / picker would give (session control op
+        // `acos_service_ctl {module:"intents", op:"result"}`); the launcher
+        // writes it to this run's own `/data/out/launch/activity-result.json`
+        // and this thread delivers it as the framework's own
+        // `ActivityResultItem` transaction, acking in `activity-result.ack`.
+        startResultWatcher();
         // Frame-clock probe (L1): post a real `Choreographer` frame callback on
         // the main thread *before* the looper runs. `Choreographer.getInstance()`
         // builds the `DisplayEventReceiver` (ISurfaceComposer →
@@ -2617,10 +2633,10 @@ public final class LaunchMain {
                 .append(",\"focused\":").append(focused)
                 .append(",\"checked\":").append(checked)
                 .append(",\"selected\":").append(selected);
+        StringBuilder kids = new StringBuilder();
+        boolean first = true;
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
-            boolean first = true;
-            StringBuilder kids = new StringBuilder();
             int n = g.getChildCount();
             for (int i = 0; i < n; i++) {
                 if (budget[0] <= 0) {
@@ -2637,9 +2653,132 @@ public final class LaunchMain {
                 kids.append(one);
                 first = false;
             }
+        }
+        // WV6: a WebView's page lives behind `ViewDelegate.
+        // getAccessibilityNodeProvider()` (the WIRE v1.1 `ax` tree, exposed as
+        // virtual descendants). The framework's View walker cannot see those
+        // children, so the provider's own standard enumeration is merged here:
+        // `findAccessibilityNodeInfosByText("", HOST_VIEW_ID)` returns the page
+        // nodes with the engine's display-space bounds. This is the same
+        // AccessibilityNodeProvider path an accessibility service uses -- no
+        // side channel and no provider-specific type check.
+        AccessibilityNodeProvider provider = null;
+        try {
+            provider = v.getAccessibilityNodeProvider();
+        } catch (Throwable ignored) {
+        }
+        if (provider != null) {
+            java.util.List<AccessibilityNodeInfo> virtual = null;
+            try {
+                virtual = provider.findAccessibilityNodeInfosByText(
+                        "", AccessibilityNodeProvider.HOST_VIEW_ID);
+            } catch (Throwable t) {
+                // Never a silent empty page: the WebView node says so in logcat
+                // and the tree simply carries no virtual children this sample.
+                android.util.Log.w("ACOSVIEW", "WebView virtual nodes failed: " + t);
+            }
+            if (virtual != null) {
+                for (AccessibilityNodeInfo info : virtual) {
+                    if (budget[0] <= 0) {
+                        truncated[0] = true;
+                        break;
+                    }
+                    StringBuilder one = new StringBuilder();
+                    appendVirtualNodeJson(v, info, one, budget, truncated, window);
+                    info.recycle();
+                    if (one.length() == 0) continue;
+                    if (!first) kids.append(',');
+                    kids.append(one);
+                    first = false;
+                }
+            }
+        }
+        if (kids.length() > 0) {
             out.append(",\"children\":[").append(kids).append(']');
         }
         out.append('}');
+    }
+
+    /**
+     * WV6: one page node from a WebView's `AccessibilityNodeProvider`, in the
+     * same JSON shape as a View node. Bounds are the provider's screen-space
+     * `getBoundsInScreen`; `visible` means the node intersects the WebView's
+     * own visible rect, so a selector cannot tap text clipped out of the view.
+     */
+    static void appendVirtualNodeJson(View host, AccessibilityNodeInfo info,
+            StringBuilder out, int[] budget, boolean[] truncated, String window) {
+        if (info == null || budget[0]-- <= 0) {
+            truncated[0] = true;
+            return;
+        }
+        android.graphics.Rect rect = new android.graphics.Rect();
+        try {
+            info.getBoundsInScreen(rect);
+        } catch (Throwable ignored) {
+        }
+        int[] origin = new int[2];
+        try {
+            host.getLocationOnScreen(origin);
+        } catch (Throwable ignored) {
+        }
+        android.graphics.Rect hostRect = new android.graphics.Rect(
+                origin[0], origin[1], origin[0] + host.getWidth(), origin[1] + host.getHeight());
+        android.graphics.Rect visibleRect = new android.graphics.Rect(rect);
+        boolean intersects = visibleRect.intersect(hostRect);
+        boolean visible = intersects && !visibleRect.isEmpty()
+                && info.isVisibleToUser() && host.isShown();
+        String text = "";
+        String contentDescription = "";
+        try {
+            CharSequence cs = info.getText();
+            text = cs == null ? "" : cs.toString();
+            CharSequence cd = info.getContentDescription();
+            contentDescription = cd == null ? "" : cd.toString();
+        } catch (Throwable ignored) {
+        }
+        String cls = "android.view.View";
+        try {
+            CharSequence cn = info.getClassName();
+            if (cn != null && cn.length() > 0) cls = cn.toString();
+        } catch (Throwable ignored) {
+        }
+        boolean clickable = false;
+        boolean enabled = true;
+        boolean focused = false;
+        boolean checked = false;
+        boolean selected = false;
+        try {
+            clickable = info.isClickable();
+            enabled = info.isEnabled();
+            focused = info.isFocused();
+            checked = info.isCheckable() && info.isChecked();
+            selected = info.isSelected();
+        } catch (Throwable ignored) {
+        }
+        out.append("{\"class\":\"").append(jesc(cls)).append('"')
+                .append(",\"id\":\"\"")
+                .append(",\"text\":\"").append(jesc(text)).append('"')
+                .append(",\"hint\":\"\"")
+                .append(",\"password\":false")
+                .append(",\"content_description\":\"").append(jesc(contentDescription)).append('"')
+                .append(",\"window\":\"").append(jesc(window)).append('"')
+                .append(",\"bounds\":\"[").append(rect.left).append(',').append(rect.top)
+                .append("][").append(rect.right).append(',').append(rect.bottom).append("]\"")
+                .append(",\"bounds_on_screen\":\"[").append(rect.left).append(',').append(rect.top)
+                .append("][").append(rect.right).append(',').append(rect.bottom).append("]\"")
+                .append(",\"visible_bounds\":\"")
+                .append(visibleRect.isEmpty() ? ""
+                        : "[" + visibleRect.left + "," + visibleRect.top + "]["
+                                + visibleRect.right + "," + visibleRect.bottom + "]")
+                .append('"')
+                .append(",\"visible\":").append(visible)
+                .append(",\"visibility\":0")
+                .append(",\"clickable\":").append(clickable)
+                .append(",\"enabled\":").append(enabled)
+                .append(",\"focused\":").append(focused)
+                .append(",\"checked\":").append(checked)
+                .append(",\"selected\":").append(selected)
+                .append('}');
     }
 
     static String jesc(String s) {
@@ -2719,16 +2858,25 @@ public final class LaunchMain {
                                 String call = "android.app.IActivityTaskManager." + n;
                                 android.content.Intent intent = n.startsWith("startActivities")
                                         ? null : findIntent(a);
-                                if (intent == null || intent.getComponent() == null) {
-                                    // No component to launch truthfully: keep the
-                                    // W27 structured marker and fabricate nothing.
+                                if (intent == null) {
+                                    // `startActivities` bundles its Intents in a list:
+                                    // there is nothing to resolve one-by-one here, so
+                                    // keep the structured marker and fabricate nothing.
                                     System.out.println("ACOSUNSUPPORTED {\"code\":\"UNSUPPORTED_ANDROID_API\","
                                             + "\"call\":\"" + esc(call) + "\","
-                                            + "\"detail\":\"the request has no explicit component and ACOS "
-                                            + "has no package-manager Intent resolution; no Activity was fabricated\"}");
+                                            + "\"detail\":\"ACOS cannot launch a bundled startActivities "
+                                            + "request; no Activity was fabricated\"}");
                                     System.out.flush();
                                     return m.getReturnType() == int.class ? 0 : null;
                                 }
+                                // MPROC1: an implicit intent is decided by the
+                                // **host** package manager, exactly as on a
+                                // device. That is what lets the capture target
+                                // stand in for an installed share sheet / browser
+                                // / picker, and it is why this branch no longer
+                                // rejects a component-less request here: the old
+                                // short-circuit made the host unable to see the
+                                // intent at all.
                                 // Record it host-side first (W35 decodes the
                                 // Intent and `AmsState` records the launch),
                                 // then deliver what AMS would deliver.
@@ -2747,6 +2895,55 @@ public final class LaunchMain {
                                     System.out.flush();
                                     return result;
                                 }
+                                android.content.ComponentName target = intent.getComponent();
+                                if (target != null
+                                        && !sPkg.equals(target.getPackageName())) {
+                                    // MPROC4 step 3b: the component lives in **another
+                                    // installed package**, i.e. in another process. The
+                                    // host has already recorded the launch (and the need
+                                    // for that package's process); this process must not
+                                    // instantiate another package's class. The process
+                                    // that owns the component launches it (AMS starts it
+                                    // and delivers the transaction there).
+                                    System.out.println("ACOSLAUNCH MARK start-activity-remote"
+                                            + " package=" + esc(target.getPackageName())
+                                            + " class=" + esc(target.getClassName()));
+                                    System.out.flush();
+                                    return result;
+                                }
+                                if (System.getenv("ACOSLAUNCH_HOST_SCHEDULES") != null) {
+                                    // MPROC7 (ADR-0029 amendment): this process's
+                                    // launches are host-built. The request is
+                                    // already recorded host-side; the peer
+                                    // delivers the `LaunchActivityItem` (or the
+                                    // `NewIntentItem` for a reused top) to this
+                                    // process's own app thread. The guest must
+                                    // not instantiate a second activity with a
+                                    // guest-minted token: that token is not the
+                                    // one the host's `ActivityRecord` carries
+                                    // (it would report the wrong token on
+                                    // `activityResumed`/`finishActivity`).
+                                    System.out.println("ACOSLAUNCH MARK start-activity-host-scheduled"
+                                            + " component=" + esc(String.valueOf(target))
+                                            + " flags=0x" + Integer.toHexString(intent.getFlags()));
+                                    System.out.flush();
+                                    return result;
+                                }
+                                if (target == null) {
+                                    // MPROC1: the host accepted the intent without
+                                    // an installed target, i.e. the session's
+                                    // **capture target** recorded it. The app is
+                                    // told exactly what a device's share sheet
+                                    // says ("handled"); the reply/control op says
+                                    // `captured`. A scripted result arrives later
+                                    // as a real ActivityResultItem transaction.
+                                    System.out.println("ACOSLAUNCH MARK start-activity-captured"
+                                            + " action=" + esc(String.valueOf(intent.getAction()))
+                                            + " type=" + esc(String.valueOf(intent.getType()))
+                                            + " data=" + esc(String.valueOf(intent.getDataString())));
+                                    System.out.flush();
+                                    return result;
+                                }
                                 try {
                                     if (launchLocalActivity(intent)) return result;
                                 } catch (Throwable t) {
@@ -2760,7 +2957,7 @@ public final class LaunchMain {
                                 }
                                 System.out.println("ACOSUNSUPPORTED {\"code\":\"UNSUPPORTED_ANDROID_API\","
                                         + "\"call\":\"" + esc(call) + "\","
-                                        + "\"detail\":\"the Intent names a component this process cannot "
+                                        + "\"detail\":\"the Intent names a component this package cannot "
                                         + "launch; no Activity was fabricated\"}");
                                 System.out.flush();
                                 return m.getReturnType() == int.class ? 2 : null;
@@ -2960,27 +3157,70 @@ public final class LaunchMain {
         // marshalled across the peer's byte pipe, which is why the token used to
         // be null (`no activity for token 0x0`). The transaction items are still
         // the framework's own (`LaunchActivityItem` + `ResumeActivityItem`).
-        IBinder token = new android.os.Binder();
-        try {
-            Object tx = buildLaunchTransaction(sClient, token, app, sActivity);
-            scheduleLocal(tx);
-            sCurrentToken = token;
-            // ROT6: the Activity was launched, so it is the top of the task and the
-            // last one: when the app finishes it (`Activity.finish()`), the *server*
-            // side owns the rest of the lifecycle. Start the watcher that delivers
-            // it (see [`startTopFinishWatcher`]).
-            startTopFinishWatcher(token);
-            System.out.println("ACOSLAUNCH MARK schedule-transaction-delivered activity="
-                    + sActivity + " token=binder:" + Integer.toHexString(System.identityHashCode(token))
-                    + " transport=local-iapplicationthread");
-        } catch (Throwable x) {
-            System.out.println("ACOSLAUNCH MARK schedule-transaction-failed " + x);
-            x.printStackTrace(System.out);
-            dumpActivityState(thread, at);
-            quit();
-            return;
+        // MPROC7 (ADR-0029 amendment): for a **spawned secondary process** the
+        // host builds and delivers the first launch. Its `ClientTransaction`
+        // carries a system_server-side activity token, which a guest cannot
+        // mint, so the guest waits for the host's
+        // `IApplicationThread.scheduleTransaction` instead of marshalling its
+        // own. The primary process keeps the local path (its token is the one
+        // the guest itself must report back).
+        if (System.getenv("ACOSLAUNCH_HOST_SCHEDULES") != null) {
+            System.out.println("ACOSLAUNCH MARK waiting-for-host-transaction activity="
+                    + sActivity);
+            System.out.flush();
+            Object launched = null;
+            long hostDeadline = System.currentTimeMillis() + sResumeMs;
+            while (launched == null && System.currentTimeMillis() < hostDeadline) {
+                Thread.sleep(5);
+                launched = resumedActivity(thread);
+            }
+            if (launched == null) {
+                System.out.println("ACOSLAUNCH MARK host-transaction-timeout activity="
+                        + sActivity + " timeout_ms=" + sResumeMs);
+                write(new File(sOut, "activity-not-resumed.marker"),
+                        "package=" + sPkg + "\nactivity=" + sActivity
+                                + "\ntimeout_ms=" + sResumeMs
+                                + "\nreason=HOST_TRANSACTION_TIMEOUT\n");
+                dumpActivityState(thread, at);
+                quit();
+                return;
+            }
+            Object hostToken = get(launched, "mToken");
+            if (hostToken instanceof IBinder) {
+                sCurrentToken = (IBinder) hostToken;
+                // ROT6: the host delivered the launch, so the server side owns
+                // the rest of the lifecycle; the finish watcher reports it.
+                startTopFinishWatcher(sCurrentToken);
+            }
+            System.out.println("ACOSLAUNCH MARK host-transaction-resumed activity="
+                    + launched.getClass().getName()
+                    + " token=" + (sCurrentToken == null ? "none" : "binder:"
+                            + Integer.toHexString(System.identityHashCode(sCurrentToken))));
+            System.out.flush();
+        } else {
+            IBinder token = new android.os.Binder();
+            try {
+                Object tx = buildLaunchTransaction(sClient, token, app, sActivity);
+                scheduleLocal(tx);
+                sCurrentToken = token;
+                // ROT6: the Activity was launched, so it is the top of the task and the
+                // last one: when the app finishes it (`Activity.finish()`), the *server*
+                // side owns the rest of the lifecycle. Start the watcher that delivers
+                // it (see [`startTopFinishWatcher`]).
+                startTopFinishWatcher(token);
+                System.out.println("ACOSLAUNCH MARK schedule-transaction-delivered activity="
+                        + sActivity + " token=binder:"
+                        + Integer.toHexString(System.identityHashCode(token))
+                        + " transport=local-iapplicationthread");
+            } catch (Throwable x) {
+                System.out.println("ACOSLAUNCH MARK schedule-transaction-failed " + x);
+                x.printStackTrace(System.out);
+                dumpActivityState(thread, at);
+                quit();
+                return;
+            }
+            System.out.flush();
         }
-        System.out.flush();
         long adeadline = System.currentTimeMillis() + sResumeMs;
         while (System.currentTimeMillis() < adeadline) {
             Object activity = resumedActivity(thread);
@@ -3521,7 +3761,35 @@ public final class LaunchMain {
                 // android.hardware.SystemSensorManager.nativeClassInit()`
                 // (Gaten, w25-gaten-launch).
                 "register_android_hardware_SensorManager",
+                // MODA11YNATIVE: an accessibility service's `takeScreenshot`
+                // result is a `HardwareBuffer` the app reads with
+                // `nReadHardwareBufferFromParcel`/the `nGet*` getters and uses
+                // with `Bitmap.wrapHardwareBuffer`. The image's libandroid_runtime
+                // exports the registration (and libui's `GraphicBuffer`
+                // unflatten goes through the ACOS gralloc shim, which owns the
+                // memfd), so the guest runs the REAL implementation — no
+                // substitute native.
+                "register_android_hardware_HardwareBuffer",
                 "register_com_android_internal_util_VirtualRefBasePtr",
+                // WV4 (wall 8): `android.net.LocalSocketImpl`'s socket natives.
+                // The WebView provider's session transport is one `AF_UNIX`
+                // stream socket per session (`results/handoff/WVB/WIRE.md` §0);
+                // `AcosSessionSocket.open` calls
+                // `LocalSocket.connect(new LocalSocketAddress("/run/acos/webview.sock",
+                // Namespace.FILESYSTEM))`, i.e. `LocalSocketImpl.connectLocal`,
+                // whose seven natives (connectLocal, bindLocal, read_native,
+                // readba_native, write_native, writeba_native,
+                // getPeerCredentials_native) live in the image's own
+                // libandroid_runtime (`register_android_net_LocalSocketImpl`,
+                // base/core/jni/android_net_LocalSocketImpl.cpp). Without the
+                // registration the provider dies with `UnsatisfiedLinkError: No
+                // implementation found for void
+                // android.net.LocalSocketImpl.connectLocal(...)`. The image's
+                // implementation is a real `connect(2)` with real errno ->
+                // IOException (`socket_local_client_connect`), so the failure
+                // with no broker is the honest ENOENT/ECONNREFUSED, never a
+                // fabricated transport.
+                "register_android_net_LocalSocketImpl",
         };
         String[] graphics = {"register_android_graphics_classes"};
         StringBuilder missing = new StringBuilder();
@@ -3708,22 +3976,6 @@ public final class LaunchMain {
     }
 
     /**
-     * The `getApplicationInfo` reply the framework would get from the package
-     * manager for the APK being launched (no split: the launch needs no class
-     * outside the APK, because `instrumentationName` is null).
-     */
-    static byte[] buildApplicationInfoReply() throws Throwable {
-        Parcel p = Parcel.obtain();
-        try {
-            p.writeInt(0); // AIDL reply: no exception
-            p.writeTypedObject(buildAppInfo(), 0);
-            return p.marshall();
-        } finally {
-            p.recycle();
-        }
-    }
-
-    /**
      * W47: the process launch `Configuration`, with the stock screen-layout
      * bits.
      *
@@ -3755,6 +4007,14 @@ public final class LaunchMain {
     static int PANEL_W = envInt("ACOSLAUNCH_WIDTH", 1080);
     static int PANEL_H = envInt("ACOSLAUNCH_PANEL_HEIGHT", 2400);
     static int DENSITY_DPI = envInt("ACOSLAUNCH_DENSITY", 420);
+    /**
+     * The display's nominal refresh rate, the same value `acos-services`'
+     * `DisplayInfo` serves (`60.000004` is what the API-34 emulator reports).
+     * `Display.getRefreshRate()` is what the framework samples time against
+     * (`AccessibilityService.calculateGestureSampleTimeMs`, `Choreographer`
+     * frame math), so the guest must report a real rate, never `0`.
+     */
+    static final float REFRESH_RATE_HZ = 60.000004f;
     static int STATUS_INSET = envInt("ACOSLAUNCH_STATUS_INSET", 128);
     static int NAV_INSET = envInt("ACOSLAUNCH_NAV_INSET", 63);
     /**
@@ -4101,11 +4361,41 @@ public final class LaunchMain {
         setField(cls, info, "rotation", 0);
         setField(cls, info, "modeId", 1);
         setField(cls, info, "defaultModeId", 1);
+        // MPROC7: a real display always lists its modes. Without this array the
+        // framework's `DisplayInfo.findMode()` throws `IllegalStateException:
+        // Unable to locate mode id=1,supportedModes=[]` as soon as something
+        // initialises hardware rendering (`HardwareRenderer.ProcessInitializer
+        // .initDisplayInfo` from `ViewRootImpl.setView`) — which is exactly
+        // what an activity with `ActivityInfo.FLAG_HARDWARE_ACCELERATED` does.
+        Class<?> modeCls = Class.forName("android.view.Display$Mode");
+        java.lang.reflect.Constructor<?> modeCtor = modeCls.getDeclaredConstructor(
+                int.class, int.class, int.class, float.class);
+        modeCtor.setAccessible(true);
+        // MERGEMPROC: the Mode carries the display's **real** refresh rate, not a
+        // rounded 60.0. `DisplayInfo.getRefreshRate()` answers from this mode
+        // (`supportedModes[0].getRefreshRate()`), and an accessibility service
+        // samples `dispatchGesture` against it — a 60.0 here made the app report
+        // `refresh_rate=60.0` where the framework's own constant is 60.000004.
+        Object mode = modeCtor.newInstance(1, PANEL_W, PANEL_H, REFRESH_RATE_HZ);
+        Object modes = java.lang.reflect.Array.newInstance(modeCls, 1);
+        java.lang.reflect.Array.set(modes, 0, mode);
+        setField(cls, info, "supportedModes", modes);
         setField(cls, info, "logicalDensityDpi", DENSITY_DPI);
         setField(cls, info, "state", 2);
         setField(cls, info, "colorMode", 0);
         setField(cls, info, "installOrientation", 0);
-        setField(cls, info, "refreshRate", 60.000004f);
+        setField(cls, info, "renderFrameRate", REFRESH_RATE_HZ);
+        setField(cls, info, "refreshRate", REFRESH_RATE_HZ);
+        // `DisplayInfo.getRefreshRate()` (the image's own bytecode) reads
+        // `refreshRateOverride > 0 ? it : (supportedModes.length == 0 ? 0 :
+        // getMode().getRefreshRate())`, so the one mode above is also what makes
+        // a non-zero rate available: with an EMPTY `supportedModes` every app
+        // read `0 Hz`, and `AccessibilityService.calculateGestureSampleTimeMs`
+        // turned that into `(int)(1000 / 0.0f) == Integer.MAX_VALUE` — a gesture
+        // then had only its key-point steps (press and release, no `MOVE`s), so
+        // a swipe never scrolled anything. A real display always carries the
+        // mode it is driving.
+        setField(cls, info, "refreshRateOverride", 0.0f);
         Parcel p = Parcel.obtain();
         try {
             p.writeInt(0); // AIDL reply: no exception
@@ -4750,6 +5040,153 @@ public final class LaunchMain {
             data.recycle();
             reply.recycle();
         }
+    }
+
+    // ---------------------------------------------- scripted activity results
+
+    /**
+     * MPROC1: watch for a scripted activity result and deliver it.
+     *
+     * <p>A session with no installed picker still has to be able to test what
+     * the app does with the picture a picker returns. The capture target records
+     * the intent; the agent scripts the answer (`resultCode` + a data `Intent`,
+     * e.g. an image `content://` URI); this thread turns it into the stock
+     * `ActivityResultItem` `ClientTransaction` and hands it to the real
+     * `ActivityThread` — `onActivityResult` runs as it would on a device. The
+     * file is inside this run's own tree; a JSON parse error is a marker, never
+     * a silent drop.
+     */
+    static void startResultWatcher() {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                java.io.File file = new java.io.File(sOut, "activity-result.json");
+                java.io.File ack = new java.io.File(sOut, "activity-result.ack");
+                long lastSeq = -1;
+                while (true) {
+                    try {
+                        Thread.sleep(50);
+                        if (!file.isFile()) continue;
+                        String text = readText(file.getPath());
+                        if (text.isEmpty()) continue;
+                        org.json.JSONObject o = new org.json.JSONObject(text);
+                        long seq = o.optLong("capture_seq", -1);
+                        if (seq <= 0 || seq == lastSeq) continue;
+                        int requestCode = o.optInt("request_code", 0);
+                        int resultCode = o.optInt("result_code", 0);
+                        android.content.Intent data = null;
+                        if (o.has("data") || o.has("action") || o.has("mime_type")) {
+                            data = new android.content.Intent();
+                            if (!o.isNull("action")) data.setAction(o.optString("action"));
+                            // `setData` and `setType` each clear the other on
+                            // Android; a picker answer carries both, so they go
+                            // in through `setDataAndType` (the framework's own
+                            // API for exactly this).
+                            if (!o.isNull("data") && !o.isNull("mime_type")) {
+                                data.setDataAndType(
+                                        android.net.Uri.parse(o.optString("data")),
+                                        o.optString("mime_type"));
+                            } else if (!o.isNull("data")) {
+                                data.setData(android.net.Uri.parse(o.optString("data")));
+                            } else if (!o.isNull("mime_type")) {
+                                data.setType(o.optString("mime_type"));
+                            }
+                            org.json.JSONObject extras = o.optJSONObject("extras");
+                            if (extras != null) {
+                                java.util.Iterator<String> keys = extras.keys();
+                                while (keys.hasNext()) {
+                                    String key = keys.next();
+                                    data.putExtra(key, extras.optString(key));
+                                }
+                            }
+                        }
+                        deliverScriptedResult(requestCode, resultCode, data);
+                        lastSeq = seq;
+                        write(ack, "{\"capture_seq\":" + seq
+                                + ",\"utc_ms\":" + System.currentTimeMillis() + "}");
+                        System.out.println("ACOSLAUNCH MARK activity-result-delivered seq=" + seq
+                                + " request_code=" + requestCode + " result_code=" + resultCode
+                                + " data=" + (data == null ? "null"
+                                        : String.valueOf(data.getDataString())));
+                        System.out.flush();
+                    } catch (Throwable e) {
+                        System.out.println("ACOSLAUNCH MARK activity-result-delivery-error "
+                                + unwrap(e));
+                        System.out.flush();
+                        try {
+                            Thread.sleep(200);
+                        } catch (InterruptedException ignored) {
+                        }
+                    }
+                }
+            }
+        });
+        t.setDaemon(true);
+        t.setName("acos-result-watcher");
+        t.start();
+        System.out.println("ACOSLAUNCH MARK activity-result-watcher started");
+        System.out.flush();
+    }
+
+    /**
+     * Deliver one `ActivityResultItem` for the current Activity through the real
+     * `IApplicationThread.scheduleTransaction` (the same path AMS uses).
+     */
+    static void deliverScriptedResult(int requestCode, int resultCode,
+            android.content.Intent data) throws Throwable {
+        IBinder token = sCurrentToken;
+        if (token == null) throw new IllegalStateException("no current activity token");
+        // `ResultInfo` has no public constructor on this image (only a `Parcel`
+        // one, which is package-private for AMS). Build it the way the wire does:
+        // write the fields with the framework's own writers
+        // (`ResultInfo.writeToParcel` = String16 who, requestCode, resultCode,
+        // data presence + `Intent.writeToParcel`) and let `CREATOR` read them
+        // back. Nothing here is a hand-marshalled struct.
+        Class<?> riCls = Class.forName("android.app.ResultInfo");
+        android.os.Parcel rp = android.os.Parcel.obtain();
+        Object resultInfo;
+        try {
+            rp.writeString(null);
+            rp.writeInt(requestCode);
+            rp.writeInt(resultCode);
+            if (data != null) {
+                rp.writeInt(1);
+                data.writeToParcel(rp, 0);
+            } else {
+                rp.writeInt(0);
+            }
+            rp.setDataPosition(0);
+            java.lang.reflect.Field creator = riCls.getField("CREATOR");
+            Object c = creator.get(null);
+            resultInfo = ((android.os.Parcelable.Creator<?>) c).createFromParcel(rp);
+        } finally {
+            rp.recycle();
+        }
+        java.util.ArrayList<Object> list = new java.util.ArrayList<Object>();
+        list.add(resultInfo);
+        Class<?> itemCls =
+                Class.forName("android.app.servertransaction.ActivityResultItem");
+        Object item = null;
+        for (java.lang.reflect.Method m : itemCls.getDeclaredMethods()) {
+            if (!m.getName().equals("obtain")) continue;
+            Class<?>[] types = m.getParameterTypes();
+            if (types.length != 1 || !java.util.List.class.isAssignableFrom(types[0])) continue;
+            m.setAccessible(true);
+            item = m.invoke(null, list);
+        }
+        if (item == null) {
+            throw new NoSuchMethodException("ActivityResultItem.obtain(List)");
+        }
+        Class<?> ctxCls = Class.forName("android.app.servertransaction.ClientTransaction");
+        Class<?> iatCls = Class.forName("android.app.IApplicationThread");
+        Object tx = ctxCls.getMethod("obtain", iatCls, IBinder.class)
+                .invoke(null, sClient, token);
+        java.util.ArrayList<Object> callbacks = new java.util.ArrayList<Object>();
+        callbacks.add(item);
+        setPrivateField(ctxCls, tx, "mActivityCallbacks", callbacks);
+        setPrivateField(ctxCls, tx, "mLifecycleStateRequest", null);
+        setPrivateFieldIfPresent(ctxCls, tx, "mTransactionItems", callbacks);
+        scheduleLocal(tx);
     }
 
     // ------------------------------------------------------------- helpers

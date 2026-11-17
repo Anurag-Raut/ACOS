@@ -303,11 +303,7 @@ impl Hub {
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn stats(&self) -> Vec<SlotStats> {
         let inner = self.inner.lock().expect("hub");
-        let mut out: Vec<SlotStats> = inner
-            .slots
-            .values()
-            .map(|slot| slot.stats())
-            .collect();
+        let mut out: Vec<SlotStats> = inner.slots.values().map(|slot| slot.stats()).collect();
         out.sort_by(|a, b| a.session_id.cmp(&b.session_id));
         out
     }
@@ -342,12 +338,7 @@ impl Watcher {
     /// The producer's hello, once received.
     #[must_use]
     pub fn hello(&self) -> Option<Value> {
-        self.slot
-            .state
-            .lock()
-            .expect("slot")
-            .hello
-            .clone()
+        self.slot.state.lock().expect("slot").hello.clone()
     }
 
     /// `(connected, last_error)` for the upstream stream.
@@ -977,9 +968,7 @@ mod tests {
             || producer.serving.load(Ordering::SeqCst) == 1,
             "the producer to see the first subscriber",
         );
-        let watchers: Vec<Watcher> = (0..4)
-            .map(|_| hub.watch("s_fan").expect("watch"))
-            .collect();
+        let watchers: Vec<Watcher> = (0..4).map(|_| hub.watch("s_fan").expect("watch")).collect();
         assert_eq!(producer.accepts.load(Ordering::SeqCst), 1);
 
         // Every browser sees the same frame and event stream.
@@ -999,7 +988,10 @@ mod tests {
         let stats = hub.stats();
         assert_eq!(stats.len(), 1);
         assert_eq!(stats[0].watchers, 5);
-        assert_eq!(stats[0].upstream_connects, 1, "exactly one upstream connection");
+        assert_eq!(
+            stats[0].upstream_connects, 1,
+            "exactly one upstream connection"
+        );
         assert!(stats[0].connected);
 
         // A new browser joins late: still no second upstream connection.

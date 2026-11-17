@@ -35,7 +35,7 @@ use std::sync::{Arc, Mutex};
 use acos_aidl::MethodInfo;
 use acos_parcel::binder::BinderId;
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, ServiceObject};
 use crate::value::Value;
 
@@ -67,7 +67,10 @@ fn int_arg(args: &[Value], i: usize) -> i32 {
 }
 
 fn str_arg(args: &[Value], i: usize) -> String {
-    args.get(i).and_then(Value::as_str).unwrap_or_default().to_string()
+    args.get(i)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// Read an AIDL nullable `CharSequence` argument.
@@ -230,12 +233,8 @@ impl ServiceObject for AppOpsService {
                 let code = int_arg(args, 1);
                 let uid = int_arg(args, 2);
                 let package = str_arg(args, 3);
-                self.state
-                    .lock()
-                    .unwrap()
-                    .notes
-                    .push((code, uid, package));
-                return Err(unsupported(interface, method))
+                self.state.lock().unwrap().notes.push((code, uid, package));
+                return Err(unsupported(interface, method));
             }
             "finishOperation" | "finishProxyOperation" => Vec::new(),
             "setMode" => {
@@ -248,7 +247,7 @@ impl ServiceObject for AppOpsService {
                     .unwrap()
                     .mode_changes
                     .push((code, uid, mode, package));
-                return Err(unsupported(interface, method))
+                return Err(unsupported(interface, method));
             }
             "setUidMode" => {
                 let code = int_arg(args, 0);
@@ -259,7 +258,7 @@ impl ServiceObject for AppOpsService {
                     .unwrap()
                     .mode_changes
                     .push((code, uid, mode, String::new()));
-                return Err(unsupported(interface, method))
+                return Err(unsupported(interface, method));
             }
             _ => return Err(unsupported(interface, method)),
         };
@@ -326,7 +325,7 @@ impl ServiceObject for PermissionService {
                     .unwrap()
                     .mutations
                     .push((package, permission, user));
-                return Err(unsupported(interface, method))
+                return Err(unsupported(interface, method));
             }
             "updatePermissionFlags" | "updatePermissionFlagsForAllApps" => {
                 let package = str_arg(args, 0);
@@ -337,7 +336,7 @@ impl ServiceObject for PermissionService {
                     .unwrap()
                     .mutations
                     .push((package, permission, user));
-                return Err(unsupported(interface, method))
+                return Err(unsupported(interface, method));
             }
             _ => return Err(unsupported(interface, method)),
         };
@@ -439,8 +438,14 @@ impl ServiceObject for UserService {
             // Only the one real user (id 0) is unlocked/running/foreground. An
             // unknown id must not be reported as a healthy user: Android
             // returns `false` (or throws) rather than a blanket `true`.
-            "isUserUnlocked" | "isUserRunning" | "isUserForeground" | "isUserVisible"
-            | "isUserUnlockingOrUnlocked" | "isUserNameSet" | "isDemoUser" | "isAdminUser" => {
+            "isUserUnlocked"
+            | "isUserRunning"
+            | "isUserForeground"
+            | "isUserVisible"
+            | "isUserUnlockingOrUnlocked"
+            | "isUserNameSet"
+            | "isDemoUser"
+            | "isAdminUser" => {
                 let user = int_arg(args, 0);
                 vec![Value::Bool(user == state.user_id)]
             }
@@ -449,8 +454,12 @@ impl ServiceObject for UserService {
                 let b = int_arg(args, 1);
                 vec![Value::Bool(a == state.user_id && b == state.user_id)]
             }
-            "isRestricted" | "canHaveRestrictedProfile" | "isHeadlessSystemUserMode"
-            | "isUserSwitcherEnabled" | "hasRestrictedProfiles" | "hasBadge" => {
+            "isRestricted"
+            | "canHaveRestrictedProfile"
+            | "isHeadlessSystemUserMode"
+            | "isUserSwitcherEnabled"
+            | "hasRestrictedProfiles"
+            | "hasBadge" => {
                 vec![Value::Bool(false)]
             }
             "getUserRestrictions" | "getApplicationRestrictions" => {
@@ -463,10 +472,16 @@ impl ServiceObject for UserService {
             "getUserCreationTime" | "getUserStartRealtime" | "getUserUnlockRealtime" => {
                 vec![Value::Long(0)]
             }
-            "createUserWithThrow" | "preCreateUserWithThrow" | "removeUser" | "setUserName"
-            | "setUserIcon" | "setUserEnabled" | "setUserRestriction" | "markGuestForDeletion" => {
+            "createUserWithThrow"
+            | "preCreateUserWithThrow"
+            | "removeUser"
+            | "setUserName"
+            | "setUserIcon"
+            | "setUserEnabled"
+            | "setUserRestriction"
+            | "markGuestForDeletion" => {
                 state.mutations.push(method.name.clone());
-                return Err(unsupported(interface, method))
+                return Err(unsupported(interface, method));
             }
             _ => return Err(unsupported(interface, method)),
         };
@@ -518,7 +533,12 @@ impl UiModeService {
 }
 
 impl ServiceObject for UiModeService {
-    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &MethodInfo,
+        _args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "android.app.IUiModeManager" {
             return Err(unsupported(interface, method));
         }
@@ -535,17 +555,32 @@ impl ServiceObject for UiModeService {
             // callback. ACOS has no contrast controller, so the callback is
             // recorded and never invoked: a no-op success, not a fake value.
             "addCallback" | "removeCallback" => {
-                self.state.lock().unwrap().mutations.push(method.name.clone());
+                self.state
+                    .lock()
+                    .unwrap()
+                    .mutations
+                    .push(method.name.clone());
                 vec![]
             }
             // Mutators and the contrast-listener registration are not
             // implemented: report them honestly instead of a no-op success.
-            "setNightMode" | "setApplicationNightMode" | "setNightModeForUser"
-            | "setNightModeForUserWithDisplay" | "enableCarMode" | "disableCarMode"
-            | "setDesktopMode" | "setCarMode"
-            | "addContrastChangeListener" | "removeContrastChangeListener"
-            | "setCustomNightModeStart" | "setCustomNightModeEnd" => {
-                self.state.lock().unwrap().mutations.push(method.name.clone());
+            "setNightMode"
+            | "setApplicationNightMode"
+            | "setNightModeForUser"
+            | "setNightModeForUserWithDisplay"
+            | "enableCarMode"
+            | "disableCarMode"
+            | "setDesktopMode"
+            | "setCarMode"
+            | "addContrastChangeListener"
+            | "removeContrastChangeListener"
+            | "setCustomNightModeStart"
+            | "setCustomNightModeEnd" => {
+                self.state
+                    .lock()
+                    .unwrap()
+                    .mutations
+                    .push(method.name.clone());
                 return Err(unsupported(interface, method));
             }
             _ => return Err(unsupported(interface, method)),
@@ -836,7 +871,8 @@ impl ServiceObject for NotificationService {
                     items,
                 ))]
             }
-            "getNotificationChannelsBypassingDnd" | "getNotificationChannelGroupsForPackage"
+            "getNotificationChannelsBypassingDnd"
+            | "getNotificationChannelGroupsForPackage"
             | "getNotificationChannelGroups" => {
                 // Groups and DND-bypassing channels are derived from stored
                 // state. A group is returned only when the app created it; no
@@ -903,7 +939,8 @@ impl ServiceObject for NotificationService {
                 }
                 Vec::new()
             }
-            "getNotificationChannelGroup" | "getNotificationChannelGroupForPackage"
+            "getNotificationChannelGroup"
+            | "getNotificationChannelGroupForPackage"
             | "getPopulatedNotificationChannelGroupForPackage" => {
                 let package = str_arg(args, 0);
                 let id = if method.name == "getNotificationChannelGroup" {
@@ -965,7 +1002,8 @@ impl ServiceObject for NotificationService {
                     .filter(|c| c.package == package)
                     .collect();
                 vec![Value::Bool(
-                    channels.is_empty() || (channels.len() == 1 && channels[0].id == "miscellaneous"),
+                    channels.is_empty()
+                        || (channels.len() == 1 && channels[0].id == "miscellaneous"),
                 )]
             }
             "areChannelsBypassingDnd" => vec![Value::Bool(false)],
@@ -976,14 +1014,21 @@ impl ServiceObject for NotificationService {
             | "getSnoozedNotificationsFromListener" => vec![Value::TypedObject(
                 crate::parcelable::parceled_list_of(Vec::new()),
             )],
-            "getConsolidatedNotificationPolicy" | "getZenModeConfig" | "getNotificationHistory"
-            | "getAutomaticZenRule" | "getEffectsSuppressor" => {
+            "getConsolidatedNotificationPolicy"
+            | "getZenModeConfig"
+            | "getNotificationHistory"
+            | "getAutomaticZenRule"
+            | "getEffectsSuppressor" => {
                 vec![Value::TypedObject(crate::value::Parcelable::Null)]
             }
             "getZenRules" => vec![Value::List(Some(Vec::new()))],
-            "setInterruptionFilter" | "setNotificationDelegate" | "setToastRateLimitingEnabled"
-            | "setPrivateNotificationsAllowed" | "clearRequestedListenerHints"
-            | "requestHintsFromListener" | "silenceNotificationSound" => Vec::new(),
+            "setInterruptionFilter"
+            | "setNotificationDelegate"
+            | "setToastRateLimitingEnabled"
+            | "setPrivateNotificationsAllowed"
+            | "clearRequestedListenerHints"
+            | "requestHintsFromListener"
+            | "silenceNotificationSound" => Vec::new(),
             _ => return Err(unsupported(interface, method)),
         };
         Ok(CallResult {
@@ -1033,15 +1078,28 @@ impl ServiceObject for StatusBarService {
             return Err(unsupported(interface, method));
         }
         let reply = match method.name.as_str() {
-            "expandNotificationsPanel" | "collapsePanels" | "togglePanel"
-            | "expandSettingsPanel" | "setIcon" | "setIconVisibility" | "removeIcon"
-            | "onPanelRevealed" | "onPanelHidden" | "clearNotificationEffects"
-            | "disable" | "disableForUser" | "disable2" | "disable2ForUser" => {
+            "expandNotificationsPanel"
+            | "collapsePanels"
+            | "togglePanel"
+            | "expandSettingsPanel"
+            | "setIcon"
+            | "setIconVisibility"
+            | "removeIcon"
+            | "onPanelRevealed"
+            | "onPanelHidden"
+            | "clearNotificationEffects"
+            | "disable"
+            | "disableForUser"
+            | "disable2"
+            | "disable2ForUser" => {
                 self.state.lock().unwrap().calls.push(method.name.clone());
                 Vec::new()
             }
             "setImeWindowStatus" => {
-                let token = args.first().and_then(Value::as_binder).unwrap_or(BinderId(0));
+                let token = args
+                    .first()
+                    .and_then(Value::as_binder)
+                    .unwrap_or(BinderId(0));
                 let visibility = int_arg(args, 1);
                 self.state
                     .lock()

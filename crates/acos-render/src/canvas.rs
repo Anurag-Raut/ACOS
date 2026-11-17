@@ -12,8 +12,8 @@ use crate::matrix::Matrix3x3;
 use crate::paint::{BlurStyle, ColorFilterSpec, MaskFilterSpec, Paint, PaintStyle};
 use crate::path::Path;
 use tiny_skia::{
-    BlendMode, FillRule, Mask, PathBuilder, Pixmap, PixmapPaint, PixmapRef,
-    PremultipliedColorU8, Transform,
+    BlendMode, FillRule, Mask, PathBuilder, Pixmap, PixmapPaint, PixmapRef, PremultipliedColorU8,
+    Transform,
 };
 
 /// Android `Canvas.ClipOp`.
@@ -141,7 +141,9 @@ impl Canvas {
     }
 
     pub fn skew(&mut self, kx: f32, ky: f32) {
-        self.state.matrix.pre_concat(&Matrix3x3::skew_matrix(kx, ky));
+        self.state
+            .matrix
+            .pre_concat(&Matrix3x3::skew_matrix(kx, ky));
     }
 
     pub fn get_matrix(&self) -> Matrix3x3 {
@@ -156,9 +158,8 @@ impl Canvas {
             state: self.state.clone(),
             layer: true,
         });
-        let mut pixmap = Pixmap::new(self.width, self.height).ok_or_else(|| {
-            RenderError::size("saveLayer allocation failed")
-        })?;
+        let mut pixmap = Pixmap::new(self.width, self.height)
+            .ok_or_else(|| RenderError::size("saveLayer allocation failed"))?;
         // Layer bounds are honoured approximately: the framework clips the
         // layer to `bounds`, while ACOS allocates a full-size layer and relies
         // on the current clip. Documented in the fidelity list.
@@ -329,7 +330,6 @@ impl Canvas {
             || device.bottom <= clip.top as f32
             || device.top >= clip.bottom as f32
     }
-
 }
 
 /// Intersect two alpha masks in place.
@@ -431,7 +431,8 @@ pub(crate) fn fill_path_filtered(
     // blur) instead of allocating and blurring a full-screen buffer. This is
     // what makes elevation shadows cheap instead of O(canvas) each frame.
     let expand = mask_expand(mask_filter);
-    let Some((x0, y0, tw, th)) = filter_device_bounds(path, transform, expand, target.width(), target.height())
+    let Some((x0, y0, tw, th)) =
+        filter_device_bounds(path, transform, expand, target.width(), target.height())
     else {
         return;
     };
@@ -473,7 +474,8 @@ pub(crate) fn stroke_path_filtered(
         return;
     }
     let expand = mask_expand(mask_filter) + stroke.width * 0.5 + 2.0;
-    let Some((x0, y0, tw, th)) = filter_device_bounds(path, transform, expand, target.width(), target.height())
+    let Some((x0, y0, tw, th)) =
+        filter_device_bounds(path, transform, expand, target.width(), target.height())
     else {
         return;
     };
@@ -729,24 +731,15 @@ pub(crate) fn blit_color(
             let out_r = (sr + (p.red() as u32 * inv + 127) / 255).min(out_a);
             let out_g = (sg + (p.green() as u32 * inv + 127) / 255).min(out_a);
             let out_b = (sb + (p.blue() as u32 * inv + 127) / 255).min(out_a);
-            *p = PremultipliedColorU8::from_rgba(
-                out_r as u8,
-                out_g as u8,
-                out_b as u8,
-                out_a as u8,
-            )
-            .unwrap_or(*p);
+            *p =
+                PremultipliedColorU8::from_rgba(out_r as u8, out_g as u8, out_b as u8, out_a as u8)
+                    .unwrap_or(*p);
         }
     }
 }
 
 /// Paint a whole rectangle with a solid colour and blend mode.
-pub(crate) fn fill_color(
-    target: &mut Pixmap,
-    clip: Option<&Mask>,
-    color: u32,
-    blend: BlendMode,
-) {
+pub(crate) fn fill_color(target: &mut Pixmap, clip: Option<&Mask>, color: u32, blend: BlendMode) {
     let mut paint = tiny_skia::Paint::default();
     paint.set_color(crate::color::argb_to_sk(color));
     paint.blend_mode = blend;
@@ -825,7 +818,13 @@ pub(crate) fn draw_nine_patch(
         let sy = dst.height() as f32 / h.max(1.0);
         let local = Transform::from_row(sx, 0.0, 0.0, sy, dst.left as f32, dst.top as f32);
         let sk_paint = tiny_skia::Paint {
-            shader: tiny_skia::Pattern::new(pixmap, tiny_skia::SpreadMode::Pad, quality, opacity, local),
+            shader: tiny_skia::Pattern::new(
+                pixmap,
+                tiny_skia::SpreadMode::Pad,
+                quality,
+                opacity,
+                local,
+            ),
             blend_mode: paint.blend_mode,
             anti_alias: true,
             force_hq_pipeline: false,
@@ -860,7 +859,13 @@ pub(crate) fn draw_nine_patch(
             let ty = dycuts[j] - ycuts[j] * scaley;
             let local = Transform::from_row(scalex, 0.0, 0.0, scaley, tx, ty);
             let sk_paint = tiny_skia::Paint {
-                shader: tiny_skia::Pattern::new(pixmap, tiny_skia::SpreadMode::Pad, quality, opacity, local),
+                shader: tiny_skia::Pattern::new(
+                    pixmap,
+                    tiny_skia::SpreadMode::Pad,
+                    quality,
+                    opacity,
+                    local,
+                ),
                 blend_mode: paint.blend_mode,
                 anti_alias: false,
                 force_hq_pipeline: false,
@@ -894,8 +899,18 @@ fn source_cuts(divs: &[i32], extent: f32) -> Vec<f32> {
 fn dest_cuts(src_cuts: &[f32], origin: f32, extent: f32) -> Vec<f32> {
     let n = src_cuts.len().saturating_sub(1);
     let widths: Vec<f32> = (0..n).map(|i| src_cuts[i + 1] - src_cuts[i]).collect();
-    let fixed: f32 = widths.iter().enumerate().filter(|(i, _)| i % 2 == 0).map(|(_, w)| *w).sum();
-    let stretch: f32 = widths.iter().enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, w)| *w).sum();
+    let fixed: f32 = widths
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| i % 2 == 0)
+        .map(|(_, w)| *w)
+        .sum();
+    let stretch: f32 = widths
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| i % 2 == 1)
+        .map(|(_, w)| *w)
+        .sum();
     let total: f32 = widths.iter().sum();
     let mut out = Vec::with_capacity(n + 1);
     let mut x = origin;
@@ -943,7 +958,12 @@ pub(crate) fn apply_color_filter(pixmap: &mut Pixmap, filter: &ColorFilterSpec) 
             let mode = *mode;
             for p in pixmap.pixels_mut() {
                 let (r, g, b, a) = unpack_unpremul(word_of(p));
-                let dst = [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a as f32 / 255.0];
+                let dst = [
+                    r as f32 / 255.0,
+                    g as f32 / 255.0,
+                    b as f32 / 255.0,
+                    a as f32 / 255.0,
+                ];
                 let out = crate::color::porter_duff_reference(mode, src, dst);
                 set_word(p, out);
             }
@@ -963,10 +983,20 @@ pub(crate) fn apply_color_filter(pixmap: &mut Pixmap, filter: &ColorFilterSpec) 
             for p in pixmap.pixels_mut() {
                 let (r, g, b, a) = unpack_unpremul(word_of(p));
                 let m = matrix;
-                let rr = m[0] * r as f32 + m[1] * g as f32 + m[2] * b as f32 + m[3] * a as f32 + m[4];
-                let rg = m[5] * r as f32 + m[6] * g as f32 + m[7] * b as f32 + m[8] * a as f32 + m[9];
-                let rb = m[10] * r as f32 + m[11] * g as f32 + m[12] * b as f32 + m[13] * a as f32 + m[14];
-                let ra = m[15] * r as f32 + m[16] * g as f32 + m[17] * b as f32 + m[18] * a as f32 + m[19];
+                let rr =
+                    m[0] * r as f32 + m[1] * g as f32 + m[2] * b as f32 + m[3] * a as f32 + m[4];
+                let rg =
+                    m[5] * r as f32 + m[6] * g as f32 + m[7] * b as f32 + m[8] * a as f32 + m[9];
+                let rb = m[10] * r as f32
+                    + m[11] * g as f32
+                    + m[12] * b as f32
+                    + m[13] * a as f32
+                    + m[14];
+                let ra = m[15] * r as f32
+                    + m[16] * g as f32
+                    + m[17] * b as f32
+                    + m[18] * a as f32
+                    + m[19];
                 let clamp = |v: f32| v.clamp(0.0, 255.0) as u8;
                 set_premul(p, clamp(rr), clamp(rg), clamp(rb), clamp(ra));
             }
@@ -974,11 +1004,7 @@ pub(crate) fn apply_color_filter(pixmap: &mut Pixmap, filter: &ColorFilterSpec) 
     }
 }
 
-fn blend_pixel(
-    blend: BlendMode,
-    src: (u8, u8, u8, u8),
-    dst: (u8, u8, u8, u8),
-) -> (u8, u8, u8, u8) {
+fn blend_pixel(blend: BlendMode, src: (u8, u8, u8, u8), dst: (u8, u8, u8, u8)) -> (u8, u8, u8, u8) {
     // Map tiny-skia blend modes to un-premultiplied reference via a small
     // subset; unsupported blends fall back to source-over.
     let (sr, sg, sb, sa) = (
@@ -1205,4 +1231,3 @@ fn box_blur(pixmap: &mut Pixmap, sigma: f32) {
         crate::color::pack_premul(r, g, b, a)
     }
 }
-

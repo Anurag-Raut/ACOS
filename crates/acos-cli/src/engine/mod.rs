@@ -369,7 +369,6 @@ pub trait SessionBackend {
         None
     }
 
-
     /// Start the app and return the first completed frame.
     fn launch(&mut self, apk: &Path) -> Result<LaunchOutcome, BackendError>;
 
@@ -626,9 +625,7 @@ impl EngineBackend {
 
     /// The live module rows' shared handle, so a verdict can read the final set.
     #[must_use]
-    pub fn module_rows(
-        &self,
-    ) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+    pub fn module_rows(&self) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
         match self {
             EngineBackend::Native(_) => None,
             EngineBackend::Session { session, .. } => session.module_rows_handle(),
@@ -766,11 +763,7 @@ impl EngineBackend {
         };
         if let EngineBackend::Session { session, .. } = self {
             if let Some(settle) = session.input_settle_timeout() {
-                return Err(settle_timeout_error(
-                    settle,
-                    context,
-                    observed.frame_seq(),
-                ));
+                return Err(settle_timeout_error(settle, context, observed.frame_seq()));
             }
         }
         if observed.frame_seq() <= previous || !observed.frame.is_fresh() {
@@ -1277,11 +1270,7 @@ impl Backend for EngineBackend {
 /// `settled:false` so an agent can still see the screen; `verify` must not
 /// assert on that transient state. Keep the guest's settle reason, the
 /// animating flag and the latest frame sequence in the step evidence.
-fn settle_timeout_error(
-    settle: serde_json::Value,
-    context: &str,
-    frame_seq: u64,
-) -> BackendError {
+fn settle_timeout_error(settle: serde_json::Value, context: &str, frame_seq: u64) -> BackendError {
     let reason = settle
         .get("reason")
         .and_then(serde_json::Value::as_str)
@@ -1533,10 +1522,15 @@ fn apply_window_tags(tree: &mut UiTree) {
     // A single-window probe may leave `window` empty on the nodes; the one row
     // is then the owner.
     let single = (tree.windows.len() == 1).then(|| tree.windows[0].clone());
-    fn tag(node: &mut UiNode, by_label: &HashMap<String, (String, String, String, i64)>, single: Option<&acos_protocol::ui::WindowInfo>) {
-        let found = by_label.get(&node.window).cloned().or_else(|| {
-            single.map(|w| (w.id.clone(), w.type_name.clone(), w.kind.clone(), w.z))
-        });
+    fn tag(
+        node: &mut UiNode,
+        by_label: &HashMap<String, (String, String, String, i64)>,
+        single: Option<&acos_protocol::ui::WindowInfo>,
+    ) {
+        let found = by_label
+            .get(&node.window)
+            .cloned()
+            .or_else(|| single.map(|w| (w.id.clone(), w.type_name.clone(), w.kind.clone(), w.z)));
         if let Some((id, type_name, kind, z)) = found {
             node.window_id = id;
             node.window_type = type_name;
@@ -1919,14 +1913,18 @@ mod tests {
 
         let search = tree
             .find_one(&Selector {
-                content_desc: Some(acos_protocol::TextMatch::exact("Search Japanese dictionary")),
+                content_desc: Some(acos_protocol::TextMatch::exact(
+                    "Search Japanese dictionary",
+                )),
                 ..Selector::default()
             })
             .expect("the RN accessibilityLabel is the node's content description");
         assert_eq!(search.text, "猫, ねこ, neko...");
         assert_eq!(search.hint, "猫, ねこ, neko...");
 
-        let name = tree.find_one(&Selector::by_text("Ada")).expect("typed text");
+        let name = tree
+            .find_one(&Selector::by_text("Ada"))
+            .expect("typed text");
         assert_eq!(name.text, "Ada");
         assert_eq!(name.hint, "Name");
 
@@ -1946,7 +1944,9 @@ mod tests {
             .expect("TextView text is unchanged");
         assert_eq!(label.content_desc, "");
 
-        let skip = tree.find_one(&Selector::by_text("Skip")).expect("Button text");
+        let skip = tree
+            .find_one(&Selector::by_text("Skip"))
+            .expect("Button text");
         assert_eq!(skip.content_desc, "Skip onboarding");
     }
 
@@ -2118,7 +2118,9 @@ mod tests {
             }]
         });
         let tree = ui_tree_from_json("dev.acos.fixtures.offscreenpager", frame(), &value).unwrap();
-        assert!(tree.find_input_target(&Selector::by_text("Hidden")).is_none());
+        assert!(tree
+            .find_input_target(&Selector::by_text("Hidden"))
+            .is_none());
         assert!(tree
             .find_input_target(&Selector::by_text("Hidden page action"))
             .is_none());
@@ -2297,12 +2299,18 @@ mod engine_tests {
             backend.session_capabilities().as_ref(),
             crate::trust::Trust::Trusted,
             &dir,
-            None,
+            // boot ms, animations, insets, extra APKs, boot image, the attached
+            // module set, session id (MERGEMPROC: the merged annotate facts; a
+            // test session booted no image, attaches no module and holds no
+            // serve id).
             None,
             None,
             None,
             &[],
-            None,        );
+            None,
+            &[],
+            None,
+        );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["engine"], "art");
         assert_eq!(verdict["mode"], "live");
@@ -2337,7 +2345,10 @@ mod engine_tests {
         let mut backend = EngineBackend::session(Box::new(FakeSession::timed_out_tap()));
         let req = request("scenarios/v2-art-counter.yaml", &dir);
         let envelope = acos_verify::verify(&req, &mut backend);
-        assert!(!envelope.status().is_pass(), "a timed-out settle must not pass");
+        assert!(
+            !envelope.status().is_pass(),
+            "a timed-out settle must not pass"
+        );
         assert_eq!(envelope.status(), Status::Timeout);
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["verdict"], "timeout");
@@ -2544,12 +2555,7 @@ mod engine_tests {
             self.seq
         }
 
-        fn tap_in_window(
-            &mut self,
-            window: &str,
-            x: i32,
-            y: i32,
-        ) -> Result<(), BackendError> {
+        fn tap_in_window(&mut self, window: &str, x: i32, y: i32) -> Result<(), BackendError> {
             self.record(format!("tap_in_window({window},{x},{y})"));
             self.publish(self.fresh_top);
             Ok(())
@@ -2565,7 +2571,10 @@ mod engine_tests {
         }
 
         fn type_text(&mut self, _text: &str) -> Result<(), BackendError> {
-            Err(BackendError::unsupported("input.type_text", "the fake has no text"))
+            Err(BackendError::unsupported(
+                "input.type_text",
+                "the fake has no text",
+            ))
         }
 
         fn key(&mut self, _key: &str) -> Result<(), BackendError> {
@@ -2655,12 +2664,18 @@ mod engine_tests {
             backend.session_capabilities().as_ref(),
             crate::trust::Trust::Trusted,
             &dir,
-            None,
+            // boot ms, animations, insets, extra APKs, boot image, the attached
+            // module set, session id (MERGEMPROC: the merged annotate facts; a
+            // test session booted no image, attaches no module and holds no
+            // serve id).
             None,
             None,
             None,
             &[],
-            None,        );
+            None,
+            &[],
+            None,
+        );
         assert!(!envelope.status().is_pass());
         assert_eq!(envelope.status(), Status::Unsupported);
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
@@ -3055,9 +3070,19 @@ mod engine_tests {
         )
         .expect("tree");
         let kinds: Vec<&str> = tree.windows.iter().map(|w| w.kind.as_str()).collect();
-        assert_eq!(kinds, vec!["application", "application", "application_overlay"]);
+        assert_eq!(
+            kinds,
+            vec!["application", "application", "application_overlay"]
+        );
         let types: Vec<&str> = tree.windows.iter().map(|w| w.type_name.as_str()).collect();
-        assert_eq!(types, vec!["TYPE_APPLICATION", "TYPE_APPLICATION", "TYPE_APPLICATION_OVERLAY"]);
+        assert_eq!(
+            types,
+            vec![
+                "TYPE_APPLICATION",
+                "TYPE_APPLICATION",
+                "TYPE_APPLICATION_OVERLAY"
+            ]
+        );
         let zs: Vec<i64> = tree.windows.iter().map(|w| w.z).collect();
         assert_eq!(zs, vec![0, 1, 2]);
         assert!(tree.windows[0].focus && !tree.windows[1].focus && !tree.windows[2].focus);

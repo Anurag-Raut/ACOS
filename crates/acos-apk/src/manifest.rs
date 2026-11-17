@@ -852,7 +852,11 @@ mod tests {
         }
     }
 
-    pub(crate) fn node(name: &str, attributes: Vec<XmlAttribute>, children: Vec<XmlNode>) -> XmlNode {
+    pub(crate) fn node(
+        name: &str,
+        attributes: Vec<XmlAttribute>,
+        children: Vec<XmlNode>,
+    ) -> XmlNode {
         XmlNode {
             namespace: None,
             name: name.to_string(),
@@ -865,7 +869,10 @@ mod tests {
     fn meta(name: &str, attribute: XmlAttribute) -> XmlNode {
         node(
             "meta-data",
-            vec![attr("name", TypedValue::String(name.to_string())), attribute],
+            vec![
+                attr("name", TypedValue::String(name.to_string())),
+                attribute,
+            ],
             Vec::new(),
         )
     }
@@ -940,7 +947,10 @@ mod tests {
     ) -> XmlNode {
         let mut attrs = vec![attr("name", TypedValue::String(name.to_string()))];
         if let Some(target) = target {
-            attrs.push(attr("targetActivity", TypedValue::String(target.to_string())));
+            attrs.push(attr(
+                "targetActivity",
+                TypedValue::String(target.to_string()),
+            ));
         }
         if let Some(enabled) = enabled {
             attrs.push(attr("enabled", TypedValue::Boolean(enabled)));
@@ -1000,10 +1010,18 @@ mod tests {
             // ungated normalScreens default survives.
             (None, None, FLAG_SUPPORTS_NORMAL_SCREENS),
             (Some(3), None, FLAG_SUPPORTS_NORMAL_SCREENS),
-            (Some(4), None, ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_XLARGE_SCREENS),
+            (
+                Some(4),
+                None,
+                ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_XLARGE_SCREENS,
+            ),
             (Some(9), None, ALL_SCREEN_FLAGS),
             (Some(26), Some(3), FLAG_SUPPORTS_NORMAL_SCREENS),
-            (None, Some(8), ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_XLARGE_SCREENS),
+            (
+                None,
+                Some(8),
+                ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_XLARGE_SCREENS,
+            ),
             (Some(26), Some(34), ALL_SCREEN_FLAGS),
         ];
         for (min_sdk, target_sdk, expected) in cases {
@@ -1085,11 +1103,7 @@ mod tests {
             .into_iter()
             .map(|name| attr(name, TypedValue::Boolean(true)))
             .collect();
-            let doc = document_with_sdk(
-                min_sdk,
-                target_sdk,
-                vec![supports_screens(attrs)],
-            );
+            let doc = document_with_sdk(min_sdk, target_sdk, vec![supports_screens(attrs)]);
             let manifest = Manifest::parse(&doc).expect("manifest");
             assert_eq!(
                 screen_flags(&manifest),
@@ -1190,7 +1204,11 @@ mod tests {
                 vec![attr("name", TypedValue::String("empty".into()))],
                 Vec::new(),
             ),
-            node("meta-data", vec![attr("value", TypedValue::IntDec(1))], Vec::new()),
+            node(
+                "meta-data",
+                vec![attr("value", TypedValue::IntDec(1))],
+                Vec::new(),
+            ),
         ]);
         let manifest = Manifest::parse(&doc).expect("manifest");
         assert_eq!(

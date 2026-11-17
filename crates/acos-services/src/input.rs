@@ -283,14 +283,8 @@ impl InputDispatcher {
         // Only a delivered frame consumes a sequence.
         self.next_seq += 1;
         let touch = matches!(frame.event, InputEvent::Motion(_));
-        self.pending.insert(
-            seq,
-            PendingEvent {
-                seq,
-                window,
-                touch,
-            },
-        );
+        self.pending
+            .insert(seq, PendingEvent { seq, window, touch });
         Ok(seq)
     }
 
@@ -303,7 +297,10 @@ impl InputDispatcher {
             x: x.floor() as i32,
             y: y.floor() as i32,
         })?;
-        let down = self.deliver(target, InputEvent::Motion(motion(0, x, y, INJECT_BASE_NANOS)))?;
+        let down = self.deliver(
+            target,
+            InputEvent::Motion(motion(0, x, y, INJECT_BASE_NANOS)),
+        )?;
         let up = self.deliver(
             target,
             InputEvent::Motion(motion(1, x, y, INJECT_BASE_NANOS + TAP_HOLD_NANOS)),
@@ -323,19 +320,24 @@ impl InputDispatcher {
             x: x.floor() as i32,
             y: y.floor() as i32,
         })?;
-        let seq = self.deliver(target, InputEvent::Motion(motion(0, x, y, INJECT_BASE_NANOS)))?;
+        let seq = self.deliver(
+            target,
+            InputEvent::Motion(motion(0, x, y, INJECT_BASE_NANOS)),
+        )?;
         self.active_tap = Some(target);
         Ok(vec![seq])
     }
 
     /// Inject the UP half of a tap started by [`InputDispatcher::inject_tap_down`].
     pub fn inject_tap_up(&mut self, x: f32, y: f32) -> Result<Vec<u32>, InputError> {
-        let target = self.active_tap.take().or_else(|| self.hit_test(x, y)).ok_or(
-            InputError::NoWindowAtPoint {
+        let target = self
+            .active_tap
+            .take()
+            .or_else(|| self.hit_test(x, y))
+            .ok_or(InputError::NoWindowAtPoint {
                 x: x.floor() as i32,
                 y: y.floor() as i32,
-            },
-        )?;
+            })?;
         let seq = self.deliver(
             target,
             InputEvent::Motion(motion(1, x, y, INJECT_BASE_NANOS + TAP_HOLD_NANOS)),
@@ -351,10 +353,12 @@ impl InputDispatcher {
         duration_nanos: i64,
         steps: usize,
     ) -> Result<Vec<u32>, InputError> {
-        let target = self.hit_test(from.0, from.1).ok_or(InputError::NoWindowAtPoint {
-            x: from.0.floor() as i32,
-            y: from.1.floor() as i32,
-        })?;
+        let target = self
+            .hit_test(from.0, from.1)
+            .ok_or(InputError::NoWindowAtPoint {
+                x: from.0.floor() as i32,
+                y: from.1.floor() as i32,
+            })?;
         let steps = steps.max(1);
         let mut seqs = Vec::with_capacity(steps + 2);
         seqs.push(self.deliver(
@@ -378,7 +382,10 @@ impl InputDispatcher {
     /// Inject a key press/release pair to the focused window.
     pub fn inject_key(&mut self, key_code: i32) -> Result<Vec<u32>, InputError> {
         let target = self.focus.ok_or(InputError::NoFocusedWindow)?;
-        let down = self.deliver(target, InputEvent::Key(key_event(KEY_ACTION_DOWN, key_code)))?;
+        let down = self.deliver(
+            target,
+            InputEvent::Key(key_event(KEY_ACTION_DOWN, key_code)),
+        )?;
         let up = self.deliver(target, InputEvent::Key(key_event(KEY_ACTION_UP, key_code)))?;
         Ok(vec![down, up])
     }
@@ -532,12 +539,7 @@ mod tests {
         overlay.x = 0;
         overlay.y = 0;
         let overlay = wm
-            .add_to_display_as_user(
-                session,
-                acos_parcel::binder::BinderId(0x12),
-                overlay,
-                0,
-            )
+            .add_to_display_as_user(session, acos_parcel::binder::BinderId(0x12), overlay, 0)
             .unwrap()
             .window;
         assert_eq!(

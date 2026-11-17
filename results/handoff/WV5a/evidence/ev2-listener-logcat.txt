@@ -1,0 +1,21 @@
+I/ACOSWvProvider: create(WebViewDelegate present)
+I/WVProbe: WebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{5f5dc12 VFED..... ......I. 0,0-0,0}
+I/WVProbe: settings ok: jsEnabled=true
+I/WVProbe: clients set
+I/WVProbe: attached (layout pending)
+E/logdw: dev.acos.fixtures.webview.MainActivity
+E/logdw: dev.acos.fixtures.webview.MainActivity
+E/logdw: dev.acos.fixtures.webview.MainActivity
+I/ACOSWvProvider: view.create view=1 900x700 density=2.625
+I/ACOSWvProvider: view.setViewport view=1 900x700 density=2.625
+I/WVProbe: laid out 900x700
+I/ACOSWvProvider: view.loadUrl view=1 url=data:text/html;charset=utf-8,%3C%21doctype+html%3E%3Chtml%3E%3Cbody+style%3D%27font%3A32px+sans-serif%27%3E%3Ch1+id%3Dh%3Eacos+webview%3C%2Fh1%3E%3Cbutton+id%3Db+style%3D%27font%3A32px+sans-serif%27+onclick%3D%22document.getElementById%28%27out%27%29.textContent%3D%27tapped%27%3Bwindow.acosBridge.report%28%27tapped%27%29%22%3ETap+me%3C%2Fbutton%3E%3Cdiv+id%3Dout+style%3D%27font%3A28px+sans-serif%27%3Enot+tapped%3C%2Fdiv%3E%3C%2Fbody%3E%3C%2Fhtml%3E
+I/WVProbe: loadUrl issued
+I/ACOSWvProvider: view.setViewport view=1 900x614 density=2.625
+I/ACOSWvProvider: view.setViewport view=1 900x700 density=2.625
+I/ACOSWvProvider: input.setFocus view=1 focused=false
+I/ACOSWvProvider: input.setFocus view=1 focused=true
+I/ACOSWvProvider: onDraw 900x700 dirty=true frame=none renderable=true
+I/ACOSWvProvider: onDraw 900x700 frame=none -> render #1
+I/ACOSWvProvider: frame decoded 16x16 seq=1 bytes=82
+I/ACOSWvProvider: onDraw 900x700 dirty=false frame=present renderable=true

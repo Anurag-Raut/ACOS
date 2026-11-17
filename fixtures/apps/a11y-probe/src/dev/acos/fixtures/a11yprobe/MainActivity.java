@@ -7,7 +7,11 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
+import android.graphics.Color;
+import android.view.View;
 import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.List;
@@ -30,8 +34,13 @@ public class MainActivity extends Activity {
     private static final String TAG = "AcosA11yProbe";
     private AccessibilityManager manager;
     private TextView status;
+    private ScrollView list;
     private int sent;
     private int clicks;
+    /** MODA11YNATIVE: taps the service delivered as a real gesture stroke. */
+    private int gestureTaps;
+    /** MODA11YNATIVE: the list's scroll offset after the service's swipe. */
+    private int swipeY;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,7 +62,49 @@ public class MainActivity extends Activity {
             updateStatus();
         });
 
+        // MODA11YNATIVE: the gesture tap target. The service taps it with a
+        // real `dispatchGesture` stroke, so this counter is the app's own proof
+        // that the injected DOWN/UP pair reached the normal touch path.
+        Button gestureTarget = (Button) findViewById(R.id.gesture_target);
+        gestureTarget.setOnClickListener(v -> {
+            gestureTaps++;
+            Log.i(TAG, "gesture_target_pressed count=" + gestureTaps);
+            updateStatus();
+        });
+
+        list = (ScrollView) findViewById(R.id.gesture_list);
+        LinearLayout rows = (LinearLayout) findViewById(R.id.gesture_rows);
+        for (int i = 0; i < 40; i++) {
+            TextView row = new TextView(this);
+            row.setText("row " + i);
+            row.setTextSize(18);
+            rows.addView(row);
+        }
+        // The list's own scroll callback is the app's view of the service's
+        // swipe: `dispatchGesture` publishes real MOVE events, so
+        // `ScrollView.onScrollChanged` runs.
+        list.setOnScrollChangeListener((v, x, y, oldX, oldY) -> {
+            swipeY = y;
+            Log.i(TAG, "list_scrolled y=" + y);
+        });
+
+        findViewById(R.id.swatch).setBackgroundColor(Color.rgb(0x33, 0x66, 0xCC));
+
         Button target = (Button) findViewById(R.id.click_target);
+        // MODA11YNATIVE2: which API reports which label. `getText()` is the
+        // ORIGINAL string, and that is what `AccessibilityNodeInfo.getText()`
+        // exposes (`TextView.getTextForAccessibility()` returns `getText()`).
+        // The label the user *sees* is the one `TextView` draws, i.e. the text
+        // after its transformation method — framework-res sets
+        // `config_buttonTextAllCaps=true`, so a Button's `AllCapsTransformation
+        // Method` upper-cases it. Both values are logged (and the scenario
+        // asserts both, each with the case its API really has) so a future
+        // "the button says CLICK TARGET" claim has to name the API it means.
+        CharSequence rawText = target.getText();
+        CharSequence drawnText = target.getTransformationMethod() == null
+                ? rawText
+                : target.getTransformationMethod().getTransformation(rawText, target);
+        Log.i(TAG, "button_text a11y=" + rawText + " drawn=" + drawnText);
         target.setOnClickListener(v -> {
             clicks++;
             Log.i(TAG, "click_target_pressed count=" + clicks);
@@ -128,7 +179,9 @@ public class MainActivity extends Activity {
                 + " installed=" + (installed == null ? -1 : installed.size())
                 + " enabled_list=" + enabledCount
                 + " sent=" + sent + first
-                + " a11y_click=" + clicks;
+                + " a11y_click=" + clicks
+                + " gesture_taps=" + gestureTaps
+                + " swipe_y=" + swipeY;
         status.setText(text);
         Log.i(TAG, "status " + text);
     }

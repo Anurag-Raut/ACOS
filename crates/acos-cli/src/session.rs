@@ -933,6 +933,12 @@ pub enum SessionCommand {
     Text(SessionTextArgs),
     /// Read the guest log buffer.
     Logs(SessionCmdArgs),
+    /// MPROC1: run a session service control op (`--module`, `--op`, `--args`).
+    ///
+    /// `--module intents` is the capture target: `--op last`/`list` read what
+    /// the app shared or picked, `--op result --args '{"data":"content://…"}'`
+    /// scripts the answer a picker returns, `--op clear` empties the record.
+    Ctl(SessionCtlArgs),
     /// Recreate the session's task state (drop the VM).
     Reset(SessionCmdArgs),
     /// Destroy the session (idempotent).
@@ -951,6 +957,7 @@ pub fn session(command: SessionCommand) -> ExitCode {
         SessionCommand::Key(args) => session_key(args),
         SessionCommand::Text(args) => session_text(args),
         SessionCommand::Logs(args) => session_logs(args),
+        SessionCommand::Ctl(args) => session_ctl(args),
         SessionCommand::Reset(args) => session_reset(args),
         SessionCommand::Destroy(args) => session_destroy(args),
         SessionCommand::Close(args) => session_destroy(args),
@@ -1098,6 +1105,66 @@ fn session_logs(args: SessionCmdArgs) -> ExitCode {
         min_priority: args.min_priority,
         json: args.json,
     })
+}
+
+/// Arguments for `acos session ctl` (MPROC1).
+#[derive(Debug, clap::Args)]
+pub struct SessionCtlArgs {
+    /// Session id label (default `s_cli`).
+    #[arg(long, default_value = "s_cli")]
+    pub session: String,
+
+    /// Session service to control (`intents`).
+    #[arg(long, default_value = "intents")]
+    pub module: String,
+
+    /// The service's operation (`last`, `list`, `clear`, `result`).
+    #[arg(long)]
+    pub op: String,
+
+    /// Operation arguments, as JSON (e.g. `{"data":"content://…"}`).
+    #[arg(long)]
+    pub args: Option<String>,
+
+    /// Emit the standard ACOS JSON envelope instead of a summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+fn session_ctl(args: SessionCtlArgs) -> ExitCode {
+    // An argument string that is not JSON is refused here: the session must not
+    // receive a silently empty argument map.
+    let inner = match args.args.as_deref() {
+        None => json!({}),
+        Some(text) => match serde_json::from_str::<Value>(text) {
+            Ok(value) => value,
+            Err(error) => {
+                let envelope = fail(
+                    &new_request_id(),
+                    ErrorCode::InvalidArgument,
+                    &format!("--args is not JSON: {error}"),
+                    json!({"field": "args"}),
+                );
+                return emit(&envelope, args.json);
+            }
+        },
+    };
+    let daemon_args = json!({
+        "base": daemon_base(&args.session),
+        "module": args.module,
+        "op": args.op,
+        "args": inner,
+    });
+    if let Some(code) = call_ensure_daemon("acos_service_ctl", &daemon_args, args.json) {
+        return code;
+    }
+    let envelope = fail(
+        &new_request_id(),
+        ErrorCode::UnsupportedBackend,
+        "`acos session ctl` requires the session daemon; unset ACOS_NO_DAEMON to enable it",
+        json!({"tool": "acos_service_ctl"}),
+    );
+    emit(&envelope, args.json)
 }
 
 fn session_reset(args: SessionCmdArgs) -> ExitCode {

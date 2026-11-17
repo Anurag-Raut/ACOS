@@ -82,7 +82,10 @@ fn stub_jar(tools: &Tools) -> Option<PathBuf> {
     let stubs = out.join("classes");
     std::fs::create_dir_all(&stubs).ok()?;
     let mut sources = Vec::new();
-    collect_java(&root.join("crates/acos-runtime/tests/java/stubs"), &mut sources);
+    collect_java(
+        &root.join("crates/acos-runtime/tests/java/stubs"),
+        &mut sources,
+    );
     sources.sort();
     if sources.is_empty() {
         return None;
@@ -130,11 +133,18 @@ fn compile_case(names: &[&str]) -> Option<PathBuf> {
     std::fs::create_dir_all(&classes).ok()?;
     let sources: Vec<PathBuf> = names
         .iter()
-        .map(|n| root.join("crates/acos-runtime/tests/java").join(format!("{n}.java")))
+        .map(|n| {
+            root.join("crates/acos-runtime/tests/java")
+                .join(format!("{n}.java"))
+        })
         .collect();
     let ok = Command::new(&tools.javac)
         .args(["--release", "11", "-encoding", "UTF-8", "-cp"])
-        .arg(format!("{}:{}", stubs.display(), tools.android_jar.display()))
+        .arg(format!(
+            "{}:{}",
+            stubs.display(),
+            tools.android_jar.display()
+        ))
         .arg("-d")
         .arg(&classes)
         .args(&sources)
@@ -217,9 +227,15 @@ fn service_manager_get_service_returns_a_working_proxy() {
         outcome.stdout,
         outcome.stderr
     );
-    assert_eq!(outcome.exit_code, 0, "exit {}:\n{}", outcome.exit_code, outcome.stderr);
+    assert_eq!(
+        outcome.exit_code, 0,
+        "exit {}:\n{}",
+        outcome.exit_code, outcome.stderr
+    );
     assert!(
-        outcome.stdout.contains("registry=ok dev.acos.fixtures.helloviews"),
+        outcome
+            .stdout
+            .contains("registry=ok dev.acos.fixtures.helloviews"),
         "missing registry evidence:\n{}",
         outcome.stdout
     );
@@ -336,7 +352,11 @@ fn fake_service_round_trips_binder_and_fd_and_reenters_the_looper() {
         outcome.stdout,
         outcome.stderr
     );
-    assert_eq!(outcome.exit_code, 0, "exit {}:\n{}", outcome.exit_code, outcome.stderr);
+    assert_eq!(
+        outcome.exit_code, 0,
+        "exit {}:\n{}",
+        outcome.exit_code, outcome.stderr
+    );
     assert!(
         outcome.stdout.contains("binder=ok") && outcome.stdout.contains("cbThread="),
         "missing binder evidence:\n{}\nstderr:\n{}",

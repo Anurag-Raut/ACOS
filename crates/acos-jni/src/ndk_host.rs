@@ -227,8 +227,7 @@ fn windows() -> &'static std::sync::Mutex<HashMap<u64, Window>> {
     WINDOWS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
 }
 
-static NEXT_WINDOW: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0x4e57_0000);
+static NEXT_WINDOW: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x4e57_0000);
 static NEXT_CHOREO: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// The last buffer a window presented, process-wide.
@@ -383,8 +382,7 @@ pub fn window_present(window: u64, width: u32, height: u32, rgba: &[u8]) -> u64 
         rec.buffer.clear();
         rec.buffer.extend_from_slice(&rgba[..len]);
         Some((rec.layer, rec.buffer.clone()))
-    })()
-    else {
+    })() else {
         eprintln!(
             "UNSUPPORTED_GLES call=eglSwapBuffers reason=unknown or unallocatable ANativeWindow \
              {window:#x}"
@@ -652,9 +650,9 @@ impl NdkHost for ProductionNdkHost {
     }
 
     fn window_lock(&self, window: u64, _dirty: Option<ARect>) -> NdkResult<WindowBuffer> {
-        let mut g = windows().lock().map_err(|_| {
-            "ANativeWindow_lock: window table poisoned".to_string()
-        })?;
+        let mut g = windows()
+            .lock()
+            .map_err(|_| "ANativeWindow_lock: window table poisoned".to_string())?;
         let rec = g
             .get_mut(&window)
             .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))?;
@@ -678,9 +676,9 @@ impl NdkHost for ProductionNdkHost {
 
     fn window_unlock_and_post(&self, window: u64) -> NdkResult<()> {
         let (layer, width, height, stride, buffer) = {
-            let mut g = windows().lock().map_err(|_| {
-                "ANativeWindow_unlockAndPost: window table poisoned".to_string()
-            })?;
+            let mut g = windows()
+                .lock()
+                .map_err(|_| "ANativeWindow_unlockAndPost: window table poisoned".to_string())?;
             let rec = g
                 .get_mut(&window)
                 .ok_or_else(|| format!("unknown ANativeWindow {window:#x}"))?;
@@ -757,7 +755,9 @@ impl NdkHost for ProductionNdkHost {
         // interval, which would make every frame look like the same instant.
         let interval = substrate::vsync_interval_nanos();
         let now = monotonic_nanos();
-        let frame_time = now.saturating_add(delay_nanos.max(0)).saturating_add(interval);
+        let frame_time = now
+            .saturating_add(delay_nanos.max(0))
+            .saturating_add(interval);
         if let Some(cb) = cb {
             // Real Android never runs the frame callback inside the post: the
             // Choreographer queues it on the calling thread's looper and the
@@ -818,8 +818,7 @@ mod tests {
 
     #[test]
     fn checked_geometry_accepts_reasonable_sizes() {
-        let bytes =
-            checked_window_geometry(1920, 1080, WINDOW_FORMAT_RGBA_8888).unwrap();
+        let bytes = checked_window_geometry(1920, 1080, WINDOW_FORMAT_RGBA_8888).unwrap();
         assert_eq!(bytes, 1920 * 1080 * 4);
         assert_eq!(
             checked_window_geometry(1, 1, WINDOW_FORMAT_RGBA_8888).unwrap(),

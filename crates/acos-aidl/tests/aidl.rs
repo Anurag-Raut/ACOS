@@ -82,7 +82,9 @@ fn spot_check_codes_against_dex() {
     }
 
     // Hand-checked entries read from `dexdump -d` of the real DEX.
-    let atms = scanner.decode_interface("android.view.IWindowSession").unwrap();
+    let atms = scanner
+        .decode_interface("android.view.IWindowSession")
+        .unwrap();
     assert_eq!(atms.method_by_name("relayout").unwrap().code, 5);
     let on_back = atms.method_by_name("setOnBackInvokedCallbackInfo").unwrap();
     assert_eq!(on_back.code, 39);
@@ -127,7 +129,9 @@ fn layout_spot_checks() {
         "getDisplayInfo reply"
     );
 
-    let ws = scanner.decode_interface("android.view.IWindowSession").unwrap();
+    let ws = scanner
+        .decode_interface("android.view.IWindowSession")
+        .unwrap();
     let relayout = ws.method_by_name("relayout").unwrap();
     let expected_args = vec![
         WireOp::Binder {
@@ -165,8 +169,7 @@ fn layout_spot_checks() {
 
     // The big relayed argument list must match the proxy bytecode op-by-op.
     assert_eq!(
-        relayout.args,
-        expected_args,
+        relayout.args, expected_args,
         "relayout proxy byte-op mismatch"
     );
 
@@ -289,7 +292,10 @@ fn coverage_report() {
         cov.fully_decoded,
         cov.percent()
     ));
-    out.push_str(&format!("interfaces absent from boot classpath: {}\n", missing.len()));
+    out.push_str(&format!(
+        "interfaces absent from boot classpath: {}\n",
+        missing.len()
+    ));
     for (iface, reason) in &missing {
         out.push_str(&format!("  missing {iface}: {reason}\n"));
     }

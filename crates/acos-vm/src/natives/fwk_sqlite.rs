@@ -135,28 +135,103 @@ fn with_state<R>(f: impl FnOnce(&mut SqliteState) -> R) -> R {
 /// Register every `android.database.sqlite` / `CursorWindow` true native.
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     let conn = "Landroid/database/sqlite/SQLiteConnection;";
-    vm.register_native(conn, "nativeOpen", "(Ljava/lang/String;ILjava/lang/String;ZZII)J", native_open);
+    vm.register_native(
+        conn,
+        "nativeOpen",
+        "(Ljava/lang/String;ILjava/lang/String;ZZII)J",
+        native_open,
+    );
     vm.register_native(conn, "nativeClose", "(J)V", native_close);
-    vm.register_native(conn, "nativePrepareStatement", "(JLjava/lang/String;)J", native_prepare_statement);
-    vm.register_native(conn, "nativeFinalizeStatement", "(JJ)V", native_finalize_statement);
-    vm.register_native(conn, "nativeGetParameterCount", "(JJ)I", native_get_parameter_count);
-    vm.register_native(conn, "nativeGetColumnCount", "(JJ)I", native_get_column_count);
-    vm.register_native(conn, "nativeGetColumnName", "(JJI)Ljava/lang/String;", native_get_column_name);
+    vm.register_native(
+        conn,
+        "nativePrepareStatement",
+        "(JLjava/lang/String;)J",
+        native_prepare_statement,
+    );
+    vm.register_native(
+        conn,
+        "nativeFinalizeStatement",
+        "(JJ)V",
+        native_finalize_statement,
+    );
+    vm.register_native(
+        conn,
+        "nativeGetParameterCount",
+        "(JJ)I",
+        native_get_parameter_count,
+    );
+    vm.register_native(
+        conn,
+        "nativeGetColumnCount",
+        "(JJ)I",
+        native_get_column_count,
+    );
+    vm.register_native(
+        conn,
+        "nativeGetColumnName",
+        "(JJI)Ljava/lang/String;",
+        native_get_column_name,
+    );
     vm.register_native(conn, "nativeIsReadOnly", "(JJ)Z", native_is_read_only);
-    vm.register_native(conn, "nativeGetDbLookaside", "(J)I", native_get_db_lookaside);
-    vm.register_native(conn, "nativeRegisterLocalizedCollators", "(JLjava/lang/String;)V", native_register_localized_collators);
+    vm.register_native(
+        conn,
+        "nativeGetDbLookaside",
+        "(J)I",
+        native_get_db_lookaside,
+    );
+    vm.register_native(
+        conn,
+        "nativeRegisterLocalizedCollators",
+        "(JLjava/lang/String;)V",
+        native_register_localized_collators,
+    );
     vm.register_native(conn, "nativeBindNull", "(JJI)V", native_bind_null);
     vm.register_native(conn, "nativeBindLong", "(JJIJ)V", native_bind_long);
     vm.register_native(conn, "nativeBindDouble", "(JJID)V", native_bind_double);
-    vm.register_native(conn, "nativeBindString", "(JJILjava/lang/String;)V", native_bind_string);
+    vm.register_native(
+        conn,
+        "nativeBindString",
+        "(JJILjava/lang/String;)V",
+        native_bind_string,
+    );
     vm.register_native(conn, "nativeBindBlob", "(JJI[B)V", native_bind_blob);
-    vm.register_native(conn, "nativeResetStatementAndClearBindings", "(JJ)V", native_reset_statement);
+    vm.register_native(
+        conn,
+        "nativeResetStatementAndClearBindings",
+        "(JJ)V",
+        native_reset_statement,
+    );
     vm.register_native(conn, "nativeExecute", "(JJZ)V", native_execute);
-    vm.register_native(conn, "nativeExecuteForLong", "(JJ)J", native_execute_for_long);
-    vm.register_native(conn, "nativeExecuteForString", "(JJ)Ljava/lang/String;", native_execute_for_string);
-    vm.register_native(conn, "nativeExecuteForChangedRowCount", "(JJ)I", native_execute_for_changed_row_count);
-    vm.register_native(conn, "nativeExecuteForLastInsertedRowId", "(JJ)J", native_execute_for_last_inserted_row_id);
-    vm.register_native(conn, "nativeExecuteForCursorWindow", "(JJJIIZ)J", native_execute_for_cursor_window);
+    vm.register_native(
+        conn,
+        "nativeExecuteForLong",
+        "(JJ)J",
+        native_execute_for_long,
+    );
+    vm.register_native(
+        conn,
+        "nativeExecuteForString",
+        "(JJ)Ljava/lang/String;",
+        native_execute_for_string,
+    );
+    vm.register_native(
+        conn,
+        "nativeExecuteForChangedRowCount",
+        "(JJ)I",
+        native_execute_for_changed_row_count,
+    );
+    vm.register_native(
+        conn,
+        "nativeExecuteForLastInsertedRowId",
+        "(JJ)J",
+        native_execute_for_last_inserted_row_id,
+    );
+    vm.register_native(
+        conn,
+        "nativeExecuteForCursorWindow",
+        "(JJJIIZ)J",
+        native_execute_for_cursor_window,
+    );
     vm.register_native(conn, "nativeCancel", "(J)V", native_cancel);
     vm.register_native(conn, "nativeResetCancel", "(JZ)V", native_reset_cancel);
 
@@ -172,17 +247,37 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(cw, "nativeGetType", "(JII)I", cw_get_type);
     vm.register_native(cw, "nativeGetLong", "(JII)J", cw_get_long);
     vm.register_native(cw, "nativeGetDouble", "(JII)D", cw_get_double);
-    vm.register_native(cw, "nativeGetString", "(JII)Ljava/lang/String;", cw_get_string);
+    vm.register_native(
+        cw,
+        "nativeGetString",
+        "(JII)Ljava/lang/String;",
+        cw_get_string,
+    );
     vm.register_native(cw, "nativeGetBlob", "(JII)[B", cw_get_blob);
     vm.register_native(cw, "nativePutNull", "(JII)Z", cw_put_null);
     vm.register_native(cw, "nativePutLong", "(JJII)Z", cw_put_long);
     vm.register_native(cw, "nativePutDouble", "(JDII)Z", cw_put_double);
-    vm.register_native(cw, "nativePutString", "(JLjava/lang/String;II)Z", cw_put_string);
+    vm.register_native(
+        cw,
+        "nativePutString",
+        "(JLjava/lang/String;II)Z",
+        cw_put_string,
+    );
     vm.register_native(cw, "nativePutBlob", "(J[BII)Z", cw_put_blob);
-    vm.register_native(cw, "nativeCopyStringToBuffer", "(JIILandroid/database/CharArrayBuffer;)V", cw_copy_string_to_buffer);
+    vm.register_native(
+        cw,
+        "nativeCopyStringToBuffer",
+        "(JIILandroid/database/CharArrayBuffer;)V",
+        cw_copy_string_to_buffer,
+    );
 
     let sg = "Landroid/database/sqlite/SQLiteGlobal;";
-    vm.register_native(sg, "nativeReleaseMemory", "()I", sqlite_global_release_memory);
+    vm.register_native(
+        sg,
+        "nativeReleaseMemory",
+        "()I",
+        sqlite_global_release_memory,
+    );
     Ok(())
 }
 
@@ -447,14 +542,24 @@ fn native_finalize_statement(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_get_parameter_count(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 1) as u64;
-    let n = with_state(|st| st.stmts.get(&handle).map(|s| s.meta.parameter_count).unwrap_or(0));
+    let n = with_state(|st| {
+        st.stmts
+            .get(&handle)
+            .map(|s| s.meta.parameter_count)
+            .unwrap_or(0)
+    });
     vm.ret_i32(ctx, n as i32);
     Ok(())
 }
 
 fn native_get_column_count(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 1) as u64;
-    let n = with_state(|st| st.stmts.get(&handle).map(|s| s.meta.column_count).unwrap_or(0));
+    let n = with_state(|st| {
+        st.stmts
+            .get(&handle)
+            .map(|s| s.meta.column_count)
+            .unwrap_or(0)
+    });
     vm.ret_i32(ctx, n as i32);
     Ok(())
 }
@@ -478,8 +583,10 @@ fn native_is_read_only(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let stmt_handle = vm.arg_i64(ctx, 1) as u64;
     let sql = with_state(|st| st.stmts.get(&stmt_handle).map(|s| s.sql.clone()));
     let result = match sql {
-        Some(sql) => with_db(db_handle, |db| db.statement_is_readonly(&sql).unwrap_or(false))
-            .unwrap_or(false),
+        Some(sql) => with_db(db_handle, |db| {
+            db.statement_is_readonly(&sql).unwrap_or(false)
+        })
+        .unwrap_or(false),
         None => false,
     };
     vm.ret_bool(ctx, result);
@@ -566,7 +673,11 @@ fn native_reset_statement(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 /// Fetch the SQL and current bindings for a statement.
 fn statement_args(vm: &mut Vm, handle: i64) -> Result<(u64, String, Vec<SqlValue>), VmError> {
     let u = handle as u64;
-    let got = with_state(|st| st.stmts.get(&u).map(|s| (s.db, s.sql.clone(), s.binds.clone())));
+    let got = with_state(|st| {
+        st.stmts
+            .get(&u)
+            .map(|s| (s.db, s.sql.clone(), s.binds.clone()))
+    });
     match got {
         Some(v) => Ok(v),
         None => Err(throw_sqlite(vm, "statement is closed")),
@@ -623,7 +734,9 @@ fn native_execute_for_changed_row_count(vm: &mut Vm, ctx: NativeCtx) -> VmResult
     let db_handle = vm.arg_i64(ctx, 0);
     let stmt_handle = vm.arg_i64(ctx, 1);
     let (_db, sql, binds) = statement_args(vm, stmt_handle)?;
-    match with_db(db_handle, |db| db.execute_for_changed_row_count(&sql, &binds)) {
+    match with_db(db_handle, |db| {
+        db.execute_for_changed_row_count(&sql, &binds)
+    }) {
         Some(Ok(n)) => {
             vm.ret_i32(ctx, n as i32);
             Ok(())
@@ -637,7 +750,9 @@ fn native_execute_for_last_inserted_row_id(vm: &mut Vm, ctx: NativeCtx) -> VmRes
     let db_handle = vm.arg_i64(ctx, 0);
     let stmt_handle = vm.arg_i64(ctx, 1);
     let (_db, sql, binds) = statement_args(vm, stmt_handle)?;
-    match with_db(db_handle, |db| db.execute_for_last_inserted_row_id(&sql, &binds)) {
+    match with_db(db_handle, |db| {
+        db.execute_for_last_inserted_row_id(&sql, &binds)
+    }) {
         Some(Ok(n)) => {
             vm.ret_i64(ctx, n);
             Ok(())
@@ -703,7 +818,11 @@ fn native_reset_cancel(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
 fn cw_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let name = vm.string_to_rust(vm.arg_ref(ctx, 0)).unwrap_or_default();
     let size = vm.arg_i32(ctx, 1);
-    let capacity = if size > 0 { size as usize } else { 2 * 1024 * 1024 };
+    let capacity = if size > 0 {
+        size as usize
+    } else {
+        2 * 1024 * 1024
+    };
     let handle = with_state(|st| {
         st.insert_win(Win {
             name,
@@ -726,7 +845,12 @@ fn cw_dispose(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn cw_get_name(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 0) as u64;
-    let name = with_state(|st| st.wins.get(&handle).map(|w| w.name.clone()).unwrap_or_default());
+    let name = with_state(|st| {
+        st.wins
+            .get(&handle)
+            .map(|w| w.name.clone())
+            .unwrap_or_default()
+    });
     let h = vm.new_string(&name)?;
     vm.ret_ref(ctx, h);
     Ok(())
@@ -824,7 +948,11 @@ fn cw_get_double(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 0) as u64;
     let row = vm.arg_i32(ctx, 1);
     let col = vm.arg_i32(ctx, 2);
-    let v = with_state(|st| cell(st, handle, row, col).map(value_as_double).unwrap_or(0.0));
+    let v = with_state(|st| {
+        cell(st, handle, row, col)
+            .map(value_as_double)
+            .unwrap_or(0.0)
+    });
     vm.ret_f64(ctx, v);
     Ok(())
 }

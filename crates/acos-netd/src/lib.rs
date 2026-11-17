@@ -53,11 +53,17 @@ pub fn serve() -> std::io::Result<()> {
         .open(&lock_path)?;
     use std::os::unix::io::AsRawFd;
     if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-        eprintln!("acos-netd: a supervisor is already running on {}", sock.display());
+        eprintln!(
+            "acos-netd: a supervisor is already running on {}",
+            sock.display()
+        );
         return Ok(());
     }
     if std::os::unix::net::UnixStream::connect(&sock).is_ok() {
-        eprintln!("acos-netd: a supervisor is already running on {}", sock.display());
+        eprintln!(
+            "acos-netd: a supervisor is already running on {}",
+            sock.display()
+        );
         return Ok(());
     }
     let _ = std::fs::remove_file(&sock);
@@ -192,11 +198,8 @@ fn read_request(
         unsafe {
             let mut cmsg = libc::CMSG_FIRSTHDR(&msg);
             while !cmsg.is_null() {
-                if (*cmsg).cmsg_level == libc::SOL_SOCKET
-                    && (*cmsg).cmsg_type == libc::SCM_RIGHTS
-                {
-                    let count = ((*cmsg).cmsg_len as usize
-                        - libc::CMSG_LEN(0) as usize)
+                if (*cmsg).cmsg_level == libc::SOL_SOCKET && (*cmsg).cmsg_type == libc::SCM_RIGHTS {
+                    let count = ((*cmsg).cmsg_len as usize - libc::CMSG_LEN(0) as usize)
                         / std::mem::size_of::<std::os::unix::io::RawFd>();
                     let data = libc::CMSG_DATA(cmsg).cast::<std::os::unix::io::RawFd>();
                     for i in 0..count {
@@ -224,7 +227,10 @@ fn handle_with_fds(
     };
     let r = &mut *guard;
     match &req {
-        Request::Identity => Reply { identity: Some(r.identity().clone()), ..Reply::ok() },
+        Request::Identity => Reply {
+            identity: Some(r.identity().clone()),
+            ..Reply::ok()
+        },
         Request::Status => Reply::status(r.status()),
         Request::Up { pasta } => match r.ensure_up(pasta.clone()) {
             Ok(()) => Reply::status(r.status()),
@@ -242,28 +248,49 @@ fn handle_with_fds(
             Err(e) => Reply::fail(e.code, e.message),
         },
         Request::Session { session } => match r.session(session) {
-            Ok(s) => Reply { session: Some(s), ..Reply::ok() },
+            Ok(s) => Reply {
+                session: Some(s),
+                ..Reply::ok()
+            },
             Err(e) => Reply::fail(e.code, e.message),
         },
-        Request::Attach { session, netns_pid, index } => match r.attach(session, *netns_pid, *index)
-        {
-            Ok(s) => Reply { session: Some(s), ..Reply::ok() },
+        Request::Attach {
+            session,
+            netns_pid,
+            index,
+        } => match r.attach(session, *netns_pid, *index) {
+            Ok(s) => Reply {
+                session: Some(s),
+                ..Reply::ok()
+            },
             Err(e) => Reply::fail(e.code, e.message),
         },
         Request::Detach { session } => match r.detach(session) {
-            Ok(s) => Reply { session: Some(s), ..Reply::ok() },
+            Ok(s) => Reply {
+                session: Some(s),
+                ..Reply::ok()
+            },
             Err(e) => Reply::fail(e.code, e.message),
         },
         Request::Offline { session, offline } => match r.set_offline(session, *offline) {
-            Ok(s) => Reply { session: Some(s), ..Reply::ok() },
+            Ok(s) => Reply {
+                session: Some(s),
+                ..Reply::ok()
+            },
             Err(e) => Reply::fail(e.code, e.message),
         },
-        Request::Delay { session, ms, jitter_ms, loss_pct } => {
-            match r.set_delay(session, *ms, *jitter_ms, *loss_pct) {
-                Ok(s) => Reply { session: Some(s), ..Reply::ok() },
-                Err(e) => Reply::fail(e.code, e.message),
-            }
-        }
+        Request::Delay {
+            session,
+            ms,
+            jitter_ms,
+            loss_pct,
+        } => match r.set_delay(session, *ms, *jitter_ms, *loss_pct) {
+            Ok(s) => Reply {
+                session: Some(s),
+                ..Reply::ok()
+            },
+            Err(e) => Reply::fail(e.code, e.message),
+        },
         Request::HostPort { port, on, session } => {
             // `session` is borrowed by the request; the call needs it as a
             // reference before the request is dropped.
