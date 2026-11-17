@@ -2300,9 +2300,11 @@ mod engine_tests {
             None,
             None,
             None,
+            &[],
             None,
             &[],
-            None,        );
+            None,
+        );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["engine"], "art");
         assert_eq!(verdict["mode"], "live");
@@ -2658,9 +2660,11 @@ mod engine_tests {
             None,
             None,
             None,
+            &[],
             None,
             &[],
-            None,        );
+            None,
+        );
         assert!(!envelope.status().is_pass());
         assert_eq!(envelope.status(), Status::Unsupported);
         let verdict = envelope.result().unwrap().get("verdict").unwrap();

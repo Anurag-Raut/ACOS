@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/notif-perm-probe.apk",
+  "apk_sha256": "f1c3f33e3c5234417597d8ae32977b6bd4752374bd4fdbab9c92f9fda0c2770a",
+  "scenario_path": "scenarios/notif-perm-granted.yaml",
+  "scenario_sha256": "376755928126d01c30af9fb26c77c3d6131576efc94d8652c3b402dab4d00020",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

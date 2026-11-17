@@ -204,15 +204,35 @@ fn read_message(parcel: &Parcel) -> (i32, i32, Vec<(String, Option<String>)>) {
             continue;
         }
         assert_eq!(tag, 4, "VAL_PARCELABLE");
+        // `Parcel.writeValue` length-prefixes VAL_PARCELABLE
+        // (`isLengthPrefixed`), covering the class name plus the payload.
+        let value_len = p.read_int32().expect("value length");
+        assert!(value_len > 0, "a parcelable value is length-prefixed");
+        let value_start = p.data_position();
         let class = p.read_string16().expect("class").expect("class");
-        // Walk the payload with the real spec so the next key lands right.
+        // Walk the payload with the real spec so the next key lands right, and
+        // check the length prefix agrees with what was consumed.
         read_payload(&class, &mut p).expect("parcelable payload");
+        assert_eq!(
+            p.data_position() - value_start,
+            value_len as usize,
+            "VAL_PARCELABLE length must cover class name + payload"
+        );
         out.push((key, Some(class)));
     }
-    // `replyTo` is a null strong binder: one zero word.
+    // `replyTo` is a null strong binder: one zero word, then `sendingUid`.
+    //
+    // The API-34 *image* ends `Message.writeToParcel` there. The r75 source
+    // cache has one more field (`workSourceUid`); NET6 measured the image reject
+    // a message carrying it with `Parcel data not fully consumed, unread size: 4`
+    // (an app's `NetworkCallback` then never fires), so the image wins.
     assert_eq!(p.read_int32().expect("replyTo"), 0);
     assert_eq!(p.read_int32().expect("sendingUid"), 0);
-    assert_eq!(p.read_int32().expect("workSourceUid"), 0);
+    assert_eq!(
+        p.data_size() - p.data_position(),
+        0,
+        "a callback Message must end exactly after sendingUid (image layout)"
+    );
     (what, arg1, out)
 }
 
@@ -312,6 +332,7 @@ fn the_same_network_request_is_echoed_in_every_callback_message() {
             if tag == -1 {
                 continue;
             }
+            let _value_len = q.read_int32().expect("value length");
             let class = q.read_string16().expect("class").expect("class");
             let value = read_payload(&class, &mut q).expect("payload");
             if key == "NetworkRequest" {

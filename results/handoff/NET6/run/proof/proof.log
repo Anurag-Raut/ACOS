@@ -1,0 +1,7 @@
+relay_start rc=0 "pasta_version": "2026_10_02.cba3570"
+arm=off exit=0 verdict=pass steps=8/8 scenario=scenarios/net-network-off.yaml
+arm=real exit=0 verdict=pass steps=9/9 scenario=scenarios/net-network-real.yaml
+arm=offline exit=0 verdict=pass steps=14/14 scenario=scenarios/net-network-offline.yaml
+hostport_runs exit=0 check=no_leak "relay_veths": [] "session_rules": 0 forwarders=0
+--- relay sessions left behind ---
+acos-netd: {"error":{"code":"supervisor-gone","message":"/home/Qui/.t3/worktrees/acos/t3-57545d37-7c87e0dcb541d029/.cache/net6/netd-state/netd.sock: No such file or directory (os error 2)"},"ok":false}

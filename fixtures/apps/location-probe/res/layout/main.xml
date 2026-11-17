@@ -20,6 +20,13 @@
         android:textSize="16sp" />
 
     <TextView
+        android:id="@+id/pending"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="pi=none"
+        android:textSize="16sp" />
+
+    <TextView
         android:id="@+id/fix"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

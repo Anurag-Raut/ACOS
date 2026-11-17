@@ -58,6 +58,8 @@ pub const INTENT_FIELD_ACTION: usize = crate::parcelable::INTENT_ACTION;
 pub const INTENT_FIELD_DATA: usize = crate::parcelable::INTENT_DATA;
 /// `Intent.mType` (the MIME type).
 pub const INTENT_FIELD_TYPE: usize = crate::parcelable::INTENT_TYPE;
+/// `Intent.mIdentifier`.
+pub const INTENT_FIELD_IDENTIFIER: usize = crate::parcelable::INTENT_IDENTIFIER;
 /// `Intent.mFlags`.
 pub const INTENT_FIELD_FLAGS: usize = crate::parcelable::INTENT_FLAGS;
 /// `Intent.mPackage`.
@@ -68,9 +70,24 @@ pub const INTENT_FIELD_COMPONENT: usize = crate::parcelable::INTENT_COMPONENT;
 pub const INTENT_FIELD_CATEGORIES: usize = crate::parcelable::INTENT_CATEGORIES;
 /// `Intent.mExtras` (`Bundle`).
 pub const INTENT_FIELD_EXTRAS: usize = crate::parcelable::INTENT_EXTRAS;
+/// `Intent.mSourceBounds` (a `Rect` parcelable, or null).
+pub const INTENT_FIELD_SOURCE_BOUNDS: usize = crate::parcelable::INTENT_SOURCE_BOUNDS;
+/// `Intent.mSelector` (a nested `Intent`, or null).
+pub const INTENT_FIELD_SELECTOR: usize = crate::parcelable::INTENT_SELECTOR;
+/// `Intent.mClipData` (a `ClipData` parcelable, or null).
+pub const INTENT_FIELD_CLIP_DATA: usize = crate::parcelable::INTENT_CLIP_DATA;
+/// `Intent.mContentUserHint`.
+pub const INTENT_FIELD_CONTENT_USER_HINT: usize = crate::parcelable::INTENT_CONTENT_USER_HINT;
 
 /// The typed intent facts the AMS state machine resolves against.
-#[derive(Debug, Clone, Default, PartialEq)]
+///
+/// These are the fields of the real `android.content.Intent` the session acts
+/// on: the resolver needs action/data/type/categories/component/package, and
+/// `Intent.fillIn` (PIFILLIN) needs every field the merge copies — including
+/// `type`, `identifier`, `flags`, `selector`, `sourceBounds` and `clipData`.
+/// A field the codec cannot carry (a non-null `Uri` body) stays a structured
+/// refusal in [`crate::parcelable::read_intent`], never a silent `None`.
+#[derive(Debug, Clone, PartialEq)]
 pub struct IntentFacts {
     /// `Intent.getAction()`.
     pub action: Option<String>,
@@ -80,6 +97,10 @@ pub struct IntentFacts {
     /// it and the intent-filter match uses it; `None` for an intent without a
     /// type, which is not the same as the wildcard `*/*`.
     pub mime_type: Option<String>,
+    /// `Intent.getIdentifier()`. PIFILLIN: `fillIn` copies it when the target
+    /// has none (or the caller asked for `FILL_IN_IDENTIFIER`), so the field is
+    /// carried, not dropped.
+    pub identifier: Option<String>,
     /// `Intent.getFlags()`. MPROC1 records it on a capture; the launch path
     /// takes the flag word from the transaction's own argument (they are the
     /// same value the framework wrote).
@@ -88,8 +109,17 @@ pub struct IntentFacts {
     pub package: Option<String>,
     /// Explicit component `(package, class)`.
     pub component: Option<(String, String)>,
+    /// `Intent.getSourceBounds()` — `(left, top, right, bottom)`.
+    pub source_bounds: Option<[i32; 4]>,
     /// `Intent.getCategories()`.
     pub categories: Vec<String>,
+    /// `Intent.getSelector()`.
+    pub selector: Option<Box<IntentFacts>>,
+    /// `Intent.getClipData()`: presence only (the codec carries the parcelable
+    /// value but does not interpret it).
+    pub clip_data: Option<Parcelable>,
+    /// `Intent.getContentUserHint()` (`UserHandle.USER_CURRENT` =-2 when unset).
+    pub content_user_hint: i32,
     /// `Intent.getExtras()` (string/int/bool values; other types recorded as
     /// present without a value).
     pub extras: BTreeMap<String, Extra>,
@@ -121,6 +151,29 @@ pub enum Extra {
     Parcelable(crate::value::Parcelable),
     /// A value of a type ACOS records but does not interpret.
     Present,
+}
+
+impl Default for IntentFacts {
+    fn default() -> Self {
+        // `Intent()` leaves `mContentUserHint` at `UserHandle.USER_CURRENT`
+        // (`-2`), which `Intent.writeToParcel` writes and `fillIn` compares
+        // against; a `0` here would claim a user hint the frame never had.
+        Self {
+            action: None,
+            data: None,
+            mime_type: None,
+            identifier: None,
+            flags: 0,
+            package: None,
+            component: None,
+            source_bounds: None,
+            categories: Vec::new(),
+            selector: None,
+            clip_data: None,
+            content_user_hint: crate::fill_in::USER_CURRENT,
+            extras: BTreeMap::new(),
+        }
+    }
 }
 
 impl IntentFacts {
@@ -180,14 +233,51 @@ impl IntentFacts {
             .and_then(Value::as_bundle)
             .map(reduce_extras)
             .unwrap_or_default();
+        let selector = f
+            .get(INTENT_FIELD_SELECTOR)
+            .and_then(Value::as_parcelable)
+            .filter(|p| !matches!(p, Parcelable::Null))
+            .map(|p| Box::new(Self::from_parcelable(p)));
+        let clip_data = f
+            .get(INTENT_FIELD_CLIP_DATA)
+            .and_then(Value::as_parcelable)
+            .filter(|p| !matches!(p, Parcelable::Null))
+            .cloned();
+        let source_bounds = f
+            .get(INTENT_FIELD_SOURCE_BOUNDS)
+            .and_then(Value::as_parcelable)
+            .filter(|p| !matches!(p, Parcelable::Null))
+            .and_then(|p| {
+                let values = p.fields()?;
+                if values.len() != 4 {
+                    return None;
+                }
+                Some([
+                    values[0].as_int()?,
+                    values[1].as_int()?,
+                    values[2].as_int()?,
+                    values[3].as_int()?,
+                ])
+            });
         Self {
             action: f.get(INTENT_FIELD_ACTION).and_then(Value::as_str).map(str::to_string),
             data: f.get(INTENT_FIELD_DATA).and_then(Value::as_str).map(str::to_string),
             mime_type: f.get(INTENT_FIELD_TYPE).and_then(Value::as_str).map(str::to_string),
+            identifier: f
+                .get(INTENT_FIELD_IDENTIFIER)
+                .and_then(Value::as_str)
+                .map(str::to_string),
             flags: f.get(INTENT_FIELD_FLAGS).and_then(Value::as_int).unwrap_or(0),
             package: f.get(INTENT_FIELD_PACKAGE).and_then(Value::as_str).map(str::to_string),
             component,
+            source_bounds,
             categories,
+            selector,
+            clip_data,
+            content_user_hint: f
+                .get(INTENT_FIELD_CONTENT_USER_HINT)
+                .and_then(Value::as_int)
+                .unwrap_or(crate::fill_in::USER_CURRENT),
             extras,
         }
     }
@@ -208,27 +298,74 @@ impl IntentFacts {
                 ],
             )
         });
+        let source_bounds = self.source_bounds.map(|[left, top, right, bottom]| {
+            Parcelable::ordered(
+                "android.graphics.Rect",
+                vec![
+                    Value::Int(left),
+                    Value::Int(top),
+                    Value::Int(right),
+                    Value::Int(bottom),
+                ],
+            )
+        });
+        // `Intent.writeToParcel` writes `mCategories.size()`, so an empty set and
+        // a null set are the same bytes — but `fillIn` distinguishes them
+        // (`other.mCategories != null`), and `Intent.readFromParcel` answers
+        // null for count 0. Writing the empty list as null keeps the round trip
+        // faithful to the wire.
+        let categories = if self.categories.is_empty() {
+            Value::StringList(None)
+        } else {
+            Value::StringList(Some(self.categories.iter().cloned().map(Some).collect()))
+        };
         Parcelable::ordered(
             crate::parcelable::INTENT_CLASS,
             vec![
                 Value::Str(self.action.clone()),
                 Value::Str(self.data.clone()),
                 Value::Str(self.mime_type.clone()), // type
-                Value::Str(None),           // identifier
+                Value::Str(self.identifier.clone()), // identifier
                 Value::Int(self.flags),     // flags
                 Value::Str(self.package.clone()),
                 Value::Parcelable(component.unwrap_or(Parcelable::Null)),
-                Value::Parcelable(Parcelable::Null), // sourceBounds
-                Value::StringList(Some(
-                    self.categories.iter().cloned().map(Some).collect(),
-                )),
-                Value::Parcelable(Parcelable::Null), // selector
-                Value::Parcelable(Parcelable::Null), // clipData
-                Value::Int(-2),                      // contentUserHint
-                Value::Bundle(Some(encode_extras(&self.extras))),
+                Value::Parcelable(source_bounds.unwrap_or(Parcelable::Null)),
+                categories,
+                Value::Parcelable(
+                    self.selector
+                        .as_deref()
+                        .map(Self::to_parcelable)
+                        .unwrap_or(Parcelable::Null),
+                ),
+                Value::Parcelable(self.clip_data.clone().unwrap_or(Parcelable::Null)),
+                Value::Int(self.content_user_hint),
+                // An Intent with no extras has a **null** `mExtras` (AOSP only
+                // creates the Bundle on the first `putExtra`), and `fillIn`
+                // distinguishes null from present for its `contentUserHint`
+                // side effect. Writing the empty map as an empty bundle would
+                // claim a bundle the original never had.
+                Value::Bundle(if self.extras.is_empty() {
+                    None
+                } else {
+                    Some(encode_extras(&self.extras))
+                }),
                 Value::Parcelable(Parcelable::Null), // originalIntent
             ],
         )
+    }
+
+    /// `Intent.fillIn(other, flags)` (AOSP `Intent.java:11530`), over the facts.
+    ///
+    /// The rules live in [`crate::fill_in::fill_in_value`], the one implementation
+    /// of the AOSP method: this converts the facts to the real Intent value, runs
+    /// it, and reduces the answer back, so the reduced path cannot drift from the
+    /// byte-verified one. Returns the `FILL_IN_*` change mask AOSP returns.
+    pub fn fill_in(&mut self, other: &Self, flags: i32) -> i32 {
+        let mut target = self.to_parcelable();
+        let changes = crate::fill_in::fill_in_value(&mut target, &other.to_parcelable(), flags)
+            .unwrap_or(0);
+        *self = Self::from_parcelable(&target);
+        changes
     }
 }
 
@@ -1292,17 +1429,38 @@ impl AmsState {
         binder: u64,
         code: i32,
     ) -> Result<crate::pending_intent::SendEvidence> {
-        self.send_pending_intent_with_fill_in(binder, code, false)
+        self.send_pending_intent_with_fill_in(
+            binder,
+            code,
+            crate::pending_intent::FillIn::None,
+        )
     }
 
-    /// [`Self::send_pending_intent`] for a caller that read the request's
-    /// fill-in marker: `fill_in_ignored` is the evidence bit (the intent is
-    /// never merged — `Intent.fillIn` is not modelled).
+    /// [`Self::send_pending_intent`] with the caller's fill-in `Intent`, the
+    /// way `PendingIntent.send(context, code, intent)` delivers it.
+    ///
+    /// The system side is `PendingIntentRecord.sendInner`
+    /// (`services.dex`, disassembled in `results/handoff/PIFILLIN`):
+    ///
+    /// ```text
+    /// finalIntent = new Intent(key.requestIntent)      // or new Intent()
+    /// if ((key.flags & FLAG_IMMUTABLE) == 0) {         // 0x04000000 test
+    ///     if (intent != null) finalIntent.fillIn(intent, key.flags);
+    /// }
+    /// ```
+    ///
+    /// so a **mutable** sender merges the fill-in through
+    /// [`crate::fill_in::fill_in_value`] (with the record's flags as the
+    /// `FILL_IN_*` mask, which — like AOSP — is 0 for every real
+    /// `PendingIntent` flag, because those live above bit 8) and delivers the
+    /// merged intent; an **immutable** sender ignores the fill-in entirely and
+    /// the evidence records `fill_in_ignored`. Nothing is ever sent twice or
+    /// half-merged.
     pub fn send_pending_intent_with_fill_in(
         &mut self,
         binder: u64,
         code: i32,
-        fill_in_ignored: bool,
+        fill_in: crate::pending_intent::FillIn<'_>,
     ) -> Result<crate::pending_intent::SendEvidence> {
         let Some(record) = self.intent_senders.record_cloned(binder) else {
             return Err(ServiceError::BadRequest {
@@ -1312,28 +1470,45 @@ impl AmsState {
             });
         };
         let cancelled = record.cancelled;
+        let immutable = record.flags & crate::pending_intent::FLAG_IMMUTABLE != 0;
         // `FLAG_UPDATE_CURRENT` stored extras are applied to every intent the
         // record replays (`PendingIntentRecord.sendInner` sets them on the
-        // intent before the start).
-        let intents: Vec<IntentFacts> = record
-            .intents
-            .iter()
-            .map(|intent| {
-                let mut intent = intent.clone();
-                if let Some(extras) = &record.extras {
-                    for (key, value) in crate::pending_intent::bundle_extras(extras) {
-                        intent.extras.insert(key, value);
-                    }
+        // intent before the start); the fill-in merges *after* them, so a
+        // fill-in key the stored intent also has still loses to the stored
+        // value (AOSP's `newb.putAll(mExtras)`).
+        let mut merged: Vec<(IntentFacts, i32)> = Vec::with_capacity(record.intents.len());
+        for stored in &record.intents {
+            let mut intent = stored.clone();
+            for (key, value) in record
+                .extras
+                .as_ref()
+                .map(crate::pending_intent::bundle_extras)
+                .unwrap_or_default()
+            {
+                intent.extras.insert(key, value);
+            }
+            let mut changes = 0;
+            if !immutable {
+                if let Some(fill_in) = fill_in.intent() {
+                    changes = intent.fill_in(fill_in, record.flags);
                 }
-                intent
-            })
-            .collect();
-        let intent = intents.first().cloned().unwrap_or_default();
+            }
+            merged.push((intent, changes));
+        }
+        let (intent, fill_in_changes) = merged
+            .first()
+            .cloned()
+            .unwrap_or_else(|| (IntentFacts::default(), 0));
         let outcome = if cancelled {
             Err("the pending intent was cancelled".to_string())
         } else {
             match record.kind {
-                crate::pending_intent::TYPE_ACTIVITY => self
+                // `INTENT_SENDER_ACTIVITY` and `INTENT_SENDER_ACTIVITY_RESULT`
+                // both start the stored activity; the result half (its
+                // `resultTo`/`resultWho`) is not modelled by `start_activity`,
+                // which is what a tap/notification sender uses.
+                crate::pending_intent::TYPE_ACTIVITY
+                | crate::pending_intent::TYPE_ACTIVITY_RESULT => self
                     .start_activity(&intent, 0, 0, record.request_code)
                     .map_err(|e| e.to_string()),
                 crate::pending_intent::TYPE_BROADCAST => self
@@ -1352,7 +1527,9 @@ impl AmsState {
             outcome: outcome.clone(),
             intent,
             refused_cancelled: cancelled,
-            fill_in_ignored,
+            fill_in_ignored: fill_in.is_some() && immutable,
+            fill_in: fill_in.intent().cloned(),
+            fill_in_changes,
         };
         self.intent_senders.record_send(binder, evidence.clone());
         Ok(evidence)
@@ -1489,6 +1666,7 @@ impl AmsState {
     ) -> Result<i32> {
         let ordered = result_to != 0;
         let mut matched = 0;
+
 
         // Manifest receivers first (in declared order), then dynamic ones.
         let manifest = self.manifests.resolve_receivers(intent);
@@ -1917,6 +2095,26 @@ pub fn dispatch(
             )?;
             vec![Value::Binder(binder.map(acos_parcel::BinderId))]
         }
+        // `ActivityManagerService.isIntentSenderTargetedToPackage` (image dex
+        // `services/classes.dex`, disassembled in
+        // `results/handoff/PIFILLIN/pending-intent-dex.txt`): the framework asks
+        // this before it hands a `PendingIntent` to a system service that will
+        // broadcast through it (`LocationManager.requestLocationUpdates` does).
+        // The image's rule is exactly "no stored intent carries both a package
+        // and a component"; a binder that is not a sender record is false.
+        "isIntentSenderTargetedToPackage" => {
+            let binder = value(0).and_then(Value::as_binder).map(|b| b.0);
+            let targeted = binder
+                .and_then(|binder| state.intent_senders.record(binder))
+                .map(|record| {
+                    !record
+                        .intents
+                        .iter()
+                        .any(|intent| intent.package.is_some() && intent.component.is_some())
+                })
+                .unwrap_or(false);
+            vec![Value::Bool(targeted)]
+        }
         "cancelIntentSender" => {
             let binder = value(0)
                 .and_then(Value::as_binder)
@@ -1930,9 +2128,13 @@ pub fn dispatch(
                 .and_then(Value::as_binder)
                 .map(|b| b.0)
                 .unwrap_or(0);
-            // `ActivityManager.PendingIntentInfo`: the creator package, whether
-            // the sender exists and whether it is an activity sender
-            // (`ActivityManager.java:4540`).
+            // `ActivityManager.PendingIntentInfo` — the image's four fields
+            // (`PendingIntentInfo.writeToParcel`: creator package, creator uid,
+            // immutable, intent-sender type), i.e. what
+            // `ActivityManagerService.getInfoForIntentSender` answers from the
+            // record. A session runs one app, so the creator uid is the fixture
+            // uid the manifest table was seeded with; a binder that is not a
+            // record answers the empty package with `immutable=false, type=0`.
             let record = state.intent_senders.record(binder);
             vec![Value::TypedObject(Parcelable::ordered(
                 "android.app.ActivityManager$PendingIntentInfo",
@@ -1940,12 +2142,17 @@ pub fn dispatch(
                     Value::Str(Some(
                         record.map(|r| r.package.clone()).unwrap_or_default(),
                     )),
-                    Value::Int(i32::from(record.is_some())),
-                    Value::Int(i32::from(
+                    Value::Int(
                         record
-                            .map(|r| r.kind == crate::pending_intent::TYPE_ACTIVITY)
+                            .map(|_| crate::pms::FIXTURE_UID)
+                            .unwrap_or(0),
+                    ),
+                    Value::Bool(
+                        record
+                            .map(|r| r.flags & crate::pending_intent::FLAG_IMMUTABLE != 0)
                             .unwrap_or(false),
-                    )),
+                    ),
+                    Value::Int(record.map(|r| r.kind).unwrap_or(0)),
                 ],
             ))]
         }

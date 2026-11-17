@@ -799,6 +799,17 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int, FieldOp::Int, FieldOp::Int, FieldOp::Int],
         verification: Verification::Full,
     },
+    // `android.app.ActivityManager$PendingIntentInfo.writeToParcel` (image dex
+    // `framework/classes.dex`): `writeString(mCreatorPackage)`,
+    // `writeInt(mCreatorUid)`, `writeBoolean(mImmutable)`,
+    // `writeInt(mIntentSenderType)`. `IActivityManager.getInfoForIntentSender`
+    // answers one, and the framework reads it on the `PendingIntent` path
+    // (PIFILLIN).
+    ParcelableSpec {
+        class: "android.app.ActivityManager$PendingIntentInfo",
+        fields: &[FieldOp::Str16, FieldOp::Int, FieldOp::Bool, FieldOp::Int],
+        verification: Verification::Full,
+    },
     // `android.os.LocaleList.writeToParcel` is a single `writeString8`
     // (`mStringRepresentation`); `Configuration` wraps it in
     // `writeTypedObject`.
@@ -2001,6 +2012,115 @@ pub fn has_codec(class: &str) -> bool {
     spec_for(class).is_some()
 }
 
+// ---------------------------------------------------------------------------
+// `android.media.AudioAttributes` (MODNOTIF3 transcription, corrected)
+// ---------------------------------------------------------------------------
+
+/// `android.media.AudioAttributes` — `writeToParcel` switches on the parcel
+/// flags (`FLATTEN_TAGS`), so it is a curated codec like [`read_icon`].
+pub const AUDIO_ATTRIBUTES_CLASS: &str = "android.media.AudioAttributes";
+/// `AudioAttributes.FLATTEN_TAGS` (`base/media/java/android/media/AudioAttributes.java:1339`).
+const AUDIO_ATTR_FLATTEN_TAGS: i32 = 0x1;
+/// `AudioAttributes.ATTR_PARCEL_IS_NULL_BUNDLE` (`:1341`) — no bundle body follows.
+const AUDIO_ATTR_NULL_BUNDLE: i32 = -1977;
+/// `AudioAttributes.ATTR_PARCEL_IS_VALID_BUNDLE` (`:1342`).
+const AUDIO_ATTR_VALID_BUNDLE: i32 = 1980;
+
+/// `AudioAttributes.writeToParcel` (`AudioAttributes.java:1349-1368`).
+///
+/// The MODNOTIF3 transcription assumed a fixed `StringArray` + `String` + bundle
+/// pair; the real writer emits **one** of the tag forms (chosen by
+/// `FLATTEN_TAGS`) and the bundle only after a `VALID_BUNDLE` sentinel. A real
+/// `Notification.Builder` notification (MODNOTIF5's ART run) carries the
+/// non-flattened form with a null bundle, which the fixed list over-read by 8
+/// bytes and desynchronised every field after it.
+fn read_audio_attributes(parcel: &mut Parcel) -> Result<Parcelable> {
+    let usage = parcel.read_int32()?;
+    let content_type = parcel.read_int32()?;
+    let source = parcel.read_int32()?;
+    let flags = parcel.read_int32()?;
+    let parcel_flags = parcel.read_int32()?;
+    let tags = if parcel_flags & AUDIO_ATTR_FLATTEN_TAGS != 0 {
+        Value::Str(parcel.read_string16()?)
+    } else {
+        Value::StringArray(parcel.read_string16_array()?)
+    };
+    let mut values = vec![
+        Value::Int(usage),
+        Value::Int(content_type),
+        Value::Int(source),
+        Value::Int(flags),
+        Value::Int(parcel_flags),
+        tags,
+    ];
+    match parcel.read_int32()? {
+        AUDIO_ATTR_NULL_BUNDLE => {
+            values.push(Value::Cond {
+                present: false,
+                values: Vec::new(),
+            });
+        }
+        AUDIO_ATTR_VALID_BUNDLE => {
+            values.push(Value::Cond {
+                present: true,
+                values: vec![Value::Bundle(read_bundle(parcel)?)],
+            });
+        }
+        other => {
+            return Err(bad(format!(
+                "AudioAttributes bundle marker {other} (expected {AUDIO_ATTR_NULL_BUNDLE} or {AUDIO_ATTR_VALID_BUNDLE})"
+            )))
+        }
+    }
+    Ok(Parcelable::ordered(AUDIO_ATTRIBUTES_CLASS, values))
+}
+
+/// The writer for [`read_audio_attributes`]'s value shape.
+fn write_audio_attributes(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
+    let Parcelable::Ordered { class, values } = value else {
+        return Err(bad("AudioAttributes payload is not an ordered parcelable"));
+    };
+    if class != AUDIO_ATTRIBUTES_CLASS || values.len() != 7 {
+        return Err(bad(format!(
+            "expected {AUDIO_ATTRIBUTES_CLASS} with 7 fields, got {class} with {}",
+            values.len()
+        )));
+    }
+    parcel.write_int32(expect_int(&values[0])?); // usage
+    parcel.write_int32(expect_int(&values[1])?); // contentType
+    parcel.write_int32(expect_int(&values[2])?); // source
+    parcel.write_int32(expect_int(&values[3])?); // flags
+    let parcel_flags = expect_int(&values[4])?;
+    parcel.write_int32(parcel_flags);
+    if parcel_flags & AUDIO_ATTR_FLATTEN_TAGS != 0 {
+        parcel.write_string16_opt(expect_str(&values[5])?)?;
+    } else {
+        let tags = expect_string_array(&values[5])?;
+        let tags: Option<Vec<&str>> = tags.map(|items| {
+            items
+                .iter()
+                .map(|item| item.as_deref().unwrap_or_default())
+                .collect()
+        });
+        parcel.write_string16_array(tags.as_deref())?;
+    }
+    match &values[6] {
+        Value::Cond { present: false, .. } => {
+            parcel.write_int32(AUDIO_ATTR_NULL_BUNDLE);
+            Ok(())
+        }
+        Value::Cond { present: true, values } => {
+            parcel.write_int32(AUDIO_ATTR_VALID_BUNDLE);
+            let Value::Bundle(bundle) = values.first().ok_or_else(|| bad("AudioAttributes bundle"))?
+            else {
+                return Err(bad("AudioAttributes bundle field is not a Bundle"));
+            };
+            write_bundle(parcel, bundle.as_ref())
+        }
+        _ => Err(bad("AudioAttributes bundle field is not Cond")),
+    }
+}
+
 fn unsupported(class: &str) -> ServiceError {
     let _ = ErrorCode::UnsupportedAndroidApi;
     ServiceError::UnsupportedParcelable {
@@ -2023,6 +2143,19 @@ pub fn read_payload(class: &str, parcel: &mut Parcel) -> Result<Parcelable> {
     }
     if class == PARCELED_LIST_SLICE {
         return read_parceled_list_slice(parcel);
+    }
+    if class == ICON_CLASS {
+        return read_icon(parcel);
+    }
+    if class == AUDIO_ATTRIBUTES_CLASS {
+        return read_audio_attributes(parcel);
+    }
+    // PIFILLIN: a `Location` travels in a `PendingIntent` fill-in's extras
+    // (`LocationManager.KEY_LOCATION_CHANGED`), so the codec has to read and
+    // write it. The layout lives in the `location` module next to the writer the
+    // `ILocationListener` path already uses.
+    if class == crate::modules::location::LOCATION_CLASS {
+        return crate::modules::location::read_location_value(parcel);
     }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     let mut values = Vec::with_capacity(spec.fields.len());
@@ -2055,6 +2188,15 @@ pub fn write_payload(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
     }
     if class == PARCELED_LIST_SLICE {
         return write_parceled_list_slice(parcel, value);
+    }
+    if class == ICON_CLASS {
+        return write_icon(parcel, value);
+    }
+    if class == AUDIO_ATTRIBUTES_CLASS {
+        return write_audio_attributes(parcel, value);
+    }
+    if class == crate::modules::location::LOCATION_CLASS {
+        return crate::modules::location::write_location_value(parcel, value);
     }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     if values.len() != spec.fields.len() {
@@ -3470,18 +3612,26 @@ pub fn write_parcelable_bundle(
     let mut ordered: Vec<&(&str, &Parcelable)> = entries.iter().collect();
     ordered.sort_by_key(|(key, _)| java_string_hash(key));
     for (key, value) in ordered {
+        // `BaseBundle.writeArrayMapInternal` writes the key with `writeString`,
+        // and on API 34 `Parcel.writeString` *is* `writeString16`
+        // (Parcel.java:1151-1153), so a String16 key is correct here.
         parcel.write_string16(key)?;
-        match value {
-            Parcelable::Null => parcel.write_int32(val::NULL),
-            Parcelable::Ordered { class, .. } => {
-                parcel.write_int32(val::PARCELABLE);
-                parcel.write_string16(class)?;
-                write_payload(parcel, value)?;
+        // The value is `Parcel.writeValue`'s wire form: a type tag, then for
+        // `VAL_PARCELABLE` a **length prefix** covering the class name plus the
+        // payload (`isLengthPrefixed`, Parcel.java:4908-4925). NET6 measured the
+        // image reject tag+class+payload (no length) with `BadParcelableException:
+        // Unmarshalling unknown type code`, which is what every `Message` a
+        // `NetworkCallback` receives is made of.
+        let dynamic = match value {
+            Parcelable::Null => crate::value::DynamicValue::Null,
+            Parcelable::Ordered { .. } => {
+                crate::value::DynamicValue::Parcelable((*value).clone())
             }
             Parcelable::Fd(_) => {
                 return Err(bad("a bundle value cannot be a bare file descriptor"));
             }
-        }
+        };
+        write_dynamic(parcel, &dynamic)?;
     }
     let payload_end = parcel.data_size();
     let len = payload_end - payload_start;

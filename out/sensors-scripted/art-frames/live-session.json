@@ -32,7 +32,7 @@
   "retention": {
     "note": "passing run: intermediate C1 captures were pruned; the frames a step declared are in frames/<seq>.png",
     "policy": "referenced",
-    "pruned_captures": 4
+    "pruned_captures": 5
   },
   "steps": [
     {
@@ -40,15 +40,15 @@
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
-        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-099117b2e874fe99",
-        "input_hash": "099117b2e874fe99",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff",
+        "input_hash": "ff39b037f1d6b9ff",
         "mode": "shared-fixed"
       },
       "buffer_generation": 1,
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 2570960,
+      "guest_process_group": 3473593,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -140,6 +140,15 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -236,7 +245,7 @@
       "ok": true,
       "package": "dev.acos.fixtures.sensorprobe",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-2570952-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-3473581-1/view.sock",
       "width": 1080
     },
     {
@@ -253,7 +262,7 @@
       "frame_seq": 1,
       "ok": true,
       "png": "out/sensors-scripted/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c1.png",
-      "probe_seq": 6
+      "probe_seq": 7
     },
     {
       "cmd": "logs",
@@ -269,7 +278,7 @@
       "frame_seq": 2,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 7
+      "probe_seq": 8
     },
     {
       "cmd": "logs",
@@ -348,7 +357,7 @@
           "fidelity": "scripted",
           "id": "sensors",
           "profile": "scripted",
-          "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 40 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
+          "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 14 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
           "state": "attached"
         },
         {
@@ -394,6 +403,15 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -511,7 +529,7 @@
       "frame_seq": 3,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 9
+      "probe_seq": 10
     },
     {
       "cmd": "logs",
@@ -583,7 +601,7 @@
           "fidelity": "scripted",
           "id": "sensors",
           "profile": "scripted",
-          "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 57 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
+          "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 19 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
           "state": "attached"
         },
         {
@@ -629,6 +647,15 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -746,7 +773,7 @@
       "frame_seq": 4,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 11
+      "probe_seq": 12
     },
     {
       "cmd": "logs",
@@ -818,7 +845,7 @@
           "fidelity": "scripted",
           "id": "sensors",
           "profile": "scripted",
-          "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 73 events delivered, 1 connections, 1 play timelines; values are scripted, not measured, and delivery is not permission-gated",
+          "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 24 events delivered, 1 connections, 1 play timelines; values are scripted, not measured, and delivery is not permission-gated",
           "state": "attached"
         },
         {
@@ -864,6 +891,15 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -981,16 +1017,25 @@
       "frame_seq": 5,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 14
+      "probe_seq": 15
+    },
+    {
+      "buffer_generation": 16,
+      "cmd": "tree",
+      "frame_number": 16,
+      "frame_seq": 6,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 21
     },
     {
       "buffer_generation": 22,
       "cmd": "tree",
       "frame_number": 22,
-      "frame_seq": 6,
+      "frame_seq": 7,
       "ok": true,
-      "png": "out/sensors-scripted/art-frames/live-frames/acos-c1-layer3-frame-22-g22-c6.png",
-      "probe_seq": 34
+      "png": "out/sensors-scripted/art-frames/live-frames/acos-c1-layer3-frame-22-g22-c7.png",
+      "probe_seq": 36
     },
     {
       "cmd": "logs",
@@ -1069,7 +1114,7 @@
           "fidelity": "scripted",
           "id": "sensors",
           "profile": "scripted",
-          "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 126 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
+          "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 67 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
           "state": "attached"
         },
         {
@@ -1115,6 +1160,15 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -1211,14 +1265,14 @@
       "ok": true,
       "op": "events",
       "value": {
-        "delivered": 126,
+        "delivered": 67,
         "dropped": 0,
         "events": [
           {
             "flush_complete": false,
             "handle": 1,
             "sensor": "accelerometer",
-            "t_ms": 21421735,
+            "t_ms": 28368421,
             "type": 1,
             "values": [
               -12.0
@@ -1228,7 +1282,7 @@
             "flush_complete": false,
             "handle": 1,
             "sensor": "accelerometer",
-            "t_ms": 21421755,
+            "t_ms": 28368441,
             "type": 1,
             "values": [
               -12.0
@@ -1238,7 +1292,7 @@
             "flush_complete": false,
             "handle": 1,
             "sensor": "accelerometer",
-            "t_ms": 21421775,
+            "t_ms": 28368461,
             "type": 1,
             "values": [
               -12.0
@@ -1248,7 +1302,7 @@
             "flush_complete": false,
             "handle": 1,
             "sensor": "accelerometer",
-            "t_ms": 21421795,
+            "t_ms": 28368481,
             "type": 1,
             "values": [
               -12.0
@@ -1362,6 +1416,15 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -1558,6 +1621,15 @@
           "state": "off"
         },
         {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
           "attach": "hot",
           "details": null,
           "fidelity": "off",
@@ -1654,7 +1726,7 @@
     {
       "capture_source": "acos-c1-buffer",
       "cmd": "close",
-      "frame_seq": 6,
+      "frame_seq": 7,
       "ok": true
     }
   ]

@@ -196,6 +196,13 @@ public final class SessionMain {
                 // `UnsatisfiedLinkError: android.net.LocalSocketImpl
                 // .connectLocal`. Same root cause as LaunchMain's list.
                 "register_android_net_LocalSocketImpl",
+                // MODA11YNATIVE: `AccessibilityService.takeScreenshot` hands the
+                // app a `HardwareBuffer`; `nReadHardwareBufferFromParcel` and the
+                // `nGet*` getters are the image's own implementations, and
+                // libui's `GraphicBuffer` unflatten goes through the ACOS
+                // gralloc shim (which owns the memfd), so no substitute native
+                // is needed.
+                "register_android_hardware_HardwareBuffer",
         };
         int ok = 0, miss = 0;
         for (String n : extra) {

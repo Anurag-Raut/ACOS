@@ -927,7 +927,9 @@ impl Module for NotificationsModule {
                         detail: "no sender delivery is published on this host (no AMS)".into(),
                     });
                 };
-                let evidence = fire(sender, 0)?;
+                // A notification action/content intent carries no fill-in:
+                // `NotificationManagerService` fires it with `send(code)`.
+                let evidence = fire(sender, 0, None)?;
                 let fired = FiredNotification {
                     id: target.id,
                     action: action_index,

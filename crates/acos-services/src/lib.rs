@@ -41,6 +41,7 @@
 
 pub mod a11y_bind; // MODA11Y2: system -> app AccessibilityService bind
 pub mod a11y_config; // MODA11Y6: <accessibility-service> meta-data -> capabilities
+pub mod a11y_native; // MODA11YNATIVE: gesture steps + HardwareBuffer payloads
 pub mod ams;
 pub mod apk_facts; // PERF-REL3b: one APK open per launch facts set (manifest, budget)
 pub mod animation;
@@ -57,6 +58,7 @@ pub mod display_events;
 pub mod error;
 pub mod exception;
 pub mod extras;
+pub mod fill_in; // PIFILLIN: `Intent.fillIn`, the one implementation (AOSP rules)
 pub mod host;
 pub mod ime;
 pub mod intents;
@@ -77,6 +79,7 @@ pub mod pending_intent; // MODNOTIF4: PendingIntent sender records + the IIntent
 pub mod permissions; // MODNOTIF2: the one runtime-permission table
 pub mod pms;
 pub mod provider;
+pub mod refs; // BINDERREF2: the guest-binder registration ledger (host strong refs)
 pub mod registry;
 pub mod sensors; // MODSENS: native sensorservice (SensorManager/SensorEventConnection)
 pub mod surface_client;

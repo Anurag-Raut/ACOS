@@ -425,6 +425,20 @@ fn handle(mut s: UnixStream) -> std::io::Result<()> {
         }
     }
     let text = String::from_utf8_lossy(&req).to_string();
+    // NET6: while the session's own `offline` control is in effect there is no
+    // network to resolve on, and the honest answer is the one a phone in
+    // airplane mode gives: `EAI_NODATA` (Java `UnknownHostException`). The
+    // resolver proxy is a host-side unix socket, so the kernel cannot make this
+    // fail by itself — the session state has to (the relay's half is the removed
+    // default route and the destroyed sockets, see
+    // `acos_netd::plan::session_offline_cmds`).
+    if acos_services::network::offline() {
+        log_request(&text, "500 session-offline");
+        s.write_all(b"500\0")?;
+        s.write_all(b"000\0")?;
+        s.shutdown(Shutdown::Both).ok();
+        return Ok(());
+    }
     let mut it = text.split(' ');
     let cmd = it.next().unwrap_or_default();
     if cmd != "getaddrinfo" {

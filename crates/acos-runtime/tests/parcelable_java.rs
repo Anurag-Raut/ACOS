@@ -17,6 +17,7 @@ mod common;
 use std::collections::HashMap;
 
 use common::{compile_case, run_case_args};
+use acos_services::ams::IntentFacts;
 use acos_services::parcelable;
 use acos_services::value::{DynamicValue, Parcelable, Value};
 use acos_services::Bundle;
@@ -291,6 +292,10 @@ fn package_info_arrays_value() -> Parcelable {
             Value::Cond { present: false, values: vec![] }, // signingInfo
             Value::Bool(false), // isApex
             Value::Bool(false), // isActiveApex
+        ],
+    )
+}
+
 /// A `BluetoothDevice` in the image's `writeToParcel` order: `mAddress`
 /// (`writeString`) then `mAddressType` (`writeInt`), read back by
 /// `BluetoothDevice(Parcel)` (image dex).
@@ -434,6 +439,139 @@ fn notification_value(content_intent: Option<u64>) -> Parcelable {
             all_pending,    // allPendingIntents
         ],
     )
+}
+
+/// The PIFILLIN differential cases: `(name, stored intent, fill-in, flags,
+/// expected FILL_IN_* change mask)`, mirroring the Java builders in
+/// `ParcelableCompareMain.java` field for field.
+fn fill_in_cases() -> Vec<(&'static str, IntentFacts, IntentFacts, i32, i32)> {
+    use acos_services::fill_in::{
+        FILL_IN_ACTION, FILL_IN_CATEGORIES, FILL_IN_COMPONENT, FILL_IN_DATA,
+        FILL_IN_IDENTIFIER, FILL_IN_PACKAGE, FILL_IN_SELECTOR, FILL_IN_SOURCE_BOUNDS,
+    };
+    use acos_services::ams::Extra;
+
+    let mut empty_fill = IntentFacts::action("android.intent.action.VIEW");
+    empty_fill.mime_type = Some("text/plain".into());
+    empty_fill.identifier = Some("id-1".into());
+    empty_fill.package = Some("dev.acos.fixtures.pifillin".into());
+    empty_fill.categories = vec![
+        "android.intent.category.DEFAULT".into(),
+        "android.intent.category.BROWSABLE".into(),
+    ];
+    empty_fill
+        .extras
+        .insert("action".into(), Extra::String("from-fill-in".into()));
+    empty_fill.extras.insert("count".into(), Extra::Int(3));
+
+    let stored_component = IntentFacts::explicit("dev.acos.fixtures", "Stored");
+    let mut stored_named = stored_component.clone();
+    stored_named.action = Some("stored.action".into());
+    let fill_component = {
+        let mut f = IntentFacts::explicit("dev.acos.fixtures", "Fill");
+        f.action = Some("fill.action".into());
+        f
+    };
+
+    let mut overwrite_stored = IntentFacts::explicit("stored.pkg", "Stored");
+    overwrite_stored.action = Some("stored.action".into());
+    overwrite_stored.categories = vec!["stored.category".into()];
+    overwrite_stored.package = Some("stored.pkg".into());
+    let mut overwrite_fill = IntentFacts::explicit("fill.pkg", "Fill");
+    overwrite_fill.action = Some("fill.action".into());
+    overwrite_fill.categories = vec!["fill.category".into()];
+    overwrite_fill.package = Some("fill.pkg".into());
+
+    let mut extras_stored = IntentFacts::default();
+    extras_stored
+        .extras
+        .insert("stored".into(), Extra::String("mine".into()));
+    extras_stored.extras.insert("shared".into(), Extra::Int(1));
+    let mut extras_fill = IntentFacts::default();
+    extras_fill.extras.insert("fresh".into(), Extra::Bool(true));
+    extras_fill.extras.insert("shared".into(), Extra::Int(2));
+
+    let mut typed_stored = IntentFacts::default();
+    typed_stored.mime_type = Some("text/plain".into());
+    let mut typed_fill = IntentFacts::default();
+    typed_fill.mime_type = Some("image/png".into());
+
+    let mut selector_stored = IntentFacts::action("outer.action");
+    selector_stored.selector = None;
+    let mut selector_fill = IntentFacts::default();
+    let mut inner = IntentFacts::action("inner.action");
+    inner.categories = vec!["inner.category".into()];
+    selector_fill.selector = Some(Box::new(inner));
+
+    let mut bounds_stored = IntentFacts::action("stored.action");
+    bounds_stored.flags = 0x1000_0000;
+    bounds_stored.source_bounds = Some([1, 2, 3, 4]);
+    let mut bounds_fill = IntentFacts::default();
+    bounds_fill.flags = 1;
+    bounds_fill.source_bounds = Some([10, 20, 30, 40]);
+
+    vec![
+        (
+            "fillin_empty",
+            IntentFacts::default(),
+            empty_fill,
+            0,
+            FILL_IN_ACTION
+                | FILL_IN_DATA
+                | FILL_IN_IDENTIFIER
+                | FILL_IN_CATEGORIES
+                | FILL_IN_PACKAGE,
+        ),
+        (
+            "fillin_component_kept",
+            stored_named.clone(),
+            fill_component.clone(),
+            0,
+            0,
+        ),
+        (
+            "fillin_component_allowed",
+            stored_named,
+            fill_component,
+            FILL_IN_COMPONENT | FILL_IN_ACTION,
+            FILL_IN_COMPONENT | FILL_IN_ACTION,
+        ),
+        (
+            "fillin_overwritten",
+            overwrite_stored,
+            overwrite_fill,
+            FILL_IN_ACTION | FILL_IN_CATEGORIES | FILL_IN_PACKAGE | FILL_IN_COMPONENT,
+            FILL_IN_ACTION | FILL_IN_CATEGORIES | FILL_IN_PACKAGE | FILL_IN_COMPONENT,
+        ),
+        ("fillin_extras", extras_stored, extras_fill, 0, 0),
+        (
+            "fillin_data_type",
+            typed_stored,
+            typed_fill,
+            FILL_IN_DATA,
+            FILL_IN_DATA,
+        ),
+        (
+            "fillin_selector",
+            selector_stored,
+            selector_fill,
+            FILL_IN_SELECTOR,
+            FILL_IN_SELECTOR,
+        ),
+        (
+            "fillin_flags_bounds",
+            bounds_stored,
+            bounds_fill,
+            FILL_IN_SOURCE_BOUNDS,
+            FILL_IN_SOURCE_BOUNDS,
+        ),
+    ]
+}
+
+fn encoded_fill_in(stored: &IntentFacts, fill_in: &IntentFacts, flags: i32) -> (Vec<u8>, i32) {
+    let mut merged = stored.clone();
+    let changes = merged.fill_in(fill_in, flags);
+    (encoded(&merged.to_parcelable()), changes)
 }
 
 fn encoded(value: &Parcelable) -> Vec<u8> {
@@ -602,6 +740,30 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         hex(&notification_intent_bytes)
     );
 
+    // PIFILLIN: `a.fillIn(b, flags)` then `a.writeToParcel` vs the Rust merge.
+    // Eight cases cover every field the AOSP method touches that this image's
+    // codec can carry: action, data/type as one field, identifier, categories,
+    // package, selector, component (kept and allowed), extras, flags and
+    // sourceBounds. A non-null `Uri` is not among them: `parcelable` refuses
+    // that body (the dex does not pin `Uri.writeToParcel`), so the data/type
+    // rule is reached through `type` alone.
+    let mut fill_in_bytes = Vec::new();
+    for (name, stored, fill_in, flags, expected_changes) in fill_in_cases() {
+        let (bytes, changes) = encoded_fill_in(&stored, &fill_in, flags);
+        assert_eq!(
+            changes, expected_changes,
+            "{name}: the Rust merge reported changes {changes:#x}, AOSP reports {expected_changes:#x}"
+        );
+        assert_eq!(
+            writes.get(name).map(String::as_str),
+            Some(hex(&bytes).as_str()),
+            "{name}: real Java a.fillIn(b, {flags:#x}).writeToParcel differs from the Rust merge\njava={:?}\nrust={}",
+            writes.get(name),
+            hex(&bytes)
+        );
+        fill_in_bytes.push((name, bytes));
+    }
+
     // Differential parcelables built from the parsed manifest/APK values.
     use acos_services::pms::{
         ActivityInfo as PmsActivityInfo, AppInfo, PackageInfo as PmsPackageInfo,
@@ -663,6 +825,10 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         format!("network_capabilities={}", hex(&caps_bytes)),
         format!("link_properties={}", hex(&link_bytes)),
     ];
+    let mut args = args;
+    for (name, bytes) in &fill_in_bytes {
+        args.push(format!("{name}={}", hex(bytes)));
+    }
     let (_rt, outcome) = run_case_args(&dex, "ParcelableCompareMain", &args);
     assert!(
         outcome.vm_error.is_none() && outcome.exit_code == 0,
@@ -671,6 +837,20 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         outcome.stdout,
         outcome.stderr
     );
+    for (name, _) in &fill_in_bytes {
+        assert!(
+            outcome.stdout.contains(&format!("read.{name}=ok")),
+            "real Intent.CREATOR rejected the Rust merge for {name}:\n{}",
+            outcome.stdout
+        );
+        assert!(
+            outcome
+                .stdout
+                .contains(&format!("roundtrip.{name}=")),
+            "the real Intent did not re-emit {name}:\n{}",
+            outcome.stdout
+        );
+    }
     for name in [
         "configuration",
         "persistable_bundle",
@@ -696,6 +876,15 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         );
     }
     let roundtrips = parse_roundtrips(&outcome.stdout);
+    for (name, bytes) in fill_in_bytes.iter().map(|(n, b)| (*n, b)) {
+        assert_eq!(
+            roundtrips.get(name).map(String::as_str),
+            Some(hex(bytes).as_str()),
+            "{name}: real writeToParcel differs from the Rust merge\njava={:?}\nrust={}",
+            roundtrips.get(name),
+            hex(bytes)
+        );
+    }
     for (name, bytes) in [
         ("configuration", &config_bytes),
         ("persistable_bundle", &bundle_bytes),

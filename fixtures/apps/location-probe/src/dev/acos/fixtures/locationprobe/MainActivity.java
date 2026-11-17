@@ -1,7 +1,11 @@
 package dev.acos.fixtures.locationprobe;
 
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.location.Geocoder;
 import android.location.Location;
 import android.location.LocationListener;
@@ -39,11 +43,16 @@ public class MainActivity extends Activity {
 
     private TextView stateView;
     private TextView lastView;
+    private TextView pendingView;
     private TextView fixView;
     private LocationManager manager;
     private LocationListener listener;
     private int fixCount;
     private String newest = "none";
+    /** The broadcast action the `PendingIntent` form is registered for. */
+    private static final String ACTION_FIX = "dev.acos.fixtures.locationprobe.FIX";
+    private BroadcastReceiver pendingReceiver;
+    private int pendingCount;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,6 +60,7 @@ public class MainActivity extends Activity {
         setContentView(R.layout.main);
         stateView = (TextView) findViewById(R.id.state);
         lastView = (TextView) findViewById(R.id.last);
+        pendingView = (TextView) findViewById(R.id.pending);
         fixView = (TextView) findViewById(R.id.fix);
         manager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         if (manager == null) {
@@ -70,6 +80,7 @@ public class MainActivity extends Activity {
         // A re-check starts from an empty screen: after a live module detach the
         // old fix must not stay on screen looking like a working phone.
         lastView.setText("last=none");
+        pendingView.setText("pi=none");
         fixView.setText("fix=none");
         fixCount = 0;
         newest = "none";
@@ -77,6 +88,7 @@ public class MainActivity extends Activity {
             reportProviders();
             reportLastKnown();
             registerUpdates();
+            registerPendingIntentUpdates();
             requestCurrentLocation();
             reportGeocoder();
         } catch (SecurityException denied) {
@@ -140,6 +152,51 @@ public class MainActivity extends Activity {
         manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 200L, 0f, listener,
                 Looper.getMainLooper());
         Log.i(TAG, "registered for gps updates");
+    }
+
+    /**
+     * The `PendingIntent` form of {@code requestLocationUpdates} (ILocationManager
+     * transaction 5, pinned by PIFILLIN).
+     *
+     * <p>The registration is a **mutable** broadcast sender: the system side
+     * fires it with a fill-in `Intent` carrying the fix under
+     * {@link LocationManager#KEY_LOCATION_CHANGED} (the framework's
+     * {@code LocationProviderManager$LocationPendingIntentTransport}), so the
+     * receiver below is the app's proof that the merge reached it. Nothing is
+     * faked: a fix that does not arrive leaves {@code pi=none} on screen.
+     */
+    private void registerPendingIntentUpdates() {
+        if (pendingReceiver == null) {
+            pendingReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    Location location =
+                            intent.getParcelableExtra(LocationManager.KEY_LOCATION_CHANGED);
+                    if (location != null) {
+                        pendingCount++;
+                        String text = format(location) + " provider=" + location.getProvider();
+                        pendingView.setText("pi=" + text + " count=" + pendingCount);
+                        Log.i(TAG, "pending intent fix #" + pendingCount + " " + text);
+                        return;
+                    }
+                    if (intent.hasExtra(LocationManager.KEY_PROVIDER_ENABLED)) {
+                        boolean enabled =
+                                intent.getBooleanExtra(LocationManager.KEY_PROVIDER_ENABLED, false);
+                        Log.i(TAG, "pending intent providerEnabled=" + enabled);
+                    }
+                }
+            };
+            // API 34 requires the exported flag for a non-system broadcast.
+            registerReceiver(pendingReceiver, new IntentFilter(ACTION_FIX),
+                    Context.RECEIVER_EXPORTED);
+        }
+        Intent fill = new Intent(ACTION_FIX).setPackage(getPackageName());
+        // FLAG_MUTABLE: the system delivers the fix as the fill-in intent, and
+        // `LocationManager` refuses an immutable sender for this form.
+        PendingIntent pending = PendingIntent.getBroadcast(this, 7, fill,
+                PendingIntent.FLAG_MUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 200L, 0f, pending);
+        Log.i(TAG, "registered a PendingIntent for gps updates");
     }
 
     private void requestCurrentLocation() {

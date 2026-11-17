@@ -108,17 +108,20 @@
 //!   by `advance_timed` on the peer's idle wakeup, so updates arrive at real
 //!   timing; `loop` repeats the track until `play_track` is called again,
 //!   `stop_track` runs, or the module detaches (nothing to join).
-//! * The PendingIntent form of `requestLocationUpdates` is **not delivered**, and
-//!   the reason is measured (MODLOC3): the image's own client
-//!   (`LocationProviderManager$LocationPendingIntentTransport`) builds
-//!   `new Intent()`, `putExtra` with the fix under
-//!   `LocationManager.KEY_LOCATION_CHANGED` (`"location"`) and hands it to
-//!   `PendingIntentSender.send(...)` as the **fill-in** intent of
-//!   `IIntentSender.send`. MODNOTIF5 accepts that transaction but refuses to merge
-//!   a fill-in into a stored intent (`Intent.fillIn` is not modelled, PIFILLIN),
-//!   so a fired sender today can carry no fix (or a stale stored one). The
-//!   registration is refused with a structured `UNSUPPORTED_ANDROID_API` naming
-//!   exactly that; the listener form is the supported path.
+//! * The PendingIntent form of `requestLocationUpdates` (transaction 5) is
+//!   **delivered** (PIFILLIN): the registration keeps the caller's
+//!   `IIntentSender` and every fix fires it with a **fill-in** intent, exactly
+//!   like the image's `LocationProviderManager$LocationPendingIntentTransport`
+//!   (`results/handoff/MODLOC3/pending-intent-dex.txt`): `new Intent()`,
+//!   `putExtra("location", fix)` under
+//!   `LocationManager.KEY_LOCATION_CHANGED`, plus `"providerEnabled"` for an
+//!   enabled/disabled callback. The framework then merges it into the stored
+//!   intent (`Intent.fillIn`, [`crate::fill_in`]) and delivers the merged
+//!   broadcast/activity/service. ACOS delivers one fix per update, never a
+//!   `LocationResult` batch, so the `"locations"` array form is not produced.
+//! * The **listener** form (`ILocationListener`) remains the direct path: the
+//!   callback is a binder the app owns, so the fix travels as the
+//!   `onLocationChanged` payload instead of a fired sender.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -129,6 +132,7 @@ use acos_parcel::{BinderId, Parcel};
 use serde_json::{json, Value};
 
 use crate::error::{Result, ServiceError};
+use crate::value::Value as ParcelValue;
 use crate::exception::{write_no_exception, EX_ILLEGAL_ARGUMENT, EX_SECURITY};
 use crate::host::{CallResult, PendingDelivery, ServiceHost, ServiceObject};
 use crate::module::{
@@ -148,10 +152,10 @@ pub const CALLBACK_DESCRIPTOR: &str = "android.location.ILocationCallback";
 pub const GEOCODE_CALLBACK_DESCRIPTOR: &str = "android.location.IGeocodeListener";
 /// Descriptor of the cancellation signal returned by `getCurrentLocation`.
 pub const CANCELLATION_DESCRIPTOR: &str = "android.os.ICancellationSignal";
-/// The `PendingIntent` target descriptor the pending-intent form would drive
+/// The `PendingIntent` target descriptor the pending-intent form drives
 /// (`PendingIntent.writeToParcel` carries one strong binder to an
-/// `IIntentSender`). Kept for the wire evidence: the refusal below names why the
-/// fill-in the framework sends cannot be merged yet (PIFILLIN).
+/// `IIntentSender`). The module fires it through the session's `FireSender`
+/// with the fix as the fill-in intent (PIFILLIN).
 pub const INTENT_SENDER_DESCRIPTOR: &str = "android.content.IIntentSender";
 /// The module id.
 pub const MODULE_ID: &str = "location";
@@ -227,12 +231,36 @@ pub mod geocode_codes {
 pub const CANCELLATION_CANCEL: u32 = 1;
 
 /// `Location` field-presence mask bits (`Location.java:98-108`).
-mod mask {
+/// `Location.mFieldsMask` bits (`Location.java:98-108` in this image's
+/// framework dex: `Landroid/location/Location;->writeToParcel` tests exactly
+/// these before writing each optional field).
+///
+/// There is **no** mock bit: this image does not write `isMock()` at all, so a
+/// mock annotation never travels in the parcel (`Fix::mock` stays a module-side
+/// record). Writing one desynchronised every reader — bit 4 is
+/// `HAS_VERTICAL_ACCURACY_MASK`, whose payload is a float.
+pub mod mask {
     pub const ALTITUDE: i32 = 1 << 0;
     pub const SPEED: i32 = 1 << 1;
     pub const BEARING: i32 = 1 << 2;
     pub const ACCURACY: i32 = 1 << 3;
-    pub const MOCK: i32 = 1 << 4;
+    pub const VERTICAL_ACCURACY: i32 = 1 << 4;
+    pub const SPEED_ACCURACY: i32 = 1 << 5;
+    pub const BEARING_ACCURACY: i32 = 1 << 6;
+    pub const MSL_ALTITUDE: i32 = 1 << 7;
+    pub const MSL_ALTITUDE_ACCURACY: i32 = 1 << 8;
+    pub const ELAPSED_REALTIME_UNCERTAINTY: i32 = 1 << 9;
+    /// Every bit this build writes or reads.
+    pub const KNOWN: i32 = ALTITUDE
+        | SPEED
+        | BEARING
+        | ACCURACY
+        | VERTICAL_ACCURACY
+        | SPEED_ACCURACY
+        | BEARING_ACCURACY
+        | MSL_ALTITUDE
+        | MSL_ALTITUDE_ACCURACY
+        | ELAPSED_REALTIME_UNCERTAINTY;
 }
 
 /// The four providers an API-34 phone publishes.
@@ -414,6 +442,28 @@ pub enum Sink {
     Listener(BinderId),
     /// `ILocationCallback` (the `getCurrentLocation` one-shot).
     Current(BinderId),
+    /// `PendingIntent` (the `requestLocationUpdates(provider, ..., pendingIntent)`
+    /// form). The value is the `IIntentSender` binder the app's
+    /// `PendingIntent.writeToParcel` carried; every fix fires it with a
+    /// **fill-in** intent, exactly like
+    /// `LocationProviderManager$LocationPendingIntentTransport`
+    /// (`results/handoff/MODLOC3/pending-intent-dex.txt`).
+    PendingIntent(BinderId),
+}
+
+/// One fill-in `Intent` a PendingIntent registration must deliver, with the
+/// sender it belongs to.
+///
+/// A fire is a **host-side AMS action** (`IIntentSender.send`), not a direct
+/// app callback, so it is collected while the module's state lock is held and
+/// fired after it is dropped: `Module::control` has the host that publishes the
+/// fire closure, `LocationService::advance_timed` has the node's copy.
+#[derive(Clone, Debug)]
+pub struct PendingFire {
+    /// The `IIntentSender` binder the app registered.
+    pub sender: BinderId,
+    /// The fill-in `Intent` the framework's transport would build.
+    pub fill_in: crate::ams::IntentFacts,
 }
 
 /// One registered update stream.
@@ -585,8 +635,19 @@ pub struct LocationState {
     pub track: Option<Track>,
     /// `system -> app` callbacks queued for the peer to deliver.
     pub pending: Vec<PendingDelivery>,
+    /// `PendingIntent` fires queued while the state lock was held (delivered
+    /// after it is dropped, through the session's `IIntentSender` path).
+    pub pending_fires: Vec<PendingFire>,
     /// Why a delivery was refused, for the report (`None` when clean).
     pub last_error: Option<String>,
+    /// One-shot callbacks whose reference is released as soon as the delivery
+    /// that uses them has been handed to the peer (`getCurrentLocation`,
+    /// geocoding): they are not registrations, so they must not stay rooted.
+    pub one_shot: Vec<BinderId>,
+    /// The live registrations as host-held strong references (one per
+    /// registered `ILocationListener`/one-shot callback, released when the
+    /// registration goes away or the module detaches — `crate::refs`).
+    pub refs: crate::refs::GuestRefs,
 }
 
 impl std::fmt::Debug for LocationState {
@@ -632,7 +693,10 @@ impl LocationState {
             provider_events: Vec::new(),
             track: None,
             pending: Vec::new(),
+            pending_fires: Vec::new(),
             last_error: None,
+            one_shot: Vec::new(),
+            refs: crate::refs::GuestRefs::new(),
         }
     }
 
@@ -717,9 +781,60 @@ pub fn permit(fix: &Fix, permission: PermissionLevel) -> Fix {
     coarse
 }
 
-/// Write one `Location` exactly as `Location.writeToParcel` does.
-pub fn write_location(parcel: &mut Parcel, fix: &Fix) -> Result<()> {
-    parcel.write_string8(&fix.provider)?;
+/// The codec key of `android.location.Location`.
+pub const LOCATION_CLASS: &str = "android.location.Location";
+
+/// `LocationManager.KEY_LOCATION_CHANGED`: the extra the framework's
+/// `LocationPendingIntentTransport` puts the fix under.
+pub const KEY_LOCATION_CHANGED: &str = "location";
+/// The batched companion of [`KEY_LOCATION_CHANGED`] (`"locations"`).
+pub const KEY_LOCATION_CHANGED_BATCH: &str = "locations";
+/// `LocationManager.KEY_PROVIDER_ENABLED`: the extra of an enabled/disabled
+/// callback (`LocationPendingIntentTransport.deliverOnProviderEnabledChanged`).
+pub const KEY_PROVIDER_ENABLED: &str = "providerEnabled";
+
+/// Field indices of the [`crate::value::Parcelable`] value a `Location` payload
+/// decodes to, in `Location.writeToParcel` order (image dex
+/// `framework/classes2.dex`).
+pub const LOCATION_PROVIDER: usize = 0;
+/// `mFieldsMask`.
+pub const LOCATION_FIELDS: usize = 1;
+/// `mTimeMs`.
+pub const LOCATION_TIME: usize = 2;
+/// `mElapsedRealtimeNs`.
+pub const LOCATION_ELAPSED: usize = 3;
+/// `mElapsedRealtimeUncertaintyNs` (`Value::Skipped` when absent).
+pub const LOCATION_ELAPSED_UNCERTAINTY: usize = 4;
+/// `mLatitudeDegrees`.
+pub const LOCATION_LATITUDE: usize = 5;
+/// `mLongitudeDegrees`.
+pub const LOCATION_LONGITUDE: usize = 6;
+/// `mAltitudeMeters`.
+pub const LOCATION_ALTITUDE: usize = 7;
+/// `mSpeedMetersPerSecond`.
+pub const LOCATION_SPEED: usize = 8;
+/// `mBearingDegrees`.
+pub const LOCATION_BEARING: usize = 9;
+/// `mHorizontalAccuracyMeters`.
+pub const LOCATION_ACCURACY: usize = 10;
+/// `mAltitudeAccuracyMeters` (vertical accuracy).
+pub const LOCATION_VERTICAL_ACCURACY: usize = 11;
+/// `mSpeedAccuracyMetersPerSecond`.
+pub const LOCATION_SPEED_ACCURACY: usize = 12;
+/// `mBearingAccuracyDegrees`.
+pub const LOCATION_BEARING_ACCURACY: usize = 13;
+/// `mMslAltitudeMeters`.
+pub const LOCATION_MSL_ALTITUDE: usize = 14;
+/// `mMslAltitudeAccuracyMeters`.
+pub const LOCATION_MSL_ACCURACY: usize = 15;
+/// `mExtras` (`Value::Bundle(None)` for a null bundle).
+pub const LOCATION_EXTRAS: usize = 16;
+/// The number of fields the `Location` codec produces.
+pub const LOCATION_FIELDS_COUNT: usize = 17;
+
+/// One `Fix` as the `Location` value the codec reads and writes.
+#[must_use]
+pub fn location_value(fix: &Fix) -> crate::value::Parcelable {
     let mut fields = mask::ACCURACY;
     if fix.altitude.is_some() {
         fields |= mask::ALTITUDE;
@@ -730,30 +845,243 @@ pub fn write_location(parcel: &mut Parcel, fix: &Fix) -> Result<()> {
     if fix.bearing.is_some() {
         fields |= mask::BEARING;
     }
-    if fix.mock {
-        fields |= mask::MOCK;
+    let optional = |mask_bit: i32, value: Option<ParcelValue>| -> ParcelValue {
+        if fields & mask_bit != 0 {
+            value.unwrap_or(ParcelValue::Skipped)
+        } else {
+            ParcelValue::Skipped
+        }
+    };
+    crate::value::Parcelable::ordered(
+        LOCATION_CLASS,
+        vec![
+            ParcelValue::Str8(Some(fix.provider.clone())),
+            ParcelValue::Int(fields),
+            ParcelValue::Long(fix.time_ms),
+            ParcelValue::Long(fix.elapsed_realtime_ns),
+            ParcelValue::Skipped,
+            ParcelValue::Double(fix.latitude),
+            ParcelValue::Double(fix.longitude),
+            optional(mask::ALTITUDE, fix.altitude.map(ParcelValue::Double)),
+            optional(mask::SPEED, fix.speed.map(ParcelValue::Float)),
+            optional(mask::BEARING, fix.bearing.map(ParcelValue::Float)),
+            ParcelValue::Float(fix.accuracy),
+            ParcelValue::Skipped,
+            ParcelValue::Skipped,
+            ParcelValue::Skipped,
+            ParcelValue::Skipped,
+            ParcelValue::Skipped,
+            ParcelValue::Bundle(None),
+        ],
+    )
+}
+
+/// Write one `Location` exactly as this image's `Location.writeToParcel` does.
+///
+/// The one writer for every path (the `ILocationListener`/`ILocationCallback`
+/// payload and the `PendingIntent` fill-in extra) goes through the value layout,
+/// so the two cannot disagree.
+pub fn write_location(parcel: &mut Parcel, fix: &Fix) -> Result<()> {
+    write_location_value(parcel, &location_value(fix))
+}
+
+/// Write a decoded `Location` value.
+pub fn write_location_value(parcel: &mut Parcel, value: &crate::value::Parcelable) -> Result<()> {
+    let Some(values) = value.fields() else {
+        return Err(ServiceError::BadReply {
+            interface: "parcelable".into(),
+            method: LOCATION_CLASS.into(),
+            detail: "a null Location cannot be written as a payload".into(),
+        });
+    };
+    if values.len() != LOCATION_FIELDS_COUNT {
+        return Err(ServiceError::BadReply {
+            interface: "parcelable".into(),
+            method: LOCATION_CLASS.into(),
+            detail: format!(
+                "expected {LOCATION_FIELDS_COUNT} Location fields, got {}",
+                values.len()
+            ),
+        });
     }
+    parcel.write_string8_opt(values[LOCATION_PROVIDER].as_str())?;
+    let fields = values[LOCATION_FIELDS].as_int().unwrap_or(0);
     parcel.write_int32(fields);
-    parcel.write_int64(fix.time_ms);
-    parcel.write_int64(fix.elapsed_realtime_ns);
-    parcel.write_double(fix.latitude);
-    parcel.write_double(fix.longitude);
-    if let Some(altitude) = fix
-        .altitude
-        .filter(|_| fix.mock || fields & mask::ALTITUDE != 0)
-    {
-        parcel.write_double(altitude);
+    parcel.write_int64(values[LOCATION_TIME].as_long().unwrap_or(0));
+    parcel.write_int64(values[LOCATION_ELAPSED].as_long().unwrap_or(0));
+    if fields & mask::ELAPSED_REALTIME_UNCERTAINTY != 0 {
+        parcel.write_double(expect_double(values, LOCATION_ELAPSED_UNCERTAINTY)?);
     }
-    if let Some(speed) = fix.speed {
-        parcel.write_float(speed);
+    parcel.write_double(expect_double(values, LOCATION_LATITUDE)?);
+    parcel.write_double(expect_double(values, LOCATION_LONGITUDE)?);
+    if fields & mask::ALTITUDE != 0 {
+        parcel.write_double(expect_double(values, LOCATION_ALTITUDE)?);
     }
-    if let Some(bearing) = fix.bearing {
-        parcel.write_float(bearing);
+    if fields & mask::SPEED != 0 {
+        parcel.write_float(expect_float(values, LOCATION_SPEED)?);
     }
-    parcel.write_float(fix.accuracy);
-    // mExtras: a null Bundle is one int32 `-1`.
-    parcel.write_int32(-1);
+    if fields & mask::BEARING != 0 {
+        parcel.write_float(expect_float(values, LOCATION_BEARING)?);
+    }
+    if fields & mask::ACCURACY != 0 {
+        parcel.write_float(expect_float(values, LOCATION_ACCURACY)?);
+    }
+    if fields & mask::VERTICAL_ACCURACY != 0 {
+        parcel.write_float(expect_float(values, LOCATION_VERTICAL_ACCURACY)?);
+    }
+    if fields & mask::SPEED_ACCURACY != 0 {
+        parcel.write_float(expect_float(values, LOCATION_SPEED_ACCURACY)?);
+    }
+    if fields & mask::BEARING_ACCURACY != 0 {
+        parcel.write_float(expect_float(values, LOCATION_BEARING_ACCURACY)?);
+    }
+    if fields & mask::MSL_ALTITUDE != 0 {
+        parcel.write_double(expect_double(values, LOCATION_MSL_ALTITUDE)?);
+    }
+    if fields & mask::MSL_ALTITUDE_ACCURACY != 0 {
+        parcel.write_float(expect_float(values, LOCATION_MSL_ACCURACY)?);
+    }
+    match &values[LOCATION_EXTRAS] {
+        ParcelValue::Bundle(bundle) => crate::parcelable::write_bundle(parcel, bundle.as_ref())?,
+        _ => {
+            return Err(ServiceError::BadReply {
+                interface: "parcelable".into(),
+                method: LOCATION_CLASS.into(),
+                detail: "Location.extras must be a Bundle".into(),
+            })
+        }
+    }
     Ok(())
+}
+
+/// Read a `Location` payload (no class name, no presence word).
+pub fn read_location_value(parcel: &mut Parcel) -> Result<crate::value::Parcelable> {
+    let provider = parcel.read_string8()?;
+    let fields = parcel.read_int32()?;
+    if fields & !mask::KNOWN != 0 {
+        // A bit this image's `writeToParcel` does not test cannot be skipped
+        // safely (its payload width is unknown), so it is refused instead of
+        // desynchronising every field after it.
+        return Err(ServiceError::UnsupportedParcelable {
+            class: format!("{LOCATION_CLASS} (field mask {fields:#x})"),
+        });
+    }
+    let time = parcel.read_int64()?;
+    let elapsed = parcel.read_int64()?;
+    let elapsed_uncertainty = if fields & mask::ELAPSED_REALTIME_UNCERTAINTY != 0 {
+        ParcelValue::Double(parcel.read_double()?)
+    } else {
+        ParcelValue::Skipped
+    };
+    let latitude = parcel.read_double()?;
+    let longitude = parcel.read_double()?;
+    let altitude = if fields & mask::ALTITUDE != 0 {
+        ParcelValue::Double(parcel.read_double()?)
+    } else {
+        ParcelValue::Skipped
+    };
+    let mut optional_float = |bit: i32| -> Result<ParcelValue> {
+        Ok(if fields & bit != 0 {
+            ParcelValue::Float(parcel.read_float()?)
+        } else {
+            ParcelValue::Skipped
+        })
+    };
+    let speed = optional_float(mask::SPEED)?;
+    let bearing = optional_float(mask::BEARING)?;
+    let accuracy = optional_float(mask::ACCURACY)?;
+    let vertical_accuracy = optional_float(mask::VERTICAL_ACCURACY)?;
+    let speed_accuracy = optional_float(mask::SPEED_ACCURACY)?;
+    let bearing_accuracy = optional_float(mask::BEARING_ACCURACY)?;
+    // The closure borrow ends before the MSL double is read.
+    drop(optional_float);
+    let msl_altitude = if fields & mask::MSL_ALTITUDE != 0 {
+        ParcelValue::Double(parcel.read_double()?)
+    } else {
+        ParcelValue::Skipped
+    };
+    let msl_accuracy = if fields & mask::MSL_ALTITUDE_ACCURACY != 0 {
+        ParcelValue::Float(parcel.read_float()?)
+    } else {
+        ParcelValue::Skipped
+    };
+    let extras = ParcelValue::Bundle(crate::parcelable::read_bundle(parcel)?);
+    Ok(crate::value::Parcelable::ordered(
+        LOCATION_CLASS,
+        vec![
+            ParcelValue::Str8(provider),
+            ParcelValue::Int(fields),
+            ParcelValue::Long(time),
+            ParcelValue::Long(elapsed),
+            elapsed_uncertainty,
+            ParcelValue::Double(latitude),
+            ParcelValue::Double(longitude),
+            altitude,
+            speed,
+            bearing,
+            accuracy,
+            vertical_accuracy,
+            speed_accuracy,
+            bearing_accuracy,
+            msl_altitude,
+            msl_accuracy,
+            extras,
+        ],
+    ))
+}
+
+fn expect_double(values: &[ParcelValue], index: usize) -> Result<f64> {
+    match values.get(index) {
+        Some(ParcelValue::Double(value)) => Ok(*value),
+        other => Err(ServiceError::BadReply {
+            interface: "parcelable".into(),
+            method: LOCATION_CLASS.into(),
+            detail: format!("Location field {index} is not a double: {other:?}"),
+        }),
+    }
+}
+
+fn expect_float(values: &[ParcelValue], index: usize) -> Result<f32> {
+    match values.get(index) {
+        Some(ParcelValue::Float(value)) => Ok(*value),
+        other => Err(ServiceError::BadReply {
+            interface: "parcelable".into(),
+            method: LOCATION_CLASS.into(),
+            detail: format!("Location field {index} is not a float: {other:?}"),
+        }),
+    }
+}
+
+/// The fill-in `Intent` a `PendingIntent` fix delivery carries.
+///
+/// `LocationProviderManager$LocationPendingIntentTransport.deliverOnLocationChanged`
+/// builds `new Intent()` and `putExtra("location", result.getLastLocation())`
+/// (`results/handoff/MODLOC3/pending-intent-dex.txt`), then hands it to
+/// `PendingIntent.send(context, code, intent)` — the fill-in.
+///
+/// ACOS delivers one fix per registration per update, never a
+/// `LocationResult` batch, so the `"locations"` array form is not produced:
+/// the module has no batched result to hand over. The key is still declared
+/// ([`KEY_LOCATION_CHANGED_BATCH`]) so the gap is named, not implied.
+#[must_use]
+pub fn fix_fill_in(fix: &Fix) -> crate::ams::IntentFacts {
+    let mut intent = crate::ams::IntentFacts::default();
+    intent.extras.insert(
+        KEY_LOCATION_CHANGED.to_string(),
+        crate::ams::Extra::Parcelable(location_value(fix)),
+    );
+    intent
+}
+
+/// The fill-in `Intent` of an enabled/disabled callback
+/// (`deliverOnProviderEnabledChanged`: `putExtra("providerEnabled", enabled)`).
+#[must_use]
+pub fn provider_enabled_fill_in(enabled: bool) -> crate::ams::IntentFacts {
+    let mut intent = crate::ams::IntentFacts::default();
+    intent
+        .extras
+        .insert(KEY_PROVIDER_ENABLED.to_string(), crate::ams::Extra::Bool(enabled));
+    intent
 }
 
 /// Write a `Location` as a nullable typed object (`readTypedObject`).
@@ -909,6 +1237,10 @@ pub struct LocationModule {
     state: Arc<Mutex<LocationState>>,
     /// Monotonic stamp source shared with the service node.
     last_stamp: Stamp,
+    /// The session's `IIntentSender` delivery path (a `control` op's fixes fire
+    /// a `PendingIntent` registration through it after the state lock is
+    /// dropped).
+    fire: Option<crate::host::FireSender>,
     profile: Profile,
 }
 
@@ -919,8 +1251,60 @@ impl LocationModule {
         Self {
             state: Arc::new(Mutex::new(LocationState::default())),
             last_stamp: Stamp::new(),
+            fire: None,
             profile: Profile::Off,
         }
+    }
+
+    /// Fire every `PendingIntent` delivery queued since the last call, outside
+    /// the state lock. Returns how many fired; a failure is a structured error
+    /// so a `service_ctl` reply never claims a delivery that did not happen.
+    fn fire_pending(&mut self) -> Result<usize> {
+        let fires = {
+            let mut state = self.lock();
+            std::mem::take(&mut state.pending_fires)
+        };
+        if fires.is_empty() {
+            return Ok(0);
+        }
+        let Some(fire) = self.fire.clone() else {
+            let error = format!(
+                "{} PendingIntent delivery(ies) could not be fired: this host publishes no \
+                 IIntentSender path",
+                fires.len()
+            );
+            self.lock().last_error = Some(error.clone());
+            return Err(ServiceError::ModuleRejected {
+                module: MODULE_ID,
+                detail: error,
+            });
+        };
+        let mut fired = 0;
+        for pending in fires {
+            match fire(pending.sender.0, 0, Some(pending.fill_in)) {
+                Ok(evidence) => {
+                    fired += 1;
+                    if let Err(error) = &evidence.outcome {
+                        self.lock().last_error = Some(format!(
+                            "PendingIntent {:#x} fired but the delivery failed: {error}",
+                            pending.sender.0
+                        ));
+                    }
+                }
+                Err(error) => {
+                    let detail = format!(
+                        "PendingIntent {:#x} could not be fired: {error}",
+                        pending.sender.0
+                    );
+                    self.lock().last_error = Some(detail.clone());
+                    return Err(ServiceError::ModuleRejected {
+                        module: MODULE_ID,
+                        detail,
+                    });
+                }
+            }
+        }
+        Ok(fired)
     }
 
     /// The manifest (tests and the registry).
@@ -999,11 +1383,30 @@ fn deliver_to_registrations(state: &mut LocationState, stamp: &Stamp, mut fix: F
             continue;
         }
         let permitted = permit(&fix, permission);
-        let delivery = match sink {
-            Sink::Listener(binder) => location_delivery(binder, &permitted),
-            Sink::Current(binder) => current_delivery(binder, &permitted),
+        // A `PendingIntent` registration fires the app's `IIntentSender` with the
+        // fix as the fill-in `Intent`, exactly like the framework's
+        // `LocationPendingIntentTransport`. The fire is a host-side AMS action
+        // (it must not run under this lock), so it is queued and fired by the
+        // caller after the lock is dropped.
+        let sink_name = match sink {
+            Sink::Listener(binder) => {
+                state
+                    .pending
+                    .push(location_delivery(binder, &permitted));
+                "listener"
+            }
+            Sink::Current(binder) => {
+                state.pending.push(current_delivery(binder, &permitted));
+                "current"
+            }
+            Sink::PendingIntent(sender) => {
+                state.pending_fires.push(PendingFire {
+                    sender,
+                    fill_in: fix_fill_in(&permitted),
+                });
+                "pending_intent"
+            }
         };
-        state.pending.push(delivery);
         state.delivered_count += 1;
         if state.delivered.len() == RECORD_CAPACITY {
             state.delivered.pop_front();
@@ -1014,7 +1417,7 @@ fn deliver_to_registrations(state: &mut LocationState, stamp: &Stamp, mut fix: F
             "lng": permitted.longitude,
             "accuracy": permitted.accuracy,
             "time": permitted.time_ms,
-            "sink": match sink { Sink::Listener(_) => "listener", Sink::Current(_) => "current" },
+            "sink": sink_name,
         }));
         delivered += 1;
         if matches!(sink, Sink::Current(_)) {
@@ -1172,6 +1575,10 @@ pub struct LocationService {
     state: Arc<Mutex<LocationState>>,
     /// The session's monotonic stamp source (a delivered fix carries it).
     stamp: Stamp,
+    /// The session's `IIntentSender` delivery path: a `PendingIntent`
+    /// registration fires through it (a host-side AMS action, never a direct
+    /// app callback).
+    fire: Option<crate::host::FireSender>,
     /// True once the module filled this node; `false` is the disabled-device
     /// answer a phone publishes with location off (and what a detach restores).
     filled: bool,
@@ -1186,6 +1593,7 @@ impl LocationService {
         Self {
             state: Arc::new(Mutex::new(LocationState::default())),
             stamp: Stamp::new(),
+            fire: None,
             filled: false,
         }
     }
@@ -1195,9 +1603,15 @@ impl LocationService {
     /// Called by [`LocationModule::attach`]: no second registration is made, so
     /// a guest that already holds the `ILocationManager` proxy keeps talking to
     /// the same binder and starts receiving fixes.
-    pub fn fill(&mut self, state: Arc<Mutex<LocationState>>, stamp: Stamp) {
+    pub fn fill(
+        &mut self,
+        state: Arc<Mutex<LocationState>>,
+        stamp: Stamp,
+        fire: Option<crate::host::FireSender>,
+    ) {
         self.state = state;
         self.stamp = stamp;
+        self.fire = fire;
         self.filled = true;
     }
 
@@ -1207,7 +1621,54 @@ impl LocationService {
     pub fn empty(&mut self) {
         self.state = Arc::new(Mutex::new(LocationState::default()));
         self.stamp = Stamp::new();
+        self.fire = None;
         self.filled = false;
+    }
+
+    /// Fire every `PendingIntent` delivery queued since the last call.
+    ///
+    /// Runs **outside** the state lock: a fire replays the app's sender through
+    /// the AMS (a broadcast/activity/service start), which must not happen while
+    /// the location state is held. A failed fire is recorded as the module's
+    /// `last_error`, never counted as delivered.
+    fn fire_pending(&mut self) {
+        let fires = {
+            let mut state = self.lock();
+            std::mem::take(&mut state.pending_fires)
+        };
+        if fires.is_empty() {
+            return;
+        }
+        let Some(fire) = self.fire.clone() else {
+            self.lock().last_error = Some(format!(
+                "{} PendingIntent delivery(ies) could not be fired: this host publishes no \
+                 IIntentSender path",
+                fires.len()
+            ));
+            return;
+        };
+        for pending in fires {
+            match fire(pending.sender.0, 0, Some(pending.fill_in)) {
+                Ok(evidence) => {
+                    let mut state = self.lock();
+                    match &evidence.outcome {
+                        Ok(_) => {}
+                        Err(error) => {
+                            state.last_error = Some(format!(
+                                "PendingIntent {:#x} fired but the delivery failed: {error}",
+                                pending.sender.0
+                            ));
+                        }
+                    }
+                }
+                Err(error) => {
+                    self.lock().last_error = Some(format!(
+                        "PendingIntent {:#x} could not be fired: {error}",
+                        pending.sender.0
+                    ));
+                }
+            }
+        }
     }
 
     /// True while the module has filled this node.
@@ -1474,10 +1935,16 @@ impl ServiceObject for LocationService {
                             // one-shot and is never registered).
                             state.pending.push(current_delivery(callback, &fix));
                             state.record(&fix, "current");
+                            state.refs.hold(callback);
+                            state.one_shot.push(callback);
                         }
-                        None => state
-                            .pending_current
-                            .push((callback, provider.clone(), None)),
+                        None => {
+                            state.refs.hold(callback);
+                            state.one_shot.push(callback);
+                            state
+                                .pending_current
+                                .push((callback, provider.clone(), None))
+                        }
                     }
                 }
                 // `@nullable ICancellationSignal`: this module answers null and
@@ -1520,6 +1987,10 @@ impl ServiceObject for LocationService {
                     state.registrations.retain(|registration| {
                         !matches!(registration.sink, Sink::Listener(existing) if existing == listener)
                     });
+                    // A registration is a strong reference on the guest's
+                    // listener: the host keeps its node alive until it is
+                    // unregistered (a repeat registration is not a second one).
+                    state.refs.hold(listener);
                     state.registrations.push(Registration {
                         sink: Sink::Listener(listener),
                         provider: provider.clone(),
@@ -1556,30 +2027,29 @@ impl ServiceObject for LocationService {
                 state.registrations.retain(|registration| {
                     !matches!(registration.sink, Sink::Listener(existing) if Some(existing) == listener)
                 });
+                if let Some(listener) = listener {
+                    // The registration the host held a reference for is gone.
+                    state.refs.release(listener);
+                }
                 write_no_exception(reply);
             }
             // void registerLocationPendingIntent(String, LocationRequest,
             // PendingIntent, String, String)
             //
-            // MODLOC3: refused, and the reason is measured, not assumed. The
-            // image's `LocationProviderManager$LocationPendingIntentTransport`
-            // builds `new Intent()`, `putExtra` with the fix and
-            // `PendingIntentSender.send(pendingIntent, context, intent, ...)` —
-            // the Location travels as the **fill-in** intent of
-            // `IIntentSender.send`, under `LocationManager.KEY_LOCATION_CHANGED`
-            // (`"location"`, plus `"locations"` for a batched result and
-            // `"providerEnabled"` for the enabled/disabled callback). MODNOTIF5
-            // accepts `IIntentSender.send` but refuses a fill-in on a mutable
-            // sender (`Intent.fillIn` is not modelled, PIFILLIN) and drops it on
-            // an immutable one, so a fired sender cannot carry a fresh fix.
-            // Accepting the registration would mean either losing the Location
-            // (a PendingIntent that fires with no fix) or leaking a stale one
-            // into the record; both are fake success. The listener form is the
-            // supported path.
+            // PIFILLIN: the registration is kept and every fix fires the app's
+            // sender with a **fill-in** `Intent` carrying the `Location`, the
+            // way the image's `LocationProviderManager$LocationPendingIntentTransport`
+            // does (`results/handoff/MODLOC3/pending-intent-dex.txt`):
+            // `deliverOnLocationChanged` builds `new Intent()`,
+            // `putExtra("location", result.getLastLocation())` and sends it as
+            // the fill-in of `IIntentSender.send`. The sender is the app's own
+            // `PendingIntent` (a mutable broadcast/activity/service sender), so
+            // `Intent.fillIn` merges the fix into the stored intent and the
+            // broadcast reaches the app's receiver with the `"location"` extra.
             codes::REGISTER_LOCATION_PENDING_INTENT => {
                 self.check_permission("requestLocationUpdates(PendingIntent)")?;
                 let provider = data.read_string16()?.unwrap_or_default();
-                let (_request_provider, _min_interval, _interval) =
+                let (_request_provider, min_interval_ms, interval_ms) =
                     Self::read_location_request(data)?;
                 let pending_present = data.read_int32_lenient();
                 let target = if pending_present != 0 {
@@ -1587,32 +2057,74 @@ impl ServiceObject for LocationService {
                 } else {
                     None
                 };
-                let _package = data.read_string16()?;
+                let package = data.read_string16()?.unwrap_or_default();
                 let _attribution_tag = data.read_string16()?;
-                let reason = format!(
-                    "registerLocationPendingIntent({provider}) refused: the framework delivers \
-                     a fix as the **fill-in** intent of IIntentSender.send \
-                     (LocationPendingIntentTransport puts the Location under \
-                     LocationManager.KEY_LOCATION_CHANGED), and merging a fill-in into the \
-                     stored intent needs Intent.fillIn, which this build refuses (PIFILLIN); \
-                     use the LocationListener form"
-                );
-                if target.is_none() {
+                let Some(sender) = target else {
                     return Err(self.illegal_argument(
                         "registerLocationPendingIntent: null PendingIntent".into(),
                     ));
+                };
+                if !self.lock().providers.contains_key(provider.as_str()) {
+                    return Err(
+                        self.illegal_argument(format!("provider \"{provider}\" does not exist"))
+                    );
                 }
-                self.lock().last_error = Some(reason.clone());
-                return Err(ServiceError::UnsupportedAndroidApi {
-                    interface: DESCRIPTOR.to_string(),
-                    code,
-                    method: format!("{MODULE_ID}: {reason}"),
-                });
+                {
+                    let mut state = self.lock();
+                    // Re-registering the same sender replaces the previous
+                    // record (`LocationManagerService.registerLocationPendingIntent`
+                    // keys the transport by its `PendingIntent`).
+                    state.registrations.retain(|registration| {
+                        !matches!(registration.sink, Sink::PendingIntent(existing) if existing == sender)
+                    });
+                    state.registrations.push(Registration {
+                        sink: Sink::PendingIntent(sender),
+                        provider: provider.clone(),
+                        package,
+                        min_interval_ms,
+                        interval_ms,
+                        last_delivered: None,
+                    });
+                    // A `PendingIntent` registration is a reference on the
+                    // sender, exactly like the `ILocationListener` form's is on
+                    // the listener.
+                    state.refs.hold(sender);
+                    // The framework's provider reports the current enabled state
+                    // to a transport that has just been added; the listener form
+                    // already does this on registration, and the fill-in is the
+                    // PendingIntent form's `onProviderEnabledChanged`.
+                    let enabled = state.provider_enabled(&provider);
+                    state.pending_fires.push(PendingFire {
+                        sender,
+                        fill_in: provider_enabled_fill_in(enabled),
+                    });
+                    state.provider_events.push(json!({
+                        "provider": provider,
+                        "enabled": enabled,
+                        "reason": "registration",
+                        "sink": "pending_intent",
+                    }));
+                }
+                // The `providerEnabled` fill-in is delivered like a fix: after
+                // the state lock, through the session's sender path.
+                self.fire_pending();
+                write_no_exception(reply);
             }
             // void unregisterLocationPendingIntent(PendingIntent)
             codes::UNREGISTER_LOCATION_PENDING_INTENT => {
-                let _present = data.read_int32_lenient();
-                let _target = data.read_strong_binder()?;
+                let present = data.read_int32_lenient();
+                let target = if present != 0 {
+                    data.read_strong_binder()?
+                } else {
+                    None
+                };
+                if let Some(sender) = target {
+                    let mut state = self.lock();
+                    state.registrations.retain(|registration| {
+                        !matches!(registration.sink, Sink::PendingIntent(existing) if existing == sender)
+                    });
+                    state.refs.release(sender);
+                }
                 write_no_exception(reply);
             }
             // boolean isGeocodeAvailable()
@@ -1671,7 +2183,14 @@ impl ServiceObject for LocationService {
                     // The framework's no-geocoder path: `onResults(null, null)`.
                     None => geocode_delivery(callback, Err(None)),
                 };
-                self.lock().pending.push(delivery);
+                {
+                    let mut state = self.lock();
+                    // The geocode callback answers exactly once: a reference
+                    // only until its delivery is on its way.
+                    state.refs.hold(callback);
+                    state.one_shot.push(callback);
+                    state.pending.push(delivery);
+                }
                 write_no_exception(reply);
             }
             // void getFromLocationName(String, double, double, double, double,
@@ -1712,7 +2231,12 @@ impl ServiceObject for LocationService {
                     Some(addresses) => geocode_delivery(callback, Ok(&addresses)),
                     None => geocode_delivery(callback, Err(None)),
                 };
-                self.lock().pending.push(delivery);
+                {
+                    let mut state = self.lock();
+                    state.refs.hold(callback);
+                    state.one_shot.push(callback);
+                    state.pending.push(delivery);
+                }
                 write_no_exception(reply);
             }
             // boolean hasProvider(String)
@@ -1818,7 +2342,28 @@ impl ServiceObject for LocationService {
     }
 
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
-        std::mem::take(&mut self.lock().pending)
+        let mut state = self.lock();
+        let deliveries = std::mem::take(&mut state.pending);
+        // The one-shot callbacks in this batch are about to be delivered, so
+        // their reference is dropped now (one turn: the delivery is queued
+        // before the release is reported, and the peer sends deliveries before
+        // reference frames).
+        for id in std::mem::take(&mut state.one_shot) {
+            state.refs.release(id);
+        }
+        deliveries
+    }
+
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        self.lock().refs.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        self.lock().refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.lock().refs.release_all()
     }
 
     /// The instant the playing track's next point is due (`None` = nothing is
@@ -1837,35 +2382,40 @@ impl ServiceObject for LocationService {
     /// them, which is what a real provider does.
     fn advance_timed(&mut self, now: Instant) {
         let stamp = self.stamp.clone();
-        let mut state = self.lock();
-        loop {
-            let Some(track) = state.track.as_mut() else {
-                return;
-            };
-            if track.next_due > now {
-                return;
-            }
-            let index = usize::try_from(track.delivered).unwrap_or(0) % track.points.len().max(1);
-            let Some(mut fix) = track.points.get(index).cloned() else {
-                state.track = None;
-                return;
-            };
-            fix.time_ms = now_stamp().0;
-            let interval = track.interval;
-            let repeat = track.repeat;
-            let total = track.points.len();
-            track.next_due += interval;
-            deliver_to_registrations(&mut state, &stamp, fix);
-            let done = {
-                let track = state.track.as_mut().expect("the track is still playing");
-                track.delivered += 1;
-                !repeat && usize::try_from(track.delivered).unwrap_or(0) >= total
-            };
-            if done {
-                state.track = None;
-                return;
+        {
+            let mut state = self.lock();
+            loop {
+                let Some(track) = state.track.as_mut() else {
+                    break;
+                };
+                if track.next_due > now {
+                    break;
+                }
+                let index =
+                    usize::try_from(track.delivered).unwrap_or(0) % track.points.len().max(1);
+                let Some(mut fix) = track.points.get(index).cloned() else {
+                    state.track = None;
+                    break;
+                };
+                fix.time_ms = now_stamp().0;
+                let interval = track.interval;
+                let repeat = track.repeat;
+                let total = track.points.len();
+                track.next_due += interval;
+                deliver_to_registrations(&mut state, &stamp, fix);
+                let done = {
+                    let track = state.track.as_mut().expect("the track is still playing");
+                    track.delivered += 1;
+                    !repeat && usize::try_from(track.delivered).unwrap_or(0) >= total
+                };
+                if done {
+                    state.track = None;
+                    break;
+                }
             }
         }
+        // `PendingIntent` registrations fire after the state lock is released.
+        self.fire_pending();
     }
 }
 
@@ -2193,6 +2743,7 @@ impl Module for LocationModule {
             // itself) has no node yet: publish the off node first, then fill it.
             install(host);
         }
+        let fire = host.pending_intent_fire();
         let service = host
             .dynamic_object_mut(DESCRIPTOR)
             .and_then(|object| object.as_any_mut())
@@ -2203,18 +2754,24 @@ impl Module for LocationModule {
                          publishes it and must be attached first"
                     .into(),
             })?;
-        service.fill(Arc::clone(&state), stamp.clone());
+        service.fill(Arc::clone(&state), stamp.clone(), fire.clone());
         self.state = state;
         self.last_stamp = stamp;
+        self.fire = fire;
         self.profile = profile;
         Ok(())
     }
 
     fn detach(&mut self, host: &mut ServiceHost) -> Result<()> {
         self.stop_track();
+        // Every listener this module rooted is released before the node empties
+        // itself: the guest may be alive for the rest of the session, and a
+        // registration the host no longer holds must not keep the node rooted.
+        host.release_object_refs(DESCRIPTOR);
         {
             let mut state = self.lock();
             state.pending.clear();
+            state.pending_fires.clear();
             state.registrations.clear();
             state.pending_current.clear();
             state.track = None;
@@ -2232,6 +2789,7 @@ impl Module for LocationModule {
         }
         self.state = Arc::new(Mutex::new(LocationState::default()));
         self.last_stamp = Stamp::new();
+        self.fire = None;
         self.profile = Profile::Off;
         Ok(())
     }
@@ -2265,6 +2823,7 @@ impl Module for LocationModule {
                     (delivered, stored, enabled, location_enabled)
                 };
                 let (delivered, stored, enabled, location_enabled) = stored;
+                let fired = self.fire_pending()?;
                 Ok(json!({
                     "provider": fix.provider,
                     "lat": fix.latitude,
@@ -2274,6 +2833,7 @@ impl Module for LocationModule {
                     "provider_enabled": enabled,
                     "location_enabled": location_enabled,
                     "delivered": delivered,
+                    "pending_intent_fires": fired,
                 }))
             }
             "play_track" => {
@@ -2368,7 +2928,7 @@ impl Module for LocationModule {
                     .filter(|registration| registration.provider == provider)
                     .filter_map(|registration| match registration.sink {
                         Sink::Listener(binder) => Some(binder),
-                        Sink::Current(_) => None,
+                        Sink::Current(_) | Sink::PendingIntent(_) => None,
                     })
                     .collect();
                 for sink in &sinks {
@@ -2376,17 +2936,38 @@ impl Module for LocationModule {
                         .pending
                         .push(provider_delivery(*sink, &provider, effective));
                 }
+                let senders: Vec<BinderId> = state
+                    .registrations
+                    .iter()
+                    .filter(|registration| registration.provider == provider)
+                    .filter_map(|registration| match registration.sink {
+                        Sink::PendingIntent(sender) => Some(sender),
+                        Sink::Listener(_) | Sink::Current(_) => None,
+                    })
+                    .collect();
+                // `deliverOnProviderEnabledChanged`: `putExtra("providerEnabled",
+                // enabled)` as the fill-in of the registration's sender.
+                for sender in &senders {
+                    state.pending_fires.push(PendingFire {
+                        sender: *sender,
+                        fill_in: provider_enabled_fill_in(effective),
+                    });
+                }
                 state.provider_events.push(json!({
                     "provider": provider,
                     "enabled": effective,
                     "configured": enabled,
                     "listeners": sinks.len(),
+                    "pending_intents": senders.len(),
                 }));
+                drop(state);
+                let fired = self.fire_pending()?;
                 Ok(json!({
                     "provider": provider,
                     "enabled": effective,
                     "configured": enabled,
                     "listeners_notified": sinks.len(),
+                    "pending_intent_fires": fired,
                 }))
             }
             "set_location_enabled" => {
@@ -2412,7 +2993,7 @@ impl Module for LocationModule {
                         .filter(|registration| registration.provider == name)
                         .filter_map(|registration| match registration.sink {
                             Sink::Listener(binder) => Some(binder),
-                            Sink::Current(_) => None,
+                            Sink::Current(_) | Sink::PendingIntent(_) => None,
                         })
                         .collect();
                     for sink in &sinks {
@@ -2421,13 +3002,35 @@ impl Module for LocationModule {
                             .push(provider_delivery(*sink, name, effective));
                     }
                     notified += sinks.len();
+                    let senders: Vec<BinderId> = state
+                        .registrations
+                        .iter()
+                        .filter(|registration| registration.provider == name)
+                        .filter_map(|registration| match registration.sink {
+                            Sink::PendingIntent(sender) => Some(sender),
+                            Sink::Listener(_) | Sink::Current(_) => None,
+                        })
+                        .collect();
+                    for sender in &senders {
+                        state.pending_fires.push(PendingFire {
+                            sender: *sender,
+                            fill_in: provider_enabled_fill_in(effective),
+                        });
+                    }
                     state.provider_events.push(json!({
                         "provider": name,
                         "enabled": effective,
                         "reason": "location_setting",
+                        "pending_intents": senders.len(),
                     }));
                 }
-                Ok(json!({"location_enabled": enabled, "listeners_notified": notified}))
+                drop(state);
+                let fired = self.fire_pending()?;
+                Ok(json!({
+                    "location_enabled": enabled,
+                    "listeners_notified": notified,
+                    "pending_intent_fires": fired,
+                }))
             }
             "set_permission" => {
                 let level = args

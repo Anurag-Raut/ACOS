@@ -27,7 +27,7 @@
 //! session in one process would have to move this into the host, and that is
 //! noted in `docs/handoff/NET5` rather than pretended away.
 
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::module::Profile;
 
@@ -37,6 +37,15 @@ use crate::module::Profile;
 pub const SPIKE_FLAG: &str = "ACOS_SPIKE_NET";
 
 static PROFILE: AtomicU8 = AtomicU8::new(0);
+
+/// The session's own `offline` control (NET6).
+///
+/// A phone that loses its network does not only drop packets: the resolver fails
+/// fast and the app's sockets are destroyed. The relay does the guest-side half
+/// inside the session netns; this flag is the half that lives in the launcher —
+/// `dnsproxyd` is served by this process, so the resolver proxy is the one place
+/// a *new* lookup can be told the truth without inventing a fake interface.
+static OFFLINE: AtomicBool = AtomicBool::new(false);
 
 fn encode(profile: Profile) -> u8 {
     match profile {
@@ -63,6 +72,7 @@ pub fn set_profile(profile: Profile) {
 /// Back to no network (called by the module's `detach`).
 pub fn clear() {
     PROFILE.store(0, Ordering::SeqCst);
+    OFFLINE.store(false, Ordering::SeqCst);
 }
 
 /// The profile the module attached, `Off` when it is not attached.
@@ -108,6 +118,27 @@ pub fn relay_session_name(session_id: &str) -> String {
     format!("acos-{session_id}")
 }
 
+/// Publish the session's `offline` control (NET6).
+///
+/// Set by the `network` module's `offline`/`online` op **after** the relay
+/// accepted the change, and read by the resolver proxy this process serves: while
+/// offline every `getaddrinfo` answers `EAI_NODATA` (Android's
+/// `UnknownHostException`) instead of resolving a name the session cannot route
+/// to. That is the same answer a phone gives in airplane mode, and it is what
+/// keeps a lookup bounded when the app's `InetAddress` cache has expired.
+pub fn set_offline(offline: bool) {
+    OFFLINE.store(offline, Ordering::SeqCst);
+}
+
+/// Is this session's network switched off by its own `offline` control?
+///
+/// `false` whenever the module is off: a session with no network at all answers
+/// `EAI_NODATA` because there is no resolver proxy, not because of this flag.
+#[must_use]
+pub fn offline() -> bool {
+    OFFLINE.load(Ordering::SeqCst)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,6 +162,15 @@ mod tests {
         // gate asks for `real`, so a stray `stub` can never fake one.
         set_profile(Profile::Stub);
         assert!(!networked());
+
+        // NET6: the offline control is process-wide like the profile, and detach
+        // clears it (a detached module cannot leave a session resolving names it
+        // cannot reach).
+        assert!(!offline());
+        set_offline(true);
+        assert!(offline());
+        clear();
+        assert!(!offline());
 
         clear();
         assert_eq!(profile(), Profile::Off);

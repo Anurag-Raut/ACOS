@@ -363,7 +363,7 @@ impl Module for NetworkModule {
         Ok(())
     }
 
-    fn control(&mut self, _host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
+    fn control(&mut self, host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         if self.profile != Profile::Real {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
@@ -393,7 +393,31 @@ impl Module for NetworkModule {
                 detail: error.message,
             }
         })?;
-        run_action(&action, &relay_session)
+        let outcome = run_action(&action, &relay_session)?;
+        // NET6: `offline`/`online` are the app-visible network state too, not just
+        // a packet filter. After the relay accepted the change (it removed the
+        // session's default route and destroyed its live sockets, inside the
+        // session netns):
+        //
+        // * the resolver proxy this process serves answers `EAI_NODATA` while
+        //   offline (Android's `UnknownHostException`), so a *new* lookup is
+        //   bounded without pretending an interface exists;
+        // * `ConnectivityManager` loses or regains its default network and every
+        //   registered `NetworkCallback` gets `onLost` / `onAvailable` (queued on
+        //   the host, which delivers them after this control request).
+        if let NetAction::Offline(offline) = action {
+            crate::network::set_offline(offline);
+            if let Some(state) = &self.connectivity {
+                let deliveries = {
+                    let mut state = state.lock().unwrap();
+                    state.set_default_network(!offline)
+                };
+                for delivery in deliveries {
+                    host.queue_delivery(delivery);
+                }
+            }
+        }
+        Ok(outcome)
     }
 
     fn report(&self) -> ModuleReport {

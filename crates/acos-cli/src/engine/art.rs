@@ -7596,7 +7596,7 @@ mod tests {
         let mut zg = ArtSession::start(&apk, &dir.join("zg")).expect("zygote-shaped session starts");
         zg.zygote = Some(ZygoteBinding {
             host: Arc::new(ZygoteHost::disabled()),
-            key: zygote_key_of(&apk, "report", "on"),
+            key: zygote_key_of(&apk, "report", "on", &[]),
             facts: ZygoteFacts {
                 tag: 0,
                 child_pid: 0,
