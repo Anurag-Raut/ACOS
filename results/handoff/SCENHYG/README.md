@@ -126,19 +126,28 @@ acceptance run also requires a plain empty `git status --porcelain`).
 
 The live launcher builds its own `ACTION_MAIN`/`CATEGORY_LAUNCHER` Intent for the
 APK's **manifest** launcher component, so a scenario's `launch.extras:` (and
-`intent_action:`, `data:`, a non-launcher `activity:`) were accepted and then
-dropped with no error. Now the ART session path refuses them **by name** with
-`UNSUPPORTED_ANDROID_API` before the launch, so no scenario can assert an Intent
-state the app never received (`crates/acos-cli/src/engine/mod.rs`,
+`intent_action:`, `data:`) were accepted and then dropped with no error. Now the
+ART session path refuses those three **by name** with `UNSUPPORTED_ANDROID_API`
+before the launch, so no scenario can assert an Intent state the app never
+received (`crates/acos-cli/src/engine/mod.rs`,
 `refused_launch_intent_fields`).
+
+A declared `activity:` is **not** refused: 20 gaten scenarios name the Activity
+they assert (`com.gaten.app.MainActivity`), while the manifest's launcher entry is
+a splash/router alias (`LauncherIconLight` -> `LauncherActivity`) that starts it;
+the executor already refuses an Activity the manifest does not declare. That
+distinction was found the hard way: the first version of this rule refused the
+Gaten component and turned all four `gaten-content-*` negatives into
+`negative_expectation_mismatch` (0.5 h of matrix triage, visible in the pinned
+`expect_error` design doing its job).
 
 * scenario `scenarios/launch-extras-unsupported.yaml`: launch with
   `extras: {greeting: hello}` → `expectation: unsupported`, pinned
   `UNSUPPORTED_ANDROID_API`; probe2 shows `status=unsupported` with that code.
 * test `a_scenario_that_declares_extras_is_refused_loudly_not_silently_dropped`
   (fails before: the request was accepted and the fake session launched) and
-  `the_launch_intent_fields_a_session_cannot_honour_are_named` (component/action/
-  data, pure).
+  `the_launch_intent_fields_a_session_cannot_honour_are_named` (action/data/
+  extras refused; a declared activity accepted, pure).
 * Wiring string extras through the session-start Intent is the honest follow-up
   (the extras must reach `acos-art launch` before the guest resumes the
   Activity); the refusal is what keeps the corpus truthful until then.
@@ -181,10 +190,22 @@ orchestrator decision (it is a ~600-line broker change reviewed in that track).
 
 | item | file | result |
 |---|---|---|
-| `cargo test -p acos-art -p acos-verify -p acos-cli -p acos-services -p acos-wm` | `suite.log` | see the suite summary line |
-| `git status` clean after the suite | `git-status-after-suite.txt` | empty |
-| `cargo test -p acos-cli --test gl1_kept_session -- --ignored` | `gl1.log` | 4 passed |
-| `cargo test -p acos-protocol` (schemas, scenario corpus) | `protocol.log` | see the summary |
-| `tools/run-matrix.sh` | `matrix/matrix.json`, `matrix/matrix.tsv` | 0 `false_pass`, 0 `unclassified`, 0 `infra_timeout`, 32/32 negatives |
+| `cargo test -p acos-art -p acos-verify -p acos-cli -p acos-services -p acos-wm -p acos-protocol` | `suite.log` | `SUITE_RC=0`, **136 targets, 1560 passed, 0 failed** |
+| `git status --porcelain` right after the suite | this README (the command is in the run log) | empty |
+| `cargo test -p acos-cli --test gl1_kept_session -- --ignored` | `gl1.log` | **4 passed** (was 0) |
+| `cargo test -p acos-protocol` (schemas, scenario corpus) | inside `suite.log` | green (schema regenerated; every checked scenario valid) |
+| `tools/run-matrix.sh` (shared slot, `--allow-contaminated`: host loadavg 4.68 > 4, so `verdict_eligible=false` and **no timing claim**) | `matrix/matrix.json`, `matrix/matrix.tsv`, `matrix/matrix.log` | classes `assertion 29, step_timeout 3, pass 1`; `false_pass 0`, `unclassified 0`, **`infra_timeout 0`**, `negative_correct 32/32`, `negative_expect_error_mismatch []`; all five gates true |
 | 16 declarations before/after | `probe1/`, `probe2/` | table §1 |
+| Gaten negatives + the new extras scenario after the launch-intent fix | `probe3/` | `ASSERTION_FAILED/content_settle_pixel` ×2, `/content_settle_geometry`, `ASSERTION_FAILED`; extras → `UNSUPPORTED_ANDROID_API` |
 | webview 30 runs | `webview-run*.json` | table §5 |
+
+## 7. One more found-while-here bug: `tools/build-apps.sh` was a syntax error
+
+The v0.4.0 merge left two `for app in …; do` headers back to back with one
+`done`, so bash rejected the script from that line on and **every fixture below
+it was silently never built** (a11y-probe, tail-probe, location-probe, proc-a/b,
+scroll-list, back-layers, tap-targets, touch-probe, net-check, keystore-probe,
+webview-probe, insets-probe). That is why `acos-services`' `moda11y6_gate`
+(5 tests) failed in the first suite run with "fixtures/build/apps/a11y-probe.apk
+is built". One union list now builds 57 APKs; the suite is green and
+`fixtures/build` is no longer a partial copy.

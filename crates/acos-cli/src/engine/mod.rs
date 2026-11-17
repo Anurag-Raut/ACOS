@@ -1065,26 +1065,19 @@ impl EngineBackend {
 /// SCENHYG: which declared launch-intent fields the live launcher cannot honour.
 ///
 /// An empty list means "the scenario's launch is exactly the Intent a session
-/// launcher builds". `launcher` is the APK's manifest launcher component (in the
-/// executor's expanded `pkg.Class` form); `None` (an unreadable APK) skips the
-/// component comparison, because the session start fails loudly on its own.
-fn refused_launch_intent_fields(
-    request: &LaunchRequest,
-    launcher: Option<&str>,
-) -> Vec<String> {
+/// launcher builds". Only the fields the launcher cannot carry *at all* are
+/// listed: `intent_action`, `data` and `extras` (the launcher builds its own
+/// ACTION_MAIN/CATEGORY_LAUNCHER Intent and has no place for them). A declared
+/// `activity` is allowed: it is the executor's manifest-existence check, and the
+/// launcher may boot a splash/router entry that then starts it.
+fn refused_launch_intent_fields(request: &LaunchRequest) -> Vec<String> {
+    // `activity` is NOT in this list on purpose: a scenario names the Activity
+    // it asserts (Gaten's launcher entry is a splash/router
+    // `LauncherIconLight` -> `LauncherActivity`, which then starts
+    // `MainActivity`, and 20 gaten scenarios name `MainActivity`). The executor
+    // already refuses an activity the manifest does not declare; which entry the
+    // launcher boots is the engine's documented policy, not a silent drop.
     let mut refused = Vec::new();
-    if let (Some(named), Some(launcher)) = (request.activity.as_deref(), launcher) {
-        let expand = |component: &str| match component.split_once('/') {
-            Some((pkg, cls)) if cls.starts_with('.') => format!("{pkg}{cls}"),
-            Some((pkg, cls)) if !cls.contains('.') => format!("{pkg}.{cls}"),
-            _ => component.to_string(),
-        };
-        if expand(named) != expand(launcher) {
-            refused.push(format!(
-                "activity (`{named}`; the launcher component is `{launcher}`)"
-            ));
-        }
-    }
     if let Some(action) = request.intent_action.as_deref() {
         refused.push(format!("intent_action (`{action}`)"));
     }
@@ -1176,10 +1169,7 @@ impl Backend for EngineBackend {
                 // before anything runs; never launch a different Intent than the
                 // scenario declared.
                 if session.engine() == Engine::Art {
-                    let launcher = acos_services::manifest_resolve::launcher_activity(&request.apk)
-                        .ok()
-                        .map(|launcher| launcher.component);
-                    let refused = refused_launch_intent_fields(request, launcher.as_deref());
+                    let refused = refused_launch_intent_fields(request);
                     if !refused.is_empty() {
                         let mut detail = format!(
                             "the ART launcher launches the APK's launcher component with an \
@@ -1188,8 +1178,8 @@ impl Backend for EngineBackend {
                         );
                         detail.push_str(
                             ". Refusing instead of launching a different Intent than the scenario \
-                             declared. Drop the field, or use a component/action the launcher \
-                             resolves (extras wiring is tracked in the launch-intent backlog).",
+                             declared. Drop the field (carrying it through the session-start \
+                             Intent is tracked in the launch-intent backlog).",
                         );
                         return Err(BackendError::Error {
                             code: acos_protocol::ErrorCode::UnsupportedAndroidApi,
@@ -3219,31 +3209,36 @@ mod engine_tests {
         }
     }
 
-    /// The component/action/data half of the same rule, as a pure decision: the
+    /// The action/data/extras half of the same rule, as a pure decision: the
     /// normal launch (the manifest launcher with no action/data/extras) is not
-    /// refused, and each declared-but-dropped field is.
+    /// refused, and each declared-but-unrepresentable field is named. `activity`
+    /// is deliberately allowed: it is a manifest-existence check in the
+    /// executor, and 20 gaten scenarios name the Activity the app settles on
+    /// while the launcher entry is a splash/router.
     #[test]
     fn the_launch_intent_fields_a_session_cannot_honour_are_named() {
         let dir = artifacts("launch-intent-fields");
         let base = launch_request(&dir);
         assert_eq!(
-            refused_launch_intent_fields(&base, Some("dev.acos.fixtures.counter.MainActivity")),
+            refused_launch_intent_fields(&base),
             Vec::<String>::new(),
-            "the launcher component itself is the normal launch"
+            "the normal launch is not refused"
         );
         let mut other = base.clone();
         other.activity = Some("dev.acos.fixtures.counter/.SecondActivity".to_string());
-        let refused = refused_launch_intent_fields(&other, Some("dev.acos.fixtures.counter.MainActivity"));
-        assert_eq!(refused.len(), 1);
-        assert!(refused[0].starts_with("activity ("), "{refused:?}");
+        assert_eq!(
+            refused_launch_intent_fields(&other),
+            Vec::<String>::new(),
+            "a declared Activity is the executor's check, not a launch-intent refusal"
+        );
         let mut action = base.clone();
         action.intent_action = Some("android.intent.action.SEND".to_string());
-        let refused = refused_launch_intent_fields(&action, None);
+        let refused = refused_launch_intent_fields(&action);
         assert_eq!(refused.len(), 1);
         assert!(refused[0].contains("intent_action"), "{refused:?}");
         let mut data = base.clone();
         data.data = Some("content://x/y".to_string());
-        let refused = refused_launch_intent_fields(&data, None);
+        let refused = refused_launch_intent_fields(&data);
         assert_eq!(refused.len(), 1);
         assert!(refused[0].contains("data"), "{refused:?}");
     }

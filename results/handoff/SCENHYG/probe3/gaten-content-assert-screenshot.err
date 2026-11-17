@@ -1,0 +1,1 @@
+verify: ASSERTION_FAILED (assertion): assert_screenshot: the bound frame was settled by `settle: content` (UI tree content stable), which is not pixel evidence - the pixels may still be animating [class=assertion, retryable=false]
