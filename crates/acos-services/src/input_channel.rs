@@ -298,6 +298,13 @@ pub enum ChannelError {
     /// A message type this module does not produce/consume.
     #[error("unsupported input message type {0}")]
     UnsupportedType(u32),
+    /// A touch at a display point with **no touchable window** under it.
+    ///
+    /// `InputDispatcher` drops such a gesture (there is nothing to deliver it
+    /// to). ACOS names the point instead of publishing it to some other window,
+    /// so "the tap vanished" can never look like a delivered tap.
+    #[error("no touch target: {0}")]
+    NoTouchTarget(String),
     /// `pointerCount` outside `1..=MAX_POINTERS`.
     #[error("bad pointer count {0}")]
     BadPointerCount(usize),

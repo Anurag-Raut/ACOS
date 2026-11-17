@@ -7859,46 +7859,19 @@ fn interactive_serve(
                 // v0.3.0 M8 regression. See `unhandled_entry_fnv` below for where
                 // the value is taken now and why moving it changes nothing.
                 let injected = match (cmd, key_code) {
-                    ("tap", _) => {
-                        // LAYER1: the ART/`verify` path routes a tap through the
-                        // WMS layer stack, not `WindowManagerGlobal` insertion
-                        // order. The request carries **display** coordinates
-                        // (the same space the UI tree reports); the target is
-                        // the topmost touchable window at that point, and the
-                        // published point is that window's own local space
-                        // (the `InputChannel` transform).
-                        let point = acos_wm::geom::PointI::new(x as i32, y as i32);
-                        let (target, origin) = {
-                            let wm = live
-                                .wms
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            match wm.wm.hit_test(point) {
-                                Some(window) => (
-                                    Some(window),
-                                    wm.wm
-                                        .windows
-                                        .get(&window)
-                                        .map(|record| (record.frame.left, record.frame.top))
-                                        .unwrap_or((0, 0)),
-                                ),
-                                None => (None, (0, 0)),
-                            }
-                        };
-                        match target {
-                            Some(window) => live.input.tap_window(
-                                acos_parcel::binder::BinderId(window),
-                                x - origin.0 as f32,
-                                y - origin.1 as f32,
-                                ack_wait,
-                            ),
-                            None => Err(
-                                acos_services::input_channel::ChannelError::Malformed(
-                                    "no touchable window at the tap point (the layer-stack hit test found none)",
-                                ),
-                            ),
-                        }
-                    }
+                    // WVTAP: one input routing rule, owned by `InputHost`:
+                    //   * touch (tap, swipe) goes to the window **under the
+                    //     point** (`InputDispatcher::findTouchedWindowAt`: the
+                    //     topmost touchable window containing it), and the
+                    //     point is converted into that window's space;
+                    //   * keys/text go to the **focused** window
+                    //     (`dispatchKeyLocked`).
+                    // The request carries **display** coordinates (the same
+                    // space the UI tree reports). Choosing the target here as
+                    // well would be a second implementation of the rule; this
+                    // arm used to be a dead duplicate of the `hit_test` one
+                    // below it, and `swipe` went to the focused window (a
+                    // touch routed by focus).
                     ("tap", _) => live.input.tap(x, y, ack_wait),
                     ("swipe", _) => live
                         .input
