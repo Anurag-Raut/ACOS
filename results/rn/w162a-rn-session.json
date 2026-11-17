@@ -121,11 +121,11 @@
         "status": "ok"
       }
     ],
-    "wall_ms": 16395
+    "wall_ms": 15088
   },
   "summary": {
     "frame_code": "UNSUPPORTED_RN_NO_RENDERER",
-    "launch_ms": 16395,
+    "launch_ms": 15088,
     "log_count": 90,
     "natives": 85,
     "nodes_after": 12,

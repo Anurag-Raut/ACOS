@@ -1024,11 +1024,26 @@ impl AtmsState {
         for item in &transaction.items {
             match item {
                 ClientTransactionItem::LaunchActivity { .. } => {
-                    self.transition(token, Transition::Create)?;
-                    self.transition(token, Transition::Start)?;
+                    // The host records the transitions still owed. A record the
+                    // guest has already reported live (`activityResumed` was the
+                    // first callback for its own token, W38/MPROC5) has created
+                    // and started itself: the launch item is then a replay of
+                    // state the host already has, not a second Create.
+                    let current = self.lifecycle_of(token);
+                    if current == Some(ActivityLifecycle::Uncreated) {
+                        self.transition(token, Transition::Create)?;
+                        self.transition(token, Transition::Start)?;
+                    } else if current == Some(ActivityLifecycle::Created) {
+                        self.transition(token, Transition::Start)?;
+                    }
                 }
                 ClientTransactionItem::ResumeActivity => {
-                    self.transition(token, Transition::Resume)?;
+                    // A repeat resume is not a transition (the framework sends
+                    // one per resume, and an adopted record may already be
+                    // `Resumed` from the guest's own report).
+                    if self.lifecycle_of(token) != Some(ActivityLifecycle::Resumed) {
+                        self.transition(token, Transition::Resume)?;
+                    }
                 }
                 ClientTransactionItem::PauseActivity { .. } => {
                     self.transition(token, Transition::Pause)?;

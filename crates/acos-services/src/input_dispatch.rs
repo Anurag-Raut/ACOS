@@ -1438,10 +1438,9 @@ mod swipe_stream_tests {
             .expect("register");
         let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
         let mut guest = LoopbackConsumer::new(fd);
-        // Drain the registration messages (touch mode + focus).
-        for _ in 0..2 {
-            guest.recv().expect("recv").expect("registration message");
-        }
+        // Drain the registration message (touch mode). Focus is the policy's
+        // (`set_focus`, LAYER1), never registration order.
+        guest.recv().expect("recv").expect("registration message");
 
         let started = Instant::now();
         let gesture = dispatch
@@ -1508,9 +1507,8 @@ mod swipe_stream_tests {
             .expect("register");
         let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
         let mut guest = LoopbackConsumer::new(fd);
-        for _ in 0..2 {
-            guest.recv().expect("recv").expect("registration message");
-        }
+        // Registration publishes TOUCH_MODE; focus follows the layer stack.
+        guest.recv().expect("recv").expect("registration message");
         let state = Arc::new(Mutex::new(dispatch));
         let host = InputHost {
             state: Arc::clone(&state),
