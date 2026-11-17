@@ -118,14 +118,65 @@ fn negative_scenarios_fail_and_never_pass() {
     }
 }
 
+/// SCENHYG: `scenarios/hello-views.yaml` now declares `non_pass` (it pins the
+/// Back-settle TIMEOUT it really produces on ART), so a *positive* partial has to
+/// come from an inline scenario with `expectation: pass`: the reference backend
+/// cannot react to input, so the tap is the unsupported step and every step
+/// before it is a real pass.
+fn run_positive_yaml_with_reference(yaml: &str, app: &str, artifacts_name: &str) -> RunOutcome {
+    let scenario = Scenario::from_yaml_str(yaml).expect("valid inline scenario");
+    let apk = workspace().join(&scenario.app);
+    let reference = reference_dir(app);
+    assert!(
+        reference.join("ui_initial.json").exists(),
+        "reference evidence missing at {}",
+        reference.display()
+    );
+    let artifacts = scratch(artifacts_name);
+    let mut backend = ReferenceBackend::new(&reference);
+    let options = RunOptions {
+        apk,
+        scenario_path: scenario_path("hello-views.yaml"),
+        artifacts_dir: artifacts.clone(),
+        required_fidelity: None,
+        request_id: "req_test_positive_views".to_string(),
+        flags: vec!["--reference".to_string()],
+        acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
+        engine: "rust-vm".to_string(),
+        warnings: Vec::new(),
+    };
+    let clock = FixedClock::new(1_794_318_674_000);
+    let outcome =
+        run_scenario(&scenario, &options, &mut backend, &clock).expect("run_scenario succeeds");
+    let _ = std::fs::remove_dir_all(&options.artifacts_dir);
+    outcome
+}
+
 #[test]
 fn positive_hello_views_is_a_truthful_partial() {
-    let outcome = run_with_reference("hello-views.yaml", "hello-views", "positive-views");
+    let yaml = r#"
+version: 1
+name: positive-hello-views-partial
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - wait_for: {selector: {id: result}, timeout_ms: 5000}
+  - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
+  - tap: {selector: {id: btn}}
+"#;
+    let outcome = run_positive_yaml_with_reference(yaml, "hello-views", "positive-views");
     assert_eq!(outcome.verdict.verdict, Status::Unsupported);
     assert!(!outcome.verdict.verdict.is_pass());
     // Everything executed before the first input step passed.
     let (executed, unsupported) = (outcome.verdict.steps.len(), 1);
-    assert!(executed >= 6, "expected a prefix of steps, got {executed}");
+    // SCENHYG: the inline scenario above is the minimal prefix (launch,
+    // wait_for, assert_text → the tap); the rule is that *every* executed step
+    // before the unsupported input passed.
+    assert!(executed >= 3, "expected a prefix of steps, got {executed}");
     assert_eq!(outcome.verdict.steps[executed - 1].step, "tap");
     assert_eq!(
         outcome.verdict.steps[executed - 1].status,
@@ -175,6 +226,7 @@ app: fixtures/build/apps/hello-views.apk
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: "test fixture: the slice backend below produces the non-pass under test"
 steps:
   - set_locale: {locale: en-US}
 "#;
@@ -853,6 +905,7 @@ app: fixtures/build/apps/hello-views.apk
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: "test fixture: the slice backend below produces the non-pass under test"
 steps:
   - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
   - capture: {name: shot, format: png, fresh: true}
@@ -877,6 +930,7 @@ app: fixtures/build/apps/hello-views.apk
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: "test fixture: the slice backend below produces the non-pass under test"
 steps:
   - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
   - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
@@ -901,6 +955,7 @@ app: fixtures/build/apps/hello-views.apk
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: "test fixture: the slice backend below produces the non-pass under test"
 steps:
   - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
   - wait_for: {selector: {id: result}, timeout_ms: 1000}
@@ -930,6 +985,7 @@ app: fixtures/build/apps/hello-views.apk
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: "test fixture: the slice backend below produces the non-pass under test"
 steps:
   - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
   - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
