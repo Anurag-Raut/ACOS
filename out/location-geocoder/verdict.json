@@ -2,9 +2,10 @@
   "animations": "on",
   "app": {
     "package": "dev.acos.fixtures.locationprobe",
-    "path": "fixtures/build/apps/location-probe.apk",
-    "sha256": "33b0f66440e2e6acdd02526ef933aba21ea0b6f2af41d48bb4f918627062fa6c"
+    "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/location-probe.apk",
+    "sha256": "8002e3de804d5b610457bf38513af4c835fe64556f19fe41add8e8f11e94cc94"
   },
+  "artifacts_overwrote_run": "req_6825f_18e8df196aee5bfd",
   "backend": "acos-native",
   "certification": "certified-with-limits",
   "certification_limits": {
@@ -35,8 +36,9 @@
     "static_manifest": "host-observed",
     "tree": "guest-asserted"
   },
+  "extra_apks": [],
   "fidelity": "art-reference",
-  "finished_at": "2026-11-16T07:33:50.633Z",
+  "finished_at": "2026-11-17T15:37:53.446Z",
   "insets": "report",
   "isolation": "process",
   "mode": "live",
@@ -101,7 +103,7 @@
       "fidelity": "scripted",
       "id": "location",
       "profile": "scripted",
-      "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 1 register(s), 0 fix(es) delivered to the app (no fix delivered yet); geocoder scripted",
+      "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 2 register(s), 0 fix(es) delivered to the app (no fix delivered yet); geocoder scripted",
       "state": "attached"
     },
     {
@@ -129,6 +131,24 @@
       "id": "hw.biometric",
       "profile": "off",
       "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "network",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "webview",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
       "state": "off"
     },
     {
@@ -224,7 +244,8 @@
   ],
   "notes": [
     "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
-    "artifacts: referenced (prune-unreferenced): 14 file(s) / 0.5 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json",
+    "artifacts: referenced (prune-unreferenced): 15 file(s) / 0.5 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json",
+    "artifacts: --overwrite replaced the evidence of run req_6825f_18e8df196aee5bfd",
     "fidelity: module `accessibility` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
@@ -234,6 +255,8 @@
     "fidelity: module `net.telephony` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `hw.bluetooth` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `hw.biometric` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `network` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `webview` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `hw.usb` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.dropbox` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `hw.nfc` is off (off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)); behaviour that needs it is unsupported, never a pass",
@@ -245,11 +268,31 @@
     "fidelity: module `system.role` is off (off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `geo.country` is off (off: a detected country is a location claim ACOS cannot back); behaviour that needs it is unsupported, never a pass"
   ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794929181528304229,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/location-probe.apk",
+      "sha256": "8002e3de804d5b610457bf38513af4c835fe64556f19fe41add8e8f11e94cc94",
+      "sha256_12": "8002e3de804d",
+      "size_bytes": 16852
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794927413381730444,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/results/handoff/MODLOC2/location-geocoder.yaml",
+      "sha256": "e7dbee16904b9d7a280b8700070f8ddc086877064a076efbf89bcf21ac7f8a42",
+      "sha256_12": "e7dbee16904b",
+      "size_bytes": 1571
+    },
+    "scenario_engine": "art",
+    "warnings": []
+  },
   "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
   "reproducer": {
-    "acos_version": "0.2.2",
-    "apk_path": "fixtures/build/apps/location-probe.apk",
-    "apk_sha256": "33b0f66440e2e6acdd02526ef933aba21ea0b6f2af41d48bb4f918627062fa6c",
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/location-probe.apk",
+    "apk_sha256": "8002e3de804d5b610457bf38513af4c835fe64556f19fe41add8e8f11e94cc94",
     "backend": "acos-native",
     "display": {
       "density_dpi": 420,
@@ -260,30 +303,30 @@
     "fidelity": "art-reference",
     "flags": [],
     "isolation": "process",
-    "scenario_path": "results/handoff/MODLOC2/location-geocoder.yaml",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/results/handoff/MODLOC2/location-geocoder.yaml",
     "scenario_sha256": "e7dbee16904b9d7a280b8700070f8ddc086877064a076efbf89bcf21ac7f8a42"
   },
-  "request_id": "req_273a5c_18e87636e6c4dc37",
+  "request_id": "req_69bb2_18e8df35a992fa86",
   "resources": {
-    "events": 89,
+    "events": 95,
     "frames_captured": 3,
-    "memory_mib": 33,
-    "peak_rss_bytes": 34680832,
+    "memory_mib": 15,
+    "peak_rss_bytes": 16306176,
     "sessions": 1,
     "steps": 3,
-    "wall_ms": 746
+    "wall_ms": 211
   },
   "scenario": {
     "name": "location-geocoder",
-    "path": "results/handoff/MODLOC2/location-geocoder.yaml",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/results/handoff/MODLOC2/location-geocoder.yaml",
     "sha256": "e7dbee16904b9d7a280b8700070f8ddc086877064a076efbf89bcf21ac7f8a42"
   },
   "schema_version": 1,
   "session_exit": {
     "abi": null,
-    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=70MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2570854-i2601823.scope)",
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=62MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p433083-i508039.scope)",
     "code": null,
-    "disk_free_bytes": 232407031808,
+    "disk_free_bytes": 239649579008,
     "guest_crash": null,
     "guest_exit": 0,
     "guest_signal": null,
@@ -296,12 +339,12 @@
     "stage": "teardown-evidence"
   },
   "session_id": "s_art_location-probe",
-  "started_at": "2026-11-16T07:33:49.887Z",
+  "started_at": "2026-11-17T15:37:53.235Z",
   "status": "pass",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 439,
+      "duration_ms": 156,
       "evidence": [
         {
           "kind": "step",
@@ -320,7 +363,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 302,
+      "duration_ms": 54,
       "evidence": [
         {
           "kind": "tree",
@@ -345,9 +388,12 @@
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
         "probe_seq": 7,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 41
+        "tree_age_ms": 40,
+        "waited_ms": 53,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "wait_for"
@@ -383,7 +429,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 2,
+      "duration_ms": 1,
       "evidence": [
         {
           "kind": "tree",
@@ -408,9 +454,12 @@
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
         "probe_seq": 7,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 41
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "assert_text"

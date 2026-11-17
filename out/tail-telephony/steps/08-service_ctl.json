@@ -107,6 +107,24 @@
             "state": "off"
           },
           {
+            "attach": "at-launch",
+            "details": null,
+            "fidelity": "off",
+            "id": "network",
+            "profile": "off",
+            "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+            "state": "off"
+          },
+          {
+            "attach": "at-launch",
+            "details": null,
+            "fidelity": "off",
+            "id": "webview",
+            "profile": "off",
+            "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+            "state": "off"
+          },
+          {
             "attach": "hot",
             "details": null,
             "fidelity": "off",
@@ -204,7 +222,7 @@
           "body": "ACOS SMS",
           "from": "+15550001111",
           "matched": 1,
-          "pdu": "00040b915155001011f100006211617033650008c1e1730a9a36a7",
+          "pdu": "00040b915155001011f100006211715173750008c1e1730a9a36a7",
           "pdu_bytes": 27
         }
       },
@@ -223,7 +241,7 @@
     "doc": "docs/SANDBOX_CERTIFICATION.md",
     "section": "§8.7"
   },
-  "duration_ms": 1,
+  "duration_ms": 0,
   "evidence": [
     {
       "kind": "step",

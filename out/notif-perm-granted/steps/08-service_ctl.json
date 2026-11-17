@@ -120,6 +120,15 @@
             "state": "off"
           },
           {
+            "attach": "at-launch",
+            "details": null,
+            "fidelity": "off",
+            "id": "webview",
+            "profile": "off",
+            "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+            "state": "off"
+          },
+          {
             "attach": "hot",
             "details": null,
             "fidelity": "off",
@@ -217,12 +226,12 @@
             "actions": [
               {
                 "index": 0,
-                "sender": 32,
+                "sender": 31,
                 "title": "Open"
               }
             ],
             "channel": "probe",
-            "content_intent_sender": 31,
+            "content_intent_sender": 30,
             "flags": 0,
             "foreground_service": false,
             "id": 7,

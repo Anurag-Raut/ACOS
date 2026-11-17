@@ -58,7 +58,7 @@
             "fidelity": "scripted",
             "id": "sensors",
             "profile": "scripted",
-            "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 19 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
+            "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 18 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
             "state": "attached"
           },
           {
@@ -113,6 +113,15 @@
             "id": "network",
             "profile": "off",
             "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+            "state": "off"
+          },
+          {
+            "attach": "at-launch",
+            "details": null,
+            "fidelity": "off",
+            "id": "webview",
+            "profile": "off",
+            "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
             "state": "off"
           },
           {

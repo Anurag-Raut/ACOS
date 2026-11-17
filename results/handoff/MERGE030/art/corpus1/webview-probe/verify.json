@@ -1,0 +1,31 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [],
+  "error": {
+    "class": "harness",
+    "code": "APK_IO",
+    "hint": "Check the APK path and permissions; this is a host I/O failure, not an app failure.",
+    "message": "APK not found: fixtures/build/apps/webview-probe.apk",
+    "retryable": true
+  },
+  "fidelity": "static-analysis",
+  "metrics": {
+    "wall_ms": 0
+  },
+  "ok": false,
+  "request_id": "req_68282_18e8df1970aea94c",
+  "result": {
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "trust": "trusted"
+  },
+  "status": "error"
+}

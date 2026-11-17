@@ -116,6 +116,15 @@
             "state": "off"
           },
           {
+            "attach": "at-launch",
+            "details": null,
+            "fidelity": "off",
+            "id": "webview",
+            "profile": "off",
+            "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+            "state": "off"
+          },
+          {
             "attach": "hot",
             "details": null,
             "fidelity": "off",
@@ -231,7 +240,7 @@
     "doc": "docs/SANDBOX_CERTIFICATION.md",
     "section": "§8.7"
   },
-  "duration_ms": 1,
+  "duration_ms": 0,
   "evidence": [
     {
       "kind": "step",

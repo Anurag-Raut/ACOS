@@ -2,7 +2,7 @@
   "assertions": [
     {
       "actual": {
-        "matched_lines": 5,
+        "matched_lines": 7,
         "sample": [
           "AcosA11yProbe: onAccessibilityEvent type=4194304",
           "AcosA11yProbe: windows2 count=2 attempts=2",

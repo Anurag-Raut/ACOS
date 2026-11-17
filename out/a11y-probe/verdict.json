@@ -2,10 +2,10 @@
   "animations": "on",
   "app": {
     "package": "dev.acos.fixtures.a11yprobe",
-    "path": "fixtures/build/apps/a11y-probe.apk",
-    "sha256": "b685ebc8e4ac754bcfffb66ec076d3f875bd08c863eb8ce0e6dcc50180c5c65e"
+    "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/a11y-probe.apk",
+    "sha256": "94b33a0aec5b60baf69a6b9e3da431e244f1f2328b6a79ca013dc599d8da2a95"
   },
-  "artifacts_overwrote_run": "req_34f546_18e87c859c3f8c0c",
+  "artifacts_overwrote_run": "req_69a42_18e8df34263356b0",
   "backend": "acos-native",
   "certification": "certified-with-limits",
   "certification_limits": {
@@ -21,7 +21,6 @@
   "evidence": {
     "artifacts": "out/a11y-probe",
     "engine_report": "out/a11y-probe/engine.json",
-    "pruned_session_captures": 1,
     "retention": "out/a11y-probe/retention.json",
     "verdict": "out/a11y-probe/verdict.json"
   },
@@ -37,8 +36,21 @@
     "static_manifest": "host-observed",
     "tree": "guest-asserted"
   },
+  "extra_apks": [],
+  "failure": {
+    "code": "ASSERTION_FAILED",
+    "error": {
+      "class": "assertion",
+      "code": "ASSERTION_FAILED",
+      "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+      "message": "log assertion did not hold",
+      "retryable": false
+    },
+    "step_index": 14,
+    "summary": "step 14 (assert_log) fail"
+  },
   "fidelity": "art-reference",
-  "finished_at": "2026-11-16T09:29:42.992Z",
+  "finished_at": "2026-11-17T15:42:30.103Z",
   "insets": "report",
   "isolation": "process",
   "mode": "live",
@@ -61,7 +73,7 @@
         "bound_service": {
           "binder": "0x10000000e",
           "component": "dev.acos.fixtures.a11yprobe/.A11yProbeService",
-          "connection": "0x74",
+          "connection": "0x76",
           "connection_id": 1,
           "service_info_set": false
         },
@@ -82,11 +94,25 @@
         "enabled_services": [
           "dev.acos.fixtures.a11yprobe/.A11yProbeService"
         ],
-        "event_count": 14,
+        "event_count": 19,
         "event_types": [
           {
-            "count": 14,
+            "count": 19,
             "type": 0
+          }
+        ],
+        "gestures": [
+          {
+            "delivered": true,
+            "events": 4,
+            "reason": null,
+            "sequence": 1
+          },
+          {
+            "delivered": true,
+            "events": 14,
+            "reason": null,
+            "sequence": 2
           }
         ],
         "installed_services": [
@@ -105,9 +131,42 @@
             "window": 1
           },
           {
-            "code": 8,
+            "code": 5,
             "interaction_id": 2,
             "window": 1
+          },
+          {
+            "code": 5,
+            "interaction_id": 3,
+            "window": 1
+          },
+          {
+            "code": 5,
+            "interaction_id": 4,
+            "window": 1
+          },
+          {
+            "code": 8,
+            "interaction_id": 5,
+            "window": 1
+          }
+        ],
+        "screenshots": [
+          {
+            "display_id": 0,
+            "status": 0
+          },
+          {
+            "display_id": 0,
+            "status": 3
+          },
+          {
+            "display_id": 5,
+            "status": 4
+          },
+          {
+            "display_id": 0,
+            "status": 6
           }
         ],
         "self_disabled": false,
@@ -124,6 +183,7 @@
           "notification_timeout": 100
         },
         "unsupported": [
+          "setAccessibilityWindowAttributes",
           "setAccessibilityWindowAttributes",
           "setAccessibilityWindowAttributes"
         ],
@@ -250,6 +310,15 @@
       "state": "off"
     },
     {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "webview",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
       "attach": "hot",
       "details": null,
       "fidelity": "off",
@@ -341,9 +410,11 @@
     }
   ],
   "notes": [
+    "stopped at step 14 (assert_log): fail; later steps were not executed",
+    "scenario expected `pass`, engine produced `fail` — result is a truthful partial",
     "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 1 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
-    "artifacts: referenced (prune-unreferenced): 28 file(s) / 0.9 MiB kept, 1 file(s) / 0.2 MiB pruned; see retention.json",
-    "artifacts: --overwrite replaced the evidence of run req_34f546_18e87c859c3f8c0c",
+    "artifacts: referenced (keep-all): 32 file(s) / 1.7 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json",
+    "artifacts: --overwrite replaced the evidence of run req_69a42_18e8df34263356b0",
     "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `sensors` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
@@ -353,6 +424,7 @@
     "fidelity: module `hw.bluetooth` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `hw.biometric` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `network` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `webview` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `hw.usb` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.dropbox` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `hw.nfc` is off (off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)); behaviour that needs it is unsupported, never a pass",
@@ -364,11 +436,31 @@
     "fidelity: module `system.role` is off (off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `geo.country` is off (off: a detected country is a location claim ACOS cannot back); behaviour that needs it is unsupported, never a pass"
   ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794929176121154718,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/a11y-probe.apk",
+      "sha256": "94b33a0aec5b60baf69a6b9e3da431e244f1f2328b6a79ca013dc599d8da2a95",
+      "sha256_12": "94b33a0aec5b",
+      "size_bytes": 25214
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794927413484187622,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/scenarios/a11y-probe.yaml",
+      "sha256": "f6ed31bfbb745c615b7f9f4f40452a01bc0d996e9c0ea95d541bc5c613783e90",
+      "sha256_12": "f6ed31bfbb74",
+      "size_bytes": 10343
+    },
+    "scenario_engine": "art",
+    "warnings": []
+  },
   "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
   "reproducer": {
-    "acos_version": "0.2.2",
-    "apk_path": "fixtures/build/apps/a11y-probe.apk",
-    "apk_sha256": "b685ebc8e4ac754bcfffb66ec076d3f875bd08c863eb8ce0e6dcc50180c5c65e",
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/a11y-probe.apk",
+    "apk_sha256": "94b33a0aec5b60baf69a6b9e3da431e244f1f2328b6a79ca013dc599d8da2a95",
     "backend": "acos-native",
     "display": {
       "density_dpi": 420,
@@ -379,30 +471,30 @@
     "fidelity": "art-reference",
     "flags": [],
     "isolation": "process",
-    "scenario_path": "scenarios/a11y-probe.yaml",
-    "scenario_sha256": "9527f55313fec966f9c72cfca9beed346fa4e374dc99420f04d3b5401e026f0f"
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/scenarios/a11y-probe.yaml",
+    "scenario_sha256": "f6ed31bfbb745c615b7f9f4f40452a01bc0d996e9c0ea95d541bc5c613783e90"
   },
-  "request_id": "req_35028f_18e87c894f3fd871",
+  "request_id": "req_6bfec_18e8df7569a75a93",
   "resources": {
-    "events": 216,
+    "events": 289,
     "frames_captured": 7,
-    "memory_mib": 16,
-    "peak_rss_bytes": 16936960,
+    "memory_mib": 17,
+    "peak_rss_bytes": 18157568,
     "sessions": 1,
-    "steps": 13,
-    "wall_ms": 2140
+    "steps": 15,
+    "wall_ms": 3066
   },
   "scenario": {
     "name": "a11y-probe",
-    "path": "scenarios/a11y-probe.yaml",
-    "sha256": "9527f55313fec966f9c72cfca9beed346fa4e374dc99420f04d3b5401e026f0f"
+    "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/scenarios/a11y-probe.yaml",
+    "sha256": "f6ed31bfbb745c615b7f9f4f40452a01bc0d996e9c0ea95d541bc5c613783e90"
   },
   "schema_version": 1,
   "session_exit": {
     "abi": null,
-    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=71MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3474076-i3374570.scope)",
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=71MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p442357-i401386.scope)",
     "code": null,
-    "disk_free_bytes": 228552757248,
+    "disk_free_bytes": 239558217728,
     "guest_crash": null,
     "guest_exit": 0,
     "guest_signal": null,
@@ -415,12 +507,12 @@
     "stage": "teardown-evidence"
   },
   "session_id": "s_art_a11y-probe",
-  "started_at": "2026-11-16T09:29:40.852Z",
-  "status": "pass",
+  "started_at": "2026-11-17T15:42:27.037Z",
+  "status": "fail",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 167,
+      "duration_ms": 946,
       "evidence": [
         {
           "kind": "step",
@@ -443,13 +535,13 @@
           "actual": {
             "bounds": [
               0,
-              988,
+              610,
               1080,
-              1245
+              867
             ],
             "hint": "",
             "node": "n4_dev.acos.fixtures.a11yprobe:id/status",
-            "text": "a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1",
+            "text": "a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=1 swipe_y=11",
             "visible": true
           },
           "expected": {
@@ -492,10 +584,13 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 6,
+        "probe_seq": 37,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 40
+        "tree_age_ms": 36,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "assert_text"
@@ -517,7 +612,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 972,
+      "duration_ms": 1049,
       "evidence": [
         {
           "kind": "tree",
@@ -534,6 +629,59 @@
       ],
       "frame_seq": 3,
       "index": 2,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[418,1077][662,1203]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.a11yprobe:id/send",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.a11yprobe:id/send",
+              "scrollable": false,
+              "text": "Send event",
+              "visible_bounds": "[418,1077][662,1203]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[418,1077][662,1203]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.a11yprobe:id/send",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.a11yprobe:id/send",
+              "scrollable": false,
+              "text": "Send event",
+              "visible_bounds": "[418,1077][662,1203]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 540,
+            "y": 1140
+          },
+          "selector": {
+            "selector": "id==\"send\""
+          }
+        }
+      },
       "provenance": {
         "frame": "host-observed",
         "host_input": "host-observed",
@@ -543,14 +691,17 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 57,
-        "frame_ms": 918,
+        "first_change_ms": 58,
+        "frame_ms": 991,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
+        "reason": "strict-event",
         "settled": true,
         "state_changed": null,
-        "strict_rule": "event"
+        "strict_rule": "event",
+        "waited_ms": 1049,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "tap"
@@ -561,13 +712,13 @@
           "actual": {
             "bounds": [
               0,
-              988,
+              610,
               1080,
-              1245
+              867
             ],
             "hint": "",
             "node": "n4_dev.acos.fixtures.a11yprobe:id/status",
-            "text": "a11y enabled=true installed=1 enabled_list=1 sent=1 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1",
+            "text": "a11y enabled=true installed=1 enabled_list=1 sent=1 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=1 swipe_y=11",
             "visible": true
           },
           "expected": {
@@ -609,14 +760,17 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 57,
-        "frame_ms": 918,
+        "first_change_ms": 58,
+        "frame_ms": 991,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
+        "reason": "strict-event",
         "settled": true,
         "state_changed": null,
-        "strict_rule": "event"
+        "strict_rule": "event",
+        "waited_ms": 0,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "assert_text"
@@ -707,24 +861,26 @@
       "assertions": [
         {
           "actual": {
-            "matched_lines": 7,
+            "matched_lines": 9,
             "sample": [
+              "AcosA11yProbe: button_text a11y=Click target drawn=Click target",
+              "AcosA11yProbe: display id=0 refresh_rate=60.000004 mode_id=1 mode_rate=60.000004 modes=1",
               "AcosA11yProbe: windows count=1 attempts=1",
               "AcosA11yProbe: window[0] id=1 type=1 layer=0 active=true focused=true title=null",
-              "AcosA11yProbe: root class=android.widget.FrameLayout text=null view_id=null clickable=false",
-              "AcosA11yProbe: by_view_id count=1",
-              "AcosA11yProbe: node class=android.widget.Button text=Click target view_id=null clickable=true"
+              "AcosA11yProbe: root class=android.widget.FrameLayout text=null view_id=null clickable=false"
             ]
           },
           "expected": {
             "min_matches": 1,
             "ordered": true,
             "patterns": [
+              "button_text a11y=Click target drawn=",
+              "display id=0 refresh_rate=60.000004 mode_id=1 mode_rate=60.000004 modes=1",
               "windows count=1",
               "type=1 layer=0 active=true focused=true",
               "root class=android.widget.FrameLayout",
               "by_view_id count=1",
-              "node class=android.widget.Button text=Click target.*clickable=true",
+              "node class=android.widget.Button text=Click target view_id=null clickable=true",
               "click handled=true"
             ],
             "since_previous_step": false,
@@ -759,13 +915,13 @@
           "actual": {
             "bounds": [
               0,
-              988,
+              610,
               1080,
-              1245
+              867
             ],
             "hint": "",
             "node": "n4_dev.acos.fixtures.a11yprobe:id/status",
-            "text": "a11y enabled=true installed=1 enabled_list=1 sent=1 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1",
+            "text": "a11y enabled=true installed=1 enabled_list=1 sent=1 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=1 swipe_y=11",
             "visible": true
           },
           "expected": {
@@ -784,7 +940,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1,
+      "duration_ms": 0,
       "evidence": [
         {
           "kind": "tree",
@@ -807,14 +963,17 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 57,
-        "frame_ms": 918,
+        "first_change_ms": 58,
+        "frame_ms": 991,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
+        "reason": "strict-event",
         "settled": true,
         "state_changed": null,
-        "strict_rule": "event"
+        "strict_rule": "event",
+        "waited_ms": 0,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "assert_text"
@@ -866,7 +1025,7 @@
       "assertions": [
         {
           "actual": {
-            "matched_lines": 5,
+            "matched_lines": 7,
             "sample": [
               "AcosA11yProbe: onAccessibilityEvent type=4194304",
               "AcosA11yProbe: windows2 count=2 attempts=2",
@@ -934,7 +1093,7 @@
                   2400
                 ],
                 "focus": true,
-                "id": "c9a0208",
+                "id": "572cd66",
                 "kind": "application",
                 "label": "main",
                 "touchable": true,
@@ -949,7 +1108,7 @@
                   488
                 ],
                 "focus": false,
-                "id": "f707002",
+                "id": "a71423",
                 "kind": "accessibility_overlay",
                 "label": "window-2032#1",
                 "touchable": false,
@@ -997,14 +1156,17 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 57,
-        "frame_ms": 918,
+        "first_change_ms": 58,
+        "frame_ms": 991,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
+        "reason": "strict-event",
         "settled": true,
         "state_changed": null,
-        "strict_rule": "event"
+        "strict_rule": "event",
+        "waited_ms": 0,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "assert_windows"
@@ -1013,56 +1175,51 @@
       "assertions": [
         {
           "actual": {
-            "acks": 2,
-            "delivered": true,
-            "visual_change": false
+            "matched_lines": 6,
+            "sample": [
+              "AcosA11yProbe: gesture_sent kind=tap accepted=true strokes=1",
+              "AcosA11yProbe: gesture_sent kind=swipe accepted=true strokes=1",
+              "AcosA11yProbe: list_scrolled y=11",
+              "AcosA11yProbe: gesture_target_pressed count=1",
+              "AcosA11yProbe: gesture_result kind=tap completed=true"
+            ]
           },
           "expected": {
-            "delivered": true
+            "min_matches": 1,
+            "ordered": false,
+            "patterns": [
+              "gesture_sent kind=tap accepted=true",
+              "gesture_result kind=tap completed=true",
+              "gesture_target_pressed count=1",
+              "gesture_sent kind=swipe accepted=true",
+              "gesture_result kind=swipe completed=true",
+              "list_scrolled y=\\d+"
+            ],
+            "since_previous_step": false,
+            "tag": "AcosA11yProbe"
           },
-          "kind": "input_delivery",
+          "kind": "log",
           "matched_node_ids": [],
-          "message": "host-observed input delivery (2 guest ack(s)); no visual change; no state change claimed",
           "passed": true
         }
       ],
-      "duration_ms": 981,
+      "duration_ms": 0,
       "evidence": [
         {
-          "kind": "tree",
-          "path": "tree/5.json"
-        },
-        {
-          "kind": "frame",
-          "path": "frames/5.png"
+          "kind": "log",
+          "path": "logs/logcat.txt"
         },
         {
           "kind": "step",
-          "path": "steps/11-tap.json"
+          "path": "steps/11-assert_log.json"
         }
       ],
-      "frame_seq": 5,
       "index": 11,
       "provenance": {
-        "frame": "host-observed",
-        "host_input": "host-observed",
-        "input_acks": "guest-asserted",
-        "tree": "guest-asserted"
-      },
-      "settle": {
-        "ack_ms": 5,
-        "bound": "strict-event",
-        "first_change_ms": 67,
-        "frame_ms": 925,
-        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
-        "mode": "strict",
-        "pixels_changed": false,
-        "settled": true,
-        "state_changed": null,
-        "strict_rule": "event"
+        "logs": "guest-asserted"
       },
       "status": "pass",
-      "step": "tap"
+      "step": "assert_log"
     },
     {
       "assertions": [
@@ -1070,22 +1227,23 @@
           "actual": {
             "matched_lines": 5,
             "sample": [
-              "AcosA11yProbe: back_requested",
-              "AcosA11yProbe: global_action back=true",
-              "AcosA11yProbe: key_down code=4 tracking=false repeat=0 flags=0",
-              "AcosA11yProbe: key_up code=4 tracking=true",
-              "AcosA11yProbe: back_pressed"
+              "AcosA11yProbe: screenshot_result kind=capture status=0 width=1080 height=2400 format=1 usage=257 color_space=sRGB IEC61966-2.1 (Linear) timestamp=7944555",
+              "AcosA11yProbe: screenshot_pixel unavailable=hardware_bitmap_needs_egl",
+              "AcosA11yProbe: screenshot_result kind=interval status=3",
+              "AcosA11yProbe: screenshot_result kind=display status=4",
+              "AcosA11yProbe: screenshot_result kind=secure status=6"
             ]
           },
           "expected": {
             "min_matches": 1,
             "ordered": false,
             "patterns": [
-              "back_requested",
-              "global_action back=true",
-              "key_down code=4 tracking=false repeat=0 flags=0",
-              "key_up code=4 tracking=true",
-              "back_pressed"
+              "screenshot_result kind=capture status=0 width=1080 height=2400 format=1",
+              "screenshot_result kind=capture status=0 .* usage=257",
+              "screenshot_result kind=interval status=3",
+              "screenshot_result kind=display status=4",
+              "screenshot_result kind=secure status=6",
+              "screenshot_pixel unavailable=hardware_bitmap_needs_egl"
             ],
             "since_previous_step": false,
             "tag": "AcosA11yProbe"
@@ -1112,9 +1270,278 @@
       },
       "status": "pass",
       "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "acks": 2,
+            "delivered": true,
+            "handled": true,
+            "visual_change": false
+          },
+          "expected": {
+            "delivered": true
+          },
+          "kind": "input_delivery",
+          "matched_node_ids": [],
+          "message": "host-observed input delivery (2 guest ack(s), handled: Some(true)); no visual change; no state change claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1064,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/5.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/5.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/13-tap.json"
+        }
+      ],
+      "frame_seq": 5,
+      "index": 13,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "handled_hint": "the app's window consumed the input (`finishInputEvent(handled) = true`) but the settled frame shows no change: the handler may be asynchronous, or the control already had that state. Assert on the state you expect instead of expecting a change",
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[376,1455][703,1581]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.a11yprobe:id/a11y_back",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.a11yprobe:id/a11y_back",
+              "scrollable": false,
+              "text": "Back via service",
+              "visible_bounds": "[376,1455][703,1581]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[376,1455][703,1581]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.a11yprobe:id/a11y_back",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.a11yprobe:id/a11y_back",
+              "scrollable": false,
+              "text": "Back via service",
+              "visible_bounds": "[376,1455][703,1581]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 539,
+            "y": 1518
+          },
+          "selector": {
+            "selector": "id==\"a11y_back\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 77,
+        "frame_ms": 1006,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 1064,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": [
+            "AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=0 gesture_taps=0 swipe_y=0",
+            "AcosA11yProbe: button_text a11y=Click target drawn=Click target",
+            "AcosA11yProbe: service_connected id=dev.acos.fixtures.a11yprobe/.A11yProbeService capabilities=161",
+            "AcosA11yProbe: probe_start pid=2 tid=14",
+            "AcosA11yProbe: display id=0 refresh_rate=60.000004 mode_id=1 mode_rate=60.000004 modes=1",
+            "AcosA11yProbe: windows count=1 attempts=1",
+            "AcosA11yProbe: window[0] id=1 type=1 layer=0 active=true focused=true title=null",
+            "AcosA11yProbe: root class=android.widget.FrameLayout text=null view_id=null clickable=false",
+            "AcosA11yProbe: swatch bounds=[277,867][802,1077]",
+            "AcosA11yProbe: by_view_id count=1",
+            "AcosA11yProbe: node class=android.widget.Button text=Click target view_id=null clickable=true",
+            "AcosA11yProbe: click_target_pressed count=1",
+            "AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=0 swipe_y=0",
+            "AcosA11yProbe: click handled=true",
+            "AcosA11yProbe: probe_done",
+            "AcosA11yProbe: gesture_sent kind=tap accepted=true strokes=1",
+            "AcosA11yProbe: gesture_sent kind=swipe accepted=true strokes=1",
+            "AcosA11yProbe: list_scrolled y=11",
+            "AcosA11yProbe: overlay_added type=2032 token=set",
+            "AcosA11yProbe: windows2_start",
+            "AcosA11yProbe: gesture_target_pressed count=1",
+            "AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=1 swipe_y=11",
+            "AcosA11yProbe: gesture_result kind=tap completed=true",
+            "AcosA11yProbe: gesture_result kind=swipe completed=true",
+            "AcosA11yProbe: onAccessibilityEvent type=4194304",
+            "AcosA11yProbe: windows2 count=2 attempts=2",
+            "AcosA11yProbe: window2[0] id=2 type=4 layer=1 active=false focused=false",
+            "AcosA11yProbe: window2[1] id=1 type=1 layer=0 active=true focused=true",
+            "AcosA11yProbe: windows2 overlay=true",
+            "AcosA11yProbe: overlay_probe_done",
+            "AcosA11yProbe: screenshot_result kind=capture status=0 width=1080 height=2400 format=1 usage=257 color_space=sRGB IEC61966-2.1 (Linear) timestamp=7944555",
+            "AcosA11yProbe: screenshot_expect kind=capture success=true",
+            "AcosA11yProbe: screenshot_pixel unavailable=hardware_bitmap_needs_egl",
+            "AcosA11yProbe: screenshot_result kind=interval status=3",
+            "AcosA11yProbe: screenshot_expect kind=interval success=false",
+            "AcosA11yProbe: screenshot_result kind=display status=4",
+            "AcosA11yProbe: screenshot_expect kind=display success=false",
+            "AcosA11yProbe: event_sent type=1 count=1",
+            "AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=1 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=1 swipe_y=11",
+            "AcosA11yProbe: secure_overlay added=true flags=8216",
+            "AcosA11yProbe: onAccessibilityEvent type=4194304",
+            "AcosA11yProbe: screenshot_result kind=secure status=6",
+            "AcosA11yProbe: screenshot_expect kind=secure success=false",
+            "AcosA11yProbe: secure_overlay added=false removed=true",
+            "AcosA11yProbe: onAccessibilityEvent type=4194304",
+            "AcosA11yProbe: back_requested",
+            "AcosA11yProbe: global_action back=true"
+          ],
+          "diff": {
+            "actual": [
+              "AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=0 gesture_taps=0 swipe_y=0",
+              "AcosA11yProbe: button_text a11y=Click target drawn=Click target",
+              "AcosA11yProbe: service_connected id=dev.acos.fixtures.a11yprobe/.A11yProbeService capabilities=161",
+              "AcosA11yProbe: probe_start pid=2 tid=14",
+              "AcosA11yProbe: display id=0 refresh_rate=60.000004 mode_id=1 mode_rate=60.000004 modes=1",
+              "AcosA11yProbe: windows count=1 attempts=1",
+              "AcosA11yProbe: window[0] id=1 type=1 layer=0 active=true focused=true title=null",
+              "AcosA11yProbe: root class=android.widget.FrameLayout text=null view_id=null clickable=false",
+              "AcosA11yProbe: swatch bounds=[277,867][802,1077]",
+              "AcosA11yProbe: by_view_id count=1",
+              "AcosA11yProbe: node class=android.widget.Button text=Click target view_id=null clickable=true",
+              "AcosA11yProbe: click_target_pressed count=1",
+              "AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=0 swipe_y=0",
+              "AcosA11yProbe: click handled=true",
+              "AcosA11yProbe: probe_done",
+              "AcosA11yProbe: gesture_sent kind=tap accepted=true strokes=1",
+              "AcosA11yProbe: gesture_sent kind=swipe accepted=true strokes=1",
+              "AcosA11yProbe: list_scrolled y=11",
+              "AcosA11yProbe: overlay_added type=2032 token=set",
+              "AcosA11yProbe: windows2_start",
+              "AcosA11yProbe: gesture_target_pressed count=1",
+              "AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=1 swipe_y=11",
+              "AcosA11yProbe: gesture_result kind=tap completed=true",
+              "AcosA11yProbe: gesture_result kind=swipe completed=true",
+              "AcosA11yProbe: onAccessibilityEvent type=4194304",
+              "AcosA11yProbe: windows2 count=2 attempts=2",
+              "AcosA11yProbe: window2[0] id=2 type=4 layer=1 active=false focused=false",
+              "AcosA11yProbe: window2[1] id=1 type=1 layer=0 active=true focused=true",
+              "AcosA11yProbe: windows2 overlay=true",
+              "AcosA11yProbe: overlay_probe_done",
+              "AcosA11yProbe: screenshot_result kind=capture status=0 width=1080 height=2400 format=1 usage=257 color_space=sRGB IEC61966-2.1 (Linear) timestamp=7944555",
+              "AcosA11yProbe: screenshot_expect kind=capture success=true",
+              "AcosA11yProbe: screenshot_pixel unavailable=hardware_bitmap_needs_egl",
+              "AcosA11yProbe: screenshot_result kind=interval status=3",
+              "AcosA11yProbe: screenshot_expect kind=interval success=false",
+              "AcosA11yProbe: screenshot_result kind=display status=4",
+              "AcosA11yProbe: screenshot_expect kind=display success=false",
+              "AcosA11yProbe: event_sent type=1 count=1",
+              "AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=1 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=1 swipe_y=11",
+              "AcosA11yProbe: secure_overlay added=true flags=8216",
+              "AcosA11yProbe: onAccessibilityEvent type=4194304",
+              "AcosA11yProbe: screenshot_result kind=secure status=6",
+              "AcosA11yProbe: screenshot_expect kind=secure success=false",
+              "AcosA11yProbe: secure_overlay added=false removed=true",
+              "AcosA11yProbe: onAccessibilityEvent type=4194304",
+              "AcosA11yProbe: back_requested",
+              "AcosA11yProbe: global_action back=true"
+            ],
+            "detail": "one or more log patterns did not match",
+            "expected": {
+              "min_matches": 1,
+              "ordered": false,
+              "patterns": [
+                "back_requested",
+                "global_action back=true",
+                "key_down code=4 tracking=false repeat=0 flags=0",
+                "key_up code=4 tracking=true",
+                "back_pressed"
+              ]
+            }
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": false,
+            "patterns": [
+              "back_requested",
+              "global_action back=true",
+              "key_down code=4 tracking=false repeat=0 flags=0",
+              "key_up code=4 tracking=true",
+              "back_pressed"
+            ]
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": false
+        }
+      ],
+      "duration_ms": 0,
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "log assertion did not hold",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/14-assert_log.json"
+        }
+      ],
+      "index": 14,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "fail",
+      "step": "assert_log"
     }
   ],
   "trust": "trusted",
   "unsupported_steps": [],
-  "verdict": "pass"
+  "verdict": "fail"
 }

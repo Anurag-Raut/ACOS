@@ -35,15 +35,15 @@
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
-        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-099117b2e874fe99",
-        "input_hash": "099117b2e874fe99",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff",
+        "input_hash": "ff39b037f1d6b9ff",
         "mode": "shared-fixed"
       },
       "buffer_generation": 1,
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 2570854,
+      "guest_process_group": 433083,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -135,6 +135,24 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -231,15 +249,15 @@
       "ok": true,
       "package": "dev.acos.fixtures.locationprobe",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-2570847-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-433076-1/view.sock",
       "width": 1080
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 86,
+      "kept": 92,
       "ok": true,
-      "total": 86
+      "total": 92
     },
     {
       "buffer_generation": 7,
@@ -253,9 +271,9 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 86,
+      "kept": 92,
       "ok": true,
-      "total": 86
+      "total": 92
     },
     {
       "buffer_generation": 7,
@@ -269,9 +287,9 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 86,
+      "kept": 92,
       "ok": true,
-      "total": 86
+      "total": 92
     },
     {
       "attached": [
@@ -346,7 +364,7 @@
           "fidelity": "scripted",
           "id": "location",
           "profile": "scripted",
-          "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 1 register(s), 0 fix(es) delivered to the app (no fix delivered yet); geocoder scripted",
+          "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 2 register(s), 0 fix(es) delivered to the app (no fix delivered yet); geocoder scripted",
           "state": "attached"
         },
         {
@@ -374,6 +392,24 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {

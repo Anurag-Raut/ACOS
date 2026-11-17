@@ -11,6 +11,7 @@
         "screenshot",
         "tap",
         "tap_text",
+        "swipe",
         "type_text",
         "key",
         "rotate",
@@ -41,6 +42,7 @@
       "tree": "guest-asserted"
     },
     "explicit": true,
+    "extra_apks": [],
     "insets": "report",
     "mode": "live",
     "modules": [
@@ -104,7 +106,7 @@
         "fidelity": "scripted",
         "id": "location",
         "profile": "scripted",
-        "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 1 register(s), 0 fix(es) delivered to the app (no fix delivered yet); geocoder scripted",
+        "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 2 register(s), 0 fix(es) delivered to the app (no fix delivered yet); geocoder scripted",
         "state": "attached"
       },
       {
@@ -132,6 +134,24 @@
         "id": "hw.biometric",
         "profile": "off",
         "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "network",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "webview",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
         "state": "off"
       },
       {
@@ -227,9 +247,9 @@
     ],
     "session_exit": {
       "abi": null,
-      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=70MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2570854-i2601823.scope)",
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=62MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p433083-i508039.scope)",
       "code": null,
-      "disk_free_bytes": 232407031808,
+      "disk_free_bytes": 239649579008,
       "guest_crash": null,
       "guest_exit": 0,
       "guest_signal": null,
@@ -241,45 +261,46 @@
       "retryable": false,
       "stage": "teardown-evidence"
     },
+    "session_id": "verify-433074",
     "timing": {
-      "attributed_ms": 743,
+      "attributed_ms": 211,
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
-        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-099117b2e874fe99",
-        "input_hash": "099117b2e874fe99",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff",
+        "input_hash": "ff39b037f1d6b9ff",
         "mode": "shared-fixed"
       },
       "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
-      "session_start_ms": 205,
+      "session_start_ms": 155,
       "steps": [
         {
           "index": 0,
           "status": "pass",
           "step": "launch",
-          "wall_ms": 439
+          "wall_ms": 156
         },
         {
           "index": 1,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 302
+          "wall_ms": 54
         },
         {
           "index": 2,
           "status": "pass",
           "step": "assert_text",
-          "wall_ms": 2
+          "wall_ms": 1
         }
       ],
-      "unattributed_ms": 3,
+      "unattributed_ms": 0,
       "unit": "ms",
-      "verdict_wall_ms": 746
+      "verdict_wall_ms": 211
     },
     "trust": "trusted",
     "unsupported_steps": []
   },
-  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
-  "request_id": "req_273a5c_18e87636e6c4dc37",
+  "provenance_rule": null,
+  "request_id": "req_69bb2_18e8df35a992fa86",
   "verdict_status": "pass"
 }

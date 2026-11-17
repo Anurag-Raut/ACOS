@@ -11,6 +11,7 @@
         "screenshot",
         "tap",
         "tap_text",
+        "swipe",
         "type_text",
         "key",
         "rotate",
@@ -25,7 +26,6 @@
     "evidence": {
       "artifacts": "out/a11y-probe",
       "engine_report": "out/a11y-probe/engine.json",
-      "pruned_session_captures": 1,
       "retention": "out/a11y-probe/retention.json",
       "verdict": "out/a11y-probe/verdict.json"
     },
@@ -42,6 +42,7 @@
       "tree": "guest-asserted"
     },
     "explicit": true,
+    "extra_apks": [],
     "insets": "report",
     "mode": "live",
     "modules": [
@@ -63,7 +64,7 @@
           "bound_service": {
             "binder": "0x10000000e",
             "component": "dev.acos.fixtures.a11yprobe/.A11yProbeService",
-            "connection": "0x74",
+            "connection": "0x76",
             "connection_id": 1,
             "service_info_set": false
           },
@@ -84,11 +85,25 @@
           "enabled_services": [
             "dev.acos.fixtures.a11yprobe/.A11yProbeService"
           ],
-          "event_count": 14,
+          "event_count": 19,
           "event_types": [
             {
-              "count": 14,
+              "count": 19,
               "type": 0
+            }
+          ],
+          "gestures": [
+            {
+              "delivered": true,
+              "events": 4,
+              "reason": null,
+              "sequence": 1
+            },
+            {
+              "delivered": true,
+              "events": 14,
+              "reason": null,
+              "sequence": 2
             }
           ],
           "installed_services": [
@@ -107,9 +122,42 @@
               "window": 1
             },
             {
-              "code": 8,
+              "code": 5,
               "interaction_id": 2,
               "window": 1
+            },
+            {
+              "code": 5,
+              "interaction_id": 3,
+              "window": 1
+            },
+            {
+              "code": 5,
+              "interaction_id": 4,
+              "window": 1
+            },
+            {
+              "code": 8,
+              "interaction_id": 5,
+              "window": 1
+            }
+          ],
+          "screenshots": [
+            {
+              "display_id": 0,
+              "status": 0
+            },
+            {
+              "display_id": 0,
+              "status": 3
+            },
+            {
+              "display_id": 5,
+              "status": 4
+            },
+            {
+              "display_id": 0,
+              "status": 6
             }
           ],
           "self_disabled": false,
@@ -126,6 +174,7 @@
             "notification_timeout": 100
           },
           "unsupported": [
+            "setAccessibilityWindowAttributes",
             "setAccessibilityWindowAttributes",
             "setAccessibilityWindowAttributes"
           ],
@@ -252,6 +301,15 @@
         "state": "off"
       },
       {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "webview",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
         "attach": "hot",
         "details": null,
         "fidelity": "off",
@@ -344,9 +402,9 @@
     ],
     "session_exit": {
       "abi": null,
-      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=71MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3474076-i3374570.scope)",
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=71MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p442357-i401386.scope)",
       "code": null,
-      "disk_free_bytes": 228552757248,
+      "disk_free_bytes": 239558217728,
       "guest_crash": null,
       "guest_exit": 0,
       "guest_signal": null,
@@ -358,9 +416,9 @@
       "retryable": false,
       "stage": "teardown-evidence"
     },
-    "session_id": "verify-3474063",
+    "session_id": "verify-442348",
     "timing": {
-      "attributed_ms": 2121,
+      "attributed_ms": 3059,
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
@@ -369,13 +427,13 @@
         "mode": "shared-fixed"
       },
       "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
-      "session_start_ms": 161,
+      "session_start_ms": 150,
       "steps": [
         {
           "index": 0,
           "status": "pass",
           "step": "launch",
-          "wall_ms": 167
+          "wall_ms": 946
         },
         {
           "index": 1,
@@ -387,7 +445,7 @@
           "index": 2,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 972
+          "wall_ms": 1049
         },
         {
           "index": 3,
@@ -417,7 +475,7 @@
           "index": 7,
           "status": "pass",
           "step": "assert_text",
-          "wall_ms": 1
+          "wall_ms": 0
         },
         {
           "index": 8,
@@ -440,24 +498,36 @@
         {
           "index": 11,
           "status": "pass",
-          "step": "tap",
-          "wall_ms": 981
+          "step": "assert_log",
+          "wall_ms": 0
         },
         {
           "index": 12,
           "status": "pass",
           "step": "assert_log",
           "wall_ms": 0
+        },
+        {
+          "index": 13,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 1064
+        },
+        {
+          "index": 14,
+          "status": "fail",
+          "step": "assert_log",
+          "wall_ms": 0
         }
       ],
-      "unattributed_ms": 19,
+      "unattributed_ms": 7,
       "unit": "ms",
-      "verdict_wall_ms": 2140
+      "verdict_wall_ms": 3066
     },
     "trust": "trusted",
     "unsupported_steps": []
   },
-  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
-  "request_id": "req_35028f_18e87c894f3fd871",
-  "verdict_status": "pass"
+  "provenance_rule": null,
+  "request_id": "req_6bfec_18e8df7569a75a93",
+  "verdict_status": "fail"
 }

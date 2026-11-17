@@ -1,0 +1,1077 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.netcheck.MainActivity",
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "hit",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff",
+        "input_hash": "ff39b037f1d6b9ff",
+        "mode": "shared-fixed"
+      },
+      "buffer_generation": 2,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "guest_process_group": 434581,
+      "height": 2400,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "accessibility",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "package": "dev.acos.fixtures.netcheck",
+      "probe_seq": 1,
+      "stream_socket": "/run/user/1000/acos-view-434574-1/view.sock",
+      "width": 1080
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 89,
+      "ok": true,
+      "total": 89
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c1.png",
+      "probe_seq": 6
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 89,
+      "ok": true,
+      "total": 89
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 2,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c2.png",
+      "probe_seq": 7
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 89,
+      "ok": true,
+      "total": 89
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 89,
+      "ok": true,
+      "total": 89
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 3,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c3.png",
+      "probe_seq": 8
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 4,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c4.png",
+      "probe_seq": 9
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 5,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c5.png",
+      "probe_seq": 10
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 6,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c6.png",
+      "probe_seq": 11
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 7,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c7.png",
+      "probe_seq": 12
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 8,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c8.png",
+      "probe_seq": 13
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 9,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c9.png",
+      "probe_seq": 14
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 10,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c10.png",
+      "probe_seq": 15
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 11,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c11.png",
+      "probe_seq": 16
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 12,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c12.png",
+      "probe_seq": 17
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 13,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c13.png",
+      "probe_seq": 18
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 14,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c14.png",
+      "probe_seq": 19
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 15,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c15.png",
+      "probe_seq": 20
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 16,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c16.png",
+      "probe_seq": 21
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 17,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c17.png",
+      "probe_seq": 22
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 18,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c18.png",
+      "probe_seq": 23
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 19,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c19.png",
+      "probe_seq": 24
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 20,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c20.png",
+      "probe_seq": 25
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 21,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c21.png",
+      "probe_seq": 26
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 22,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c22.png",
+      "probe_seq": 27
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 23,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c23.png",
+      "probe_seq": 28
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 24,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c24.png",
+      "probe_seq": 29
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 25,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c25.png",
+      "probe_seq": 30
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 26,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c26.png",
+      "probe_seq": 31
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 27,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c27.png",
+      "probe_seq": 32
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 28,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c28.png",
+      "probe_seq": 33
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 29,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c29.png",
+      "probe_seq": 34
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 30,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c30.png",
+      "probe_seq": 35
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 31,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c31.png",
+      "probe_seq": 36
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 32,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c32.png",
+      "probe_seq": 37
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 33,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c33.png",
+      "probe_seq": 38
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 34,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c34.png",
+      "probe_seq": 39
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 35,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c35.png",
+      "probe_seq": 40
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 36,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c36.png",
+      "probe_seq": 41
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 37,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c37.png",
+      "probe_seq": 42
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 38,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c38.png",
+      "probe_seq": 43
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 39,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c39.png",
+      "probe_seq": 44
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 40,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c40.png",
+      "probe_seq": 45
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 41,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c41.png",
+      "probe_seq": 46
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 42,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c42.png",
+      "probe_seq": 47
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 43,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c43.png",
+      "probe_seq": 48
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 44,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c44.png",
+      "probe_seq": 49
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 45,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c45.png",
+      "probe_seq": 50
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 46,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c46.png",
+      "probe_seq": 51
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 47,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c47.png",
+      "probe_seq": 52
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 48,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c48.png",
+      "probe_seq": 53
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 49,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c49.png",
+      "probe_seq": 54
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 50,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c50.png",
+      "probe_seq": 55
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 51,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c51.png",
+      "probe_seq": 56
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 52,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c52.png",
+      "probe_seq": 57
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 53,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c53.png",
+      "probe_seq": 58
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 54,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c54.png",
+      "probe_seq": 59
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 55,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c55.png",
+      "probe_seq": 60
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 56,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c56.png",
+      "probe_seq": 61
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 57,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c57.png",
+      "probe_seq": 62
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 58,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c58.png",
+      "probe_seq": 63
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 59,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c59.png",
+      "probe_seq": 64
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 60,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c60.png",
+      "probe_seq": 65
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 61,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c61.png",
+      "probe_seq": 66
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 62,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c62.png",
+      "probe_seq": 67
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 63,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c63.png",
+      "probe_seq": 68
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 64,
+      "ok": true,
+      "png": "out/net-check/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c64.png",
+      "probe_seq": 69
+    },
+    {
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        }
+      ],
+      "cmd": "services",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "accessibility",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "op": "list"
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 64,
+      "ok": true
+    }
+  ]
+}

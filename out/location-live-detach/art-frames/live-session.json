@@ -40,15 +40,15 @@
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
-        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-099117b2e874fe99",
-        "input_hash": "099117b2e874fe99",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff",
+        "input_hash": "ff39b037f1d6b9ff",
         "mode": "shared-fixed"
       },
-      "buffer_generation": 2,
+      "buffer_generation": 1,
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 2573083,
+      "guest_process_group": 433145,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -140,6 +140,24 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -236,15 +254,15 @@
       "ok": true,
       "package": "dev.acos.fixtures.locationprobe",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-2573076-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-433137-1/view.sock",
       "width": 1080
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 86,
+      "kept": 92,
       "ok": true,
-      "total": 86
+      "total": 92
     },
     {
       "buffer_generation": 7,
@@ -258,9 +276,9 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 86,
+      "kept": 92,
       "ok": true,
-      "total": 86
+      "total": 92
     },
     {
       "buffer_generation": 7,
@@ -274,16 +292,16 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 86,
+      "kept": 92,
       "ok": true,
-      "total": 86
+      "total": 92
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 86,
+      "kept": 92,
       "ok": true,
-      "total": 86
+      "total": 92
     },
     {
       "attached": [
@@ -359,7 +377,7 @@
           "fidelity": "scripted",
           "id": "location",
           "profile": "scripted",
-          "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 1 register(s), 2 fix(es) delivered to the app (last gps lat 37.422 lng -122.0841); geocoder not present (framework no-geocoder path)",
+          "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 2 register(s), 3 fix(es) delivered to the app (last gps lat 37.422 lng -122.0841); geocoder not present (framework no-geocoder path)",
           "state": "attached"
         },
         {
@@ -387,6 +405,24 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -484,10 +520,11 @@
       "op": "set_location",
       "value": {
         "accuracy": 4.0,
-        "delivered": 2,
+        "delivered": 3,
         "lat": 37.422,
         "lng": -122.0841,
         "location_enabled": true,
+        "pending_intent_fires": 1,
         "provider": "gps",
         "provider_enabled": true,
         "stored": true
@@ -496,21 +533,21 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 86,
+      "kept": 92,
       "ok": true,
-      "total": 86
+      "total": 92
     },
     {
       "cmd": "tree",
       "frame_seq": 3,
       "ok": true,
       "pixels": false,
-      "probe_seq": 9
+      "probe_seq": 10
     },
     {
-      "buffer_generation": 45,
+      "buffer_generation": 61,
       "cmd": "tap",
-      "frame_number": 45,
+      "frame_number": 61,
       "frame_seq": 4,
       "handled": [
         true,
@@ -518,39 +555,39 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 42,
+      "probe_seq": 46,
       "x": 540.0,
-      "y": 600.0
+      "y": 657.0
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 132,
+      "kept": 158,
       "ok": true,
-      "total": 132
+      "total": 158
     },
     {
-      "buffer_generation": 45,
+      "buffer_generation": 61,
       "cmd": "tree",
-      "frame_number": 45,
+      "frame_number": 61,
       "frame_seq": 5,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 44
+      "probe_seq": 47
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 132,
+      "kept": 158,
       "ok": true,
-      "total": 132
+      "total": 158
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 132,
+      "kept": 158,
       "ok": true,
-      "total": 132
+      "total": 158
     },
     {
       "attached": [
@@ -649,6 +686,24 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -748,21 +803,21 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 132,
+      "kept": 158,
       "ok": true,
-      "total": 132
+      "total": 158
     },
     {
       "cmd": "tree",
       "frame_seq": 6,
       "ok": true,
       "pixels": false,
-      "probe_seq": 45
+      "probe_seq": 48
     },
     {
-      "buffer_generation": 84,
+      "buffer_generation": 113,
       "cmd": "tap",
-      "frame_number": 84,
+      "frame_number": 113,
       "frame_seq": 7,
       "handled": [
         true,
@@ -770,39 +825,39 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 78,
+      "probe_seq": 86,
       "x": 540.0,
-      "y": 600.0
+      "y": 657.0
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 171,
+      "kept": 210,
       "ok": true,
-      "total": 171
+      "total": 210
     },
     {
-      "buffer_generation": 84,
+      "buffer_generation": 113,
       "cmd": "tree",
-      "frame_number": 84,
+      "frame_number": 113,
       "frame_seq": 8,
       "ok": true,
-      "png": "out/location-live-detach/art-frames/live-frames/acos-c1-layer3-frame-84-g84-c8.png",
-      "probe_seq": 79
+      "png": "out/location-live-detach/art-frames/live-frames/acos-c1-layer3-frame-113-g113-c8.png",
+      "probe_seq": 87
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 171,
+      "kept": 210,
       "ok": true,
-      "total": 171
+      "total": 210
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 171,
+      "kept": 210,
       "ok": true,
-      "total": 171
+      "total": 210
     },
     {
       "attached": [
@@ -901,6 +956,24 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {

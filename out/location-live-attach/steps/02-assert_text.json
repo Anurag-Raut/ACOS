@@ -6,11 +6,11 @@
           42,
           317,
           1038,
-          521
+          668
         ],
         "hint": "",
         "node": "n4_dev.acos.fixtures.locationprobe:id/state",
-        "text": "state=unavailable: UnsupportedOperationException: unsupported Android API: android.location.ILocationManager code 37 (code 37)",
+        "text": "state=unavailable: UnsupportedOperationException: unsupported Android API: android.location.ILocationManager code 37 (location: the location module is not attached; the `location` name answers the disabled-device node (a phone with location off). Attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]})",
         "visible": true
       },
       "expected": {
@@ -34,7 +34,7 @@
     "doc": "docs/SANDBOX_CERTIFICATION.md",
     "section": "§8.7"
   },
-  "duration_ms": 2,
+  "duration_ms": 0,
   "evidence": [
     {
       "kind": "tree",
@@ -59,9 +59,12 @@
     "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
     "mode": "strict",
     "probe_seq": 7,
+    "reason": "strict-event",
     "settled": true,
     "strict_rule": "event",
-    "tree_age_ms": 41
+    "tree_age_ms": 40,
+    "waited_ms": 0,
+    "waited_ms_source": "step"
   },
   "status": "pass",
   "step": "assert_text",

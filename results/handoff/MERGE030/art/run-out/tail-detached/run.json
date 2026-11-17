@@ -1,0 +1,8 @@
+{
+  "request_id": "req_69ee3_18e8df39eecd0ec2",
+  "started_at": "2026-11-17T15:38:11.419Z",
+  "scenario": "results/handoff/MODTAIL/tail-detached.yaml",
+  "apk": "",
+  "acos_version": "0.3.0",
+  "overwrote_run_id": "req_6827d_18e8df196fcb93db"
+}

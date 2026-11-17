@@ -2,9 +2,10 @@
   "animations": "on",
   "app": {
     "package": "dev.acos.fixtures.tailprobe",
-    "path": "results/handoff/MODTAIL/../../../fixtures/build/apps/tail-probe.apk",
-    "sha256": "6bc8eee2bea20df956421284d83db475c7df319f591504bb7f6364abc4b23021"
+    "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/tail-probe.apk",
+    "sha256": "fb8305efe64a961091aaaca5c3185bd87f413c0dcaf628fb6dcaa01b384d3d72"
   },
+  "artifacts_overwrote_run": "req_68269_18e8df196c8dea34",
   "backend": "acos-native",
   "certification": "certified-with-limits",
   "certification_limits": {
@@ -36,8 +37,9 @@
     "static_manifest": "host-observed",
     "tree": "guest-asserted"
   },
+  "extra_apks": [],
   "fidelity": "art-reference",
-  "finished_at": "2026-11-16T07:34:00.327Z",
+  "finished_at": "2026-11-17T15:37:59.791Z",
   "insets": "report",
   "isolation": "process",
   "mode": "live",
@@ -133,6 +135,24 @@
       "state": "off"
     },
     {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "network",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "webview",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
       "attach": "hot",
       "details": null,
       "fidelity": "off",
@@ -225,7 +245,8 @@
   ],
   "notes": [
     "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
-    "artifacts: referenced (prune-unreferenced): 45 file(s) / 2.9 MiB kept, 10 file(s) / 1.8 MiB pruned; see retention.json",
+    "artifacts: referenced (prune-unreferenced): 46 file(s) / 3.3 MiB kept, 10 file(s) / 2.2 MiB pruned; see retention.json",
+    "artifacts: --overwrite replaced the evidence of run req_68269_18e8df196c8dea34",
     "fidelity: module `accessibility` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
@@ -235,6 +256,8 @@
     "fidelity: module `net.telephony` is attached at `scripted` (not `real`); every result that depends on it is that fidelity, not a real implementation",
     "fidelity: module `hw.bluetooth` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `hw.biometric` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `network` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `webview` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `hw.usb` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.dropbox` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `hw.nfc` is off (off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)); behaviour that needs it is unsupported, never a pass",
@@ -246,11 +269,31 @@
     "fidelity: module `system.role` is off (off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `geo.country` is off (off: a detected country is a location claim ACOS cannot back); behaviour that needs it is unsupported, never a pass"
   ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794929180389272759,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/tail-probe.apk",
+      "sha256": "fb8305efe64a961091aaaca5c3185bd87f413c0dcaf628fb6dcaa01b384d3d72",
+      "sha256_12": "fb8305efe64a",
+      "size_bytes": 20883
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794927413385145586,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/results/handoff/MODTAIL/tail-telephony.yaml",
+      "sha256": "c9afed5179ccd6732788d2f1afc15dbc5e3ff530e5c83fd702832eaef303ad20",
+      "sha256_12": "c9afed5179cc",
+      "size_bytes": 2798
+    },
+    "scenario_engine": "art",
+    "warnings": []
+  },
   "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
   "reproducer": {
-    "acos_version": "0.2.2",
-    "apk_path": "results/handoff/MODTAIL/../../../fixtures/build/apps/tail-probe.apk",
-    "apk_sha256": "6bc8eee2bea20df956421284d83db475c7df319f591504bb7f6364abc4b23021",
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/tail-probe.apk",
+    "apk_sha256": "fb8305efe64a961091aaaca5c3185bd87f413c0dcaf628fb6dcaa01b384d3d72",
     "backend": "acos-native",
     "display": {
       "density_dpi": 420,
@@ -261,30 +304,30 @@
     "fidelity": "art-reference",
     "flags": [],
     "isolation": "process",
-    "scenario_path": "results/handoff/MODTAIL/tail-telephony.yaml",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/results/handoff/MODTAIL/tail-telephony.yaml",
     "scenario_sha256": "c9afed5179ccd6732788d2f1afc15dbc5e3ff530e5c83fd702832eaef303ad20"
   },
-  "request_id": "req_273b31_18e87637ced842cb",
+  "request_id": "req_69c3a_18e8df36603e5be7",
   "resources": {
-    "events": 200,
+    "events": 258,
     "frames_captured": 12,
-    "memory_mib": 33,
-    "peak_rss_bytes": 35311616,
+    "memory_mib": 16,
+    "peak_rss_bytes": 17027072,
     "sessions": 1,
     "steps": 14,
-    "wall_ms": 6591
+    "wall_ms": 3489
   },
   "scenario": {
     "name": "tail-telephony",
-    "path": "results/handoff/MODTAIL/tail-telephony.yaml",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/results/handoff/MODTAIL/tail-telephony.yaml",
     "sha256": "c9afed5179ccd6732788d2f1afc15dbc5e3ff530e5c83fd702832eaef303ad20"
   },
   "schema_version": 1,
   "session_exit": {
     "abi": null,
-    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=80MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2571066-i2629968.scope)",
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=70MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p433219-i467775.scope)",
     "code": null,
-    "disk_free_bytes": 237560209408,
+    "disk_free_bytes": 239934730240,
     "guest_crash": null,
     "guest_exit": 0,
     "guest_signal": null,
@@ -297,12 +340,12 @@
     "stage": "teardown-evidence"
   },
   "session_id": "s_art_tail-probe",
-  "started_at": "2026-11-16T07:33:53.736Z",
+  "started_at": "2026-11-17T15:37:56.302Z",
   "status": "pass",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 382,
+      "duration_ms": 157,
       "evidence": [
         {
           "kind": "step",
@@ -321,7 +364,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 288,
+      "duration_ms": 54,
       "evidence": [
         {
           "kind": "tree",
@@ -346,16 +389,19 @@
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
         "probe_seq": 7,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 40
+        "tree_age_ms": 40,
+        "waited_ms": 54,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "wait_for"
     },
     {
       "assertions": [],
-      "duration_ms": 288,
+      "duration_ms": 54,
       "evidence": [
         {
           "kind": "tree",
@@ -380,16 +426,19 @@
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
         "probe_seq": 8,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 40
+        "tree_age_ms": 40,
+        "waited_ms": 53,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "wait_for"
     },
     {
       "assertions": [],
-      "duration_ms": 288,
+      "duration_ms": 54,
       "evidence": [
         {
           "kind": "tree",
@@ -414,9 +463,12 @@
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
         "probe_seq": 9,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 40
+        "tree_age_ms": 40,
+        "waited_ms": 53,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "wait_for"
@@ -438,7 +490,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1239,
+      "duration_ms": 954,
       "evidence": [
         {
           "kind": "tree",
@@ -455,6 +507,74 @@
       ],
       "frame_seq": 5,
       "index": 4,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[24,874][1056,1000]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Listen for calls",
+              "visible_bounds": "[24,874][1056,1000]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[24,874][1056,1000]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Listen for calls",
+              "visible_bounds": "[24,874][1056,1000]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "node": {
+            "bounds": "[24,874][1056,1000]",
+            "class": "android.widget.Button",
+            "clickable": true,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n4_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Listen for calls",
+            "visible_bounds": "[24,874][1056,1000]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 937
+          },
+          "selector": {
+            "selector": "text==\"Listen for calls\""
+          }
+        }
+      },
       "provenance": {
         "frame": "host-observed",
         "host_input": "host-observed",
@@ -464,21 +584,24 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 103,
-        "frame_ms": 995,
+        "first_change_ms": 55,
+        "frame_ms": 941,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
+        "reason": "strict-event",
         "settled": true,
         "state_changed": null,
-        "strict_rule": "event"
+        "strict_rule": "event",
+        "waited_ms": 954,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "tap"
     },
     {
       "assertions": [],
-      "duration_ms": 284,
+      "duration_ms": 54,
       "evidence": [
         {
           "kind": "tree",
@@ -502,10 +625,13 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 42,
+        "probe_seq": 46,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 40
+        "tree_age_ms": 40,
+        "waited_ms": 54,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "wait_for"
@@ -619,6 +745,24 @@
                 "state": "off"
               },
               {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
                 "attach": "hot",
                 "details": null,
                 "fidelity": "off",
@@ -727,7 +871,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1,
+      "duration_ms": 0,
       "evidence": [
         {
           "kind": "step",
@@ -741,7 +885,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 295,
+      "duration_ms": 64,
       "evidence": [
         {
           "kind": "tree",
@@ -765,10 +909,13 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 44,
+        "probe_seq": 48,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 25
+        "tree_age_ms": 24,
+        "waited_ms": 64,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "wait_for"
@@ -882,6 +1029,24 @@
                 "state": "off"
               },
               {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
                 "attach": "hot",
                 "details": null,
                 "fidelity": "off",
@@ -979,7 +1144,7 @@
               "body": "ACOS SMS",
               "from": "+15550001111",
               "matched": 1,
-              "pdu": "00040b915155001011f100006211617033650008c1e1730a9a36a7",
+              "pdu": "00040b915155001011f100006211715173750008c1e1730a9a36a7",
               "pdu_bytes": 27
             }
           },
@@ -993,7 +1158,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1,
+      "duration_ms": 0,
       "evidence": [
         {
           "kind": "step",
@@ -1007,7 +1172,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 312,
+      "duration_ms": 75,
       "evidence": [
         {
           "kind": "tree",
@@ -1031,10 +1196,13 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 46,
+        "probe_seq": 50,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 35
+        "tree_age_ms": 34,
+        "waited_ms": 74,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "wait_for"
@@ -1056,7 +1224,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1278,
+      "duration_ms": 947,
       "evidence": [
         {
           "kind": "tree",
@@ -1073,6 +1241,74 @@
       ],
       "frame_seq": 9,
       "index": 10,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[24,1378][1056,1504]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Send SMS",
+              "visible_bounds": "[24,1378][1056,1504]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[24,1378][1056,1504]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Send SMS",
+              "visible_bounds": "[24,1378][1056,1504]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "node": {
+            "bounds": "[24,1378][1056,1504]",
+            "class": "android.widget.Button",
+            "clickable": true,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n4_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Send SMS",
+            "visible_bounds": "[24,1378][1056,1504]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 1441
+          },
+          "selector": {
+            "selector": "text==\"Send SMS\""
+          }
+        }
+      },
       "provenance": {
         "frame": "host-observed",
         "host_input": "host-observed",
@@ -1082,21 +1318,24 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 101,
-        "frame_ms": 1028,
+        "first_change_ms": 55,
+        "frame_ms": 933,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
+        "reason": "strict-event",
         "settled": true,
         "state_changed": null,
-        "strict_rule": "event"
+        "strict_rule": "event",
+        "waited_ms": 947,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "tap"
     },
     {
       "assertions": [],
-      "duration_ms": 290,
+      "duration_ms": 54,
       "evidence": [
         {
           "kind": "tree",
@@ -1120,10 +1359,13 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 80,
+        "probe_seq": 87,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 40
+        "tree_age_ms": 40,
+        "waited_ms": 54,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "wait_for"
@@ -1145,7 +1387,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1333,
+      "duration_ms": 961,
       "evidence": [
         {
           "kind": "tree",
@@ -1162,6 +1404,74 @@
       ],
       "frame_seq": 11,
       "index": 12,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[24,370][1056,496]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Telephony",
+              "visible_bounds": "[24,370][1056,496]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[24,370][1056,496]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Telephony",
+              "visible_bounds": "[24,370][1056,496]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "node": {
+            "bounds": "[24,370][1056,496]",
+            "class": "android.widget.Button",
+            "clickable": true,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n4_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Telephony",
+            "visible_bounds": "[24,370][1056,496]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 433
+          },
+          "selector": {
+            "selector": "text==\"Telephony\""
+          }
+        }
+      },
       "provenance": {
         "frame": "host-observed",
         "host_input": "host-observed",
@@ -1171,21 +1481,24 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 121,
-        "frame_ms": 1079,
+        "first_change_ms": 56,
+        "frame_ms": 944,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
+        "reason": "strict-event",
         "settled": true,
         "state_changed": null,
-        "strict_rule": "event"
+        "strict_rule": "event",
+        "waited_ms": 961,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "tap"
     },
     {
       "assertions": [],
-      "duration_ms": 295,
+      "duration_ms": 57,
       "evidence": [
         {
           "kind": "tree",
@@ -1209,10 +1522,13 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 115,
+        "probe_seq": 124,
+        "reason": "strict-event",
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 40
+        "tree_age_ms": 40,
+        "waited_ms": 57,
+        "waited_ms_source": "step"
       },
       "status": "pass",
       "step": "wait_for"

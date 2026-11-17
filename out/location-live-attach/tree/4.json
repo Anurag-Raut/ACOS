@@ -1,12 +1,12 @@
 {
   "frame": {
     "frame_seq": 4,
-    "produced_at": "2026-11-16T07:29:48.623Z",
+    "produced_at": "2026-11-17T15:37:51.815Z",
     "cause_id": "art",
     "width": 1080,
     "height": 2400,
     "density": 420,
-    "content_hash": "3be0ae61b44e949e73e5139c7434043c",
+    "content_hash": "47ec8c91804dfc2ad0ae18aba7bbff81",
     "meaningful": true,
     "display_origin": [
       0,
@@ -135,7 +135,7 @@
                       "id": "n4_dev.acos.fixtures.locationprobe:id/state",
                       "class": "android.widget.TextView",
                       "resource_id": "dev.acos.fixtures.locationprobe:id/state",
-                      "text": "state=unavailable: IllegalArgumentException: unknown binder handle 0x64",
+                      "text": "state=ready providers=fused,gps,network,passive enabled=true gps=true",
                       "hint": "",
                       "content_desc": "",
                       "bounds": [
@@ -161,7 +161,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "d71e3fa",
+                      "window_id": "f2d33ee",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -196,16 +196,16 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "d71e3fa",
+                      "window_id": "f2d33ee",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
                     },
                     {
-                      "id": "n4_dev.acos.fixtures.locationprobe:id/fix",
+                      "id": "n4_dev.acos.fixtures.locationprobe:id/pending",
                       "class": "android.widget.TextView",
-                      "resource_id": "dev.acos.fixtures.locationprobe:id/fix",
-                      "text": "fix=none",
+                      "resource_id": "dev.acos.fixtures.locationprobe:id/pending",
+                      "text": "pi=none",
                       "hint": "",
                       "content_desc": "",
                       "bounds": [
@@ -231,7 +231,42 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "d71e3fa",
+                      "window_id": "f2d33ee",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    },
+                    {
+                      "id": "n4_dev.acos.fixtures.locationprobe:id/fix",
+                      "class": "android.widget.TextView",
+                      "resource_id": "dev.acos.fixtures.locationprobe:id/fix",
+                      "text": "fix=none",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        537,
+                        1038,
+                        594
+                      ],
+                      "visible_bounds": [
+                        42,
+                        537,
+                        1038,
+                        594
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "f2d33ee",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -245,15 +280,15 @@
                       "content_desc": "",
                       "bounds": [
                         42,
-                        537,
+                        594,
                         1038,
-                        663
+                        720
                       ],
                       "visible_bounds": [
                         42,
-                        537,
+                        594,
                         1038,
-                        663
+                        720
                       ],
                       "visible": true,
                       "enabled": true,
@@ -266,7 +301,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "d71e3fa",
+                      "window_id": "f2d33ee",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -274,7 +309,7 @@
                   ],
                   "package": "",
                   "window": "main",
-                  "window_id": "d71e3fa",
+                  "window_id": "f2d33ee",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -282,7 +317,7 @@
               ],
               "package": "",
               "window": "main",
-              "window_id": "d71e3fa",
+              "window_id": "f2d33ee",
               "window_type": "TYPE_BASE_APPLICATION",
               "window_kind": "application",
               "window_z": 0
@@ -373,7 +408,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "d71e3fa",
+                      "window_id": "f2d33ee",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -402,7 +437,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "d71e3fa",
+                      "window_id": "f2d33ee",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -410,7 +445,7 @@
                   ],
                   "package": "",
                   "window": "main",
-                  "window_id": "d71e3fa",
+                  "window_id": "f2d33ee",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -439,7 +474,7 @@
                   "children": [],
                   "package": "",
                   "window": "main",
-                  "window_id": "d71e3fa",
+                  "window_id": "f2d33ee",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -447,7 +482,7 @@
               ],
               "package": "",
               "window": "main",
-              "window_id": "d71e3fa",
+              "window_id": "f2d33ee",
               "window_type": "TYPE_BASE_APPLICATION",
               "window_kind": "application",
               "window_z": 0
@@ -455,7 +490,7 @@
           ],
           "package": "",
           "window": "main",
-          "window_id": "d71e3fa",
+          "window_id": "f2d33ee",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -490,7 +525,7 @@
           "children": [],
           "package": "",
           "window": "main",
-          "window_id": "d71e3fa",
+          "window_id": "f2d33ee",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -525,7 +560,7 @@
           "children": [],
           "package": "",
           "window": "main",
-          "window_id": "d71e3fa",
+          "window_id": "f2d33ee",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -533,7 +568,7 @@
       ],
       "package": "",
       "window": "main",
-      "window_id": "d71e3fa",
+      "window_id": "f2d33ee",
       "window_type": "TYPE_BASE_APPLICATION",
       "window_kind": "application",
       "window_z": 0
@@ -543,7 +578,7 @@
   "text_available": true,
   "windows": [
     {
-      "id": "d71e3fa",
+      "id": "f2d33ee",
       "label": "main",
       "type_name": "TYPE_BASE_APPLICATION",
       "kind": "application",

@@ -1,8 +1,8 @@
 {
-  "acos_version": "0.2.2",
-  "apk_path": "fixtures/build/apps/sensor-probe.apk",
-  "apk_sha256": "786e4729894ea2816c544aa56ca06cfe9156753296abac7958e85f806ca428e2",
-  "scenario_path": "scenarios/sensors-scripted.yaml",
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/sensor-probe.apk",
+  "apk_sha256": "9129bb02c19460230af9fb9012488fbe2068634ec8cfaa2386b450723ca60cb6",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/scenarios/sensors-scripted.yaml",
   "scenario_sha256": "c21f87b1c9b7cd98f8a6673cc470a4787123e77d9cad84693878842e33be2ef6",
   "flags": [],
   "isolation": "process",

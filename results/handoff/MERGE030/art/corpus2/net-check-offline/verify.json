@@ -1,0 +1,65 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 17260544,
+    "wall_ms": 273
+  },
+  "ok": true,
+  "request_id": "req_6a88e_18e8df5037b15250",
+  "result": {
+    "artifacts_dir": "out/net-check-offline",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794929183695364065,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/net-check.apk",
+        "sha256": "219ff71bc04ba8c416de52f8ca932f9d71775152f606212c2e6b34e7f4d9d47e",
+        "sha256_12": "219ff71bc04b",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794927413484187622,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/scenarios/net-check-offline.yaml",
+        "sha256": "bdf07214647fdc363911aa8cef2ffa9046ef21f14597f4f324f15cf50c82a37d",
+        "sha256_12": "bdf07214647f",
+        "size_bytes": 2888
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "out/net-check-offline/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_net-check",
+  "status": "pass"
+}

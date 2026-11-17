@@ -1,0 +1,8 @@
+{
+  "request_id": "req_6a18c_18e8df4221f2376f",
+  "started_at": "2026-11-17T15:38:46.637Z",
+  "scenario": "scenarios/net-check.yaml",
+  "apk": "",
+  "acos_version": "0.3.0",
+  "overwrote_run_id": "req_6828f_18e8df197351fd3c"
+}

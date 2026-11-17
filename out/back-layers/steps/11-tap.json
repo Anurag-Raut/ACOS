@@ -1,0 +1,117 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "screenshot_changed": true,
+        "tree_changed": true
+      },
+      "expected": {
+        "screenshot_changed": true,
+        "tree_changed": true
+      },
+      "kind": "state_change",
+      "matched_node_ids": [],
+      "message": "UI tree and screenshot both changed",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 198,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/6.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/6.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/11-tap.json"
+    }
+  ],
+  "frame_seq": 6,
+  "index": 11,
+  "input": {
+    "expect_change": "auto",
+    "handled": true,
+    "handled_evidence": {
+      "acked": 2,
+      "published": 2,
+      "source": "guest"
+    },
+    "target": {
+      "hit": {
+        "clickable": true,
+        "consumer": {
+          "bounds": "[42,443][1038,561]",
+          "class": "android.widget.EditText",
+          "clickable": true,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n4_dev.acos.fixtures.backlayers:id/input",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.backlayers:id/input",
+          "scrollable": false,
+          "text": "Type here",
+          "visible_bounds": "[42,443][1038,561]",
+          "window": "main"
+        },
+        "method": "tree-geometry",
+        "node": {
+          "bounds": "[42,443][1038,561]",
+          "class": "android.widget.EditText",
+          "clickable": true,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n4_dev.acos.fixtures.backlayers:id/input",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.backlayers:id/input",
+          "scrollable": false,
+          "text": "Type here",
+          "visible_bounds": "[42,443][1038,561]",
+          "window": "main"
+        },
+        "suggest": null
+      },
+      "point": {
+        "x": 540,
+        "y": 502
+      },
+      "selector": {
+        "selector": "id==\"input\""
+      }
+    }
+  },
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 5,
+    "bound": "strict-event",
+    "first_change_ms": 106,
+    "frame_ms": 145,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "strict",
+    "pixels_changed": true,
+    "reason": "strict-event",
+    "settled": true,
+    "state_changed": null,
+    "strict_rule": "event",
+    "waited_ms": 198,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "tap",
+  "trust": "trusted"
+}

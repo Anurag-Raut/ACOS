@@ -4,13 +4,13 @@
       "actual": {
         "bounds": [
           0,
-          988,
+          610,
           1080,
-          1245
+          867
         ],
         "hint": "",
         "node": "n4_dev.acos.fixtures.a11yprobe:id/status",
-        "text": "a11y enabled=true installed=1 enabled_list=1 sent=1 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1",
+        "text": "a11y enabled=true installed=1 enabled_list=1 sent=1 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=1 swipe_y=11",
         "visible": true
       },
       "expected": {
@@ -57,14 +57,17 @@
   "settle": {
     "ack_ms": 5,
     "bound": "strict-event",
-    "first_change_ms": 57,
-    "frame_ms": 918,
+    "first_change_ms": 58,
+    "frame_ms": 991,
     "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
     "mode": "strict",
     "pixels_changed": true,
+    "reason": "strict-event",
     "settled": true,
     "state_changed": null,
-    "strict_rule": "event"
+    "strict_rule": "event",
+    "waited_ms": 0,
+    "waited_ms_source": "step"
   },
   "status": "pass",
   "step": "assert_text",

@@ -2,50 +2,50 @@
   "mode": "referenced",
   "decision": "prune-unreferenced",
   "reason": "passing run (mode `referenced`): declared evidence plus the first and last frame kept, intermediate frames and mirrored captures pruned",
-  "kept_files": 45,
-  "kept_bytes": 2996612,
+  "kept_files": 46,
+  "kept_bytes": 3494768,
   "pruned_files": 10,
-  "pruned_bytes": 1898642,
+  "pruned_bytes": 2270919,
   "pruned": [
     {
-      "path": "art-frames/live-frames/acos-c1-layer3-frame-116-g116-c11.png",
-      "bytes": 277507
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-113-g113-c10.png",
+      "bytes": 287889
     },
     {
-      "path": "art-frames/live-frames/acos-c1-layer3-frame-42-g42-c5.png",
-      "bytes": 164067
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-113-g113-c9.png",
+      "bytes": 287889
     },
     {
-      "path": "art-frames/live-frames/acos-c1-layer3-frame-42-g42-c6.png",
-      "bytes": 164067
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-165-g165-c11.png",
+      "bytes": 225236
     },
     {
-      "path": "art-frames/live-frames/acos-c1-layer3-frame-43-g43-c7.png",
-      "bytes": 184348
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-59-g59-c5.png",
+      "bytes": 199461
     },
     {
-      "path": "art-frames/live-frames/acos-c1-layer3-frame-44-g44-c8.png",
-      "bytes": 205225
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-59-g59-c6.png",
+      "bytes": 199461
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-60-g60-c7.png",
+      "bytes": 249817
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-61-g61-c8.png",
+      "bytes": 270693
     },
     {
       "path": "art-frames/live-frames/acos-c1-layer3-frame-7-g7-c2.png",
-      "bytes": 152862
+      "bytes": 183491
     },
     {
       "path": "art-frames/live-frames/acos-c1-layer3-frame-7-g7-c3.png",
-      "bytes": 152862
+      "bytes": 183491
     },
     {
       "path": "art-frames/live-frames/acos-c1-layer3-frame-7-g7-c4.png",
-      "bytes": 152862
-    },
-    {
-      "path": "art-frames/live-frames/acos-c1-layer3-frame-79-g79-c10.png",
-      "bytes": 222421
-    },
-    {
-      "path": "art-frames/live-frames/acos-c1-layer3-frame-79-g79-c9.png",
-      "bytes": 222421
+      "bytes": 183491
     }
   ]
 }

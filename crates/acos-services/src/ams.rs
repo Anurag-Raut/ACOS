@@ -1213,7 +1213,15 @@ impl AmsState {
         const CLEAR_TOP: i32 = 0x0400_0000;
         /// `Intent.FLAG_ACTIVITY_SINGLE_TOP` (MPROC7).
         const SINGLE_TOP: i32 = 0x2000_0000;
-        const HONOURED: i32 = NEW_TASK | CLEAR_TOP | SINGLE_TOP;
+        /// `Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED`: what a launcher-icon
+        /// start carries (`NEW_TASK|RESET_TASK_IF_NEEDED` = `0x10200000`). AOSP
+        /// runs `ActivityStarter.resetTaskIfNeeded` over the task stack; ACOS
+        /// keeps one task per process with no affinity clusters, so there is
+        /// nothing to reset — the flag is honoured as the no-op it is here
+        /// (accepting it is not "silently ignoring" a launch-affecting flag:
+        /// NEW_TASK already selects the same behaviour).
+        const RESET_TASK_IF_NEEDED: i32 = 0x0020_0000;
+        const HONOURED: i32 = NEW_TASK | CLEAR_TOP | SINGLE_TOP | RESET_TASK_IF_NEEDED;
         if flags & !HONOURED != 0 {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: "android.app.IActivityManager".into(),

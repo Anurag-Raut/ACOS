@@ -20,7 +20,7 @@
     "doc": "docs/SANDBOX_CERTIFICATION.md",
     "section": "§8.7"
   },
-  "duration_ms": 1333,
+  "duration_ms": 961,
   "evidence": [
     {
       "kind": "tree",
@@ -37,6 +37,74 @@
   ],
   "frame_seq": 11,
   "index": 12,
+  "input": {
+    "expect_change": "auto",
+    "handled": true,
+    "handled_evidence": {
+      "acked": 2,
+      "published": 2,
+      "source": "guest"
+    },
+    "target": {
+      "hit": {
+        "clickable": true,
+        "consumer": {
+          "bounds": "[24,370][1056,496]",
+          "class": "android.widget.Button",
+          "clickable": true,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n4_",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "text": "Telephony",
+          "visible_bounds": "[24,370][1056,496]",
+          "window": "main"
+        },
+        "method": "tree-geometry",
+        "node": {
+          "bounds": "[24,370][1056,496]",
+          "class": "android.widget.Button",
+          "clickable": true,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n4_",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "text": "Telephony",
+          "visible_bounds": "[24,370][1056,496]",
+          "window": "main"
+        },
+        "suggest": null
+      },
+      "node": {
+        "bounds": "[24,370][1056,496]",
+        "class": "android.widget.Button",
+        "clickable": true,
+        "content_desc": "",
+        "enabled": true,
+        "focused": false,
+        "id": "n4_",
+        "password": false,
+        "resource_id": "",
+        "scrollable": false,
+        "text": "Telephony",
+        "visible_bounds": "[24,370][1056,496]",
+        "window": "main"
+      },
+      "point": {
+        "x": 540,
+        "y": 433
+      },
+      "selector": {
+        "selector": "text==\"Telephony\""
+      }
+    }
+  },
   "provenance": {
     "frame": "host-observed",
     "host_input": "host-observed",
@@ -46,14 +114,17 @@
   "settle": {
     "ack_ms": 5,
     "bound": "strict-event",
-    "first_change_ms": 121,
-    "frame_ms": 1079,
+    "first_change_ms": 56,
+    "frame_ms": 944,
     "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
     "mode": "strict",
     "pixels_changed": true,
+    "reason": "strict-event",
     "settled": true,
     "state_changed": null,
-    "strict_rule": "event"
+    "strict_rule": "event",
+    "waited_ms": 961,
+    "waited_ms_source": "step"
   },
   "status": "pass",
   "step": "tap",

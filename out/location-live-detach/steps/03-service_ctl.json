@@ -76,7 +76,7 @@
             "fidelity": "scripted",
             "id": "location",
             "profile": "scripted",
-            "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 1 register(s), 2 fix(es) delivered to the app (last gps lat 37.422 lng -122.0841); geocoder not present (framework no-geocoder path)",
+            "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 2 register(s), 3 fix(es) delivered to the app (last gps lat 37.422 lng -122.0841); geocoder not present (framework no-geocoder path)",
             "state": "attached"
           },
           {
@@ -104,6 +104,24 @@
             "id": "hw.biometric",
             "profile": "off",
             "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+            "state": "off"
+          },
+          {
+            "attach": "at-launch",
+            "details": null,
+            "fidelity": "off",
+            "id": "network",
+            "profile": "off",
+            "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+            "state": "off"
+          },
+          {
+            "attach": "at-launch",
+            "details": null,
+            "fidelity": "off",
+            "id": "webview",
+            "profile": "off",
+            "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
             "state": "off"
           },
           {
@@ -201,10 +219,11 @@
         "op": "set_location",
         "value": {
           "accuracy": 4.0,
-          "delivered": 2,
+          "delivered": 3,
           "lat": 37.422,
           "lng": -122.0841,
           "location_enabled": true,
+          "pending_intent_fires": 1,
           "provider": "gps",
           "provider_enabled": true,
           "stored": true
@@ -225,7 +244,7 @@
     "doc": "docs/SANDBOX_CERTIFICATION.md",
     "section": "§8.7"
   },
-  "duration_ms": 0,
+  "duration_ms": 1,
   "evidence": [
     {
       "kind": "step",

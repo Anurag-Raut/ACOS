@@ -1,10 +1,31 @@
 {
   "mode": "referenced",
-  "decision": "keep-all",
-  "reason": "status `timeout` is not a pass: a non-pass run keeps all of its artifacts",
-  "kept_files": 43,
-  "kept_bytes": 3276614,
-  "pruned_files": 0,
-  "pruned_bytes": 0,
-  "pruned": []
+  "decision": "prune-unreferenced",
+  "reason": "passing run (mode `referenced`): declared evidence plus the first and last frame kept, intermediate frames and mirrored captures pruned",
+  "kept_files": 40,
+  "kept_bytes": 2018034,
+  "pruned_files": 5,
+  "pruned_bytes": 912437,
+  "pruned": [
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-113-g113-c8.png",
+      "bytes": 242063
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-59-g59-c4.png",
+      "bytes": 125240
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-59-g59-c5.png",
+      "bytes": 125240
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-61-g61-c6.png",
+      "bytes": 177831
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-7-g7-c2.png",
+      "bytes": 242063
+    }
+  ]
 }

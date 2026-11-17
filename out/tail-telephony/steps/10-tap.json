@@ -20,7 +20,7 @@
     "doc": "docs/SANDBOX_CERTIFICATION.md",
     "section": "§8.7"
   },
-  "duration_ms": 1278,
+  "duration_ms": 947,
   "evidence": [
     {
       "kind": "tree",
@@ -37,6 +37,74 @@
   ],
   "frame_seq": 9,
   "index": 10,
+  "input": {
+    "expect_change": "auto",
+    "handled": true,
+    "handled_evidence": {
+      "acked": 2,
+      "published": 2,
+      "source": "guest"
+    },
+    "target": {
+      "hit": {
+        "clickable": true,
+        "consumer": {
+          "bounds": "[24,1378][1056,1504]",
+          "class": "android.widget.Button",
+          "clickable": true,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n4_",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "text": "Send SMS",
+          "visible_bounds": "[24,1378][1056,1504]",
+          "window": "main"
+        },
+        "method": "tree-geometry",
+        "node": {
+          "bounds": "[24,1378][1056,1504]",
+          "class": "android.widget.Button",
+          "clickable": true,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n4_",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "text": "Send SMS",
+          "visible_bounds": "[24,1378][1056,1504]",
+          "window": "main"
+        },
+        "suggest": null
+      },
+      "node": {
+        "bounds": "[24,1378][1056,1504]",
+        "class": "android.widget.Button",
+        "clickable": true,
+        "content_desc": "",
+        "enabled": true,
+        "focused": false,
+        "id": "n4_",
+        "password": false,
+        "resource_id": "",
+        "scrollable": false,
+        "text": "Send SMS",
+        "visible_bounds": "[24,1378][1056,1504]",
+        "window": "main"
+      },
+      "point": {
+        "x": 540,
+        "y": 1441
+      },
+      "selector": {
+        "selector": "text==\"Send SMS\""
+      }
+    }
+  },
   "provenance": {
     "frame": "host-observed",
     "host_input": "host-observed",
@@ -46,14 +114,17 @@
   "settle": {
     "ack_ms": 5,
     "bound": "strict-event",
-    "first_change_ms": 101,
-    "frame_ms": 1028,
+    "first_change_ms": 55,
+    "frame_ms": 933,
     "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
     "mode": "strict",
     "pixels_changed": true,
+    "reason": "strict-event",
     "settled": true,
     "state_changed": null,
-    "strict_rule": "event"
+    "strict_rule": "event",
+    "waited_ms": 947,
+    "waited_ms_source": "step"
   },
   "status": "pass",
   "step": "tap",

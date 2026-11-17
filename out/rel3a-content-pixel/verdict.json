@@ -1,0 +1,780 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.settletab",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/settle-lab.apk",
+    "sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4"
+  },
+  "artifacts_overwrote_run": "req_69878_18e8df310d514fcd",
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "out/rel3a-content-pixel",
+    "engine_report": "out/rel3a-content-pixel/engine.json",
+    "retention": "out/rel3a-content-pixel/retention.json",
+    "verdict": "out/rel3a-content-pixel/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "extra_apks": [],
+  "failure": {
+    "code": "ASSERTION_FAILED",
+    "error": {
+      "class": "assertion",
+      "code": "ASSERTION_FAILED",
+      "details": {
+        "diff": {
+          "actual": {
+            "pixel_evidence": false,
+            "settle": "content"
+          },
+          "detail": "content settle proves the tree's text/nodes/bounds/state stopped changing; it never proves the pixels stopped changing",
+          "expected": {
+            "pixel_evidence": true,
+            "settle": "strict"
+          },
+          "path": "frame.settle"
+        },
+        "pixel_evidence": false,
+        "reason": "content_settle_pixel",
+        "settle": {
+          "bound": "content-stable",
+          "elapsed_ms": 338,
+          "frame_seq": 67,
+          "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+          "mode": "content",
+          "pixel_evidence": false,
+          "probe_seq": 130,
+          "probe_seq_first": 112,
+          "probe_seq_floor": 109,
+          "settled": true,
+          "signature": "edadeba6fb9871d3",
+          "signature_fields": [
+            "class",
+            "resource_id",
+            "text",
+            "content_desc",
+            "hint",
+            "visible",
+            "enabled",
+            "focused",
+            "clickable",
+            "scrollable",
+            "checked",
+            "selected",
+            "window",
+            "window_kind",
+            "window_z",
+            "package"
+          ],
+          "signature_tree_fields": [
+            "package",
+            "truncated",
+            "text_available"
+          ],
+          "traversals": 19,
+          "window_ms": 300
+        },
+        "step_kind": "assert_region"
+      },
+      "hint": "A pixel/frame assertion needs a pixel-settled frame: use `settle: strict` (the default) and let the screen stop animating, or assert on the UI tree (assert_text/assert_visible/assert_state) which content settle may back.",
+      "message": "assert_region: the bound frame was settled by `settle: content` (UI tree content stable), which is not pixel evidence - the pixels may still be animating",
+      "retryable": false
+    },
+    "step_index": 4,
+    "summary": "step 4 (assert_region) fail"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-17T15:42:21.142Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "modules": [
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "real",
+      "id": "core",
+      "profile": "real",
+      "reason": null,
+      "state": "attached"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "accessibility",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.permissions",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.notifications",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "sensors",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "feedback.vibrator",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "location",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "net.telephony",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.bluetooth",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.biometric",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "network",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "webview",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.usb",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.dropbox",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.nfc",
+      "profile": "off",
+      "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.wallpaper",
+      "profile": "off",
+      "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.print",
+      "profile": "off",
+      "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.search",
+      "profile": "off",
+      "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.usage",
+      "profile": "off",
+      "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.dpm",
+      "profile": "off",
+      "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.role",
+      "profile": "off",
+      "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "geo.country",
+      "profile": "off",
+      "reason": "off: a detected country is a location claim ACOS cannot back",
+      "state": "off"
+    }
+  ],
+  "notes": [
+    "stopped at step 4 (assert_region): fail; later steps were not executed",
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (keep-all): 26 file(s) / 2.2 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json",
+    "artifacts: --overwrite replaced the evidence of run req_69878_18e8df310d514fcd",
+    "fidelity: module `accessibility` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `sensors` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `feedback.vibrator` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `location` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `net.telephony` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.bluetooth` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.biometric` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `network` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `webview` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.usb` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.dropbox` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.nfc` is off (off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.wallpaper` is off (off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.print` is off (off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.search` is off (off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.usage` is off (off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.dpm` is off (off: no managed device or profile; every device-policy answer would be invented policy state); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.role` is off (off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `geo.country` is off (off: a detected country is a location claim ACOS cannot back); behaviour that needs it is unsupported, never a pass"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794521211436188681,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/settle-lab.apk",
+      "sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4",
+      "sha256_12": "3ea3d28b33ba",
+      "size_bytes": 21082
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794927422586519480,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/scenarios/rel3a-content-pixel.yaml",
+      "sha256": "66c7387720c3fb42246f4baef846c78d3071698c2e0388d387d707ee63da082e",
+      "sha256_12": "66c7387720c3",
+      "size_bytes": 1501
+    },
+    "scenario_engine": "art",
+    "warnings": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/settle-lab.apk",
+    "apk_sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/scenarios/rel3a-content-pixel.yaml",
+    "scenario_sha256": "66c7387720c3fb42246f4baef846c78d3071698c2e0388d387d707ee63da082e"
+  },
+  "request_id": "req_6be57_18e8df7363af571f",
+  "resources": {
+    "events": 136,
+    "frames_captured": 4,
+    "memory_mib": 16,
+    "peak_rss_bytes": 16855040,
+    "sessions": 1,
+    "steps": 5,
+    "wall_ms": 2804
+  },
+  "scenario": {
+    "name": "rel3a-content-pixel",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/scenarios/rel3a-content-pixel.yaml",
+    "sha256": "66c7387720c3fb42246f4baef846c78d3071698c2e0388d387d707ee63da082e"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=71MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p441952-i448794.scope)",
+    "code": null,
+    "disk_free_bytes": 239566168064,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "out/rel3a-content-pixel/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_settle-lab",
+  "started_at": "2026-11-17T15:42:18.338Z",
+  "status": "fail",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 159,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 55,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 7,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 54,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 372,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/25.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/25.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-tap.json"
+        }
+      ],
+      "frame_seq": 25,
+      "index": 2,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[21,1224][415,1340]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.settletab:id/progress_start",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.settletab:id/progress_start",
+              "scrollable": false,
+              "text": "Infinite progress",
+              "visible_bounds": "[21,1224][415,1340]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[21,1224][415,1340]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.settletab:id/progress_start",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.settletab:id/progress_start",
+              "scrollable": false,
+              "text": "Infinite progress",
+              "visible_bounds": "[21,1224][415,1340]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 218,
+            "y": 1282
+          },
+          "selector": {
+            "selector": "id==\"progress_start\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 328,
+        "frame_seq": 25,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 28,
+        "probe_seq_first": 9,
+        "probe_seq_floor": 8,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "edadeba6fb9871d3",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 20,
+        "waited_ms": 328,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 2217,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/67.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/67.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-wait_for.json"
+        }
+      ],
+      "frame_seq": 67,
+      "index": 3,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 338,
+        "fallback_from": "strict",
+        "fallback_reason": "strict-did-not-settle",
+        "frame_seq": 67,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 130,
+        "probe_seq_first": 112,
+        "probe_seq_floor": 109,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "edadeba6fb9871d3",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 19,
+        "waited_ms": 338,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "pixel_evidence": false,
+            "settle": "content"
+          },
+          "diff": {
+            "actual": {
+              "pixel_evidence": false,
+              "settle": "content"
+            },
+            "detail": "content settle proves the tree's text/nodes/bounds/state stopped changing; it never proves the pixels stopped changing",
+            "expected": {
+              "pixel_evidence": true,
+              "settle": "strict"
+            },
+            "path": "frame.settle"
+          },
+          "expected": {
+            "pixel_evidence": true,
+            "settle": "strict"
+          },
+          "kind": "frame_binding",
+          "matched_node_ids": [],
+          "passed": false
+        }
+      ],
+      "duration_ms": 0,
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "details": {
+          "diff": {
+            "actual": {
+              "pixel_evidence": false,
+              "settle": "content"
+            },
+            "detail": "content settle proves the tree's text/nodes/bounds/state stopped changing; it never proves the pixels stopped changing",
+            "expected": {
+              "pixel_evidence": true,
+              "settle": "strict"
+            },
+            "path": "frame.settle"
+          },
+          "pixel_evidence": false,
+          "reason": "content_settle_pixel",
+          "settle": {
+            "bound": "content-stable",
+            "elapsed_ms": 338,
+            "frame_seq": 67,
+            "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+            "mode": "content",
+            "pixel_evidence": false,
+            "probe_seq": 130,
+            "probe_seq_first": 112,
+            "probe_seq_floor": 109,
+            "settled": true,
+            "signature": "edadeba6fb9871d3",
+            "signature_fields": [
+              "class",
+              "resource_id",
+              "text",
+              "content_desc",
+              "hint",
+              "visible",
+              "enabled",
+              "focused",
+              "clickable",
+              "scrollable",
+              "checked",
+              "selected",
+              "window",
+              "window_kind",
+              "window_z",
+              "package"
+            ],
+            "signature_tree_fields": [
+              "package",
+              "truncated",
+              "text_available"
+            ],
+            "traversals": 19,
+            "window_ms": 300
+          },
+          "step_kind": "assert_region"
+        },
+        "hint": "A pixel/frame assertion needs a pixel-settled frame: use `settle: strict` (the default) and let the screen stop animating, or assert on the UI tree (assert_text/assert_visible/assert_state) which content settle may back.",
+        "message": "assert_region: the bound frame was settled by `settle: content` (UI tree content stable), which is not pixel evidence - the pixels may still be animating",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/04-assert_region.json"
+        }
+      ],
+      "index": 4,
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "status": "fail",
+      "step": "assert_region"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "fail"
+}

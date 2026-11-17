@@ -1,12 +1,12 @@
 {
   "frame": {
     "frame_seq": 10,
-    "produced_at": "2026-11-16T07:33:58.693Z",
+    "produced_at": "2026-11-17T15:37:58.772Z",
     "cause_id": "art",
     "width": 1080,
     "height": 2400,
     "density": 420,
-    "content_hash": "fc9e1695a7cb7acfec18e1fb6adb812c",
+    "content_hash": "f94c5e829789e2561ee02c9ed04337ed",
     "meaningful": true,
     "display_origin": [
       0,
@@ -161,7 +161,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "716714c",
+                      "window_id": "9ac83a1",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -196,7 +196,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "716714c",
+                      "window_id": "9ac83a1",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -231,7 +231,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "716714c",
+                      "window_id": "9ac83a1",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -266,7 +266,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "716714c",
+                      "window_id": "9ac83a1",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -301,7 +301,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "716714c",
+                      "window_id": "9ac83a1",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -336,7 +336,112 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "716714c",
+                      "window_id": "9ac83a1",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.Button",
+                      "resource_id": "",
+                      "text": "Stop listening",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        1000,
+                        1056,
+                        1126
+                      ],
+                      "visible_bounds": [
+                        24,
+                        1000,
+                        1056,
+                        1126
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "9ac83a1",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.Button",
+                      "resource_id": "",
+                      "text": "Report callbacks",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        1126,
+                        1056,
+                        1252
+                      ],
+                      "visible_bounds": [
+                        24,
+                        1126,
+                        1056,
+                        1252
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "9ac83a1",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.Button",
+                      "resource_id": "",
+                      "text": "Weaken listeners",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        24,
+                        1252,
+                        1056,
+                        1378
+                      ],
+                      "visible_bounds": [
+                        24,
+                        1252,
+                        1056,
+                        1378
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "9ac83a1",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -350,15 +455,15 @@
                       "content_desc": "",
                       "bounds": [
                         24,
-                        1000,
+                        1378,
                         1056,
-                        1126
+                        1504
                       ],
                       "visible_bounds": [
                         24,
-                        1000,
+                        1378,
                         1056,
-                        1126
+                        1504
                       ],
                       "visible": true,
                       "enabled": true,
@@ -371,7 +476,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "716714c",
+                      "window_id": "9ac83a1",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -380,20 +485,20 @@
                       "id": "n4_dev.acos.fixtures.tailprobe:id/status",
                       "class": "android.widget.TextView",
                       "resource_id": "dev.acos.fixtures.tailprobe:id/status",
-                      "text": "READY\nTELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"\nCALL state=IDLE number=null\nCALL state=IDLE number=null\nCALL state=RINGING number=+15550002222\nSMS from=+15550001111 body=ACOS SMS\nSMS-SENT queued to=+15557654321\n",
+                      "text": "READY\nTELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"\nCALL state=IDLE number=null listener=1\nCALL state=IDLE number=null listener=2\nCALL state=RINGING number=+15550002222 listener=1\nCALL state=RINGING number=+15550002222 listener=2\nSMS from=+15550001111 body=ACOS SMS\nSMS-SENT queued to=+15557654321\n",
                       "hint": "",
                       "content_desc": "",
                       "bounds": [
                         24,
-                        1126,
+                        1504,
                         1056,
-                        1521
+                        1942
                       ],
                       "visible_bounds": [
                         24,
-                        1126,
+                        1504,
                         1056,
-                        1521
+                        1942
                       ],
                       "visible": true,
                       "enabled": true,
@@ -406,7 +511,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "716714c",
+                      "window_id": "9ac83a1",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -414,7 +519,7 @@
                   ],
                   "package": "",
                   "window": "main",
-                  "window_id": "716714c",
+                  "window_id": "9ac83a1",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -422,7 +527,7 @@
               ],
               "package": "",
               "window": "main",
-              "window_id": "716714c",
+              "window_id": "9ac83a1",
               "window_type": "TYPE_BASE_APPLICATION",
               "window_kind": "application",
               "window_z": 0
@@ -513,7 +618,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "716714c",
+                      "window_id": "9ac83a1",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -542,7 +647,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "716714c",
+                      "window_id": "9ac83a1",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -550,7 +655,7 @@
                   ],
                   "package": "",
                   "window": "main",
-                  "window_id": "716714c",
+                  "window_id": "9ac83a1",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -579,7 +684,7 @@
                   "children": [],
                   "package": "",
                   "window": "main",
-                  "window_id": "716714c",
+                  "window_id": "9ac83a1",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -587,7 +692,7 @@
               ],
               "package": "",
               "window": "main",
-              "window_id": "716714c",
+              "window_id": "9ac83a1",
               "window_type": "TYPE_BASE_APPLICATION",
               "window_kind": "application",
               "window_z": 0
@@ -595,7 +700,7 @@
           ],
           "package": "",
           "window": "main",
-          "window_id": "716714c",
+          "window_id": "9ac83a1",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -630,7 +735,7 @@
           "children": [],
           "package": "",
           "window": "main",
-          "window_id": "716714c",
+          "window_id": "9ac83a1",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -665,7 +770,7 @@
           "children": [],
           "package": "",
           "window": "main",
-          "window_id": "716714c",
+          "window_id": "9ac83a1",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -673,7 +778,7 @@
       ],
       "package": "",
       "window": "main",
-      "window_id": "716714c",
+      "window_id": "9ac83a1",
       "window_type": "TYPE_BASE_APPLICATION",
       "window_kind": "application",
       "window_z": 0
@@ -683,7 +788,7 @@
   "text_available": true,
   "windows": [
     {
-      "id": "716714c",
+      "id": "9ac83a1",
       "label": "main",
       "type_name": "TYPE_BASE_APPLICATION",
       "kind": "application",

@@ -1,0 +1,128 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "infra_timeout",
+    "code": "TIMEOUT",
+    "details": {
+      "content_confirmation_pending": false,
+      "elapsed_ms": 30335,
+      "last_frame_seq": 3283,
+      "offscreen_match": null,
+      "polls": 27,
+      "require_visible": true,
+      "selector": {
+        "id": "finish"
+      },
+      "settle": {
+        "mode": "content",
+        "reason": "unsettled",
+        "settled": false,
+        "source": "executor",
+        "waited_ms": 1526
+      },
+      "timeout_ms": 30000
+    },
+    "hint": "The live tree kept being re-traversed until the deadline. Increase `timeout_ms` if the app is genuinely slow, or fix the selector/state; a timeout is a structured failure… [ACOS: result.error.hint bounded for size — 276 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …tep's `settle` record names the rule(s) it asked for and why each observation failed.",
+    "message": "wait_for timed out after 30000 ms: selector id==\"finish\" did not satisfy the condition (require_visible=true)",
+    "retryable": true
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16478208,
+    "wall_ms": 31562
+  },
+  "ok": false,
+  "request_id": "req_6baa4_18e8df6bd14432d7",
+  "result": {
+    "artifacts_dir": "out/mproc3-two-process",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 3,
+      "index": 3,
+      "kind": "wait_for",
+      "message": "wait_for timed out after 30000 ms: selector id==\"finish\" did not satisfy the condition (require_visible=true)",
+      "status": "timeout"
+    },
+    "failure": {
+      "code": "TIMEOUT",
+      "error": {
+        "class": "infra_timeout",
+        "code": "TIMEOUT",
+        "details": {
+          "content_confirmation_pending": false,
+          "elapsed_ms": 30335,
+          "last_frame_seq": 3283,
+          "offscreen_match": null,
+          "polls": 27,
+          "require_visible": true,
+          "selector": {
+            "id": "finish"
+          },
+          "settle": {
+            "mode": "content",
+            "reason": "unsettled",
+            "settled": false,
+            "source": "executor",
+            "waited_ms": 1526
+          },
+          "timeout_ms": 30000
+        },
+        "hint": "… [ACOS: identical to result.error.hint (276 bytes), not repeated; it begins: The live tree kept being re-traversed until the deadline. Increase `timeout_ms` if the app is genuinely slow, or fix the selector/state; a timeout is a structured failure, never a pass. The step's `settle` record names the rule(s) it asked for and why each observation failed.] …",
+        "message": "wait_for timed out after 30000 ms: selector id==\"finish\" did not satisfy the condition (require_visible=true)",
+        "retryable": true
+      },
+      "step_index": 3,
+      "summary": "step 3 (wait_for) timeout"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794929184752393234,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/proc-a.apk",
+        "sha256": "4402b23ec97a18903d0db6ffe6d35a9be2c7604a8f27be48fa30922a12f22d43",
+        "sha256_12": "4402b23ec97a",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794927413484187622,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/scenarios/mproc3-two-process.yaml",
+        "sha256": "cfd53ea0e2609983c7f2651de7b3921ba0b399fe82d492b29b4fb8d27d8f96fd",
+        "sha256_12": "cfd53ea0e260",
+        "size_bytes": 5479
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "out/mproc3-two-process/verdict.json",
+    "verdict_status": "timeout"
+  },
+  "session_id": "s_art_proc-a",
+  "status": "timeout"
+}

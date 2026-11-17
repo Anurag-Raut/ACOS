@@ -21,7 +21,7 @@
               2400
             ],
             "focus": true,
-            "id": "c9a0208",
+            "id": "572cd66",
             "kind": "application",
             "label": "main",
             "touchable": true,
@@ -36,7 +36,7 @@
               488
             ],
             "focus": false,
-            "id": "f707002",
+            "id": "a71423",
             "kind": "accessibility_overlay",
             "label": "window-2032#1",
             "touchable": false,
@@ -89,14 +89,17 @@
   "settle": {
     "ack_ms": 5,
     "bound": "strict-event",
-    "first_change_ms": 57,
-    "frame_ms": 918,
+    "first_change_ms": 58,
+    "frame_ms": 991,
     "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
     "mode": "strict",
     "pixels_changed": true,
+    "reason": "strict-event",
     "settled": true,
     "state_changed": null,
-    "strict_rule": "event"
+    "strict_rule": "event",
+    "waited_ms": 0,
+    "waited_ms_source": "step"
   },
   "status": "pass",
   "step": "assert_windows",

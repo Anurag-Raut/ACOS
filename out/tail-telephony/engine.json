@@ -11,6 +11,7 @@
         "screenshot",
         "tap",
         "tap_text",
+        "swipe",
         "type_text",
         "key",
         "rotate",
@@ -42,6 +43,7 @@
       "tree": "guest-asserted"
     },
     "explicit": true,
+    "extra_apks": [],
     "insets": "report",
     "mode": "live",
     "modules": [
@@ -133,6 +135,24 @@
         "id": "hw.biometric",
         "profile": "off",
         "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "network",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "webview",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
         "state": "off"
       },
       {
@@ -228,9 +248,9 @@
     ],
     "session_exit": {
       "abi": null,
-      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=80MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2571066-i2629968.scope)",
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=70MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p433219-i467775.scope)",
       "code": null,
-      "disk_free_bytes": 237560209408,
+      "disk_free_bytes": 239934730240,
       "guest_crash": null,
       "guest_exit": 0,
       "guest_signal": null,
@@ -242,111 +262,112 @@
       "retryable": false,
       "stage": "teardown-evidence"
     },
+    "session_id": "verify-433210",
     "timing": {
-      "attributed_ms": 6574,
+      "attributed_ms": 3485,
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
-        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-099117b2e874fe99",
-        "input_hash": "099117b2e874fe99",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff",
+        "input_hash": "ff39b037f1d6b9ff",
         "mode": "shared-fixed"
       },
       "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
-      "session_start_ms": 160,
+      "session_start_ms": 158,
       "steps": [
         {
           "index": 0,
           "status": "pass",
           "step": "launch",
-          "wall_ms": 382
+          "wall_ms": 157
         },
         {
           "index": 1,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 288
+          "wall_ms": 54
         },
         {
           "index": 2,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 288
+          "wall_ms": 54
         },
         {
           "index": 3,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 288
+          "wall_ms": 54
         },
         {
           "index": 4,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 1239
+          "wall_ms": 954
         },
         {
           "index": 5,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 284
+          "wall_ms": 54
         },
         {
           "index": 6,
           "status": "pass",
           "step": "service_ctl",
-          "wall_ms": 1
+          "wall_ms": 0
         },
         {
           "index": 7,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 295
+          "wall_ms": 64
         },
         {
           "index": 8,
           "status": "pass",
           "step": "service_ctl",
-          "wall_ms": 1
+          "wall_ms": 0
         },
         {
           "index": 9,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 312
+          "wall_ms": 75
         },
         {
           "index": 10,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 1278
+          "wall_ms": 947
         },
         {
           "index": 11,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 290
+          "wall_ms": 54
         },
         {
           "index": 12,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 1333
+          "wall_ms": 961
         },
         {
           "index": 13,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 295
+          "wall_ms": 57
         }
       ],
-      "unattributed_ms": 17,
+      "unattributed_ms": 4,
       "unit": "ms",
-      "verdict_wall_ms": 6591
+      "verdict_wall_ms": 3489
     },
     "trust": "trusted",
     "unsupported_steps": []
   },
-  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
-  "request_id": "req_273b31_18e87637ced842cb",
+  "provenance_rule": null,
+  "request_id": "req_69c3a_18e8df36603e5be7",
   "verdict_status": "pass"
 }

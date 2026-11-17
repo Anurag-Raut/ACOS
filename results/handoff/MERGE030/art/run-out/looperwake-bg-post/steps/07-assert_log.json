@@ -1,0 +1,53 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 4,
+        "sample": [
+          "AcosLooperWake: go.click",
+          "AcosLooperWake: bg2-post t=7661321",
+          "AcosLooperWake: ui2-drain latency_ms=14 t=7661335",
+          "AcosLooperWake: ui2-setText t=7661335"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "^go\\.click",
+          "^bg2-post ",
+          "^ui2-drain latency_ms=[0-9]{1,3} ",
+          "^ui2-setText "
+        ],
+        "since_previous_step": false,
+        "tag": "AcosLooperWake"
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/07-assert_log.json"
+    }
+  ],
+  "index": 7,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

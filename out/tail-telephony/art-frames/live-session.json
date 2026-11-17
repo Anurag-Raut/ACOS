@@ -40,15 +40,15 @@
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
-        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-099117b2e874fe99",
-        "input_hash": "099117b2e874fe99",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff",
+        "input_hash": "ff39b037f1d6b9ff",
         "mode": "shared-fixed"
       },
       "buffer_generation": 1,
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 2571066,
+      "guest_process_group": 433219,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -140,6 +140,24 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
@@ -236,15 +254,15 @@
       "ok": true,
       "package": "dev.acos.fixtures.tailprobe",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-2571059-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-433212-1/view.sock",
       "width": 1080
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 81,
+      "kept": 84,
       "ok": true,
-      "total": 81
+      "total": 84
     },
     {
       "buffer_generation": 7,
@@ -258,9 +276,9 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 81,
+      "kept": 84,
       "ok": true,
-      "total": 81
+      "total": 84
     },
     {
       "buffer_generation": 7,
@@ -274,9 +292,9 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 81,
+      "kept": 84,
       "ok": true,
-      "total": 81
+      "total": 84
     },
     {
       "buffer_generation": 7,
@@ -290,9 +308,9 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 81,
+      "kept": 84,
       "ok": true,
-      "total": 81
+      "total": 84
     },
     {
       "buffer_generation": 7,
@@ -306,14 +324,14 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 81,
+      "kept": 84,
       "ok": true,
-      "total": 81
+      "total": 84
     },
     {
-      "buffer_generation": 42,
+      "buffer_generation": 59,
       "cmd": "tap",
-      "frame_number": 42,
+      "frame_number": 59,
       "frame_seq": 5,
       "handled": [
         true,
@@ -321,32 +339,32 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 41,
+      "probe_seq": 45,
       "x": 540.0,
       "y": 937.0
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 115,
+      "kept": 136,
       "ok": true,
-      "total": 115
+      "total": 136
     },
     {
-      "buffer_generation": 42,
+      "buffer_generation": 59,
       "cmd": "tree",
-      "frame_number": 42,
+      "frame_number": 59,
       "frame_seq": 6,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 42
+      "probe_seq": 46
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 115,
+      "kept": 136,
       "ok": true,
-      "total": 115
+      "total": 136
     },
     {
       "attached": [
@@ -453,6 +471,24 @@
           "state": "off"
         },
         {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
           "attach": "hot",
           "details": null,
           "fidelity": "off",
@@ -554,25 +590,25 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 115,
+      "kept": 136,
       "ok": true,
-      "total": 115
+      "total": 136
     },
     {
-      "buffer_generation": 43,
+      "buffer_generation": 60,
       "cmd": "tree",
-      "frame_number": 43,
+      "frame_number": 60,
       "frame_seq": 7,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 44
+      "probe_seq": 48
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 115,
+      "kept": 138,
       "ok": true,
-      "total": 115
+      "total": 138
     },
     {
       "attached": [
@@ -679,6 +715,24 @@
           "state": "off"
         },
         {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
           "attach": "hot",
           "details": null,
           "fidelity": "off",
@@ -776,37 +830,37 @@
         "body": "ACOS SMS",
         "from": "+15550001111",
         "matched": 1,
-        "pdu": "00040b915155001011f100006211617033650008c1e1730a9a36a7",
+        "pdu": "00040b915155001011f100006211715173750008c1e1730a9a36a7",
         "pdu_bytes": 27
       }
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 116,
+      "kept": 139,
       "ok": true,
-      "total": 116
+      "total": 139
     },
     {
-      "buffer_generation": 44,
+      "buffer_generation": 61,
       "cmd": "tree",
-      "frame_number": 44,
+      "frame_number": 61,
       "frame_seq": 8,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 46
+      "probe_seq": 50
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 117,
+      "kept": 141,
       "ok": true,
-      "total": 117
+      "total": 141
     },
     {
-      "buffer_generation": 79,
+      "buffer_generation": 113,
       "cmd": "tap",
-      "frame_number": 79,
+      "frame_number": 113,
       "frame_seq": 9,
       "handled": [
         true,
@@ -814,37 +868,37 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 79,
+      "probe_seq": 86,
       "x": 540.0,
-      "y": 1063.0
+      "y": 1441.0
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 152,
+      "kept": 194,
       "ok": true,
-      "total": 152
+      "total": 194
     },
     {
-      "buffer_generation": 79,
+      "buffer_generation": 113,
       "cmd": "tree",
-      "frame_number": 79,
+      "frame_number": 113,
       "frame_seq": 10,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 80
+      "probe_seq": 87
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 152,
+      "kept": 194,
       "ok": true,
-      "total": 152
+      "total": 194
     },
     {
-      "buffer_generation": 116,
+      "buffer_generation": 165,
       "cmd": "tap",
-      "frame_number": 116,
+      "frame_number": 165,
       "frame_seq": 11,
       "handled": [
         true,
@@ -852,25 +906,25 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 114,
+      "probe_seq": 123,
       "x": 540.0,
       "y": 433.0
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 188,
+      "kept": 246,
       "ok": true,
-      "total": 188
+      "total": 246
     },
     {
-      "buffer_generation": 116,
+      "buffer_generation": 165,
       "cmd": "tree",
-      "frame_number": 116,
+      "frame_number": 165,
       "frame_seq": 12,
       "ok": true,
-      "png": "out/tail-telephony/art-frames/live-frames/acos-c1-layer3-frame-116-g116-c12.png",
-      "probe_seq": 115
+      "png": "out/tail-telephony/art-frames/live-frames/acos-c1-layer3-frame-165-g165-c12.png",
+      "probe_seq": 124
     },
     {
       "attached": [
@@ -973,6 +1027,24 @@
           "id": "hw.biometric",
           "profile": "off",
           "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
           "state": "off"
         },
         {
