@@ -1,0 +1,45 @@
+# PERF4: one form-fast tap, publish-relative, from the host trace of each arm.
+# 'PERF4 stamp entry_fnv_us=' exists only in the instrumented build; it is the
+# REL3H pre-publish composite that cost 8.7-9.2 ms per tap.
+
+===== v022 (tap-split-v022-trace.log)
+   149023us pid=186223 HOST tap publish_begin x=157 y=616 ack_wait_ms=2500
+   154096us pid=186223 HOST tap acks_returned total_ms=5 seqs=[3, 4] acks=[(3, true, Some(5060)), (4, true, Some(5060))]
+   169184us pid=186223 HOST settle fast ready gen=2 probe_seq=2 first_change_ms=16 frame_ms=20
+   169213us pid=186223 HOST tap settle_done after_ms=20 settled=true mode=fast
+   165476us pid=186268 HOST tap publish_begin x=157 y=616 ack_wait_ms=2500
+   170553us pid=186268 HOST tap acks_returned total_ms=5 seqs=[3, 4] acks=[(3, true, Some(5061)), (4, true, Some(5060))]
+   185664us pid=186268 HOST settle fast ready gen=2 probe_seq=2 first_change_ms=17 frame_ms=21
+   185692us pid=186268 HOST tap settle_done after_ms=20 settled=true mode=fast
+   165282us pid=186478 HOST tap publish_begin x=157 y=616 ack_wait_ms=2500
+   170359us pid=186478 HOST tap acks_returned total_ms=5 seqs=[3, 4] acks=[(3, true, Some(5062)), (4, true, Some(5061))]
+   185473us pid=186478 HOST settle fast ready gen=2 probe_seq=2 first_change_ms=16 frame_ms=20
+   185504us pid=186478 HOST tap settle_done after_ms=20 settled=true mode=fast
+
+===== rel030 (tap-split-rel030-trace.log)
+   160656us pid=204150 HOST probe rx seq=2 cause=wake lag_ms=0 settled=true draw_seq=2 gen=2
+   169593us pid=204150 HOST probe rx seq=3 cause=dirty lag_ms=0 settled=true draw_seq=2 gen=2
+   156585us pid=204582 HOST tap publish_begin at (157,616) ack_wait_ms=2500
+   171578us pid=204582 HOST probe rx seq=2 cause=dirty lag_ms=0 settled=false draw_seq=2 gen=2
+   171607us pid=204582 HOST tap acks_returned total_ms=15 seqs=[3, 4] acks=[(3, true, Some(5129)), (4, true, Some(5128))]
+   186113us pid=204582 HOST settle fast ready gen=3 probe_seq=2 first_change_ms=15 frame_ms=30
+   186167us pid=204582 HOST tap settle_done after_ms=29 settled=true mode=fast
+   203265us pid=204582 HOST probe rx seq=3 cause=dirty lag_ms=0 settled=true draw_seq=4 gen=4
+   161422us pid=204717 HOST tap publish_begin at (157,616) ack_wait_ms=2500
+   170932us pid=204717 HOST probe rx seq=2 cause=dirty lag_ms=3 settled=false draw_seq=1 gen=2
+   176020us pid=204717 HOST tap acks_returned total_ms=14 seqs=[3, 4] acks=[(3, true, Some(5082)), (4, true, Some(5081))]
+   176049us pid=204717 HOST settle fast ready gen=3 probe_seq=2 first_change_ms=10 frame_ms=15
+
+===== fix (tap-split-fix-trace.log)
+   155499us pid=268907 HOST probe rx seq=2 cause=wake lag_ms=0 settled=true draw_seq=2 gen=2
+   165240us pid=268907 HOST probe rx seq=3 cause=dirty lag_ms=0 settled=true draw_seq=2 gen=2
+   135438us pid=269329 HOST tap publish_begin at (157,616) ack_wait_ms=2500
+   140515us pid=269329 HOST tap acks_returned total_ms=5 seqs=[3, 4] acks=[(3, true, Some(5064)), (4, true, Some(5064))]
+   152036us pid=269329 HOST probe rx seq=2 cause=dirty lag_ms=1 settled=false draw_seq=2 gen=2
+   152080us pid=269329 HOST settle fast ready gen=2 probe_seq=2 first_change_ms=17 frame_ms=15 commit_gen=2 draw_seq=2 own_draw=true
+   152120us pid=269329 HOST tap settle_done after_ms=16 settled=true mode=fast
+   167140us pid=269329 HOST probe rx seq=3 cause=wake lag_ms=0 settled=false draw_seq=3 gen=3
+   137073us pid=269427 HOST tap publish_begin at (157,616) ack_wait_ms=2500
+   142154us pid=269427 HOST tap acks_returned total_ms=5 seqs=[3, 4] acks=[(3, true, Some(5067)), (4, true, Some(5066))]
+   153476us pid=269427 HOST probe rx seq=2 cause=dirty lag_ms=0 settled=false draw_seq=2 gen=2
+   153518us pid=269427 HOST settle fast ready gen=2 probe_seq=2 first_change_ms=16 frame_ms=15 commit_gen=2 draw_seq=2 own_draw=true

@@ -1,0 +1,45 @@
+# v0.2.2 (tag) vs perf4 -- lattice-aware A/B (PERF-REL3)
+
+Arms: v0.2.2 (tag) = 1 file(s) [0a088f67]; perf4 = 1 file(s) [0a088f67]
+
+## 1. Old gate -- medians of per-rep p50s (unchanged rule)
+
+| metric | v0.2.2 (tag) | perf4 | delta | delta % | threshold | verdict |
+|---|---:|---:|---:|---:|---:|---|
+| M4 warm launch (strict) | 304.34 | 278.82 | -25.53 | -8.4% | ±5.00% / 2.00 | improved |
+| M4 warm launch (fast) | 167.36 | 143.49 | -23.87 | -14.3% | ±5.00% / 2.00 | improved |
+| M5 fresh screenshot (PNG) | 11.69 | 11.99 | 0.30 | +2.6% | ±10% / 2.00 | within-noise |
+| M6 reset -> first correct screen (strict) | 344.84 | 316.90 | -27.94 | -8.1% | ±6% / 2.00 | improved |
+| M6 reset -> first correct screen (fast) | 208.09 | 189.21 | -18.88 | -9.1% | ±9% / 2.00 | improved |
+| M7 UI tree with text (strict) | 41.34 | 31.87 | -9.47 | -22.9% | ±5.00% / 2.00 | improved |
+| M7 UI tree with text (fast) | 0.58 | 0.58 | 0.00 | +0.4% | ±27% / 2.00 | within-noise |
+| M8 tap -> settled, counter (strict) | 951.89 | 949.34 | -2.55 | -0.3% | ±6% / 2.00 | within-noise |
+| M8 tap -> settled, counter (fast) | 50.27 | 24.50 | -25.77 | -51.3% | ±5.00% / 2.00 | improved |
+| M8 tap -> settled, form (strict) | 931.08 | 930.78 | -0.31 | -0.0% | ±5.00% / 2.00 | within-noise |
+| M8 tap -> settled, form (fast) | 32.25 | 30.46 | -1.80 | -5.6% | ±14% / 2.00 | within-noise |
+| tap acknowledgement | 5.00 | 5.00 | 0.00 | +0.0% | ±5.00% / 2.00 | within-noise |
+| acos_destroy teardown_ms | 20.50 | 21.00 | 0.50 | +2.4% | ±10% / 2.00 | within-noise |
+| cpu_active_tap_strict_pct | 44.99 | 65.81 | 20.82 | +46.3% | ±10.00% / 0.20 | REGRESSION |
+| teardown_wall_ms | 21.17 | 21.74 | 0.57 | +2.7% | ±7% / 2.00 | within-noise |
+
+## 2. Pooled 5 %-trimmed mean, and 3. frame-slot shares
+
+| metric | n v0.2.2 (tag)/perf4 | v0.2.2 (tag) trimmed | perf4 trimmed | delta | delta % | frame ms | first slot v0.2.2 (tag)/perf4 | slot shares v0.2.2 (tag) | slot shares perf4 | verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|
+| M4 warm launch (fast) | 199/200 | 162.85 | 145.05 | -17.79 | -10.9% | 16.67 | 0%/4% | 2:47% 3:49% 4:4% 5:0% | 0:4% 1:80% 2:16% | improved |
+| M6 reset -> first correct screen (fast) | 200/200 | 204.60 | 183.82 | -20.78 | -10.2% | 16.67 | 0%/6% | 1:10% 2:24% 3:58% 4:8% 5:0% | 0:6% 1:26% 2:62% 3:6% | improved |
+| M8 tap -> settled, counter (fast) | 200/200 | 45.96 | 24.85 | -21.11 | -45.9% | 16.67 | 10%/50% | 0:10% 1:13% 2:72% 3:5% | 0:50% 1:50% | improved (slot-shift +40 pp) |
+| M8 tap -> settled, form (fast) | 200/200 | 32.25 | 29.72 | -2.54 | -7.9% | 16.67 | 100%/100% | 0:100% 1:0% | 0:100% 1:0% | improved |
+
+## 4. Verdict
+
+Lattice gate (proposal): pooled 5 percent-trimmed mean worse by > 5 percent and > 2 ms; a first-slot share shift >= 10 pp is flagged separately.
+
+* M4 warm launch (fast): improved -- trimmed 162.85 vs 145.05 (-17.79 ms, -10.9%), first-slot 0% vs 4%
+* M6 reset -> first correct screen (fast): improved -- trimmed 204.60 vs 183.82 (-20.78 ms, -10.2%), first-slot 0% vs 6%
+* M8 tap -> settled, counter (fast): improved -- trimmed 45.96 vs 24.85 (-21.11 ms, -45.9%), first-slot 10% vs 50% (SLOT-SHIFT +40 pp)
+* M8 tap -> settled, form (fast): improved -- trimmed 32.25 vs 29.72 (-2.54 ms, -7.9%), first-slot 100% vs 100%
+
+Old gate regressions: cpu_active_tap_strict_pct
+
+JSON: /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/03-ab/ab-compare.json

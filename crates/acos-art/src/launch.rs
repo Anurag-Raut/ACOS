@@ -3997,10 +3997,6 @@ fn wait_for_event_settled(
         .unwrap_or(false);
     let mut candidate: Option<ProbeSample> = None;
     let mut candidate_since = Instant::now();
-    // PERF4: the session's own change signal (see [`wait_for_change`]) and the
-    // tick this loop has already consumed.
-    let wake = settle_wake(probe_state);
-    let mut seen = 0u64;
     // REL3H2: the unhandled-input shortcut's own window. It is created once, at
     // entry, so the ack floor is a fixed point: samples older than it are never
     // eligible, however long the wait runs.
@@ -4432,9 +4428,15 @@ fn wait_for_event_settled(
             };
         }
         cgroup.sample();
-        // PERF4: block on the session's own change signal instead of a fixed
-        // poll period (see [`ProbeWake::wait`] / [`WAKE_LIVENESS_MS`]).
-        wait_for_change(&wake, &mut seen);
+        // PERF4: the strict rule keeps its own cadence. It binds on timestamps
+        // plus a 150 ms quiet window and a 24 ms confirmation window, so a 10 ms
+        // observation tick is at most 1 % of a ~950 ms strict wait (M8 strict is
+        // flat: 949.3 ms vs 951.9 ms over 5 reps), while an eager wake here cost
+        // 20 points of active CPU in the 20-tap charge cohort (65.8 % vs 45.0 %,
+        // `04-ab/ab-compare.txt`): every binder transaction of an animating
+        // screen re-reads the tree. The eager wait is used where it pays — the
+        // fast rule in [`wait_for_settled_observation`].
+        std::thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -4505,7 +4507,8 @@ fn wait_for_settled_observation(
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
     let mut last_wake = Instant::now();
     // PERF4: the session's own change signal (see [`wait_for_change`]) and the
-    // tick this loop has already consumed.
+    // tick this loop has already consumed. Signalled by the guest-line reader for
+    // a sample and by the peer loop for every applied transaction (the C1 store).
     let wake = settle_wake(probe_state);
     let mut seen = 0u64;
     loop {
@@ -4585,22 +4588,11 @@ fn wait_for_settled_observation(
         // Anything the equality cannot prove (a store without a draw, a draw
         // whose buffer has not landed, no draw counter on the sample) falls back
         // to the shipped rule exactly.
-        let own_draw_stored = match (&first_change_probe, &baseline_probe) {
-            (Some(commit), baseline) => {
-                commit.draw_seq > 0
-                    // every draw so far has been stored (a session may store
-                    // more than it draws, never fewer)
-                    && commit.generation >= commit.draw_seq
-                    // and the store the host holds arrived after this sample's
-                    // own draw, so it is not a pre-draw buffer left behind
-                    && last_change_ms >= commit.draw_ms
-                    // and the sample's draw is newer than the pre-publish one
-                    && baseline
-                        .as_ref()
-                        .map(|b| commit.draw_seq > b.draw_seq)
-                        .unwrap_or(true)
+        let own_draw_stored = match &first_change_probe {
+            Some(commit) => {
+                sample_own_draw_is_stored(commit, baseline_probe.as_ref(), last_change_ms)
             }
-            _ => false,
+            None => false,
         };
         let committed_store = first_change_probe
             .as_ref()
@@ -4725,11 +4717,55 @@ fn wait_for_settled_observation(
             };
         }
         cgroup.sample();
-        // PERF4: the same event-driven wait the strict rule uses. This was a
-        // 15 ms sleep, which quantized every fast settle to 15 ms and turned a
-        // sub-millisecond difference between builds into a whole step.
+        // PERF4: block on the session's own change signal instead of a 15 ms
+        // sleep. The sleep quantized every fast settle to its period, so a
+        // sub-millisecond difference between builds moved M8 by a whole step
+        // (the same build resolved `frame_ms` 16 or 29 depending on phase).
+        // Unlike the strict loop this one is on the action path the gate
+        // measures, and its iterations are cheap (one probe read, one store
+        // counter), so the eager wake is a win here.
         wait_for_change(&wake, &mut seen);
     }
+}
+
+/// PERF4: does the store the fast settle is about to bind hold the buffer of the
+/// very draw this sample's tree was taken at?
+///
+/// The shipped rule is *observation order*: a C1 store the host saw **after**
+/// the sample. That is satisfied by whichever store is noticed next, and because
+/// a draw's own buffer is stored before the probe sample describing it is
+/// parsed, it always binds the *following* frame. Measured: the same loop
+/// resolves `frame_ms` 16 or 29 ms depending on which side of a poll tick the
+/// store landed (`results/handoff/PERF4/diagnosis/tap-split-*.txt`).
+///
+/// The sample already reports the two facts that make the precise statement
+/// possible: `generation` is C1's store counter when the host parsed it and
+/// `draw_seq` is the guest's `ViewTreeObserver.OnDraw` counter. All three must
+/// hold, or the caller keeps the shipped rule:
+///
+/// * `generation >= draw_seq` — every draw so far has been stored (a session may
+///   store more than it draws, never fewer), so the sample's own draw has a
+///   buffer in C1;
+/// * `last_change_ms >= draw_ms` — the store the host holds arrived after that
+///   draw's own wall clock (`draw_ms` comes from the same clock), so it is not a
+///   pre-draw buffer left behind;
+/// * `draw_seq > baseline.draw_seq` (or no baseline) — the sample's draw is newer
+///   than the pre-publish one, so the tree cannot predate the gesture.
+///
+/// With all three the tree and the bound frame describe one UI state, which is
+/// the property the observation-order rule approximates; nothing here can bind a
+/// sample taken before the action.
+fn sample_own_draw_is_stored(
+    commit: &ProbeSample,
+    baseline: Option<&ProbeSample>,
+    last_change_ms: u64,
+) -> bool {
+    commit.draw_seq > 0
+        && commit.generation >= commit.draw_seq
+        && last_change_ms >= commit.draw_ms
+        && baseline
+            .map(|b| commit.draw_seq > b.draw_seq)
+            .unwrap_or(true)
 }
 
 /// Is this probe sample usable for a fast tree request that started when C1 was
@@ -4893,10 +4929,6 @@ fn wait_for_fast_tree(
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
     let base_seq = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
     let mut requested = false;
-    // PERF4: the sample this loop waits for is signalled by the guest-line
-    // reader (see [`wait_for_change`]).
-    let wake = settle_wake(probe_state);
-    let mut seen = 0u64;
     loop {
         let (unsupported_seq, marker) = latest_unsupported(probe_state);
         if unsupported_seq > unsupported_baseline {
@@ -4935,9 +4967,7 @@ fn wait_for_fast_tree(
             };
         }
         cgroup.sample();
-        // PERF4: a probe sample is the fact this loop waits for, and the
-        // guest-line reader signals it; wait for that instead of polling.
-        wait_for_change(&wake, &mut seen);
+        std::thread::sleep(Duration::from_millis(2));
     }
 }
 
@@ -7808,6 +7838,88 @@ mod probe_line_tests {
             window_gone: false,
             animations_on: None,
         }
+    }
+
+    /// PERF4: the fast settle binds the sample's *own* draw only when the
+    /// guest/C1 counters prove that draw's buffer is in C1; every other shape
+    /// keeps the shipped "a store observed after the sample" rule, so this can
+    /// only ever move the bind earlier for a sample whose frame is already
+    /// there — never bind a sample from before the action.
+    #[test]
+    fn a_fast_commit_binds_its_own_draw_only_with_proof() {
+        let mut commit = sample(7, 3); // generation (C1 stores) = 3
+        commit.draw_seq = 2; // the guest's draw counter
+        commit.draw_ms = 1_000; // same clock as the host's store stamps
+        let mut baseline = sample(3, 1);
+        baseline.draw_seq = 1;
+        // Every draw stored, the store arrived after this draw, and the draw is
+        // newer than the pre-publish one: bind at once.
+        assert!(sample_own_draw_is_stored(&commit, Some(&baseline), 1_004));
+
+        // Stores behind draws: the sample's own buffer may not be in C1 yet.
+        let mut behind = commit.clone();
+        behind.generation = 1;
+        assert!(!sample_own_draw_is_stored(&behind, Some(&baseline), 1_004));
+
+        // The newest store predates this draw: a pre-draw buffer.
+        assert!(!sample_own_draw_is_stored(&commit, Some(&baseline), 999));
+
+        // The tree was taken at the pre-publish draw.
+        let mut same_draw = commit.clone();
+        same_draw.draw_seq = 1;
+        assert!(!sample_own_draw_is_stored(&same_draw, Some(&baseline), 1_004));
+
+        // No draw counter on the sample (a non-event sample): never a shortcut.
+        let mut no_draw = commit.clone();
+        no_draw.draw_seq = 0;
+        assert!(!sample_own_draw_is_stored(&no_draw, Some(&baseline), 1_004));
+
+        // No pre-publish sample (a first observation): the draw must still be
+        // real and stored.
+        assert!(sample_own_draw_is_stored(&commit, None, 1_004));
+        assert!(!sample_own_draw_is_stored(&no_draw, None, 1_004));
+    }
+
+    /// PERF4: the settle wait is woken by a change signal, and a signal that
+    /// arrived before the wait is not lost (the tick is compared, not cleared) —
+    /// the two properties the loops depend on now that they no longer sleep.
+    #[test]
+    fn the_change_wake_is_event_driven_and_loses_no_edge() {
+        let wake = std::sync::Arc::new(ProbeWake::default());
+        let mut seen = 0u64;
+
+        // No event: the wait spends its whole (short) budget.
+        let started = Instant::now();
+        wake.wait(&mut seen, Duration::from_millis(5));
+        assert!(started.elapsed() >= Duration::from_millis(4));
+
+        // An event that landed *before* the wait returns at once.
+        wake.notify();
+        let started = Instant::now();
+        wake.wait(&mut seen, Duration::from_millis(50));
+        assert!(
+            started.elapsed() < Duration::from_millis(20),
+            "a pending signal must not wait for the timeout: {:?}",
+            started.elapsed()
+        );
+
+        // An event that lands *while* waiting returns promptly, from another
+        // thread (the two producers are the guest-line reader and the peer loop).
+        let started = Instant::now();
+        let producer = {
+            let wake = std::sync::Arc::clone(&wake);
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(10));
+                wake.notify();
+            })
+        };
+        wake.wait(&mut seen, Duration::from_millis(500));
+        producer.join().expect("producer");
+        assert!(
+            started.elapsed() < Duration::from_millis(100),
+            "a notify during the wait must end it: {:?}",
+            started.elapsed()
+        );
     }
 
     /// ROT8b: `state_changed` is computed from the pre-action tree, never

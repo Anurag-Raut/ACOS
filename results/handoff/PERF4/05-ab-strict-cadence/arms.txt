@@ -1,0 +1,4 @@
+arm v022 binary /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/.cache/p4/v022-target/release/acos sha256 3b9af34baff2d79176d87fb86267280834d209f93e2a54219ee767f20dbf2b09
+arm fix binary /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/.cache/p4-target/release/acos sha256 d9246fd6b3af4a51bb49c246d0ae0ef9fcd741ba9327ffafbcbdedf01230e774
+acos 0.2.2
+acos 0.3.0

@@ -1,0 +1,5 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/scenarios/touchdisp-posted-side-effect.yaml (sha e2da25d06512), apk /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/fixtures/build/apps/touch-probe.apk (sha 5348cfbac47c), engine art, fidelity art-reference, warnings: 1 [INPUT_UNHANDLED]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/04-scenarios/touchdisp-posted-side-effect
+  steps: 5

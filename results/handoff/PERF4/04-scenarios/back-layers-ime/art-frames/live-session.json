@@ -1,0 +1,2418 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "retention": {
+    "note": "passing run: intermediate C1 captures were pruned; the frames a step declared are in frames/<seq>.png",
+    "policy": "referenced",
+    "pruned_captures": 5
+  },
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.backlayers.MainActivity",
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "hit",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-f912a7bffc07a295",
+        "input_hash": "f912a7bffc07a295",
+        "mode": "shared-fixed"
+      },
+      "buffer_generation": 1,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "guest_process_group": 529305,
+      "height": 2400,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "ok": true,
+      "package": "dev.acos.fixtures.backlayers",
+      "probe_seq": 1,
+      "stream_socket": "/run/user/1000/acos-view-529296-1/view.sock",
+      "width": 1080
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "/home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/04-scenarios/back-layers-ime/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c1.png",
+      "probe_seq": 6
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 84,
+      "ok": true,
+      "total": 84
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 2,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 7
+    },
+    {
+      "buffer_generation": 66,
+      "cmd": "tap",
+      "frame_number": 7,
+      "frame_seq": 3,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 41,
+      "x": 173.0,
+      "y": 380.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 139,
+      "ok": true,
+      "total": 139
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 139,
+      "ok": true,
+      "total": 139
+    },
+    {
+      "bound": "timeout",
+      "buffer_generation": 66,
+      "buffer_id": 8589934593,
+      "capture_label": "ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)",
+      "capture_source": "acos-c1-buffer",
+      "cmd": "key",
+      "frame_number": 59,
+      "frame_seq": 4,
+      "gesture": {
+        "acks": [],
+        "seqs": [
+          3,
+          4
+        ],
+        "token": "0x100000012",
+        "window_removed": true
+      },
+      "height": 2400,
+      "layer_id": 3,
+      "layer_name": "bbq-wrapper",
+      "md5": "0312e988169be5a5aa56a09702806b9c",
+      "non_zero_pixels": 2592000,
+      "ok": true,
+      "pixels_fnv1a": "367faa56060ef8ac",
+      "png_bytes": 81000,
+      "png_pruned": true,
+      "probe": {
+        "guest_stall_pending_ms": null,
+        "newest_sample_age_ms": 2866,
+        "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
+        "stale_samples": 0,
+        "wake_failures": 0,
+        "wakes_sent": 4
+      },
+      "probe_at_ms": 1794901946341,
+      "probe_seq": 43,
+      "producer_id": 1,
+      "settle": {
+        "ack_ms": 0,
+        "bound": "timeout",
+        "first_change_ms": 9,
+        "frame_ms": null,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "probe": {
+          "guest_stall_pending_ms": null,
+          "newest_sample_age_ms": 2866,
+          "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
+          "stale_samples": 0,
+          "wake_failures": 0,
+          "wakes_sent": 4
+        },
+        "settled": false,
+        "state_changed": false
+      },
+      "settled": false,
+      "tree": {
+        "emit_us": 443,
+        "node_budget": 2000,
+        "nodes": [
+          {
+            "bounds": "[0,0][1080,2400]",
+            "bounds_on_screen": "[0,0][1080,2400]",
+            "checked": false,
+            "children": [
+              {
+                "bounds": "[0,0][1080,2337]",
+                "bounds_on_screen": "[0,0][1080,2337]",
+                "checked": false,
+                "children": [
+                  {
+                    "bounds": "[0,275][1080,2337]",
+                    "bounds_on_screen": "[0,275][1080,2337]",
+                    "checked": false,
+                    "children": [
+                      {
+                        "bounds": "[0,275][1080,2337]",
+                        "bounds_on_screen": "[0,275][1080,2337]",
+                        "checked": false,
+                        "children": [
+                          {
+                            "bounds": "[42,317][305,443]",
+                            "bounds_on_screen": "[42,317][305,443]",
+                            "checked": false,
+                            "class": "android.widget.Button",
+                            "clickable": true,
+                            "content_description": "",
+                            "enabled": true,
+                            "focused": false,
+                            "hint": "",
+                            "id": "dev.acos.fixtures.backlayers:id/dialog",
+                            "password": false,
+                            "selected": false,
+                            "text": "Show dialog",
+                            "visibility": 0,
+                            "visible": true,
+                            "visible_bounds": "[42,317][305,443]",
+                            "window": "main"
+                          },
+                          {
+                            "bounds": "[42,443][1038,561]",
+                            "bounds_on_screen": "[42,443][1038,561]",
+                            "checked": false,
+                            "class": "android.widget.EditText",
+                            "clickable": true,
+                            "content_description": "",
+                            "enabled": true,
+                            "focused": false,
+                            "hint": "Type here",
+                            "id": "dev.acos.fixtures.backlayers:id/input",
+                            "password": false,
+                            "selected": false,
+                            "text": "Type here",
+                            "visibility": 0,
+                            "visible": true,
+                            "visible_bounds": "[42,443][1038,561]",
+                            "window": "main"
+                          },
+                          {
+                            "bounds": "[42,561][1038,612]",
+                            "bounds_on_screen": "[42,561][1038,612]",
+                            "checked": false,
+                            "class": "android.widget.TextView",
+                            "clickable": false,
+                            "content_description": "",
+                            "enabled": true,
+                            "focused": false,
+                            "hint": "",
+                            "id": "dev.acos.fixtures.backlayers:id/status",
+                            "password": false,
+                            "selected": false,
+                            "text": "Idle",
+                            "visibility": 0,
+                            "visible": true,
+                            "visible_bounds": "[42,561][1038,612]",
+                            "window": "main"
+                          }
+                        ],
+                        "class": "android.widget.LinearLayout",
+                        "clickable": false,
+                        "content_description": "",
+                        "enabled": true,
+                        "focused": false,
+                        "hint": "",
+                        "id": "",
+                        "password": false,
+                        "selected": false,
+                        "text": "",
+                        "visibility": 0,
+                        "visible": true,
+                        "visible_bounds": "[0,275][1080,2337]",
+                        "window": "main"
+                      }
+                    ],
+                    "class": "android.widget.FrameLayout",
+                    "clickable": false,
+                    "content_description": "",
+                    "enabled": true,
+                    "focused": false,
+                    "hint": "",
+                    "id": "android:id/content",
+                    "password": false,
+                    "selected": false,
+                    "text": "",
+                    "visibility": 0,
+                    "visible": true,
+                    "visible_bounds": "[0,275][1080,2337]",
+                    "window": "main"
+                  },
+                  {
+                    "bounds": "[0,128][1080,275]",
+                    "bounds_on_screen": "[0,128][1080,275]",
+                    "checked": false,
+                    "children": [
+                      {
+                        "bounds": "[0,128][1080,275]",
+                        "bounds_on_screen": "[0,128][1080,275]",
+                        "checked": false,
+                        "children": [
+                          {
+                            "bounds": "[42,166][331,237]",
+                            "bounds_on_screen": "[42,166][331,237]",
+                            "checked": false,
+                            "class": "android.widget.TextView",
+                            "clickable": false,
+                            "content_description": "",
+                            "enabled": true,
+                            "focused": false,
+                            "hint": "",
+                            "id": "",
+                            "password": false,
+                            "selected": false,
+                            "text": "Back Layers",
+                            "visibility": 0,
+                            "visible": true,
+                            "visible_bounds": "[42,166][331,237]",
+                            "window": "main"
+                          },
+                          {
+                            "bounds": "[1080,128][1080,275]",
+                            "bounds_on_screen": "[1080,128][1080,275]",
+                            "checked": false,
+                            "children": [],
+                            "class": "android.widget.ActionMenuView",
+                            "clickable": false,
+                            "content_description": "",
+                            "enabled": true,
+                            "focused": false,
+                            "hint": "",
+                            "id": "",
+                            "password": false,
+                            "selected": false,
+                            "text": "",
+                            "visibility": 0,
+                            "visible": false,
+                            "visible_bounds": "",
+                            "window": "main"
+                          }
+                        ],
+                        "class": "android.widget.Toolbar",
+                        "clickable": false,
+                        "content_description": "",
+                        "enabled": true,
+                        "focused": false,
+                        "hint": "",
+                        "id": "android:id/action_bar",
+                        "password": false,
+                        "selected": false,
+                        "text": "",
+                        "visibility": 0,
+                        "visible": true,
+                        "visible_bounds": "[0,128][1080,275]",
+                        "window": "main"
+                      },
+                      {
+                        "bounds": "[0,128][0,128]",
+                        "bounds_on_screen": "[0,128][0,128]",
+                        "checked": false,
+                        "children": [],
+                        "class": "com.android.internal.widget.ActionBarContextView",
+                        "clickable": false,
+                        "content_description": "",
+                        "enabled": true,
+                        "focused": false,
+                        "hint": "",
+                        "id": "android:id/action_context_bar",
+                        "password": false,
+                        "selected": false,
+                        "text": "",
+                        "visibility": 8,
+                        "visible": false,
+                        "visible_bounds": "",
+                        "window": "main"
+                      }
+                    ],
+                    "class": "com.android.internal.widget.ActionBarContainer",
+                    "clickable": false,
+                    "content_description": "",
+                    "enabled": true,
+                    "focused": false,
+                    "hint": "",
+                    "id": "android:id/action_bar_container",
+                    "password": false,
+                    "selected": false,
+                    "text": "",
+                    "visibility": 0,
+                    "visible": true,
+                    "visible_bounds": "[0,128][1080,275]",
+                    "window": "main"
+                  }
+                ],
+                "class": "com.android.internal.widget.ActionBarOverlayLayout",
+                "clickable": false,
+                "content_description": "",
+                "enabled": true,
+                "focused": false,
+                "hint": "",
+                "id": "android:id/decor_content_parent",
+                "password": false,
+                "selected": false,
+                "text": "",
+                "visibility": 0,
+                "visible": true,
+                "visible_bounds": "[0,0][1080,2337]",
+                "window": "main"
+              },
+              {
+                "bounds": "[0,2337][1080,2400]",
+                "bounds_on_screen": "[0,2337][1080,2400]",
+                "checked": false,
+                "class": "android.view.View",
+                "clickable": false,
+                "content_description": "",
+                "enabled": true,
+                "focused": false,
+                "hint": "",
+                "id": "android:id/navigationBarBackground",
+                "password": false,
+                "selected": false,
+                "text": "",
+                "visibility": 0,
+                "visible": true,
+                "visible_bounds": "[0,2337][1080,2400]",
+                "window": "main"
+              },
+              {
+                "bounds": "[0,0][1080,128]",
+                "bounds_on_screen": "[0,0][1080,128]",
+                "checked": false,
+                "class": "android.view.View",
+                "clickable": false,
+                "content_description": "",
+                "enabled": true,
+                "focused": false,
+                "hint": "",
+                "id": "android:id/statusBarBackground",
+                "password": false,
+                "selected": false,
+                "text": "",
+                "visibility": 0,
+                "visible": true,
+                "visible_bounds": "[0,0][1080,128]",
+                "window": "main"
+              }
+            ],
+            "class": "com.android.internal.policy.DecorView",
+            "clickable": false,
+            "content_description": "",
+            "enabled": true,
+            "focused": false,
+            "hint": "",
+            "id": "",
+            "password": false,
+            "selected": false,
+            "text": "",
+            "visibility": 0,
+            "visible": true,
+            "visible_bounds": "[0,0][1080,2400]",
+            "window": "main"
+          }
+        ],
+        "truncated": false,
+        "window_count": 1,
+        "windows": [
+          {
+            "window": "main",
+            "z": 0
+          }
+        ]
+      },
+      "warning": "strict settle timed out after 3000 ms (reason: timeout); the tree and frame identity are the latest observed state, not a settled one, and this is not assertion evidence",
+      "width": 1080
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 5,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 43
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 6,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 44
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 7,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 45
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 8,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 46
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 9,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 47
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 10,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 48
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 11,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 49
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 12,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 50
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 13,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 51
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 14,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 52
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 15,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 53
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 16,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 54
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 17,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 55
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 18,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 56
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 19,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 57
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 20,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 58
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 21,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 59
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 22,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 60
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 23,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 61
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 24,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 62
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 25,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 63
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 26,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 64
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 27,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 65
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 28,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 66
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 29,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 67
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 30,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 68
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 31,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 69
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 32,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 70
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 33,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 71
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 34,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 72
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 35,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 73
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 36,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 74
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 37,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 75
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 38,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 76
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 39,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 77
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 40,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 78
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 41,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 79
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 42,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 80
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 43,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 81
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 44,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 82
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 45,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 83
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 46,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 84
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 47,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 85
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 48,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 86
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 49,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 87
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 50,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 88
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 51,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 89
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 52,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 90
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 53,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 91
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 54,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 92
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 55,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 93
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 56,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 94
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 57,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 95
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 58,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 96
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 59,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 97
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 60,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 98
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 61,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 99
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 62,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 100
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 63,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 101
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 64,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 102
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 65,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 103
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 66,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 104
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 67,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 105
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 68,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 106
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 69,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 107
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 70,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 108
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 71,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 109
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 72,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 110
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 73,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 111
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 74,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 112
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 75,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 113
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 76,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 114
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 77,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 115
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 78,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 116
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 79,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 117
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 80,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 118
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 81,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 119
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 82,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 120
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 83,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 121
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 84,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 122
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 85,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 123
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 86,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 124
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 87,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 125
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 88,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 126
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 89,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 127
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 90,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 128
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 91,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 129
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 92,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 130
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 93,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 131
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 94,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 132
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 95,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 133
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 96,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 134
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 97,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 135
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 98,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 136
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 99,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 137
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 100,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 138
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 101,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 139
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 102,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 140
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 103,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 141
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 104,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 142
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 105,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 143
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 106,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 144
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 107,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 145
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 108,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 146
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 109,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 147
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 110,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 148
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 111,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 149
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 112,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 150
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 113,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 151
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 114,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 152
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 115,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 153
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 116,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 154
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 117,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 155
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 118,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 156
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 119,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 157
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 120,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 158
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 121,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 159
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 122,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 160
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 123,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 161
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 124,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 162
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 125,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 163
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 126,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 164
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 127,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 165
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 128,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 166
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 129,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 167
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 130,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 168
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 131,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 169
+    },
+    {
+      "buffer_generation": 66,
+      "cmd": "tree",
+      "frame_number": 59,
+      "frame_seq": 132,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 170
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 142,
+      "ok": true,
+      "total": 142
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 142,
+      "ok": true,
+      "total": 142
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 142,
+      "ok": true,
+      "total": 142
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 142,
+      "ok": true,
+      "total": 142
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 142,
+      "ok": true,
+      "total": 142
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 142,
+      "ok": true,
+      "total": 142
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 133,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 171
+    },
+    {
+      "buffer_generation": 68,
+      "cmd": "tap",
+      "frame_number": 61,
+      "frame_seq": 134,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 174,
+      "x": 540.0,
+      "y": 502.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 149,
+      "ok": true,
+      "total": 149
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 149,
+      "ok": true,
+      "total": 149
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 149,
+      "ok": true,
+      "total": 149
+    },
+    {
+      "buffer_generation": 69,
+      "cmd": "key",
+      "frame_number": 62,
+      "frame_seq": 135,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 175,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 136,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 175
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 137,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 176
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 138,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 177
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 139,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 178
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 140,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 179
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 141,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 180
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 142,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 181
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 143,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 182
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 144,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 183
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 145,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 184
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 146,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 185
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 147,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 186
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 148,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 187
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 149,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 188
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 150,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 189
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 151,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 190
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 152,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 191
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 153,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 192
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 154,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 193
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 155,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 194
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 156,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 195
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 157,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 196
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 158,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 197
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 159,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 198
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 160,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 199
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 161,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 200
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 162,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 201
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 163,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 202
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 164,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 203
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 165,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 204
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 166,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 205
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 167,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 206
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 168,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 207
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 169,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 208
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 170,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 209
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 171,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 210
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 172,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 211
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 173,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 212
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 174,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 213
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 175,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 214
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 176,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 215
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 177,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 216
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 178,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 217
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 179,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 218
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 180,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 219
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 181,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 220
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 182,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 221
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 183,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 222
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 184,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 223
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 185,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 224
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 186,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 225
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 187,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 226
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 188,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 227
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 189,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 228
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 190,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 229
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 191,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 230
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 192,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 231
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 193,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 232
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 194,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 233
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 195,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 234
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 196,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 235
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 197,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 236
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 198,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 237
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 199,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 238
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 200,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 239
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 201,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 240
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 202,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 241
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 203,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 242
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 204,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 243
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 205,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 244
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 206,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 245
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 207,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 246
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 208,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 247
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 209,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 248
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 210,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 249
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 211,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 250
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 212,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 251
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 213,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 252
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 214,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 253
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 215,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 254
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 216,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 255
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 217,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 256
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 218,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 257
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 219,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 258
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 220,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 259
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 221,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 260
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 222,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 261
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 223,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 262
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 224,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 263
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 225,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 264
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 226,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 265
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 227,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 266
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 228,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 267
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 229,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 268
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 230,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 269
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 231,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 270
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 232,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 271
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 233,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 272
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 234,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 273
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 235,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 274
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 236,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 275
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 237,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 276
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 238,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 277
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 239,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 278
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 240,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 279
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 241,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 280
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 242,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 281
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 243,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 282
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 244,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 283
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 245,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 284
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 246,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 285
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 247,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 286
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 248,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 287
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 249,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 288
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 250,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 289
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 251,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 290
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 252,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 291
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 253,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 292
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 254,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 293
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 255,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 294
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 256,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 295
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 257,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 296
+    },
+    {
+      "buffer_generation": 70,
+      "cmd": "tree",
+      "frame_number": 63,
+      "frame_seq": 258,
+      "ok": true,
+      "png": "/home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/04-scenarios/back-layers-ime/art-frames/live-frames/acos-c1-layer3-frame-63-g70-c258.png",
+      "probe_seq": 297
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 152,
+      "ok": true,
+      "total": 152
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 152,
+      "ok": true,
+      "total": 152
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 152,
+      "ok": true,
+      "total": 152
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 152,
+      "ok": true,
+      "total": 152
+    },
+    {
+      "cmd": "key",
+      "frame_seq": 259,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "probe_seq": 300,
+      "window_gone": true,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 163,
+      "ok": true,
+      "total": 163
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 163,
+      "ok": true,
+      "total": 163
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 163,
+      "ok": true,
+      "total": 163
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 259,
+      "ok": true
+    }
+  ]
+}
