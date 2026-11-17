@@ -1472,3 +1472,33 @@ Two rules this track had to settle, both applied in one place each:
    where stock AMS's `startProcessLocked` would, and `Peer::package_of` never answers an empty name.
    Without it a `startActivity` into the already-running primary (a notification's content sender) was
    recorded and never encoded.
+
+**ADR-0029 amendment (MERGEFIX2, 2026-11-18): one launch, one delivering side — by origin and by
+process.**
+
+The SYSUI3A note above is right that the primary's package is the launcher's fact; it did not say
+what the host may *do* with it. Naming tag 0 enabled `Peer::take_host_transactions` to encode the
+**guest's own** `startActivity` as a host-built `ClientTransaction`, while the guest's start-activity
+guard (`LaunchMain.launchLocalActivity`) had already materialised the same launch with the token it
+minted. Two `MainActivity` instances ran (two `React` roots: `Gaten` logged `Running "Gaten"` twice),
+the app re-rendered every frame and `gaten-backstack`'s first tap could never settle
+(`frame_ms: null`, pending `queue`/`newer-store`).
+
+Both sides stay authoritative for their own launches; the record now says **who asked**:
+
+* `PendingLaunch.origin = Guest` — the guest's own `IActivityTaskManager.startActivity…`. The guest
+  materialises it and adopts its own token (`ActivityManagerAdopt`), exactly as `ActivityThread` does
+  after `scheduleTransaction`. The host must not mint a second token for it.
+* `PendingLaunch.origin = Host` — `system_server` as the client: a module firing an `IIntentSender`
+  (the shade's row tap), the permission dialog's start. No guest `startActivity` exists, so only the
+  host can deliver it.
+
+`AmsState::pending_launch_for_tag(tag, package)` is the one selector both delivery paths read:
+**tag 0 (the primary) is offered only `Host` launches**; every spawned tag is `ACOSLAUNCH_HOST_SCHEDULES`
+and is offered every origin (MPROC7's "the guest waits for the host's transaction"). The guest's adopt
+path (`AmsState::adopt_launch_token`) takes only `Guest` launches, so a shade launch stays queued for
+the peer instead of being bound to a token the guest invented.
+
+Consequence: `gaten-*` settle again (the primary's launches are the guest's, one instance each), the
+shade and the permission dialog keep their host-built delivery, and `tools/build-fixtures.sh` no longer
+deletes checked-in expectations on a failed `javac` (staged, published only after every program built).

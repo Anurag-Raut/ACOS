@@ -283,6 +283,12 @@ pub struct BindApplicationData {
 /// The synthetic activity token used by the in-process launch flow.
 pub const FIXTURE_ACTIVITY_TOKEN: u64 = 0xabc;
 
+/// The **primary** process's tag: the session's own guest, started by the
+/// launcher (`ACOS_PROCESS_TAG` = 0). Its guest marshals its own launches and
+/// mints its own activity tokens, so the host owes it only launches the guest
+/// could not ask for itself (`LaunchOrigin::Host`, MERGEFIX2).
+pub const PRIMARY_PROCESS_TAG: u32 = 0;
+
 /// Bit 32 of a binder id: the peer's `JAVA_TAG` (`acos-binder-peer`), i.e. a
 /// binder object owned by the guest JVM. Activity tokens minted by the guest's
 /// `ActivityThread` arrive with this bit set; host-minted binder ids do not.
@@ -2056,11 +2062,11 @@ impl AtmsService {
     /// MPROC7: the launch recorded for `package` that the host still owes,
     /// as `(placeholder token, activity class)`.
     #[must_use]
-    pub fn pending_launch_for(&self, package: &str) -> Option<(u64, String)> {
+    pub fn pending_launch_for(&self, tag: u32, package: &str) -> Option<(u64, String)> {
         let state = self.state.lock().ok()?;
         state
             .ams
-            .pending_launch_for(package)
+            .pending_launch_for_tag(tag, package)
             .map(|launch| (launch.token, launch.class.clone()))
     }
 

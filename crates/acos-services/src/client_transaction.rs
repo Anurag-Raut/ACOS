@@ -786,12 +786,13 @@ impl AtmsState {
     /// A structured error when the recorded intent cannot be encoded.
     pub fn take_launch_for_process(
         &mut self,
+        tag: u32,
         package: &str,
         app: &AppInfo,
         activity: &PmsActivityInfo,
         token: BinderId,
     ) -> Result<Option<Parcelable>> {
-        let Some(launch) = self.ams.pending_launch_for(package).cloned() else {
+        let Some(launch) = self.ams.pending_launch_for_tag(tag, package).cloned() else {
             return Ok(None);
         };
         let transaction = self.encode_launch_parcelable(&launch, app, activity, token)?;

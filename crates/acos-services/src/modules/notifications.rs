@@ -1145,7 +1145,7 @@ fn open_shade(host: &mut ServiceHost, store: &Arc<Mutex<NotificationStore>>) -> 
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .ams
-        .start_activity(&intent, FLAG_ACTIVITY_NEW_TASK, 0, -1)?;
+        .start_activity_from_host(&intent, FLAG_ACTIVITY_NEW_TASK, 0, -1)?;
     Ok(json!({
         "shade": {
             "component": SHADE_COMPONENT,

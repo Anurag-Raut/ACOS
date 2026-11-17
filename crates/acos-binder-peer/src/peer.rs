@@ -2045,7 +2045,7 @@ impl Peer {
         let package = self.package_of(tag)?;
         let class = {
             let atms = self.atms_service_mut()?;
-            atms.pending_launch_for(&package)?.1
+            atms.pending_launch_for(tag, &package)?.1
         };
         let (app, activity) = {
             let object = self
@@ -2087,7 +2087,7 @@ impl Peer {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             state
-                .take_launch_for_process(&package, &app, &activity, token)
+                .take_launch_for_process(tag, &package, &app, &activity, token)
                 .ok()??
         };
         let parcel = acos_services::client_transaction::schedule_transaction_request(&transaction)
