@@ -123,6 +123,64 @@ fn a_registered_phone_state_listener_is_referenced_until_listen_none() {
     );
 }
 
+/// BINDERREF4 §3, the host half of the stub probe: a registration is what
+/// keeps a callback node alive, so the app holding no Java reference to the
+/// listener must not matter. Delivering to a registration changes nothing about
+/// the reference it holds, and only the unregister releases it.
+///
+/// The guest half (the Java object behind the node surviving a forced
+/// collection, and the app's callback running after it) is the ART measurement
+/// in `results/handoff/BINDERREF4/m-stub.json`.
+#[test]
+fn a_delivery_keeps_the_registration_that_roots_a_detached_listener() {
+    let mut host = ServiceHost::standard();
+    let mut registry = registry_with(&mut host, "net.telephony", Profile::Scripted);
+
+    let detached = guest(0x1d);
+    let held = guest(0x1e);
+    telephony_listen(&mut host, detached, &[36]);
+    telephony_listen(&mut host, held, &[36]);
+    let _ = host.take_deliveries();
+    let _ = host.take_released_binders();
+    assert_eq!(host.held_refs(detached), 1);
+    assert_eq!(host.held_refs(held), 1);
+
+    // The scripted ring reaches both registrations. A delivery is not a
+    // release: the detached registration is still rooted afterwards (on a
+    // device it stays rooted until LISTEN_NONE), which is what lets a callback
+    // arrive after the app dropped its own reference.
+    registry
+        .control(
+            &mut host,
+            "net.telephony",
+            "call_state",
+            &serde_json::json!({"state": "ringing", "number": "+15550002222"}),
+        )
+        .expect("scripted ring");
+    let delivered: Vec<u64> = host
+        .take_deliveries()
+        .into_iter()
+        .map(|d| d.target.0)
+        .collect();
+    assert_eq!(
+        delivered,
+        vec![detached.0, held.0],
+        "every registration is delivered to, detached or not"
+    );
+    assert!(
+        host.take_released_binders().is_empty(),
+        "delivering must not unroot a registration"
+    );
+    assert_eq!(host.held_refs(detached), 1, "the detached one still holds");
+    assert_eq!(host.held_refs(held), 1);
+
+    // Only the unregister drops it.
+    telephony_listen(&mut host, detached, &[]);
+    assert_eq!(host.held_refs(detached), 0);
+    assert_eq!(host.take_released_binders(), vec![detached]);
+    assert_eq!(host.held_refs(held), 1, "the other registration is untouched");
+}
+
 #[test]
 fn a_telephony_module_detach_releases_the_listeners_it_rooted() {
     let mut host = ServiceHost::standard();

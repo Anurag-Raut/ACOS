@@ -42,6 +42,19 @@ use crate::vm::{InvokeKind, ThreadRT, Vm};
 /// forever (W94-A #10).
 pub const MAX_NATIVE_ROOTS: usize = 1 << 20;
 
+/// BINDERREF4: is the rooting trace on? (`ACOS_BINDER_TRACE=1`)
+///
+/// Every entry `native_roots` gains is a Java object the collector may no
+/// longer move or free — the ACOS counterpart of `JavaBBinder`'s JNI global
+/// reference. The flag makes that edge observable in `acos logs` (tag
+/// `acos-binder`); it is off by default because a register-heavy session adds
+/// one line per callback binder.
+fn native_root_trace() -> bool {
+    // Read every time (an export is rare): a cached flag would make the trace
+    // impossible to switch on from inside a test, and `ACOS_BINDER_TRACE` is
+    // read by the same process that writes the line.
+    std::env::var_os("ACOS_BINDER_TRACE").is_some()
+}
 /// A value crossing the Rust ↔ Java boundary.
 ///
 /// Reference values are heap [`Handle`]s. `Null` is the Java `null` reference;
@@ -606,6 +619,16 @@ impl Vm {
 
     // ---- internals -------------------------------------------------------
 
+    /// The log line for one new `native_roots` entry.
+    ///
+    /// BINDERREF4: the second half of the rooting trace (the first is
+    /// `acos_runtime::transport::binder_export_line`). Pure so the format is
+    /// testable without a live VM.
+    #[must_use]
+    pub fn native_root_insert_line(handle: Handle, count: usize) -> String {
+        format!("native_roots insert handle={handle} count={count}")
+    }
+
     /// Register a bridge root, once per handle.
     ///
     /// The binder transport calls `root_handle` for every `writeStrongBinder`
@@ -626,6 +649,19 @@ impl Vm {
             return;
         }
         self.native_roots.push(h);
+        if native_root_trace() {
+            // BINDERREF4: the guest-side edge is visible. `native_roots` is
+            // where a callback binder's Java object becomes a GC root, exactly
+            // like `JavaBBinder`'s JNI global reference on Android; without
+            // this line "the object was collected" and "the object was never
+            // rooted" look the same from the outside.
+            crate::natives::os_log::push_record(
+                3,
+                "acos-binder",
+                &Self::native_root_insert_line(h, self.native_roots.len()),
+                0,
+            );
+        }
     }
 
     /// Make sure the host has a thread and a sentinel base frame so
@@ -1143,6 +1179,45 @@ mod tests {
         assert_eq!(JavaValue::Null.kind(), "null");
         assert_eq!(JavaValue::Object(3).as_handle(), Some(3));
         assert_eq!(JavaValue::Boolean(true).as_handle(), None);
+    }
+
+    #[test]
+    fn the_rooting_trace_names_the_native_root() {
+        // BINDERREF4: the line an agent reads back with `acos logs` must name
+        // the handle that became a GC root and the size of the root set after
+        // the insert, so "rooted late" is distinguishable from "never rooted".
+        assert_eq!(
+            Vm::native_root_insert_line(0x0123_4567, 7),
+            "native_roots insert handle=19088743 count=7"
+        );
+    }
+
+    /// BINDERREF4: a new `native_roots` entry must be visible in the stream
+    /// `acos logs` reads. Without it "the Java object was collected" and "the
+    /// object was never rooted on this path" are indistinguishable, which is
+    /// exactly the question the rooting edge exists to answer.
+    #[test]
+    fn the_native_root_trace_reaches_the_vm_log_sink() {
+        struct EnvGuard;
+        impl Drop for EnvGuard {
+            fn drop(&mut self) {
+                std::env::remove_var("ACOS_BINDER_TRACE");
+            }
+        }
+        let _guard = EnvGuard;
+        std::env::set_var("ACOS_BINDER_TRACE", "1");
+        let mut vm = Vm::new(crate::VmOptions::default()).expect("vm");
+        vm.native_roots.clear();
+        let before = crate::natives::os_log::records().len();
+        vm.root_handle(0xB1D4_0002);
+        let records = crate::natives::os_log::records();
+        let line = Vm::native_root_insert_line(0xB1D4_0002, 1);
+        assert!(
+            records[before..]
+                .iter()
+                .any(|r| r.tag == "acos-binder" && r.msg == line),
+            "the native_roots insert must be in the VM log sink: {line}"
+        );
     }
 
     #[test]
