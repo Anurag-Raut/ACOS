@@ -1029,12 +1029,25 @@ impl AtmsState {
                     // first callback for its own token, W38/MPROC5) has created
                     // and started itself: the launch item is then a replay of
                     // state the host already has, not a second Create.
-                    let current = self.lifecycle_of(token);
-                    if current == Some(ActivityLifecycle::Uncreated) {
-                        self.transition(token, Transition::Create)?;
-                        self.transition(token, Transition::Start)?;
-                    } else if current == Some(ActivityLifecycle::Created) {
-                        self.transition(token, Transition::Start)?;
+                    match self.lifecycle_of(token) {
+                        // A record the guest has already reported live
+                        // (`activityResumed` was its first callback, W38) has
+                        // created and started itself: the launch item is a
+                        // replay of state the host already has.
+                        Some(
+                            ActivityLifecycle::Started
+                            | ActivityLifecycle::Resumed
+                            | ActivityLifecycle::Paused,
+                        ) => {}
+                        Some(ActivityLifecycle::Created) => {
+                            self.transition(token, Transition::Start)?;
+                        }
+                        // Uncreated, Destroyed (a relaunch) or anything below
+                        // the launch step: the record owes create + start.
+                        _ => {
+                            self.transition(token, Transition::Create)?;
+                            self.transition(token, Transition::Start)?;
+                        }
                     }
                 }
                 ClientTransactionItem::ResumeActivity => {

@@ -1,8 +1,0 @@
-{
-  "request_id": "req_6c5cf_18e8df7e0dcc3dc8",
-  "started_at": "2026-11-17T15:43:03.997Z",
-  "scenario": "scenarios/gaten-lesson.yaml",
-  "apk": "",
-  "acos_version": "0.3.0",
-  "overwrote_run_id": "req_6b90b_18e8df6b032883bc"
-}

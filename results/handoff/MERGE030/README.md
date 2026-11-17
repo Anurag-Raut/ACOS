@@ -74,10 +74,11 @@ is the known "real network arms need pasta" environment arm.
 `cargo check --workspace --all-targets` — green.
 `cargo test -p acos-art -p acos-verify -p acos-protocol -p acos-services -p acos-wm -p acos-binder-peer -p acos-mcp -p acos-cli -p acos-webview -p acos-netd`
 — run under `tools/art-runtime/run-exclusive.sh` + `tools/guarded.sh`;
-log: `nonart-tests.log`. **All targets green** except the leak scan
-(`acos-art --test cleanup::leak_scan_is_scoped_to_this_tests_own_processes`), which
-enumerates host `acos` processes and fails when another agent's session is live; it
-passes in isolation (env-only). No test was ignored/weakened. The one test I *changed*
+log: `nonart-tests.log`: **177 target runs, 0 failures** (`grep -c 'test result: ok'` =
+177, `FAILED` = 0). (An earlier sweep hit the leak scan in
+`acos-art --test cleanup`, which enumerates host `acos` processes and fails when
+another agent's session is live; the final clean sweep passed it.) No test was
+ignored or weakened. The one test I *changed*
 asserted the pre-MPROC5 lifecycle (`Uncreated` after a resume); it now asserts the
 merged model's intent — the Back/finish call invents no transition (lifecycle stays the
 `Resumed` the resume established).

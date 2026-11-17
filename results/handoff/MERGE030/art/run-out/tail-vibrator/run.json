@@ -1,8 +1,0 @@
-{
-  "request_id": "req_69e52_18e8df3924896c93",
-  "started_at": "2026-11-17T15:38:08.026Z",
-  "scenario": "results/handoff/MODTAIL/tail-vibrator.yaml",
-  "apk": "",
-  "acos_version": "0.3.0",
-  "overwrote_run_id": "req_68278_18e8df196f0486b4"
-}

@@ -1,8 +1,0 @@
-{
-  "request_id": "req_69cfc_18e8df373c42751a",
-  "started_at": "2026-11-17T15:37:59.834Z",
-  "scenario": "results/handoff/MODTAIL/tail-biometric.yaml",
-  "apk": "",
-  "acos_version": "0.3.0",
-  "overwrote_run_id": "req_6826e_18e8df196d67002f"
-}
