@@ -1529,18 +1529,43 @@ impl PmsState {
     /// then the manifest's install-time grants.
     #[must_use]
     pub fn check_permission(&self, permission: &str) -> i32 {
+        self.check_permission_for(None, permission)
+    }
+
+    /// [`PmsState::check_permission`] for a **named** package (MPROC1: the
+    /// question is about the package the caller names, not the one under test).
+    ///
+    /// The runtime table is keyed by permission name and describes one package
+    /// (ACOS installs one app per session). It answers for the package it was
+    /// built for — and for a package name this session has no record of at all:
+    /// there is exactly one runtime table, so a name the session cannot resolve
+    /// cannot have a second one, and answering `-1` there is what made the PMS
+    /// and the ATMS disagree about the session's one app (MODNOTIF2). A name that
+    /// **is** installed is answered from its own manifest record, so a runtime
+    /// grant made for the app under test never leaks to a second package.
+    #[must_use]
+    pub fn check_permission_for(&self, package: Option<&str>, permission: &str) -> i32 {
+        const GRANTED: i32 = crate::permissions::PERMISSION_GRANTED;
+        const DENIED: i32 = crate::permissions::PERMISSION_DENIED;
+        let record = self.lookup(package);
         if let Some(store) = self.runtime_permissions.as_ref() {
             let store = store
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if store.entry(permission).is_some() {
+            let describes_it = match record {
+                Some(record) => store.package == record.package.package_name,
+                None => true,
+            };
+            if describes_it && store.entry(permission).is_some() {
                 return store.check(permission);
             }
         }
-        const GRANTED: i32 = 0;
-        const DENIED: i32 = -1;
-        if self
-            .primary()
+        let Some(record) = record else {
+            // No record and no runtime answer: the permission is not granted to
+            // anything this session knows.
+            return DENIED;
+        };
+        if record
             .granted_permissions
             .iter()
             .any(|p| p == permission)
@@ -1949,21 +1974,12 @@ impl ServiceObject for PmsService {
             "checkPermission" => {
                 // `checkPermission(String permName, String pkgName, int userId)`.
                 // The answer is the *named* package's grant, not the package
-                // under test's.
+                // under test's — through the one runtime table when the name is
+                // the package that table describes (MODNOTIF2), and that
+                // package's manifest grants otherwise.
                 let permission = args.first().and_then(Value::as_str).unwrap_or_default();
                 let package = args.get(1).and_then(Value::as_str);
-                let granted = state.lookup(package).map_or(-1, |record| {
-                    if record
-                        .granted_permissions
-                        .iter()
-                        .any(|p| p == permission)
-                    {
-                        0
-                    } else {
-                        -1
-                    }
-                });
-                vec![Value::Int(granted)]
+                vec![Value::Int(state.check_permission_for(package, permission))]
             }
             // `acos-apk` does not parse `<instrumentation>` yet, so there is no
             // manifest-backed `InstrumentationInfo` to serve. A structured

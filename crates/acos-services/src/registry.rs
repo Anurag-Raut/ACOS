@@ -465,23 +465,22 @@ pub fn install_with_handles_and_insets(
     // `WebViewFactory.getProvider()` — `getUpdateService()` ->
     // `ServiceManager.getService("webviewupdate")` -> a null service NPEs inside
     // `waitForAndGetProvider()` and surfaces as
-    // `MissingWebViewPackageException`. It answers from the same package state
-    // `PackageManager` serves, so the provider record cannot drift from the
-    // package's own record; with no provider package installed it answers
-    // "no provider" (null record, non-OK status), never a fake success.
-    let pms_state = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
-    let webviewupdate_state = Arc::clone(&pms_state);
-    host.register("package", "android.content.pm.IPackageManager", move |w| {
-        Box::new(crate::pms::PmsService::new(Arc::clone(&pms_state), w))
-            as Box<dyn ServiceObject>
-    });
+    // `MissingWebViewPackageException`. It answers from the **same** package
+    // state `PackageManager` serves (`pms_shared`, the one the accessibility
+    // module and the runtime-permission table are wired to), so the provider
+    // record cannot drift from the package's own record; with no provider
+    // package installed it answers "no provider" (null record, non-OK status),
+    // never a fake success. It is published here, after the single PMS
+    // registration above and never as a second `package` factory: a second
+    // factory would replace MODNOTIF2's one-store PMS with a table-less one.
     host.register_dynamic_named(
         "webviewupdate",
         crate::webview::DESCRIPTOR,
-        Box::new(crate::webview::WebViewUpdateService::new(
-            webviewupdate_state,
-        )),
-    );    host.register(
+        Box::new(crate::webview::WebViewUpdateService::new(Arc::clone(
+            &pms_shared,
+        ))),
+    );
+    host.register(
         "display",
         "android.hardware.display.IDisplayManager",
         move |_w| {
