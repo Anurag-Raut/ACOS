@@ -654,6 +654,13 @@ def provenance(repo_root, binaries=(), profile=None, *, gate=None, engine=None,
     elif blockers:
         eligible = False
         reason = "binary not release: " + ", ".join(b["path"] for b in blockers)
+    elif isinstance(gate, dict) and gate.get("ok") is False:
+        # A run on a host that failed its own gate is a correctness run: the gate
+        # block was *recorded* but used to be ignored here, so a contaminated
+        # matrix could still claim `verdict_eligible: true` in its provenance
+        # while its summary said otherwise (GATEFIX, 2026-11-17).
+        eligible = False
+        reason = "host gate refused: " + "; ".join(gate.get("reasons") or ["failed"])
     else:
         eligible = True
         reason = None
@@ -778,9 +785,24 @@ def legacy_memory_reference(mib=130.3):
 # --------------------------------------------------------------------------- #
 
 _CLASS_BY_CODE = {
-    # app / assertion behaviour
+    # app / assertion behaviour.
+    #
+    # This block is `acos_protocol::ErrorCode::default_status() == Status::Fail`
+    # verbatim: an assertion outcome is the app's or the expectation's answer, so
+    # an expected negative that fails with one of them is a `correct_negative`,
+    # never an unclassified row. `ELEMENT_OFFSCREEN` was missing here, which made
+    # two correct matrix negatives (`form-wrong-error`, `offscreen-pager-visible`)
+    # `unclassified` and the whole release-gate matrix INVALID at
+    # `false_pass = 0` (v0.3.0 gate F2). `tools/tests/test-benchlib.py`
+    # cross-checks this block against the protocol, so a new assertion code cannot
+    # silently become `unknown` again.
     "ASSERTION_FAILED": "assertion",
     "ELEMENT_NOT_FOUND": "assertion",
+    "ELEMENT_OFFSCREEN": "assertion",
+    "AMBIGUOUS_SELECTOR": "assertion",
+    "TREE_TRUNCATED": "assertion",
+    "END_OF_LIST": "assertion",
+    "INPUT_NOT_HANDLED": "assertion",
     "STALE_REF": "assertion",
     "WRONG_TEXT": "assertion",
     "WRONG_BOUNDS": "assertion",

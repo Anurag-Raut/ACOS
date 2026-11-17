@@ -1,0 +1,3150 @@
+{
+  "legacy_reference": {
+    "metric_type": "CGROUP_ANON_SHMEM",
+    "settle_s": 60,
+    "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+    "state": "warm",
+    "value_mib": 130.3
+  },
+  "provenance": {
+    "artifacts_dir": "results/handoff/GATEFIX/02-matrix-quiet/artifacts",
+    "binaries": [
+      {
+        "exists": true,
+        "mtime_utc": "2026-11-17T06:26:07+00:00",
+        "not_eligible_reason": null,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-2034252f-9e5e77e9f95c4b73/.cache/gf-target/release/acos",
+        "profile": "release",
+        "profile_source": "path heuristic (release)",
+        "sha256": "8b2804ec8ecc2d282ebc413b60fc93cce988dd1f633844c17daba1b2e88ecb95",
+        "sha256_16": "8b2804ec8ecc2d28",
+        "size_bytes": 193440336,
+        "verdict_eligible": true
+      },
+      {
+        "exists": true,
+        "mtime_utc": "2026-11-17T06:26:02+00:00",
+        "not_eligible_reason": null,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-2034252f-9e5e77e9f95c4b73/.cache/gf-target/release/acos-art",
+        "profile": "release",
+        "profile_source": "path heuristic (release)",
+        "sha256": "0f41c52d189607726c946585c09b2d403dff50ee6911d2bf1786ae22011fc6a4",
+        "sha256_16": "0f41c52d18960772",
+        "size_bytes": 89646528,
+        "verdict_eligible": true
+      }
+    ],
+    "engine": "art",
+    "engine_flag": true,
+    "git_dirty": true,
+    "git_dirty_files": 12,
+    "git_head": "5a912d4b13563490339e1497f25742173a6e3ce5",
+    "git_head_subject": "RELGATE2: v0.3.0 release-gate timing half \u2014 matrix, gaten-lesson rerun, interleaved A/B, notes",
+    "git_status_porcelain_sha256": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+    "host": {
+      "loadavg1": 2.18,
+      "loadavg15": 4.99,
+      "loadavg5": 4.25,
+      "mem_available_gib": 45.93,
+      "mem_available_mib": 47029.5,
+      "mem_total_gib": 60.46,
+      "mem_total_mib": 61908.7,
+      "nproc": 32,
+      "runnable": "1/2647",
+      "used_mib": 14879.2,
+      "used_pct": 24.03
+    },
+    "host_gate": {
+      "art_lock_checked": false,
+      "art_lock_held": null,
+      "last_art_run": null,
+      "limits": {
+        "loadavg1_max": 4.0,
+        "min_avail_gib": 30.0
+      },
+      "loadavg1": 2.18,
+      "loadavg15": 4.99,
+      "loadavg5": 4.25,
+      "mem_available_gib": 45.93,
+      "mem_available_mib": 47030.2,
+      "mem_total_gib": 60.46,
+      "ok": true,
+      "reasons": [],
+      "utc": "2026-11-17T06:38:27+00:00"
+    },
+    "method": "BENCHMARKS.md section 11 (benchlib.py)",
+    "not_verdict_eligible_reason": null,
+    "profile": "release",
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+    "sample_ms": 100,
+    "schema": "acos-bench-provenance/1",
+    "settle_s": 0,
+    "utc": "2026-11-17T06:38:27+00:00",
+    "verdict_eligible": true
+  },
+  "runs": [
+    {
+      "apk_sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/01-v2-art-counter-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": null,
+      "expected": "pass",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 3210,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.61,
+        "loadavg5": null,
+        "mem_available_end_mib": 46733.9,
+        "mem_available_mib": 46701.9
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.000567,
+        "cgroup_peak_mib": 20.83,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 29.53,
+        "pss_type": "PSS",
+        "sample_count": 34,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": false,
+      "profile": "release",
+      "rc": 0,
+      "run_id": "01-v2-art-counter-r1",
+      "scenario": "scenarios/v2-art-counter.yaml",
+      "scenario_sha256": "cc270776f42796f8a64d9acd4bf507f86b478f34c59dacfba203f2c1e515e2b0",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:36:20+00:00",
+      "variant": "good",
+      "verdict": "pass",
+      "verdict_eligible": true,
+      "wall_ms": 3437.1
+    },
+    {
+      "apk_sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/02-negative-counter-wrong-count-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"99\", got text \"0\" / hint \"\"",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 206.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 207,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.61,
+        "loadavg5": null,
+        "mem_available_end_mib": 46769.7,
+        "mem_available_mib": 46728.7
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 3.5e-05,
+        "cgroup_peak_mib": 8.16,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 17.94,
+        "pss_type": "PSS",
+        "sample_count": 4,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "02-negative-counter-wrong-count-r1",
+      "scenario": "scenarios/negative/counter-wrong-count.yaml",
+      "scenario_sha256": "ec1003fd534e81b035ab3fd540ba938ae11f84f793033fe012bceb935b14c5f8",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 154,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 52,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:36:20+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 422.1
+    },
+    {
+      "apk_sha256": "093a43bd8b7cb949bcdadb7c50dac0eb62849c2578b2ca2208839ba67e0747ef",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/03-negative-finish-start-wrong-home-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Goodbye\", got text \"Home\" / hint \"\"",
+        "retryable": false,
+        "step_index": 3
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 208.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 386,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.61,
+        "loadavg5": null,
+        "mem_available_end_mib": 46797.2,
+        "mem_available_mib": 46761.1
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 7.3e-05,
+        "cgroup_peak_mib": 18.55,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 28.48,
+        "pss_type": "PSS",
+        "sample_count": 6,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "03-negative-finish-start-wrong-home-r1",
+      "scenario": "scenarios/negative/finish-start-wrong-home.yaml",
+      "scenario_sha256": "c343ea3e5217182d2576e72f5fac367ffbab53b0fb81e9b6917cc1d5180c81f8",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 154,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 54,
+          "status": "pass"
+        },
+        {
+          "kind": "tap",
+          "ms": 175,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:36:21+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 623.5
+    },
+    {
+      "apk_sha256": "d8c277d7476a54f8a09288962fd3d9a864ad53b934350721af81725cb3ba7aa9",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/04-negative-form-wrong-error-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_OFFSCREEN",
+        "hint": "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass.",
+        "message": "selector id==\"error\" matched no visible node, but it matches a node that is not visible to the user (text \"\" content_desc \"\" class android.widget.TextView bounds [42,679][42,730] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class \u2014 scroll it into view or target a visible node, never treat it as a pass",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 208.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 209,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.56,
+        "loadavg5": null,
+        "mem_available_end_mib": 46801.8,
+        "mem_available_mib": 46797.0
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 3.5e-05,
+        "cgroup_peak_mib": 8.32,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 17.93,
+        "pss_type": "PSS",
+        "sample_count": 4,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "04-negative-form-wrong-error-r1",
+      "scenario": "scenarios/negative/form-wrong-error.yaml",
+      "scenario_sha256": "a0d3b8c5342118e218927417758e67a2b60511dfe6c564ec2a3f56129f58cdce",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 155,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 53,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:36:21+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 422.0
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/05-gaten-backstack-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Settings\", got text \"\" / hint \"\"",
+        "retryable": false,
+        "step_index": null
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 11554,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.56,
+        "loadavg5": null,
+        "mem_available_end_mib": 45325.4,
+        "mem_available_mib": 46801.3
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.065617,
+        "cgroup_peak_mib": 427.19,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 169.29,
+        "pss_type": "PSS",
+        "sample_count": 123,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "05-gaten-backstack-wrong-r1",
+      "scenario": "scenarios/negative/gaten-backstack-wrong.yaml",
+      "scenario_sha256": "39884056c7436543b115b2356d60e067dbb50bf91dee0567a08e32d4dc7b361f",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:36:34+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 12414.8
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/06-gaten-content-assert-screenshot-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "A pixel/frame assertion needs a pixel-settled frame: use `settle: strict` (the default) and let the screen stop animating, or assert on the UI tree (assert_text/assert_visible/assert_state) which content settle may back.",
+        "message": "assert_screenshot: the bound frame was settled by `settle: content` (UI tree content stable), which is not pixel evidence - the pixels may still be animating",
+        "retryable": false,
+        "step_index": 1
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 434,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 3.44,
+        "loadavg5": null,
+        "mem_available_end_mib": 46469.4,
+        "mem_available_mib": 45317.3
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.003999,
+        "cgroup_peak_mib": 314.3,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 169.64,
+        "pss_type": "PSS",
+        "sample_count": 12,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "06-gaten-content-assert-screenshot-r1",
+      "scenario": "scenarios/negative/gaten-content-assert-screenshot.yaml",
+      "scenario_sha256": "3ac0ead93568a7a9aa4a608c9188b99a8a53c17566ef96f1741064da5b7fa59f",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 432,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_screenshot",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:36:35+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 1228.5
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/07-gaten-content-pixel-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "A pixel/frame assertion needs a pixel-settled frame: use `settle: strict` (the default) and let the screen stop animating, or assert on the UI tree (assert_text/assert_visible/assert_state) which content settle may back.",
+        "message": "assert_region: the bound frame was settled by `settle: content` (UI tree content stable), which is not pixel evidence - the pixels may still be animating",
+        "retryable": false,
+        "step_index": null
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 2289,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 3.44,
+        "loadavg5": null,
+        "mem_available_end_mib": 46440.9,
+        "mem_available_mib": 46465.7
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.010605,
+        "cgroup_peak_mib": 417.53,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 241.26,
+        "pss_type": "PSS",
+        "sample_count": 31,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "07-gaten-content-pixel-r1",
+      "scenario": "scenarios/negative/gaten-content-pixel.yaml",
+      "scenario_sha256": "fd5da3dfdf83ceadee77e0dfba8cce6df248e08339823c79a40794e9184461a3",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:36:38+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 3137.8
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/08-gaten-content-selector-bounds-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "A bounds claim needs a geometry-settled frame: use `settle: strict` (the default) and wait for the animation to stop. Assert text/state instead, which content settle may back. A `bounds` inside the selector is a geometry claim too - drop it (the text/id/class match is enough) or settle strictly.",
+        "message": "assert_not_visible: the bound frame was settled by `settle: content` (UI tree content stable), which is not geometry evidence - an animating view's reported bounds change every frame",
+        "retryable": false,
+        "step_index": 1
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 450,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 3.25,
+        "loadavg5": null,
+        "mem_available_end_mib": 46538.7,
+        "mem_available_mib": 46439.9
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.004323,
+        "cgroup_peak_mib": 416.68,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 241.29,
+        "pss_type": "PSS",
+        "sample_count": 12,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "08-gaten-content-selector-bounds-r1",
+      "scenario": "scenarios/negative/gaten-content-selector-bounds.yaml",
+      "scenario_sha256": "5bef8de1d91c2fd87b9c5f7381a63909789c64a5790b25e9120ad460d8cd26fc",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 450,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_not_visible",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:36:39+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 1227.6
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/09-gaten-content-welcome-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text containing \"This text does not exist\", got text \"Set up Gaten\" / hint \"\"",
+        "retryable": false,
+        "step_index": 1
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 448.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 451,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 3.25,
+        "loadavg5": null,
+        "mem_available_end_mib": 46300.8,
+        "mem_available_mib": 46534.9
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.004424,
+        "cgroup_peak_mib": 417.34,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 241.37,
+        "pss_type": "PSS",
+        "sample_count": 12,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "09-gaten-content-welcome-wrong-r1",
+      "scenario": "scenarios/negative/gaten-content-welcome-wrong.yaml",
+      "scenario_sha256": "674f1d5b48070df4b4ae479e4c40d5cb21e6a7aa73111d07d5e151ef747f7144",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 448,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:36:41+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 1226.0
+    },
+    {
+      "apk_sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/10-gaten-content-window-impossible-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "infra_timeout",
+        "code": "TIMEOUT",
+        "hint": "Content settle needs the tree's text/content-desc/bounds/state to stop                  changing for the window, on traversals that are provably fresh samples. If                  the screen updates a value continuously (a countdown or a progress                  percentage), no settle rule can prove it: use `settle: fast` for navigation                  only, then assert once you know the value.",
+        "message": "settle content: the UI tree content signature was still changing after                  2 proven traversal(s) / 2 ms (window 300 ms); the screen                  is not content-stable, so nothing it shows is settled",
+        "retryable": true
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 208.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 277,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 3.15,
+        "loadavg5": null,
+        "mem_available_end_mib": 46281.5,
+        "mem_available_mib": 46335.1
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 7.5e-05,
+        "cgroup_peak_mib": 19.87,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 18.4,
+        "pss_type": "PSS",
+        "sample_count": 5,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "10-gaten-content-window-impossible-r1",
+      "scenario": "scenarios/negative/gaten-content-window-impossible.yaml",
+      "scenario_sha256": "a69dd8101b6382c8f61d6cf1be44de43511ecca2727444f8be3273cedf122a53",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 155,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 53,
+          "status": "pass"
+        },
+        {
+          "kind": "tap",
+          "ms": 68,
+          "status": "timeout"
+        }
+      ],
+      "utc": "2026-11-17T06:36:41+00:00",
+      "variant": "negative",
+      "verdict": "error",
+      "verdict_eligible": true,
+      "wall_ms": 522.8
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/11-gaten-home-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text containing \"Weekly streak\", got text \"Daily streak\" / hint \"\"",
+        "retryable": false,
+        "step_index": null
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 7637,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 3.15,
+        "loadavg5": null,
+        "mem_available_end_mib": 46286.3,
+        "mem_available_mib": 46278.5
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.028597,
+        "cgroup_peak_mib": 317.52,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 169.82,
+        "pss_type": "PSS",
+        "sample_count": 84,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "11-gaten-home-wrong-r1",
+      "scenario": "scenarios/negative/gaten-home-wrong.yaml",
+      "scenario_sha256": "2728e9a8d67ea087afbf8e560fc9342c81908d529472de0b195ba8f25e0ef63b",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:36:50+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 8473.1
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/12-gaten-kanji-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Remembering the Kanji\", got text \"WaniKani\" / hint \"\"",
+        "retryable": false,
+        "step_index": null
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 11954,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.97,
+        "loadavg5": null,
+        "mem_available_end_mib": 46091.4,
+        "mem_available_mib": 46285.1
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.044659,
+        "cgroup_peak_mib": 417.31,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 241.4,
+        "pss_type": "PSS",
+        "sample_count": 127,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "12-gaten-kanji-wrong-r1",
+      "scenario": "scenarios/negative/gaten-kanji-wrong.yaml",
+      "scenario_sha256": "f3c0a7424ce83c82d6191dc67deb9598bb6661f2536ef3739c0fb2568b559d57",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:37:02+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 12803.2
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/13-gaten-lesson-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Anki is installed\", got text \"Anki is not installed\" / hint \"\"",
+        "retryable": false,
+        "step_index": null
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 8713,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.9,
+        "loadavg5": null,
+        "mem_available_end_mib": 46257.7,
+        "mem_available_mib": 46085.4
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.032491,
+        "cgroup_peak_mib": 417.52,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 242.03,
+        "pss_type": "PSS",
+        "sample_count": 95,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "13-gaten-lesson-wrong-r1",
+      "scenario": "scenarios/negative/gaten-lesson-wrong.yaml",
+      "scenario_sha256": "758384363ee9edf3d832739a3eaf7905febd80161bc2e109907aab294bc46efc",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:37:12+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 9581.9
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/14-gaten-recognition-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Enhanced\", got text \"Standard\" / hint \"\"",
+        "retryable": false,
+        "step_index": null
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 12383,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 3.0,
+        "loadavg5": null,
+        "mem_available_end_mib": 46475.3,
+        "mem_available_mib": 46252.6
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.046498,
+        "cgroup_peak_mib": 418.48,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 241.34,
+        "pss_type": "PSS",
+        "sample_count": 131,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "14-gaten-recognition-wrong-r1",
+      "scenario": "scenarios/negative/gaten-recognition-wrong.yaml",
+      "scenario_sha256": "c35f84eca5e86caa8ee14f8516790b600946a5c8b30d986d28b8bcd7ba1379d6",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:37:25+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 13209.5
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/15-gaten-search-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Not meanings\", got text \"Meanings\" / hint \"\"",
+        "retryable": false,
+        "step_index": null
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 10931,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.78,
+        "loadavg5": null,
+        "mem_available_end_mib": 46855.3,
+        "mem_available_mib": 46474.4
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.040471,
+        "cgroup_peak_mib": 324.9,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 153.43,
+        "pss_type": "PSS",
+        "sample_count": 117,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "15-gaten-search-wrong-r1",
+      "scenario": "scenarios/negative/gaten-search-wrong.yaml",
+      "scenario_sha256": "3ec47611d0eb45ac4d2795cbdcd70ed276b6f5f18ea3dc2e7f4af57711456ac7",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:37:37+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 11789.3
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/16-gaten-settings-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Theme\", got text \"Appearance\" / hint \"\"",
+        "retryable": false,
+        "step_index": null
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 9101,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.66,
+        "loadavg5": null,
+        "mem_available_end_mib": 46129.8,
+        "mem_available_mib": 46843.9
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.034043,
+        "cgroup_peak_mib": 417.12,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 240.2,
+        "pss_type": "PSS",
+        "sample_count": 99,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "16-gaten-settings-wrong-r1",
+      "scenario": "scenarios/negative/gaten-settings-wrong.yaml",
+      "scenario_sha256": "ea4738ad4e22b80437522017c8f2369dca87f259d477ebd20a29c9f475d37684",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:37:47+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 9977.3
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/17-gaten-support-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text containing \"a review or a subscription keeps it going\", got text \"Gaten is a one-person project. If it has been useful, a review or a coffee helps it keep going.\" / hint \"\"",
+        "retryable": false,
+        "step_index": null
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 9780,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.56,
+        "loadavg5": null,
+        "mem_available_end_mib": 46140.5,
+        "mem_available_mib": 46125.4
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.036447,
+        "cgroup_peak_mib": 417.24,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 241.22,
+        "pss_type": "PSS",
+        "sample_count": 105,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "17-gaten-support-wrong-r1",
+      "scenario": "scenarios/negative/gaten-support-wrong.yaml",
+      "scenario_sha256": "4292acdd728a5a9104ee5467e76b8f18e3b7df5fe152d42f3c2e0f1ba8d29814",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:37:58+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 10589.4
+    },
+    {
+      "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/18-gaten-tabs-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text containing \"Weekly streak\", got text \"Daily streak\" / hint \"\"",
+        "retryable": false,
+        "step_index": null
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 7557,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.47,
+        "loadavg5": null,
+        "mem_available_end_mib": 46650.7,
+        "mem_available_mib": 46140.3
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.028209,
+        "cgroup_peak_mib": 327.67,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 170.02,
+        "pss_type": "PSS",
+        "sample_count": 83,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "18-gaten-tabs-wrong-r1",
+      "scenario": "scenarios/negative/gaten-tabs-wrong.yaml",
+      "scenario_sha256": "c7dbe2ba3d7b67d222fea8df9ecc3075352742849d81060cca38709fd01904ab",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:38:06+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 8377.5
+    },
+    {
+      "apk_sha256": "25d0615792c4c3c74624e33c2d492e8e646b807a806a1b7b3403e73baf6e30a1",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/19-negative-hello-views-back-text-gone-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_NOT_FOUND",
+        "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+        "message": "selector id==\"result\" matched no node",
+        "retryable": false,
+        "step_index": 3
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 207.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 2720,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.16,
+        "loadavg5": null,
+        "mem_available_end_mib": 46763.0,
+        "mem_available_mib": 46652.1
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.00031,
+        "cgroup_peak_mib": 7.63,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 18.5,
+        "pss_type": "PSS",
+        "sample_count": 29,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "19-negative-hello-views-back-text-gone-r1",
+      "scenario": "scenarios/negative/hello-views-back-text-gone.yaml",
+      "scenario_sha256": "8ed71f13906a55c47868e6755364c839d10cea56b4a65b1027e62862e15a0478",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 154,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 53,
+          "status": "pass"
+        },
+        {
+          "kind": "back",
+          "ms": 2503,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:09+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 2934.9
+    },
+    {
+      "apk_sha256": "25d0615792c4c3c74624e33c2d492e8e646b807a806a1b7b3403e73baf6e30a1",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/20-negative-missing-element-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_NOT_FOUND",
+        "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+        "message": "selector id==\"does_not_exist\" matched no node",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 208.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 209,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.16,
+        "loadavg5": null,
+        "mem_available_end_mib": 46814.7,
+        "mem_available_mib": 46761.8
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 3.4e-05,
+        "cgroup_peak_mib": 8.48,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 17.96,
+        "pss_type": "PSS",
+        "sample_count": 4,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "20-negative-missing-element-r1",
+      "scenario": "scenarios/negative/missing-element.yaml",
+      "scenario_sha256": "13453ca571752c5379c2c8d27dc4dc646c04c4396b43bc86c7c846881a770221",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 156,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 52,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_visible",
+          "ms": 1,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:10+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 422.3
+    },
+    {
+      "apk_sha256": "913877c64fd4f114c4aeee46b239850f70863c3fe0b4c2410c887cabe26ba4db",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/21-negative-missing-jni-line-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text containing \"registeredEcho=echo?\", got text \"stringFromJNI=Hello from native C\\nadd(20,22)=42\\nsumArray([1,2,3,4,5])=15\\njavaCallbackResult=42\\nvoidCallback=from-native\\nregisteredEcho=echo!\\nthrowFromJNI caught=thrown from native\\n\" / hint \"\"",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 170.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 171,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.16,
+        "loadavg5": null,
+        "mem_available_end_mib": 46894.4,
+        "mem_available_mib": 46815.0
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 3.5e-05,
+        "cgroup_peak_mib": 7.8,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 19.01,
+        "pss_type": "PSS",
+        "sample_count": 4,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "21-negative-missing-jni-line-r1",
+      "scenario": "scenarios/negative/missing-jni-line.yaml",
+      "scenario_sha256": "7ae1a984daafde6b533dd1204480282c71a08accda3df74314c6a921841cdbfa",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 116,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 54,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:10+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 422.3
+    },
+    {
+      "apk_sha256": "986dbb18f33973df81dd96e5be771861f4fdb2f6dbca92c1655381e30b5d4a7a",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/22-negative-multi-back-save-state-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "log assertion did not hold",
+        "retryable": false,
+        "step_index": 3
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 206.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 2712,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.15,
+        "loadavg5": null,
+        "mem_available_end_mib": 47037.0,
+        "mem_available_mib": 46894.2
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.000324,
+        "cgroup_peak_mib": 8.52,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 19.3,
+        "pss_type": "PSS",
+        "sample_count": 29,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "22-negative-multi-back-save-state-r1",
+      "scenario": "scenarios/negative/multi-back-save-state.yaml",
+      "scenario_sha256": "637555c28bb43288b183a7fc1c6b8d792acb6a1bcb4e9ece0515e29589244ea4",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 153,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 53,
+          "status": "pass"
+        },
+        {
+          "kind": "back",
+          "ms": 2504,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_log",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:13+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 2933.8
+    },
+    {
+      "apk_sha256": "986dbb18f33973df81dd96e5be771861f4fdb2f6dbca92c1655381e30b5d4a7a",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/23-negative-multi-wrong-after-back-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "infra_timeout",
+        "code": "TIMEOUT",
+        "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure and never a pass. For a screen that animates forever in pixels (React Nati\u2026 [ACOS: result.error.hint bounded for size \u2014 668 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] \u2026rt_*` fall back to it by default. The latest tree/frame is kept in the step evidence.",
+        "message": "back: strict settle timed out (no-draw-after-action); the step is a non-pass because the screen was still changing when the deadline elapsed",
+        "retryable": true
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": null,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 4596,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.15,
+        "loadavg5": null,
+        "mem_available_end_mib": 45456.2,
+        "mem_available_mib": 47038.2
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.000807,
+        "cgroup_peak_mib": 29.39,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 36.95,
+        "pss_type": "PSS",
+        "sample_count": 48,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "23-negative-multi-wrong-after-back-r1",
+      "scenario": "scenarios/negative/multi-wrong-after-back.yaml",
+      "scenario_sha256": "c25b585c9dd7a63509cf676926b5478cdcd95b3954bcc906e80d5e21e26dbaf5",
+      "state": "cold-process",
+      "steps": [],
+      "utc": "2026-11-17T06:38:18+00:00",
+      "variant": "negative",
+      "verdict": "error",
+      "verdict_eligible": true,
+      "wall_ms": 4852.0
+    },
+    {
+      "apk_sha256": "986dbb18f33973df81dd96e5be771861f4fdb2f6dbca92c1655381e30b5d4a7a",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/24-negative-multi-wrong-message-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Goodbye\", got text \"Message\" / hint \"Message\"",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 210.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 211,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.14,
+        "loadavg5": null,
+        "mem_available_end_mib": 46394.4,
+        "mem_available_mib": 45677.1
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 3.8e-05,
+        "cgroup_peak_mib": 8.61,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 18.01,
+        "pss_type": "PSS",
+        "sample_count": 4,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "24-negative-multi-wrong-message-r1",
+      "scenario": "scenarios/negative/multi-wrong-message.yaml",
+      "scenario_sha256": "ef7a5d18b1379202b576faea2af12d3600c91fc5492b35eda848edb437137683",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 157,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 53,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 1,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:19+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 422.7
+    },
+    {
+      "apk_sha256": "7e2a469d20614c5ecde47b0a3407b40d4930991a23cdf0cc928179a298c51d80",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/25-negative-offscreen-pager-visible-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_OFFSCREEN",
+        "hint": "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass.",
+        "message": "selector text==\"Hidden\" matched no visible node, but it matches a node that is not visible to the user (text \"Hidden\" content_desc \"\" class android.widget.TextView bounds [1122,317][1239,368] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class \u2014 scroll it into view or target a visible node, never treat it as a pass",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 208.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 210,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.14,
+        "loadavg5": null,
+        "mem_available_end_mib": 46254.0,
+        "mem_available_mib": 46386.4
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 4.3e-05,
+        "cgroup_peak_mib": 17.5,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 27.8,
+        "pss_type": "PSS",
+        "sample_count": 4,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "25-negative-offscreen-pager-visible-r1",
+      "scenario": "scenarios/negative/offscreen-pager-visible.yaml",
+      "scenario_sha256": "634a0dd579f7a65d8967c888470e419a71de688811b428d218ff97be5917b847",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 154,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 54,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_visible",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:19+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 422.3
+    },
+    {
+      "apk_sha256": "7e2a469d20614c5ecde47b0a3407b40d4930991a23cdf0cc928179a298c51d80",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/26-negative-offscreen-pager-wait-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "infra_timeout",
+        "code": "TIMEOUT",
+        "hint": "The live tree kept being re-traversed until the deadline. Increase `timeout_ms` if the app is genuinely slow, or fix the selector/state; a timeout is a structured failure, never a pass. The step's `settle` record names the rule(s) it asked for and why each observation failed.",
+        "message": "wait_for timed out after 1000 ms: selector text==\"Hidden\" did not satisfy the condition (require_visible=true); it DID match a node that is not visible to the user (bounds [1122,317][1239,368], visible_bounds <none>) \u2014 scroll it into view first",
+        "retryable": true
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 200.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 1268,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.14,
+        "loadavg5": null,
+        "mem_available_end_mib": 46012.3,
+        "mem_available_mib": 46587.6
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.00023,
+        "cgroup_peak_mib": 10.66,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 18.71,
+        "pss_type": "PSS",
+        "sample_count": 16,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "26-negative-offscreen-pager-wait-r1",
+      "scenario": "scenarios/negative/offscreen-pager-wait.yaml",
+      "scenario_sha256": "092928a805a662fc65d79c79c7c5bc0c23a2e24e366e64337bfeea5e59894b94",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 145,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 55,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 1068,
+          "status": "timeout"
+        }
+      ],
+      "utc": "2026-11-17T06:38:21+00:00",
+      "variant": "negative",
+      "verdict": "error",
+      "verdict_eligible": true,
+      "wall_ms": 1632.7
+    },
+    {
+      "apk_sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/27-negative-rot1-rotate-wrong-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected bounds [42,368][273,494], got [170,282][401,408]",
+        "retryable": false,
+        "step_index": 4
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 208.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 394,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.37,
+        "loadavg5": null,
+        "mem_available_end_mib": 46619.0,
+        "mem_available_mib": 46303.5
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 6.9e-05,
+        "cgroup_peak_mib": 9.46,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 18.67,
+        "pss_type": "PSS",
+        "sample_count": 6,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "27-negative-rot1-rotate-wrong-r1",
+      "scenario": "scenarios/negative/rot1-rotate-wrong.yaml",
+      "scenario_sha256": "0f7e3599d3280c9644f5ad1ab74386b566e105a9852f43e75acbf82e4618ba0b",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 155,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 53,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 0,
+          "status": "pass"
+        },
+        {
+          "kind": "rotate",
+          "ms": 184,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 1,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:21+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 623.8
+    },
+    {
+      "apk_sha256": "d8c277d7476a54f8a09288962fd3d9a864ad53b934350721af81725cb3ba7aa9",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/28-se1-expect-change-noop-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "The action was delivered and settled, but nothing on screen changed, so anything asserted afterwards would describe state this step never produced (GR4 G4c). Target the control that really writes the state, or drop `expect_change` if this action legitimately changes no pixels.",
+        "message": "tap: the settled frame is pixel-identical to the pre-action frame (`settle.pixels_changed:false`); the step proved no visual change",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 208.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 413,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.37,
+        "loadavg5": null,
+        "mem_available_end_mib": 46624.3,
+        "mem_available_mib": 46608.9
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 6.7e-05,
+        "cgroup_peak_mib": 17.87,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 28.54,
+        "pss_type": "PSS",
+        "sample_count": 6,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "28-se1-expect-change-noop-r1",
+      "scenario": "scenarios/negative/se1-expect-change-noop.yaml",
+      "scenario_sha256": "a75392173bbfa9e831176c340c4d811296e7d2d8157fb5fc5003fcf77b0bfbce",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 155,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 53,
+          "status": "pass"
+        },
+        {
+          "kind": "tap",
+          "ms": 204,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:22+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 623.6
+    },
+    {
+      "apk_sha256": "1d94c4c9806be2f3a9e6dd4f9699c1923459e8e09dcdef2b776de8b522b375eb",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/29-negative-todo-missing-item-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_NOT_FOUND",
+        "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+        "message": "selector text==\"eggs\" matched no node",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 208.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 208,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.37,
+        "loadavg5": null,
+        "mem_available_end_mib": 47058.0,
+        "mem_available_mib": 46619.8
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 3.3e-05,
+        "cgroup_peak_mib": 8.98,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 18.0,
+        "pss_type": "PSS",
+        "sample_count": 4,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "29-negative-todo-missing-item-r1",
+      "scenario": "scenarios/negative/todo-missing-item.yaml",
+      "scenario_sha256": "6cd724b7beb6a6f833a9c56307097c80640ca67b040f9727ec7180c52b952bc2",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 154,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 54,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_visible",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:23+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 422.0
+    },
+    {
+      "apk_sha256": "89c65f431bddfb29b0ab2a89dd4c7bca492b19ee61410473b3b02266b4d863f3",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/30-w44-hostile-forest-trusted-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_NOT_FOUND",
+        "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+        "message": "selector id==\"ghost\" matched no node",
+        "retryable": false,
+        "step_index": 1
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 1518.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 3038,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.37,
+        "loadavg5": null,
+        "mem_available_end_mib": 47070.0,
+        "mem_available_mib": 47057.3
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 0.000418,
+        "cgroup_peak_mib": 8.77,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 18.51,
+        "pss_type": "PSS",
+        "sample_count": 32,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "30-w44-hostile-forest-trusted-r1",
+      "scenario": "scenarios/negative/w44-hostile-forest-trusted.yaml",
+      "scenario_sha256": "56c7f0d090fc05a46d780c1d160288ae17b27a8897a3ca987173722a54737938",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 1518,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:26+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 3233.2
+    },
+    {
+      "apk_sha256": "25d0615792c4c3c74624e33c2d492e8e646b807a806a1b7b3403e73baf6e30a1",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/31-negative-wrong-bounds-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected bounds [0,0][1,1], got [42,612][175,663]",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 214.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 216,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.18,
+        "loadavg5": null,
+        "mem_available_end_mib": 47080.8,
+        "mem_available_mib": 47063.6
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 4e-05,
+        "cgroup_peak_mib": 17.58,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 27.58,
+        "pss_type": "PSS",
+        "sample_count": 4,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "31-negative-wrong-bounds-r1",
+      "scenario": "scenarios/negative/wrong-bounds.yaml",
+      "scenario_sha256": "924da17ed3fe7d7f2ced5830d285870573307382efec501173a6fe5b40555ac8",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 158,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 56,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:26+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 422.3
+    },
+    {
+      "apk_sha256": "25d0615792c4c3c74624e33c2d492e8e646b807a806a1b7b3403e73baf6e30a1",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/32-negative-wrong-lifecycle-order-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "log assertion did not hold",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 215.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 215,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.18,
+        "loadavg5": null,
+        "mem_available_end_mib": 47080.3,
+        "mem_available_mib": 47080.5
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 3.7e-05,
+        "cgroup_peak_mib": 8.47,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 18.78,
+        "pss_type": "PSS",
+        "sample_count": 4,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "32-negative-wrong-lifecycle-order-r1",
+      "scenario": "scenarios/negative/wrong-lifecycle-order.yaml",
+      "scenario_sha256": "6841a20406aaa8cd3e3a3dc2cd831c8d08d2ce5019aba0a6f3f7ca3b4910bdd9",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 158,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 57,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_log",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:27+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 422.6
+    },
+    {
+      "apk_sha256": "25d0615792c4c3c74624e33c2d492e8e646b807a806a1b7b3403e73baf6e30a1",
+      "art_engine_flag": true,
+      "artifacts": "results/handoff/GATEFIX/02-matrix-quiet/artifacts/33-negative-wrong-text-r1",
+      "dirty_hash": "8f0f386ddec063e008929f0fc68212061e7e08c486395c6cf6ca725d8ddebd44",
+      "engine": "art",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"clicks: 9\", got text \"clicks: 0\" / hint \"\"",
+        "retryable": false,
+        "step_index": 2
+      },
+      "expected": "fail",
+      "false_fail": false,
+      "false_pass": false,
+      "first_frame_ms": 212.0,
+      "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
+      "git": "5a912d4b13563490339e1497f25742173a6e3ce5",
+      "guest_wall_ms": 215,
+      "host": {
+        "contaminated": false,
+        "loadavg1": 2.18,
+        "loadavg5": null,
+        "mem_available_end_mib": 47032.3,
+        "mem_available_mib": 47078.5
+      },
+      "mem": {
+        "anon_shmem_settled_mib": null,
+        "cgroup_gib_min": 3.4e-05,
+        "cgroup_peak_mib": 7.87,
+        "cgroup_source": "unit-scope",
+        "legacy_comparison": {
+          "acos": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": null,
+            "source": null,
+            "state": "cold-process",
+            "value_mib": null
+          },
+          "comparable": false,
+          "legacy": {
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "n": null,
+            "settle_s": 60,
+            "source": "BENCHMARKS.md section 3 (legacy ACVM N=1), reference only",
+            "state": "warm",
+            "value_mib": 130.3
+          },
+          "note": "never sum cgroup and PSS; cgroup anon+shmem is the legacy-comparable column",
+          "ratio": null,
+          "reasons": [
+            "value missing",
+            "state cold-process != warm",
+            "settle time None s != 60 s"
+          ],
+          "verdict": "NOT_COMPARABLE"
+        },
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "peak_type": "CGROUP_MEMORY_CURRENT",
+        "pss_mib": 17.95,
+        "pss_type": "PSS",
+        "sample_count": 4,
+        "settle_s": null
+      },
+      "n_concurrent": 1,
+      "negative": true,
+      "profile": "release",
+      "rc": 1,
+      "run_id": "33-negative-wrong-text-r1",
+      "scenario": "scenarios/negative/wrong-text.yaml",
+      "scenario_sha256": "aaf321a2411ef42b207c2c34e81662e904cb19af94ac254f60476d187007fe1a",
+      "state": "cold-process",
+      "steps": [
+        {
+          "kind": "launch",
+          "ms": 156,
+          "status": "pass"
+        },
+        {
+          "kind": "wait_for",
+          "ms": 56,
+          "status": "pass"
+        },
+        {
+          "kind": "assert_text",
+          "ms": 0,
+          "status": "fail"
+        }
+      ],
+      "utc": "2026-11-17T06:38:27+00:00",
+      "variant": "negative",
+      "verdict": "fail",
+      "verdict_eligible": true,
+      "wall_ms": 422.3
+    }
+  ],
+  "schema": "acos-bench-matrix/1",
+  "summary": {
+    "classes": {
+      "assertion": 29,
+      "infra_timeout": 3,
+      "pass": 1
+    },
+    "errors": 3,
+    "failed": 29,
+    "false_fail": 0,
+    "false_pass": 0,
+    "gates": {
+      "false_pass_zero": true,
+      "harness_timeout_within_2pct": false,
+      "negative_all_correct": false,
+      "unclassified_zero": true
+    },
+    "harness_or_timeout": 3,
+    "negative_correct": 29,
+    "negative_runs": 32,
+    "passed": 1,
+    "total_runs": 33,
+    "unclassified": 0,
+    "verdict_eligible": true
+  },
+  "utc": "2026-11-17T06:38:27+00:00"
+}

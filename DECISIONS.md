@@ -1224,3 +1224,42 @@ not, so a verdict may show `mode: content, fallback_from: strict, pixel_evidence
 that asserted a text on an animating screen used to fail (and was being worked around with a
 `settle: content` tap); it now passes with a content record. Pixel assertions on the same screens still
 fail (`content_settle_pixel`), as they must.
+
+### ADR-0032 amendment 1 — a placeholder verdict needs a window, not a sample burst (GATEFIX, 2026-11-17)
+
+**Context.** The v0.3.0 release gate found `launch` + `settle: content` answering
+`PLACEHOLDER_CONTENT` on a quiet host (2/32 matrix negatives; the same rows passed on a busy host).
+A content launch binds its first frame with the guest's `fast` rule and then proves the tree content
+stable on the host. The pre-content mount wait was the G3c/G3f1 loop: repeat a re-traversal while the
+tree is a window skeleton, capped at `FIRST_FRAME_MAX_ATTEMPTS = 8`. A `fast` traversal has no change
+gate, so on an idle host the eight samples cost ~0 ms: the loop read the guest's cached skeleton eight
+times and declared `placeholder` before the app could draw. ADR-0032 already says content settle is a
+tree rule, not a pixel rule; it did not say what "the app never mounted" needs as evidence.
+
+**Decision.** A placeholder is a claim about the app, so it gets the same shape as every other settle:
+a **window plus a guest signal**, never a count of samples.
+
+1. The mount wait is a *change* wait for every settle rule. It hands the guest the tree it just
+   published (`baseline_tree`) and asks with the strict change rule, whatever the caller's rule is
+   (the caller's rule is proven on the mounted tree afterwards). It is bounded by the
+   `ACOS_ART_FIRST_FRAME_MS` window, not by a traversal count; a guest that answers before the window
+   has run out is paced (`FIRST_FRAME_PROBE_PACE_MS`) and observed again.
+2. `placeholder` requires the skeleton to be stable **for the whole window** (report:
+   `first_frame.window_ms`, `window_spent`) with no frame/pixel movement. Eight samples in a
+   millisecond are not evidence of an unmounted app.
+3. A wait that cannot observe the window (guest error) yields neither a placeholder nor a pass: the
+   launch returns the guest's own structured error (`first_frame_window_unproven` when there is none).
+   Never a false placeholder, never a false pass.
+4. The same rule for `reset`. Nothing else changes: a real placeholder still blocks with the log hint,
+   and a text-free mounted screen is still `placeholder_suspect` (pixels moved), not blocked.
+
+**Consequences.** A launch that really never mounts now spends the content window (default 5 s) before
+`PLACEHOLDER_CONTENT` — it already did on the strict path, and the content path now matches it. The
+reply's `first_frame` block names the window and whether it was spent, so a gate can check the
+evidence instead of trusting the verdict.
+
+`tools/benchlib.py`'s failure taxonomy gained the protocol's assertion outcomes (`ELEMENT_OFFSCREEN`,
+`AMBIGUOUS_SELECTOR`, `TREE_TRUNCATED`, `END_OF_LIST`, `INPUT_NOT_HANDLED`): a correct negative that
+fails with one of them is a `correct_negative`, never an `unclassified` row (v0.3.0 gate F2). The
+matrix's default fixture set is built on demand (`tools/run-matrix.sh` → `tools/build-apps.sh
+ACOS_APP_ONLY=<missing>`) so a stale `fixtures/build` cannot produce an `APK_IO` row (F3).

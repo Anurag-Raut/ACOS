@@ -4809,6 +4809,8 @@ mod tests {
             pixels_compared: true,
             pixels_changed: false,
             budget_ms: 5000,
+            window_ms: 5000,
+            window_spent: true,
         }
     }
 

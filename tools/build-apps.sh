@@ -13,10 +13,15 @@
 #   fixtures/build/apps/counter.apk
 #   fixtures/build/apps/todo-list.apk
 #   fixtures/build/apps/multi-activity.apk
+#   fixtures/build/apps/finish-start.apk
 #   fixtures/build/apps/form-validation.apk
 #   fixtures/build/apps/svg-viewbox.apk
 #   fixtures/build/apps/offscreen-pager.apk
 #   fixtures/build/apps/insets-probe.apk
+#
+# `tools/run-matrix.sh` calls this script with ACOS_APP_ONLY for any scenario
+# APK under fixtures/build/apps that is missing, so a stale fixtures/build can
+# never turn a correct matrix row into `APK_IO` (v0.3.0 gate finding F3).
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
