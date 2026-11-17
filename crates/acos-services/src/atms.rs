@@ -294,6 +294,30 @@ pub const PRIMARY_PROCESS_TAG: u32 = 0;
 /// `ActivityThread` arrive with this bit set; host-minted binder ids do not.
 const GUEST_JAVA_BINDER_TAG: u64 = 1 << 32;
 
+/// MPROC5/SYSUI4: one `IApplicationThread` lifecycle call queued for a
+/// specific process's app thread.
+///
+/// The encoded `args` are what the peer writes; the typed `item` and its
+/// `token` are kept too, because AOSP withdraws a pause/stop that has been
+/// superseded by the caller's result delivery **before** it is sent
+/// (`ActivityRecord.sendResult` stores the result while the caller is not
+/// resumed; `TaskFragment.resumeTopActivity` then resumes it with the result in
+/// one transaction, so the server never pauses/stops an activity it is about
+/// to resume).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PendingLifecycleCall {
+    /// Process tag that owns the target `IApplicationThread`.
+    pub tag: u32,
+    /// Activity token the item targets.
+    pub token: u64,
+    /// The typed item (pause/stop/resume/result transaction).
+    pub item: ClientTransactionItem,
+    /// `IApplicationThread` method (always `scheduleTransaction` today).
+    pub method: String,
+    /// Encoded call arguments.
+    pub args: Vec<Value>,
+}
+
 /// One activity record.
 #[derive(Debug, Clone)]
 pub struct ActivityRecord {
@@ -493,10 +517,11 @@ pub struct AtmsState {
     /// process, and it is what the cross-process pause/stop/resume rule reads.
     pub tops: std::collections::BTreeMap<u32, u64>,
     /// MPROC5: lifecycle `ClientTransaction`s queued for a **specific**
-    /// process's `IApplicationThread` (`tag`, method, args). `AtmsService::call`
-    /// encodes them into `PendingDelivery`s; the peer routes each to the
-    /// process that owns the target binder.
-    pub pending_lifecycle_calls: Vec<(u32, String, Vec<Value>)>,
+    /// process's `IApplicationThread`. `AtmsService::call` encodes them into
+    /// `PendingDelivery`s; the peer routes each to the process that owns the
+    /// target binder. Kept typed as well as encoded so a superseded pause/stop
+    /// can be withdrawn before it is sent (SYSUI4).
+    pub pending_lifecycle_calls: Vec<PendingLifecycleCall>,
     /// MPROC5: the activity that was the session's top **before** the current
     /// one (`tag`, token). When the top finishes, stock resumes the activity
     /// below it in the task stack; ACOS keeps one task per process, so the
@@ -1395,11 +1420,13 @@ impl AtmsState {
             );
             return;
         };
-        self.pending_lifecycle_calls.push((
+        self.pending_lifecycle_calls.push(PendingLifecycleCall {
             tag,
-            "scheduleTransaction".into(),
-            vec![Value::TypedObject(transaction)],
-        ));
+            token,
+            item: item.clone(),
+            method: "scheduleTransaction".into(),
+            args: vec![Value::TypedObject(transaction)],
+        });
         self.log_event(
             "ActivityManagerLifecycle",
             acos_protocol::LogLevel::Debug,
@@ -1485,6 +1512,27 @@ impl AtmsState {
                 "ActivityManagerStopped",
                 acos_protocol::LogLevel::Debug,
                 format!("token={token:#x} stop after destroy ignored (stock: record is gone)"),
+            );
+            return Ok(());
+        }
+        // SYSUI4: AOSP's `ActivityRecord.activityStopped` only accepts a stop
+        // while the record is stopping (`isStopping`); for anything else it logs
+        // "Activity reported stop, but no longer stopping" and returns. The
+        // guest produces that order itself: `handleStopActivity` defers the
+        // report into a `PendingTransactionActions.StopInfo` runnable, so when
+        // the caller is resumed by its result delivery before that runnable
+        // runs, its stop arrives for a `Resumed` record. With a
+        // start-then-finish-in-`onCreate` dialog this is the normal order, not
+        // an app error (`sysui1-permission-pregranted` measured
+        // `illegal transition Stop from Resumed`).
+        if self.activities[index].lifecycle == ActivityLifecycle::Resumed {
+            self.log_event(
+                "ActivityManagerStopped",
+                acos_protocol::LogLevel::Debug,
+                format!(
+                    "token={token:#x} stop for a resumed activity ignored (stock: no longer \
+                     stopping)"
+                ),
             );
             return Ok(());
         }
@@ -1815,17 +1863,111 @@ impl AtmsState {
                  code={result_code}, who={result_who:?}) + ResumeActivityItem"
             ),
         );
-        self.pending_lifecycle_calls.push((
+        // SYSUI4: AOSP's ordering. `ActivityRecord.sendResult` stores the result
+        // while the caller is not resumed; `TaskFragment.resumeTopActivity`
+        // resumes the caller *with* the stored results, so a pause/stop the
+        // server queued earlier but never sent is superseded. A dialog that
+        // starts and finishes inside `onCreate` (the pre-granted arm) makes that
+        // window real: the pause/stop were queued when the dialog became top and
+        // the result arrives before the caller ever ran them. Drop those
+        // undelivered items; the result transaction restarts the caller itself
+        // (`ActivityResultItem` + `ResumeActivityItem`).
+        self.withdraw_pending_pause_stop(tag, caller);
+        self.pending_lifecycle_calls.push(PendingLifecycleCall {
             tag,
-            "scheduleTransaction".into(),
-            vec![Value::TypedObject(transaction)],
-        ));
+            token: caller,
+            item: ClientTransactionItem::ResumeActivity,
+            method: "scheduleTransaction".into(),
+            args: vec![Value::TypedObject(transaction)],
+        });
         self.activities[index].result_delivered = true;
+        // `TaskFragment.resumeTopActivity` calls `next.notifyAppResumed()`
+        // *before* it schedules the result+resume transaction. Model the same:
+        // the caller is resumed from now on, so the guest's deferred
+        // `activityStopped` (posted by `handleStopActivity` as a
+        // `PendingTransactionActions.StopInfo` runnable) is the "reported stop,
+        // but no longer stopping" case AOSP logs and ignores instead of an
+        // illegal transition.
+        self.notify_caller_resumed(caller);
         // The caller is the resumed, foreground activity now (stock: the result
         // transaction resumes it).
         self.tops.insert(tag, caller);
         self.publish_top(tag);
         self.mark_process_active(tag);
+    }
+
+    /// SYSUI4: withdraw queued-but-unsent pause/stop items for `token`.
+    ///
+    /// AOSP only ever pauses/stops an activity whose record is not about to be
+    /// resumed with pending results: `ActivityRecord.sendResult` keeps the
+    /// result on the record while the caller is not resumed and
+    /// `TaskFragment.resumeTopActivity` sends `ActivityResultItem` +
+    /// `ResumeActivityItem` in one transaction. ACOS queues the pause/stop when
+    /// the dialog becomes top; when the dialog finishes before those were
+    /// delivered they are stale and must not pause the caller after its result.
+    fn withdraw_pending_pause_stop(&mut self, tag: u32, token: u64) {
+        let is_superseded = |call: &PendingLifecycleCall| {
+            call.tag == tag
+                && call.token == token
+                && matches!(
+                    call.item,
+                    ClientTransactionItem::PauseActivity { .. }
+                        | ClientTransactionItem::StopActivity { .. }
+                )
+        };
+        let withdrawn: Vec<ClientTransactionItem> = self
+            .pending_lifecycle_calls
+            .iter()
+            .filter(|call| is_superseded(call))
+            .map(|call| call.item.clone())
+            .collect();
+        if withdrawn.is_empty() {
+            return;
+        }
+        self.pending_lifecycle_calls
+            .retain(|call| !is_superseded(call));
+        self.log_event(
+            "ActivityManagerResult",
+            acos_protocol::LogLevel::Debug,
+            format!(
+                "tag={tag} token={token:#x} withdrew superseded item(s) {withdrawn:?} \
+                 (the result transaction restarts the caller; stock never pauses it)"
+            ),
+        );
+    }
+
+    /// SYSUI4: `ActivityRecord.notifyAppResumed` for the caller.
+    ///
+    /// The result delivery resumes the caller, so the host's model must say so
+    /// before the guest's reports arrive; otherwise the deferred
+    /// `activityStopped` that `handleStopActivity` posts
+    /// (`PendingTransactionActions.StopInfo`) lands on a `Resumed` record and is
+    /// rejected as `illegal transition Stop from Resumed`. AOSP's
+    /// `ActivityRecord.activityStopped` answers exactly that case with
+    /// "Activity reported stop, but no longer stopping" and ignores it.
+    fn notify_caller_resumed(&mut self, caller: u64) {
+        let Some(index) = self.activities.iter().position(|a| a.token == caller) else {
+            return;
+        };
+        let previous = self.activities[index].lifecycle;
+        if matches!(
+            previous,
+            ActivityLifecycle::Created
+                | ActivityLifecycle::Started
+                | ActivityLifecycle::Paused
+                | ActivityLifecycle::Stopped
+        ) {
+            self.activities[index].lifecycle = ActivityLifecycle::Resumed;
+            self.activities[index].resumed = true;
+            self.log_event(
+                "ActivityManagerResult",
+                acos_protocol::LogLevel::Debug,
+                format!(
+                    "token={caller:#x} notifyAppResumed {previous:?} -> Resumed \
+                     (the result transaction resumes the caller)"
+                ),
+            );
+        }
     }
 
     /// SYSUI3A: name the session's **primary** process (tag 0).
@@ -2715,7 +2857,13 @@ impl ServiceObject for AtmsService {
         // attached process.
         let lifecycle = std::mem::take(&mut state.pending_lifecycle_calls);
         let trace_lifecycle = std::env::var_os("ACOS_ATMS_TRACE").is_some();
-        for (tag, name, values) in lifecycle {
+        for PendingLifecycleCall {
+            tag,
+            method: name,
+            args: values,
+            ..
+        } in lifecycle
+        {
             if trace_lifecycle {
                 eprintln!(
                     "ACOSATMS deliver tag={tag} method={name} app_thread={:?}",

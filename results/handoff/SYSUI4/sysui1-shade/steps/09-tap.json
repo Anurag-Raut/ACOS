@@ -1,0 +1,66 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "acks": 2,
+        "delivered": true,
+        "handled": "window-removed",
+        "window": "main"
+      },
+      "expected": {
+        "handled": "window-removed",
+        "window": "main"
+      },
+      "kind": "window_removed",
+      "matched_node_ids": [],
+      "message": "the tapped window \"main\" was removed by a delivered, guest-handled gesture; the window removal is the interaction's evidence",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 4554,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/6.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/6.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/09-tap.json"
+    }
+  ],
+  "frame_seq": 6,
+  "index": 9,
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "acked": 2,
+    "animating": false,
+    "bound": "window-removed",
+    "handled": "window-removed",
+    "handled_window": "c13048c",
+    "handled_window_label": "main",
+    "meaning": "the window the tap landed on is gone from the host's window record: the removal is the interaction's evidence, not a screen that is still changing (a settle timeout with no delivered gesture stays a timeout)",
+    "mode": "strict",
+    "reason": "no-draw-after-action",
+    "settled": false,
+    "strict_rule": "event",
+    "windows_after": 2,
+    "windows_before": 1
+  },
+  "status": "pass",
+  "step": "tap",
+  "trust": "trusted"
+}

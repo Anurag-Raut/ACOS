@@ -51,14 +51,17 @@ fn create_and_start(atms: &mut AtmsState, activity_token: u64, class: &str) {
 
 /// `(item class name, activity token)` of one queued lifecycle call, read back
 /// from the encoded `ClientTransaction` parcelable.
-fn encoded(call: &(u32, String, Vec<Value>)) -> (String, u64) {
-    let (tag, method, args) = call;
+fn encoded(call: &acos_services::atms::PendingLifecycleCall) -> (String, u64) {
     assert_eq!(
-        method, "scheduleTransaction",
+        call.method, "scheduleTransaction",
         "delivered as IApplicationThread.scheduleTransaction"
     );
-    let Value::TypedObject(Parcelable::Ordered { class, values }) = &args[0] else {
-        panic!("expected an encoded ClientTransaction, got {:?}", args[0]);
+    let tag = &call.tag;
+    let Value::TypedObject(Parcelable::Ordered { class, values }) = &call.args[0] else {
+        panic!(
+            "expected an encoded ClientTransaction, got {:?}",
+            call.args[0]
+        );
     };
     assert_eq!(class, "android.app.servertransaction.ClientTransaction");
     assert_eq!(
@@ -179,9 +182,9 @@ fn finishing_the_new_top_resumes_the_activity_below_in_the_other_process() {
     atms.finish_activity(b, 0, None).expect("B finishes");
 
     assert_eq!(atms.pending_lifecycle_calls.len(), 1);
-    let (tag, method, args) = &atms.pending_lifecycle_calls[0];
-    assert_eq!((*tag, method.as_str()), (0, "scheduleTransaction"));
-    let Value::TypedObject(Parcelable::Ordered { values, .. }) = &args[0] else {
+    let call = &atms.pending_lifecycle_calls[0];
+    assert_eq!((call.tag, call.method.as_str()), (0, "scheduleTransaction"));
+    let Value::TypedObject(Parcelable::Ordered { values, .. }) = &call.args[0] else {
         panic!("expected an encoded ClientTransaction");
     };
     let Value::Cond {
