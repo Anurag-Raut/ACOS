@@ -1,5 +1,5 @@
 {
-  "request_id": "req_7f50e_18e8c588ac5c5487",
+  "request_id": "req_f550_18e8d8fc46be8b08",
   "ok": false,
   "status": "fail",
   "backend": "acos-native",
@@ -19,7 +19,7 @@
     "retryable": false,
     "details": {
       "polls": 66,
-      "waited_ms": 60004
+      "waited_ms": 60003
     }
   },
   "result": {
@@ -84,7 +84,7 @@
           "code": "ASSERTION_FAILED",
           "details": {
             "polls": 66,
-            "waited_ms": 60004
+            "waited_ms": 60003
           },
           "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
           "message": "expected text exactly \"HTTP 200\", got text \"java.lang.SecurityException\" / hint \"\"",
@@ -94,7 +94,7 @@
         "summary": "step 3 (assert_text) fail"
       },
       "fidelity": "art-reference",
-      "finished_at": "2026-11-17T07:48:23.136Z",
+      "finished_at": "2026-11-17T13:44:50.386Z",
       "insets": "report",
       "isolation": "process",
       "mode": "live",
@@ -343,15 +343,15 @@
         "scenario_path": "scenarios/net-check.yaml",
         "scenario_sha256": "e9dd8f227916ef442b884aa4bafe51dcb87ea3dea08162d3feb21a428204dada"
       },
-      "request_id": "req_7f50e_18e8c588ac5c5487",
+      "request_id": "req_f550_18e8d8fc46be8b08",
       "resources": {
-        "events": 96,
+        "events": 93,
         "frames_captured": 4,
         "memory_mib": 33,
-        "peak_rss_bytes": 35553280,
+        "peak_rss_bytes": 34668544,
         "sessions": 1,
         "steps": 4,
-        "wall_ms": 60677
+        "wall_ms": 60683
       },
       "scenario": {
         "name": "net-check",
@@ -361,9 +361,9 @@
       "schema_version": 1,
       "session_exit": {
         "abi": null,
-        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=65MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p521495-i576300.scope)",
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=68MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p62809-i6845.scope)",
         "code": null,
-        "disk_free_bytes": 266078068736,
+        "disk_free_bytes": 261814734848,
         "guest_crash": null,
         "guest_exit": 0,
         "guest_signal": null,
@@ -376,12 +376,12 @@
         "stage": "teardown-evidence"
       },
       "session_id": "s_art_net-check",
-      "started_at": "2026-11-17T07:47:22.459Z",
+      "started_at": "2026-11-17T13:43:49.703Z",
       "status": "fail",
       "steps": [
         {
           "assertions": [],
-          "duration_ms": 379,
+          "duration_ms": 382,
           "evidence": [
             {
               "kind": "step",
@@ -400,7 +400,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 285,
+          "duration_ms": 290,
           "evidence": [
             {
               "kind": "tree",
@@ -523,13 +523,13 @@
               "passed": false
             }
           ],
-          "duration_ms": 60005,
+          "duration_ms": 60003,
           "error": {
             "class": "assertion",
             "code": "ASSERTION_FAILED",
             "details": {
               "polls": 66,
-              "waited_ms": 60004
+              "waited_ms": 60003
             },
             "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
             "message": "expected text exactly \"HTTP 200\", got text \"java.lang.SecurityException\" / hint \"\"",
@@ -574,8 +574,8 @@
     "verdict_path": "out/net-check/verdict.json"
   },
   "metrics": {
-    "wall_ms": 60677,
-    "peak_rss_bytes": 35553280
+    "wall_ms": 60683,
+    "peak_rss_bytes": 34668544
   },
   "evidence": {
     "events": "events.jsonl",

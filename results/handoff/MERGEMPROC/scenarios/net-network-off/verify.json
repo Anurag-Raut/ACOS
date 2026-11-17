@@ -1,5 +1,5 @@
 {
-  "request_id": "req_7faf2_18e8c59725eb35f9",
+  "request_id": "req_108dc_18e8d90ac61bd786",
   "ok": false,
   "status": "error",
   "backend": "acos-native",
@@ -15,9 +15,9 @@
       "art_code": "GUEST_EXITED",
       "session_exit": {
         "abi": null,
-        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=1MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p523004-i429216.scope)",
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=1MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p67814-i35119.scope)",
         "code": "GUEST_EXITED",
-        "disk_free_bytes": 266076495872,
+        "disk_free_bytes": 261796982784,
         "guest_crash": null,
         "guest_exit": 127,
         "guest_signal": null,

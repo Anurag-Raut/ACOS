@@ -1,5 +1,5 @@
 {
-  "request_id": "req_7e604_18e8c573e67130ad",
+  "request_id": "req_d522_18e8d8eefd51be5e",
   "ok": true,
   "status": "pass",
   "backend": "acos-native",
@@ -69,7 +69,7 @@
       },
       "extra_apks": [],
       "fidelity": "art-reference",
-      "finished_at": "2026-11-17T07:45:55.770Z",
+      "finished_at": "2026-11-17T13:42:59.012Z",
       "insets": "report",
       "isolation": "process",
       "mode": "live",
@@ -317,15 +317,15 @@
         "scenario_path": "scenarios/sensors-scripted.yaml",
         "scenario_sha256": "c21f87b1c9b7cd98f8a6673cc470a4787123e77d9cad84693878842e33be2ef6"
       },
-      "request_id": "req_7e604_18e8c573e67130ad",
+      "request_id": "req_d522_18e8d8eefd51be5e",
       "resources": {
         "events": 94,
         "frames_captured": 11,
-        "memory_mib": 33,
-        "peak_rss_bytes": 35184640,
+        "memory_mib": 34,
+        "peak_rss_bytes": 35786752,
         "sessions": 1,
         "steps": 16,
-        "wall_ms": 2494
+        "wall_ms": 2492
       },
       "scenario": {
         "name": "sensors-scripted",
@@ -335,9 +335,9 @@
       "schema_version": 1,
       "session_exit": {
         "abi": null,
-        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=68MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p517648-i523577.scope)",
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=67MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p55959-i30780.scope)",
         "code": null,
-        "disk_free_bytes": 265897009152,
+        "disk_free_bytes": 274797977600,
         "guest_crash": null,
         "guest_exit": 0,
         "guest_signal": null,
@@ -350,12 +350,12 @@
         "stage": "teardown-evidence"
       },
       "session_id": "s_art_sensor-probe",
-      "started_at": "2026-11-17T07:45:53.276Z",
+      "started_at": "2026-11-17T13:42:56.520Z",
       "status": "pass",
       "steps": [
         {
           "assertions": [],
-          "duration_ms": 373,
+          "duration_ms": 374,
           "evidence": [
             {
               "kind": "step",
@@ -374,7 +374,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 283,
+          "duration_ms": 279,
           "evidence": [
             {
               "kind": "tree",
@@ -437,7 +437,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 1,
+          "duration_ms": 2,
           "evidence": [
             {
               "kind": "tree",
@@ -592,7 +592,7 @@
                     "fidelity": "scripted",
                     "id": "sensors",
                     "profile": "scripted",
-                    "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 37 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
+                    "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 36 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
                     "state": "attached"
                   },
                   {
@@ -783,7 +783,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 298,
+          "duration_ms": 292,
           "evidence": [
             {
               "kind": "tree",
@@ -938,7 +938,7 @@
                     "fidelity": "scripted",
                     "id": "sensors",
                     "profile": "scripted",
-                    "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 53 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
+                    "reason": "scripted profile: 7 sensors (accelerometer/magnetometer/gyroscope/light/proximity/rotation_vector/step_counter), 52 events delivered, 1 connections, 0 play timelines; values are scripted, not measured, and delivery is not permission-gated",
                     "state": "attached"
                   },
                   {
@@ -1115,7 +1115,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 1,
+          "duration_ms": 0,
           "evidence": [
             {
               "kind": "step",
@@ -1129,7 +1129,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 287,
+          "duration_ms": 281,
           "evidence": [
             {
               "kind": "tree",
@@ -1153,10 +1153,10 @@
             "bound": "strict-event",
             "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
             "mode": "strict",
-            "probe_seq": 11,
+            "probe_seq": 10,
             "settled": true,
             "strict_rule": "event",
-            "tree_age_ms": 25
+            "tree_age_ms": 39
           },
           "status": "pass",
           "step": "wait_for"
@@ -1192,7 +1192,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 2,
+          "duration_ms": 1,
           "evidence": [
             {
               "kind": "tree",
@@ -1216,10 +1216,10 @@
             "bound": "strict-event",
             "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
             "mode": "strict",
-            "probe_seq": 11,
+            "probe_seq": 10,
             "settled": true,
             "strict_rule": "event",
-            "tree_age_ms": 25
+            "tree_age_ms": 39
           },
           "status": "pass",
           "step": "assert_text"
@@ -1461,7 +1461,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 1,
+          "duration_ms": 0,
           "evidence": [
             {
               "kind": "step",
@@ -1475,7 +1475,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 1226,
+          "duration_ms": 1235,
           "evidence": [
             {
               "kind": "tree",
@@ -1502,7 +1502,7 @@
             "probe_seq": 33,
             "settled": true,
             "strict_rule": "event",
-            "tree_age_ms": 17
+            "tree_age_ms": 35
           },
           "status": "pass",
           "step": "wait_for"
@@ -1538,7 +1538,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 1,
+          "duration_ms": 2,
           "evidence": [
             {
               "kind": "tree",
@@ -1565,7 +1565,7 @@
             "probe_seq": 33,
             "settled": true,
             "strict_rule": "event",
-            "tree_age_ms": 17
+            "tree_age_ms": 35
           },
           "status": "pass",
           "step": "assert_text"
@@ -1601,7 +1601,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 2,
+          "duration_ms": 3,
           "evidence": [
             {
               "kind": "tree",
@@ -1628,7 +1628,7 @@
             "probe_seq": 33,
             "settled": true,
             "strict_rule": "event",
-            "tree_age_ms": 17
+            "tree_age_ms": 35
           },
           "status": "pass",
           "step": "assert_text"
@@ -1860,7 +1860,7 @@
                       "flush_complete": false,
                       "handle": 1,
                       "sensor": "accelerometer",
-                      "t_ms": 6960828,
+                      "t_ms": 776230,
                       "type": 1,
                       "values": [
                         -12.0
@@ -1870,7 +1870,7 @@
                       "flush_complete": false,
                       "handle": 1,
                       "sensor": "accelerometer",
-                      "t_ms": 6960848,
+                      "t_ms": 776250,
                       "type": 1,
                       "values": [
                         -12.0
@@ -1880,7 +1880,7 @@
                       "flush_complete": false,
                       "handle": 1,
                       "sensor": "accelerometer",
-                      "t_ms": 6960868,
+                      "t_ms": 776270,
                       "type": 1,
                       "values": [
                         -12.0
@@ -1890,7 +1890,7 @@
                       "flush_complete": false,
                       "handle": 1,
                       "sensor": "accelerometer",
-                      "t_ms": 6960888,
+                      "t_ms": 776290,
                       "type": 1,
                       "values": [
                         -12.0
@@ -2167,8 +2167,8 @@
     "verdict_path": "out/sensors-scripted/verdict.json"
   },
   "metrics": {
-    "wall_ms": 2494,
-    "peak_rss_bytes": 35184640
+    "wall_ms": 2492,
+    "peak_rss_bytes": 35786752
   },
   "evidence": {
     "events": "events.jsonl",

@@ -1,0 +1,3 @@
+
+warning: `acos-cli` (bin "acos" test) generated 7 warnings (2 duplicates) (run `cargo fix --bin "acos" --tests` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized] target(s) in 4.99s

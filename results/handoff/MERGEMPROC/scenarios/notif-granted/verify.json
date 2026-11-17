@@ -1,5 +1,5 @@
 {
-  "request_id": "req_7e87b_18e8c5756b49feb7",
+  "request_id": "req_e447_18e8d8f1e7ef20dd",
   "ok": true,
   "status": "pass",
   "backend": "acos-native",
@@ -68,7 +68,7 @@
       },
       "extra_apks": [],
       "fidelity": "art-reference",
-      "finished_at": "2026-11-17T07:46:00.393Z",
+      "finished_at": "2026-11-17T13:43:05.946Z",
       "insets": "report",
       "isolation": "process",
       "mode": "live",
@@ -314,15 +314,15 @@
         "scenario_path": "scenarios/notif-perm-granted.yaml",
         "scenario_sha256": "376755928126d01c30af9fb26c77c3d6131576efc94d8652c3b402dab4d00020"
       },
-      "request_id": "req_7e87b_18e8c5756b49feb7",
+      "request_id": "req_e447_18e8d8f1e7ef20dd",
       "resources": {
         "events": 91,
         "frames_captured": 5,
         "memory_mib": 33,
-        "peak_rss_bytes": 34807808,
+        "peak_rss_bytes": 34988032,
         "sessions": 1,
         "steps": 10,
-        "wall_ms": 617
+        "wall_ms": 741
       },
       "scenario": {
         "name": "notif-perm-granted",
@@ -332,9 +332,9 @@
       "schema_version": 1,
       "session_exit": {
         "abi": null,
-        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=61MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p518276-i568486.scope)",
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=59MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p58448-i24122.scope)",
         "code": null,
-        "disk_free_bytes": 265895452672,
+        "disk_free_bytes": 271547641856,
         "guest_crash": null,
         "guest_exit": 0,
         "guest_signal": null,
@@ -347,12 +347,12 @@
         "stage": "teardown-evidence"
       },
       "session_id": "s_art_notif-perm-probe",
-      "started_at": "2026-11-17T07:45:59.776Z",
+      "started_at": "2026-11-17T13:43:05.205Z",
       "status": "pass",
       "steps": [
         {
           "assertions": [],
-          "duration_ms": 335,
+          "duration_ms": 426,
           "evidence": [
             {
               "kind": "step",
@@ -371,7 +371,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 269,
+          "duration_ms": 279,
           "evidence": [
             {
               "kind": "tree",
@@ -434,7 +434,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 2,
+          "duration_ms": 1,
           "evidence": [
             {
               "kind": "tree",
@@ -1183,7 +1183,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 1,
+          "duration_ms": 0,
           "evidence": [
             {
               "kind": "step",
@@ -2051,8 +2051,8 @@
     "verdict_path": "out/notif-perm-granted/verdict.json"
   },
   "metrics": {
-    "wall_ms": 617,
-    "peak_rss_bytes": 34807808
+    "wall_ms": 741,
+    "peak_rss_bytes": 34988032
   },
   "evidence": {
     "events": "events.jsonl",

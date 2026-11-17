@@ -1,5 +1,5 @@
 {
-  "request_id": "req_7e9bb_18e8c575cdba2853",
+  "request_id": "req_e54c_18e8d8f254fe2a9b",
   "ok": true,
   "status": "pass",
   "backend": "acos-native",
@@ -70,7 +70,7 @@
       },
       "extra_apks": [],
       "fidelity": "art-reference",
-      "finished_at": "2026-11-17T07:46:05.867Z",
+      "finished_at": "2026-11-17T13:43:11.391Z",
       "insets": "report",
       "isolation": "process",
       "mode": "live",
@@ -318,15 +318,15 @@
         "scenario_path": "results/handoff/MODLOC3/location-live-attach.yaml",
         "scenario_sha256": "997a21cc903201b6c0113bcb9248626054cc65bc364d927c06685ea8ad61f410"
       },
-      "request_id": "req_7e9bb_18e8c575cdba2853",
+      "request_id": "req_e54c_18e8d8f254fe2a9b",
       "resources": {
-        "events": 183,
+        "events": 189,
         "frames_captured": 15,
         "memory_mib": 33,
-        "peak_rss_bytes": 35000320,
+        "peak_rss_bytes": 34607104,
         "sessions": 1,
         "steps": 18,
-        "wall_ms": 4441
+        "wall_ms": 4389
       },
       "scenario": {
         "name": "location-live-attach",
@@ -336,9 +336,9 @@
       "schema_version": 1,
       "session_exit": {
         "abi": null,
-        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=81MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p518604-i554787.scope)",
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=81MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p58709-i3526.scope)",
         "code": null,
-        "disk_free_bytes": 265906495488,
+        "disk_free_bytes": 271493738496,
         "guest_crash": null,
         "guest_exit": 0,
         "guest_signal": null,
@@ -351,12 +351,12 @@
         "stage": "teardown-evidence"
       },
       "session_id": "s_art_location-probe",
-      "started_at": "2026-11-17T07:46:01.426Z",
+      "started_at": "2026-11-17T13:43:07.002Z",
       "status": "pass",
       "steps": [
         {
           "assertions": [],
-          "duration_ms": 382,
+          "duration_ms": 390,
           "evidence": [
             {
               "kind": "step",
@@ -375,7 +375,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 286,
+          "duration_ms": 285,
           "evidence": [
             {
               "kind": "tree",
@@ -438,7 +438,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 3,
+          "duration_ms": 2,
           "evidence": [
             {
               "kind": "tree",
@@ -564,7 +564,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 4,
+          "duration_ms": 3,
           "evidence": [
             {
               "kind": "tree",
@@ -917,7 +917,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 1304,
+          "duration_ms": 1266,
           "evidence": [
             {
               "kind": "tree",
@@ -943,8 +943,8 @@
           "settle": {
             "ack_ms": 5,
             "bound": "strict-event",
-            "first_change_ms": 108,
-            "frame_ms": 1020,
+            "first_change_ms": 139,
+            "frame_ms": 989,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
             "mode": "strict",
             "pixels_changed": true,
@@ -957,7 +957,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 281,
+          "duration_ms": 275,
           "evidence": [
             {
               "kind": "tree",
@@ -981,10 +981,10 @@
             "bound": "strict-event",
             "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
             "mode": "strict",
-            "probe_seq": 41,
+            "probe_seq": 43,
             "settled": true,
             "strict_rule": "event",
-            "tree_age_ms": 40
+            "tree_age_ms": 41
           },
           "status": "pass",
           "step": "wait_for"
@@ -1244,7 +1244,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 319,
+          "duration_ms": 314,
           "evidence": [
             {
               "kind": "tree",
@@ -1268,10 +1268,10 @@
             "bound": "strict-event",
             "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
             "mode": "strict",
-            "probe_seq": 44,
+            "probe_seq": 45,
             "settled": true,
             "strict_rule": "event",
-            "tree_age_ms": 21
+            "tree_age_ms": 41
           },
           "status": "pass",
           "step": "wait_for"
@@ -1307,7 +1307,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 3,
+          "duration_ms": 2,
           "evidence": [
             {
               "kind": "tree",
@@ -1331,10 +1331,10 @@
             "bound": "strict-event",
             "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
             "mode": "strict",
-            "probe_seq": 44,
+            "probe_seq": 45,
             "settled": true,
             "strict_rule": "event",
-            "tree_age_ms": 21
+            "tree_age_ms": 41
           },
           "status": "pass",
           "step": "assert_text"
@@ -1370,7 +1370,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 3,
+          "duration_ms": 2,
           "evidence": [
             {
               "kind": "tree",
@@ -1394,10 +1394,10 @@
             "bound": "strict-event",
             "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
             "mode": "strict",
-            "probe_seq": 44,
+            "probe_seq": 45,
             "settled": true,
             "strict_rule": "event",
-            "tree_age_ms": 21
+            "tree_age_ms": 41
           },
           "status": "pass",
           "step": "assert_text"
@@ -1656,7 +1656,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 1535,
+          "duration_ms": 1524,
           "evidence": [
             {
               "kind": "tree",
@@ -1682,8 +1682,8 @@
           "settle": {
             "ack_ms": 5,
             "bound": "strict-event",
-            "first_change_ms": 103,
-            "frame_ms": 1067,
+            "first_change_ms": 141,
+            "frame_ms": 987,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
             "mode": "strict",
             "pixels_changed": true,
@@ -1696,7 +1696,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 286,
+          "duration_ms": 290,
           "evidence": [
             {
               "kind": "tree",
@@ -1720,7 +1720,7 @@
             "bound": "strict-event",
             "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
             "mode": "strict",
-            "probe_seq": 83,
+            "probe_seq": 84,
             "settled": true,
             "strict_rule": "event",
             "tree_age_ms": 40
@@ -1783,7 +1783,7 @@
             "bound": "strict-event",
             "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
             "mode": "strict",
-            "probe_seq": 83,
+            "probe_seq": 84,
             "settled": true,
             "strict_rule": "event",
             "tree_age_ms": 40
@@ -1846,7 +1846,7 @@
             "bound": "strict-event",
             "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
             "mode": "strict",
-            "probe_seq": 83,
+            "probe_seq": 84,
             "settled": true,
             "strict_rule": "event",
             "tree_age_ms": 40
@@ -1862,8 +1862,8 @@
     "verdict_path": "out/location-live-attach/verdict.json"
   },
   "metrics": {
-    "wall_ms": 4441,
-    "peak_rss_bytes": 35000320
+    "wall_ms": 4389,
+    "peak_rss_bytes": 34607104
   },
   "evidence": {
     "events": "events.jsonl",
