@@ -68,7 +68,7 @@ use crate::module::{
     SecurityClass, ServiceProvide,
 };
 use crate::permissions::{PermissionStore, PERMISSION_GRANTED};
-use crate::value::Value as WireValue;
+use crate::value::{Parcelable, Value as WireValue};
 
 /// The `ServiceManager` name this module takes over from `core`.
 pub const SERVICE_NAME: &str = "permission";
@@ -246,6 +246,74 @@ impl ServiceObject for PermissionsService {
             "checkPermission" => {
                 let permission = string(1);
                 vec![WireValue::Int(self.store().check(&permission))]
+            }
+            // `getPermissionInfo(String permissionName, String packageName, int userId)`
+            // (code 3). SYSUI1 measured the dialog's `PackageManager.
+            // getPermissionInfo` landing here, not on `IPackageManager`:
+            // `PackageManager` -> `PermissionManager` -> `IPermissionManager`.
+            // The reply is a `PermissionInfo` whose `nonLocalizedLabel` /
+            // `nonLocalizedDescription` carry AOSP's English text, so the
+            // framework's own `PermissionInfo.loadLabel` answers the real label
+            // with no resource resolution. `null` for a permission ACOS cannot
+            // describe (`NameNotFoundException` on the guest side).
+            "getPermissionInfo" => {
+                let permission = string(0);
+                let info = self.store().permission_description(&permission);
+                vec![WireValue::TypedObject(match info {
+                    Some(info) => info.to_parcelable(),
+                    None => Parcelable::Null,
+                })]
+            }
+            // `getPermissionGroupInfo(String groupName, int flags)` (code 2):
+            // a `PermissionGroupInfo` from the same catalog, `null` for an
+            // unknown group.
+            "getPermissionGroupInfo" => {
+                let group = string(0);
+                let info = self.store().group_description(&group);
+                vec![WireValue::TypedObject(match info {
+                    Some(info) => info.to_parcelable(),
+                    None => Parcelable::Null,
+                })]
+            }
+            // `queryPermissionsByGroup(String groupName, int userId)` (code 4):
+            // `ParceledListSlice<PermissionInfo>`; a known group always answers
+            // a (possibly empty) list, an unknown one `null`.
+            "queryPermissionsByGroup" => {
+                let group = string(0);
+                // One guard, one answer: `permissions_in_group` builds owned
+                // rows, so the lock is released before the reply is written.
+                let (known, items) = {
+                    let store = self.store();
+                    let known = store.group_description(&group).is_some();
+                    let items: Vec<WireValue> = store
+                        .permissions_in_group(&group)
+                        .iter()
+                        .map(|info| WireValue::Parcelable(info.to_parcelable()))
+                        .collect();
+                    (known, items)
+                };
+                if !known && items.is_empty() {
+                    return Ok(CallResult {
+                        reply: vec![WireValue::TypedObject(Parcelable::Null)],
+                        deliveries: Vec::new(),
+                    });
+                }
+                vec![WireValue::TypedObject(
+                    crate::parcelable::parceled_list_of(items),
+                )]
+            }
+            // `getAllPermissionGroups(int flags)` (code 1):
+            // `ParceledListSlice<PermissionGroupInfo>`.
+            "getAllPermissionGroups" => {
+                let items = self
+                    .store()
+                    .group_descriptions()
+                    .iter()
+                    .map(|info| WireValue::Parcelable(info.to_parcelable()))
+                    .collect();
+                vec![WireValue::TypedObject(
+                    crate::parcelable::parceled_list_of(items),
+                )]
             }
             // `isPermissionRevokedByPolicy(...)`: no device policy on ACOS.
             "isPermissionRevokedByPolicy" => vec![WireValue::Bool(false)],

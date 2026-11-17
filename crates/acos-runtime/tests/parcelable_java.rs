@@ -185,6 +185,36 @@ fn permission_info_value() -> Parcelable {
     )
 }
 
+/// The `PermissionGroupInfo` the `system.permissions` module answers for
+/// `android.permission-group.CAMERA` (SYSUI3B), in the image's
+/// `writeToParcel` order. The real framework re-emits these bytes byte for byte.
+fn permission_group_info_value() -> Parcelable {
+    Parcelable::ordered(
+        "android.content.pm.PermissionGroupInfo",
+        vec![
+            // PackageItemInfo prefix
+            Value::Str8(Some("android.permission-group.CAMERA".into())),
+            Value::Str8(Some("android".into())),
+            Value::Int(0),                     // banner
+            Value::Str(Some("Camera".into())), // nonLocalizedLabel
+            Value::Int(0),                     // icon
+            Value::Int(0),                     // labelRes
+            Value::Bundle(None),
+            Value::Int(0), // showUser
+            Value::Int(0), // showBadge
+            // PermissionGroupInfo
+            Value::Int(0), // descriptionRes
+            Value::Int(0), // requestRes
+            Value::Int(0), // requestDetailResourceId
+            Value::Int(0), // backgroundRequestResourceId
+            Value::Int(0), // backgroundRequestDetailResourceId
+            Value::Str(Some("take pictures and record video".into())), // nonLocalizedDescription
+            Value::Int(0),  // flags
+            Value::Int(700), // priority
+        ],
+    )
+}
+
 /// A launcher `ResolveInfo` in the exact API-34 `writeToParcel` order: the
 /// activity branch and a null `IntentFilter`.
 fn resolve_info_value(app: &acos_services::pms::AppInfo) -> Parcelable {
@@ -805,6 +835,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
     let service_bytes = encoded(&service_info_value(&app));
     let instrumentation_bytes = encoded(&instrumentation_info_value());
     let permission_bytes = encoded(&permission_info_value());
+    let permission_group_bytes = encoded(&permission_group_info_value());
     let resolve_bytes = encoded(&resolve_info_value(&app));
 
     // Reverse: feed the Rust bytes to the real createFromParcel, then compare
@@ -823,6 +854,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         format!("service_info={}", hex(&service_bytes)),
         format!("instrumentation_info={}", hex(&instrumentation_bytes)),
         format!("permission_info={}", hex(&permission_bytes)),
+        format!("permission_group_info={}", hex(&permission_group_bytes)),
         format!("resolve_info={}", hex(&resolve_bytes)),
         format!("network_capabilities={}", hex(&caps_bytes)),
         format!("link_properties={}", hex(&link_bytes)),
@@ -865,6 +897,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         "service_info",
         "instrumentation_info",
         "permission_info",
+        "permission_group_info",
         "resolve_info",
         "network_capabilities",
         "link_properties",
@@ -898,6 +931,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         ("service_info", &service_bytes),
         ("instrumentation_info", &instrumentation_bytes),
         ("permission_info", &permission_bytes),
+        ("permission_group_info", &permission_group_bytes),
         ("resolve_info", &resolve_bytes),
         ("network_capabilities", &caps_bytes),
         ("link_properties", &link_bytes),

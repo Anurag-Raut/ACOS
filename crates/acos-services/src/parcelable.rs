@@ -627,6 +627,40 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // `PermissionGroupInfo.writeToParcel` (SYSUI3B). The image's own
+    // `classes.dex` was scanned for this order
+    // (`classes.dex` -> `PermissionGroupInfo;->writeToParcel`, 8 calls after
+    // `PackageItemInfo.writeToParcel`): five ints, the
+    // `TextUtils.writeToParcel` description, then flags and priority. The
+    // field names follow `base/core/java/android/content/pm/PermissionGroupInfo.java:192`,
+    // which the image matches byte for byte (the Java differential harness
+    // `crates/acos-runtime/tests/parcelable_java.rs` re-emits these bytes with
+    // the real framework and compares them).
+    ParcelableSpec {
+        class: "android.content.pm.PermissionGroupInfo",
+        fields: &[
+            // PackageItemInfo prefix (super.writeToParcel splice)
+            FieldOp::Str8,         // PackageItemInfo.name
+            FieldOp::Str8,         // packageName
+            FieldOp::Int,          // banner
+            FieldOp::CharSequence, // label
+            FieldOp::Int,          // icon
+            FieldOp::Int,          // labelRes
+            FieldOp::Bundle,       // metaData
+            FieldOp::Int,          // showUser
+            FieldOp::Int,          // showBadge
+            // PermissionGroupInfo
+            FieldOp::Int,          // descriptionRes
+            FieldOp::Int,          // requestRes
+            FieldOp::Int,          // requestDetailResourceId
+            FieldOp::Int,          // backgroundRequestResourceId
+            FieldOp::Int,          // backgroundRequestDetailResourceId
+            FieldOp::CharSequence, // nonLocalizedDescription
+            FieldOp::Int,          // flags
+            FieldOp::Int,          // priority
+        ],
+        verification: Verification::Full,
+    },
     // `ResolveInfo.writeToParcel` (API 34): a component-type marker selects one
     // of `ActivityInfo`/`ServiceInfo`/`ProviderInfo` (1/2/3), then an optional
     // `IntentFilter`, then the scalar match metadata. ACOS models the launcher

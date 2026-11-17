@@ -493,6 +493,13 @@ pub fn install_with_handles_and_insets(
                         &state.primary().granted_permissions.clone(),
                     );
                 }
+                // SYSUI3B: the same moment publishes the package's own
+                // `<permission>` declarations, so `getPermissionInfo` for a
+                // custom permission and this table's package identity agree.
+                store.set_declared_permissions(
+                    &state.primary().package.package_name.clone(),
+                    &state.primary().declared_permissions.clone(),
+                );
             }
             let pms = Arc::clone(&pms_state);
             Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>

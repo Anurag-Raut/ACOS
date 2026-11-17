@@ -80,15 +80,18 @@ steps:
       selector: {id: title}
       text: {exact: "Allow dev.acos.fixtures.permprobe to access?"}
 
-  # Both permissions of the one request are listed (their labels).
+  # Both permissions of the one request are listed with AOSP's own labels:
+  # the dialog calls `getPermissionInfo(...).loadLabel(...)`, which answers the
+  # reply's `nonLocalizedLabel` (`permlab_camera`, `permlab_accessFineLocation`)
+  # instead of falling back to the permission name's last segment (SYSUI3B).
   - assert_text:
       selector: {id: permission_0}
-      text: {exact: "CAMERA"}
+      text: {exact: "take pictures and videos"}
       timeout_ms: 10000
 
   - assert_text:
       selector: {id: permission_1}
-      text: {exact: "ACCESS_FINE_LOCATION"}
+      text: {exact: "access precise location only in the foreground"}
       timeout_ms: 10000
 
   - assert_text:
