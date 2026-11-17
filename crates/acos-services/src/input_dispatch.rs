@@ -736,8 +736,7 @@ impl InputHost {
     /// `InputDispatch::inject_tap` I2 already proved (window-transform-carried
     /// coordinates on the real `InputChannel`), with the wait for the guest's
     /// acks instead of a fire-and-forget log.
-    pub fn tap(&self, x: f32, y: f32, ack_wait: Duration) -> Result<InjectedGesture> {
-        let (token, gesture) = lock(&self.state)
+    pub fn tap(&self, x: f32, y: f32, ack_wait: Duration) -> Result<InjectedGesture> {        let (token, gesture) = lock(&self.state)
             .publish_on_live(|dispatch, token| dispatch.inject_tap(token, x, y))?;
         self.collect(&token, &gesture, ack_wait)
     }

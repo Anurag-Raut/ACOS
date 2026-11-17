@@ -771,6 +771,13 @@ pub(crate) fn launch_session(
     let (peer_host, live) = live_handles;
     let interactive = std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some();
     crate::stage("peer-setup");
+    // PERF4: the session's settle/observation wake exists before the peer thread
+    // because applying a guest transaction is one of the facts a settle waits
+    // for: a `Surface` transaction is the C1 store, and the peer loop signals
+    // this wake as soon as it has applied one, so a settle never waits for its
+    // own poll tick to notice the frame it is binding.
+    let settle_change = Arc::new(ProbeWake::default());
+    let settle_change_for_peer = Arc::clone(&settle_change);
     let peer_thread = std::thread::spawn(move || {
         let summary = (|| -> std::io::Result<PeerSummary> {
             let client = loop {
@@ -817,7 +824,7 @@ pub(crate) fn launch_session(
             // `getApplicationInfo` and must get the real package, not the
             // hello-views fixture (and never a fabricated null).
             let mut peer = Peer::with_host(peer_host, Some(peer_log));
-            let rc = serve(&mut peer, client, &peer_stop, peer_wake_fd);
+            let rc = serve(&mut peer, client, &peer_stop, peer_wake_fd, &settle_change_for_peer);
             unsafe {
                 libc::close(client);
             }
@@ -1503,6 +1510,14 @@ pub(crate) fn launch_session(
     let cap = stream_cap_from_env();
     let (otx, orx) = mpsc::channel::<(u8, TailBuffer)>();
     let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+    // PERF4: the probe state uses the wake the peer thread already signals, so
+    // one condvar covers both fact sources (a parsed guest sample and an applied
+    // transaction). Nothing has subscribed to `ProbeState::default()`'s own wake
+    // yet, so replacing it here cannot strand a waiter.
+    probe_state
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .wake = Arc::clone(&settle_change);
     // W59: one trace sink for the whole interactive session. The guest's looper
     // lines and the host's tap markers share `started`, so the two clocks are
     // directly comparable (both are the same CLOCK_MONOTONIC on this host).
@@ -2115,6 +2130,22 @@ impl ProbeWake {
         self.signal.notify_all();
     }
 
+    /// PERF4: the settle/observation loops' wait. A settle binds exactly when
+    /// the *last* host-visible fact it needs has landed (the probe sample that
+    /// differs from the baseline, the C1 store that commits it, the ack). This
+    /// condvar is signalled by every producer of those facts — the guest-line
+    /// reader for a sample, the peer loop for an applied transaction (the C1
+    /// store) — so the loop wakes on the event instead of re-reading state on a
+    /// fixed period.
+    ///
+    /// The period was not harmless: with a 15 ms sleep a tap whose commit landed
+    /// 1 ms after a tick waited the whole quantum, and a sub-millisecond
+    /// difference between two builds moved the metric by a full 15 ms (measured:
+    /// the same build resolves `frame_ms` 16 or 29 depending on phase — v0.3.0's
+    /// M8 form-fast "+8.7 ms regression" was that flip, not 8.7 ms of work).
+    /// `WAKE_LIVENESS_MS` bounds only how long a *silent* guest (a dead child, a
+    /// stalled probe) goes unnoticed; every real change wakes the loop at once.
+    ///
     /// Wait until the tick differs from `seen`, or `timeout` elapses.
     fn wait(&self, seen: &mut u64, timeout: std::time::Duration) {
         let tick = self.tick.lock().unwrap_or_else(|e| e.into_inner());
@@ -2128,6 +2159,35 @@ impl ProbeWake {
             .unwrap_or_else(|e| e.into_inner());
         *seen = *tick;
     }
+}
+
+/// PERF4: how long a settle/observation loop may go without re-reading host
+/// state when nothing signalled [`ProbeWake`].
+///
+/// Every fact a settle waits for has a producer that signals the wake, so this
+/// is a *liveness* bound only: it is how quickly a silent guest (a dead child, a
+/// probe thread that never answers) is noticed, which the old fixed poll noticed
+/// on its own period. It must stay well under the shortest useful settle budget
+/// (`ACOS_STRICT_SETTLE_CONFIRM_MS` is 24 ms) so a missed edge can never outlast
+/// a rule window, and it is never the cadence a normal settle runs at.
+const WAKE_LIVENESS_MS: u64 = 10;
+
+/// The wake channel of this session's probe state (see [`ProbeWake`]).
+fn settle_wake(probe_state: &Arc<std::sync::Mutex<ProbeState>>) -> Arc<ProbeWake> {
+    Arc::clone(
+        &probe_state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .wake,
+    )
+}
+
+/// Block until the session's host-visible state may have moved, or the liveness
+/// bound elapses. Callers re-read their own state after every return, so a
+/// spurious wake only costs one re-read; a missed one is impossible because the
+/// tick is compared against the last value `wait` consumed.
+fn wait_for_change(wake: &ProbeWake, seen: &mut u64) {
+    wake.wait(seen, Duration::from_millis(WAKE_LIVENESS_MS));
 }
 
 #[derive(Default)]
@@ -3937,6 +3997,10 @@ fn wait_for_event_settled(
         .unwrap_or(false);
     let mut candidate: Option<ProbeSample> = None;
     let mut candidate_since = Instant::now();
+    // PERF4: the session's own change signal (see [`wait_for_change`]) and the
+    // tick this loop has already consumed.
+    let wake = settle_wake(probe_state);
+    let mut seen = 0u64;
     // REL3H2: the unhandled-input shortcut's own window. It is created once, at
     // entry, so the ack floor is a fixed point: samples older than it are never
     // eligible, however long the wait runs.
@@ -4368,7 +4432,9 @@ fn wait_for_event_settled(
             };
         }
         cgroup.sample();
-        std::thread::sleep(Duration::from_millis(10));
+        // PERF4: block on the session's own change signal instead of a fixed
+        // poll period (see [`ProbeWake::wait`] / [`WAKE_LIVENESS_MS`]).
+        wait_for_change(&wake, &mut seen);
     }
 }
 
@@ -4438,6 +4504,10 @@ fn wait_for_settled_observation(
     let mut first_change_probe: Option<ProbeSample> = None;
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
     let mut last_wake = Instant::now();
+    // PERF4: the session's own change signal (see [`wait_for_change`]) and the
+    // tick this loop has already consumed.
+    let wake = settle_wake(probe_state);
+    let mut seen = 0u64;
     loop {
         // A structured guest marker is more informative than the generic
         // "no fresh frame" timeout, and it is the only honest result for an
@@ -4491,9 +4561,50 @@ fn wait_for_settled_observation(
             .as_ref()
             .map(|sample| sample.at_ms.saturating_sub(publish_epoch_ms));
         let frame_ms = |store_ms: u64| store_ms.checked_sub(publish_epoch_ms);
+        // The commit store: the C1 buffer the sample is bound to must be at
+        // least as new as the state the sample's tree describes.
+        //
+        // The shipped rule is *observation order* — a store the host saw after
+        // the sample (`last_change_ms > commit.at_ms`). That is satisfied by
+        // whichever store happens to be noticed next, and with the fixed poll a
+        // build that notices the sample's own store in time has to wait for the
+        // **following** frame: measured, the same loop resolves `frame_ms` 16 or
+        // 29 depending on which side of a poll tick the store landed
+        // (diagnosis/tap-split-*.txt).
+        //
+        // PERF4 adds the precise form of the same fact, from what the sample
+        // reports: `generation` is C1's store counter when the host parsed the
+        // sample and `draw_seq` is the guest's `ViewTreeObserver.OnDraw` counter.
+        // When they are **equal** every draw so far has been stored and nothing
+        // else was, so store #draw_seq is the buffer of the very draw this tree
+        // was taken at — the tree and the frame describe one UI state, which is
+        // the property the observation-order rule approximates. It can never bind
+        // an earlier sample: it requires a draw newer than the pre-publish one,
+        // with its own buffer already in C1.
+        //
+        // Anything the equality cannot prove (a store without a draw, a draw
+        // whose buffer has not landed, no draw counter on the sample) falls back
+        // to the shipped rule exactly.
+        let own_draw_stored = match (&first_change_probe, &baseline_probe) {
+            (Some(commit), baseline) => {
+                commit.draw_seq > 0
+                    // every draw so far has been stored (a session may store
+                    // more than it draws, never fewer)
+                    && commit.generation >= commit.draw_seq
+                    // and the store the host holds arrived after this sample's
+                    // own draw, so it is not a pre-draw buffer left behind
+                    && last_change_ms >= commit.draw_ms
+                    // and the sample's draw is newer than the pre-publish one
+                    && baseline
+                        .as_ref()
+                        .map(|b| commit.draw_seq > b.draw_seq)
+                        .unwrap_or(true)
+            }
+            _ => false,
+        };
         let committed_store = first_change_probe
             .as_ref()
-            .map(|commit| last_change_ms > commit.at_ms)
+            .map(|commit| last_change_ms > commit.at_ms || own_draw_stored)
             .unwrap_or(false);
         let committed_now = mode == SettleMode::Fast
             && committed_store
@@ -4518,10 +4629,14 @@ fn wait_for_settled_observation(
             trace_host(
                 probe_state,
                 &format!(
-                    "settle fast ready gen={generation} probe_seq={} first_change_ms={} frame_ms={}",
+                    "settle fast ready gen={generation} probe_seq={} first_change_ms={} frame_ms={} \
+                     commit_gen={} draw_seq={} own_draw={}",
                     commit.seq,
                     first_change_ms.unwrap_or(0),
-                    timing.frame_ms.unwrap_or(0)
+                    timing.frame_ms.unwrap_or(0),
+                    commit.generation,
+                    commit.draw_seq,
+                    own_draw_stored
                 ),
             );
             return SettleEnd::Settled(Settled {
@@ -4610,7 +4725,10 @@ fn wait_for_settled_observation(
             };
         }
         cgroup.sample();
-        std::thread::sleep(Duration::from_millis(15));
+        // PERF4: the same event-driven wait the strict rule uses. This was a
+        // 15 ms sleep, which quantized every fast settle to 15 ms and turned a
+        // sub-millisecond difference between builds into a whole step.
+        wait_for_change(&wake, &mut seen);
     }
 }
 
@@ -4775,6 +4893,10 @@ fn wait_for_fast_tree(
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
     let base_seq = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
     let mut requested = false;
+    // PERF4: the sample this loop waits for is signalled by the guest-line
+    // reader (see [`wait_for_change`]).
+    let wake = settle_wake(probe_state);
+    let mut seen = 0u64;
     loop {
         let (unsupported_seq, marker) = latest_unsupported(probe_state);
         if unsupported_seq > unsupported_baseline {
@@ -4813,7 +4935,9 @@ fn wait_for_fast_tree(
             };
         }
         cgroup.sample();
-        std::thread::sleep(Duration::from_millis(2));
+        // PERF4: a probe sample is the fact this loop waits for, and the
+        // guest-line reader signals it; wait for that instead of polling.
+        wait_for_change(&wake, &mut seen);
     }
 }
 
@@ -6051,16 +6175,16 @@ fn interactive_serve(
                         ack_wait.as_millis()
                     ),
                 );
-                // REL3H: the newest C1 buffer at publish is the fallback
-                // pre-action pixels for an unhandled-input settle. Only taken
-                // when the caller has no capture of its own, so a normal input
-                // pays nothing for it.
-                let entry_fnv = if last_capture_fnv.is_none() {
-                    let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
-                    state.capture_latest().map(|capture| capture.fnv1a)
-                } else {
-                    None
-                };
+                // PERF4: the fallback pre-action pixels are NOT captured here.
+                // They used to be, and the cost was a full composite of the
+                // display (`capture_latest`: every visible layer's buffer copied
+                // and hashed, 1080x2400) on every action whose caller had no
+                // capture of its own — i.e. every tap after a `pixels:false`
+                // reply, which is the whole M8 form loop and any agent that does
+                // not ask for pixels. Measured on the bench's form-fast loop:
+                // 8.7-9.2 ms per tap (`diagnosis/tap-split-*.txt`), the entire
+                // v0.3.0 M8 regression. See `unhandled_entry_fnv` below for where
+                // the value is taken now and why moving it changes nothing.
                 let injected = match (cmd, key_code) {
                     ("tap", _) => live.input.tap(x, y, ack_wait),
                     ("swipe", _) => live
@@ -6127,6 +6251,33 @@ fn interactive_serve(
                         .map(|sample| sample.seq)
                         .unwrap_or(p0)
                 });
+                // REL3H's fallback pre-action pixels, taken here instead of at
+                // publish (PERF4; see the publish site for the measured 9 ms).
+                //
+                // What the value is for: the unhandled-input branch reports
+                // `pixels_changed` against it instead of inventing one, so an
+                // `expect_change: true` claim on a tap nothing consumed fails on
+                // a *measured* false. The branch can only bind a sample whose
+                // draw predates the publish (that is what makes the gesture
+                // unhandled: no draw followed it), so when no C1 store has
+                // landed since `g0` the composite in C1 is still the pre-action
+                // screen, byte for byte — the same value the old code captured
+                // before publishing, just read later. If a store *did* land, the
+                // pre-action screen is gone; the old comparison would then have
+                // reported a change by construction (current != entry, unless a
+                // redraw reproduced the same pixels), and `None` makes the branch
+                // report exactly that: the conservative `true`, no claim.
+                // The capture is skipped entirely when the branch cannot be
+                // reached (fast mode never sets `unhandled_ack_floor`; a handled
+                // gesture never does) and when the caller supplied its own
+                // pre-action capture.
+                let entry_fnv = match (unhandled_ack_floor, last_capture_fnv) {
+                    (Some(_), None) if latest_generation(live) == g0 => {
+                        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                        state.capture_latest().map(|capture| capture.fnv1a)
+                    }
+                    _ => None,
+                };
                 let settled = wait_for_settled_observation(
                     child,
                     cgroup,
@@ -7057,7 +7208,13 @@ struct PeerSummary {
     resource_limits: u64,
 }
 
-fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool, wake: RawFd) -> std::io::Result<()> {
+fn serve(
+    peer: &mut Peer,
+    fd: RawFd,
+    stop: &AtomicBool,
+    wake: RawFd,
+    change: &ProbeWake,
+) -> std::io::Result<()> {
     let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
     loop {
         // REL3I3: the idle turn waits for whichever comes first — a guest frame,
@@ -7160,6 +7317,13 @@ fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool, wake: RawFd) -> std::io:
         let frame_code = frame.code;
         let started = std::time::Instant::now();
         let outs = peer.handle(frame);
+        // PERF4: a guest transaction may have changed live state — a `Surface`
+        // transaction is the C1 store a settle binds, and a service call can move
+        // window/insets state. Signal the settle/observation waiters after every
+        // handled frame so they read the new state now rather than on their next
+        // poll. With no waiter this is one uncontended mutex and a futex wake with
+        // no waiters, inside a binder call that just parsed a parcel.
+        change.notify();
         let elapsed = started.elapsed();
         if elapsed >= Duration::from_millis(env_u64("ACOS_PEER_SLOW_MS", 250)) {
             let calls = peer.service_calls();
