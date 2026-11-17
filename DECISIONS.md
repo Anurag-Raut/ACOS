@@ -1297,3 +1297,23 @@ Open, not decided here: the controller's process launch is subject to the same l
 (`host-transaction-timeout`, `results/handoff/SYSUI1/pregranted-finding/`), while the two dialog arms
 pass. The shade/system-UI app (item 2 of the track) is not built; the notification layer's control
 path is where `open_shade` belongs.
+
+**ADR-0029 settlement note (SYSUI3A, 2026-11-17): a tap that closes the tapped window is a pass,
+and the primary process is named by the launcher.**
+
+Two rules this track had to settle, both applied in one place each:
+
+1. **The settle contract for a dismissed window.** The guest's strict settle reports `detached`
+   (a root it still holds has no `ViewRootImpl`) or `no-draw-after-action` when the window the tap
+   landed on has gone away. That is a *completed interaction*, and reporting it as a `TIMEOUT` was a
+   harness bug (the notification shade's row tap). The backend now proves the removal against its own
+   window record — a tap, a host-observed delivery with a handled guest ack, the top-most touchable
+   pre-action window containing the point, that window absent afterwards, something still on screen —
+   and publishes `settle.bound: "window-removed", handled: "window-removed"`; `acos-verify`'s
+   `eval_tap_change` is the one place the tap contract accepts it. A window that vanishes with no
+   delivered input keeps its timeout (the guard, with tests).
+2. **The primary process's package is the launcher's fact.** `attachApplication` carries no package
+   and the primary never sends the peer handshake, so `ServiceHost::seed_primary_package` records it
+   where stock AMS's `startProcessLocked` would, and `Peer::package_of` never answers an empty name.
+   Without it a `startActivity` into the already-running primary (a notification's content sender) was
+   recorded and never encoded.

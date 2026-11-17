@@ -2109,17 +2109,28 @@ impl Peer {
 
     /// The package the activity manager recorded for `tag`, else the handshake
     /// name (the guest names itself by its package).
+    ///
+    /// SYSUI3A: an **empty** recorded package is not an answer. The primary
+    /// process's `attachApplication` carries no package, so the record could be
+    /// created unnamed; returning that empty name made `pending_launch_for("")`
+    /// miss the launch the running primary had been given (the shade's row tap).
+    /// The launcher seeds the primary package now
+    /// (`ServiceHost::seed_primary_package`), and this fallback still asks the
+    /// handshake name rather than inventing one.
     fn package_of(&mut self, tag: u32) -> Option<String> {
         if let Some(atms) = self.atms_service_mut() {
             if let Some((_, package, ..)) = atms
                 .process_list()
                 .into_iter()
                 .find(|(process_tag, ..)| *process_tag == tag)
+                .filter(|(_, package, ..)| !package.is_empty())
             {
                 return Some(package);
             }
         }
-        self.process_name(tag).map(str::to_string)
+        self.process_name(tag)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
     }
 
     fn atms_service_mut(&mut self) -> Option<&mut acos_services::atms::AtmsService> {

@@ -1708,6 +1708,18 @@ pub(crate) fn launch_session(
         // property of what this session is, stated by the only component that
         // knows.
         host.set_host_side_services(true);
+        // SYSUI3A: name the session's primary process (tag 0) the way stock AMS
+        // names it in `startProcessLocked`, before any attach. `attachApplication`
+        // carries no package and the primary never sends the peer's handshake,
+        // so without this `Peer::package_of(0)` had no package to ask
+        // `pending_launch_for` with: a `startActivity` into the already-running
+        // primary (a notification's content sender) was recorded and never
+        // delivered. The launcher is the component that knows what it started.
+        if !host.seed_primary_package(&package) {
+            eprintln!(
+                "acos-art: launch: the activity service did not take the primary package {package}"
+            );
+        }
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`

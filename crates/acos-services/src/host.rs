@@ -1942,6 +1942,27 @@ impl ServiceHost {
         Ok(())
     }
 
+    /// SYSUI3A: name the session's primary process (tag 0).
+    ///
+    /// Stock AMS's `ProcessRecord` is created by `startProcessLocked` with the
+    /// process name; ACOS's primary process is started by the **launcher**, so
+    /// the launcher (the only component that knows the session package) is the
+    /// one that records the name. `attachApplication` carries no package, so
+    /// without this the primary record stayed unnamed and
+    /// `Peer::package_of(0)` could not find the launch a `startActivity` into the
+    /// already-running primary had recorded (the notification shade's row tap).
+    /// Returns whether the activity service took the name.
+    pub fn seed_primary_package(&mut self, package: &str) -> bool {
+        let Ok(object) = self.ensure("android.app.IActivityTaskManager") else {
+            return false;
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(|service| service.set_primary_package(package))
+            .unwrap_or(false)
+    }
+
     /// The dynamic receiver registrations `IActivityManager`
     /// (`registerReceiver[WithFeature]`) has recorded, with the decoded
     /// `IntentFilter` facts (W28). Oldest first.

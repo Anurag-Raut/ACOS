@@ -538,6 +538,15 @@ pub struct AtmsState {
     /// unrooted the moment the app's own reference goes away, and
     /// `performReceive` would answer `DEAD_OBJECT`.
     pub refs: crate::refs::GuestRefs,
+    /// SYSUI3A: the session's **primary** package, named by the launcher (the
+    /// only component that knows it). Stock AMS learns a process's name in
+    /// `startProcessLocked`, before the fork, and `attachApplication` carries no
+    /// package; ACOS's primary process is started by the launcher, so the
+    /// launcher seeds it here. Without it the primary's `ProcessRecord` keeps an
+    /// empty name, and an empty name cannot answer "what launch is pending for
+    /// this process?" (`Peer::package_of` -> `pending_launch_for`), which is how
+    /// a `startActivity` into the already-running primary was undeliverable.
+    pub primary_package: Option<String>,
 }
 
 impl AtmsState {
@@ -566,6 +575,7 @@ impl AtmsState {
             receiver_registrations: Vec::new(),
             provider_registry: crate::provider::ProviderRegistry::new(),
             refs: crate::refs::GuestRefs::new(),
+            primary_package: None,
         }
     }
 
@@ -839,8 +849,15 @@ impl AtmsState {
     /// Record an attach for process `tag` and emit `process_started`.
     pub fn attach_application_for(&mut self, tag: u32, app_thread: u64, seq: i64, package: &str) {
         let package = if package.is_empty() {
+            // `attachApplication` carries no package. The record can already name
+            // it (the peer's handshake), and the **primary** process never
+            // connects through a handshake at all: the launcher seeded its
+            // package (`set_primary_package`), and stock AMS already knows the
+            // process name at this point because `startProcessLocked` set it.
             self.process(tag)
                 .map(|p| p.package_name.clone())
+                .filter(|name| !name.is_empty())
+                .or_else(|| (tag == 0).then(|| self.primary_package.clone()).flatten())
                 .unwrap_or_default()
         } else {
             package.to_string()
@@ -1651,6 +1668,49 @@ impl AtmsState {
         self.mark_process_active(tag);
     }
 
+    /// SYSUI3A: name the session's **primary** process (tag 0).
+    ///
+    /// The launcher starts the primary process, so it is the component that
+    /// knows the package (`ACOS_PROCESS_NAME`); stock AMS's `ProcessRecord`
+    /// carries the process name from `startProcessLocked` on, before any attach.
+    /// Everything that asks "which package does tag 0 run?" (`Peer::package_of`
+    /// -> `pending_launch_for`, `process_list`, `process_has_work`) reads it from
+    /// here. A record that already exists keeps its uid/app-thread; only the
+    /// name is filled, and never overwritten with a different one.
+    ///
+    /// Returns whether the name is now the primary process's package.
+    pub fn set_primary_package(&mut self, package: &str) -> bool {
+        if package.is_empty() {
+            return false;
+        }
+        match self.processes.iter_mut().find(|p| p.tag == 0) {
+            Some(record) if !record.package_name.is_empty() => {
+                // The record is already named: the name is the record's, and a
+                // second, different seed must not contradict it.
+                record.package_name == package
+            }
+            Some(record) => {
+                record.package_name = package.to_string();
+                self.primary_package = Some(package.to_string());
+                true
+            }
+            // No record yet: `attach_application_for` fills it from
+            // `primary_package` when the guest attaches. First seed wins.
+            None => {
+                if self.primary_package.is_none() {
+                    self.primary_package = Some(package.to_string());
+                }
+                self.primary_package.as_deref() == Some(package)
+            }
+        }
+    }
+
+    /// The primary package the launcher seeded, if any.
+    #[must_use]
+    pub fn primary_package(&self) -> Option<&str> {
+        self.primary_package.as_deref()
+    }
+
     /// `checkPermission`: the shared runtime table first, then install-time.
     #[must_use]
     pub fn check_permission(&self, permission: &str) -> i32 {
@@ -1897,6 +1957,27 @@ impl AtmsService {
         if let Ok(mut s) = self.state.lock() {
             s.attach_application(app_thread, seq, package);
         }
+    }
+
+    /// SYSUI3A: name the session's primary process (tag 0).
+    ///
+    /// `ServiceHost::seed_primary_package` is the seam the launcher uses; it is
+    /// the same fact ADR-0029 gives the host for every launch fact it builds
+    /// (the launcher knows what it started).
+    pub fn set_primary_package(&mut self, package: &str) -> bool {
+        self.state
+            .lock()
+            .map(|mut s| s.set_primary_package(package))
+            .unwrap_or(false)
+    }
+
+    /// The seeded primary package (tests/inspection).
+    #[must_use]
+    pub fn primary_package(&self) -> Option<String> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|s| s.primary_package().map(str::to_string))
     }
 
     /// Seed the component table `startActivity` resolves against (W38).

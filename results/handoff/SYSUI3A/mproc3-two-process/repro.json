@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/proc-a.apk",
+  "apk_sha256": "175375bb0c692429f62ae751cc9c787dc58e22be941f6c535d2c824f67bdbe9e",
+  "scenario_path": "scenarios/mproc3-two-process.yaml",
+  "scenario_sha256": "cfd53ea0e2609983c7f2651de7b3921ba0b399fe82d492b29b4fb8d27d8f96fd",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

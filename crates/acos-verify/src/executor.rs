@@ -2415,6 +2415,45 @@ fn eval_tap_change(
     current: &SessionObservation,
     caps: Capabilities,
 ) -> Evaluated {
+    // SYSUI3A: a tap whose **target window was removed** is a completed
+    // interaction, and the removal is its evidence. The backend proves it
+    // against its own window record (the tapped window existed before the
+    // gesture and is gone from the observation the gesture completed) and only
+    // for a delivered, guest-handled gesture; a window that vanishes with no
+    // input delivered keeps its timeout (`removed_window_handled` in the ART
+    // backend). This is the single place the tap contract says so, so no step
+    // can claim success from a settle the backend did not handle.
+    if let Some(delivery) = &current.input {
+        if delivery.settle.as_ref().and_then(|settle| {
+            settle
+                .get("handled")
+                .and_then(serde_json::Value::as_str)
+        }) == Some("window-removed")
+        {
+            let window = delivery
+                .settle
+                .as_ref()
+                .and_then(|settle| settle.get("handled_window_label"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            return Evaluated::pass(
+                "window_removed",
+                Vec::new(),
+                Some(format!(
+                    "the tapped window {window:?} was removed by a delivered, guest-handled \
+                     gesture; the window removal is the interaction's evidence"
+                )),
+                serde_json::json!({"handled": "window-removed", "window": window}),
+                serde_json::json!({
+                    "handled": "window-removed",
+                    "window": window,
+                    "delivered": delivery.delivered,
+                    "acks": delivery.acks.len(),
+                }),
+            );
+        }
+    }
     // A delivered input that produced no visible change is not stale: the host
     // observed the injection, the guest accepted it, and the action's frame is
     // fresh. It is also not a state change, so nothing visual is claimed.
@@ -3360,6 +3399,72 @@ mod region_tests {
         assert!(detail.contains("display region [0,0][4,4]"), "{detail}");
         assert!(detail.contains("display origin [0,4]"), "{detail}");
         assert_eq!(evaluated.error.unwrap().code(), ErrorCode::AssertionFailed);
+    }
+
+    /// SYSUI3A: a tap that removed the window it landed on is a completed
+    /// interaction, and its evidence is the removal — even when the remaining
+    /// frame's content hash is what the tap step compares. The backend only
+    /// publishes `handled: "window-removed"` for a delivered, guest-handled
+    /// gesture whose target window it recorded before and no longer records
+    /// after (`acos-cli`'s `removed_window_handled`), so this is the single place
+    /// the tap contract reads it.
+    #[test]
+    fn a_handled_window_removal_passes_the_tap_contract() {
+        let previous = observation(&[[0, 0, 0, 255]], 1, 1);
+        let mut current = observation(&[[0, 0, 0, 255]], 1, 1);
+        current.input = Some(InputDelivery {
+            delivered: true,
+            visual_change: true,
+            acks: vec![crate::backend::InputAck {
+                seq: 1,
+                handled: true,
+                latency_us: Some(4000),
+            }],
+            settle: Some(serde_json::json!({
+                "mode": "strict",
+                "settled": false,
+                "bound": "window-removed",
+                "handled": "window-removed",
+                "handled_window": "w-shade",
+                "handled_window_label": "shade",
+                "acked": 1,
+            })),
+        });
+        let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default());
+        assert!(evaluated.result.passed, "{:?}", evaluated.error);
+        assert_eq!(evaluated.result.kind, "window_removed");
+        let message = evaluated.result.message.unwrap_or_default();
+        assert!(message.contains("\"shade\""), "{message}");
+
+        // A raw settle timeout is never a pass, handled flag or not: the
+        // backend is the only component that may claim the removal. With a tree
+        // channel and an unchanged tree, the tap's own change rule has nothing
+        // to accept.
+        let mut caps = Capabilities::default();
+        caps.ui_tree = true;
+        let node = acos_protocol::ui::UiNode::new(
+            "n",
+            "android.widget.FrameLayout",
+            acos_protocol::ui::Bounds::new(0, 0, 4, 4),
+        );
+        let mut with_tree = current.clone();
+        with_tree.tree.nodes = vec![node.clone()];
+        let mut before_tree = with_tree.clone();
+        before_tree.input = None;
+        let mut timed_out = with_tree.clone();
+        if let Some(input) = timed_out.input.as_mut() {
+            input.settle = Some(serde_json::json!({
+                "mode": "strict",
+                "settled": false,
+                "bound": "timeout",
+                "reason": "detached",
+            }));
+        }
+        let evaluated = eval_tap_change(Some(&before_tree), &timed_out, caps);
+        assert!(
+            !evaluated.result.passed,
+            "a bare settle timeout must stay a failure"
+        );
     }
 
     #[test]
