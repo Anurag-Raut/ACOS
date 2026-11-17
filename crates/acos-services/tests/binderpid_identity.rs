@@ -339,3 +339,47 @@ fn a_session_grant_survives_the_launch_install() {
         "the scenario's grant must apply after the launch install"
     );
 }
+
+/// `IActivityManager.checkPermission(permission, pid, uid)` answers for the
+/// **uid** the framework passes (BINDERPID): this is the call the image's
+/// `Context.checkCallingPermission`/`checkSelfPermission` path actually reaches
+/// (measured on ART: `IActivityManager code 9`), so it must not answer from one
+/// package regardless of the caller.
+#[test]
+fn the_activity_manager_answers_check_permission_per_uid() {
+    let mut host = two_package_host();
+    let perm = "android.permission.INTERNET";
+    host.permission_store()
+        .expect("one permission table")
+        .lock()
+        .unwrap()
+        .grant(perm);
+    let granted = service_q(
+        &mut host,
+        "activity",
+        "android.app.IActivityManager",
+        "checkPermission",
+        &[
+            Value::Str(Some(perm.into())),
+            Value::Int(2),
+            Value::Int(10192),
+        ],
+    );
+    let denied = service_q(
+        &mut host,
+        "activity",
+        "android.app.IActivityManager",
+        "checkPermission",
+        &[
+            Value::Str(Some(perm.into())),
+            Value::Int(3),
+            Value::Int(55_555),
+        ],
+    );
+    assert_eq!(granted, vec![Value::Int(PERMISSION_GRANTED)]);
+    assert_eq!(
+        denied,
+        vec![Value::Int(PERMISSION_DENIED)],
+        "a uid the table does not own must not inherit the primary package's grant"
+    );
+}
