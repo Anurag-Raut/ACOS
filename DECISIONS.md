@@ -1259,3 +1259,41 @@ so the last two open questions get a recorded answer instead of an implementer's
    `module::system_apks`) **at launch** and binds the session's gate socket; the one host Chromium is
    still started by the first guest connect. There is no `stub`/`scripted` profile: a scripted page
    would be a fake success.
+
+**ADR-0029 amendment note (SYSUI1, 2026-11-17): the permission dialog is the guest system app, and
+the host routes it there.** The `permissions` module now declares
+`system_apps: ["com.android.permissioncontroller"]`; the launcher stages that APK through the one
+`modules::system_app_apk` resolver (the mechanism WV8 introduced for the WebView provider), installs
+it as a second package, and the ATMS resolves the framework's own
+`PackageManager.buildRequestPermissionsIntent` (`ACTION_REQUEST_PERMISSIONS` + package) to its
+`GrantPermissionsActivity`. The controller runs in its own ART process, spawned lazily the way a
+second app is (`request_process` → launcher); the host launches it with a host-built
+`ClientTransaction`, and the activity result comes back on the same MPROC7 path — with the AIDL
+`resultWho` the framework passed (`"@android:requestPermissions:"`), which is what makes
+`Activity.dispatchActivityResult` call `onRequestPermissionsResult` with the AOSP shape
+(`EXTRA_REQUEST_PERMISSIONS_NAMES` + `EXTRA_REQUEST_PERMISSIONS_RESULTS`). The host applies the
+answer to the one runtime-permission table the two `checkPermission` paths read.
+
+Three contract details, each documented where it lives:
+
+1. **The resolved component is written onto the launch intent.** AOSP's `ActivityStarter` does
+   `intent.setComponent(…)` before it schedules the launch; `ActivityThread.performLaunchActivity`
+   reads `r.intent.getComponent()` and crashes on null. An implicit start therefore records the
+   resolved component (SYSUI1 found this on the first ART run of the dialog).
+2. **The two facts the controller cannot query are passed in the launch.** A real controller calls
+   `IPermissionManager.getPermissionFlags`; the ACOS guest app cannot reach the hidden interface, so
+   the host puts `acos.permission.GRANTED` / `acos.permission.FIXED` (and the requesting package) in
+   the launch extras, and the app does what `GrantPermissionsActivity` does with them — skip
+   already-granted permissions, answer "don't ask again" ones denied, and return without drawing when
+   nothing is left to ask. The result Intent carries the AOSP extras plus
+   `…REQUEST_PERMISSIONS_NEVER_ASK_AGAIN` for the "Don't ask again" answer (AOSP's controller calls
+   `updatePermissionFlags(FLAG_PERMISSION_USER_FIXED)` itself; this is the same flag, one hop later).
+3. **`system_ui: dialogs|off`** (default `dialogs` for the `real` profile). `off`, an uninstalled
+   controller, or a detached module keeps MODNOTIF2's structured `PERMISSION_UI_UNAVAILABLE` — never
+   a silent grant.
+
+Open, not decided here: the controller's process launch is subject to the same lazy-spawn launch race
+`mproc3-two-process` exercises; the pre-granted arm of the SYSUI1 scenarios hits it
+(`host-transaction-timeout`, `results/handoff/SYSUI1/pregranted-finding/`), while the two dialog arms
+pass. The shade/system-UI app (item 2 of the track) is not built; the notification layer's control
+path is where `open_shade` belongs.
