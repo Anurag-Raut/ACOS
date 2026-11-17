@@ -1775,6 +1775,11 @@ pub(crate) fn launch_session(
             // live module-control channel, both on the thread that owns the
             // service table. A spawn request crosses to the launcher, which owns
             // the processes and their tags.
+            // SYSUI1: a control op can start an activity (the permission
+            // dialog, the shade). Its resolution may need a process the launcher
+            // owns, and no guest frame follows to drain the request, so the pump
+            // hands it over the same way the serve loop does.
+            let pump_spawns = spawn_tx.clone();
             let mut sink = |request: acos_services::ams::ProcessSpawnRequest| {
                 let _ = spawn_tx.send(request);
             };
@@ -1784,6 +1789,13 @@ pub(crate) fn launch_session(
                     let reply = service_request(peer, &mut peer_registry, &request);
                     let debug_reply = reply.to_string();
                     peer_control.reply(id, reply);
+                    for spawn in peer.take_spawn_requests() {
+                        eprintln!(
+                            "acos-binder-peer: control op: {} needs a process for {} ({})",
+                            spawn.package, spawn.component, spawn.reason
+                        );
+                        let _ = pump_spawns.send(spawn);
+                    }
                     // A live `ctl` op can queue `system -> app` deliveries (an
                     // SMS, a call-state event, a location fix, an auth result).
                     // No binder transaction follows to flush them, so do it here

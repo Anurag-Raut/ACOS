@@ -20,6 +20,8 @@
 #   fixtures/build/apps/multi-package-probe.apk
 #   fixtures/build/apps/sensor-probe.apk   (MODSENS: native sensorservice feed)
 #   fixtures/build/apps/notif-perm-probe.apk (MODNOTIF5: notifications + POST_NOTIFICATIONS gate)
+#   fixtures/build/apps/permissioncontroller.apk (SYSUI1: the permission-controller system app)
+#   fixtures/build/apps/perm-probe.apk   (SYSUI1: requestPermissions -> the dialog)
 #   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
 #
 # Installation on a device is attempted only if one is already attached; no
@@ -307,7 +309,7 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
-for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager sensor-probe notif-perm-probe; do
+for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager sensor-probe notif-perm-probe permissioncontroller perm-probe; do
     build_apk "$app"
 done
 

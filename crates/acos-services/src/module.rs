@@ -666,7 +666,7 @@ pub fn system_apks(specs: &[ModuleSpec]) -> Vec<std::path::PathBuf> {
             continue;
         };
         for app in manifest.system_apps {
-            let resolved = crate::modules::webview::system_app_apk(&spec.id, app, &spec.config);
+            let resolved = crate::modules::system_app_apk(&spec.id, app, &spec.config);
             if let Some(path) = resolved {
                 if !out.contains(&path) {
                     out.push(path);

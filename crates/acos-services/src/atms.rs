@@ -308,6 +308,11 @@ pub struct ActivityRecord {
     /// MPROC7: `startActivityForResult` request code (`-1`/`0` for a plain
     /// `startActivity`).
     pub request_code: i32,
+    /// SYSUI1: the AIDL `resultWho` string (`Activity.requestPermissions`
+    /// passes `"@android:requestPermissions:"`; a normal launch passes null).
+    /// `Activity.dispatchActivityResult` routes a non-null who through the
+    /// fragment/permission paths instead of `onActivityResult`.
+    pub result_who: Option<String>,
     /// MPROC7: the result `finish(resultCode, data)` set (`RESULT_CANCELED` =
     /// `0` until the app sets one).
     pub result_code: i32,
@@ -333,6 +338,7 @@ impl ActivityRecord {
             saved_clicks: 0,
             result_to: 0,
             request_code: 0,
+            result_who: None,
             result_code: 0,
             result_data: None,
             result_delivered: false,
@@ -1348,6 +1354,45 @@ impl AtmsState {
         self.emit(LifecycleState::SaveInstanceState, None);
     }
 
+    /// Apply a permission dialog's result Intent to the runtime table (SYSUI1).
+    ///
+    /// Only a result that carries both AOSP extras is a dialog answer; anything
+    /// else (a normal activity's `setResult`) is left alone. `never_ask_again`
+    /// is the ACOS system-app extra for "Don't ask again", which a real
+    /// controller expresses with `updatePermissionFlags(FLAG_PERMISSION_USER_FIXED)`
+    /// (see [`crate::permissions::EXTRA_REQUEST_PERMISSIONS_NEVER_ASK_AGAIN`]).
+    fn apply_permission_dialog_result(&mut self, facts: &crate::ams::IntentFacts) {
+        use crate::ams::Extra;
+        let names = match facts.extras.get(crate::permissions::EXTRA_REQUEST_PERMISSIONS_NAMES) {
+            Some(Extra::Strings(names)) => names.clone(),
+            _ => return,
+        };
+        let results = match facts.extras.get(crate::permissions::EXTRA_REQUEST_PERMISSIONS_RESULTS) {
+            Some(Extra::Ints(results)) => results.clone(),
+            _ => return,
+        };
+        let never_ask_again = matches!(
+            facts
+                .extras
+                .get(crate::permissions::EXTRA_REQUEST_PERMISSIONS_NEVER_ASK_AGAIN),
+            Some(Extra::Bool(true))
+        );
+        if let Some(store) = self.runtime_permissions.as_ref() {
+            store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .apply_dialog_result(&names, &results, never_ask_again);
+        }
+        self.log_event(
+            "ActivityManagerResult",
+            acos_protocol::LogLevel::Debug,
+            format!(
+                "permission dialog answered names={} results={results:?} never_ask_again={never_ask_again}",
+                names.len()
+            ),
+        );
+    }
+
     /// `finishActivity` (the app asked to finish), with the result the app set.
     ///
     /// `IClientController.finishActivity(IBinder token, int resultCode, Intent
@@ -1381,6 +1426,16 @@ impl AtmsState {
         self.activities[index].result_code = result_code;
         if result_data.is_some() {
             self.activities[index].result_data = result_data;
+        }
+        // SYSUI1: the permission dialog's answer. The controller system app sets
+        // an `ACTION`-less result Intent carrying the AOSP extras
+        // (`EXTRA_REQUEST_PERMISSIONS_NAMES` + `EXTRA_REQUEST_PERMISSIONS_RESULTS`)
+        // exactly as `GrantPermissionsActivity` does; the host applies them to
+        // the one runtime-permission table here, which is what a device's
+        // `IPermissionManager.grantRuntimePermissions` call inside the
+        // controller does.
+        if let Some(facts) = self.activities[index].result_data.clone() {
+            self.apply_permission_dialog_result(&facts);
         }
         // Keep `AmsState`'s task stack in step: the finished Activity leaves the
         // task, so the record below it is the new top (what the guest's
@@ -1443,6 +1498,7 @@ impl AtmsState {
         }
         let caller = record.result_to;
         let request_code = record.request_code;
+        let result_who = record.result_who.clone();
         let result_code = record.result_code;
         let data = record.result_data.clone();
         let tag = self.activity_tag(caller);
@@ -1476,8 +1532,15 @@ impl AtmsState {
         // `Activity.dispatchActivityResult` treats a non-null `who` as an
         // embedded id and does **not** call `onActivityResult` for it, so an
         // empty string silently swallowed the result (MPROC7).
-        let info =
-            crate::client_transaction::result_info(None, request_code, result_code, data_intent);
+        // SYSUI1: a non-null `who` is what `Activity.dispatchActivityResult`
+        // needs to reach `onRequestPermissionsResult`; it comes from the
+        // caller's `startActivityForResult(who, …)` AIDL argument.
+        let info = crate::client_transaction::result_info(
+            result_who.as_deref(),
+            request_code,
+            result_code,
+            data_intent,
+        );
         let item = crate::client_transaction::activity_result_item(vec![info]);
         let resume = crate::client_transaction::resume_item(2, true, false, false);
         let transaction = crate::client_transaction::client_transaction(
@@ -1490,7 +1553,7 @@ impl AtmsState {
             acos_protocol::LogLevel::Debug,
             format!(
                 "tag={tag} token={caller:#x} ActivityResultItem(request={request_code}, \
-                 code={result_code}) + ResumeActivityItem"
+                 code={result_code}, who={result_who:?}) + ResumeActivityItem"
             ),
         );
         self.pending_lifecycle_calls.push((

@@ -2263,6 +2263,12 @@ impl Peer {
         pending.extend(self.host.take_timed_deliveries());
         let mut out = self.frames_for_deliveries(pending);
         out.extend(self.take_ref_frames());
+        // SYSUI1: a **host-initiated** launch (a module control op starting the
+        // permission dialog or the shade) records a `PendingLaunch` with no
+        // guest frame behind it. The idle turn is exactly when it must reach an
+        // already-running process, so the host transactions are drained here
+        // too (they are the same deliveries `handle_tagged` emits after a frame).
+        out.extend(self.take_host_transactions());
         out
     }
 

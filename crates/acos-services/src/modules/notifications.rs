@@ -66,6 +66,20 @@ pub const MODULE_ID: &str = "system.notifications";
 /// `android.permission.POST_NOTIFICATIONS` (`Manifest.permission`).
 pub const POST_NOTIFICATIONS: &str = "android.permission.POST_NOTIFICATIONS";
 
+/// SYSUI1: the guest system-UI app that draws the notification shade
+/// (`com.android.systemui`, the package a real device's shade lives in).
+pub const SHADE_PACKAGE: &str = "com.android.systemui";
+/// SYSUI1: the shade activity (`package/class`, as a launch intent names it).
+pub const SHADE_COMPONENT: &str = "com.android.systemui/.ShadeActivity";
+/// SYSUI1: the control op that opens the shade.
+pub const OPEN_SHADE: &str = "open_shade";
+/// `config: {"shade_apk": …}` override for the shade system app.
+pub const SHADE_APK_CONFIG: &str = "shade_apk";
+/// Environment override for the shade system app.
+pub const SHADE_APK_ENV: &str = "ACOS_SYSTEMUI_APK";
+/// Workspace-relative default build output.
+pub const SHADE_APK_REL: &str = "fixtures/build/apps/systemui.apk";
+
 /// The `ServiceManager` name -> descriptor pairs this module serves.
 pub const SERVICES: &[ServiceProvide] = &[ServiceProvide {
     name: SERVICE_NAME,
@@ -1023,4 +1037,22 @@ mod tests {
         manifest_ref().validate().expect("valid manifest");
         assert_eq!(manifest_ref().replaces, &["notification"]);
     }
+}
+
+/// The host APK a module's declared **system app** installs
+/// (`crate::module::system_apks`). The shade app is SYSUI1's system app.
+#[must_use]
+pub fn system_app_apk(module: &str, app: &str, config: &ModuleConfig) -> Option<std::path::PathBuf> {
+    if module != MODULE_ID || app != SHADE_PACKAGE {
+        return None;
+    }
+    if let Some(path) = config.string(SHADE_APK_CONFIG).filter(|path| !path.is_empty()) {
+        return Some(std::path::PathBuf::from(path));
+    }
+    if let Some(path) = std::env::var_os(SHADE_APK_ENV) {
+        if !path.is_empty() {
+            return Some(std::path::PathBuf::from(path));
+        }
+    }
+    Some(crate::workspace_path(SHADE_APK_REL).unwrap_or_else(|| std::path::PathBuf::from(SHADE_APK_REL)))
 }
