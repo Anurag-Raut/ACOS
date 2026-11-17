@@ -5,9 +5,11 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcel;
+import android.os.Process;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -111,7 +113,32 @@ public class ProcAActivity extends Activity {
         });
         Log.i(TAG, "ACOSPROBE a ready pkg=" + getPackageName()
                 + " pid=" + android.os.Process.myPid());
+        probeIdentity();
         status.setText("A ready");
+    }
+
+    /**
+     * BINDERPID: what this process's own binder identity is, and what the host
+     * answers for it.
+     *
+     * <p>On a device a process's own thread answers `Binder.getCallingUid()` with
+     * its own uid (`IPCThreadState`'s calling identity outside a transaction) and
+     * `Context.checkCallingPermission` asks the permission service for it by uid.
+     * The two apps in this session have different uids, so the permission answer
+     * must differ per app: {@code granted_to} is only one of them.
+     */
+    private void probeIdentity() {
+        int uid = Process.myUid();
+        int pid = Process.myPid();
+        int callingUid = Binder.getCallingUid();
+        int callingPid = Binder.getCallingPid();
+        String owner = getPackageManager().getNameForUid(uid);
+        int perm = checkCallingPermission("android.permission.INTERNET");
+        Log.i(TAG, "ACOSPROBE a identity pkg=" + getPackageName()
+                + " uid=" + uid + " pid=" + pid
+                + " calling-uid=" + callingUid + " calling-pid=" + callingPid
+                + " uid-pkg=" + owner
+                + " internet=" + perm);
     }
 
     @Override

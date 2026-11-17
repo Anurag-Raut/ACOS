@@ -18,7 +18,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::peer::{Peer, TagRefusal};
 use crate::protocol::{
-    accept, close_frame_fds, read_frame, write_frame, Frame, F_RSP, MAX_PROCESSES, TAG_PRIMARY,
+    accept, close_frame_fds, peer_cred, read_frame, write_frame, Frame, F_RSP, MAX_PROCESSES,
+    TAG_PRIMARY,
 };
 
 /// One live driver connection.
@@ -30,6 +31,12 @@ struct Conn {
     tag: Option<u32>,
     /// Name from the handshake (diagnostics only).
     name: String,
+    /// BINDERPID: the peer's pid in **this** pid namespace, from `SO_PEERCRED`
+    /// on the accepted socket. The guest's own `getpid()` is namespace-local
+    /// (the sandbox unshares pid), so this is the only number that names the
+    /// process the way `ps` and `ProcessRecord.pid` do. `0` = the credential
+    /// could not be read.
+    pid: i32,
 }
 
 /// What one serve run did (evidence, never a silent outcome).
@@ -262,13 +269,32 @@ pub fn serve_with_control(
                                 std::mem::size_of::<libc::timeval>() as libc::socklen_t,
                             );
                         }
+                        // BINDERPID: the kernel's answer for who this is. It is
+                        // read once, at accept, because that is the only moment
+                        // a `SO_PEERCRED` is guaranteed to describe the guest
+                        // (the credential is fixed for the socket's lifetime, but
+                        // a failed accept is not a silence).
+                        let cred = match peer_cred(fd) {
+                            Ok(cred) => cred,
+                            Err(e) => {
+                                eprintln!(
+                                    "acos-binder-peer: SO_PEERCRED on the accepted driver \
+                                     connection failed ({e}); callers on it report pid 0"
+                                );
+                                crate::protocol::PeerCred::default()
+                            }
+                        };
                         if dbg {
-                            eprintln!("peer-trace: driver connected (fd {fd})");
+                            eprintln!(
+                                "peer-trace: driver connected (fd {fd}, pid {}, uid {})",
+                                cred.pid, cred.uid
+                            );
                         }
                         conns.push(Conn {
                             fd,
                             tag: None,
                             name: String::new(),
+                            pid: cred.pid,
                         });
                         outcome.peak_connections = outcome.peak_connections.max(conns.len());
                         // Re-poll before touching the new connection: this poll
@@ -392,6 +418,8 @@ pub fn serve_with_control(
                     close_frame_fds(&out);
                     continue;
                 };
+                let mut out = out;
+                peer.stamp_sender(&mut out);
                 if let Err(e) = write_frame(target_fd, &out) {
                     eprintln!(
                         "peer-trace: write_frame FAILED for process {dest}: {e} \
@@ -432,8 +460,8 @@ fn write_tagged(
     outcome: &mut ServeOutcome,
     dbg: bool,
 ) {
-    let _ = peer;
-    for (dest, frame) in frames {
+    for (dest, mut frame) in frames {
+        peer.stamp_sender(&mut frame);
         let Some(target_fd) = conns.iter().find(|c| c.tag == Some(dest)).map(|c| c.fd) else {
             outcome.unroutable += 1;
             eprintln!(
@@ -469,7 +497,10 @@ fn write_tagged(
 fn resolve_tag(peer: &mut Peer, conn: &mut Conn, frame: &Frame) -> Result<u32, TagRefusal> {
     let (tag, name) = match frame.hello_of() {
         Some((tag, name)) => {
-            peer.register_process(tag, &name)?;
+            // The pid comes from the accepted socket, never from the guest: a
+            // process must not be able to claim another process's pid in its
+            // handshake (BINDERPID).
+            peer.register_process_with_pid(tag, &name, conn.pid)?;
             (tag, name)
         }
         None => {

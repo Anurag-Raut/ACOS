@@ -40,9 +40,17 @@ public class EchoService extends Service {
                     reply.writeNoException();
                     reply.writeString(out);
                 }
+                // BINDERPID: who the binder says is calling. This service runs
+                // in B's process; the transaction comes from A's process, so
+                // `getCallingUid()` must be A's uid and `getCallingPid()` the pid
+                // the kernel reported for A's connection — not 0, not B's own,
+                // and not `system_server` (the relay is the host's, the caller
+                // is not).
                 Log.i(TAG, "ACOSPROBE b transact code=" + code
                         + " in=" + in + " -> out=" + out
-                        + " pid=" + android.os.Process.myPid());
+                        + " pid=" + android.os.Process.myPid()
+                        + " caller-uid=" + Binder.getCallingUid()
+                        + " caller-pid=" + Binder.getCallingPid());
                 return true;
             }
             try {

@@ -36,6 +36,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use acos_parcel::binder::BINDER_TYPE_FD;
+use acos_parcel::registry::{pop_calling_identity, push_calling_identity};
 use acos_parcel::{BinderId, BinderKind, FlatObject, Parcel};
 use acos_services::{codes, exception, registry, ServiceError, ServiceHost};
 
@@ -209,6 +210,10 @@ pub struct ProcessConn {
     java_binders: HashMap<u32, String>,
     /// The connection is still open.
     connected: bool,
+    /// BINDERPID: the process's pid **in the host's pid namespace**, from
+    /// `SO_PEERCRED` on the accepted socket. `0` until the serve loop records
+    /// it (a peer driven directly by tests has no socket).
+    pub pid: i32,
     launch: LaunchState,
 }
 
@@ -219,6 +224,7 @@ impl ProcessConn {
             name: name.into(),
             java_binders: HashMap::new(),
             connected: true,
+            pid: 0,
             launch: LaunchState::default(),
         }
     }
@@ -695,6 +701,21 @@ impl Peer {
     /// [`TagRefusal`] — the caller must refuse the connection, never silently
     /// fold it into another process.
     pub fn register_process(&mut self, tag: u32, name: &str) -> Result<(), TagRefusal> {
+        self.register_process_with_pid(tag, name, 0)
+    }
+
+    /// [`Self::register_process`] for a connection whose peer pid the serve loop
+    /// already read from `SO_PEERCRED` (BINDERPID).
+    ///
+    /// `pid` is the host-visible pid (the number `ps` and `ProcessRecord.pid`
+    /// show), not the guest's namespace-local `getpid()`. `0` means "not known"
+    /// and is recorded as such, never replaced by a guess.
+    pub fn register_process_with_pid(
+        &mut self,
+        tag: u32,
+        name: &str,
+        pid: i32,
+    ) -> Result<(), TagRefusal> {
         if tag > crate::protocol::MAX_PROCESS_TAG {
             return Err(TagRefusal::OutOfRange(tag));
         }
@@ -708,10 +729,15 @@ impl Peer {
                 if tag == crate::protocol::TAG_PRIMARY {
                     // The primary process re-announcing itself (a driver that
                     // reconnects after a restart) keeps its state and just
-                    // updates the name.
+                    // updates the name / pid.
                     if !name.is_empty() {
                         conn.name = name.to_string();
                     }
+                    if pid != 0 {
+                        conn.pid = pid;
+                    }
+                    let package = conn.name.clone();
+                    self.record_process_started(tag, &package, pid);
                     return Ok(());
                 }
                 Err(TagRefusal::AlreadyConnected(tag))
@@ -722,16 +748,36 @@ impl Peer {
                 } else {
                     name.to_string()
                 };
-                eprintln!("acos-binder-peer: process tag {tag} connected ({name})");
-                *slot = Some(ProcessConn::new(tag, name.clone()));
+                eprintln!(
+                    "acos-binder-peer: process tag {tag} connected ({name}, host pid {pid})"
+                );
+                let mut conn = ProcessConn::new(tag, name.clone());
+                conn.pid = pid;
+                *slot = Some(conn);
                 // MPROC4 step 3b: a process exists from the moment its guest
                 // connects, exactly where `ActivityManagerService
                 // .startProcessLocked` creates the record on a device. The
                 // activity manager's `ProcessRecord` is per tag, so the attach
                 // and the process list name the right package.
-                self.record_process_started(tag, &name);
+                self.record_process_started(tag, &name, pid);
                 Ok(())
             }
+        }
+    }
+
+    /// BINDERPID: record the host-visible pid of process `tag`'s connection.
+    ///
+    /// Called by the serve loop right after the handshake names the tag (the
+    /// credential is read from the socket, so it is the kernel's answer, not
+    /// the guest's claim), and again if the activity manager needs to know.
+    pub fn set_process_pid(&mut self, tag: u32, pid: i32) {
+        if pid == 0 {
+            return;
+        }
+        if let Some(conn) = self.conns.get_mut(tag as usize).and_then(Option::as_mut) {
+            conn.pid = pid;
+            let package = conn.name.clone();
+            self.record_process_started(tag, &package, pid);
         }
     }
 
@@ -739,8 +785,13 @@ impl Peer {
     ///
     /// The peer owns the handshake (the first thing a guest does) and the
     /// activity manager owns the `ProcessRecord`; the package name comes from the
-    /// guest's own `ACOS_PROCESS_NAME`, so nothing is invented here.
-    fn record_process_started(&mut self, tag: u32, package: &str) {
+    /// guest's own `ACOS_PROCESS_NAME` and the pid from the accepted socket, so
+    /// nothing is invented here. The uid is the one the package manager
+    /// allocated for that package (`PmsState::uid_packages`), which is what
+    /// differs per app in a multi-process session — the socket's uid is the
+    /// sandbox's mapped 1000 and says nothing about the app.
+    fn record_process_started(&mut self, tag: u32, package: &str, pid: i32) {
+        let uid = self.host.package_uid(package).unwrap_or(0);
         let Ok(object) = self.host.ensure("android.app.IActivityTaskManager") else {
             return;
         };
@@ -748,8 +799,55 @@ impl Peer {
             .as_any_mut()
             .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
         {
-            atms.note_process_started(tag, package);
+            atms.note_process_started(tag, package, uid, pid);
         }
+    }
+
+    /// The pid the activity manager recorded for process `tag` (BINDERPID).
+    pub fn process_pid(&mut self, tag: u32) -> Option<i32> {
+        let state = self.atms_service_mut()?.shared_state();
+        let state = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.process(tag).map(|p| p.pid).filter(|pid| *pid != 0)
+    }
+
+    /// The uid the activity manager recorded for process `tag` (BINDERPID).
+    pub fn process_uid(&mut self, tag: u32) -> Option<i32> {
+        let state = self.atms_service_mut()?.shared_state();
+        let state = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.process(tag).map(|p| p.uid).filter(|uid| *uid != 0)
+    }
+
+    /// BINDERPID: the caller identity a transaction from process `tag` runs
+    /// with, i.e. what `Binder.getCallingUid/Pid` must answer inside the host
+    /// service that handles it.
+    ///
+    /// The connection is the authority: the pid is what `SO_PEERCRED` reported
+    /// for that process's socket and the uid is the activity manager's
+    /// `ProcessRecord`. Both are per process, never per transaction, so a
+    /// process cannot claim someone else's identity. A connection the serve
+    /// loop has not named (a unit test, a peer driven without a socket) falls
+    /// back to the identity the frame carries, and a frame that carries none
+    /// (a v3 driver, whose last header bytes were `reserved`) reports the
+    /// unknown sender `(0, 0)` exactly as before — never a fabricated one.
+    #[must_use]
+    pub fn caller_identity(&mut self, tag: u32, frame: &Frame) -> (u32, i32) {
+        let conn_pid = self
+            .process(tag)
+            .map(|c| c.pid)
+            .filter(|pid| *pid != 0);
+        let uid = self.process_uid(tag).map(|uid| uid as u32);
+        // `process_uid` locks the activity manager; `process_pid` reuses the
+        // peer's own record when the serve loop has one (the common case), so
+        // only the fallback path asks the activity manager.
+        let pid = conn_pid
+            .or_else(|| self.process_pid(tag))
+            .unwrap_or_else(|| frame.sender_pid as i32);
+        let euid = uid.unwrap_or(frame.sender_euid);
+        (euid, pid)
     }
 
     /// MPROC5c: close every window session a dead process owned.
@@ -1058,7 +1156,33 @@ impl Peer {
         }
         out.extend(self.take_host_transactions());
         out.extend(self.take_death_frames());
+        // BINDERPID: every frame leaving the peer carries its sender. A delivery
+        // the peer originated is a `system_server` transaction (uid 1000); a
+        // relayed guest -> guest transaction already stamped the real caller in
+        // `forward_foreign`, and this keeps it.
+        for (_, frame) in &mut out {
+            self.stamp_sender(frame);
+        }
         out
+    }
+
+    /// BINDERPID: fill a guest-bound frame's sender with this peer's identity.
+    ///
+    /// The peer plays the system here, so a `system -> app` transaction and the
+    /// reply to a guest's call both come from `system_server`: uid 1000
+    /// (`SYSTEM_UID`) and this process's pid. The guest's driver reports them as
+    /// `binder_transaction_data.sender_pid` / `sender_euid`, which is what
+    /// `Binder.getCallingUid()` / `getCallingPid()` answer inside the app.
+    /// A frame that already names a sender (a relayed transaction from another
+    /// guest process) is left alone.
+    pub fn stamp_sender(&self, frame: &mut Frame) {
+        if frame.sender_pid != 0 || frame.sender_euid != 0 {
+            return;
+        }
+        if matches!(frame.ty, F_TXN | F_RSP) {
+            frame.sender_euid = acos_services::permissions::SYSTEM_UID;
+            frame.sender_pid = std::process::id();
+        }
     }
 
     // --- cross-process binder routing (MPROC3 step 3c) --------------------
@@ -1249,6 +1373,12 @@ impl Peer {
                 .insert((owner, seq), (tag, frame.seq, node));
         }
         self.foreign_forwards = self.foreign_forwards.saturating_add(1);
+        // BINDERPID: a transaction between two app processes reaches the target
+        // with the *caller's* identity, exactly as the kernel would deliver it.
+        // The relay is the peer's, but the sender is not: the caller's uid and
+        // pid come from its own connection, so a guest -> guest call reports the
+        // real caller and not `system_server`.
+        let (caller_euid, caller_pid) = self.caller_identity(tag, frame);
         let base = Frame {
             ty: F_TXN,
             seq,
@@ -1256,7 +1386,8 @@ impl Peer {
             flags: frame.flags,
             target: u64::from(wire),
             ..Default::default()
-        };
+        }
+        .sent_by(caller_pid.max(0) as u32, caller_euid);
         (owner, frame_from_parcel(F_TXN, &base, &exported))
     }
 
@@ -1389,7 +1520,28 @@ impl Peer {
         true
     }
 
+    /// Handle one transaction request, with the caller's identity pushed for the
+    /// duration of the dispatch (BINDERPID).
+    ///
+    /// On a device every service runs inside `system_server` and answers
+    /// `Binder.getCallingUid/Pid` from the transaction's `sender_euid`/
+    /// `sender_pid`. Here the hosted service layer asks the same question through
+    /// `acos_parcel::calling_uid()/calling_pid()`, so the peer pushes the
+    /// identity of the process that owns the connection (see
+    /// [`Self::caller_identity`]) around the whole dispatch — service manager,
+    /// direct dispatch and the host's `transact` alike, because all of them are
+    /// reached from here. The pop is unconditional and runs on the error path
+    /// too, so a failed call can never leave another process's identity on the
+    /// stack.
     fn handle_request(&mut self, tag: u32, frame: &Frame) -> Option<Frame> {
+        let (uid, pid) = self.caller_identity(tag, frame);
+        push_calling_identity(uid, pid);
+        let reply = self.handle_request_inner(tag, frame);
+        pop_calling_identity();
+        reply
+    }
+
+    fn handle_request_inner(&mut self, tag: u32, frame: &Frame) -> Option<Frame> {
         if frame.code == PING_TRANSACTION {
             // `IBinder::PING_TRANSACTION` is answered with an empty parcel; a
             // reply header here would make libbinder read garbage (E3G §0).
@@ -2257,7 +2409,11 @@ impl Peer {
     pub fn flush_deliveries(&mut self) -> Vec<(u32, Frame)> {
         let raw = self.host.drain_raw_deliveries_all();
         self.local_deliveries.extend(raw);
-        self.take_delivery_frames()
+        let mut out = self.take_delivery_frames();
+        for (_, frame) in &mut out {
+            self.stamp_sender(frame);
+        }
+        out
     }
 
     /// Deliveries that became ready while the guest was idle.
@@ -2277,6 +2433,9 @@ impl Peer {
         pending.extend(self.host.take_timed_deliveries());
         let mut out = self.frames_for_deliveries(pending);
         out.extend(self.take_ref_frames());
+        for (_, frame) in &mut out {
+            self.stamp_sender(frame);
+        }
         out
     }
 
@@ -2653,6 +2812,8 @@ pub fn frame_from_parcel(ty: u32, base: &Frame, parcel: &Parcel) -> Frame {
         data: out,
         offs,
         fds,
+        sender_pid: base.sender_pid,
+        sender_euid: base.sender_euid,
     }
 }
 

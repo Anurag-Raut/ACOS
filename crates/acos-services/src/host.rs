@@ -2199,6 +2199,28 @@ impl ServiceHost {
         service.install_extra_package_from_apk_as(apk_path, guest_source_dir, guest_native_lib_dir)
     }
 
+    /// The uid the package manager allocated for `package` in this session.
+    ///
+    /// `None` when the package manager is not registered or the package is not
+    /// installed — never a guessed uid. BINDERPID uses it to record the caller
+    /// identity of a guest process: the socket's uid is the sandbox's mapped
+    /// 1000 and says nothing about the app, while this is the uid
+    /// `PackageManager.getPackageUid` and the permission checks answer with.
+    pub fn package_uid(&mut self, package: &str) -> Option<i32> {
+        if package.is_empty() {
+            return None;
+        }
+        let object = self.ensure("android.content.pm.IPackageManager").ok()?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())?;
+        let state = service.shared_state();
+        let state = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.lookup(Some(package)).map(|record| record.app.uid)
+    }
+
     fn pms_mut(&mut self) -> Result<&mut crate::pms::PmsService> {
         let object = self.ensure("android.content.pm.IPackageManager")?;
         object

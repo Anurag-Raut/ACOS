@@ -1,6 +1,8 @@
 package dev.acos.fixtures.procb;
 
 import android.app.Application;
+import android.os.Binder;
+import android.os.Process;
 import android.util.Log;
 
 /**
@@ -18,7 +20,16 @@ public class ProcBApp extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.i(TAG, "ACOSPROBE b process-start pid=" + android.os.Process.myPid()
+        Log.i(TAG, "ACOSPROBE b process-start pid=" + Process.myPid()
                 + " pkg=" + getPackageName());
+        // BINDERPID: B's own uid is its package's (a second uid in one session),
+        // and the per-uid permission answer must be B's, not A's.
+        int uid = Process.myUid();
+        Log.i(TAG, "ACOSPROBE b identity pkg=" + getPackageName()
+                + " uid=" + uid + " pid=" + Process.myPid()
+                + " calling-uid=" + Binder.getCallingUid()
+                + " calling-pid=" + Binder.getCallingPid()
+                + " uid-pkg=" + getPackageManager().getNameForUid(uid)
+                + " internet=" + checkCallingPermission("android.permission.INTERNET"));
     }
 }

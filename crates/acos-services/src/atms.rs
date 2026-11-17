@@ -358,7 +358,12 @@ pub struct ProcessRecord {
     /// MPROC4 step 3b: the app process's tag (`0` = the launched/primary
     /// process). One record per tag; a tag is what names a process here.
     pub tag: u32,
-    /// Synthetic pid (the reference app pid is not stable across runs).
+    /// The process's pid **in the host's pid namespace** — the number `ps`
+    /// shows and the one the kernel reports through `SO_PEERCRED` on the guest's
+    /// driver socket (BINDERPID). `0` means the pid is not known yet (a host
+    /// test that never connects a guest); it is never a placeholder, because a
+    /// placeholder is indistinguishable from a real pid to every caller of
+    /// `Binder.getCallingPid()`.
     pub pid: i32,
     /// uid.
     pub uid: i32,
@@ -664,16 +669,28 @@ impl AtmsState {
     /// MPROC4 step 3b: a process exists because its guest connected with `tag`.
     ///
     /// `ActivityManagerService.startProcessLocked` creates the record when the
-    /// zygote forks; the peer's handshake names the tag and the package, so this
-    /// is the same event at the same point (before any attach). A record that
-    /// already exists keeps its pid/uid (a re-attach is not a new process).
-    pub fn process_started(&mut self, tag: u32, package: &str, uid: i32) {
-        if self.process(tag).is_some() {
+    /// zygote forks; the peer's handshake names the tag, the package and the pid
+    /// the kernel reported, so this is the same event at the same point (before
+    /// any attach). A record that already exists keeps its identity (a re-attach
+    /// is not a new process), except that a pid/uid/package learned later fills
+    /// in what the record did not know: `0`/empty always means "unknown here",
+    /// never a value to keep over a real one.
+    pub fn process_started(&mut self, tag: u32, package: &str, uid: i32, pid: i32) {
+        if let Some(existing) = self.processes.iter_mut().find(|p| p.tag == tag) {
+            if pid != 0 {
+                existing.pid = pid;
+            }
+            if uid != 0 && existing.uid == 0 {
+                existing.uid = uid;
+            }
+            if !package.is_empty() {
+                existing.package_name = package.to_string();
+            }
             return;
         }
         self.processes.push(ProcessRecord {
             tag,
-            pid: 4242,
+            pid,
             uid,
             package_name: package.to_string(),
             app_thread: None,
@@ -832,7 +849,11 @@ impl AtmsState {
         }
         self.processes.push(ProcessRecord {
             tag,
-            pid: 4242,
+            // No `ProcessRecord` for this tag existed (the branch above), so
+            // no pid was ever reported for it: unknown, never a placeholder.
+            // `process_started` fills it in when the guest's connection names
+            // its credential.
+            pid: 0,
             uid: crate::pms::FIXTURE_UID,
             package_name: package,
             app_thread: Some(app_thread),
@@ -1784,17 +1805,11 @@ impl AtmsService {
     ///
     /// The uid is the uid already recorded for that package, else `0` (never a
     /// guessed uid).
-    pub fn note_process_started(&mut self, tag: u32, package: &str) {
+    pub fn note_process_started(&mut self, tag: u32, package: &str, uid: i32, pid: i32) {
         let Ok(mut state) = self.state.lock() else {
             return;
         };
-        let uid = state
-            .processes
-            .iter()
-            .find(|p| p.package_name == package)
-            .map(|p| p.uid)
-            .unwrap_or(0);
-        state.process_started(tag, package, uid);
+        state.process_started(tag, package, uid, pid);
     }
 
     /// MPROC7: the launch recorded for `package` that the host still owes,

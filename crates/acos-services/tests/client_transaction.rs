@@ -222,7 +222,7 @@ fn atms_with_process(tag: u32) -> AtmsState {
         .manifests
         .add_apk(apk(), acos_services::pms::FIXTURE_UID)
         .expect("seed the APK component table");
-    atms.process_started(tag, PACKAGE, acos_services::pms::FIXTURE_UID);
+    atms.process_started(tag, PACKAGE, acos_services::pms::FIXTURE_UID, 0);
     atms.attach_application_for(tag, 0x1000, 7, PACKAGE);
     atms.process_mut(tag).expect("process").attached = true;
     atms

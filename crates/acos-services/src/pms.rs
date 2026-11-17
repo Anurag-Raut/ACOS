@@ -1435,6 +1435,11 @@ impl PmsState {
         self.uid_packages
             .push((uid, record.app.package_name.clone()));
         self.packages.push(record);
+        // BINDERPID: the uid -> package/grant table the per-uid permission check
+        // reads must learn about the new package at the same moment the uid
+        // table does, or `checkCallingPermission` from that package's process
+        // answers from the wrong app's grants.
+        self.publish_uid_grants();
         Ok(uid)
     }
 
@@ -1607,6 +1612,56 @@ impl PmsState {
             .collect()
     }
 
+    /// `IPackageManager.getNameForUid(int uid)`: the package the uid belongs
+    /// to, or `None` (which the wire writes as a null string).
+    ///
+    /// AOSP answers the first package of the uid
+    /// (`PackageManagerService.getNameForUid`) and null for a uid no package
+    /// owns. The framework's permission check path asks this to turn a calling
+    /// uid into a package (`ActivityManager.checkComponentPermission` ->
+    /// `ContextImpl.checkComponentPermission`), so the answer must be the same
+    /// uid table `getPackagesForUid` and the ATMS records use.
+    #[must_use]
+    pub fn name_for_uid(&self, uid: i32) -> Option<String> {
+        self.packages_for_uid(uid).into_iter().next()
+    }
+
+    /// Every installed package's `(uid, package, manifest grants)`.
+    ///
+    /// This is what the one permission table needs to answer
+    /// `IPermissionManager.checkUidPermission` (the framework's
+    /// `Context.checkCallingPermission` path): the question is asked by **uid**,
+    /// and only the package manager can say which package (and therefore which
+    /// install-time grant set) a uid names.
+    #[must_use]
+    pub fn uid_grants(&self) -> Vec<(i32, String, Vec<String>)> {
+        self.packages
+            .iter()
+            .map(|p| {
+                (
+                    p.app.uid,
+                    p.app.package_name.clone(),
+                    p.granted_permissions.clone(),
+                )
+            })
+            .collect()
+    }
+
+    /// Republish [`Self::uid_grants`] into the session's permission table.
+    ///
+    /// Called whenever the installed set changes (first install, extra package):
+    /// the table is shared with `ATMS`, `core`'s `IPermissionManager` and the
+    /// `system.permissions` module, so one publish keeps all of them answering
+    /// per-uid questions from the same data.
+    fn publish_uid_grants(&self) {
+        let Some(store) = self.runtime_permissions.as_ref() else {
+            return;
+        };
+        if let Ok(mut store) = store.lock() {
+            store.set_uid_grants(self.uid_grants());
+        }
+    }
+
     /// `COMPONENT_ENABLED_STATE_DEFAULT` (the stock value of
     /// `PackageManager.COMPONENT_ENABLED_STATE_DEFAULT`).
     pub const COMPONENT_ENABLED_STATE_DEFAULT: i32 = 0;
@@ -1760,7 +1815,29 @@ impl PmsService {
         if let Some(guest) = guest_source_dir {
             state.set_guest_apk_path(guest);
         }
-        *self.state.lock().unwrap() = state;
+        // The session's one permission table outlives a package replacement: it
+        // is the table `ATMS`, `core`'s `IPermissionManager` and the
+        // `system.permissions` module all read (MODNOTIF2), and BINDERPID's
+        // per-uid check reads its uid -> package/grants snapshot. Replacing the
+        // package state without re-publishing would leave both describing the
+        // *previous* APK, which is exactly the kind of silent disagreement the
+        // one table exists to prevent.
+        let mut guard = self.state.lock().unwrap();
+        state.runtime_permissions = guard.runtime_permissions.clone();
+        state.publish_uid_grants();
+        if let Some(store) = state.runtime_permissions.clone() {
+            let primary = state.primary();
+            let (package, granted) = (
+                primary.package.package_name.clone(),
+                primary.granted_permissions.clone(),
+            );
+            let mut store = store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            store.set_install_time(&package, &granted);
+            store.set_uid_grants(state.uid_grants());
+        }
+        *guard = state;
         Ok(())
     }
 
@@ -1948,6 +2025,35 @@ impl ServiceObject for PmsService {
                 vec![Value::StringArray(Some(
                     packages.into_iter().map(Some).collect(),
                 ))]
+            }
+            // `checkUidPermission(String permission, int uid) -> int`: the
+            // permission answer **for a uid**, which is what the framework's
+            // `ActivityManager.checkComponentPermission` (and therefore
+            // `Context.checkCallingPermission`) asks. Answered from the one
+            // shared table, so it cannot disagree with
+            // `IPermissionManager.checkUidPermission` or `checkPermission`.
+            "checkUidPermission" => {
+                let permission = args.first().and_then(Value::as_str).unwrap_or_default();
+                let uid = args.get(1).and_then(Value::as_int).unwrap_or(0);
+                let answer = state
+                    .runtime_permissions
+                    .as_ref()
+                    .map(|store| {
+                        store
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .check_uid_permission(uid as u32, permission)
+                    })
+                    .unwrap_or_else(|| state.check_permission_for(None, permission));
+                vec![Value::Int(answer)]
+            }
+            // `getNameForUid(int uid) -> String`: the uid's package, null when
+            // no package owns it (`PackageManagerService.getNameForUid`).
+            // `Context.checkCallingPermission` reaches it through the framework
+            // to turn the calling uid into a package name.
+            "getNameForUid" => {
+                let uid = args.first().and_then(Value::as_int).unwrap_or(FIXTURE_UID);
+                vec![Value::Str(state.name_for_uid(uid))]
             }
             "getPackageUid" => {
                 let package = args.first().and_then(Value::as_str);

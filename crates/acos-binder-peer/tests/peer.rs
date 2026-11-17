@@ -160,6 +160,8 @@ fn unknown_code_is_a_structured_error_and_a_json_line() {
         data: data.marshall(),
         offs: vec![],
         fds: vec![],
+        sender_pid: 0,
+        sender_euid: 0,
     };
     let (reply, _) = read_reply(&mut peer, req);
     // `Parcel.EX_UNSUPPORTED_OPERATION`
@@ -291,6 +293,8 @@ fn host_error_paths_are_not_silent_successes() {
         },
         offs: vec![],
         fds: vec![],
+        sender_pid: 0,
+        sender_euid: 0,
     };
     let (mut reply, _) = read_reply(&mut peer, req);
     assert_ne!(exception_code(&mut reply), 0);
@@ -343,6 +347,8 @@ fn the_unsupported_log_is_bounded_and_counts_the_drops() {
             data: data.marshall(),
             offs: vec![],
             fds: vec![],
+            sender_pid: 0,
+            sender_euid: 0,
         };
         let _ = peer.handle(req);
     }
@@ -1078,4 +1084,164 @@ mod delivery_wake {
         handle.join().expect("the loop ends on the stop wake");
         drop(guest);
     }
+}
+
+// ---------------------------------------------------------------- BINDERPID --
+// `Binder.getCallingUid()`/`getCallingPid()` inside a hosted service is the
+// identity of the process that sent the transaction: the guest's own uid and
+// host-visible pid for a guest -> host call, `system_server`'s for a host
+// delivery. The peer is the only place that knows it, so it pushes it for the
+// duration of the dispatch (`acos_parcel::calling_uid()/calling_pid()`).
+
+/// A host service that records the caller identity it was dispatched with.
+struct IdentityRecorder {
+    seen: std::sync::Arc<std::sync::Mutex<Vec<(u32, i32)>>>,
+}
+
+impl acos_services::host::ServiceObject for IdentityRecorder {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &acos_aidl::MethodInfo,
+        _args: &[Value],
+    ) -> Result<acos_services::host::CallResult, ServiceError> {
+        Err(ServiceError::UnsupportedAndroidApi {
+            interface: interface.to_string(),
+            code: method.code,
+            method: method.name.clone(),
+        })
+    }
+
+    fn raw_transact(
+        &mut self,
+        _interface: &str,
+        _code: u32,
+        _data: &mut Parcel,
+        _reply: &mut Parcel,
+    ) -> Result<bool, ServiceError> {
+        // The question a hosted service asks for `Binder.getCallingUid/Pid`.
+        self.seen
+            .lock()
+            .unwrap()
+            .push((acos_parcel::calling_uid(), acos_parcel::calling_pid()));
+        Ok(true)
+    }
+}
+
+/// Register the recorder under a descriptor no other service owns and return
+/// `(its binder id, the seen list)`.
+fn identity_recorder(peer: &mut Peer) -> (u64, std::sync::Arc<std::sync::Mutex<Vec<(u32, i32)>>>) {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let descriptor: &'static str = "dev.acos.test.ICallerIdentity";
+    let binder = peer.host_mut().register_dynamic(
+        descriptor,
+        Box::new(IdentityRecorder {
+            seen: std::sync::Arc::clone(&seen),
+        }),
+    );
+    (binder.0, seen)
+}
+
+/// One transaction to the recorder, carrying `sender_pid`/`sender_euid` the way
+/// a v4 driver's frame does.
+fn identity_request(binder: u64, sender_pid: u32, sender_euid: u32, seq: u32) -> Frame {
+    let mut data = Parcel::new();
+    data.write_interface_token("dev.acos.test.ICallerIdentity")
+        .expect("interface token");
+    data.set_data_position(0);
+    let base = Frame {
+        ty: F_REQ,
+        seq,
+        code: 1,
+        flags: 0,
+        target: NODE_TAG | binder,
+        sender_pid,
+        sender_euid,
+        ..Default::default()
+    };
+    frame_from_parcel(F_REQ, &base, &data)
+}
+
+/// The `F_REQ` frame's sender lands on the identity stack (BINDERPID).
+///
+/// This is the mechanism behind a hosted service's `Binder.getCallingUid()`:
+/// without the push the service answers its own process identity (0/0 on a bare
+/// host), which is what the placeholder `4242` pid used to hide.
+#[test]
+fn an_f_req_sender_is_the_identity_the_host_service_runs_with() {
+    let mut peer = Peer::new();
+    let (binder, seen) = identity_recorder(&mut peer);
+    // No socket, no process table: the frame's own sender is the only identity
+    // there is, and it is used rather than a fabricated one.
+    let out = peer.handle(identity_request(binder, 4242, 10192, 1));
+    assert!(!out.is_empty(), "the recorder answers every transaction");
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![(10192, 4242)],
+        "the hosted service must see the frame's sender as its caller"
+    );
+    // ... and the identity is popped: the next caller starts clean.
+    assert_eq!(
+        acos_parcel::calling_uid(),
+        acos_parcel::process_identity().uid,
+        "the caller identity must not leak past the dispatch"
+    );
+
+    // A second caller with a different identity: nothing is cached.
+    let out = peer.handle(identity_request(binder, 7, 10193, 2));
+    assert!(!out.is_empty());
+    assert_eq!(*seen.lock().unwrap(), vec![(10192, 4242), (10193, 7)]);
+}
+
+/// The connection's identity (the kernel's) wins over the frame's claim, and a
+/// process that has none falls back to the frame (BINDERPID).
+#[test]
+fn the_connection_identity_wins_over_the_frames_claim() {
+    let mut peer = Peer::new();
+    let (binder, seen) = identity_recorder(&mut peer);
+    // Tag 0's package is the one the standard host installed, so the activity
+    // manager records the uid the package manager allocated for it.
+    peer.register_process_with_pid(0, "dev.acos.fixtures.helloviews", 4242)
+        .expect("tag 0 re-announces itself");
+    assert_eq!(
+        peer.process_pid(0),
+        Some(4242),
+        "the accepted socket's pid is the process's pid"
+    );
+    let uid = peer.process_uid(0).expect("the package's uid");
+    assert_ne!(uid, 0, "the package manager's uid must be a real one");
+
+    // The frame claims someone else's identity; the connection is the authority.
+    let out = peer.handle(identity_request(binder, 9999, 4242, 1));
+    assert!(!out.is_empty());
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![(uid as u32, 4242)],
+        "a transaction runs with the connection's uid/pid, not the frame's claim"
+    );
+}
+
+/// A `system -> app` frame leaves the peer naming `system_server` (uid 1000 and
+/// this process's pid), which the guest reports as `Binder.getCallingUid/Pid`
+/// inside `onTransact` (BINDERPID).
+#[test]
+fn a_guest_bound_frame_names_the_host_as_its_sender() {
+    let peer = Peer::new();
+    let mut txn = Frame::plain(F_TXN, 1, 5, 0, 0x7, vec![1]);
+    peer.stamp_sender(&mut txn);
+    assert_eq!(txn.sender_euid, 1000, "system_server's uid");
+    assert_eq!(txn.sender_pid, std::process::id(), "this peer's pid");
+    // A reply is the host's answer to a guest call, so it names the host too.
+    let mut reply = Frame::plain(F_RSP, 1, 0, 0, 0, vec![1]);
+    peer.stamp_sender(&mut reply);
+    assert_eq!((reply.sender_euid, reply.sender_pid), (1000, std::process::id()));
+    // A frame that already names a sender (a relayed guest -> guest call) is
+    // left alone: the target must see the real caller, not system_server.
+    let mut relayed = Frame::plain(F_TXN, 2, 6, 0, 0x8, vec![1]).sent_by(10192, 4321);
+    peer.stamp_sender(&mut relayed);
+    assert_eq!((relayed.sender_euid, relayed.sender_pid), (4321, 10192));
+    // F_REF/F_DEATH carry no parcel and no identity.
+    let mut control = Frame::plain(F_REF, 0, REF_RELEASE, 0, 3, Vec::new());
+    peer.stamp_sender(&mut control);
+    assert_eq!((control.sender_pid, control.sender_euid), (0, 0));
 }

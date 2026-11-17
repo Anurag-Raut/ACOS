@@ -86,7 +86,7 @@ fn attach_b(host: &mut ServiceHost, app_thread: BinderId) {
         .as_any_mut()
         .and_then(|any| any.downcast_mut::<AtmsService>())
         .expect("atms");
-    atms.note_process_started(TAG_B, B_PACKAGE);
+    atms.note_process_started(TAG_B, B_PACKAGE, 0, 0);
     let mut state = atms.shared_state();
     let seq = 1;
     state
