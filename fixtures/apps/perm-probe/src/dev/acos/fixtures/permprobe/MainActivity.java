@@ -53,6 +53,34 @@ public class MainActivity extends Activity {
         });
     }
 
+    // SYSUI2: the caller's own lifecycle, so a run that does not reach
+    // `onRequestPermissionsResult` still says how far the restart got (the
+    // pre-granted arm resumes a caller the host paused and stopped).
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        Log.i(TAG, "onRestart");
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        Log.i(TAG, "onStart");
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Log.i(TAG, "onResume");
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        Log.i(TAG, "onActivityResult request=" + requestCode + " code=" + resultCode
+                + " data=" + (data == null ? "null" : "intent"));
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
     @Override
     public void onRequestPermissionsResult(
             int requestCode, String[] permissions, int[] grantResults) {

@@ -1,0 +1,171 @@
+--------- beginning of main
+1794933777685      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794933777685      2  I : Using CollectorTypeCC GC.
+1794933777685      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794933777685      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794933777685      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794933777685      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794933777685      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794933777685      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794933777685      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794933777685     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794933777685     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794933777685     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794933777685     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794933777685     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794933777685     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794933777685     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794933777685     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794933777685     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794933777685     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794933777685     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794933777685     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794933777685     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794933777685     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794933777685     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794933777685     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794933777685     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794933777685     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794933777685     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794933777685     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794933777685     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794933777685     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794933777685     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794933777685     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794933777685     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794933777685     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794933777685     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794933777685     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794933777685     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794933777685     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794933777685     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794933777685     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794933777685     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794933777685     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794933777685     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794933777685     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794933777685     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794933777685     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794933777685     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794933777685     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794933777685     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794933777685     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794933777685     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794933777685     53  D nativeloader: InitExtendedPublicLibraries: 
+1794933777685     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794933777685     55  D nativeloader: InitProductPublicLibraries: 
+1794933777685     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794933777685     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794933777685     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794933777685     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794933777685     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794933777685     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794933777685     62  W ziparchive: Unable to open '/data/app/notif-perm-probe.dm': No such file or directory
+1794933777685     63  W ziparchive: Unable to open '/data/app/notif-perm-probe.dm': No such file or directory
+1794933777685     64  D nativeloader: Configuring clns-2 for other apk /data/app/notif-perm-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.notifpermprobe
+1794933777685     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.notifpermprobe/cache: chown failed: EINVAL (Invalid argument)
+1794933777685     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.notifpermprobe/code_cache: chown failed: EINVAL (Invalid argument)
+1794933777685     67  V GraphicsEnvironment: Currently set values for:
+1794933777685     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794933777685     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794933777685     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.notifpermprobe: false
+1794933777685     71  V GraphicsEnvironment: dev.acos.fixtures.notifpermprobe is not listed in per-application setting
+1794933777685     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794933777685     73  W SystemServiceRegistry: No service published for: netstats
+1794933777685     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794933777685     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794933777685     76  I AcosNotifProbe: onCreate
+1794933777685     77  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794933777685     78  I AcosNotifProbe: channel created id=probe
+1794933777685     79  I AcosNotifProbe: areNotificationsEnabled=true
+1794933777685     80  D CompatibilityChangeReporter: Compat change id reported: 160794467; UID 10192; state: ENABLED
+1794933777685     81  I AcosNotifProbe: notified tag=probe-notification id=7
+1794933777685     82  I AcosNotifProbe: areNotificationsEnabled after notify=true
+1794933777685     83  E logdw: dev.acos.fixtures.notifpermprobe.MainActivity
+1794933777685     84  E logdw: dev.acos.fixtures.notifpermprobe.MainActivity
+1794933777685     85  E logdw: dev.acos.fixtures.notifpermprobe.MainActivity
+1794933777685     86  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794933778144     87  E cutils-trace: Error opening trace file: Permission denied (13)
+1794933778144     88  I : Using CollectorTypeCC GC.
+1794933778144     89  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794933778144     90  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794933778144     91  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794933778144     92  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794933778144     93  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794933778144     94  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794933778144     95  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794933778144     96  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794933778144     97  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794933778144     98  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794933778144     99  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794933778144    100  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794933778144    101  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794933778144    102  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794933778144    103  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794933778144    104  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794933778144    105  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794933778144    106  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794933778144    107  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794933778144    108  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794933778144    109  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794933778144    110  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794933778144    111  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794933778144    112  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794933778144    113  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794933778144    114  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794933778144    115  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794933778144    116  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794933778144    117  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794933778144    118  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794933778144    119  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794933778144    120  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794933778144    121  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794933778144    122  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794933778144    123  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794933778144    124  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794933778144    125  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794933778144    126  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794933778144    127  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794933778144    128  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794933778144    129  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794933778144    130  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794933778144    131  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794933778144    132  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794933778144    133  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794933778144    134  W : Failed to determine oat file name for dex location /data/app/launch-guest/classes.dex: Dalvik cache directory does not exist
+1794933778144    135  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794933778144    136  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794933778144    137  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794933778144    138  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794933778144    139  D nativeloader: InitExtendedPublicLibraries: 
+1794933778144    140  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794933778144    141  D nativeloader: InitProductPublicLibraries: 
+1794933778144    142  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794933778144    143  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794933778144    144  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794933778144    145  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794933778144    146  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794933778144    147  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794933778144    148  W : Failed to determine oat file name for dex location /data/app/systemui.apk: Dalvik cache directory does not exist
+1794933778144    149  W ziparchive: Unable to open '/data/app/systemui.dm': No such file or directory
+1794933778144    150  D nativeloader: Configuring clns-2 for other apk /data/app/systemui.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/com.android.systemui
+1794933778144    151  W ContextImpl: Failed to ensure /data/app-data/com.android.systemui/cache: chown failed: EINVAL (Invalid argument)
+1794933778144    152  W ContextImpl: Failed to ensure /data/app-data/com.android.systemui/code_cache: chown failed: EINVAL (Invalid argument)
+1794933778144    153  V GraphicsEnvironment: Currently set values for:
+1794933778144    154  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794933778144    155  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794933778144    156  V GraphicsEnvironment: ANGLE GameManagerService for com.android.systemui: false
+1794933778144    157  V GraphicsEnvironment: com.android.systemui is not listed in per-application setting
+1794933778144    158  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794933778144    159  W SystemServiceRegistry: No service published for: netstats
+1794933778144    160  E TrafficStats: TrafficStats not initialized, uid=10192
+1794933778144    161  I AcosSystemUI: shade created rows=1 keys=7:probe-notification
+1794933778144    162  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794933778144    163  E logdw: com.android.systemui.ShadeActivity
+1794933778144    164  E logdw: com.android.systemui.ShadeActivity
+1794933778144    165  E logdw: com.android.systemui.ShadeActivity
+1794933778144    166  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794933778144    167  E logdw: dev.acos.fixtures.notifpermprobe.MainActivity
+1794933778144    168  E logdw: dev.acos.fixtures.notifpermprobe.MainActivity
+1794933778144    169  W AcosPriority: setpriority(-2) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)
+1794933778144    170  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started

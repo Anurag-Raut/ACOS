@@ -55,8 +55,16 @@ impl ActivityLifecycle {
         use Transition::*;
         match (self, transition) {
             (Uncreated, Create) | (Destroyed, Create) | (Destroyed, Relaunch) => Some(Created),
-            (Created, Start) | (Paused, Start) => Some(Started),
-            (Started, Resume) | (Paused, Resume) => Some(Resumed),
+            // SYSUI2: an Activity can be started/resumed again from `Stopped`.
+            // AOSP's `ActivityThread.handleResumeActivity` for a stopped record
+            // runs `performRestartActivity` + the resume, and the caller of a
+            // finished Activity is exactly that case: the host paused and
+            // stopped it while the permission dialog was the top, then resumes
+            // it with the `ActivityResultItem` (`deliver_result`), which the
+            // guest reports back as `activityResumed`. Refusing
+            // `Stopped -> Resume` dropped the caller's restart.
+            (Created, Start) | (Paused, Start) | (Stopped, Start) => Some(Started),
+            (Started, Resume) | (Paused, Resume) | (Stopped, Resume) => Some(Resumed),
             (Resumed, Pause) => Some(Paused),
             (Paused, Stop) | (Started, Stop) => Some(Stopped),
             (Stopped, Destroy) | (Paused, Destroy) | (Resumed, Destroy) | (Created, Destroy) => {
@@ -1554,6 +1562,15 @@ impl AtmsState {
         let result_code = record.result_code;
         let data = record.result_data.clone();
         let tag = self.activity_tag(caller);
+        if trace {
+            eprintln!(
+                "ACOSATMS result-route caller={caller:#x} tag={tag} attached={:?}",
+                self.processes
+                    .iter()
+                    .map(|p| (p.tag, p.package_name.clone(), p.attached))
+                    .collect::<Vec<_>>()
+            );
+        }
         if !self.processes.iter().any(|p| p.tag == tag && p.attached) {
             self.log_event(
                 "ActivityManagerResult",
@@ -2340,7 +2357,18 @@ impl ServiceObject for AtmsService {
         // them goes to **that** activity's own app thread, never to "the"
         // attached process.
         let lifecycle = std::mem::take(&mut state.pending_lifecycle_calls);
+        let trace_lifecycle = std::env::var_os("ACOS_ATMS_TRACE").is_some();
         for (tag, name, values) in lifecycle {
+            if trace_lifecycle {
+                eprintln!(
+                    "ACOSATMS deliver tag={tag} method={name} app_thread={:?}",
+                    state
+                        .processes
+                        .iter()
+                        .find(|p| p.tag == tag)
+                        .and_then(|p| p.app_thread)
+                );
+            }
             let Some(app_thread) = state
                 .processes
                 .iter()

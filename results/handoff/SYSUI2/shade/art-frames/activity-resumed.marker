@@ -1,0 +1,11 @@
+package=dev.acos.fixtures.notifpermprobe
+activity=dev.acos.fixtures.notifpermprobe.MainActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@5c7b868
+timeout_ms=12000
+first_traversal=traversed=true app_visible=true skip=traversal:view_not_visible
+draw_skip=traversal:view_not_visible
+resume_ready=first-traversal

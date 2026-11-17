@@ -3184,6 +3184,15 @@ public final class LaunchMain {
             Object hostToken = get(launched, "mToken");
             if (hostToken instanceof IBinder) {
                 sCurrentToken = (IBinder) hostToken;
+                // ROT6: the Activity is the top of the task and the last one, so
+                // when it finishes (`Activity.finish()`) the **server** owns the
+                // rest of the lifecycle: this watcher delivers the three items
+                // stock sends (`Pause(finished)`, `Stop`, `Destroy`), and the
+                // host turns the app's `activityDestroyed` into the caller's
+                // `ActivityResultItem`. It starts here for a resumed Activity
+                // and for one that already finished inside `onCreate`: both owe
+                // the same destroy before the caller's result can be delivered.
+                startTopFinishWatcher(sCurrentToken);
             }
             boolean resumed = Boolean.TRUE.equals(get(launched, "mResumed"));
             boolean finishedDuringCreate = !resumed
@@ -3206,10 +3215,6 @@ public final class LaunchMain {
                         + " finish_during_create=true");
                 System.out.flush();
                 return;
-            } else if (hostToken instanceof IBinder) {
-                // ROT6: the host delivered the launch, so the server side owns
-                // the rest of the lifecycle; the finish watcher reports it.
-                startTopFinishWatcher(sCurrentToken);
             }
             System.out.println("ACOSLAUNCH MARK host-transaction-resumed activity="
                     + launched.getClass().getName()
