@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 use crate::ax::{self, AxNode};
 use crate::broker::Browser;
 use crate::error::{Error, Result};
+use crate::fair::{Attempt, FramePriority};
 use crate::wire::{code, FMT_PNG};
 
 /// The page's size in device pixels and the Android density it maps to.
@@ -244,6 +245,9 @@ pub struct FrameData {
     pub engine_ms: f64,
 }
 
+/// Process-wide view ids (the fair gate's key, see [`View::uid`]).
+static NEXT_UID: AtomicU64 = AtomicU64::new(1);
+
 /// The JavaScript bridge shim: one binding, one pending table, one installer.
 const JSI_SHIM: &str = r#"
 (() => {
@@ -277,7 +281,12 @@ const JSI_SHIM: &str = r#"
 
 /// One target = one WebView instance.
 pub struct View {
+    /// The guest's id for this view (`render {view}`); unique per session only.
     pub id: i64,
+    /// A process-wide id, unique across sessions: the fair frame gate's key.
+    /// Two sessions may both call their first view `0`, and a gate keyed by the
+    /// guest id would coalesce *their* frames into one pull.
+    pub uid: u64,
     pub browser: Arc<Browser>,
     pub context_id: String,
     pub target_id: String,
@@ -337,6 +346,7 @@ impl View {
         let events = cdp.queue(&session);
         let view = Arc::new(Self {
             id,
+            uid: NEXT_UID.fetch_add(1, Ordering::SeqCst),
             browser: Arc::clone(&browser),
             context_id: context_id.to_string(),
             target_id,
@@ -978,10 +988,30 @@ impl View {
     // --- frames ------------------------------------------------------------
 
     /// Deterministic frame: `HeadlessExperimental.beginFrame` renders exactly one
-    /// compositor frame, and the pixels are captured at the View's **device**
-    /// resolution (`Page.captureScreenshot` honours `deviceScaleFactor`;
-    /// `beginFrame`'s own screenshot does not). PNG only (`WIRE.md` §4.2).
-    pub fn render(&self, format: &str, timeout: Duration) -> Result<FrameData> {
+    /// compositor frame. PNG only (`WIRE.md` §4.2).
+    ///
+    /// Frame production is **serialised per engine** (`beginFrame` is a
+    /// browser-global command: two targets asking at once crashed the pinned
+    /// engine), and the serialisation is a *fair* queue with one attempted
+    /// frame in flight per view — see [`crate::fair`]. A guest `render` is a
+    /// pull-priority pull; the frames the input path needs use
+    /// [`Self::render_input`].
+    pub fn render(&self, format: &str, timeout: Duration) -> Result<Arc<FrameData>> {
+        self.render_with(format, timeout, FramePriority::Pull)
+    }
+
+    /// A frame the input path needs (tap/touch/key/setFocus): granted ahead of
+    /// guest pull frames, still behind at most the attempt already running.
+    pub fn render_input(&self, timeout: Duration) -> Result<Arc<FrameData>> {
+        self.render_with("png", timeout, FramePriority::Input)
+    }
+
+    pub fn render_with(
+        &self,
+        format: &str,
+        timeout: Duration,
+        priority: FramePriority,
+    ) -> Result<Arc<FrameData>> {
         if format != "png" {
             return Err(Error::proto(
                 code::UNSUPPORTED,
@@ -990,73 +1020,83 @@ impl View {
                 ),
             ));
         }
+        self.browser
+            .frames
+            .pull(self.uid, priority, timeout, |attempt_timeout, final_attempt| {
+                self.begin_frame(attempt_timeout, final_attempt)
+            })
+    }
+
+    /// Exactly one `beginFrame` attempt (the gate bounds it and serialises it).
+    ///
+    /// `beginFrame` can answer "not attached to an active page" while a
+    /// navigation is committing, and omits `screenshotData` when the compositor
+    /// produced no new frame. Both are transient: the gate re-queues a bounded
+    /// number of retries (behind every other waiting view) rather than hand the
+    /// guest a frame-less response or block it for the whole call timeout.
+    fn begin_frame(&self, attempt_timeout: Duration, final_attempt: bool) -> Attempt {
         let t0 = Instant::now();
-        // One beginFrame at a time across the whole browser (see Browser).
-        let _render = self.browser.render_lock.lock().expect("render lock");
-        // `beginFrame` can answer "not attached to an active page" while a
-        // navigation is committing, and omits `screenshotData` when the
-        // compositor produced no new frame. Both are transient: retry a few
-        // times (bounded, no invented pixels) rather than hand the guest a
-        // frame-less response or block it for the whole call timeout.
         // `beginFrame` renders exactly one compositor frame and captures it.
         // Its screenshot is CSS-sized (the engine has no device-resolution
         // capture path — see [`Frames`]), so the frame's real size is reported.
-        let mut captured: Option<Vec<u8>> = None;
-        let mut has_damage = true;
-        let mut last_error = String::new();
-        let attempt_timeout = timeout.min(Duration::from_secs(2));
-        for attempt in 0..3 {
-            if attempt > 0 {
-                std::thread::sleep(Duration::from_millis(25));
+        let result = self.call(
+            "HeadlessExperimental.beginFrame",
+            json!({"screenshot": {"format": "png", "optimizeForSpeed": true}}),
+            attempt_timeout,
+        );
+        let engine_ms = t0.elapsed().as_secs_f64() * 1000.0;
+        match result {
+            Ok(res) => {
+                let has_damage = res["hasDamage"].as_bool().unwrap_or(true);
+                if let Some(png) = res["screenshotData"].as_str().and_then(base64_decode) {
+                    return Attempt::Frame(Arc::new(self.store_frame(png, has_damage, engine_ms)));
+                }
+                let message = format!(
+                    "beginFrame returned no screenshotData (hasDamage={has_damage})"
+                );
+                if has_damage && !final_attempt {
+                    return Attempt::Retry(message);
+                }
+                self.last_frame_or_retry(message, engine_ms)
             }
-            match self.call(
-                "HeadlessExperimental.beginFrame",
-                json!({"screenshot": {"format": "png", "optimizeForSpeed": true}}),
-                attempt_timeout,
-            ) {
-                Ok(res) => {
-                    has_damage = res["hasDamage"].as_bool().unwrap_or(true);
-                    if let Some(data) = res["screenshotData"].as_str() {
-                        captured = base64_decode(data);
-                        break;
-                    }
-                    last_error =
-                        format!("beginFrame returned no screenshotData (hasDamage={has_damage})");
-                    if !has_damage {
-                        break;
-                    }
+            Err(e) => {
+                let message = e.to_string();
+                if message.contains("Not attached to an active page") && !final_attempt {
+                    return Attempt::Retry(message);
                 }
-                Err(e) => {
-                    last_error = e.to_string();
-                    if !last_error.contains("Not attached to an active page") {
-                        break;
-                    }
-                }
+                self.last_frame_or_retry(message, engine_ms)
             }
         }
-        let engine_ms = t0.elapsed().as_secs_f64() * 1000.0;
-        // No new frame: the surface still holds the last one. Before the first
-        // paint there is nothing honest to return.
-        let (bytes, png_w, png_h) = match captured {
-            Some(png) => {
-                let (w, h) = png_dimensions(&png).unwrap_or((0, 0));
-                self.frames.store(png.clone(), w, h);
-                (png, w, h)
+    }
+
+    /// No new frame this attempt: the surface still holds the last one, which
+    /// is real pixels and therefore honest to return. Before the first paint
+    /// there is nothing to return and the pull retries.
+    fn last_frame_or_retry(&self, message: String, engine_ms: f64) -> Attempt {
+        match self.frames.latest() {
+            Some((png, w, h)) => {
+                let _ = (w, h);
+                Attempt::Frame(Arc::new(self.frame_data(png, false, engine_ms)))
             }
-            None => self.frames.latest().ok_or_else(|| {
-                Error::proto(
-                    code::FRAME_FAILED,
-                    if last_error.is_empty() {
-                        "no compositor frame yet (the page has not painted once)".to_string()
-                    } else {
-                        last_error
-                    },
-                )
-            })?,
-        };
+            None => Attempt::Retry(if message.is_empty() {
+                "no compositor frame yet (the page has not painted once)".to_string()
+            } else {
+                message
+            }),
+        }
+    }
+
+    fn store_frame(&self, png: Vec<u8>, has_damage: bool, engine_ms: f64) -> FrameData {
+        let (w, h) = png_dimensions(&png).unwrap_or((0, 0));
+        self.frames.store(png.clone(), w, h);
+        self.frame_data(png, has_damage, engine_ms)
+    }
+
+    fn frame_data(&self, bytes: Vec<u8>, has_damage: bool, engine_ms: f64) -> FrameData {
+        let (png_w, png_h) = png_dimensions(&bytes).unwrap_or((0, 0));
         let vp = self.viewport();
         let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
-        Ok(FrameData {
+        FrameData {
             seq,
             // The frame's real pixel size: the engine rounds the scaled size
             // down (900x559 for a 900x560 View), so the wire never claims more
@@ -1074,7 +1114,7 @@ impl View {
             has_damage,
             engine_ms,
             bytes,
-        })
+        }
     }
 
     // --- accessibility -----------------------------------------------------
@@ -1110,10 +1150,10 @@ impl View {
             "touchStart",
             json!([{"x": cx, "y": cy, "radiusX": 4, "radiusY": 4, "force": 1, "id": 1}]),
         )?;
-        let first = self.render("png", self.browser.frame_timeout)?;
+        let first = self.render_input(self.browser.frame_timeout)?;
         std::thread::sleep(hold);
         let up = self.touch_event("touchEnd", json!([]))?;
-        let _second = self.render("png", self.browser.frame_timeout)?;
+        let _second = self.render_input(self.browser.frame_timeout)?;
         for reply in [down, up] {
             let _ = reply.wait(Duration::from_secs(2));
         }
@@ -1147,7 +1187,7 @@ impl View {
             }
         }
         let reply = self.touch_event(kind, points)?;
-        let _ = self.render("png", self.browser.frame_timeout)?;
+        let _ = self.render_input(self.browser.frame_timeout)?;
         let _ = reply.wait(Duration::from_secs(2));
         Ok(())
     }

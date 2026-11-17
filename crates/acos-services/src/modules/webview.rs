@@ -87,7 +87,14 @@ pub const CONFIG_PROVIDER_APK: &str = "provider_apk";
 /// provider built elsewhere).
 pub const PROVIDER_APK_ENV: &str = "ACOS_WEBVIEW_PROVIDER_APK";
 
-/// The workspace-relative provider APK `tools/build-apps.sh` produces.
+/// The provider APK as the **image** ships it (`tools/extract-bootclasspath.sh`,
+/// which builds it with `tools/build-webview-provider.sh` and stages it under
+/// the boot image's `system-apps/`). This is the copy a fresh install has, so it
+/// is what a session installs unless an explicit path says otherwise.
+pub const PROVIDER_APK_IMAGE_REL: &str = ".cache/boot/android-34/system-apps/com.android.webview.apk";
+
+/// The workspace-relative provider APK `tools/build-apps.sh` produces (the
+/// developer/fixture build; the image carries its own copy).
 pub const PROVIDER_APK_REL: &str = "fixtures/build/apps/webview-provider.apk";
 
 /// The control ops: the module's own state and what the session's engine is
@@ -140,9 +147,12 @@ fn manifest_ref() -> &'static ModuleManifest {
 /// Where the provider APK for this session is.
 ///
 /// `config: {"provider_apk": …}` first (an explicit path wins), then
-/// `ACOS_WEBVIEW_PROVIDER_APK`, then the workspace build output. `None` when the
-/// path cannot even be named, which a `real` attach refuses: a WebView without a
-/// provider package is exactly the fake this framework forbids.
+/// `ACOS_WEBVIEW_PROVIDER_APK`, then the image's own copy
+/// ([`PROVIDER_APK_IMAGE_REL`] — what a fresh install ships and needs no
+/// separate build step for), then the workspace build output
+/// ([`PROVIDER_APK_REL`], the fixture). `None` when the path cannot even be
+/// named, which a `real` attach refuses: a WebView without a provider package is
+/// exactly the fake this framework forbids.
 #[must_use]
 pub fn provider_apk(config: &ModuleConfig) -> Option<PathBuf> {
     if let Some(path) = config.string(CONFIG_PROVIDER_APK).filter(|p| !p.is_empty()) {
@@ -152,6 +162,9 @@ pub fn provider_apk(config: &ModuleConfig) -> Option<PathBuf> {
         if !path.is_empty() {
             return Some(PathBuf::from(path));
         }
+    }
+    if let Some(image) = crate::workspace_path(PROVIDER_APK_IMAGE_REL) {
+        return Some(image);
     }
     Some(crate::workspace_path(PROVIDER_APK_REL).unwrap_or_else(|| PathBuf::from(PROVIDER_APK_REL)))
 }
@@ -243,7 +256,8 @@ impl Module for WebviewModule {
             detail: format!(
                 "the `real` profile needs the provider APK: pass \
                  `config: {{\"{CONFIG_PROVIDER_APK}\": \"<path>\"}}` or set {PROVIDER_APK_ENV} \
-                 (the default is {PROVIDER_APK_REL}, built by tools/build-apps.sh)"
+                 (the image ships {PROVIDER_APK_IMAGE_REL} from \
+                 tools/extract-bootclasspath.sh; the fixture build is {PROVIDER_APK_REL})"
             ),
         })?;
         self.provider_apk = Some(apk);

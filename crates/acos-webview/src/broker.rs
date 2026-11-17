@@ -19,6 +19,7 @@ use serde_json::{json, Value};
 use crate::cdp::CdpClient;
 use crate::engine::EngineCache;
 use crate::error::{Error, Result};
+use crate::fair::{FrameGate, GateConfig};
 use crate::sandbox::{bwrap_argv, engine_args, ProfileDir};
 use crate::view::{View, Viewport};
 use crate::wire::code;
@@ -46,6 +47,12 @@ pub struct BrokerConfig {
     pub call_timeout: Duration,
     pub nav_timeout: Duration,
     pub frame_timeout: Duration,
+    /// How long one `beginFrame` attempt may hold the engine while other views
+    /// wait ([`crate::fair`]): the latency bound a slow page can cost another
+    /// WebView, per attempt.
+    pub frame_attempt: Duration,
+    /// Attempts per `render` (transient "not attached"/no-damage retries).
+    pub frame_attempts: u32,
 }
 
 impl BrokerConfig {
@@ -60,6 +67,8 @@ impl BrokerConfig {
             call_timeout: Duration::from_secs(20),
             nav_timeout: Duration::from_secs(30),
             frame_timeout: Duration::from_secs(10),
+            frame_attempt: Duration::from_millis(750),
+            frame_attempts: 3,
         }
     }
 }
@@ -75,9 +84,11 @@ pub struct Browser {
     pub nav_timeout: Duration,
     pub frame_timeout: Duration,
     /// `HeadlessExperimental.beginFrame` is a browser-global command; two
-    /// targets asking at once crashed the pinned engine in the two-WebView
-    /// ART run. Frame production is serialised per browser (measured).
-    pub render_lock: Mutex<()>,
+    /// targets asking at once crashed the pinned engine in the two-WebView ART
+    /// run. Frame production is serialised per browser — fairly: one attempt in
+    /// flight, one outstanding pull per view, input frames first
+    /// ([`crate::fair`]).
+    pub frames: FrameGate,
     started: Instant,
 }
 
@@ -144,7 +155,11 @@ impl Browser {
             call_timeout: cfg.call_timeout,
             nav_timeout: cfg.nav_timeout,
             frame_timeout: cfg.frame_timeout,
-            render_lock: Mutex::new(()),
+            frames: FrameGate::new(GateConfig {
+                attempt: cfg.frame_attempt,
+                max_attempts: cfg.frame_attempts,
+                ..GateConfig::default()
+            }),
             started: Instant::now(),
         }))
     }
@@ -385,6 +400,13 @@ impl Broker {
         self.inner.lock().expect("broker").last_activity = Instant::now();
     }
 
+    /// Keep the fair frame gate's view count in step with `open_views` (the
+    /// gate's contention rule: one view keeps the old attempt budget, two or
+    /// more are cut at `frame_attempt` so a slow page cannot starve another).
+    fn sync_gate_views(&self, browser: &Arc<Browser>) {
+        browser.frames.set_open_views(self.open_views());
+    }
+
     /// The current engine, starting it (or restarting a dead one) as needed.
     pub fn browser(&self) -> Result<Arc<Browser>> {
         let mut inner = self.inner.lock().expect("broker");
@@ -502,6 +524,7 @@ impl Broker {
                     .fetch_sub(1.min(self.open_views()), Ordering::SeqCst);
             }
             if let Ok(browser) = self.browser() {
+                self.sync_gate_views(&browser);
                 let _ = browser.dispose_context(&session.context_id);
             }
         }
@@ -533,6 +556,7 @@ impl Broker {
         let view = View::create(Arc::clone(&browser), &session.context_id, id, viewport, url)?;
         session.insert(Arc::clone(&view))?;
         self.open_views.fetch_add(1, Ordering::SeqCst);
+        self.sync_gate_views(&browser);
         self.touch();
         Ok(view)
     }
@@ -547,6 +571,12 @@ impl Broker {
                 Some(n.saturating_sub(1))
             })
             .ok();
+        let generation = view.browser.generation;
+        if let Ok(browser) = self.browser() {
+            if browser.generation == generation {
+                self.sync_gate_views(&browser);
+            }
+        }
         self.touch();
         Ok(())
     }
@@ -573,12 +603,20 @@ impl Broker {
             )
         };
         let idle_left = self.cfg.idle_shutdown.saturating_sub(idle).as_millis() as u64;
+        let frames = self
+            .inner
+            .lock()
+            .expect("broker")
+            .browser
+            .as_ref()
+            .map(|b| b.frames.stats());
         json!({
             "state": if browser.is_some() { "up" } else { "down" },
             "generation": gen,
             "restarts": self.restarts(),
             "openViews": self.open_views(),
             "idleShutdownInMs": idle_left,
+            "frames": frames,
             "engine": browser.as_ref().map(|(v, up)| json!({
                 "product": v.product,
                 "version": v.version,

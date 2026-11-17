@@ -145,6 +145,12 @@ public final class WebViewChromiumCore {
     private boolean mAxInFlight;
     /** Set by an input: the next tree read must fetch the post-input tree. */
     private boolean mAxForceSync;
+    /** WVFAIR: read sequence, so a *later* read always wins the snapshot.
+     * A bounded read can be abandoned by the UI thread (the page is too slow)
+     * and finish after a later one; without the sequence the older answer
+     * overwrites the newer tree and a node the step just observed disappears. */
+    private long mAxReadSeq;
+    private long mAxSnapshotSeq;
     private AxProvider mAxProvider;
 
     private volatile boolean mHasWindowFocus;
@@ -947,21 +953,42 @@ public final class WebViewChromiumCore {
 
     // -- JavaScript ---------------------------------------------------------
 
+    /**
+     * `WebView.evaluateJavascript`: Android's contract is **asynchronous** — the
+     * call returns and the `ValueCallback` arrives later. This provider used to
+     * answer it synchronously over the wire, which meant an app calling it from
+     * `onPageFinished` (as almost every app does) blocked the guest's UI thread
+     * for as long as that page's script took. WVFAIR measured what that costs: a
+     * busy page held the whole guest for ~2 s, the live probe stopped sampling
+     * (`NO_FRESH_TREE`) and every other view's input waited with it. The engine
+     * round trip now runs on its own thread and the callback is posted back.
+     */
     void evaluateJavascript(String script, ValueCallback<String> callback) {
-        JSONObject params = params();
+        final JSONObject params = params();
         try {
             params.put("view", mView);
             params.put("script", script);
-            JSONObject result = mTransport.call("view.evaluateJavascript", params).result();
-            final String value = result == null ? null : result.optString("valueJson", null);
-            if (callback != null) {
-                mUi.post(() -> callback.onReceiveValue(value));
-            }
         } catch (Exception e) {
             if (callback != null) {
                 mUi.post(() -> callback.onReceiveValue(null));
             }
+            return;
         }
+        Thread call = new Thread(() -> {
+            String value = null;
+            try {
+                JSONObject result = mTransport.call("view.evaluateJavascript", params).result();
+                value = result == null ? null : result.optString("valueJson", null);
+            } catch (Exception e) {
+                Log.w(TAG, "evaluateJavascript failed: " + e);
+            }
+            final String v = value;
+            if (callback != null) {
+                mUi.post(() -> callback.onReceiveValue(v));
+            }
+        }, "acos-webview-js");
+        call.setDaemon(true);
+        call.start();
     }
 
     void addJavascriptInterface(Object object, String name) {
@@ -1135,14 +1162,21 @@ public final class WebViewChromiumCore {
             }
             mAxInFlight = true;
         }
+        final long seq;
+        synchronized (mAxLock) {
+            seq = ++mAxReadSeq;
+        }
         Thread refresh = new Thread(() -> {
             try {
                 JSONObject params = params();
                 params.put("view", mView);
                 JSONObject result = mTransport.call("ax", params).result();
                 synchronized (mAxLock) {
-                    mAxSnapshot = result;
-                    mAxStale = false;
+                    if (seq >= mAxSnapshotSeq) {
+                        mAxSnapshot = result;
+                        mAxSnapshotSeq = seq;
+                        mAxStale = false;
+                    }
                     mAxLock.notifyAll();
                 }
             } catch (Exception e) {
@@ -1650,6 +1684,18 @@ public final class WebViewChromiumCore {
         return info;
     }
 
+    /**
+     * WVFAIR: how long a *post-input* tree read may wait for the engine.
+     *
+     * The read runs on the UI thread (`AccessibilityNodeProvider`), and the
+     * screen tree is every view's tree, so an unbounded wait for one page's
+     * accessibility tree stalls the whole guest: the probe's tree sample went
+     * missing for seconds while the second WebView was busy (`NO_FRESH_TREE`,
+     * measured). A page that cannot answer its tree in this window is served
+     * from the last snapshot, and the refresh keeps running in the background.
+     */
+    private static final long AX_SYNC_WAIT_MS = 250;
+
     private JSONObject axSnapshot() {
         boolean force;
         synchronized (mAxLock) {
@@ -1660,21 +1706,50 @@ public final class WebViewChromiumCore {
             }
         }
         if (force) {
-            // A tree read right after an input: answer from the engine now, so
-            // the step cannot observe the pre-input text. This runs on the UI
-            // thread once per input, not on every frame sample.
-            try {
-                JSONObject params = params();
-                params.put("view", mView);
-                JSONObject result = mTransport.call("ax", params).result();
-                synchronized (mAxLock) {
-                    mAxSnapshot = result;
-                    mAxStale = false;
-                }
-                return result;
-            } catch (Exception e) {
-                Log.w(TAG, "sync ax failed: " + e);
+            // A tree read right after an input: answer from the engine so the
+            // step cannot observe the pre-input text — but **bounded**, so a
+            // page whose main thread is busy cannot hold the guest's UI thread
+            // (and with it every other view's tree and every input) hostage.
+            final JSONObject[] answer = new JSONObject[1];
+            final java.util.concurrent.CountDownLatch done =
+                    new java.util.concurrent.CountDownLatch(1);
+            final long seq;
+            synchronized (mAxLock) {
+                seq = ++mAxReadSeq;
             }
+            Thread read = new Thread(() -> {
+                try {
+                    JSONObject params = params();
+                    params.put("view", mView);
+                    JSONObject result = mTransport.call("ax", params).result();
+                    synchronized (mAxLock) {
+                        // A later read's answer wins: an abandoned read that
+                        // finishes late must not put back an older tree.
+                        if (seq >= mAxSnapshotSeq) {
+                            mAxSnapshot = result;
+                            mAxSnapshotSeq = seq;
+                            mAxStale = false;
+                        }
+                    }
+                    answer[0] = result;
+                } catch (Exception e) {
+                    Log.w(TAG, "sync ax failed: " + e);
+                } finally {
+                    done.countDown();
+                }
+            }, "acos-webview-ax-sync");
+            read.setDaemon(true);
+            read.start();
+            try {
+                done.await(AX_SYNC_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            if (answer[0] != null) {
+                return answer[0];
+            }
+            Log.w(TAG, "ax: post-input refresh did not answer in " + AX_SYNC_WAIT_MS
+                    + " ms (view=" + mView + "); serving the last snapshot");
         }
         requestAxRefresh();
         synchronized (mAxLock) {

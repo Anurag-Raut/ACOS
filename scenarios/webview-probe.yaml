@@ -91,10 +91,23 @@ steps:
   # encoding it as a failure of this scenario.
   - capture:
       name: webview-first-frame
+  # WVFAIR: wait for a frame from **each** view (provider view ids in creation
+  # order: A=1, B=2) before the input steps below. Both targets pull frames
+  # while their pages load, and the tap was measured to be lost when it landed
+  # in that storm (WV8 §5); waiting for both first frames makes the input
+  # measurement a measurement, not a race. This strengthens the old single-frame
+  # wait, it does not replace it.
+  # One step per view (each `assert_log` matches its patterns in order, and the
+  # two views' first frames may arrive in either order).
   - assert_log:
       tag: ACOSWvProvider
       patterns:
-        - 'frame decoded (view=[0-9]+ )?[0-9]+x[0-9]+ seq=[0-9]+ bytes=[0-9]+'
+        - 'frame decoded view=1 [0-9]+x[0-9]+ seq=[0-9]+ bytes=[0-9]+'
+      timeout_ms: 30000
+  - assert_log:
+      tag: ACOSWvProvider
+      patterns:
+        - 'frame decoded view=2 [0-9]+x[0-9]+ seq=[0-9]+ bytes=[0-9]+'
       timeout_ms: 30000
   # Tap the page's button by the text the accessibility tree exposes; the page's
   # own JS changes #out to "tapped" and calls the Java bridge.
