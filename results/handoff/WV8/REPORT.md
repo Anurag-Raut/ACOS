@@ -37,8 +37,10 @@ after the `system.permissions` grant. **Two causes**, both from wv7's own merge:
    falls back to the **named** package's manifest grants, so MPROC1's multi-package
    behaviour is kept and a runtime grant cannot leak to a second installed package.
 
-`cargo test -p acos-services --test modnotif2_permissions`: 4/4 pass (3 failed
-before: the test failed on the wv7 tree, passes now).
+`cargo test -p acos-services --test modnotif2_permissions`: 4/4 pass (on the wv7
+tree `both_check_permission_paths_read_the_one_store` failed; the other three
+already passed, so the one behaviour fixed is visible as the one test that
+flipped).
 
 ## 3. The `webview` module (ADR-0029, modelled on `network`)
 
