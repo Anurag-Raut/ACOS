@@ -45,6 +45,9 @@ use std::collections::BTreeMap;
 
 use serde_json::{json, Value};
 
+use crate::permission_catalog;
+use crate::value::{Parcelable, Value as WireValue};
+
 /// `PackageManager.PERMISSION_GRANTED`.
 pub const PERMISSION_GRANTED: i32 = 0;
 /// `PackageManager.PERMISSION_DENIED`.
@@ -129,6 +132,166 @@ pub const FLAG_PERMISSION_SYSTEM_FIXED: i32 = 1 << 4;
 /// `PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT` (`:5146`) — an install-time grant.
 pub const FLAG_PERMISSION_GRANTED_BY_DEFAULT: i32 = 1 << 5;
 
+/// The `android.permission-group.*` prefix a `PermissionInfo.group` carries.
+pub const GROUP_PREFIX: &str = "android.permission-group.";
+
+/// `PermissionInfo.PROTECTION_*` bits (`base/core/java/android/content/pm/PermissionInfo.java:50-310`).
+///
+/// Used to turn the `<permission android:protectionLevel="...">` attribute an
+/// app declares into the int `PermissionInfo.protectionLevel` carries.
+#[must_use]
+pub fn protection_bits(declared: &str) -> i32 {
+    let mut parts = declared.split('|');
+    let mut bits = match parts.next().unwrap_or("normal").trim() {
+        "normal" => 0x0,
+        "dangerous" => 0x1,
+        "signature" => 0x2,
+        "signatureOrSystem" => 0x3,
+        "internal" => 0x4,
+        // `PackageParser.parsePermission`: an unknown base level is an install
+        // error; the store refuses rather than inventing one, so it keeps
+        // `normal` and records nothing else.
+        _ => 0x0,
+    };
+    for flag in parts {
+        bits |= match flag.trim() {
+            "privileged" | "system" => 0x10,
+            "development" => 0x20,
+            "appop" => 0x40,
+            "pre23" => 0x80,
+            "installer" => 0x100,
+            "verifier" => 0x200,
+            "preinstalled" => 0x400,
+            "setup" => 0x800,
+            "instant" => 0x1000,
+            "runtime" => 0x2000,
+            "oem" => 0x4000,
+            "vendorPrivileged" => 0x8000,
+            "textClassifier" => 0x1_0000,
+            "wellbeing" => 0x2_0000,
+            "documenter" => 0x4_0000,
+            "configurator" => 0x8_0000,
+            "incidentReportApprover" => 0x10_0000,
+            "appPredictor" => 0x20_0000,
+            "module" => 0x40_0000,
+            "companion" => 0x80_0000,
+            "retailDemo" => 0x100_0000,
+            "recents" => 0x200_0000,
+            "role" => 0x400_0000,
+            "knownSigner" => 0x800_0000,
+            _ => 0,
+        };
+    }
+    bits
+}
+
+/// One permission's `PermissionInfo` facts, as `IPermissionManager` answers
+/// them.
+///
+/// This is the *description* half of the permission model (SYSUI3B): the
+/// runtime state stays in [`PermissionStore`]'s entry table, and the label /
+/// group / description come from [`crate::permission_catalog`] for a platform
+/// permission or from the installed package's own `<permission>` declarations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PermissionDescription {
+    /// The permission name (`android.permission.CAMERA`).
+    pub name: String,
+    /// The defining package (`android` for a platform permission).
+    pub package_name: String,
+    /// `PackageItemInfo.nonLocalizedLabel`: what `PermissionInfo.loadLabel`
+    /// returns without resolving resources.
+    pub label: Option<String>,
+    /// `PermissionInfo.nonLocalizedDescription`.
+    pub description: Option<String>,
+    /// The full group name (`android.permission-group.CAMERA`).
+    pub group: String,
+    /// `PermissionInfo.protectionLevel`.
+    pub protection_level: i32,
+    /// `android:backgroundPermission`, when declared.
+    pub background_permission: Option<String>,
+}
+
+impl PermissionDescription {
+    /// The `android.content.pm.PermissionInfo` parcelable payload, in the
+    /// image's own `writeToParcel` order (see [`crate::parcelable`]).
+    #[must_use]
+    pub fn to_parcelable(&self) -> Parcelable {
+        Parcelable::ordered(
+            "android.content.pm.PermissionInfo",
+            vec![
+                // PackageItemInfo prefix
+                WireValue::Str8(Some(self.name.clone())),
+                WireValue::Str8(Some(self.package_name.clone())),
+                WireValue::Int(0), // banner
+                WireValue::Str(self.label.clone()),
+                WireValue::Int(0), // icon
+                WireValue::Int(0), // labelRes (the label is non-localized)
+                WireValue::Bundle(None),
+                WireValue::Int(0), // showUser
+                WireValue::Int(0), // showBadge
+                // PermissionInfo
+                WireValue::Int(self.protection_level),
+                WireValue::Int(0), // flags
+                WireValue::Str8(Some(self.group.clone())),
+                WireValue::Str8(self.background_permission.clone()),
+                WireValue::Int(0), // descriptionRes (non-localized)
+                WireValue::Int(0), // requestRes
+                WireValue::Str(self.description.clone()),
+                // `knownCerts` is a `Parcelling.ForStringSet`; a null set is the
+                // same leading int the verified `PermissionInfo` codec writes.
+                WireValue::Int(0),
+            ],
+        )
+    }
+}
+
+/// One permission group's `PermissionGroupInfo` facts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroupDescription {
+    /// The full group name (`android.permission-group.CAMERA`).
+    pub name: String,
+    /// The defining package (`android`).
+    pub package_name: String,
+    /// `PackageItemInfo.nonLocalizedLabel` (the dialog's group title).
+    pub label: Option<String>,
+    /// `PermissionGroupInfo.nonLocalizedDescription`.
+    pub description: Option<String>,
+    /// `PermissionGroupInfo.priority`.
+    pub priority: i32,
+}
+
+impl GroupDescription {
+    /// The `android.content.pm.PermissionGroupInfo` parcelable payload, in the
+    /// image's own `writeToParcel` order (see [`crate::parcelable`]).
+    #[must_use]
+    pub fn to_parcelable(&self) -> Parcelable {
+        Parcelable::ordered(
+            "android.content.pm.PermissionGroupInfo",
+            vec![
+                // PackageItemInfo prefix
+                WireValue::Str8(Some(self.name.clone())),
+                WireValue::Str8(Some(self.package_name.clone())),
+                WireValue::Int(0), // banner
+                WireValue::Str(self.label.clone()),
+                WireValue::Int(0), // icon
+                WireValue::Int(0), // labelRes (the label is non-localized)
+                WireValue::Bundle(None),
+                WireValue::Int(0), // showUser
+                WireValue::Int(0), // showBadge
+                // PermissionGroupInfo
+                WireValue::Int(0), // descriptionRes (non-localized)
+                WireValue::Int(0), // requestRes
+                WireValue::Int(0), // requestDetailResourceId
+                WireValue::Int(0), // backgroundRequestResourceId
+                WireValue::Int(0), // backgroundRequestDetailResourceId
+                WireValue::Str(self.description.clone()),
+                WireValue::Int(0), // flags
+                WireValue::Int(self.priority),
+            ],
+        )
+    }
+}
+
 /// One permission's runtime state.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PermissionEntry {
@@ -184,6 +347,10 @@ pub struct PermissionStore {
     entries: BTreeMap<String, PermissionEntry>,
     /// Manifest permissions, published by the PMS when its state is built.
     install_time: Vec<String>,
+    /// `<permission>` elements the installed package declares itself (SYSUI3B):
+    /// a custom permission's `PermissionInfo` comes from here, never from the
+    /// platform catalog and never from a guess.
+    declared: Vec<acos_apk::manifest::DeclaredPermission>,
     /// Every `requestPermissions` the system received, in order.
     pub requests: Vec<PermissionRequest>,
     /// Requests the system could not hand to a permission dialog (no controller
@@ -212,6 +379,7 @@ impl PermissionStore {
             package: package.to_string(),
             entries: BTreeMap::new(),
             install_time: install_time.to_vec(),
+            declared: Vec::new(),
             requests: Vec::new(),
             refused: Vec::new(),
             mutations: Vec::new(),
@@ -254,6 +422,105 @@ impl PermissionStore {
     #[must_use]
     pub fn is_declared(&self, permission: &str) -> bool {
         self.install_time.iter().any(|p| p == permission)
+    }
+
+    /// Publish the installed package's own `<permission>` declarations
+    /// (SYSUI3B). The PMS calls this with the same state change that publishes
+    /// the install-time grants, so `getPermissionInfo` for a custom permission
+    /// and `checkPermission` for it can never disagree about the package.
+    pub fn set_declared_permissions(
+        &mut self,
+        package: &str,
+        declared: &[acos_apk::manifest::DeclaredPermission],
+    ) {
+        if self.package.is_empty() && !package.is_empty() {
+            self.package = package.to_string();
+        }
+        self.declared = declared.to_vec();
+    }
+
+    /// `IPermissionManager.getPermissionInfo`: the platform catalog first (the
+    /// AOSP label/description/group), then the installed package's own
+    /// `<permission>` declarations. `None` is the honest answer for an unknown
+    /// permission: the framework turns it into `NameNotFoundException`, and the
+    /// dialog's last-segment fallback is what a device would show for a
+    /// permission ACOS cannot describe.
+    #[must_use]
+    pub fn permission_description(&self, permission: &str) -> Option<PermissionDescription> {
+        if let Some(row) = permission_catalog::permission(permission) {
+            return Some(PermissionDescription {
+                name: row.name.to_string(),
+                package_name: "android".to_string(),
+                label: row.label.map(str::to_string),
+                description: row.description.map(str::to_string),
+                group: format!("{GROUP_PREFIX}{}", row.group),
+                protection_level: row.protection_level,
+                background_permission: row.background_permission.map(str::to_string),
+            });
+        }
+        let declared = self.declared.iter().find(|row| row.name == permission)?;
+        Some(PermissionDescription {
+            name: declared.name.clone(),
+            package_name: self.package.clone(),
+            label: declared.label.clone(),
+            description: declared.description.clone(),
+            group: declared
+                .group
+                .clone()
+                .unwrap_or_else(|| format!("{GROUP_PREFIX}UNDEFINED")),
+            protection_level: protection_bits(
+                declared.protection_level.as_deref().unwrap_or("normal"),
+            ),
+            background_permission: declared.background_permission.clone(),
+        })
+    }
+
+    /// `IPermissionManager.getPermissionGroupInfo`: a platform group in AOSP's
+    /// own words. A group the app declared itself has no catalog row (its label
+    /// would live in the app's resources, which ACOS does not resolve), so the
+    /// honest answer is `None`.
+    #[must_use]
+    pub fn group_description(&self, group: &str) -> Option<GroupDescription> {
+        let row = permission_catalog::group(group)?;
+        Some(GroupDescription {
+            name: row.name.to_string(),
+            package_name: "android".to_string(),
+            label: row.label.map(str::to_string),
+            description: row.description.map(str::to_string),
+            priority: row.priority,
+        })
+    }
+
+    /// `IPermissionManager.queryPermissionsByGroup`: every platform permission
+    /// in `group`, plus any the installed package declares in it.
+    #[must_use]
+    pub fn permissions_in_group(&self, group: &str) -> Vec<PermissionDescription> {
+        let short = group.strip_prefix(GROUP_PREFIX).unwrap_or(group);
+        let mut rows: Vec<PermissionDescription> = permission_catalog::permissions_in_group(short)
+            .into_iter()
+            .filter_map(|row| self.permission_description(row.name))
+            .collect();
+        for declared in &self.declared {
+            let declared_short = declared
+                .group
+                .as_deref()
+                .map(|name| name.strip_prefix(GROUP_PREFIX).unwrap_or(name));
+            if declared_short == Some(short) {
+                if let Some(row) = self.permission_description(&declared.name) {
+                    rows.push(row);
+                }
+            }
+        }
+        rows
+    }
+
+    /// `IPermissionManager.getAllPermissionGroups`: every platform group.
+    #[must_use]
+    pub fn group_descriptions(&self) -> Vec<GroupDescription> {
+        permission_catalog::GROUPS
+            .iter()
+            .filter_map(|row| self.group_description(row.name))
+            .collect()
     }
 
     /// The entry for `permission`, when the runtime table has one.

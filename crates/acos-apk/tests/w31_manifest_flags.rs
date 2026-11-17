@@ -230,6 +230,7 @@ fn cleartext_default_follows_target_sdk_28() {
         compile_sdk: Some(34),
         uses_permissions: Vec::new(),
         uses_features: Vec::new(),
+        permissions: Vec::new(),
         application: Default::default(),
         activities: Vec::new(),
         services: Vec::new(),

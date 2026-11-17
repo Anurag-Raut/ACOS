@@ -3,6 +3,7 @@ package com.android.permissioncontroller.permission.ui;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
 import android.os.Bundle;
 import android.util.Log;
@@ -184,16 +185,30 @@ public class GrantPermissionsActivity extends Activity {
     }
 
     /**
-     * The permission's label. `PermissionInfo.loadLabel` needs the defining
-     * package's resources, which this build's package manager does not resolve
-     * yet, so the label falls back to the permission's own name — the same thing
-     * `loadLabel` answers when a permission has no label resource.
+     * The permission's label, as AOSP's own `PermissionInfo.loadLabel` answers
+     * it. SYSUI3B: `IPermissionManager.getPermissionInfo` now carries
+     * `nonLocalizedLabel`, so `loadLabel` returns the text the platform declares
+     * for the permission ("take pictures and videos" for CAMERA) with no
+     * resource resolution. `loadLabel` only needs the defining package's
+     * resources when the label is a resource id, which a non-localized label
+     * never is.
+     *
+     * <p>The group lookup runs too: it is the second half of the store
+     * (`getPermissionGroupInfo`), and a device's dialog shows the group title
+     * next to the permission. Its failure never hides the label.
+     *
+     * <p>The last-segment fallback is what a phone shows for a permission that
+     * is not in the platform catalog and that the app did not declare: it is
+     * kept, and logged, so an unknown permission is visible in the evidence
+     * instead of being silently disguised as a real label.
      */
     private String label(String permission) {
         try {
             PermissionInfo info = getPackageManager().getPermissionInfo(permission, 0);
             CharSequence label = info.loadLabel(getPackageManager());
             if (label != null && label.length() > 0) {
+                Log.i(TAG, "permission " + permission + " label=" + label
+                        + " group=" + groupLabel(info));
                 return label.toString();
             }
         } catch (Throwable ignored) {
@@ -201,6 +216,24 @@ public class GrantPermissionsActivity extends Activity {
         }
         int dot = permission.lastIndexOf('.');
         return dot < 0 ? permission : permission.substring(dot + 1);
+    }
+
+    /** The `PermissionInfo.group` title from `getPermissionGroupInfo`. */
+    private String groupLabel(PermissionInfo info) {
+        String group = info.group;
+        if (group == null || group.length() == 0) {
+            return "none";
+        }
+        try {
+            PermissionGroupInfo groupInfo = getPackageManager().getPermissionGroupInfo(group, 0);
+            CharSequence label = groupInfo.loadLabel(getPackageManager());
+            if (label != null && label.length() > 0) {
+                return label.toString();
+            }
+        } catch (Throwable ignored) {
+            Log.i(TAG, "group fallback for " + group + ": " + ignored);
+        }
+        return group;
     }
 
     private static boolean contains(String[] values, String value) {

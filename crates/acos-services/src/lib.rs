@@ -76,6 +76,8 @@ pub mod netd; // the relay's control surface: protocol, client, `acos_net`'s sch
 pub mod network; // ADR-0029/NET5: which network profile this session attached
 pub mod parcel_dump; // WV2: ACOS_PARCEL_DUMP=<path> reply byte dump
 pub mod parcelable;
+// SYSUI3B: the platform permission catalog (AOSP labels/groups/descriptions).
+pub mod permission_catalog;
 pub mod pending_intent; // MODNOTIF4: PendingIntent sender records + the IIntentSender nodes
 pub mod permissions; // MODNOTIF2: the one runtime-permission table
 pub mod pms;

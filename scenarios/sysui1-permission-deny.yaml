@@ -54,9 +54,11 @@ steps:
       focus_type: TYPE_BASE_APPLICATION
       types: [TYPE_BASE_APPLICATION]
 
+  # The real platform label, from the store's `PermissionInfo`
+  # `nonLocalizedLabel` (SYSUI3B).
   - assert_text:
       selector: {id: permission_0}
-      text: {exact: "CAMERA"}
+      text: {exact: "take pictures and videos"}
       timeout_ms: 10000
 
   # Deny + "Don't ask again".

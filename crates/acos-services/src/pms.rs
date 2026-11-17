@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use acos_aidl::MethodInfo;
+use acos_apk::manifest::DeclaredPermission;
 use acos_parcel::Parcel;
 
 /// The parsed `<meta-data>` model, re-exported so a crate that only depends on
@@ -1117,6 +1118,10 @@ pub struct InstalledPackage {
     pub services: Vec<ServiceInfo>,
     /// Granted permissions (manifest + install `-g`).
     pub granted_permissions: Vec<String>,
+    /// `<permission>` elements the package declares itself (SYSUI3B): the
+    /// `PermissionInfo` an `IPermissionManager.getPermissionInfo` for a custom
+    /// permission answers comes from here.
+    pub declared_permissions: Vec<DeclaredPermission>,
     /// installer package (null = side-loaded).
     pub installer_package: Option<String>,
     /// `sourceDir` the state was built from.
@@ -1227,6 +1232,7 @@ impl InstalledPackage {
             providers,
             services,
             granted_permissions: requested_permissions,
+            declared_permissions: manifest.permissions.clone(),
             installer_package: None,
             apk_path: path.to_path_buf(),
             manifest: crate::ams::PackageRecord::from_manifest(&manifest, uid),
@@ -1338,6 +1344,7 @@ impl PmsState {
                 providers: Vec::new(),
                 services: Vec::new(),
                 granted_permissions: vec!["android.permission.INTERNET".into()],
+                declared_permissions: Vec::new(),
                 installer_package: None,
                 apk_path: apk,
                 manifest,
@@ -1771,19 +1778,22 @@ impl PmsService {
             let state = self.state.lock().unwrap();
             state.runtime_permissions.clone()
         };
-        let (package, granted) = {
-            let primary = state.primary();
-            (
-                primary.package.package_name.clone(),
-                primary.granted_permissions.clone(),
-            )
-        };
         *self.state.lock().unwrap() = state;
         if let Some(store) = store {
-            store
+            let (package, granted, declared) = {
+                let state = self.state.lock().unwrap();
+                let primary = state.primary();
+                (
+                    primary.package.package_name.clone(),
+                    primary.granted_permissions.clone(),
+                    primary.declared_permissions.clone(),
+                )
+            };
+            let mut store = store
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .set_install_time(&package, &granted);
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            store.set_install_time(&package, &granted);
+            store.set_declared_permissions(&package, &declared);
         }
         Ok(())
     }
@@ -2286,6 +2296,7 @@ mod tests {
             compile_sdk: Some(34),
             uses_permissions: Vec::new(),
             uses_features: Vec::new(),
+            permissions: Vec::new(),
             application: acos_apk::manifest::ApplicationInfo {
                 name: Some(".MainApplication".into()),
                 label: None,
