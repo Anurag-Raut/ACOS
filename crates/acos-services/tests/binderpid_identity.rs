@@ -383,3 +383,75 @@ fn the_activity_manager_answers_check_permission_per_uid() {
         "a uid the table does not own must not inherit the primary package's grant"
     );
 }
+
+/// PROCUID: two installed packages, two uids, one session grant.
+///
+/// `system.permissions` grants `INTERNET` to the session's primary package
+/// (proc-a). The permission table is keyed by uid, so the same question asked
+/// for proc-b's uid — the uid its own process runs as — is denied, and
+/// `getNameForUid` names each package from its own uid. This is what the guest's
+/// `checkSelfPermission(INTERNET)` reaches (`IActivityManager.checkPermission`
+/// with its own `Process.myUid()`).
+#[test]
+fn check_permission_differs_between_the_two_installed_apps() {
+    let mut host = two_package_host();
+    let perm = "android.permission.INTERNET";
+    host.permission_store()
+        .expect("one permission table")
+        .lock()
+        .unwrap()
+        .grant(perm);
+    let (uid_a, uid_b) = {
+        let service = pms(&mut host);
+        let state = service.shared_state();
+        let state = state.lock().unwrap();
+        let a = state
+            .lookup(Some("dev.acos.fixtures.proca"))
+            .expect("proc-a")
+            .app
+            .uid;
+        let b = state
+            .lookup(Some("dev.acos.fixtures.procb"))
+            .expect("proc-b")
+            .app
+            .uid;
+        (a, b)
+    };
+    assert_ne!(uid_a, uid_b, "one uid per installed package");
+    let ask = |host: &mut ServiceHost, uid: i32| {
+        service_q(
+            host,
+            "activity",
+            "android.app.IActivityManager",
+            "checkPermission",
+            &[
+                Value::Str(Some(perm.into())),
+                Value::Int(0),
+                Value::Int(uid),
+            ],
+        )
+    };
+    assert_eq!(
+        ask(&mut host, uid_a),
+        vec![Value::Int(PERMISSION_GRANTED)],
+        "the grant belongs to proc-a's uid"
+    );
+    assert_eq!(
+        ask(&mut host, uid_b),
+        vec![Value::Int(PERMISSION_DENIED)],
+        "proc-b's uid does not inherit another app's grant"
+    );
+    for (uid, package) in [
+        (uid_a, "dev.acos.fixtures.proca"),
+        (uid_b, "dev.acos.fixtures.procb"),
+    ] {
+        let named = service_q(
+            &mut host,
+            "package",
+            "android.content.pm.IPackageManager",
+            "getNameForUid",
+            &[Value::Int(uid)],
+        );
+        assert_eq!(named, vec![Value::Str(Some(package.into()))]);
+    }
+}

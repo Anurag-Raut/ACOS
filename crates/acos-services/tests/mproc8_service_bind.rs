@@ -356,3 +356,212 @@ fn a_dead_service_process_reaches_its_caller_as_a_disconnect() {
     assert!(binder.is_none(), "a dead service is a null binder");
     assert_eq!(parcel.read_int32().expect("dead flag"), 1, "dead = true");
 }
+
+/// MPROC8/PROCUID: AOSP's `realStartServiceLocked` for a process that exists
+/// **only** because of the bind.
+///
+/// A `bindService` to a package with no process is `startProcessLocked`: the
+/// launcher starts one, the process names its `IApplicationThread` and it has no
+/// activity at all (nothing asked for one). AOSP delivers the service work in
+/// `attachApplicationLocked` — `mServices.attachApplicationLocked` runs there,
+/// after the app's `bindApplication` is sent and before the app can report back.
+/// Waiting for the process to *finish* attaching (`finishAttachApplication`) or
+/// for an activity launch strands the bind: the caller waits out its timeout and
+/// the service never exists.
+#[test]
+fn a_bind_only_process_gets_create_and_bind_when_it_attaches() {
+    let mut host = two_package_host();
+    let connection = java_binder(TAG_A, 5);
+
+    // 1. No process for B yet: the bind is recorded and a spawn is requested
+    //    (nothing can be delivered to a thread that does not exist).
+    let reply = transact(
+        &mut host,
+        "activity",
+        "bindService",
+        vec![
+            Value::Binder(Some(java_binder(TAG_A, 1))),
+            Value::Binder(None),
+            bind_intent(),
+            Value::Str(None),
+            Value::Binder(Some(connection)),
+            Value::Long(1),
+            Value::Str(Some("test".into())),
+            Value::Int(0),
+        ],
+    );
+    assert_eq!(reply.len(), 1, "bindService answers its boolean");
+    assert!(
+        host.take_deliveries().is_empty(),
+        "there is no app thread to deliver create/bind to yet"
+    );
+    let requests = {
+        let object = host.ensure("android.app.IActivityTaskManager").unwrap();
+        let atms = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<AtmsService>())
+            .expect("atms");
+        atms.take_spawn_requests()
+    };
+    assert_eq!(requests.len(), 1, "exactly one spawn request: {requests:?}");
+    assert_eq!(requests[0].package, B_PACKAGE);
+    assert_eq!(requests[0].reason, "bindService");
+    assert_eq!(requests[0].component, format!("{B_PACKAGE}/{B_CLASS}"));
+
+    // 2. The launcher started it: the peer records the process from the guest's
+    //    handshake (its own uid) and the guest attaches its app thread. Nothing
+    //    else happens — a bind-only process never launches an activity, so this
+    //    `attachApplication` is the only thing the host will ever hear from it.
+    let app_thread_b = java_binder(TAG_B, 3);
+    {
+        let object = host.ensure("android.app.IActivityTaskManager").unwrap();
+        let atms = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<AtmsService>())
+            .expect("atms");
+        atms.note_process_started(TAG_B, B_PACKAGE, 0, 0);
+    }
+    let _ = transact(
+        &mut host,
+        "activity",
+        "attachApplication",
+        vec![Value::Binder(Some(app_thread_b)), Value::Long(1)],
+    );
+
+    // 3. AOSP order at attach: create, then bind, both to B's own app thread.
+    let deliveries = host.take_deliveries();
+    let created = deliveries
+        .iter()
+        .find(|d| d.method == "scheduleCreateService")
+        .unwrap_or_else(|| panic!("scheduleCreateService to B: {deliveries:?}"));
+    let bound = deliveries
+        .iter()
+        .find(|d| d.method == "scheduleBindService")
+        .unwrap_or_else(|| panic!("scheduleBindService to B: {deliveries:?}"));
+    assert_eq!(created.target, app_thread_b, "create goes to B's app thread");
+    assert_eq!(bound.target, app_thread_b, "bind goes to B's app thread");
+    assert_eq!(created.interface, "android.app.IApplicationThread");
+    let create_at = deliveries
+        .iter()
+        .position(|d| d.method == "scheduleCreateService")
+        .expect("create present");
+    let bind_at = deliveries
+        .iter()
+        .position(|d| d.method == "scheduleBindService")
+        .expect("bind present");
+    assert!(
+        create_at < bind_at,
+        "`realStartServiceLocked` creates before it binds: {deliveries:?}"
+    );
+
+    // 4. The service's `onBind` result reaches A's connection, so the bind-only
+    //    spawn is a *served* bind, not just two queued deliveries.
+    let mut token_parcel = created.data.clone();
+    token_parcel.set_data_position(0);
+    token_parcel
+        .enforce_interface("android.app.IApplicationThread")
+        .expect("interface token");
+    let token = token_parcel
+        .read_strong_binder()
+        .expect("token binder")
+        .expect("a real token");
+    let service_binder = java_binder(TAG_B, 9);
+    let _ = transact(
+        &mut host,
+        "activity",
+        "publishService",
+        vec![
+            Value::Binder(Some(token)),
+            bind_intent(),
+            Value::Binder(Some(service_binder)),
+        ],
+    );
+    let deliveries = host.take_deliveries();
+    let connected = deliveries
+        .iter()
+        .find(|d| d.method == "connected")
+        .unwrap_or_else(|| panic!("connected to A's connection: {deliveries:?}"));
+    assert_eq!(connected.target, connection);
+}
+
+/// MPROC8/PROCUID: a bind that lands while the target process is attaching.
+///
+/// The process record exists (the peer created it at the guest's handshake) and
+/// the app thread is known, but the app has not finished `bindApplication`. AOSP
+/// still queues the service work for that process — it runs on the app's looper
+/// behind `BIND_APPLICATION`. Treating such a target as "no process" recorded a
+/// spawn request for a package that is already running (which the launcher
+/// correctly refuses) and left the bind waiting for an attach that had already
+/// happened.
+#[test]
+fn a_bind_to_a_process_that_is_still_attaching_is_delivered_to_it() {
+    let mut host = two_package_host();
+    let app_thread_b = java_binder(TAG_B, 3);
+    let connection = java_binder(TAG_A, 5);
+
+    {
+        let object = host.ensure("android.app.IActivityTaskManager").unwrap();
+        let atms = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<AtmsService>())
+            .expect("atms");
+        atms.note_process_started(TAG_B, B_PACKAGE, 0, 0);
+    }
+    let _ = transact(
+        &mut host,
+        "activity",
+        "attachApplication",
+        vec![Value::Binder(Some(app_thread_b)), Value::Long(1)],
+    );
+    assert!(
+        host.take_deliveries().is_empty(),
+        "nothing was waiting for B at its attach"
+    );
+
+    let _ = transact(
+        &mut host,
+        "activity",
+        "bindService",
+        vec![
+            Value::Binder(Some(java_binder(TAG_A, 1))),
+            Value::Binder(None),
+            bind_intent(),
+            Value::Str(None),
+            Value::Binder(Some(connection)),
+            Value::Long(1),
+            Value::Str(Some("test".into())),
+            Value::Int(0),
+        ],
+    );
+    let deliveries = host.take_deliveries();
+    assert!(
+        deliveries
+            .iter()
+            .any(|d| d.method == "scheduleCreateService" && d.target == app_thread_b),
+        "create goes to the attaching process: {deliveries:?}"
+    );
+    assert!(
+        deliveries
+            .iter()
+            .any(|d| d.method == "scheduleBindService" && d.target == app_thread_b),
+        "bind goes to the attaching process: {deliveries:?}"
+    );
+    // The resolution path (`AmsState::bind_service`) always records the need; the
+    // launcher is the authority on what is running and refuses a spawn for a
+    // package that already has a process (`SecondaryPool::spawn`). What must not
+    // happen is what the old lookup did: treat the attaching process as absent
+    // and therefore deliver nothing at all.
+    let requests = {
+        let object = host.ensure("android.app.IActivityTaskManager").unwrap();
+        let atms = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<AtmsService>())
+            .expect("atms");
+        atms.take_spawn_requests()
+    };
+    assert_eq!(
+        requests.len(),
+        1,
+        "the bind resolution records the need (the launcher dedups it): {requests:?}"
+    );
+}

@@ -19,8 +19,17 @@
 #   only).
 #
 # Every line asserted here comes from the guest's own framework
-# (`Binder.getCallingUid/Pid`, `PackageManager.getNameForUid`,
-# `Context.checkCallingPermission`) or from the binder driver's frame header.
+# (`Process.myUid`, `Binder.getCallingUid/Pid`, `PackageManager.getNameForUid`,
+# `Context.checkSelfPermission`) and is reported by the host services the
+# framework asks.
+#
+# PROCUID: the two processes carry **two different application uids** — the ones
+# the package manager allocated per installed package (10192 for the launched
+# package, 10193 for the extra APK; AOSP's `PackageManagerService` allocates one
+# uid per package and a process runs as its package's uid). Both uids are
+# asserted literally: a regex that admits "any 10xxx" could not tell a
+# per-package uid from a session-wide one, which is exactly the defect this
+# scenario exists to catch.
 version: 1
 name: binderpid
 description: >-
@@ -74,7 +83,7 @@ steps:
       timeout_ms: 20000
       ordered: true
       patterns:
-        - '^ACOSPROBE a identity pkg=dev\.acos\.fixtures\.proca uid=10[0-9]{3} pid=[1-9][0-9]* calling-uid=10[0-9]{3} calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.proca internet=-?[0-9]+ self=0 by-name=0$'
+        - '^ACOSPROBE a identity pkg=dev\.acos\.fixtures\.proca uid=10192 pid=[1-9][0-9]* calling-uid=10192 calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.proca internet=-?[0-9]+ self=0 by-name=0$'
 
   # 2. Spawn proc-b (its own guest process, its own uid in the same session) by
   #    starting its Activity. `Application.onCreate` runs once per process and
@@ -87,21 +96,19 @@ steps:
       text: {exact: "Finish B"}
       timeout_ms: 60000
 
-  # B's process reports the identity *it* has. Note: today the guest uid is a
-  # session-wide constant (`guest_uid()` in acos-art), so B's `Process.myUid()`
-  # is the session uid and its permission answer is that uid's — the package
-  # manager *did* allocate proc-b its own uid (the activity manager's
-  # `ProcessRecord` for tag 1 carries it), but the guest process does not run
-  # under it yet. That is the per-process-uid wall reported with this handoff,
-  # not something this scenario may pretend away: B's line asserts its **own**
-  # package resolution and a real (non-zero) calling identity, and B must not
-  # claim A's package for its uid.
+  # B's process reports the identity *it* has: its **own** uid (10193, the one
+  # the package manager allocated for proc-b), the framework resolving that uid
+  # to proc-b's package, and a permission answer for that uid — not A's.
+  # `self=-1` is `checkSelfPermission(INTERNET)` denied for proc-b's uid while A
+  # above answered `self=0` for the same permission: one grant, two apps, two
+  # answers. Before PROCUID both processes ran as one uid (A's), so B reported
+  # A's uid, A's package and A's grant.
   - assert_log:
       since_previous_step: false
       timeout_ms: 30000
       ordered: true
       patterns:
-        - '^ACOSPROBE b identity pkg=dev\.acos\.fixtures\.procb uid=10[0-9]{3} pid=[1-9][0-9]* calling-uid=10[0-9]{3} calling-pid=[1-9][0-9]* uid-pkg=[a-z0-9_.]+ internet=-?[0-9]+ self=-?[0-9]+$'
+        - '^ACOSPROBE b identity pkg=dev\.acos\.fixtures\.procb uid=10193 pid=[1-9][0-9]* calling-uid=10193 calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.procb internet=-?[0-9]+ self=-1$'
 
   # 3. Back to A, then bind B's already-running service: a guest -> guest
   #    transaction whose target reports the caller it saw.
@@ -121,10 +128,10 @@ steps:
       text: {exact: "A transact echo:ping"}
       timeout_ms: 60000
 
-  # B's `onTransact` sees A as the caller: A's uid (its own, not 1000 =
-  # system_server, and not B's) and A's host-visible pid.
+  # B's `onTransact` sees A as the caller: A's uid (10192, its own — not 1000 =
+  # system_server, and not B's 10193) and A's host-visible pid.
   - assert_log:
       since_previous_step: false
       timeout_ms: 20000
       patterns:
-        - '^ACOSPROBE b transact code=1 in=ping -> out=echo:ping pid=[1-9][0-9]* caller-uid=10[0-9]{3} caller-pid=[1-9][0-9]*$'
+        - '^ACOSPROBE b transact code=1 in=ping -> out=echo:ping pid=[1-9][0-9]* caller-uid=10192 caller-pid=[1-9][0-9]*$'

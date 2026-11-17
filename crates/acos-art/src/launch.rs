@@ -531,6 +531,32 @@ struct ExtraApk {
     uid: Option<i32>,
 }
 
+/// MPROC8: what a lazily spawned process was started for.
+///
+/// AOSP distinguishes an activity launch from a component that runs without an
+/// activity (`ActiveServices.realStartServiceLocked` for a started or bound
+/// service, a provider publish). The guest's stop point and its launch argv
+/// follow from it: an activity process marshals/wait for its launch transaction,
+/// a service process attaches, stays resident and waits for the host's
+/// `scheduleCreateService`/`scheduleBindService` deliveries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpawnKind {
+    /// `startActivity`: the process launches the requested activity.
+    Activity,
+    /// `bindService`/`startService`/`getContentProvider`: no activity.
+    Service,
+}
+
+impl SpawnKind {
+    /// The `until` stop point the guest runs to (`LaunchMain`'s 4th argument).
+    fn until(self) -> &'static str {
+        match self {
+            Self::Activity => "activity-resumed",
+            Self::Service => "service-resident",
+        }
+    }
+}
+
 /// MPROC4 step 3b: one secondary app process this session can start.
 ///
 /// Built from the session's own recipe (`launch_session`): the extra APK is
@@ -556,6 +582,12 @@ struct SecondarySpec {
     guest_lib_dir: String,
     /// `ApplicationInfo.uid` the package manager assigned.
     uid: Option<i32>,
+    /// MPROC8: what this process was started for (activity vs service-only).
+    kind: SpawnKind,
+    /// The service class the spawn request named (empty when the request was an
+    /// activity launch). The host delivers the create/bind to the process; the
+    /// guest never launches it.
+    service: String,
     /// The activity this process launches (the requested component, else the
     /// APK's launcher activity).
     activity: String,
@@ -633,7 +665,7 @@ impl SecondaryShared {
             spec.guest_apk.clone(),
             spec.package.clone(),
             "/data/out/launch".to_string(),
-            "activity-resumed".to_string(),
+            spec.kind.until().to_string(),
             spec.activity.clone(),
             spec.app_class.clone(),
             spec.theme.to_string(),
@@ -660,6 +692,16 @@ impl SecondaryShared {
             sb.with_image(Some(image.clone()));
         }
         sb.run_root(&spec.run_root);
+        // UID: this process carries **its package's** uid (AOSP allocates one
+        // per installed package), not the session's. A spawn whose package has
+        // no allocated uid is refused instead of running as another app's uid.
+        let Some(uid) = spec.uid else {
+            return Err(Error::Layout(format!(
+                "process tag {}: the package manager allocated no uid for {}",
+                spec.tag, spec.package
+            )));
+        };
+        sb.app_uid(uid as u32);
         sb.seccomp_guest(true);
         sb.with_shim(false);
         sb.ro_bind(&self.art_shim, "/data/shim/libartshim.so");
@@ -929,23 +971,46 @@ impl SecondaryPool {
             );
             return;
         };
-        // The requested activity is what the process launches: on a device the
-        // process starts empty and AMS schedules the launch transaction; here
-        // the guest marshals its own launch transaction for the activity the
-        // request named, so a spawn is always for a real component.
-        if let Some(class) = request.component.split_once('/').map(|(_, class)| class) {
-            if !class.is_empty() {
-                let fqcn = if class.starts_with('.') {
-                    format!("{}{}", spec.package, class)
-                } else {
-                    class.to_string()
-                };
-                spec.activity = fqcn;
+        // MPROC8: what the process is being started *for* decides its stop
+        // point. AOSP's `ActivityManagerService` starts one process object for
+        // both cases and hands the work to the component's own path: an
+        // activity gets a launch transaction, a service gets
+        // `realStartServiceLocked` after `attachApplication`. A service
+        // component is never launched as an Activity, and the process does not
+        // wait for a launch transaction it will never receive.
+        let class = request
+            .component
+            .split_once('/')
+            .map(|(_, class)| class)
+            .unwrap_or_default();
+        let fqcn = if class.is_empty() {
+            String::new()
+        } else if class.starts_with('.') {
+            format!("{}{}", spec.package, class)
+        } else {
+            class.to_string()
+        };
+        spec.kind = match request.reason.as_str() {
+            "bindService" | "startService" | "getContentProvider" => SpawnKind::Service,
+            _ => SpawnKind::Activity,
+        };
+        match spec.kind {
+            SpawnKind::Activity => {
+                if !fqcn.is_empty() {
+                    spec.activity = fqcn;
+                }
+            }
+            SpawnKind::Service => {
+                spec.service = fqcn;
+                spec.activity = String::new();
             }
         }
         // Per-process `ProviderInfoList` + application `<meta-data>`, from this
-        // package's own manifest (the same two facts the primary receives).
-        let (app_meta, providers) = acos_services::pms::PmsState::from_apk(&spec.staged)
+        // package's own manifest (the same two facts the primary receives), with
+        // this package's own uid.
+        let (app_meta, providers) = spec
+            .uid
+            .and_then(|uid| acos_services::pms::PmsState::from_apk_with_uid(&spec.staged, uid).ok())
             .map(|state| {
                 let app_meta = meta_spec(&state.app().meta_data);
                 let providers = provider_spec_of(&state);
@@ -986,6 +1051,12 @@ impl SecondaryPool {
                     "reason": request.reason,
                     "tag": spec.tag,
                     "pid": pid,
+                    "uid": spec.uid,
+                    "kind": match spec.kind {
+                        SpawnKind::Activity => "activity",
+                        SpawnKind::Service => "service",
+                    },
+                    "service": spec.service,
                     "activity": spec.activity,
                     "spawned": true,
                     "since_ms": self.started.elapsed().as_millis() as u64,
@@ -1128,7 +1199,13 @@ impl SecondaryPool {
                     "tag": tag,
                     "package": guest.spec.package,
                     "pid": guest.pid,
+                    "uid": guest.spec.uid,
+                    "kind": match guest.spec.kind {
+                        SpawnKind::Activity => "activity",
+                        SpawnKind::Service => "service",
+                    },
                     "activity": guest.spec.activity,
+                    "service": guest.spec.service,
                     "alive": matches!(guest.child.try_wait(), Ok(None)),
                 })
             })
@@ -1767,9 +1844,17 @@ pub(crate) fn launch_session(
                 }
             }
         }
-        (host, handles, registry)
+        // UID: the uid the package manager allocated for the launched package.
+        // AOSP allocates one uid per installed package, and this process must
+        // run as **its** uid (a second package in the same session gets its
+        // own). `None` only when the package manager never registered the
+        // package (then the historical fixture uid stays the default, and a
+        // guest that asks for its own `ApplicationInfo` fails loudly on its
+        // own).
+        let primary_uid = host.package_uid(&package).map(|uid| uid as u32);
+        (host, handles, registry, primary_uid)
     };
-    let (peer_host, live, peer_registry) = live_handles;
+    let (peer_host, live, peer_registry, primary_uid) = live_handles;
     let service_control = Arc::new(ServiceControl::default());
     // A live module request wakes the peer's idle wait (see `ServiceControl`).
     service_control.set_wake(peer_wakeup.write);
@@ -2115,7 +2200,13 @@ pub(crate) fn launch_session(
     let mut secondary_specs: Vec<SecondarySpec> = Vec::new();
     for (index, extra) in extras.iter().enumerate() {
         let tag = (index as u32) + 1;
-        let facts = acos_services::pms::PmsState::from_apk(&extra.staged).ok();
+        // UID: this package's **own** uid (the package manager allocated it at
+        // install time), so every fact built from its APK carries the uid the
+        // process runs as — never the fixture uid of the launched package.
+        let facts = match extra.uid {
+            Some(uid) => acos_services::pms::PmsState::from_apk_with_uid(&extra.staged, uid).ok(),
+            None => acos_services::pms::PmsState::from_apk(&extra.staged).ok(),
+        };
         let launcher = apk_launcher_activity(&extra.staged).ok();
         let labels = acos_services::pms::manifest_labels(&extra.staged).ok();
         let run_root = run.path().join("secondary").join(format!("tag-{tag}"));
@@ -2130,6 +2221,11 @@ pub(crate) fn launch_session(
             guest_lib_root: extra.guest_lib_root.clone(),
             guest_lib_dir: extra.guest_lib_dir.clone(),
             uid: extra.uid,
+            // A spec starts as an activity process (MPROC4's lazy `startActivity`
+            // spawn); a request for a service component switches it to
+            // `SpawnKind::Service` at spawn time.
+            kind: SpawnKind::Activity,
+            service: String::new(),
             activity: launcher
                 .as_ref()
                 .map(|l| l.component.clone())
@@ -2210,6 +2306,21 @@ pub(crate) fn launch_session(
         sb.with_image(Some(image.dir.clone()));
     }
     sb.run_root(run.path());
+    // UID: this guest runs as the launched package's uid (AOSP: one uid per
+    // installed package, shared by that package's processes). The secondary
+    // processes below carry *their* package's uid the same way, so two processes
+    // of two packages in one session have two uids — `Process.myUid()`,
+    // `getPackageUid()`, `getNameForUid()` and the per-uid permission answer all
+    // agree on both sides of the socket.
+    match primary_uid {
+        Some(uid) => {
+            sb.app_uid(uid);
+        }
+        None => eprintln!(
+            "acos-art: launch: the package manager has no uid for {package}; the guest keeps the \
+             session default (per-package identity is unavailable)"
+        ),
+    }
     // NET3/NET4: the relay session is named after the session id the engine
     // published (`ACOS_ART_SESSION_ID`) — for an `acos serve` session and for a
     // one-shot `verify` run alike — so the live session API's `acos_net` controls

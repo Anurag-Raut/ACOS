@@ -1149,11 +1149,24 @@ impl Peer {
         // `BR_RELEASE` + `BR_DECREFS`, so a `F_TXN` sent after it would answer
         // `DEAD_OBJECT` even though the callback was queued while the
         // registration (and its reference) still existed.
-        out.extend(self.take_delivery_frames());
-        out.extend(self.take_ref_frames());
+        //
+        // MPROC8: **`bindApplication` goes first**. AOSP's
+        // `ActivityManagerService.attachApplicationLocked` sends
+        // `IApplicationThread.bindApplication` and only then does
+        // `mServices.attachApplicationLocked` queue `scheduleCreateService` /
+        // `scheduleBindService` for that app; everything the app receives is
+        // ordered behind `BIND_APPLICATION` on its main looper because AMS sent
+        // it first. A process started for a bound service gets both in the same
+        // attach (there is no activity launch to spread them out), and the
+        // service work in front of the app's own `Instrumentation` is a null
+        // dereference inside `ActivityThread.handleCreateService` — measured,
+        // the bind-only scenario failed with exactly that NPE before this
+        // order was fixed.
         for frame in self.take_launch_delivery(tag) {
             out.push((tag, frame));
         }
+        out.extend(self.take_delivery_frames());
+        out.extend(self.take_ref_frames());
         out.extend(self.take_host_transactions());
         out.extend(self.take_death_frames());
         // BINDERPID: every frame leaving the peer carries its sender. A delivery

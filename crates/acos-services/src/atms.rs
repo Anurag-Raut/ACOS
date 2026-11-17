@@ -854,7 +854,12 @@ impl AtmsState {
             // `process_started` fills it in when the guest's connection names
             // its credential.
             pid: 0,
-            uid: crate::pms::FIXTURE_UID,
+            // UID: likewise unknown, never another app's uid. AOSP's
+            // `ProcessRecord.uid` is the package's; the peer's handshake
+            // (`Peer::record_process_started` -> `process_started`) is what
+            // names it from the package manager, and `process_started` fills
+            // an unknown (`0`) uid in place.
+            uid: 0,
             package_name: package,
             app_thread: Some(app_thread),
             attach_seq: seq,

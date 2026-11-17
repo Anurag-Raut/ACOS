@@ -516,3 +516,70 @@ fn push_launch(peer: &mut Peer, tag: u32, code: u32, bytes: &[u8]) {
         panic!("launch push refused: code={code} msg={msg:?}");
     }
 }
+
+/// MPROC8: `bindApplication` reaches a freshly attached process **before** the
+/// work the host queued for it while answering that attach.
+///
+/// AOSP's `ActivityManagerService.attachApplicationLocked` sends
+/// `IApplicationThread.bindApplication` and only then runs
+/// `mServices.attachApplicationLocked` (`realStartServiceLocked` →
+/// `scheduleCreateService` + `scheduleBindService`). Everything the app receives
+/// is ordered behind `BIND_APPLICATION` on its main looper because AMS sent it
+/// first. A process started for a bound service gets both in the *same* attach —
+/// there is no activity launch in between — so if the peer flushes the host's
+/// deliveries first, `ActivityThread.handleCreateService` runs before
+/// `handleBindApplication` and dies on the null `Instrumentation` (measured: the
+/// bind-only scenario failed with exactly that NPE).
+#[test]
+fn bind_application_is_delivered_before_the_service_work_queued_at_attach() {
+    let mut peer = Peer::new();
+    peer.register_process(1, "dev.acos.fixtures.procb").unwrap();
+    // The guest pushes the `bindApplication` payload it will run (its launch
+    // protocol, unchanged).
+    push_launch(
+        &mut peer,
+        1,
+        acos_binder_peer::peer::LAUNCH_PUSH_BIND,
+        b"bind-application-bytes",
+    );
+    // The host queued a delivery for this process while it was answering the
+    // attach — a bound service's `scheduleCreateService` has the same shape
+    // (a `system -> app` one-way transaction to the app thread the attach
+    // names). `IResultReceiver.send` stands in for it here so the test needs no
+    // service table.
+    const WIRE: u32 = 0x77;
+    let delivery_code =
+        acos_aidl::lookup_by_name("com.android.internal.os.IResultReceiver", "send")
+            .expect("IResultReceiver.send")
+            .code;
+    queue_result_delivery(&mut peer, java_binder_id(1, WIRE), 0);
+
+    let activity = peer
+        .host()
+        .binder_for_descriptor("android.app.IActivityManager")
+        .expect("the activity service is registered");
+    let attach = request_for(
+        1,
+        NODE_TAG | activity.0,
+        "android.app.IActivityManager",
+        "attachApplication",
+        &[Value::Binder(Some(java_binder_id(1, WIRE))), Value::Long(7)],
+        0,
+    );
+    let out = peer.handle_tagged(1, attach);
+    let shape: Vec<(u32, u32, u32)> = out.iter().map(|(dest, f)| (*dest, f.ty, f.code)).collect();
+    let bind_at = out
+        .iter()
+        .position(|(dest, f)| {
+            *dest == 1 && f.ty == F_TXN && f.code == acos_binder_peer::peer::BIND_APPLICATION_CODE
+        })
+        .unwrap_or_else(|| panic!("no bindApplication delivery: {shape:?}"));
+    let work_at = out
+        .iter()
+        .position(|(dest, f)| *dest == 1 && f.ty == F_TXN && f.code == delivery_code)
+        .unwrap_or_else(|| panic!("no host delivery: {shape:?}"));
+    assert!(
+        bind_at < work_at,
+        "`bindApplication` must be the first thing a starting process runs: {shape:?}"
+    );
+}

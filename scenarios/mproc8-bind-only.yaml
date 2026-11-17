@@ -1,0 +1,94 @@
+# MPROC8/PROCUID: a process that exists **only** because of a `bindService`.
+#
+# AOSP starts one process for a package when a component of it needs one, and a
+# bound service needs one exactly like an activity does
+# (`ActivityManagerService.startProcessLocked`). The process has no activity at
+# all: it attaches (`IActivityManager.attachApplication`), runs
+# `handleBindApplication`, and `ActiveServices.realStartServiceLocked` delivers
+# `scheduleCreateService` + `scheduleBindService` to it
+# (`attachApplicationLocked` does both, in that order). Nothing ever launches an
+# activity in it, and there is no launch transaction to wait for.
+#
+# Before this scenario's fix a lazily spawned process always ran the
+# activity-launch path: it waited `ACOSLAUNCH_RESUME_MS` (12 s) for a
+# `scheduleTransaction` the host was never going to send, timed out, exited —
+# and its caller's bind was never answered. That is why the older probe started
+# B's **activity** first ("activity-first workaround"): the bind only worked in a
+# process that already existed for another reason.
+#
+# This scenario does the opposite on purpose: A binds B's service while B has no
+# process at all, so the only thing that can start B is the bind.
+version: 1
+name: mproc8-bind-only
+description: >-
+  proc-a binds proc-b's EchoService with no proc-b process running; the bind
+  alone spawns it, the host delivers create+bind at its attach, and the
+  transaction round trip succeeds — with B running as its own uid (10193).
+app: fixtures/build/apps/proc-a.apk
+extra_apks:
+  - fixtures/build/apps/proc-b.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  # One runtime-permission table for the session, granted to the primary package
+  # (`proc-a`): B's process must answer `checkSelfPermission` for **its** uid,
+  # which is what the identity line asserts below.
+  - id: system.permissions
+    profile: real
+    config:
+      grant:
+        - android.permission.INTERNET
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.proca/.ProcAActivity
+      clear_state: true
+
+  - assert_text:
+      selector: {id: bind_b}
+      text: {exact: "Bind B"}
+      timeout_ms: 20000
+
+  # 1. `bindService` is the *only* trigger: nothing has started proc-b yet (no
+  #    `Start B` tap, no activity).
+  - tap:
+      selector: {id: bind_b}
+
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "A transact echo:ping"}
+      timeout_ms: 60000
+
+  # 2. The evidence, in the order AOSP performs it: B's process starts (its own
+  #    uid, 10193), its `Application.onCreate` runs, the host's
+  #    `realStartServiceLocked` creates the service and binds it, and the
+  #    transaction from A arrives in B. No activity line for B exists at all —
+  #    a process spawned for a service never launches one.
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 30000
+      ordered: true
+      patterns:
+        - '^ACOSPROBE b process-start pid=[1-9][0-9]* pkg=dev\.acos\.fixtures\.procb$'
+        - '^ACOSPROBE b identity pkg=dev\.acos\.fixtures\.procb uid=10193 pid=[1-9][0-9]* calling-uid=10193 calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.procb internet=-?[0-9]+ self=-1$'
+        - '^ACOSPROBE b onBind pid=[1-9][0-9]*$'
+        - '^ACOSPROBE a bind-b ok component=dev\.acos\.fixtures\.procb/\.EchoService$'
+        - '^ACOSPROBE b transact code=1 in=ping -> out=echo:ping pid=[1-9][0-9]* caller-uid=10192 caller-pid=[1-9][0-9]*$'
+        - '^ACOSPROBE a transact ok=true out=echo:ping pid=[1-9][0-9]*$'
+
+  - assert_no_crash:
+      timeout_ms: 5000

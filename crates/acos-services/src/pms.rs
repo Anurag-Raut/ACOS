@@ -135,9 +135,27 @@ pub fn cached_activity_info() -> Option<(AppInfo, ActivityInfo)> {
 }
 
 /// ACOS fixture uid (MEASURED `display.txt`: `A=10192`).
+///
+/// It is the uid the package manager allocates to the **first** package of a
+/// session (AOSP allocates 10000+ per installed package); a second package gets
+/// the next free uid, so a multi-process session has one uid per app.
 pub const FIXTURE_UID: i32 = 10192;
+/// `Process.FIRST_APPLICATION_UID`: the first uid the package manager allocates.
+pub const FIRST_APPLICATION_UID: u32 = 10_000;
+/// `Process.LAST_APPLICATION_UID`: the last application uid (`Process`'s range).
+pub const LAST_APPLICATION_UID: u32 = 19_999;
 /// User id used in the `/data/user/<id>/` path.
 pub const FIXTURE_USER: i32 = 0;
+
+/// Whether `uid` is an **application** uid, i.e. a uid the package manager
+/// allocates for an installed package (`Process.isApplicationUid`).
+///
+/// The guest must carry one of these: uid 1000 is `SYSTEM_UID` (the host caller,
+/// and the uid the framework takes privileged branches on).
+#[must_use]
+pub fn is_application_uid(uid: u32) -> bool {
+    (FIRST_APPLICATION_UID..=LAST_APPLICATION_UID).contains(&uid)
+}
 
 /// Typed `ApplicationInfo` values ACOS serves.
 #[derive(Debug, Clone, PartialEq)]
@@ -1361,10 +1379,23 @@ impl PmsState {
         Self::from_opened(path, &apk)
     }
 
-    /// [`PmsState::from_apk`] for an APK that is already open (`apk` is the open of
-    /// `path`). PERF-REL3c: a launch reads its source APK once.
-    pub fn from_opened(path: impl AsRef<Path>, apk: &acos_apk::Apk) -> Result<Self> {
-        let record = InstalledPackage::from_opened(path, apk, FIXTURE_UID)?;
+    /// [`PmsState::from_apk`] for a package whose uid the package manager has
+    /// **already** allocated (AOSP allocates one uid per installed package).
+    ///
+    /// A package's `ApplicationInfo.uid` must be its own: building an extra
+    /// package's facts with the fixture uid would describe a different app's uid
+    /// while nothing else about the record changed.
+    pub fn from_apk_with_uid(path: impl AsRef<Path>, uid: i32) -> Result<Self> {
+        let path = path.as_ref();
+        let apk = crate::apk_facts::open_shared(path)
+            .map_err(|e| ServiceError::Internal(format!("open {}: {e}", path.display())))?;
+        Self::from_opened_with_uid(path, &apk, uid)
+    }
+
+    /// [`PmsState::from_opened`] for an APK that is already open and a package
+    /// uid the caller owns (see [`PmsState::from_apk_with_uid`]).
+    pub fn from_opened_with_uid(path: impl AsRef<Path>, apk: &acos_apk::Apk, uid: i32) -> Result<Self> {
+        let record = InstalledPackage::from_opened(path, apk, uid)?;
         let uid_packages = vec![(record.app.uid, record.app.package_name.clone())];
         Ok(Self {
             packages: vec![record],
@@ -1375,6 +1406,12 @@ impl PmsState {
             dex_loads: Vec::new(),
             component_settings: Vec::new(),
         })
+    }
+
+    /// [`PmsState::from_apk`] for an APK that is already open (`apk` is the open of
+    /// `path`). PERF-REL3c: a launch reads its source APK once.
+    pub fn from_opened(path: impl AsRef<Path>, apk: &acos_apk::Apk) -> Result<Self> {
+        Self::from_opened_with_uid(path, apk, FIXTURE_UID)
     }
 
     /// Install an extra package into this session: an APK given at launch, or a

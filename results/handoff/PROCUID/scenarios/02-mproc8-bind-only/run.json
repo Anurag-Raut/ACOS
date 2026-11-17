@@ -1,0 +1,7 @@
+{
+  "request_id": "req_1776f2_18e8eb5a5441af39",
+  "started_at": "2026-11-17T19:20:24.700Z",
+  "scenario": "scenarios/mproc8-bind-only.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}
