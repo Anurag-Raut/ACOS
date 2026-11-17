@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-6f9a4261-d278f2d5fb0234a5/fixtures/build/apps/back-layers.apk",
+  "apk_sha256": "b6fd7f81cf8d0c0973c5fa2eee8be955fc189a3eb8c3243319f29697ced11780",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-6f9a4261-d278f2d5fb0234a5/scenarios/back-layers.yaml",
+  "scenario_sha256": "6b9ddd57c7fa21f97763934d9386d7ff29889553221d1a896d53413548c6aab5",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

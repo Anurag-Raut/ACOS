@@ -540,6 +540,36 @@ impl InputDispatch {
         }
     }
 
+    /// Publish on the window that holds **input focus**, falling back to the
+    /// newest live one only when no focus is known (a bare host with no layer
+    /// stack).
+    ///
+    /// This is `InputDispatcher`'s own policy: a key goes to
+    /// `getFocusedWindowHandle`, never to "the window that registered last".
+    /// Measured before this existed: after a `TYPE_ACCESSIBILITY_OVERLAY`
+    /// (`FLAG_NOT_FOCUSABLE|FLAG_NOT_TOUCHABLE`) was added, the next `back`
+    /// landed on the overlay's `ViewRootImpl`, which logged `VRI[]: Dropping
+    /// event (no window focus)` and the app never saw the key.
+    pub fn publish_on_focused(
+        &mut self,
+        mut publish: impl FnMut(&mut InputDispatch, BinderId) -> Result<Gesture>,
+    ) -> Result<(BinderId, Gesture)> {
+        let focused = self.focused().filter(|token| self.tokens.contains(&token.0));
+        if let Some(token) = focused {
+            match publish(self, token) {
+                Ok(gesture) => return Ok((token, gesture)),
+                Err(ChannelError::PeerClosed) => {
+                    let message =
+                        format!("input channel {:#x} peer is closed; forgetting it", token.0);
+                    self.events.push(InputEvent::Error { token, message });
+                    self.remove(token);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        self.publish_on_live(publish)
+    }
+
     fn publish_key(&mut self, token: BinderId, key_code: i32) -> Result<Gesture> {
         let Some(publisher) = self.registry.publisher_mut(token) else {
             let message = format!(
@@ -813,6 +843,12 @@ impl InputHost {
         }
     }
 
+    /// `true` when `token` still has a live input channel.
+    #[must_use]
+    pub fn is_live(&self, token: BinderId) -> bool {
+        lock(&self.state).is_registered(token)
+    }
+
     /// `true` when an environment-driven injection plan is configured.
     #[must_use]
     pub fn is_active(&self) -> bool {
@@ -866,8 +902,9 @@ impl InputHost {
         self.collect(&token, &gesture, ack_wait)
     }
 
-    /// Publish one swipe/scroll on the newest live window and collect the
-    /// guest's `FINISHED` replies for a bounded window.
+    /// Publish one swipe/scroll on the focused window (falling back to the
+    /// newest live one) and collect the guest's `FINISHED` replies for a
+    /// bounded window.
     ///
     /// The stream is paced over `duration` (see
     /// [`InputDispatch::inject_swipe`]); the ack window starts after the `UP`
@@ -880,23 +917,24 @@ impl InputHost {
         duration: Duration,
         ack_wait: Duration,
     ) -> Result<InjectedGesture> {
-        let (token, gesture) = lock(&self.state).publish_on_live(|dispatch, token| {
+        let (token, gesture) = lock(&self.state).publish_on_focused(|dispatch, token| {
             dispatch.inject_swipe(token, from, to, duration)
         })?;
         self.collect(&token, &gesture, ack_wait)
     }
 
-    /// Publish one key press on the newest live window (delivery only; window
+    /// Publish one key press on the focused window (delivery only; window
     /// focus still needs the IME `EditorInfo` codec, so the app may drop it —
     /// the ack's `handled` field reports exactly that).
     pub fn key(&self, code: i32, ack_wait: Duration) -> Result<InjectedGesture> {
         let (token, gesture) = lock(&self.state)
-            .publish_on_live(|dispatch, token| dispatch.inject_key(token, code))?;
+            .publish_on_focused(|dispatch, token| dispatch.inject_key(token, code))?;
         self.collect(&token, &gesture, ack_wait)
     }
 
-    /// Publish `text` as a real key stroke per character on the newest live
-    /// window and collect every `FINISHED` reply.
+    /// Publish `text` as a real key stroke per character on the focused window
+    /// (falling back to the newest live one) and collect every `FINISHED`
+    /// reply.
     ///
     /// This is the `type_text` session API. It is a **keyboard** path: the
     /// guest resolves each character through its `KeyCharacterMap`, exactly as
@@ -904,7 +942,7 @@ impl InputHost {
     /// IME; see `crate::ime`).
     pub fn type_text(&self, text: &str, ack_wait: Duration) -> Result<InjectedGesture> {
         let (token, gesture) = lock(&self.state)
-            .publish_on_live(|dispatch, token| dispatch.inject_text(token, text))?;
+            .publish_on_focused(|dispatch, token| dispatch.inject_text(token, text))?;
         self.collect(&token, &gesture, ack_wait)
     }
 
@@ -1191,6 +1229,50 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[must_use]
 pub fn default_token(d: &InputDispatch) -> Option<BinderId> {
     d.newest_token()
+}
+
+#[cfg(test)]
+mod focus_target_tests {
+    use super::*;
+
+    const FOCUSED: BinderId = BinderId(0x9a01);
+    const NEWEST: BinderId = BinderId(0x9a02);
+
+    /// A11YPACE: a key/gesture goes to the window that holds **input focus**,
+    /// not to the newest one.
+    ///
+    /// Measured before this existed: a `TYPE_ACCESSIBILITY_OVERLAY`
+    /// (`FLAG_NOT_FOCUSABLE|FLAG_NOT_TOUCHABLE`) was the newest window, so
+    /// `back` was published to the overlay's channel, whose `ViewRootImpl`
+    /// logged `VRI[]: Dropping event (no window focus)` — the app never saw the
+    /// key. Focus is the layer stack's answer, so the overlay can be above the
+    /// activity and still be skipped.
+    #[test]
+    fn keys_go_to_the_focused_window_not_the_newest() {
+        let mut dispatch = InputDispatch::new();
+        dispatch
+            .register_window(FOCUSED, "activity")
+            .expect("register activity");
+        dispatch
+            .register_window(NEWEST, "accessibility overlay")
+            .expect("register overlay");
+        dispatch.set_focus(Some(FOCUSED)).expect("publish focus");
+        assert_eq!(dispatch.newest_token(), Some(NEWEST));
+
+        let (token, gesture) = dispatch
+            .publish_on_focused(|d, token| d.inject_key(token, crate::input_channel::KEYCODE_BACK))
+            .expect("the focused channel accepts the key");
+        assert_eq!(token, FOCUSED);
+        assert_eq!(gesture.dispatches.len(), 2, "DOWN and UP");
+
+        // With no focus known the fallback is the newest live window, so a bare
+        // host still has a defined target.
+        dispatch.set_focus(None).expect("clear focus");
+        let (token, _) = dispatch
+            .publish_on_focused(|d, token| d.inject_key(token, crate::input_channel::KEYCODE_BACK))
+            .expect("the newest channel accepts the key");
+        assert_eq!(token, NEWEST);
+    }
 }
 
 #[cfg(test)]

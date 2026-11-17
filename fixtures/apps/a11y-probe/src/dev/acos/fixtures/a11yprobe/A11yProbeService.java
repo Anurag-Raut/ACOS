@@ -3,6 +3,7 @@ package dev.acos.fixtures.a11yprobe;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.GestureDescription;
+import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
@@ -146,6 +147,7 @@ public class A11yProbeService extends AccessibilityService {
         // same-process interaction wait MODA11Y4 documented.
         Rect gestureTarget = boundsOf(root, "dev.acos.fixtures.a11yprobe:id/gesture_target");
         Rect gestureList = boundsOf(root, "dev.acos.fixtures.a11yprobe:id/gesture_list");
+        Rect dragTarget = boundsOf(root, "dev.acos.fixtures.a11yprobe:id/drag_target");
         Rect swatch = boundsOf(root, "dev.acos.fixtures.a11yprobe:id/swatch");
         if (swatch != null) {
             // The swatch the composited frame uses for the pixel claim; logged
@@ -167,7 +169,7 @@ public class A11yProbeService extends AccessibilityService {
         }
         Log.i(TAG, "probe_done");
 
-        probeGestures(gestureTarget, gestureList);
+        probeGestures(gestureTarget, gestureList, dragTarget);
 
         // MODA11Y5 step 4: the same service adds a TYPE_ACCESSIBILITY_OVERLAY
         // window through the WindowManager the framework gave it. AOSP fills
@@ -231,7 +233,7 @@ public class A11yProbeService extends AccessibilityService {
      * {@code gesture_list} list; the app's own listeners count both, so the
      * scenario's assertion is the app's state, not this log.
      */
-    private void probeGestures(Rect tapBounds, Rect listBounds) {
+    private void probeGestures(Rect tapBounds, Rect listBounds, Rect dragBounds) {
         if (tapBounds == null) {
             Log.i(TAG, "gesture tap=false reason=no_gesture_target");
         } else {
@@ -240,7 +242,7 @@ public class A11yProbeService extends AccessibilityService {
             GestureDescription description = new GestureDescription.Builder()
                     .addStroke(new GestureDescription.StrokeDescription(tap, 0, 40))
                     .build();
-            dispatch("tap", description);
+            queueGesture("tap", description);
         }
         if (listBounds == null) {
             Log.i(TAG, "gesture swipe=false reason=no_gesture_list");
@@ -252,22 +254,68 @@ public class A11yProbeService extends AccessibilityService {
             GestureDescription description = new GestureDescription.Builder()
                     .addStroke(new GestureDescription.StrokeDescription(swipe, 0, 200))
                     .build();
-            dispatch("swipe", description);
+            queueGesture("swipe", description);
         }
+        if (dragBounds == null) {
+            Log.i(TAG, "gesture drag=false reason=no_drag_target");
+        } else {
+            // A11YPACE: a slow horizontal drag with no fling. The stroke's
+            // declared timeline is what the host paces its MotionEvents over,
+            // so the app's own `onTouch` sees every MOVE and ends exactly
+            // `DRAG_DX` pixels left of where it started.
+            float cy = dragBounds.exactCenterY();
+            Path drag = new Path();
+            drag.moveTo(dragBounds.exactCenterX(), cy);
+            drag.lineTo(dragBounds.exactCenterX() - DRAG_DX, cy);
+            GestureDescription description = new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(drag, 0, 400))
+                    .build();
+            queueGesture("drag", description);
+        }
+        nextGesture();
     }
 
-    /** Dispatch one description and log the framework's own result callback. */
-    private void dispatch(String kind, GestureDescription description) {
+    /** A11YPACE: the commanded horizontal drag, in display pixels. */
+    static final float DRAG_DX = 300f;
+
+    /**
+     * A11YPACE: one gesture at a time.
+     *
+     * <p>Two `dispatchGesture` strokes in flight at once are two touch streams
+     * on one channel: a real service waits for `onCompleted` before it starts
+     * the next (the framework keeps one injector per display). Dispatching the
+     * tap, swipe and drag back to back made their paced DOWN/MOVE/UP events
+     * interleave in time, and the app saw one mangled stream instead of three
+     * strokes — measured as `drag_end dx=0 dy=-741` for a horizontal drag.
+     */
+    private final java.util.List<String> gestureKinds = new java.util.ArrayList<>();
+    private final java.util.List<GestureDescription> gestureQueue = new java.util.ArrayList<>();
+    private int gestureIndex;
+
+    private void queueGesture(String kind, GestureDescription description) {
+        gestureKinds.add(kind);
+        gestureQueue.add(description);
+    }
+
+    private void nextGesture() {
+        final int index = gestureIndex++;
+        if (index >= gestureQueue.size()) {
+            return;
+        }
+        final String kind = gestureKinds.get(index);
+        final GestureDescription description = gestureQueue.get(index);
         boolean accepted = dispatchGesture(description,
                 new GestureResultCallback() {
                     @Override
                     public void onCompleted(GestureDescription gesture) {
                         Log.i(TAG, "gesture_result kind=" + kind + " completed=true");
+                        nextGesture();
                     }
 
                     @Override
                     public void onCancelled(GestureDescription gesture) {
                         Log.i(TAG, "gesture_result kind=" + kind + " completed=false");
+                        nextGesture();
                     }
                 }, new Handler(Looper.getMainLooper()));
         Log.i(TAG, "gesture_sent kind=" + kind + " accepted=" + accepted
@@ -332,14 +380,36 @@ public class A11yProbeService extends AccessibilityService {
                         + " color_space=" + (colorSpace == null ? "null" : colorSpace.getName())
                         + " timestamp=" + result.getTimestamp());
                 Log.i(TAG, "screenshot_expect kind=" + kind + " success=" + success);
-                // MODA11YNATIVE2: reading one pixel needs
-                // `Bitmap.wrapHardwareBuffer`, i.e. a HARDWARE bitmap, i.e. an
-                // EGL/GLES implementation in the guest. This image has none
-                // ("libEGL: assertion failed: !hnd couldn't find an OpenGL ES
-                // implementation", then SIGABRT on RenderThread), so the pixel
-                // read is not reachable here; the buffer's own metadata (frame
-                // size, format, usage, colour space) is what the app can
-                // assert, and the compositor frame it points at is asserted
+                // A11YPACE: wrap the returned `HardwareBuffer` in a `Bitmap`
+                // and read the bitmap's own allocation size. That is the
+                // app-side path that used to SIGSEGV in
+                // `android::GraphicBufferMapper::getAllocationSize` (libui.so)
+                // when the gralloc shim was stale: the call resolved libui's
+                // own mapper entry point, whose HAL object is null in a
+                // gralloc-less guest. Either outcome is a *defined* one now —
+                // a bitmap with its geometry, or a Java exception — and the
+                // run must never crash here.
+                try {
+                    Bitmap wrapped = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
+                    if (wrapped == null) {
+                        Log.i(TAG, "wrap_hardware_buffer result=null");
+                    } else {
+                        Log.i(TAG, "wrap_hardware_buffer ok=true width=" + wrapped.getWidth()
+                                + " height=" + wrapped.getHeight()
+                                + " config=" + wrapped.getConfig());
+                        Log.i(TAG, "wrap_hardware_buffer allocation="
+                                + wrapped.getAllocationByteCount());
+                        wrapped.recycle();
+                    }
+                } catch (Throwable failure) {
+                    Log.i(TAG, "wrap_hardware_buffer error="
+                            + failure.getClass().getName() + " msg=" + failure.getMessage());
+                }
+                // MODA11YNATIVE2: reading one *pixel* of the buffer needs the
+                // HARDWARE bitmap's pixels uploaded through EGL/GLES, which
+                // this image does not have; the buffer's own metadata (frame
+                // size, format, usage, colour space) is what the app asserts
+                // here, and the compositor frame it points at is asserted
                 // host-side. Logged, not silently skipped.
                 Log.i(TAG, "screenshot_pixel unavailable=hardware_bitmap_needs_egl");
                 buffer.close();

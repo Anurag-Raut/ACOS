@@ -66,6 +66,153 @@ pub const DEFAULT_IMAGE_REL: &str = "system-images/android-34/google_apis/x86_64
 /// Host path of the embedded freestanding shim source.
 pub const SHIM_SOURCE: &str = include_str!("../shim/artshim.c");
 
+/// The software gralloc interposer's source (`LD_PRELOAD`, the memfd-backed
+/// `GraphicBuffer` memory the stock libui/libgui use; G1).
+pub const GRALLOC_SHIM_SOURCE: &str = include_str!("../shim/gralloc_shim.c");
+
+/// The `libacoshw.so` this binary must run: the sysroot's prebuilt copy when it
+/// was built from the embedded source, else a build of the embedded source into
+/// the content-addressed cache.
+///
+/// # Why the sysroot's copy is verified, not trusted
+///
+/// `tools/art-sysroot.sh --shim` writes `shim/libacoshw.so` and stamps
+/// `shim/gralloc_shim.hash` with the first 32 hex characters of the source's
+/// SHA-256. The `.so` lives **outside** this binary, so when the shim source
+/// changes an existing sysroot keeps the old artefact — and a session then
+/// silently runs a shim that is missing entry points. Measured
+/// (`results/handoff/A11YPACE`): A11YNATIVE2 added
+/// `GraphicBufferMapper::getAllocationSize` to the shim, the shared sysroot's
+/// copy was older, and an app calling `Bitmap.wrapHardwareBuffer` on the
+/// screenshot `HardwareBuffer` took SIGSEGV in
+/// `android::GraphicBufferMapper::getAllocationSize` (libui's own copy, whose
+/// HAL mapper object is null without a gralloc HAL) instead of getting its
+/// bitmap. The `.so` therefore cannot be taken on faith: its stamp is compared
+/// with the embedded source's hash, and a stale/missing artefact is rebuilt
+/// from the embedded bytes (one compile per source change, then reused).
+///
+/// Only when the sysroot is stale **and** no Android NDK is available does the
+/// launch stop — with a structured error naming the fix, never a crash.
+///
+/// # Errors
+///
+/// A stale sysroot shim with no usable NDK toolchain (`Error::Tool`), or a
+/// failed compile of the embedded source.
+pub fn gralloc_shim(root: &ArtRoot) -> Result<PathBuf> {
+    let prebuilt = root.sysroot.join("shim/libacoshw.so");
+    let stamp = root.sysroot.join("shim/gralloc_shim.hash");
+    let source = GRALLOC_SHIM_SOURCE.as_bytes();
+    let want: String = crate::build_cache::sha256_hex(source)
+        .chars()
+        .take(32)
+        .collect();
+    let stamped = fs::read_to_string(&stamp)
+        .map(|text| text.trim() == want)
+        .unwrap_or(false);
+    if std::env::var_os("ACOSART_SHIM_TRACE").is_some() {
+        eprintln!(
+            "acos-art: gralloc shim: sysroot={} stamped={stamped} want={want} prebuilt={}",
+            prebuilt.display(),
+            prebuilt.is_file()
+        );
+    }
+    if stamped && prebuilt.is_file() {
+        return Ok(prebuilt);
+    }
+    let clang = ndk_clang().ok_or_else(|| {
+        Error::Tool(format!(
+            "the sysroot's software gralloc shim ({}) was not built from this binary's              crates/acos-art/shim/gralloc_shim.c (stamp {} vs {want}), so it would crash an app              that wraps a HardwareBuffer in a Bitmap; rebuild it with              `tools/art-sysroot.sh --shim` or point ANDROID_NDK_HOME at an NDK",
+            prebuilt.display(),
+            stamp.display()
+        ))
+    })?;
+    let key = crate::build_cache::digest(&[
+        b"acos-art/gralloc-shim/v1",
+        source,
+        crate::build_cache::file_id(Path::new(&clang)).as_bytes(),
+    ]);
+    let built = crate::build_cache::ensure(&key, &["libacoshw.so"], |stage| {
+        let src = stage.join("gralloc_shim.c");
+        fs::write(&src, source)?;
+        let out = stage.join("libacoshw.so");
+        let status = Command::new(&clang)
+            .args([
+                "-O2",
+                "-fPIC",
+                "-shared",
+                "-Wall",
+                "-Wno-unused-parameter",
+                "-o",
+            ])
+            .arg(&out)
+            .arg(&src)
+            .status()
+            .map_err(|e| Error::Tool(format!("running {clang}: {e}")))?;
+        if !status.success() {
+            return Err(Error::Tool(format!(
+                "{clang} failed to build {}",
+                src.display()
+            )));
+        }
+        Ok(())
+    })?;
+    let installed = crate::build_cache::install(&built, &["libacoshw.so"], &root.data.join("shim"))?;
+    Ok(installed[0].clone())
+}
+
+/// The NDK clang that can build the bionic-linked gralloc shim, if one is
+/// installed: `ACOS_ART_NDK`, `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT`, then the
+/// SDK's `ndk/*` (the same discovery `tools/art-sysroot.sh` uses).
+fn ndk_clang() -> Option<String> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for key in ["ACOS_ART_NDK", "ANDROID_NDK_HOME", "ANDROID_NDK_ROOT"] {
+        if let Some(value) = std::env::var_os(key) {
+            if !value.is_empty() {
+                roots.push(PathBuf::from(value));
+            }
+        }
+    }
+    for key in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Some(value) = std::env::var_os(key) {
+            roots.push(PathBuf::from(value).join("ndk"));
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        roots.push(PathBuf::from(home).join("Android/Sdk/ndk"));
+    }
+    for root in roots {
+        let mut ndks: Vec<PathBuf> = match fs::read_dir(&root) {
+            Ok(entries) => entries
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| path.is_dir())
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        // A bare NDK directory (ACOS_ART_NDK=/path/to/ndk) has no nested
+        // versions; a bare android-34 API suffix is what the image's libs are.
+        ndks.sort();
+        if root.join("toolchains").is_dir() {
+            ndks.push(root.clone());
+        }
+        for ndk in ndks {
+            let prebuilt = ndk.join("toolchains/llvm/prebuilt");
+            let Ok(hosts) = fs::read_dir(&prebuilt) else {
+                continue;
+            };
+            let mut hosts: Vec<PathBuf> = hosts.flatten().map(|e| e.path()).collect();
+            hosts.sort();
+            for host in hosts {
+                let candidate = host.join("bin/x86_64-linux-android34-clang");
+                if candidate.is_file() {
+                    return Some(candidate.display().to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Publish `bytes` at `path` without ever truncating a file another process may
 /// be reading or **mapping**.
 ///

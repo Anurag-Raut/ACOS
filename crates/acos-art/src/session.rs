@@ -484,10 +484,13 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     sb.ro_bind(&shim, "/data/app/libacosart.so");
     // H17: this session's own APK shadows the shared `/data/app` entry.
     sb.ro_bind(&apk, &format!("/data/app/{apk_name}"));
-    sb.ro_bind(
-        &root.sysroot.join("shim/libacoshw.so"),
-        "/data/libacoshw.so",
-    );
+    // The software gralloc shim this binary was built with. A sysroot whose
+    // prebuilt copy is stale (its stamp is an older shim source) is rebuilt from
+    // the embedded source instead of running a shim that is missing entry
+    // points (A11YPACE: `Bitmap.wrapHardwareBuffer` then SIGSEGVs in
+    // `GraphicBufferMapper::getAllocationSize`).
+    let gralloc_shim = crate::gralloc_shim(root)?;
+    sb.ro_bind(&gralloc_shim, "/data/libacoshw.so");
     // The session dir is writable to the guest, but only this session's:
     // `/data/session/<id>` is the run root, `/data/session` itself is a plain
     // temp dir with nothing in it.

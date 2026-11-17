@@ -58,4 +58,13 @@
             android:layout_height="wrap_content"
             android:orientation="vertical" />
     </ScrollView>
+    <!-- A11YPACE: the target the service drags with a paced stroke. Its
+         onTouchListener logs the finger delta, so the app itself proves how far
+         the gesture travelled (the commanded distance is in the scenario). -->
+    <View
+        android:id="@+id/drag_target"
+        android:layout_width="220dp"
+        android:layout_height="100dp"
+        android:background="#FF66BB66" />
+
 </LinearLayout>

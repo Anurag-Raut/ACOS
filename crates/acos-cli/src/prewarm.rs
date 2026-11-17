@@ -500,8 +500,11 @@ fn guest_files(sysroot: &Path, data: &Path) -> Vec<PathBuf> {
     vec![
         data.join("app/launch-guest/classes.dex"),
         data.join("app/libacosart.so"),
-        // `/data/libacoshw.so` is a bind of `<sysroot>/shim/libacoshw.so`.
+        // `/data/libacoshw.so` is a bind of `<sysroot>/shim/libacoshw.so`, or of
+        // the shim `acos-art` rebuilt from its embedded source when the
+        // sysroot's copy is stale (A11YPACE).
         sysroot.join("shim/libacoshw.so"),
+        data.join("shim/libacoshw.so"),
         data.join("shim/libartshim.so"),
         data.join("lib/libacos_binder_driver.so"),
     ]

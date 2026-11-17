@@ -159,13 +159,21 @@ steps:
         - "gesture_target_pressed count=1"
         - "gesture_sent kind=swipe accepted=true"
         - "gesture_result kind=swipe completed=true"
-        # The stroke reaches the list as DOWN + MOVE... + UP (`ACOSA11Y
-        # dispatchGesture seq=… t=…` in the trace), so the ScrollView really
-        # moves. MODA11YNATIVE2: the whole stream is published in one turn, so
-        # the guest batches it and only the slop-crossing delta is applied
-        # (11 px of a 400 px stroke) — AOSP's injector paces the events over the
-        # stroke's duration. See results/handoff/A11YNATIVE2/README.md.
+        # A11YPACE: the stroke is paced over its declared timeline (the
+        # `GestureStep` durations), exactly as AOSP's `MotionEventInjector`
+        # posts each event at its `eventTime`. The guest therefore sees every
+        # MOVE in its own frame and the `ScrollView` scrolls the commanded
+        # distance (plus the fling its own physics adds) instead of the
+        # slop-crossing delta only (measured: `y=578`, then a fling to 662, for
+        # a 400 px stroke; before the pacing it was `y=11`).
         - "list_scrolled y=\\d+"
+        # A11YPACE: a slow 300 px drag with no fling. The app's own
+        # `onTouch` on the drag target reports the delta it saw; the stroke's
+        # end point is the commanded one, so this is the app's proof that the
+        # paced stream travelled the distance the gesture declared.
+        - "gesture_sent kind=drag accepted=true"
+        - "gesture_result kind=drag completed=true"
+        - "drag_end dx=-300 dy=0 steps=[1-9]\\d*"
   # MODA11YNATIVE step 2: `takeScreenshot`. The success payload really is the
   # composited frame: the framework's own `TakeScreenshotCallback.onSuccess`
   # runs with a `HardwareBuffer` that reports the display's size, RGBA_8888 and
@@ -189,22 +197,32 @@ steps:
         - "screenshot_result kind=display status=4"
         - "screenshot_result kind=secure status=6"
         - "screenshot_pixel unavailable=hardware_bitmap_needs_egl"
+  # A11YPACE: this tap's effect is *asynchronous* — the button's listener hands
+  # `performGlobalAction` to the probe's own worker thread (`a11y-back`), the
+  # host publishes the BACK key when that call arrives, and the guest's main
+  # looper processes it afterwards. The tap therefore makes no tree/pixel claim
+  # (`expect_change: false`, the transient-effect spelling) and does not wait
+  # for a settle it cannot produce (`settle: fast`); the log assertion below
+  # owns the effect and waits for it. Without the explicit `false`, the tap's
+  # own state-change rule would sample the tree before the effect and race it.
   - tap:
       selector: {id: a11y_back}
+      settle: fast
+      expect_change: false
   - assert_log:
       tag: AcosA11yProbe
       # The key is published before `performGlobalAction` returns, so the app's
       # `key_down` may be logged before or after `global_action back=true`: the
       # claim is that all of these happened, not their interleaving.
       #
-      # MERGEFIX: and the app reads it on a **later** looper iteration than the
-      # one that ran its click handler. `timeout_ms` is the wait-for-effect
-      # semantic (a missing line still fails at the deadline): without it this
-      # step judged the log at the instant the tap's settle bound its frame, so
-      # whether `key_down`/`key_up`/`back_pressed` were already in the buffer
-      # depended on where the step boundary fell — that is the whole difference
-      # between this scenario passing and failing across trees.
-      timeout_ms: 10000
+      # MERGE040A: `timeout_ms` is required, not a convenience. The button's
+      # listener hands `performGlobalAction` to the probe's own worker thread and
+      # the app reads the published key on a **later** looper iteration than the
+      # one that ran its click handler (MERGEFIX), so the app-side lines are
+      # logged after the tap step's settle (A11YPACE measured ~1 s of guest
+      # log-pipeline lag on this screen). The wait is the effect semantic; a
+      # missing line still fails at the deadline.
+      timeout_ms: 30000
       ordered: false
       patterns:
         - "back_requested"

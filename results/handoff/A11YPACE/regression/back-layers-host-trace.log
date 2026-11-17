@@ -1,0 +1,69 @@
+1794934764489 ACOSWMS enter code=2 (addToDisplayAsUser) avail=480
+1794934764489 ACOSWMS lock-wait code=2
+1794934764489 ACOSWMS locked code=2
+1794934764489 ACOSWMS exit code=2
+1794934764497 ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=60
+1794934764497 ACOSWMS lock-wait code=39
+1794934764498 ACOSWMS locked code=39
+1794934764498 ACOSWMS exit code=39
+1794934764499 ACOSWMS enter code=5 (relayout) avail=484
+1794934764499 ACOSWMS lock-wait code=5
+1794934764499 ACOSWMS locked code=5
+1794934764499 ACOSWMS exit code=5
+1794934764500 ACOSWMS enter code=9 (finishDrawing) avail=164
+1794934764500 ACOSWMS lock-wait code=9
+1794934764500 ACOSWMS locked code=9
+1794934764500 ACOSWMS exit code=9
+1794934764513 ACOSWMS enter code=5 (relayout) avail=52
+1794934764513 ACOSWMS lock-wait code=5
+1794934764513 ACOSWMS locked code=5
+1794934764514 ACOSWMS exit code=5
+1794934764715 ACOSINPUT collect-wait token=0x100000009 seqs=[3, 4] budget_ms=2500
+1794934764735 ACOSWMS enter code=2 (addToDisplayAsUser) avail=476
+1794934764735 ACOSWMS lock-wait code=2
+1794934764735 ACOSWMS locked code=2
+1794934764735 ACOSWMS exit code=2
+1794934764750 ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=60
+1794934764750 ACOSWMS lock-wait code=39
+1794934764750 ACOSWMS locked code=39
+1794934764750 ACOSWMS exit code=39
+1794934764750 ACOSWMS enter code=5 (relayout) avail=480
+1794934764750 ACOSWMS lock-wait code=5
+1794934764750 ACOSWMS locked code=5
+1794934764750 ACOSWMS exit code=5
+1794934764750 ACOSWMS enter code=9 (finishDrawing) avail=164
+1794934764750 ACOSWMS lock-wait code=9
+1794934764750 ACOSWMS locked code=9
+1794934764750 ACOSWMS exit code=9
+1794934764766 ACOSWMS enter code=5 (relayout) avail=52
+1794934764766 ACOSWMS lock-wait code=5
+1794934764766 ACOSWMS locked code=5
+1794934764766 ACOSWMS exit code=5
+1794934765703 ACOSINPUT collect-wait token=0x100000012 seqs=[3, 4] budget_ms=2500
+1794934765704 ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=28
+1794934765704 ACOSWMS lock-wait code=39
+1794934765704 ACOSWMS locked code=39
+1794934765704 ACOSWMS exit code=39
+1794934765704 ACOSWMS enter code=4 (remove) avail=24
+1794934765704 ACOSWMS lock-wait code=4
+1794934765704 ACOSWMS locked code=4
+1794934765704 ACOSWMS exit code=4
+1794934768320 ACOSINPUT collect-wait token=0x100000009 seqs=[7, 8] budget_ms=2500
+1794934768333 ACOSWMS enter code=32 (updateRequestedVisibleTypes) avail=28
+1794934768333 ACOSWMS lock-wait code=32
+1794934768333 ACOSWMS locked code=32
+1794934768333 ACOSWMS exit code=32
+1794934768497 ACOSINPUT collect-wait token=0x100000009 seqs=[9, 10] budget_ms=2500
+1794934768502 ACOSWMS enter code=32 (updateRequestedVisibleTypes) avail=28
+1794934768502 ACOSWMS lock-wait code=32
+1794934768502 ACOSWMS locked code=32
+1794934768502 ACOSWMS exit code=32
+1794934768865 ACOSINPUT collect-wait token=0x100000009 seqs=[11, 12] budget_ms=2500
+1794934768873 ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=28
+1794934768873 ACOSWMS lock-wait code=39
+1794934768873 ACOSWMS locked code=39
+1794934768873 ACOSWMS exit code=39
+1794934768873 ACOSWMS enter code=4 (remove) avail=24
+1794934768873 ACOSWMS lock-wait code=4
+1794934768873 ACOSWMS locked code=4
+1794934768873 ACOSWMS exit code=4

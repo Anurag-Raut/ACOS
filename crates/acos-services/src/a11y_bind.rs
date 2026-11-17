@@ -186,7 +186,7 @@ pub fn bind_intent(package: &str, class: &str) -> Parcelable {
 /// `applicationInvertedScale`).
 const DEFAULT_COMPAT: [u8; 16] = [0; 16];
 
-fn default_compat_info() -> Parcelable {
+pub(crate) fn default_compat_info() -> Parcelable {
     // `CompatibilityInfo` is four scalars; the default instance is all zero
     // except `applicationScale`/`applicationInvertedScale` = 1.0f.
     let _ = DEFAULT_COMPAT;
@@ -718,6 +718,9 @@ impl Interaction {
 pub struct A11yConnectionNode {
     state: Arc<Mutex<A11yState>>,
     deliveries: Vec<PendingDelivery>,
+    /// Gestures whose events are being published over their declared timeline
+    /// (AOSP's `MotionEventInjector` shape; see [`crate::misc::PacedGesture`]).
+    paced: Vec<crate::misc::PacedGesture>,
 }
 
 impl A11yConnectionNode {
@@ -727,6 +730,7 @@ impl A11yConnectionNode {
         Self {
             state,
             deliveries: Vec::new(),
+            paced: Vec::new(),
         }
     }
 
@@ -848,11 +852,20 @@ impl A11yConnectionNode {
     /// Serve one `dispatchGesture` request.
     ///
     /// Everything the app observes is the framework's: the sequence number and
-    /// the sampled `MotionEvent`s come from the guest, the events go out on the
-    /// session's real `InputChannel`, and the answer is
+    /// the sampled `MotionEvent`s come from the guest. The events are published
+    /// **paced over the stroke's own timeline** (the `GestureStep` durations,
+    /// i.e. `StrokeDescription`'s start/duration sampled by the framework):
+    /// AOSP's `MotionEventInjector` posts each one with
+    /// `delay = eventTime - now`, and this node does the same on the peer's
+    /// deadline-driven idle turn ([`Self::next_delivery_deadline`] /
+    /// [`Self::advance_timed`]). Publishing the whole stream in one turn makes
+    /// the guest batch it, which is why a 400 px swipe used to scroll 11 px.
+    ///
+    /// The reply is `true` now (the request was accepted); the answer is
     /// `IAccessibilityServiceClient.onPerformGestureResult(sequence, delivered)`
-    /// (`code 11`) **after** the events were published — a `true` here means
-    /// the dispatcher accepted every event, never that the app handled it.
+    /// (`code 11`) **after the last event was published** — a `true` there
+    /// means the dispatcher accepted every event, never that the app handled
+    /// it.
     fn dispatch_gesture(
         &mut self,
         sequence: i32,
@@ -863,6 +876,8 @@ impl A11yConnectionNode {
         let denied = |reason: String| crate::misc::A11yGestureRecord {
             sequence,
             events: steps.len(),
+            accepted: false,
+            published: 0,
             delivered: false,
             reason: Some(reason),
         };
@@ -904,7 +919,7 @@ impl A11yConnectionNode {
         // The stroke's clock starts now (the same `CLOCK_MONOTONIC` base a real
         // `InputDispatcher` stamps events with) and every event keeps the
         // guest's own offset from it, so a 200 ms swipe is a 200 ms event-time
-        // span even though the host publishes it in one turn.
+        // span *and* a 200 ms arrival span.
         let down_time_ns = crate::input_channel::monotonic_nanos();
         let channel_events = crate::a11y_native::channel_events(&events, down_time_ns, display_id);
         for event in &events {
@@ -914,29 +929,114 @@ impl A11yConnectionNode {
                 event.time_ms, event.action, point.0, point.1
             ));
         }
-        match state.publish_gesture(token, &channel_events) {
-            Ok(()) => {
-                self.deliveries
-                    .push(gesture_result_delivery(&bound, sequence, true));
-                crate::misc::A11yGestureRecord {
-                    sequence,
-                    // The record counts the `MotionEvent`s the app received
-                    // (one per `GestureStep` point), which is what "the stroke
-                    // reached the list" means; `steps.len()` is the slice's
-                    // sampling, not the touch stream.
-                    events: events.len(),
-                    delivered: true,
-                    reason: None,
+        // A closed channel is refused now, with the same structured answer a
+        // device gives when its injector is gone, instead of failing at the
+        // first paced event after the app was told `true`.
+        if !state.gesture_channel_is_live(token) {
+            let delivery = gesture_result_delivery(&bound, sequence, false);
+            self.deliveries.push(delivery);
+            return denied(format!(
+                "dispatchGesture({sequence}): input channel {:#x} is not live",
+                token.0
+            ));
+        }
+        let span_ms = channel_events
+            .last()
+            .map(|event| event.event_time.saturating_sub(down_time_ns) / 1_000_000)
+            .unwrap_or(0);
+        let record = crate::misc::A11yGestureRecord {
+            sequence,
+            // The record counts the `MotionEvent`s the app receives (one per
+            // `GestureStep` point), which is what "the stroke reached the
+            // list" means; `steps.len()` is the slice's sampling, not the
+            // touch stream.
+            events: channel_events.len(),
+            accepted: true,
+            published: 0,
+            delivered: false,
+            reason: None,
+        };
+        crate::trace::line(format!(
+            "ACOSA11Y dispatchGesture seq={sequence} paced events={} span_ms={span_ms} \
+             token={:#x}",
+            record.events,
+            token.0
+        ));
+        self.paced.push(crate::misc::PacedGesture {
+            sequence,
+            token,
+            bound,
+            events: channel_events,
+            next: 0,
+            started: std::time::Instant::now(),
+            base_ns: down_time_ns,
+        });
+        record
+    }
+
+    /// Publish every paced event that is due at `now`, and answer the service
+    /// (`onPerformGestureResult`) once the last event of a stroke has gone out.
+    ///
+    /// This is the `MotionEventInjector` half of [`Self::dispatch_gesture`],
+    /// called from the peer's idle turn when [`Self::next_delivery_deadline`]
+    /// says an event is due. A publish that fails (the window went away) ends
+    /// the stroke with `completed = false`, which is AOSP's own answer.
+    fn advance_paced(&mut self, now: std::time::Instant) {
+        if self.paced.is_empty() {
+            return;
+        }
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut finished: Vec<(usize, bool, Option<String>)> = Vec::new();
+        for (index, gesture) in self.paced.iter_mut().enumerate() {
+            while gesture.next < gesture.events.len() {
+                if gesture.due(gesture.next) > now {
+                    break;
+                }
+                let event = gesture.events[gesture.next].clone();
+                match state.publish_gesture(gesture.token, std::slice::from_ref(&event)) {
+                    Ok(()) => {
+                        gesture.next += 1;
+                        state.note_gesture_published(gesture.sequence, gesture.next);
+                        crate::trace::line(format!(
+                            "ACOSA11Y dispatchGesture seq={} paced event={}/{} action={} t=+{}ms",
+                            gesture.sequence,
+                            gesture.next,
+                            gesture.events.len(),
+                            event.action,
+                            event.event_time.saturating_sub(gesture.base_ns) / 1_000_000
+                        ));
+                    }
+                    Err(reason) => {
+                        finished.push((index, false, Some(reason)));
+                        break;
+                    }
                 }
             }
-            Err(reason) => {
-                self.deliveries
-                    .push(gesture_result_delivery(&bound, sequence, false));
-                denied(format!(
-                    "dispatchGesture({sequence}): the session input channel refused the \
-                     events: {reason}"
-                ))
+            if gesture.next >= gesture.events.len() {
+                finished.push((index, true, None));
             }
+        }
+        for (index, delivered, reason) in finished.into_iter().rev() {
+            let gesture = self.paced.remove(index);
+            if let Some(reason) = reason.clone() {
+                state.unsupported.push(format!(
+                    "dispatchGesture({}): {reason}",
+                    gesture.sequence
+                ));
+            }
+            state.finish_gesture(gesture.sequence, delivered, reason);
+            crate::trace::line(format!(
+                "ACOSA11Y dispatchGesture seq={} completed={delivered}",
+                gesture.sequence
+            ));
+            self.deliveries.push(gesture_result_delivery(
+                &gesture.bound,
+                gesture.sequence,
+                delivered,
+            ));
         }
     }
 
@@ -1425,6 +1525,23 @@ impl ServiceObject for A11yConnectionNode {
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
         std::mem::take(&mut self.deliveries)
     }
+
+    /// The instant the next paced gesture event is due.
+    ///
+    /// This is the `MotionEventInjector`'s handler clock, exposed the way the
+    /// peer's idle turn wants it: the loop sleeps exactly until the next
+    /// sample's arrival time (or until the guest speaks) instead of polling.
+    fn next_delivery_deadline(&self) -> Option<std::time::Instant> {
+        self.paced
+            .iter()
+            .filter_map(crate::misc::PacedGesture::next_due)
+            .min()
+    }
+
+    /// Publish the paced gesture events that are due at `now`.
+    fn advance_timed(&mut self, now: std::time::Instant) {
+        self.advance_paced(now);
+    }
 }
 
 /// Read the presence marker `Parcel.writeTypedObject` writes before a
@@ -1616,4 +1733,191 @@ pub fn accessibility_info_for(
         crate::value::Value::Parcelable(p) => p,
         _ => Parcelable::Null,
     }
+}
+
+/// The deliveries that **unbind** the currently bound accessibility service.
+///
+/// AOSP's `AccessibilityManagerService.removeServiceLocked` →
+/// `unbindService` → the app's `ActivityThread` runs `Service.onUnbind`, then
+/// `scheduleStopService` destroys it (`AccessibilityService.onUnbind`/
+/// `onDestroy`). ACOS's bind created the service with
+/// `scheduleCreateService` + `scheduleBindService` (`plan_bind`), so the
+/// inverse is `scheduleUnbindService` + `scheduleStopService` addressed at the
+/// same token — exactly the pair the generic `bindService` path already uses
+/// (`crate::service_bind`).
+///
+/// The service's overlay window token is released with it: AOSP removes an
+/// accessibility window token when the service that owns it goes away, and
+/// leaving the token behind would let a later, unrelated window inherit the
+/// overlay authority of a service that is no longer enabled.
+pub fn plan_unbind(state: &mut A11yState) -> Vec<PendingDelivery> {
+    let bound = state.bound_service.take();
+    let pending = state.pending_bind.take();
+    let (component, token) = match (&bound, &pending) {
+        (Some(bound), _) => (bound.component.clone(), bound.token),
+        (None, Some(pending)) => (pending.component.clone(), pending.token),
+        (None, None) => return Vec::new(),
+    };
+    if let Some(bound) = &bound {
+        state.release_overlay_token(bound.window_token);
+        if bound.binder != 0 {
+            state.refs.release(acos_parcel::BinderId(bound.binder));
+        }
+    }
+    state.service_config = None;
+    let (package, class) = component
+        .split_once('/')
+        .map(|(package, class)| {
+            (
+                package.to_string(),
+                if let Some(short) = class.strip_prefix('.') {
+                    format!("{package}.{short}")
+                } else {
+                    class.to_string()
+                },
+            )
+        })
+        .unwrap_or_else(|| (component.clone(), component.clone()));
+    let Some(app_thread) = state.app_thread else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    if let Ok(data) = request(
+        APP_THREAD,
+        SCHEDULE_UNBIND_SERVICE,
+        vec![
+            Value::Binder(Some(BinderId(token))),
+            Value::Parcelable(bind_intent(&package, &class)),
+        ],
+    ) {
+        out.push(PendingDelivery {
+            target: BinderId(app_thread),
+            interface: APP_THREAD.to_string(),
+            code: SCHEDULE_UNBIND_SERVICE,
+            method: "scheduleUnbindService".into(),
+            data,
+        });
+    }
+    if let Ok(data) = request(
+        APP_THREAD,
+        SCHEDULE_STOP_SERVICE,
+        vec![Value::Binder(Some(BinderId(token)))],
+    ) {
+        out.push(PendingDelivery {
+            target: BinderId(app_thread),
+            interface: APP_THREAD.to_string(),
+            code: SCHEDULE_STOP_SERVICE,
+            method: "scheduleStopService".into(),
+            data,
+        });
+    }
+    out
+}
+
+/// `IApplicationThread.scheduleUnbindService(IBinder, Intent)`.
+pub const SCHEDULE_UNBIND_SERVICE: u32 = 12;
+/// `IApplicationThread.scheduleStopService(IBinder)`.
+pub const SCHEDULE_STOP_SERVICE: u32 = 4;
+
+/// `AccessibilityManagerService.onUserStateChangedLocked` →
+/// `readConfigurationForUserStateLocked` → `setEnabledServices` →
+/// `bindServices`.
+///
+/// The system learns that the enabled-service set changed from its
+/// `SettingsObserver`, never from an app call. ACOS's equivalent observer is a
+/// **pull** at the session's delivery drain: the settings provider's `PUT_secure`
+/// and the module's own launches write the same table, so re-reading it there
+/// is exactly what the observer sees, without a callback channel between two
+/// service objects that share only the `SettingsState` lock.
+///
+/// Returns the deliveries the reconciliation produced (a bind for a newly
+/// enabled service, the unbind pair for a service that left the set).
+pub fn sync_enabled_services(state: &mut A11yState) -> Vec<PendingDelivery> {
+    let Some(settings) = state.settings.as_ref() else {
+        // No settings provider: nothing can change the enable set behind the
+        // module's back, and `enable_services` already keeps the state in step.
+        return Vec::new();
+    };
+    let (enabled, services, generation, written) = {
+        let settings = settings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // A settings table nobody has written has no enable set to read: the
+        // module's own record is then the authority (a host built without the
+        // module's launch config, a conformance kit). Once either key exists —
+        // every real session writes both when a service is switched on — the
+        // table is the authority, exactly as it is on a device.
+        let written = settings.secure.contains_key("accessibility_enabled")
+            || settings
+                .secure
+                .contains_key("enabled_accessibility_services");
+        (
+            settings
+                .secure
+                .get("accessibility_enabled")
+                .is_some_and(|value| value == "1"),
+            settings
+                .secure
+                .get("enabled_accessibility_services")
+                .map(|raw| {
+                    raw.split(':')
+                        .filter(|entry| !entry.is_empty())
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            settings.generation(crate::provider::Namespace::Secure),
+            written,
+        )
+    };
+    if !written {
+        return Vec::new();
+    }
+    // The observer runs when the `Settings.Secure` generation moves — whether
+    // the write came from a guest `ContentResolver` or from the module's own
+    // `enable_services` (which writes the same two keys and then keeps its own
+    // record in step). Reading the table on every drain is what makes the two
+    // paths converge on one reconciliation.
+    if state.observed_secure_generation == Some(generation)
+        && enabled == state.enabled
+        && services == state.enabled_services
+    {
+        return Vec::new();
+    }
+    state.observed_secure_generation = Some(generation);
+    state.enabled = enabled;
+    state.enabled_services = services;
+    // A service that is no longer enabled (or was replaced by another one) is
+    // unbound first: `setEnabledServices` unbinds the services that left the
+    // set before it binds the ones that joined it.
+    let keep = state
+        .enabled
+        .then(|| state.enabled_services.first().cloned())
+        .flatten();
+    let bound = state
+        .bound_service
+        .as_ref()
+        .map(|bound| bound.component.clone())
+        .or_else(|| state.pending_bind.as_ref().map(|bind| bind.component.clone()));
+    let mut deliveries = Vec::new();
+    if let Some(bound) = bound {
+        if keep.as_deref() != Some(bound.as_str()) {
+            deliveries.extend(plan_unbind(state));
+        }
+    }
+    if keep.is_some() {
+        match plan_bind(state) {
+            Ok(more) => deliveries.extend(more),
+            Err(error) => {
+                // A bind that cannot start yet (no `attachApplication`, no
+                // installed service) is recorded on the state, never a silent
+                // success: the module's report lists it.
+                let reason = format!("bind not started: {error}");
+                if !state.unsupported.contains(&reason) {
+                    state.unsupported.push(reason);
+                }
+            }
+        }
+    }
+    deliveries
 }

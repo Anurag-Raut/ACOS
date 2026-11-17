@@ -924,7 +924,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             timeout_ms: Some(1000),
             settle_timeout_ms: None,
             settle: None,
-            expect_change: false,
+            expect_change: Some(false),
             expect_handled: None,
         }),
         ..Step::default()

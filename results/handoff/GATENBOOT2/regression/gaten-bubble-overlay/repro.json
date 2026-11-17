@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+  "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+  "scenario_path": "scenarios/gaten-bubble-overlay.yaml",
+  "scenario_sha256": "eaaace38711d28b5f3ab5e205bfe185b63d6cc35f44c564f2a2196e97dbae258",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 400
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

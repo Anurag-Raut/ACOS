@@ -2752,13 +2752,187 @@ impl ServiceHost {
     /// delivery path for host-originated broadcasts, module broadcasts and a
     /// fired `PendingIntent`.
     fn take_ams_receiver_deliveries(&mut self) -> Vec<PendingDelivery> {
-        self.entries
+        let mut out = self
+            .entries
             .get_mut("android.app.IActivityManager")
             .and_then(|entry| entry.object.as_mut())
             .and_then(|object| object.as_any_mut())
             .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
             .map(crate::atms::AtmsService::take_receiver_deliveries)
+            .unwrap_or_default();
+        out.extend(self.take_manifest_receiver_deliveries());
+        out.extend(self.take_accessibility_deliveries());
+        out
+    }
+
+    /// `AccessibilityManagerService`'s settings observer, as a pull.
+    ///
+    /// AOSP learns that `Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES` /
+    /// `ACCESSIBILITY_ENABLED` changed from its `SettingsObserver` →
+    /// `onUserStateChangedLocked` → `setEnabledServices` → `bindServices`, and
+    /// binds or unbinds the affected service. ACOS's enable set is writable
+    /// from two places that share only the settings table (a guest
+    /// `ContentResolver` put and the module's own control op), so the same
+    /// reconciliation runs where the session drains its deliveries — after
+    /// every transaction and control op, exactly the point the settings write
+    /// becomes visible to the system.
+    fn take_accessibility_deliveries(&mut self) -> Vec<PendingDelivery> {
+        self.entries
+            .get_mut("android.view.accessibility.IAccessibilityManager")
+            .and_then(|entry| entry.object.as_mut())
+            .and_then(|object| object.as_any_mut())
+            .and_then(|any| any.downcast_mut::<crate::misc::A11yService>())
+            .map(crate::misc::A11yService::sync_from_settings)
             .unwrap_or_default()
+    }
+
+    /// `ActivityThread.handleReceiver` for every manifest `<receiver>` a
+    /// broadcast matched.
+    ///
+    /// Stock `BroadcastQueue` copies the broadcast intent, sets the receiver's
+    /// component on the copy, resolves the package's `ActivityInfo` and calls
+    /// `IApplicationThread.scheduleReceiver` on the **owning process**, which
+    /// instantiates the class and runs `onReceive` on its main thread. ACOS's
+    /// host has no Java, so the same request is one `PendingDelivery`; the only
+    /// case that cannot be served is a package with no running process (a
+    /// device would start it, and starting processes is the launcher's
+    /// decision — the ATMS reports that case instead of fabricating a receiver).
+    fn take_manifest_receiver_deliveries(&mut self) -> Vec<PendingDelivery> {
+        /// `ActivityManager.PROCESS_STATE_RECEIVER` (11): the state a
+        /// process is reported at while a broadcast receiver runs.
+        const PROCESS_STATE_RECEIVER: i32 = 11;
+        let matches = self
+            .entries
+            .get_mut("android.app.IActivityManager")
+            .and_then(|entry| entry.object.as_mut())
+            .and_then(|object| object.as_any_mut())
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(crate::atms::AtmsService::take_manifest_receiver_matches)
+            .unwrap_or_default();
+        if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
+            eprintln!(
+                "ACOSATMS manifest-matches drained={} ({:?})",
+                matches.len(),
+                matches
+                    .iter()
+                    .map(|m| format!("{}/{}", m.package, m.class))
+                    .collect::<Vec<_>>()
+            );
+        }
+        if matches.is_empty() {
+            return Vec::new();
+        }
+        let Some(method) = acos_aidl::lookup_by_name("android.app.IApplicationThread", "scheduleReceiver")
+        else {
+            eprintln!("ACOSATMS scheduleReceiver: no IApplicationThread.scheduleReceiver table entry");
+            return Vec::new();
+        };
+        if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
+            eprintln!("ACOSATMS scheduleReceiver: method code={}", method.code);
+        }
+        let mut out = Vec::new();
+        for receiver in matches {
+            let thread = self
+                .entries
+                .get_mut("android.app.IActivityManager")
+                .and_then(|entry| entry.object.as_mut())
+                .and_then(|object| object.as_any_mut())
+                .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+                .and_then(|service| service.app_thread_for_package(&receiver.package));
+            // A match with no process was already reported by the ATMS drain.
+            let Some(thread) = thread else {
+                eprintln!("ACOSATMS scheduleReceiver: no app thread for {}", receiver.package);
+                continue;
+            };
+            let Some(info) = self.manifest_activity_info(&receiver.package, &receiver.class) else {
+                eprintln!(
+                    "acos-services: manifest receiver {}/{} has no installed ActivityInfo;                      not delivered",
+                    receiver.package, receiver.class
+                );
+                continue;
+            };
+            // `BroadcastQueue` delivers a **copy** with the receiver's
+            // component set; `ActivityThread.handleReceiver` reads it to name
+            // the class it instantiates (`data.intent.getComponent()`).
+            let mut intent = receiver.intent;
+            intent.component = Some((receiver.package.clone(), receiver.class.clone()));
+            let args = [
+                crate::value::Value::Parcelable(intent.to_parcelable()),
+                crate::value::Value::Parcelable(info),
+                crate::value::Value::Parcelable(crate::a11y_bind::default_compat_info()),
+                crate::value::Value::Int(0),      // resultCode
+                crate::value::Value::Str(None),    // data
+                crate::value::Value::Parcelable(crate::value::Parcelable::Null), // extras
+                crate::value::Value::Bool(false), // sync (serialized ordered broadcast)
+                crate::value::Value::Bool(false), // assumeDelivered
+                crate::value::Value::Int(0),      // sendingUser (Process.SYSTEM_UID)
+                crate::value::Value::Int(PROCESS_STATE_RECEIVER),
+                crate::value::Value::Int(0),      // sendingUid
+                crate::value::Value::Str(
+                    (!receiver.sending_package.is_empty()).then(|| receiver.sending_package.clone()),
+                ),
+            ];
+            match crate::codec::build_request("android.app.IApplicationThread", &method, &args) {
+                Ok(data) => {
+                    if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
+                        eprintln!(
+                            "ACOSATMS scheduleReceiver {}/{} thread={thread:#x} bytes={}",
+                            receiver.package,
+                            receiver.class,
+                            data.data_size()
+                        );
+                    }
+                    out.push(PendingDelivery {
+                    target: acos_parcel::BinderId(thread),
+                    interface: "android.app.IApplicationThread".into(),
+                    code: method.code,
+                    method: method.name.clone(),
+                    data,
+                })
+                }
+                Err(error) => eprintln!(
+                    "acos-services: scheduleReceiver for {}/{} not encodable: {error}",
+                    receiver.package, receiver.class
+                ),
+            }
+        }
+        out
+    }
+
+    /// The `ActivityInfo` a manifest receiver is instantiated with, read from
+    /// the installed package's own record (the same `ApplicationInfo` the
+    /// process was bound with, so `ActivityThread.getPackageInfoNoCheck`
+    /// reuses the bound `LoadedApk`: class loader, data dir and all).
+    fn manifest_activity_info(
+        &mut self,
+        package: &str,
+        class: &str,
+    ) -> Option<crate::value::Parcelable> {
+        let object = self.ensure("android.content.pm.IPackageManager").ok()?;
+        let pms = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())?;
+        let installed = pms
+            .shared_state()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .packages
+            .iter()
+            .find(|installed| installed.app.package_name == package)
+            .cloned()?;
+        Some(
+            crate::pms::ActivityInfo {
+                name: class.to_string(),
+                package_name: package.to_string(),
+                launch_mode: 0,
+                flags: 0,
+                theme: 0,
+                exported: true,
+                parent_activity_name: String::new(),
+                meta_data: Vec::new(),
+            }
+            .to_parcelable(&installed.app),
+        )
     }
 
     /// Drain the deliveries a **dynamic** object produced from its own thread
@@ -2780,6 +2954,9 @@ impl ServiceHost {
             out.append(&mut object.drain_raw_deliveries());
         }
         out.extend(self.take_ams_receiver_deliveries());
+        // A control op that changed the accessibility enable set is drained by
+        // the peer's idle tick, not by a transaction.
+        out.extend(self.take_accessibility_deliveries());
         out
     }
 

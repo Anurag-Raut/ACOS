@@ -1835,8 +1835,11 @@
       "description": "`tap`.",
       "properties": {
         "expect_change": {
-          "description": "SE1: fail the step when the settled frame's pixels are unchanged.\n\nOpt-in and strict-only: `expect_change: true` with `settle: fast` is rejected at scenario-validation time, because a fast frame may be mid-animation and can never back a claim.",
-          "type": "boolean"
+          "description": "SE1: fail the step when the settled frame's pixels are unchanged; A11YPACE: `expect_change: false` says the tap's effect is transient (a hide/re-show, an asynchronous worker) and **no** change is claimed.\n\nThe tap's own `state_change` assertion (the UI tree + screenshot rule a tap runs even when the scenario says nothing) needs a tree that differs between the pre- and post-action frames. That is wrong for a control whose effect is transient: Gaten's bubble hides for its lookup and re-shows a moment later, so two probe samples can land on the same tree and a sampling race would fail the step. An explicit `false` turns the assertion into the \"input delivered, no change claimed\" form (the same `input_delivery` assertion a `handled: false` tap gets) and is recorded as `input.expect_change: false` in the step and verdict, so it can never read as a silent pass of a missing effect: only `true` or the default (\"auto\") still require the change.\n\n`true` is strict-only: with `settle: fast`/`content` the pixel claim has no evidence, so validation rejects it. `false` is not a claim and may combine with any settle rule.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "expect_handled": {
           "description": "REL3H2: the scenario's own claim about the app's handling of this input.\n\n`true` fails the step with `INPUT_NOT_HANDLED` when the app window acknowledged every event `finishInputEvent(handled) = false` (the gesture was delivered and nothing consumed it). `false` says \"this press is expected to be a no-op\" and silences the `INPUT_UNHANDLED` warning that REL3H2 attaches to every unhandled input. Unset: the step passes as measured and carries the warning.",

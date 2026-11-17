@@ -1407,7 +1407,14 @@ fn execute_step(
                 x: tap.x,
                 y: tap.y,
             };
-            input_step(backend, &action, caps, previous, last_frame_seq)
+            input_step(
+                backend,
+                &action,
+                caps,
+                previous,
+                last_frame_seq,
+                tap.expect_change,
+            )
         }
         StepRef::Swipe(swipe) => {
             capabilities_used.insert(Capability::Input.as_str().to_string());
@@ -1436,7 +1443,7 @@ fn execute_step(
                 duration_ms: swipe_duration(swipe.duration_ms, swipe.fling),
                 fling: swipe.fling,
             };
-            input_step(backend, &action, caps, previous, last_frame_seq)
+            input_step(backend, &action, caps, previous, last_frame_seq, None)
         }
         StepRef::ScrollUntil(scroll) => {
             capabilities_used.insert(Capability::Input.as_str().to_string());
@@ -1491,7 +1498,7 @@ fn execute_step(
                 text: ty.text.clone(),
                 clear: ty.clear,
             };
-            input_step(backend, &action, caps, previous, last_frame_seq)
+            input_step(backend, &action, caps, previous, last_frame_seq, None)
         }
         StepRef::Key(key) => {
             capabilities_used.insert(Capability::Input.as_str().to_string());
@@ -1507,6 +1514,7 @@ fn execute_step(
                 caps,
                 previous,
                 last_frame_seq,
+                None,
             )
         }
         StepRef::Back(_) => {
@@ -1517,7 +1525,14 @@ fn execute_step(
             // A scenario `back` has no settle field: it is always strict, and a
             // previous `settle: fast` input must not leak into it.
             backend.set_input_settle(false);
-            input_step(backend, &InputAction::Back, caps, previous, last_frame_seq)
+            input_step(
+                backend,
+                &InputAction::Back,
+                caps,
+                previous,
+                last_frame_seq,
+                None,
+            )
         }
         StepRef::Rotate(rotate) => {
             capabilities_used.insert(Capability::Input.as_str().to_string());
@@ -1531,6 +1546,7 @@ fn execute_step(
                 caps,
                 previous,
                 last_frame_seq,
+                None,
             )
         }
         StepRef::AssertText(assertion) => {
@@ -1987,6 +2003,9 @@ fn input_step(
     caps: Capabilities,
     previous: Option<&SessionObservation>,
     last_frame_seq: Option<u64>,
+    // A11YPACE: a tap's explicit `expect_change` claim (`Some(false)` = "the
+    // effect is transient, no change claimed"). `None` for every other action.
+    change_claim: Option<bool>,
 ) -> StepExec {
     match backend.input(action) {
         Ok(observation) => {
@@ -2001,7 +2020,7 @@ fn input_step(
                 }
             }
             let mut exec = if matches!(action, InputAction::Tap { .. }) {
-                let evaluated = eval_tap_change(previous, &observation, caps);
+                let evaluated = eval_tap_change(previous, &observation, caps, change_claim);
                 if evaluated.result.passed {
                     StepExec::passed_assertion(evaluated)
                 } else {
@@ -2695,7 +2714,11 @@ fn fast_input_step(step: &Step) -> bool {
 /// frame of its own, so it cannot express the rule.
 fn expect_change_requested(step: &Step) -> bool {
     match step.as_step() {
-        Some(StepRef::Tap(tap)) => tap.expect_change,
+        // A11YPACE: only an explicit `expect_change: true` is a claim. A tap's
+        // unset value is the "auto" tree rule (which `eval_tap_change` runs),
+        // and `false` means the effect is transient: delivered, no change
+        // claimed.
+        Some(StepRef::Tap(tap)) => tap.expect_change == Some(true),
         Some(StepRef::Swipe(swipe)) => swipe.expect_change,
         Some(StepRef::Type(ty)) => ty.expect_change,
         Some(StepRef::Key(key)) => key.expect_change,
@@ -2896,13 +2919,10 @@ fn step_input(
     let expect_change = match step.as_step() {
         // A tap's state-change rule runs on every step, so an unflagged tap says
         // `"auto"` - never a silent `false` that hides the rule.
-        Some(StepRef::Tap(tap)) => {
-            if tap.expect_change {
-                serde_json::json!(true)
-            } else {
-                serde_json::json!("auto")
-            }
-        }
+        Some(StepRef::Tap(tap)) => match tap.expect_change {
+            Some(claim) => serde_json::json!(claim),
+            None => serde_json::json!("auto"),
+        },
         Some(StepRef::Swipe(swipe)) => serde_json::json!(swipe.expect_change),
         Some(StepRef::ScrollUntil(_)) => serde_json::json!(false),
         Some(StepRef::Type(ty)) => serde_json::json!(ty.expect_change),
@@ -3537,7 +3557,74 @@ fn eval_tap_change(
     previous: Option<&SessionObservation>,
     current: &SessionObservation,
     caps: Capabilities,
+    change_claim: Option<bool>,
 ) -> Evaluated {
+    // A11YPACE: an explicit `expect_change: false` says this tap's effect is
+    // transient (a hide/re-show, a worker thread), so the tree at the settle
+    // boundary is not the tap's state and a comparison would be a sampling
+    // race. The step still has to prove the input *was delivered* - that is
+    // the claim it makes instead, and the reply records `change_claimed: false`
+    // so nobody can read it as a silent pass of a missing effect.
+    if change_claim == Some(false) {
+        let Some(delivery) = &current.input else {
+            return Evaluated::fail(
+                "input_delivery",
+                Vec::new(),
+                AssertionDiff {
+                    expected: serde_json::json!({"delivered": true, "change_claimed": false}),
+                    actual: serde_json::json!({"delivered": null}),
+                    path: None,
+                    detail: Some(
+                        "`expect_change: false` still claims the input was delivered, and this \
+                         backend reports no delivery record"
+                            .to_string(),
+                    ),
+                },
+                BackendError::Failed {
+                    code: ErrorCode::UnsupportedAssertion,
+                    detail: "`expect_change: false` needs a host-observed input delivery; this \
+                             backend/settle rule reports none"
+                        .to_string(),
+                },
+            );
+        };
+        let acks = delivery.acks.len();
+        if !delivery.delivered {
+            return Evaluated::fail(
+                "input_delivery",
+                Vec::new(),
+                AssertionDiff {
+                    expected: serde_json::json!({"delivered": true}),
+                    actual: serde_json::json!({"delivered": false}),
+                    path: None,
+                    detail: Some("the host did not observe input delivery".to_string()),
+                },
+                BackendError::Failed {
+                    code: ErrorCode::NoFreshFrame,
+                    detail: "the host did not observe input delivery".to_string(),
+                },
+            );
+        }
+        let handled = delivery.handled;
+        return Evaluated::pass(
+            "input_delivery",
+            Vec::new(),
+            Some(format!(
+                "input delivered ({acks} guest ack(s), handled: {handled:?}); no change claimed \
+                 (`expect_change: false`: the effect is transient, so the post-settle tree is not \
+                 this tap's state)"
+            )),
+            serde_json::json!({"delivered": true, "change_claimed": false}),
+            serde_json::json!({
+                "delivered": delivery.delivered,
+                "handled": handled,
+                "acks": acks,
+                "visual_change": delivery.visual_change,
+                "change_claimed": false,
+                "expect_change": false,
+            }),
+        );
+    }
     // A delivered input that produced no visible change is not stale: the host
     // observed the injection, the guest accepted it, and the action's frame is
     // fresh. It is also not a state change, so nothing visual is claimed.
@@ -4585,7 +4672,7 @@ mod region_tests {
 
         // The finding must not turn "nothing consumed it" into a failure, and it
         // must not claim a state change either.
-        let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default());
+        let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default(), None);
         assert!(evaluated.result.passed, "{:?}", evaluated.result);
         assert_eq!(evaluated.result.kind, "input_delivery");
         let message = evaluated.result.message.unwrap_or_default();
@@ -4946,12 +5033,96 @@ mod region_tests {
             target: None,
             settle: None,
         });
-        let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default());
+        let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default(), None);
         assert!(evaluated.result.passed);
         assert_eq!(evaluated.result.kind, "input_delivery");
         let message = evaluated.result.message.unwrap_or_default();
         assert!(message.contains("host-observed input delivery"));
         assert!(message.contains("no visual change"));
+    }
+
+    /// A11YPACE: `expect_change: false` is the "my effect is transient" claim.
+    ///
+    /// The very case the implicit tree rule fails on (the same tree before and
+    /// after, an async effect) passes when the scenario says no change is
+    /// claimed, and the assertion *still* proves the input was delivered. It is
+    /// never a silent pass: the diff records `change_claimed: false` and the
+    /// step's `input.expect_change` reads `false` (not `"auto"`).
+    #[test]
+    fn a11ypace_expect_change_false_passes_on_an_unchanged_tree_with_delivery_evidence() {
+        let previous = observation(&[[0, 0, 0, 255]], 1, 1);
+        let mut current = observation(&[[0, 0, 0, 255]], 1, 1);
+        current.input = Some(InputDelivery {
+            delivered: true,
+            visual_change: true,
+            handled: Some(true),
+            published: 2,
+            acks: Vec::new(),
+            window_removed: false,
+            target: None,
+            settle: None,
+        });
+
+        // The default ("auto") rule fails: the tree is unchanged. The
+        // capabilities must carry the two evidence channels, or the rule has
+        // nothing to compare and passes by construction.
+        let caps = Capabilities {
+            ui_tree: true,
+            screenshot: true,
+            ..Capabilities::default()
+        };
+        let implicit = eval_tap_change(Some(&previous), &current, caps, None);
+        assert!(!implicit.result.passed, "an unchanged tap fails the auto rule");
+        assert_eq!(implicit.result.kind, "state_change");
+
+        // The explicit `false` is a delivery claim, not a change claim.
+        let explicit = eval_tap_change(Some(&previous), &current, caps, Some(false));
+        assert!(explicit.result.passed);
+        assert_eq!(explicit.result.kind, "input_delivery");
+        assert_eq!(
+            explicit.result.actual.as_ref().and_then(|a| a.get("change_claimed")),
+            Some(&serde_json::json!(false))
+        );
+        assert_eq!(
+            explicit.result.actual.as_ref().and_then(|a| a.get("expect_change")),
+            Some(&serde_json::json!(false))
+        );
+        let message = explicit.result.message.unwrap_or_default();
+        assert!(message.contains("no change claimed"));
+        assert!(message.contains("expect_change: false"));
+
+        // A step that claims no change still claims the input *was* delivered.
+        let mut undelivered = current.clone();
+        if let Some(delivery) = &mut undelivered.input {
+            delivery.delivered = false;
+        }
+        let failed = eval_tap_change(Some(&previous), &undelivered, caps, Some(false));
+        assert!(!failed.result.passed);
+        assert_eq!(failed.result.kind, "input_delivery");
+    }
+
+    /// A11YPACE: the step JSON spells the claim out — `false` for the explicit
+    /// no-change tap, `"auto"` when the scenario did not say anything (the
+    /// implicit tree rule), and `true` for a pixel claim.
+    #[test]
+    fn a11ypace_tap_step_reports_the_explicit_no_change_claim() {
+        const HEAD: &str = "version: 1\nname: a11ypace\napp: dev.acos.fixtures.taptargets\n\
+             isolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, \
+             density_dpi: 420}\n";
+        for (yaml, want) in [
+            ("expect_change: false", serde_json::json!(false)),
+            ("", serde_json::json!("auto")),
+            ("expect_change: true", serde_json::json!(true)),
+        ] {
+            let scenario = Scenario::from_yaml_str(&format!(
+                "{HEAD}steps:\n  - tap:\n      selector: {{id: title}}\n      {yaml}\n"
+            ))
+            .expect("a one-tap scenario");
+            let step = scenario.steps.first().expect("the tap step");
+            let delivery = unhandled_delivery(Some(true));
+            let input = step_input(step, Some(&delivery), None).expect("input evidence");
+            assert_eq!(input.expect_change, want, "spelling for {yaml:?}");
+        }
     }
 }
 

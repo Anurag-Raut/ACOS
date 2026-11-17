@@ -335,13 +335,11 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     sb.ro_bind(&shim, "/data/app/libacosart.so");
     // H17: this run's APK shadows the (read-only) shared `/data/app` entry.
     sb.ro_bind(&apk, &format!("/data/app/{apk_name}"));
-    // Software gralloc interposer (built into the sysroot by
-    // `tools/art-sysroot.sh --shim`; G1). Loaded last, so the substrate's
-    // libraries resolve against it.
-    sb.ro_bind(
-        &root.sysroot.join("shim/libacoshw.so"),
-        "/data/libacoshw.so",
-    );
+    // Software gralloc interposer (the sysroot's prebuilt copy when its stamp
+    // matches this binary's embedded source, else rebuilt into the build cache;
+    // G1). Loaded last, so the substrate's libraries resolve against it.
+    let gralloc_shim = crate::gralloc_shim(root)?;
+    sb.ro_bind(&gralloc_shim, "/data/libacoshw.so");
     sb.rw_bind(run.dir("socket"), "/dev/socket");
     // SPIKE-NET (gated): `render-app` binds its own run socket dir at
     // `/dev/socket`, so a guest that resolves a name needs the responder here.
