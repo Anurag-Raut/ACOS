@@ -1161,6 +1161,11 @@ pub struct AmsState {
     /// request names only what was resolved, never a pid, a tag or a command
     /// line (those belong to the launcher).
     pub spawn_requests: Vec<ProcessSpawnRequest>,
+    /// MPROC8: the guest-initiated cross-process bind table (AOSP
+    /// `ActiveServices`). Empty and inert until the session has real app
+    /// processes, which the launcher states
+    /// ([`crate::host::ServiceHost::set_host_side_services`]).
+    pub host_services: crate::service_bind::HostServices,
 }
 
 /// Ceiling on queued spawn requests (a bounded queue, never unbounded growth).

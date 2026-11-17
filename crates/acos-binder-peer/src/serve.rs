@@ -471,6 +471,11 @@ fn close_conn(peer: &mut Peer, conns: &mut Vec<Conn>, index: usize, outcome: &mu
     // dead now: every holder must get its `linkToDeath` callback (MPROC3 step
     // 3c). The peer queued those frames while dropping the process's state.
     flush_deaths(peer, conns, outcome);
+    // MPROC8: the teardown also queued the `onServiceDisconnected` deliveries
+    // for callers bound to the dead process's services; write them now instead
+    // of waiting for the idle turn (a caller may assert the disconnect at once).
+    let queued = peer.tick();
+    write_tagged(peer, conns, queued, outcome, false);
 }
 
 /// Write the death notifications (and the structured refusals for transactions

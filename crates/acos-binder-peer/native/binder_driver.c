@@ -459,6 +459,20 @@ static pthread_mutex_t g_slab_mu = PTHREAD_MUTEX_INITIALIZER;
 // that is parked waiting for an incoming transaction still wakes up for it: the
 // kernel's `binder_wakeup_proc_ilocked` does the same for BINDER_WORK_NODE.
 static volatile int g_node_pending;
+// One thread at a time drains the incoming queue.
+//
+// The kernel gives a node **one** active async transaction at a time
+// (`binder_node.has_async_transaction`): its queued work is executed in FIFO
+// order by whichever thread is reading, and no second thread interleaves. A
+// userspace driver that let two reader threads pop one transaction each would
+// lose that order once the receiver posts both to its own looper thread from
+// two different binder threads — measured with MPROC8: `scheduleCreateService`
+// and `scheduleBindService` (sent create-first) reached `ActivityThread` as
+// BIND_SERVICE then CREATE_SERVICE, so `Service.onBind` ran for a service that
+// did not exist yet. Holding this flag while draining restores the kernel's
+// single-consumer rule; a thread that finds the drain in progress returns and
+// lets libbinder retry.
+static volatile int g_in_delivery;
 
 struct tstate {
     int is_looper;
@@ -1843,7 +1857,23 @@ static int e3g_write_read(struct binder_write_read* bwr) {
     }
     int have = g.in_head != NULL;
     int delivered = -1;
-    if (have) delivered = deliver_incoming();
+    if (have) {
+        if (g_in_delivery) {
+            // Another thread owns the queue and is draining it in order.
+            pthread_mutex_unlock(&g.mu);
+            bwr->read_consumed = 0;
+            return 0;
+        }
+        g_in_delivery = 1;
+        // Drain everything queued now, in order, into this thread's output: the
+        // receiver sees one FIFO stream, never two interleaved ones.
+        while (g.in_head != NULL) {
+            if (deliver_incoming() < 0) break;
+            delivered = 0;
+        }
+        g_in_delivery = 0;
+        pthread_cond_broadcast(&g.cv_txn);
+    }
     pthread_mutex_unlock(&g.mu);
     if (delivered == 0) flush_pend(bwr);
     else bwr->read_consumed = 0;

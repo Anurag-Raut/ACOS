@@ -508,6 +508,14 @@ pub struct ServiceHost {
     /// (`crate::permissions`). Modules that own the name share it through this
     /// slot, exactly like the notification state.
     permission_store: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    /// MPROC8: this session runs **real app processes**, so the host performs
+    /// AOSP's `ActiveServices` work for a guest `bindService` (create/bind the
+    /// service in its own process, answer `IServiceConnection.connected` on
+    /// `publishService`, unbind/stop, and report a dead process). The in-process
+    /// runtime keeps its own bind path (`AmsState::pending_binds`), so the flag
+    /// is off there: one implementation per seam, chosen by what the session
+    /// actually is.
+    host_side_services: bool,
     /// The one way to *fire* a `PendingIntent` sender (MODNOTIF4). A module
     /// owns the notification records but the sender table and the activity
     /// start live in the AMS, so the registry publishes the delivery here
@@ -561,6 +569,7 @@ impl ServiceHost {
 
             declared: Vec::new(),
             notifications: Vec::new(),
+            host_side_services: false,
 
             binder_owner_drops: 0,
             deliveries: Vec::new(),
@@ -1175,6 +1184,299 @@ impl ServiceHost {
         state: std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>,
     ) {
         self.notification = Some(state);
+    }
+
+    /// MPROC8: this session runs real app processes, so the host performs AOSP's
+    /// `ActiveServices` work for a guest `bindService` (create/bind the service
+    /// in its own process, answer the caller's `IServiceConnection` on
+    /// `publishService`, unbind/stop on `unbindService`, disconnect on process
+    /// death).
+    ///
+    /// Called by the ART launcher, which is the only component that knows the
+    /// session has guest processes; the in-process runtime keeps its own bind
+    /// path and leaves this off ([`crate::ams::AmsState::pending_binds`]).
+    pub fn set_host_side_services(&mut self, enabled: bool) {
+        if self.host_side_services == enabled {
+            return;
+        }
+        self.host_side_services = enabled;
+        if let Some(state) = self.ams_state() {
+            state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .ams
+                .host_services
+                .enabled = enabled;
+        }
+    }
+
+    /// Whether this session performs host-side service binds (MPROC8).
+    #[must_use]
+    pub fn host_side_services(&self) -> bool {
+        self.host_side_services
+    }
+
+    /// The activity manager's state, when the session has one (constructed on
+    /// first use).
+    fn ams_state(&mut self) -> Option<std::sync::Arc<Mutex<crate::atms::AtmsState>>> {
+        let object = self.ensure("android.app.IActivityTaskManager").ok()?;
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(|service| service.shared_state())
+    }
+
+    /// The `IActivityManager` calls whose answer needs the cross-service
+    /// `ActiveServices` table (MPROC8).
+    ///
+    /// AOSP's `ActivityManagerService` does this work itself; ACOS has no system
+    /// process, so the host dispatcher is where the service table lives. Each
+    /// arm only *records* and *queues*: the reply the guest sees is the activity
+    /// manager's own (a `bindService` boolean), and the app-side work is a
+    /// delivery to the process that must perform it.
+    fn host_service_hook(&mut self, method: &str, args: &[crate::value::Value]) {
+        match method {
+            "bindService" | "bindServiceInstance" => {
+                // `bindService(caller, token, Intent, resolvedType,
+                // IServiceConnection, flags, instanceName, callingPackage,
+                // userId)`.
+                let Some(intent) = args
+                    .get(2)
+                    .and_then(crate::value::Value::as_parcelable)
+                    .map(crate::ams::IntentFacts::from_parcelable)
+                else {
+                    return;
+                };
+                let connection = args
+                    .get(4)
+                    .and_then(crate::value::Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                // A host-side bind only performs work for a **resolved**
+                // component: an implicit service intent is resolved by the
+                // decoded dispatch (`AmsState::bind_service`), which is where
+                // the rule lives.
+                let Some((package, class)) = intent.component.clone() else {
+                    return;
+                };
+                let Some((service_info, app_info)) = self.service_record(&package, &class) else {
+                    return;
+                };
+                let token = self.node_registrar().register(
+                    "android.app.ServiceToken",
+                    Box::new(crate::service_bind::ServiceToken),
+                );
+                let Some(state) = self.ams_state() else {
+                    return;
+                };
+                // The target process, when it is already attached: the same
+                // `ProcessRecord` the activity launch path uses. `None` means
+                // the launcher must spawn it first, exactly like a launch.
+                let target = {
+                    let state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    if std::env::var_os("ACOS_SERVICE_BIND_TRACE").is_some() {
+                        eprintln!(
+                            "acos-services: bind {package}/{class}: processes={:?}",
+                            state
+                                .processes
+                                .iter()
+                                .map(|p| (p.tag, p.package_name.clone(), p.app_thread, p.attached))
+                                .collect::<Vec<_>>()
+                        );
+                    }
+                    state
+                        .processes
+                        .iter()
+                        .find(|p| p.package_name == package && p.attached)
+                        .and_then(|p| p.app_thread.map(|thread| (p.tag, thread)))
+                };
+                let resolved = crate::ams::DeclaredComponent {
+                    package: package.clone(),
+                    class: class.clone(),
+                    exported: service_info.exported,
+                    launch_mode: 0,
+                    filters: Vec::new(),
+                };
+                let bound = {
+                    let mut state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let result = state.ams.host_services.bind(
+                        &resolved,
+                        token,
+                        connection,
+                        &intent,
+                        &service_info,
+                        &app_info,
+                        target,
+                    );
+                    if target.is_none() && result.is_ok() {
+                        state.ams.request_process(&package, &class, "bindService");
+                    }
+                    result
+                };
+                match bound {
+                    Ok(deliveries) => {
+                        // The caller's `IServiceConnection` is a binder the host
+                        // now stores: one strong reference (BINDERREF2), which is
+                        // what keeps the caller's node rooted until the unbind.
+                        if connection != 0 {
+                            self.retain_binder(BinderId(connection));
+                        }
+                        self.deliveries.extend(deliveries);
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "acos-services: bindService({package}/{class}) could not be \
+                             recorded: {error}"
+                        );
+                    }
+                }
+            }
+            "unbindService" => {
+                let connection = args
+                    .first()
+                    .and_then(crate::value::Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                if connection == 0 {
+                    return;
+                }
+                let Some(state) = self.ams_state() else {
+                    return;
+                };
+                let (deliveries, gone) = {
+                    let mut state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    state.ams.host_services.unbind(connection)
+                };
+                if !gone.is_empty() {
+                    // The host no longer stores the caller's connection: drop
+                    // the reference it held (the driver gets the `F_REF`
+                    // release, so the caller's node may be freed).
+                    self.release_binder(BinderId(connection));
+                }
+                self.deliveries.extend(deliveries);
+            }
+            "attachApplication" => {
+                let thread = args
+                    .first()
+                    .and_then(crate::value::Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                let Some(state) = self.ams_state() else {
+                    return;
+                };
+                let record = {
+                    let state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    state
+                        .processes
+                        .iter()
+                        .find(|p| p.app_thread == Some(thread) && p.attached)
+                        .map(|p| (p.tag, p.package_name.clone()))
+                };
+                let Some((tag, package)) = record else {
+                    return;
+                };
+                let waiting = {
+                    let state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    state.ams.host_services.waiting_for_process(&package)
+                };
+                for (package, class) in waiting {
+                    let Some((info, app)) = self.service_record(&package, &class) else {
+                        continue;
+                    };
+                    let assigned = {
+                        let mut state = state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        state
+                            .ams
+                            .host_services
+                            .assign_process(tag, thread, &package, &class, &info, &app)
+                    };
+                    match assigned {
+                        Ok(deliveries) => self.deliveries.extend(deliveries),
+                        Err(error) => eprintln!(
+                            "acos-services: cannot bring up {package}/{class} for process {tag}: \
+                             {error}"
+                        ),
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// MPROC8: process `tag` died — every caller bound to one of its services
+    /// hears `connected(name, null, true)` (which `LoadedApk.ServiceDispatcher`
+    /// turns into `onServiceDisconnected`), and the host drops the references it
+    /// held on those callers' `IServiceConnection`s.
+    ///
+    /// Called by the peer when a driver connection closes, beside the activity
+    /// manager's own `ProcessRecord` teardown, so a dead process can never leave
+    /// a caller waiting for a callback that will not come.
+    pub fn service_process_died(&mut self, tag: u32) {
+        if !self.host_side_services {
+            return;
+        }
+        let Some(state) = self.ams_state() else {
+            return;
+        };
+        let (deliveries, released) = {
+            let mut state = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let deliveries = state.ams.host_services.process_died(tag);
+            (deliveries, Vec::<u64>::new())
+        };
+        let _ = released;
+        match deliveries {
+            Ok(deliveries) => {
+                for delivery in &deliveries {
+                    eprintln!(
+                        "acos-services: process {tag} died: {} to {:#x}",
+                        delivery.method, delivery.target.0
+                    );
+                }
+                self.deliveries.extend(deliveries);
+            }
+            Err(error) => {
+                eprintln!("acos-services: process {tag} died: service disconnect failed: {error}");
+            }
+        }
+    }
+
+    /// The package manager's `ServiceInfo`/`AppInfo` for `package`'s `class`
+    /// (MPROC8: the payload of `scheduleCreateService`).
+    fn service_record(
+        &mut self,
+        package: &str,
+        class: &str,
+    ) -> Option<(crate::pms::ServiceInfo, crate::pms::AppInfo)> {
+        let object = self.ensure("android.content.pm.IPackageManager").ok()?;
+        let state = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())
+            .map(|service| service.shared_state())?;
+        let state = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.packages.iter().find_map(|installed| {
+            installed
+                .services
+                .iter()
+                .find(|s| s.package_name == package && s.name == class)
+                .cloned()
+                .map(|service| (service, installed.app.clone()))
+        })
     }
 
     /// Install the accessibility state the dispatcher hooks into (called by
@@ -1928,31 +2230,82 @@ impl ServiceHost {
         // Advance past the interface token now that dispatch is chosen.
         data.enforce_interface(&descriptor)?;
 
-        // MODA11Y2: `publishService` is the reply to a **system-initiated**
-        // bind. The answer is the accessibility module's (it owns the bind
-        // token and the service's connection), not the activity service's, so
-        // it is answered here before the decoded dispatch. Every other
-        // `IActivityManager` call keeps going to `AtmsService`.
-        if descriptor == "android.app.IActivityManager"
-            && method.name == "publishService"
-            && self.a11y.is_some()
-        {
+        // `publishService` is the reply to a **system-initiated** or a
+        // guest-initiated bind, and both are answered here before the decoded
+        // dispatch because the state they need is cross-service:
+        //
+        // * the accessibility module owns its own bind token (MODA11Y2): the
+        //   app reports the binder `Service.onBind` returned, and the module
+        //   answers with `IAccessibilityServiceClient.init`;
+        // * MPROC8: a bind a guest started (`bindService` for a service in
+        //   another app's package) is recorded by the host's `ActiveServices`
+        //   table, which answers every waiting `IServiceConnection`.
+        //
+        // The token decides which one it is (a token is opaque and unique), so
+        // there is exactly one owner per bind and no guessing.
+        if descriptor == "android.app.IActivityManager" && method.name == "publishService" {
             let args = codec::read_args(data, &method.args, &descriptor, &method.name)?;
-            let connection = self.accessibility_connection_node();
-            let window_token = self.accessibility_window_token();
-            let a11y = self
+            let token = args
+                .first()
+                .and_then(crate::value::Value::as_binder)
+                .map(|b| b.0)
+                .unwrap_or(0);
+            // The accessibility module owns its token whenever it has a bind in
+            // flight: a token that is not that one is *its* refusal ("does not
+            // match the pending bind"), so the check runs before the general
+            // table can claim the call.
+            let a11y_pending = self
                 .a11y
                 .as_ref()
                 .and_then(std::sync::Weak::upgrade)
-                .expect("checked above");
-            let mut state = a11y
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let delivery =
-                crate::a11y_bind::on_publish_service(&mut state, connection, window_token, &args)?;
-            drop(state);
-            if let Some(delivery) = delivery {
-                self.deliveries.push(delivery);
+                .and_then(|state| {
+                    state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .pending_bind
+                        .as_ref()
+                        .map(|pending| pending.token)
+                });
+            let mut reply_note = "<guest bind>";
+            if a11y_pending.is_some() {
+                let connection = self.accessibility_connection_node();
+                let window_token = self.accessibility_window_token();
+                let a11y = self
+                    .a11y
+                    .as_ref()
+                    .and_then(std::sync::Weak::upgrade)
+                    .expect("checked above");
+                let mut state = a11y
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let delivery = crate::a11y_bind::on_publish_service(
+                    &mut state,
+                    connection,
+                    window_token,
+                    &args,
+                )?;
+                drop(state);
+                if let Some(delivery) = delivery {
+                    self.deliveries.push(delivery);
+                }
+                reply_note = "<accessibility bind>";
+            } else if self.host_side_services {
+                let binder = args
+                    .get(2)
+                    .and_then(crate::value::Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                if let Some(state) = self.ams_state() {
+                    let published = {
+                        let mut state = state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        state.ams.host_services.publish_service(token, binder)?
+                    };
+                    if let Some(deliveries) = published {
+                        self.deliveries.extend(deliveries);
+                    }
+                }
             }
             if !oneway {
                 reply.reset();
@@ -1963,7 +2316,7 @@ impl ServiceHost {
                 interface: descriptor,
                 method: method.name.clone(),
                 args: "<publishService>".into(),
-                reply: "<accessibility bind>".into(),
+                reply: reply_note.into(),
             });
         }
 
@@ -2055,6 +2408,14 @@ impl ServiceHost {
                     _ => {}
                 }
             }
+        }
+        // MPROC8: AOSP's `ActiveServices` for a guest-initiated bind. Every step
+        // runs here, on the thread that owns the service table, and produces the
+        // `system -> app` deliveries the peer routes (create/bind to the
+        // service's own process, `connected` to the caller's
+        // `IServiceConnection`).
+        if descriptor == "android.app.IActivityManager" && self.host_side_services {
+            self.host_service_hook(&method.name, &args);
         }
 
         if oneway {

@@ -1611,6 +1611,13 @@ pub(crate) fn launch_session(
             .expect("core publishes the session handles at attach");
         let (host, registry) = session_modules.into_parts();
         let mut host = host;
+        // MPROC8: this session runs real app processes, so the host performs
+        // AOSP's `ActiveServices` work for a guest `bindService` (create/bind in
+        // the service's own process, answer the caller's `IServiceConnection`).
+        // The in-process runtime keeps its own bind path, so the flag is a
+        // property of what this session is, stated by the only component that
+        // knows.
+        host.set_host_side_services(true);
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`

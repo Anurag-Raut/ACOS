@@ -82,6 +82,7 @@ pub mod provider;
 pub mod refs; // BINDERREF2: the guest-binder registration ledger (host strong refs)
 pub mod registry;
 pub mod sensors; // MODSENS: native sensorservice (SensorManager/SensorEventConnection)
+pub mod service_bind; // MPROC8: host-side ActiveServices for a guest bindService
 pub mod surface_client;
 pub mod trace;
 pub mod value;

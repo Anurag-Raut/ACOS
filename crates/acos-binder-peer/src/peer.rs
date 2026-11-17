@@ -803,6 +803,11 @@ impl Peer {
         {
             atms.note_process_died(tag);
         }
+        // MPROC8: a caller bound to one of this process's services gets
+        // `onServiceDisconnected` (`IServiceConnection.connected(name, null,
+        // true)`), exactly like a device whose service process was killed. The
+        // deliveries are queued on the host and written by the next drain.
+        self.host.service_process_died(tag);
     }
 
     /// MPROC4 step 3b: drain the spawn requests the activity manager recorded

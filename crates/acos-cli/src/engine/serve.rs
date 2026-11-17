@@ -2762,12 +2762,14 @@ fn logs(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
             };
             match acos_runtime::session::parse_log_priority(&text) {
                 Some(priority) => Some(priority),
-                None => return Err(BackendError::Error {
-                    code: ErrorCode::InvalidArgument,
-                    detail: format!(
+                None => {
+                    return Err(BackendError::Error {
+                        code: ErrorCode::InvalidArgument,
+                        detail: format!(
                         "min_priority `{text}` is not a logcat priority; use V/D/I/W/E/F or 2..7"
                     ),
-                }),
+                    })
+                }
             }
         }
     };
