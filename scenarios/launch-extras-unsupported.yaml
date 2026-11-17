@@ -1,0 +1,43 @@
+# launch-extras-unsupported: a scenario's launch `extras:` are REFUSED, not dropped.
+#
+# WVFAIR found (2026-11-17) that the live launcher builds its own
+# `ACTION_MAIN`/`CATEGORY_LAUNCHER` Intent for the APK's manifest launcher
+# component, so a scenario `launch: {extras: ...}` was accepted, never sent, and
+# the run asserted against an Intent the app never received. That is a silent
+# downgrade of the scenario's own declaration.
+#
+# The honest behaviour, pinned here: the launch step fails with the structured
+# `UNSUPPORTED_ANDROID_API` naming the field (and the extras' keys) before the
+# launch runs. `expect_error` pins the code, so this control cannot pass on any
+# other failure (an app crash, a missing fixture, a harness error all stay a
+# mismatch). `expectation: unsupported` says the engine cannot honour the field:
+# a pass here would be the bug.
+#
+# `intent_action:`, `data:` and a non-launcher `activity:` are the same family
+# and are refused by the same rule (unit test
+# `the_launch_intent_fields_a_session_cannot_honour_are_named`); wiring string
+# extras through the session-start Intent is the launch-intent backlog item.
+version: 1
+name: launch-extras-unsupported
+description: >-
+  A launch step that declares `extras:` is a structured UNSUPPORTED_ANDROID_API
+  (the live launcher cannot carry them), never a run against the wrong Intent.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: unsupported
+expectation_reason: >-
+  The live launcher builds its own ACTION_MAIN Intent for the manifest launcher
+  component and cannot carry scenario string extras; the field is refused by
+  name rather than silently dropped.
+expect_error: {code: UNSUPPORTED_ANDROID_API}
+budgets: {memory_mib: 512, wall_ms: 60000}
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      extras:
+        greeting: hello
+      clear_state: true

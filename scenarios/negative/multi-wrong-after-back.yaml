@@ -9,7 +9,18 @@ fallback: forbid
 api_level: 34
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
-expectation: fail
+# SCENHYG: declared honestly. The claim this file is for (a wrong text after
+# Back must fail strictly) is NOT reached: the Back step ends in TIMEOUT
+# (`no-draw-after-action`, the same REL3A/PERF4 settle seam as hello-views and
+# multi-activity). It still proves a non-pass, and it pins *which* non-pass so it
+# cannot go green on an unrelated failure. Re-point to
+# `expectation: fail` when Back settles without a new frame (then the last
+# `assert_text` fails with ASSERTION_FAILED, as intended).
+expectation: non_pass
+expectation_reason: >-
+  Blocked by Back's strict settle (no new frame): the wrong-text assertion is
+  never reached, so the honest pinned outcome is that TIMEOUT.
+expect_error: {code: TIMEOUT, reason: no-draw-after-action}
 steps:
   - launch:
       activity: dev.acos.fixtures.multiactivity/.MainActivity

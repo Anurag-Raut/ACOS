@@ -412,7 +412,7 @@ fn rn_native_stack_under_confinement() {
     );
 
     // Persist the raw result next to the other evidence.
-    let out_dir = repo_root().join("results/rn");
+    let out_dir = acos_test_support::test_artifacts_dir("rn");
     let _ = std::fs::create_dir_all(&out_dir);
     let json = serde_json::to_string_pretty(&summary).unwrap_or_default();
     let _ = std::fs::write(out_dir.join("rn-native-first-run.json"), &json);

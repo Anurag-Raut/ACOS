@@ -35,7 +35,7 @@ fn boot_dir() -> PathBuf {
 }
 
 fn results_dir() -> PathBuf {
-    let d = workspace_root().join("results/aidl");
+    let d = acos_test_support::test_artifacts_dir("aidl");
     let _ = std::fs::create_dir_all(&d);
     d
 }

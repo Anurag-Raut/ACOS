@@ -1,0 +1,1 @@
+verify: ASSERTION_FAILED (assertion): expected text containing "canvasIsViewPx=true", got text "view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34" / hint "" [class=assertion, retryable=false]

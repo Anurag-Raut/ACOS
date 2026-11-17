@@ -681,7 +681,7 @@ fn pipeline_generated_layouts_match_art_reference() {
         );
 
         // Persist the candidate frame as PNG for inspection.
-        let out_dir = repo_root().join("results/render/pipeline");
+        let out_dir = acos_test_support::test_artifacts_dir("render/pipeline");
         let _ = std::fs::create_dir_all(&out_dir);
         let _ = std::fs::write(
             out_dir.join(format!("{}.png", scene.app)),
@@ -710,7 +710,7 @@ fn pipeline_generated_layouts_match_art_reference() {
         ran += 1;
     }
 
-    let out = repo_root().join("results/render/corpus/corpus-pipeline-metrics.json");
+    let out = acos_test_support::test_artifacts_dir("render/corpus").join("corpus-pipeline-metrics.json");
     let _ = std::fs::create_dir_all(out.parent().unwrap());
     let aggregate = serde_json::json!({
         "wave": "W101-A",

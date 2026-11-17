@@ -1110,14 +1110,18 @@ impl View {
             "touchStart",
             json!([{"x": cx, "y": cy, "radiusX": 4, "radiusY": 4, "force": 1, "id": 1}]),
         )?;
-        let first = self.render("png", self.browser.frame_timeout)?;
         std::thread::sleep(hold);
         let up = self.touch_event("touchEnd", json!([]))?;
-        let _second = self.render("png", self.browser.frame_timeout)?;
         for reply in [down, up] {
             let _ = reply.wait(Duration::from_secs(2));
         }
-        let _ = first;
+        // No frame pull *between* a gesture's phases. `render` is the
+        // engine-wide, serialised `beginFrame`: with a second view pulling,
+        // that pull can wait seconds, which stretched a tap's down->up gap
+        // into a long press so the page's `click` never fired (webview-probe
+        // failed 4/10, SCENHYG). The frame is still produced, after the
+        // gesture: input fidelity first, frame freshness second.
+        let _ = self.render("png", self.browser.frame_timeout);
         Ok(())
     }
 
@@ -1147,8 +1151,29 @@ impl View {
             }
         }
         let reply = self.touch_event(kind, points)?;
-        let _ = self.render("png", self.browser.frame_timeout)?;
-        let _ = reply.wait(Duration::from_secs(2));
+        // A non-final phase must not hold the session's worker for the CDP
+        // reply: with two views, the engine can answer a `dispatchTouchEvent`
+        // seconds late while it renders the other one, and waiting here delayed
+        // the guest's `up` to ~2 s after its `down` — a long press, so the
+        // page's `click` never fired (webview-probe 3/10, SCENHYG). The event is
+        // already ordered on the wire, so a non-final phase waits only long
+        // enough to surface an immediate error; the end of the sequence waits
+        // the full budget and is where a real failure is reported.
+        let final_phase = kind == "touchEnd" || kind == "touchCancel";
+        let budget = if final_phase {
+            Duration::from_secs(2)
+        } else {
+            Duration::from_millis(150)
+        };
+        let _ = reply.wait(budget);
+        // Only the end of the sequence pulls a frame (see `tap`): a render
+        // between `down` and `up` is what turned a fast tap into a long press
+        // whenever the engine was busy with another view's frame. The guest
+        // invalidates and requests its own frame after `onTouchEvent`, and the
+        // end-of-sequence pull below paints the result.
+        if final_phase {
+            let _ = self.render("png", self.browser.frame_timeout);
+        }
         Ok(())
     }
 

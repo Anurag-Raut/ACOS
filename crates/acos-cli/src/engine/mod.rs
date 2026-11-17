@@ -1062,6 +1062,42 @@ impl EngineBackend {
     }
 }
 
+/// SCENHYG: which declared launch-intent fields the live launcher cannot honour.
+///
+/// An empty list means "the scenario's launch is exactly the Intent a session
+/// launcher builds". `launcher` is the APK's manifest launcher component (in the
+/// executor's expanded `pkg.Class` form); `None` (an unreadable APK) skips the
+/// component comparison, because the session start fails loudly on its own.
+fn refused_launch_intent_fields(
+    request: &LaunchRequest,
+    launcher: Option<&str>,
+) -> Vec<String> {
+    let mut refused = Vec::new();
+    if let (Some(named), Some(launcher)) = (request.activity.as_deref(), launcher) {
+        let expand = |component: &str| match component.split_once('/') {
+            Some((pkg, cls)) if cls.starts_with('.') => format!("{pkg}{cls}"),
+            Some((pkg, cls)) if !cls.contains('.') => format!("{pkg}.{cls}"),
+            _ => component.to_string(),
+        };
+        if expand(named) != expand(launcher) {
+            refused.push(format!(
+                "activity (`{named}`; the launcher component is `{launcher}`)"
+            ));
+        }
+    }
+    if let Some(action) = request.intent_action.as_deref() {
+        refused.push(format!("intent_action (`{action}`)"));
+    }
+    if let Some(data) = request.data.as_deref() {
+        refused.push(format!("data (`{data}`)"));
+    }
+    if !request.extras.is_empty() {
+        let keys: Vec<&str> = request.extras.keys().map(String::as_str).collect();
+        refused.push(format!("extras ({} string extra(s): {})", keys.len(), keys.join(", ")));
+    }
+    refused
+}
+
 impl Backend for EngineBackend {
     fn id(&self) -> &'static str {
         match self {
@@ -1129,6 +1165,38 @@ impl Backend for EngineBackend {
                 cause_id,
                 ..
             } => {
+                // SCENHYG (WVFAIR finding): a live session launcher builds its
+                // own `ACTION_MAIN`/`CATEGORY_LAUNCHER` Intent for the
+                // manifest's launcher component. A scenario's `activity`,
+                // `intent_action`, `data` and `extras` therefore cannot all be
+                // honoured, and they used to be dropped **silently**: a
+                // scenario declaring `extras:` ran against an Intent that never
+                // carried them and could assert a state the app never had. One
+                // rule: refuse the fields the launcher cannot honour, by name,
+                // before anything runs; never launch a different Intent than the
+                // scenario declared.
+                if session.engine() == Engine::Art {
+                    let launcher = acos_services::manifest_resolve::launcher_activity(&request.apk)
+                        .ok()
+                        .map(|launcher| launcher.component);
+                    let refused = refused_launch_intent_fields(request, launcher.as_deref());
+                    if !refused.is_empty() {
+                        let mut detail = format!(
+                            "the ART launcher launches the APK's launcher component with an \
+                             ACTION_MAIN/CATEGORY_LAUNCHER Intent; it cannot honour {}",
+                            refused.join(", ")
+                        );
+                        detail.push_str(
+                            ". Refusing instead of launching a different Intent than the scenario \
+                             declared. Drop the field, or use a component/action the launcher \
+                             resolves (extras wiring is tracked in the launch-intent backlog).",
+                        );
+                        return Err(BackendError::Error {
+                            code: acos_protocol::ErrorCode::UnsupportedAndroidApi,
+                            detail,
+                        });
+                    }
+                }
                 *cause_id = request.cause_id.clone();
                 // SE2: the launch's first tree may be bound by the content rule
                 // (a screen whose pixels animate forever); strict stays the
@@ -3126,6 +3194,58 @@ mod engine_tests {
             cause_id: "req_engine_test:launch:0".to_string(),
             settle: acos_protocol::scenario::StepSettle::Strict,
         }
+    }
+
+    /// SCENHYG (WVFAIR finding): a scenario's `extras:` used to be dropped by
+    /// the live launcher with no error, so a run could assert an Intent state
+    /// the app never received. The refusal names the field and happens before
+    /// the launch; the fake session's `launch` is never reached.
+    #[test]
+    fn a_scenario_that_declares_extras_is_refused_loudly_not_silently_dropped() {
+        let dir = artifacts("launch-extras");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::live()));
+        let mut request = launch_request(&dir);
+        request.extras.insert("greeting".to_string(), "hello".to_string());
+        let err = backend
+            .launch(&request)
+            .expect_err("extras must be refused, not dropped");
+        match err {
+            acos_verify::backend::BackendError::Error { code, detail } => {
+                assert_eq!(code, acos_protocol::ErrorCode::UnsupportedAndroidApi);
+                assert!(detail.contains("extras"), "{detail}");
+                assert!(detail.contains("greeting"), "the extra is named: {detail}");
+            }
+            other => panic!("unexpected error {other:?}"),
+        }
+    }
+
+    /// The component/action/data half of the same rule, as a pure decision: the
+    /// normal launch (the manifest launcher with no action/data/extras) is not
+    /// refused, and each declared-but-dropped field is.
+    #[test]
+    fn the_launch_intent_fields_a_session_cannot_honour_are_named() {
+        let dir = artifacts("launch-intent-fields");
+        let base = launch_request(&dir);
+        assert_eq!(
+            refused_launch_intent_fields(&base, Some("dev.acos.fixtures.counter.MainActivity")),
+            Vec::<String>::new(),
+            "the launcher component itself is the normal launch"
+        );
+        let mut other = base.clone();
+        other.activity = Some("dev.acos.fixtures.counter/.SecondActivity".to_string());
+        let refused = refused_launch_intent_fields(&other, Some("dev.acos.fixtures.counter.MainActivity"));
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].starts_with("activity ("), "{refused:?}");
+        let mut action = base.clone();
+        action.intent_action = Some("android.intent.action.SEND".to_string());
+        let refused = refused_launch_intent_fields(&action, None);
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].contains("intent_action"), "{refused:?}");
+        let mut data = base.clone();
+        data.data = Some("content://x/y".to_string());
+        let refused = refused_launch_intent_fields(&data, None);
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].contains("data"), "{refused:?}");
     }
 
     #[test]

@@ -80,6 +80,12 @@ pub enum FallbackPolicy {
 }
 
 /// What the scenario expects. Used to make negative tests explicit.
+///
+/// Every scenario in the corpus declares one, and the declaration is enforced at
+/// run time: `pass` is the only value that may produce a pass, and a scenario
+/// that cannot (or should not) produce one says so here instead of leaving a
+/// red row looking like a regression. `expectation_reason` is the one-line why
+/// (`non_pass`/`unsupported`) and is required for those values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Expectation {
@@ -90,7 +96,18 @@ pub enum Expectation {
     Fail,
     /// The scenario must produce any non-pass status (crash/unsupported/... count).
     NonPass,
+    /// The engine cannot provide what the scenario asks, by design or by a known
+    /// gap. The run must report `unsupported` (or the code `expect_error` pins);
+    /// a pass is a harness failure, never a successful test.
+    Unsupported,
 }
+
+/// Host capabilities a scenario may need before it can run at all (`needs_env`).
+///
+/// One registry, validated at load time: a typo'd capability name would
+/// otherwise disable a scenario forever with no error, which is the same
+/// silent-skip failure the corpus is meant to prevent.
+pub const KNOWN_NEEDS_ENV: &[&str] = &["pasta"];
 
 /// A scenario step.
 ///
@@ -1104,6 +1121,17 @@ pub struct Scenario {
     /// Expected outcome.
     #[serde(default)]
     pub expectation: Expectation,
+    /// One line saying **why** the expectation is not `pass` (the known reason:
+    /// an open defect, an engine gap, a security rule). Required for
+    /// `non_pass`/`unsupported` and for `needs_env`; refused for `pass`, so an
+    /// honest declaration and a green row cannot disagree silently.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expectation_reason: Option<String>,
+    /// Host capabilities the scenario needs before it can run (see
+    /// [`KNOWN_NEEDS_ENV`]). A runner must skip the scenario when one is absent
+    /// and say so, instead of running it into a failure that is not its own.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub needs_env: Vec<String>,
     /// Ordered steps.
     pub steps: Vec<Step>,
     /// Artifact options.
@@ -1652,6 +1680,77 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
     }
     if scenario.steps.is_empty() {
         v.push("$.steps", "scenario must contain at least one step");
+    }
+    // The declaration must be honest on its own: a non-pass expectation says
+    // why in one line, and a `needs_env` names a registered host capability (a
+    // typo would otherwise skip the scenario forever with no error).
+    if let Some(reason) = scenario.expectation_reason.as_deref() {
+        if reason.trim().is_empty() {
+            v.push(
+                "$.expectation_reason",
+                "expectation_reason must not be empty (it is the one-line why)",
+            );
+        }
+        if scenario.expectation == Expectation::Pass && scenario.needs_env.is_empty() {
+            v.push(
+                "$.expectation_reason",
+                "`expectation: pass` has no reason to give; a reason belongs to non_pass or \
+                 unsupported (or to needs_env, where it says what the host must provide)",
+            );
+        }
+    }
+    if matches!(
+        scenario.expectation,
+        Expectation::NonPass | Expectation::Unsupported
+    ) && scenario.expectation_reason.as_deref().is_none_or(|r| r.trim().is_empty())
+    {
+        v.push(
+            "$.expectation_reason",
+            format!(
+                "`expectation: {}` must say why in one line (expectation_reason)",
+                match scenario.expectation {
+                    Expectation::NonPass => "non_pass",
+                    Expectation::Unsupported => "unsupported",
+                    _ => unreachable!(),
+                }
+            ),
+        );
+    }
+    let mut seen_needs: BTreeMap<&str, usize> = BTreeMap::new();
+    for (index, name) in scenario.needs_env.iter().enumerate() {
+        let path = format!("$.needs_env[{index}]");
+        let name_trimmed = name.trim();
+        if name_trimmed.is_empty() {
+            v.push(path, "needs_env entries must not be empty");
+            continue;
+        }
+        if !KNOWN_NEEDS_ENV.contains(&name_trimmed) {
+            v.push(
+                path,
+                format!(
+                    "unknown host capability `{name_trimmed}`; known: {}",
+                    KNOWN_NEEDS_ENV.join(", ")
+                ),
+            );
+        }
+        *seen_needs.entry(name_trimmed).or_default() += 1;
+    }
+    for (name, count) in seen_needs {
+        if count > 1 {
+            v.push(
+                "$.needs_env",
+                format!("`{name}` is listed {count} times; name each capability once"),
+            );
+        }
+    }
+    if !scenario.needs_env.is_empty()
+        && scenario.expectation_reason.as_deref().is_none_or(|r| r.trim().is_empty())
+    {
+        v.push(
+            "$.needs_env",
+            "a scenario that needs a host capability says so in expectation_reason \
+             (what is missing and why the run cannot be honest without it)",
+        );
     }
     // SE2b: a pinned failure only makes sense for a negative scenario. A
     // `pass` scenario that pins an error code would be self-contradictory, and

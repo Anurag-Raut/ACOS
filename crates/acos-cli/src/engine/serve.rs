@@ -698,24 +698,26 @@ impl ServeEngine {
         };
         // MPROC7: the launcher's idle kill, launch-time like `extra_apks`.
         // `0` disables it. The same value the scenario launch step carries and
-        // `acos-art launch --idle-kill-seconds` takes.
-        let idle_kill_seconds: Option<u64> = match args.get("idle_kill_seconds") {
-            None => None,
-            Some(value) => match value.as_u64() {
-                Some(seconds) if seconds <= 86_400 => Some(seconds),
-                _ => {
-                    return art_failure(
-                        request_id,
-                        Some(id),
-                        trust,
-                        ErrorCode::InvalidArgument,
-                        "idle_kill_seconds must be an integer in 0..=86400 (0 disables the idle                          kill)"
-                            .to_string(),
-                        json!({"field": "idle_kill_seconds", "value": value}),
-                    )
-                }
-            },
+        // `acos-art launch --idle-kill-seconds` takes. An explicit JSON `null`
+        // means "not provided" (JSON has no absent-vs-None distinction for a
+        // client that serialises an `Option` naively), never 0 and never an
+        // invalid integer: the old reading rejected `null` and broke every
+        // `acos launch --keep` (GL1).
+        let idle_kill_seconds = match idle_kill_seconds_arg(args) {
+            Ok(seconds) => seconds,
+            Err(value) => {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::InvalidArgument,
+                    "idle_kill_seconds must be an integer in 0..=86400 (0 disables the idle                          kill)"
+                        .to_string(),
+                    json!({"field": "idle_kill_seconds", "value": value}),
+                )
+            }
         };
+        let idle_kill_requested = idle_kill_seconds.is_some();
         let apk = match acos_mcp::safety::validate_path(apk_arg, &ctx.allowed_roots) {
             Ok(path) => path,
             Err(reason) => {
@@ -800,9 +802,7 @@ impl ServeEngine {
                          then acos_launch with the package set you want.",
                     );
                 }
-                if args.get("idle_kill_seconds").is_some()
-                    && session.idle_kill_seconds() != idle_kill_seconds
-                {
+                if idle_kill_requested && session.idle_kill_seconds() != idle_kill_seconds {
                     return with_hint(
                         art_failure(
                             request_id,
@@ -3214,6 +3214,22 @@ fn extra_apks_json(extra_apks: &[std::path::PathBuf]) -> Value {
     )
 }
 
+/// MPROC7: read the launch-time `idle_kill_seconds` argument.
+///
+/// Absent and explicit `null` both mean "not provided" (`Ok(None)`); anything
+/// else must be an integer in `0..=86400`, where `0` disables the idle kill.
+/// `Err` carries the offending value so the caller's error can name it.
+fn idle_kill_seconds_arg(args: &Value) -> Result<Option<u64>, Value> {
+    match args.get("idle_kill_seconds") {
+        None => Ok(None),
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => match value.as_u64() {
+            Some(seconds) if seconds <= 86_400 => Ok(Some(seconds)),
+            _ => Err(value.clone()),
+        },
+    }
+}
+
 /// The JSON type of an argument, for an error that names what arrived instead of
 /// guessing (FB-series: a mistyped argument is never silently accepted).
 fn json_kind(value: &Value) -> &'static str {
@@ -4431,8 +4447,34 @@ fn sanitize_session_id(id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{keep_log_record, log_level_rank};
+    use super::{idle_kill_seconds_arg, keep_log_record, log_level_rank};
     use acos_protocol::LogLevel;
+    use serde_json::json;
+
+    /// GL1/MPROC7: an absent key and an explicit JSON `null` both mean "not
+    /// provided". A client that serialises `Option<u64>` as `null` (the `acos
+    /// launch` CLI did) must not be rejected, and `null` must never be read as
+    /// `0` (which would disable the idle kill).
+    #[test]
+    fn idle_kill_seconds_treats_an_absent_or_null_field_as_not_provided() {
+        assert_eq!(idle_kill_seconds_arg(&json!({})), Ok(None));
+        assert_eq!(idle_kill_seconds_arg(&json!({"idle_kill_seconds": null})), Ok(None));
+        assert_eq!(idle_kill_seconds_arg(&json!({"idle_kill_seconds": 0})), Ok(Some(0)));
+        assert_eq!(
+            idle_kill_seconds_arg(&json!({"idle_kill_seconds": 30})),
+            Ok(Some(30))
+        );
+        assert_eq!(
+            idle_kill_seconds_arg(&json!({"idle_kill_seconds": 86_400})),
+            Ok(Some(86_400))
+        );
+        // Out of range, a string, a float and a negative all name the value.
+        for bad in [json!(86_401), json!("30"), json!(1.5), json!(-1)] {
+            let err = idle_kill_seconds_arg(&json!({"idle_kill_seconds": bad}))
+                .expect_err("must be rejected");
+            assert_eq!(err, bad);
+        }
+    }
 
     /// FB6 (5): the default log view is `W` + the app's own package.
     #[test]

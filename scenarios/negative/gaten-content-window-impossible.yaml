@@ -30,6 +30,9 @@ api_level: 34
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: >-
+  A 1 ms content-settle budget against a 300 ms window must be a structured
+  TIMEOUT (content-not-stable), never a "close enough" pass.
 expect_error: {code: TIMEOUT, reason: content-not-stable}
 budgets: {memory_mib: 512, wall_ms: 120000}
 steps:

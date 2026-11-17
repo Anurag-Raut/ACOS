@@ -143,11 +143,16 @@ fn every_checked_in_scenario_parses_and_validates() {
             assert!(
                 matches!(
                     scenario.expectation,
-                    Expectation::Fail | Expectation::NonPass
+                    Expectation::Fail | Expectation::NonPass | Expectation::Unsupported
                 ),
                 "{} must not expect pass",
                 path.display()
             );
+            // A non-pass `expectation_reason` is enforced by
+            // `Scenario::validate`; `fail` twins are self-describing. What the
+            // corpus test adds is that the declaration is *not* what makes the
+            // file unparsable elsewhere (load() above) and that a needs_env
+            // scenario names a registered capability, also in validate().
         } else {
             positive += 1;
             assert_eq!(
