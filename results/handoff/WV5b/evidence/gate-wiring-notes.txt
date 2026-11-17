@@ -1,0 +1,6 @@
+### arm gate=on (ACOS_WEBVIEW_GATE=1)
+wall_ms: 130 outcome: ok
+note: webview socket: /run/user/1000/acos-wv/2612478-0/webview.sock -> guest /run/acos/webview.sock (lazy gate listening; first connect starts the shared broker at /run/user/1000/acos-wv/broker.sock)
+### arm gate=off (ACOS_WEBVIEW_GATE=0)
+wall_ms: 129 outcome: ok
+note: webview socket: /run/user/1000/acos-wv/2612542-0/webview.sock -> guest /run/acos/webview.sock (gate disabled by ACOS_WEBVIEW_GATE; no listener means the guest's connect fails with the real ENOENT)

@@ -1,0 +1,1 @@
+"webview socket: /home/Qui/.t3/worktrees/acos/t3-5b64adc7-88e66fd92dbe9e6c/.cache/wv4-run/wv/webview.sock -> guest /run/acos/webview.sock (host transport; no listener means the guest's connect fails with the real ENOENT)"

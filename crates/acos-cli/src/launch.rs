@@ -97,16 +97,6 @@ pub struct LaunchArgs {
     #[arg(long, value_name = "carve|report")]
     pub insets: Option<String>,
 
-    /// ADR-0029 item 4: attach a service module for this session.
-    ///
-    /// Spelling `id[:profile][,config]` (`feedback.vibrator:stub`,
-    /// `feedback.vibrator:scripted,{"x":1}`); repeatable, applied in order,
-    /// `core` is always attached first. Requires a session host, so it needs
-    /// `--keep` or `--engine art` (the in-process Rust VM has no service table
-    /// to attach to and refuses instead of pretending).
-    #[arg(long = "service", value_name = "id[:profile][,config]")]
-    pub service: Vec<String>,
-
     /// MPROC1: install this APK into the session beside the launched one
     /// (repeatable). Each extra package gets its own uid and its own guest
     /// paths, and is reachable through `PackageManager` /
@@ -116,6 +106,15 @@ pub struct LaunchArgs {
     /// than pretending a second package is installed.
     #[arg(long = "extra-apk", value_name = "APK")]
     pub extra_apk: Vec<PathBuf>,
+    /// ADR-0029 item 4: attach a service module for this session.
+    ///
+    /// Spelling `id[:profile][,config]` (`feedback.vibrator:stub`,
+    /// `feedback.vibrator:scripted,{"x":1}`); repeatable, applied in order,
+    /// `core` is always attached first. Requires a session host, so it needs
+    /// `--keep` or `--engine art` (the in-process Rust VM has no service table
+    /// to attach to and refuses instead of pretending).
+    #[arg(long = "service", value_name = "id[:profile][,config]")]
+    pub service: Vec<String>,
 
     /// P12: framework animation scales for an ART session (`on`/`off`).
     ///

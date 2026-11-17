@@ -311,6 +311,25 @@ impl BinderTransport for ServiceTransport {
                     }
                 }
             }
+            // WV2: `ACOS_PARCEL_DUMP` records the reply bytes as the guest
+            // reads them — after every materialiser has had its turn. This is
+            // the byte stream a framework-side desync is a fact about; the
+            // Rust-codec view (`acos-services`) is dumped separately by the
+            // service that wrote it.
+            if acos_services::parcel_dump::enabled() {
+                if let Some(descriptor) = descriptor.as_deref().filter(|d| {
+                    *d == "android.content.pm.IPackageManager"
+                        || *d == "android.webkit.IWebViewUpdateService"
+                }) {
+                    let method = acos_aidl::lookup(descriptor, code)
+                        .map(|m| m.name.clone())
+                        .unwrap_or_else(|| format!("code{code}"));
+                    acos_services::parcel_dump::dump(
+                        &format!("reply.{descriptor}.{method}"),
+                        reply,
+                    );
+                }
+            }
         }
 
         result.map(|()| deliveries)

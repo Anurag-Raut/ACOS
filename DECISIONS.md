@@ -1228,3 +1228,34 @@ without any window/dialog code. Three decisions were taken while building it:
    system-app work. A pre-granted request therefore *still* fails, because the result cannot be
    delivered; that delivery path is the first thing the permission-controller system app needs, and it
    belongs to the multi-process/`mproc` work, not to the service layer.
+
+**ADR-0029/0031 note (WV8, 2026-11-16): `webview` is a module, and the two decisions it carries.**
+The WebView track is finished as an ADR-0029 module (`crates/acos-services/src/modules/webview.rs`),
+so the last two open questions get a recorded answer instead of an implementer's choice:
+
+1. **Viewport contract (decision).** `WebSettings.setUseWideViewPort(false)` — Android's default and
+   what this provider always did — means the layout viewport is the `View`'s width in CSS px
+   (`device px / density`) and `<meta name="viewport">` is **ignored**; that is Chromium's
+   `mobile: false`. `setUseWideViewPort(true)` honours the page's meta viewport and, without one,
+   uses Chromium's Android default of 980 CSS px (`mobile: true`), which is what a phone does.
+   `setLoadWithOverviewMode(true)` is a *visual* scale on top (`Emulation.setPageScaleFactor`,
+   `cssWidth / layoutWidth`), so it never changes the layout width. Both arms are measured against the
+   pinned engine (`crates/acos-webview/tests/wv8_viewport.rs`) and through the guest provider in
+   `scenarios/webview-probe.yaml` (pages with and without a meta tag, layout width read from the page).
+2. **Frames stay at the engine's CSS resolution (decision, follows WV7's measurement).** The wire
+   reports the frame's real pixel size and the guest scales it into the `View`. This pinned
+   `chrome-headless-shell` cannot capture at `deviceScaleFactor` under `--enable-begin-frame-control`
+   (`results/handoff/WV7/evidence/engine-capture-facts.txt`), so a device-resolution PNG is not
+   something a setting can turn on — it needs an engine whose capture path honours
+   `deviceScaleFactor`. A frame that arrives while nothing else draws is still painted only on the
+   next draw; that defect belongs to the LOOPERWAKE track (guest invalidation → traversal → vsync)
+   and is *not* worked around here: the scenario tolerates it with a generous `timeout_ms` instead of
+   hiding it.
+3. **`off` is Android's own no-provider path, not a tombstone.** With the module unattached there is
+   no `com.android.webview` package, so `hasSystemFeature("android.software.webview")` is false and
+   `WebViewFactory` throws its own `UnsupportedOperationException`; `webviewupdate` stays `core`'s and
+   answers from the package table (a module that re-registered it would be a second source of truth).
+   `real` installs the provider APK as a system app (`system_apps`, resolved by
+   `module::system_apks`) **at launch** and binds the session's gate socket; the one host Chromium is
+   still started by the first guest connect. There is no `stub`/`scripted` profile: a scripted page
+   would be a fake success.

@@ -1752,11 +1752,11 @@ impl ArtSession {
             // live session instead of a one-shot launch. The guest publishes
             // the read-only view-tree probe the `tree`/`tap` replies carry.
             .env("ACOSLAUNCH_INTERACTIVE", "1")
-            .env("ACOSLAUNCH_LIVE_PROBE", "1");
-        // The relay session is named `acos-<id>` from this id (`acos_net`
-        // resolves the same rule). Always set: a one-shot run publishes its own
-        // id, so no session's network is unreachable by construction.
-        command.env(acos_art::spike_net::SESSION_ID_ENV, &session_id);
+            .env("ACOSLAUNCH_LIVE_PROBE", "1")
+            // The relay session is named `acos-<id>` from this id (`acos_net`
+            // resolves the same rule). Always set: a one-shot run publishes its
+            // own id, so no session's network is unreachable by construction.
+            .env(acos_art::spike_net::SESSION_ID_ENV, &session_id);
         // MPROC1: the extra packages this session installs. Both spellings name
         // the same list: the repeatable flags the launcher parses, and the
         // `ACOSLAUNCH_EXTRA_APKS` env a frozen host-template child reads.

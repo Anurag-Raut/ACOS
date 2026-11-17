@@ -1,0 +1,40 @@
+Wall 5, wire shape: the image dex is authoritative (per the common brief).
+
+  $ .cache/wv3-target/debug/examples/dexdump .cache/boot/android-34/dex/framework/classes.dex \
+      --mnemonics
+  M Landroid/app/IActivityManager$Default; addPackageDependency (Ljava/lang/String;)V 1 return-void
+  M Landroid/app/IActivityManager$Stub$Proxy; addPackageDependency (Ljava/lang/String;)V 23 ...
+
+  $ .../dexdump .cache/boot/android-34/dex/framework/classes.dex   # full body
+  method Landroid/app/IActivityManager$Stub$Proxy;->addPackageDependency(Ljava/lang/String;)V ... code=0x20e54c
+    000c: const-string v2, "android.app.IActivityManager"
+    000e: invoke-virtual {v0, v2}, Landroid/os/Parcel;->writeInterfaceToken:(Ljava/lang/String;)V
+    0011: invoke-virtual {v0, v6}, Landroid/os/Parcel;->writeString:(Ljava/lang/String;)V
+    0016: const/16 v3, #int 96
+    0019: invoke-interface {v2, v3, v0, v1, v4}, Landroid/os/IBinder;->transact:(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z
+    001d: invoke-virtual {v1}, Landroid/os/Parcel;->readException:()V
+
+  onTransact (code 96 branch):
+    108d: invoke-virtual/range {v37 .. v37}, Landroid/os/Parcel;->readString:()Ljava/lang/String;
+    1091: invoke-virtual/range {v37 .. v37}, Landroid/os/Parcel;->enforceNoDataAvail:()V
+    1094: invoke-virtual {v15, v0}, Landroid/app/IActivityManager$Stub;->addPackageDependency:(Ljava/lang/String;)V
+    1097: invoke-virtual/range {v38 .. v38}, Landroid/os/Parcel;->writeNoException:()V
+
+So: transaction 96, ONE String (writeString/readString, i.e. Str16 on the wire),
+reply = writeNoException() only. The task brief's "addPackageDependency(String,int)"
+is the newer platform's overload; the API-34 image writes one String. The AOSP
+source cache for this image agrees at the call site:
+
+  base/core/java/android/webkit/WebViewFactory.java:463
+      ActivityManager.getService().addPackageDependency(
+              response.packageInfo.packageName);      # one argument
+
+The caller in the image (`LoadedApk.getResources`, mRegisterPackage branch)
+also passes one argument:
+
+  method Landroid/app/LoadedApk;->getResources(...)  (classes.dex)
+    0069: invoke-interface {v0, v3}, Landroid/app/IActivityManager;.addPackageDependency:(Ljava/lang/String;)V
+
+The generated table already carried the right shape
+(`crates/acos-aidl/src/generated/tables.rs`: code 96, args [Str16], reply []), so
+the defect was the missing AMS dispatch arm, not the AIDL table.

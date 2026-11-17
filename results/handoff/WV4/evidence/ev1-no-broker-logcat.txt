@@ -1,0 +1,24 @@
+1794812252834     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794812252834     76  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794812252834     77  D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED
+1794812252834     78  I WVProbe: hasSystemFeature(android.software.webview)=true
+1794812252834     79  I WVProbe: WebView.getCurrentWebViewPackage()=PackageInfo{c7a40d9 com.android.webview}
+1794812252834     80  I WVProbe: myUid=10192
+1794812252834     81  I WVProbe: own getPackageInfo(0x100024c0) -> dev.acos.fixtures.webview sigs=1
+1794812252834     82  I WebViewFactory: Loading com.android.webview version 1.0 (code 1)
+1794812252834     83  W ziparchive: Unable to open '/data/app/webview-provider.dm': No such file or directory
+1794812252834     84  W ziparchive: Unable to open '/data/app/webview-provider.dm': No such file or directory
+1794812252834     85  D nativeloader: Configuring clns-3 for other apk /data/app/webview-provider.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib-extra/com.android.webview/x86_64, permitted_path=/data:/mnt/expand
+1794812252834     86  E WebViewLibraryLoader: can't load with relro file; address space not reserved
+1794812252834     87  I ACOSWvProvider: create(WebViewDelegate present)
+1794812252834     88  E ACOSWvProvider: ACOS WebView engine unavailable: /run/acos/webview.sock: java.io.IOException: No such file or directory
+1794812252834     89  I WVProbe: WebView FAILED: java.lang.IllegalStateException: ACOS WebView engine unavailable (ENGINE_UNAVAILABLE): /run/acos/webview.sock: No such file or directory
+  at com.android.webview.chromium.AcosSessionSocket.open(AcosSessionSocket.java:41)
+  at com.android.webview.chromium.WebViewChromiumFactoryProvider.transport(WebViewChromiumFactoryProvider.java:29)
+  at com.android.webview.chromium.WebViewChromiumFactoryProvider.createWebView(WebViewChromiumFactoryProvider.java:41)
+  at android.webkit.WebView.ensureProviderCreated(WebView.java:2599)
+1794812252834     90  E logdw: dev.acos.fixtures.webview.MainActivity
+1794812252834     91  E logdw: dev.acos.fixtures.webview.MainActivity
+--- (WV4 arm 1: no broker. Line 88 is the honest connect error; there is no
+--- UnsatisfiedLinkError and no native frame in the stack: the guest's real
+--- AF_UNIX connectLocal ran and the kernel answered ENOENT.)

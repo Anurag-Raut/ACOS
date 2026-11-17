@@ -47,8 +47,16 @@ pub enum FieldOp {
     CharSequence,
     /// `writeString8`.
     Str8,
-    /// `writeStringArray`.
+    /// `writeStringArray` (`Parcel.writeString16Array`): an `int` count (`-1`
+    /// for null) followed by each string as a **String16**.
     StringArray,
+    /// `writeString8Array`: an `int` count (`-1` for null) followed by each
+    /// string as a **String8**. Every `android.content.pm` parcelable uses this
+    /// form for its `String[]` fields (`PackageInfo.splitNames`,
+    /// `requestedPermissions`; `ApplicationInfo.split*`; `ComponentInfo.
+    /// attributionTags`); the bytes differ from [`FieldOp::StringArray`] for
+    /// every non-empty array, so the two are distinct ops, not aliases.
+    String8Array,
     /// `writeStringList`: an `int` count (`-1` for null) followed by each
     /// string. Wire-identical to [`FieldOp::StringArray`]; separate so the
     /// decoded value is a [`Value::StringList`], which is what the Java reader
@@ -100,11 +108,6 @@ pub enum FieldOp {
     IgnoredTyped(&'static str),
     /// A dynamic `writeValue`.
     Dynamic,
-    /// `Parcel.writeArraySet`: an `int` count (`-1` for null) followed by that
-    /// many `writeValue` payloads (`Parcel.java:1387-1393`). The one user is
-    /// `Notification.writeToParcel`'s trailing `allPendingIntents`, whose
-    /// elements are `PendingIntent`s (`VAL_PARCELABLE`).
-    ArraySet,
     /// A conditional group: a `writeInt` presence marker, then the nested
     /// fields when the marker is non-zero (API-34 `TaskDescription` writes its
     /// label, icon and icon filename this way). The nested list must be empty
@@ -141,26 +144,48 @@ pub enum FieldOp {
     /// `supportedModes[i].writeToParcel(dest, flags)`, and `readFromParcel`
     /// mirrors it with `Display.Mode.CREATOR.createFromParcel(source)`.
     CountedNested(&'static str),
-    /// A `writeInt` count followed by that many addresses as
-    /// `LinkProperties.writeAddresses` / `writeAddress` write them: the raw
-    /// address bytes via `Parcel.writeByteArray` and, for a 16-byte (IPv6)
-    /// address, `writeBoolean(hasScopeId)` plus `writeInt(scopeId)` when set.
-    ///
-    /// Not a parcelable list: the framework writes `InetAddress` bytes directly,
-    /// there is no class name and no `writeToParcel`.
-    AddressList,
+    /// A `writeInt` count followed by that many repetitions of a field
+    /// sequence. This is the general form of the `writeInt(size); for (…)`
+    /// loop AOSP writes inline or through a private helper:
+    /// `NetworkCapabilities.writeParcelableArraySet` (`writeInt`, then a
+    /// `writeParcelable` per element) and `LinkProperties.writeAddresses`
+    /// (`writeInt`, then `writeByteArray` + `writeBoolean` + `writeInt` per
+    /// `InetAddress`). The DEX oracle collapses a loop to one body pass, so a
+    /// value consumes the body when the scanned calls continue with it and
+    /// only the count when they do not (an empty or `null` list). Each
+    /// element's values are carried as
+    /// [`Value::Cond`]` { present: true, values }` in a [`Value::List`].
+    Counted(&'static [FieldOp]),
+    /// `writeList`: an `int` count (`-1` for `null`) followed by each element as
+    /// a `writeValue` (API-34 `LinkProperties.mStackedLinks`). ACOS only writes
+    /// the empty list, but a non-empty one round-trips through
+    /// [`Value::Dynamic`].
+    ValueList,
+    /// One `LinkProperties.writeAddress` payload that has no list count
+    /// (`mDhcpServerAddress`): a `writeByteArray`, then — for an
+    /// `Inet6Address` — `writeBoolean(hasScopeId)` + `writeInt(scopeId)`.
+    /// The IPv6 arm is dead for the dhcp field (the reader casts the address to
+    /// `Inet4Address`), but the DEX oracle collapses the branch and sees the two
+    /// calls, so they are matched while a `null`/IPv4 value writes only the byte
+    /// array (which is exactly the framework's bytes for that value).
+    Address,
     /// `DisplayCutout$ParcelableWrapper.writeCutoutToParcel`: an `int` variant
     /// marker (`-1` null, `0` `NO_CUTOUT`, `1` full cutout) and, for variant
     /// `1`, the full geometry. See [`read_cutout`]/[`write_cutout`].
     Cutout,
-    /// A payload ACOS cannot model. Reading or writing it raises a structured
-    /// `UnsupportedParcelable` rather than silently desynchronising the parcel.
-    Unsupported(&'static str),
+    /// `Parcel.writeArraySet`: an `int` count (`-1` for null) followed by that
+    /// many `writeValue` payloads (`Parcel.java:1387-1393`). The one user is
+    /// `Notification.writeToParcel`'s trailing `allPendingIntents`, whose
+    /// elements are `PendingIntent`s (`VAL_PARCELABLE`).
+    ArraySet,
     /// `android.graphics.drawable.Icon`: an `int` type tag and then the fields
     /// of that branch (`Icon.writeToParcel` switches on `mType`), followed by
     /// the nullable `ColorStateList` tint and the `BlendMode` value. See
     /// [`read_icon`]/[`write_icon`].
     Icon,
+    /// A payload ACOS cannot model. Reading or writing it raises a structured
+    /// `UnsupportedParcelable` rather than silently desynchronising the parcel.
+    Unsupported(&'static str),
 }
 
 /// How faithfully a spec covers the real method.
@@ -205,21 +230,6 @@ pub static SPECS: &[ParcelableSpec] = &[
         class: "android.content.ComponentName",
         fields: &[FieldOp::Str16, FieldOp::Str16],
         verification: Verification::Curated,
-    },
-    ParcelableSpec {
-        // `BluetoothDevice.writeToParcel` (image dex `BluetoothDevice.writeToParcel`:
-        // `writeString(mAddress)` then `writeInt(mAddressType)`; the image's
-        // `BluetoothDevice(Parcel)` reads `readString()` + `readInt()`).
-        // `writeString` is the **UTF-16** string (`Parcel.writeString`), not
-        // `writeString8`: a `Str8` here made the client read the address as
-        // UTF-16 and abandon the whole `Result`, so
-        // `BluetoothAdapter.getBondedDevices()` logged a `TimeoutException` and
-        // returned null (MODTAIL2 `BONDED null`). The bonded-device list and the
-        // `ACTION_FOUND` extra both carry this payload.
-        // `real_java_write_to_parcel_matches_the_rust_codec` byte-compares it.
-        class: "android.bluetooth.BluetoothDevice",
-        fields: &[FieldOp::Str16, FieldOp::Int],
-        verification: Verification::Full,
     },
     ParcelableSpec {
         class: "android.content.pm.PackageItemInfo",
@@ -271,60 +281,60 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Str8,                                              // scanPublicSourceDir
             FieldOp::Str8,                                              // sourceDir
             FieldOp::Str8,                                              // publicSourceDir
-            FieldOp::StringArray,                                       // splitNames
-            FieldOp::StringArray,                                       // splitSourceDirs
-            FieldOp::StringArray,                                       // splitPublicSourceDirs
+            FieldOp::String8Array,                                      // splitNames
+            FieldOp::String8Array,                                      // splitSourceDirs
+            FieldOp::String8Array,                                      // splitPublicSourceDirs
             FieldOp::SparseArray,                                       // splitDependencies
             FieldOp::Str8,                                              // nativeLibraryDir
             FieldOp::Str8,                                              // secondaryNativeLibraryDir
             FieldOp::Str8,                                              // nativeLibraryRootDir
-            FieldOp::Int,         // nativeLibraryRootRequiresIsa
-            FieldOp::Str8,        // primaryCpuAbi
-            FieldOp::Str8,        // secondaryCpuAbi
-            FieldOp::StringArray, // resourceDirs
-            FieldOp::StringArray, // overlayPaths
-            FieldOp::Str8,        // seInfo
-            FieldOp::Str8,        // seInfoUser
-            FieldOp::StringArray, // sharedLibraryFiles
+            FieldOp::Int,          // nativeLibraryRootRequiresIsa
+            FieldOp::Str8,         // primaryCpuAbi
+            FieldOp::Str8,         // secondaryCpuAbi
+            FieldOp::String8Array, // resourceDirs
+            FieldOp::String8Array, // overlayPaths
+            FieldOp::Str8,         // seInfo
+            FieldOp::Str8,         // seInfoUser
+            FieldOp::String8Array, // sharedLibraryFiles
             FieldOp::TypedList("android.content.pm.SharedLibraryInfo"), // sharedLibraryInfos
-            FieldOp::Str8,        // dataDir
-            FieldOp::Str8,        // deviceProtectedDataDir
-            FieldOp::Str8,        // credentialProtectedDataDir
-            FieldOp::Int,         // uid
-            FieldOp::Int,         // minSdkVersion
-            FieldOp::Int,         // targetSdkVersion
-            FieldOp::Long,        // longVersionCode
-            FieldOp::Int,         // enabled
-            FieldOp::Int,         // enabledSetting
-            FieldOp::Int,         // installLocation
-            FieldOp::Str8,        // manageSpaceActivityName
-            FieldOp::Str8,        // backupAgentName
-            FieldOp::Int,         // descriptionRes
-            FieldOp::Int,         // uiOptions
-            FieldOp::Int,         // fullBackupContent
-            FieldOp::Int,         // dataExtractionRulesRes
-            FieldOp::Bool,        // crossProfile
-            FieldOp::Int,         // networkSecurityConfigRes
-            FieldOp::Int,         // category
-            FieldOp::Int,         // targetSandboxVersion
-            FieldOp::Str8,        // classLoaderName
-            FieldOp::StringArray, // splitClassLoaderNames
-            FieldOp::Int,         // compileSdkVersion
-            FieldOp::Str8,        // compileSdkVersionCodename
-            FieldOp::Str8,        // appComponentFactory
-            FieldOp::Int,         // iconRes
-            FieldOp::Int,         // roundIconRes
-            FieldOp::Int,         // mHiddenApiPolicy
-            FieldOp::Int,         // hiddenUntilInstalled
-            FieldOp::Str8,        // zygotePreloadName
-            FieldOp::Int,         // gwpAsanMode
-            FieldOp::Int,         // memtagMode
-            FieldOp::Int,         // nativeHeapZeroInitialized
-            FieldOp::Int,         // requestRawExternalStorageAccess (ForBoolean)
-            FieldOp::Long,        // createTimestamp
+            FieldOp::Str8,         // dataDir
+            FieldOp::Str8,         // deviceProtectedDataDir
+            FieldOp::Str8,         // credentialProtectedDataDir
+            FieldOp::Int,          // uid
+            FieldOp::Int,          // minSdkVersion
+            FieldOp::Int,          // targetSdkVersion
+            FieldOp::Long,         // longVersionCode
+            FieldOp::Int,          // enabled
+            FieldOp::Int,          // enabledSetting
+            FieldOp::Int,          // installLocation
+            FieldOp::Str8,         // manageSpaceActivityName
+            FieldOp::Str8,         // backupAgentName
+            FieldOp::Int,          // descriptionRes
+            FieldOp::Int,          // uiOptions
+            FieldOp::Int,          // fullBackupContent
+            FieldOp::Int,          // dataExtractionRulesRes
+            FieldOp::Bool,         // crossProfile
+            FieldOp::Int,          // networkSecurityConfigRes
+            FieldOp::Int,          // category
+            FieldOp::Int,          // targetSandboxVersion
+            FieldOp::Str8,         // classLoaderName
+            FieldOp::String8Array, // splitClassLoaderNames
+            FieldOp::Int,          // compileSdkVersion
+            FieldOp::Str8,         // compileSdkVersionCodename
+            FieldOp::Str8,         // appComponentFactory
+            FieldOp::Int,          // iconRes
+            FieldOp::Int,          // roundIconRes
+            FieldOp::Int,          // mHiddenApiPolicy
+            FieldOp::Int,          // hiddenUntilInstalled
+            FieldOp::Str8,         // zygotePreloadName
+            FieldOp::Int,          // gwpAsanMode
+            FieldOp::Int,          // memtagMode
+            FieldOp::Int,          // nativeHeapZeroInitialized
+            FieldOp::Int,          // requestRawExternalStorageAccess (ForBoolean)
+            FieldOp::Long,         // createTimestamp
             FieldOp::Cond(&[FieldOp::Str16, FieldOp::Str16]), // mAppClassNamesByProcess
-            FieldOp::Int,         // localeConfigRes
-            FieldOp::Int,         // mKnownActivityEmbeddingCerts (ForStringSet)
+            FieldOp::Int,          // localeConfigRes
+            FieldOp::Int,          // mKnownActivityEmbeddingCerts (ForStringSet)
         ],
         verification: Verification::Full,
     },
@@ -341,13 +351,13 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int, // showUser
             FieldOp::Int, // showBadge
             FieldOp::Nested("android.content.pm.ApplicationInfo"),
-            FieldOp::Str8,        // processName
-            FieldOp::Str8,        // splitName
-            FieldOp::StringArray, // attributionTags
-            FieldOp::Int,         // descriptionRes
-            FieldOp::Int,         // enabled
-            FieldOp::Int,         // exported
-            FieldOp::Int,         // directBootAware
+            FieldOp::Str8,         // processName
+            FieldOp::Str8,         // splitName
+            FieldOp::String8Array, // attributionTags
+            FieldOp::Int,          // descriptionRes
+            FieldOp::Int,          // enabled
+            FieldOp::Int,          // exported
+            FieldOp::Int,          // directBootAware
         ],
         verification: Verification::Full,
     },
@@ -371,7 +381,7 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Nested("android.content.pm.ApplicationInfo"),
             FieldOp::Str8,
             FieldOp::Str8,
-            FieldOp::StringArray,
+            FieldOp::String8Array,
             FieldOp::Int,
             FieldOp::Int,
             FieldOp::Int,
@@ -412,18 +422,28 @@ pub static SPECS: &[ParcelableSpec] = &[
     // `PackageInfo.writeToParcel` (API 34): 43 `Parcel.write*` calls. The two
     // conditional members (`applicationInfo`, `signingInfo`) are `writeInt`
     // presence markers followed by a direct `writeToParcel`.
+    //
+    // `splitNames` and `requestedPermissions` are **`writeString8Array`**:
+    // `PackageInfo.java:585,608` in the android-14 tag and
+    // `Landroid/content/pm/PackageInfo;->writeToParcel` at `0x000b`/`0x0072` in
+    // the image's `classes.dex`. Encoding them as String16 arrays (the old
+    // `FieldOp::StringArray`) desynchronised every field after
+    // `requestedPermissions`; the framework then read a `Signature[]` length
+    // out of string payload bytes and threw
+    // `OutOfMemoryError: Failed to allocate a 7676737936 byte allocation at
+    // Parcel.createString8Array` for `getPackageInfo(pkg, 0x100024c0)`.
     ParcelableSpec {
         class: "android.content.pm.PackageInfo",
         fields: &[
-            FieldOp::Str8,        // packageName
-            FieldOp::StringArray, // splitNames
-            FieldOp::Int,         // versionCode
-            FieldOp::Int,         // versionCodeMajor
-            FieldOp::Str8,        // versionName
-            FieldOp::Int,         // baseRevisionCode
-            FieldOp::IntArray,    // splitRevisionCodes
-            FieldOp::Str8,        // sharedUserId
-            FieldOp::Int,         // sharedUserLabel
+            FieldOp::Str8,         // packageName
+            FieldOp::String8Array, // splitNames
+            FieldOp::Int,          // versionCode
+            FieldOp::Int,          // versionCodeMajor
+            FieldOp::Str8,         // versionName
+            FieldOp::Int,          // baseRevisionCode
+            FieldOp::IntArray,     // splitRevisionCodes
+            FieldOp::Str8,         // sharedUserId
+            FieldOp::Int,          // sharedUserLabel
             FieldOp::Cond(&[FieldOp::Nested("android.content.pm.ApplicationInfo")]),
             FieldOp::Long,     // firstInstallTime
             FieldOp::Long,     // lastUpdateTime
@@ -434,8 +454,8 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::TypedArray("android.content.pm.ProviderInfo"),
             FieldOp::TypedArray("android.content.pm.InstrumentationInfo"),
             FieldOp::TypedArray("android.content.pm.PermissionInfo"),
-            FieldOp::StringArray, // requestedPermissions
-            FieldOp::IntArray,    // requestedPermissionsFlags
+            FieldOp::String8Array, // requestedPermissions
+            FieldOp::IntArray,     // requestedPermissionsFlags
             FieldOp::TypedArray("android.content.pm.Signature"),
             FieldOp::TypedArray("android.content.pm.ConfigurationInfo"),
             FieldOp::TypedArray("android.content.pm.FeatureInfo"),
@@ -482,18 +502,18 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int,          // showUser
             FieldOp::Int,          // showBadge
             FieldOp::Nested("android.content.pm.ApplicationInfo"),
-            FieldOp::Str8,        // processName
-            FieldOp::Str8,        // splitName
-            FieldOp::StringArray, // attributionTags
-            FieldOp::Int,         // descriptionRes
-            FieldOp::Int,         // enabled
-            FieldOp::Int,         // exported
-            FieldOp::Int,         // directBootAware
-            FieldOp::Str8,        // authority
-            FieldOp::Str8,        // readPermission
-            FieldOp::Str8,        // writePermission
-            FieldOp::Int,         // grantUriPermissions
-            FieldOp::Int,         // forceUriPermissions
+            FieldOp::Str8,         // processName
+            FieldOp::Str8,         // splitName
+            FieldOp::String8Array, // attributionTags
+            FieldOp::Int,          // descriptionRes
+            FieldOp::Int,          // enabled
+            FieldOp::Int,          // exported
+            FieldOp::Int,          // directBootAware
+            FieldOp::Str8,         // authority
+            FieldOp::Str8,         // readPermission
+            FieldOp::Str8,         // writePermission
+            FieldOp::Int,          // grantUriPermissions
+            FieldOp::Int,          // forceUriPermissions
             FieldOp::TypedArray("android.content.pm.PathPermission"),
             FieldOp::TypedArray("android.content.pm.PathPermission"),
             FieldOp::Int, // multiprocess
@@ -520,13 +540,13 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int,          // showUser
             FieldOp::Int,          // showBadge
             FieldOp::Nested("android.content.pm.ApplicationInfo"),
-            FieldOp::Str8,        // processName
-            FieldOp::Str8,        // splitName
-            FieldOp::StringArray, // attributionTags
-            FieldOp::Int,         // descriptionRes
-            FieldOp::Int,         // enabled
-            FieldOp::Int,         // exported (ComponentInfo)
-            FieldOp::Int,         // directBootAware
+            FieldOp::Str8,         // processName
+            FieldOp::Str8,         // splitName
+            FieldOp::String8Array, // attributionTags
+            FieldOp::Int,          // descriptionRes
+            FieldOp::Int,          // enabled
+            FieldOp::Int,          // exported (ComponentInfo)
+            FieldOp::Int,          // directBootAware
             // ServiceInfo
             FieldOp::Str8, // permission
             FieldOp::Int,  // flags
@@ -552,23 +572,23 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int,          // showUser
             FieldOp::Int,          // showBadge
             // InstrumentationInfo
-            FieldOp::Str8,        // targetPackage
-            FieldOp::Str8,        // targetProcesses
-            FieldOp::Str8,        // sourceDir
-            FieldOp::Str8,        // publicSourceDir
-            FieldOp::StringArray, // splitNames
-            FieldOp::StringArray, // splitSourceDirs
-            FieldOp::StringArray, // splitPublicSourceDirs
-            FieldOp::SparseArray, // splitDependencies
-            FieldOp::Str8,        // dataDir
-            FieldOp::Str8,        // deviceProtectedDataDir
-            FieldOp::Str8,        // credentialProtectedDataDir
-            FieldOp::Str8,        // primaryCpuAbi
-            FieldOp::Str8,        // secondaryCpuAbi
-            FieldOp::Str8,        // nativeLibraryDir
-            FieldOp::Str8,        // secondaryNativeLibraryDir
-            FieldOp::Int,         // handleProfiling
-            FieldOp::Int,         // functionalTest
+            FieldOp::Str8,         // targetPackage
+            FieldOp::Str8,         // targetProcesses
+            FieldOp::Str8,         // sourceDir
+            FieldOp::Str8,         // publicSourceDir
+            FieldOp::String8Array, // splitNames
+            FieldOp::String8Array, // splitSourceDirs
+            FieldOp::String8Array, // splitPublicSourceDirs
+            FieldOp::SparseArray,  // splitDependencies
+            FieldOp::Str8,         // dataDir
+            FieldOp::Str8,         // deviceProtectedDataDir
+            FieldOp::Str8,         // credentialProtectedDataDir
+            FieldOp::Str8,         // primaryCpuAbi
+            FieldOp::Str8,         // secondaryCpuAbi
+            FieldOp::Str8,         // nativeLibraryDir
+            FieldOp::Str8,         // secondaryNativeLibraryDir
+            FieldOp::Int,          // handleProfiling
+            FieldOp::Int,          // functionalTest
         ],
         verification: Verification::Full,
     },
@@ -1121,10 +1141,16 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int],
         verification: Verification::Curated,
     },
+    // `android.content.pm.ProviderInfoList.writeToParcel` (image
+    // `classes.dex`): `allowSquashing()` (writes nothing), then
+    // `writeTypedList(providers, flags)`, then `restoreAllowSquashing`. The old
+    // `[StringArray]` spec described a class that has no string array at all;
+    // no ACOS reply uses this codec yet (`atms` sends a null typed object), so
+    // the wrong table was inert but wrong.
     ParcelableSpec {
         class: "android.content.pm.ProviderInfoList",
-        fields: &[FieldOp::StringArray],
-        verification: Verification::Curated,
+        fields: &[FieldOp::TypedList("android.content.pm.ProviderInfo")],
+        verification: Verification::Full,
     },
     // `android.app.ProfilerInfo.writeToParcel`:
     //   writeString(profileFile)
@@ -1627,39 +1653,47 @@ pub static SPECS: &[ParcelableSpec] = &[
     },
     // ---- NET1: connectivity (API-34 `ConnectivityManager` wire) ------------
     //
-    // `NetworkCapabilities.writeToParcel` (packages/modules/Connectivity
-    // framework, android-14.0.0_r75) writes: the two capability bitfields and
-    // the transport bitfield as longs, four ints (up/down bandwidth, signal
-    // strength), the nullable `NetworkSpecifier`/`TransportInfo` parcelables,
-    // the nullable uid `ArraySet` (an int count; `-1` is null), the
-    // `mAllowedUids`/`mAdministratorUids`/`mSubIds` int arrays (never null on
-    // the wire: the reader dereferences them), the SSID, the private-DNS flag,
-    // owner/requestor ids and package, the underlying-network typed list (an
-    // int count) and the enterprise-id mask. `Str16` with a null value is
-    // byte-identical to `writeParcelable(null)`, which is how the two nullable
-    // parcelables and every null count are modelled.
+    // `NetworkCapabilities.writeToParcel` (packages/modules/Connectivity,
+    // android-14.0.0_r75, bytecode in
+    // `dex/framework-connectivity/classes.dex`) writes:
+    //
+    // ```text
+    // writeLong ×3, writeInt ×2, writeParcelable ×2, writeInt,
+    // writeParcelableArraySet(mUids), writeIntArray, writeString, writeBoolean,
+    // writeIntArray, writeInt ×2, writeString, writeIntArray, writeTypedList,
+    // writeInt
+    // ```
+    //
+    // `writeParcelableArraySet` is a private helper (`writeInt(size)` then a
+    // `writeParcelable` per element) and the oracle now inlines it, which is
+    // [`FieldOp::Counted`]. The two nullable `Parcelable` fields are
+    // `writeParcelable` — a `null` one writes only the `null` class-name
+    // string, but the field must not be modelled as a bare `writeString` or the
+    // next real writer change (a non-null specifier) desynchronises silently.
+    // `mUnderlyingNetworks` is `writeTypedList` (surfaces in the scan) and its
+    // `null` encoding is `writeInt(-1)`, which [`FieldOp::TypedList`] writes.
     ParcelableSpec {
         class: "android.net.NetworkCapabilities",
         fields: &[
-            FieldOp::Long,     // mNetworkCapabilities & ALL_VALID_CAPABILITIES
-            FieldOp::Long,     // mForbiddenNetworkCapabilities
-            FieldOp::Long,     // mTransportTypes & ALL_VALID_TRANSPORTS
-            FieldOp::Int,      // mLinkUpBandwidthKbps
-            FieldOp::Int,      // mLinkDownBandwidthKbps
-            FieldOp::Str16,    // mNetworkSpecifier (writeParcelable)
-            FieldOp::Str16,    // mTransportInfo (writeParcelable)
-            FieldOp::Int,      // mSignalStrength
-            FieldOp::Int,      // mUids ArraySet count (-1 = null)
+            FieldOp::Long, // mNetworkCapabilities & ALL_VALID_CAPABILITIES
+            FieldOp::Long, // mForbiddenNetworkCapabilities
+            FieldOp::Long, // mTransportTypes & ALL_VALID_TRANSPORTS
+            FieldOp::Int,  // mLinkUpBandwidthKbps
+            FieldOp::Int,  // mLinkDownBandwidthKbps
+            FieldOp::Named("android.net.NetworkSpecifier"), // mNetworkSpecifier
+            FieldOp::Named("android.net.TransportInfo"), // mTransportInfo
+            FieldOp::Int,  // mSignalStrength
+            FieldOp::Counted(&[FieldOp::Named("android.net.UidRange")]), // mUids ArraySet
             FieldOp::IntArray, // mAllowedUids
-            FieldOp::Str16,    // mSSID
-            FieldOp::Bool,     // mPrivateDnsBroken
+            FieldOp::Str16, // mSSID
+            FieldOp::Bool, // mPrivateDnsBroken
             FieldOp::IntArray, // administrator uids
-            FieldOp::Int,      // mOwnerUid
-            FieldOp::Int,      // mRequestorUid
-            FieldOp::Str16,    // mRequestorPackageName
+            FieldOp::Int,  // mOwnerUid
+            FieldOp::Int,  // mRequestorUid
+            FieldOp::Str16, // mRequestorPackageName
             FieldOp::IntArray, // mSubIds
-            FieldOp::Int,      // mUnderlyingNetworks typed-list count (-1 = null)
-            FieldOp::Int,      // mEnterpriseId & ALL_VALID_ENTERPRISE_IDS
+            FieldOp::TypedList("android.net.Network"), // mUnderlyingNetworks
+            FieldOp::Int,  // mEnterpriseId & ALL_VALID_ENTERPRISE_IDS
         ],
         verification: Verification::Full,
     },
@@ -1676,72 +1710,44 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
-    // `LinkProperties.writeToParcel`: interface name, three address lists
-    // (LinkAddress parcelables / `InetAddress` byte arrays), the private-DNS
-    // facts, domains, the dhcp server address byte array, MTU, TCP buffer
-    // sizes, route parcelables, the nullable HTTP proxy (a byte marker), the
-    // nullable NAT64 prefix, the stacked links (`writeList`), wake-on-LAN and
-    // the two captive-portal parcelables.
+    // `LinkProperties.writeToParcel` (android-14.0.0_r75, bytecode in
+    // `dex/framework-connectivity/classes.dex`): interface name, three address
+    // lists (each `writeInt(count)` then a `writeParcelable`/`writeAddress` per
+    // element; the helpers are inlined by the oracle now), the private-DNS
+    // facts, domains, the dhcp server address, MTU, TCP buffer sizes, the route
+    // list, the nullable HTTP proxy (a `writeByte` marker), the nullable NAT64
+    // prefix, the stacked links (`writeList`), wake-on-LAN and the two
+    // captive-portal parcelables.
     //
-    // The lists are variable length on the wire; each list is one field here.
-    // Without the network module every list is empty and the bytes are the ones
-    // ACOS shipped before (an explicit `0` count per list), so an empty list and
-    // the old three-`Int` form are byte-identical.
+    // ACOS's network carries no address list (the sandbox has no interface to
+    // describe), so every list is an explicit `0`/`-1` count, never a fabricated
+    // address. `writeAddress` writes `writeByteArray`, then (for an IPv6
+    // address) `writeBoolean` + `writeInt`; the oracle's collapsed loop body is
+    // [`FieldOp::Counted`] over exactly those three ops.
     ParcelableSpec {
         class: "android.net.LinkProperties",
         fields: &[
-            FieldOp::Str16,                                     // interface name
-            FieldOp::ParcelableList("android.net.LinkAddress"), // link addresses
-            FieldOp::AddressList,                               // DNS servers
-            FieldOp::AddressList,                               // validated private DNS servers
-            FieldOp::Bool,                                      // usePrivateDns
-            FieldOp::Str16,                                     // privateDnsServerName
-            FieldOp::AddressList,                               // PCSCF servers
-            FieldOp::Str16,                                     // domains
-            FieldOp::ByteArray,                                 // dhcp server address (null)
-            FieldOp::Int,                                       // mtu
-            FieldOp::Str16,                                     // tcpBufferSizes
-            FieldOp::ParcelableList("android.net.RouteInfo"),   // routes
-            FieldOp::Byte,                                      // httpProxy presence marker
-            FieldOp::Str16,                                     // nat64Prefix (writeParcelable)
-            FieldOp::Int,                                       // stacked links (`writeList` count)
-            FieldOp::Bool,                                      // wakeOnLanSupported
-            FieldOp::Str16, // captivePortalApiUrl (writeParcelable)
-            FieldOp::Str16, // captivePortalData (writeParcelable)
+            FieldOp::Str16,                                                       // interface name
+            FieldOp::Counted(&[FieldOp::Named("android.net.LinkAddress")]),       // mLinkAddresses
+            FieldOp::Counted(&[FieldOp::ByteArray, FieldOp::Bool, FieldOp::Int]), // mDnses
+            // mValidatedPrivateDnses
+            FieldOp::Counted(&[FieldOp::ByteArray, FieldOp::Bool, FieldOp::Int]),
+            FieldOp::Bool,  // usePrivateDns
+            FieldOp::Str16, // privateDnsServerName
+            // mPcscfs
+            FieldOp::Counted(&[FieldOp::ByteArray, FieldOp::Bool, FieldOp::Int]),
+            FieldOp::Str16,                                                // domains
+            FieldOp::Address, // dhcp server address (writeAddress, IPv4)
+            FieldOp::Int,     // mtu
+            FieldOp::Str16,   // tcpBufferSizes
+            FieldOp::Counted(&[FieldOp::Named("android.net.RouteInfo")]), // mRoutes
+            FieldOp::ByteCond(&[FieldOp::Named("android.net.ProxyInfo")]), // mHttpProxy
+            FieldOp::Named("android.net.IpPrefix"), // nat64Prefix
+            FieldOp::ValueList, // mStackedLinks (`writeList`)
+            FieldOp::Bool,    // wakeOnLanSupported
+            FieldOp::Named("android.net.CaptivePortalApiUrl"), // mCaptivePortalApiUrl
+            FieldOp::Named("android.net.CaptivePortalData"), // mCaptivePortalData
         ],
-        verification: Verification::Full,
-    },
-    // `LinkAddress.writeToParcel`: the raw address bytes, prefix length, flags,
-    // scope, then the two lifetimes (`LIFETIME_UNKNOWN` = -1 when unset).
-    ParcelableSpec {
-        class: "android.net.LinkAddress",
-        fields: &[
-            FieldOp::ByteArray, // address.getAddress()
-            FieldOp::Int,       // prefixLength
-            FieldOp::Int,       // flags (OsConstants.IFA_F_*)
-            FieldOp::Int,       // scope (RT_SCOPE_*)
-            FieldOp::Long,      // deprecationTime
-            FieldOp::Long,      // expirationTime
-        ],
-        verification: Verification::Full,
-    },
-    // `RouteInfo.writeToParcel`: destination `IpPrefix` (writeParcelable),
-    // gateway bytes, interface, type, MTU.
-    ParcelableSpec {
-        class: "android.net.RouteInfo",
-        fields: &[
-            FieldOp::Named("android.net.IpPrefix"), // destination
-            FieldOp::ByteArray,                     // gateway (null for an on-link route)
-            FieldOp::Str16,                         // mInterface
-            FieldOp::Int,                           // mType (RTN_UNICAST = 1)
-            FieldOp::Int,                           // mMtu
-        ],
-        verification: Verification::Full,
-    },
-    // `IpPrefix.writeToParcel`: address bytes + prefix length.
-    ParcelableSpec {
-        class: "android.net.IpPrefix",
-        fields: &[FieldOp::ByteArray, FieldOp::Int],
         verification: Verification::Full,
     },
     // `NetworkInfo.writeToParcel` (the deprecated query replies).
@@ -1810,6 +1816,45 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int,  // userLockedFields
         ],
         verification: Verification::Prefix,
+    },
+    // ---- K2/R1: the single-user emulated volume ----------------------------
+    //
+    // `StorageVolume.writeToParcel` (image `classes3.dex`): four string8s, five
+    // booleans-as-int, the max file size long, the owner UserHandle written by
+    // `writeParcelable` (class name + int), the nullable UUID (int presence +
+    // string8), then the fsUuid and state string8s.
+    // `LinkAddress.writeToParcel`: the raw address bytes, prefix length, flags,
+    // scope, then the two lifetimes (`LIFETIME_UNKNOWN` = -1 when unset).
+    ParcelableSpec {
+        class: "android.net.LinkAddress",
+        fields: &[
+            FieldOp::ByteArray, // address.getAddress()
+            FieldOp::Int,       // prefixLength
+            FieldOp::Int,       // flags (OsConstants.IFA_F_*)
+            FieldOp::Int,       // scope (RT_SCOPE_*)
+            FieldOp::Long,      // deprecationTime
+            FieldOp::Long,      // expirationTime
+        ],
+        verification: Verification::Full,
+    },
+    // `RouteInfo.writeToParcel`: destination `IpPrefix` (writeParcelable),
+    // gateway bytes, interface, type, MTU.
+    ParcelableSpec {
+        class: "android.net.RouteInfo",
+        fields: &[
+            FieldOp::Named("android.net.IpPrefix"), // destination
+            FieldOp::ByteArray,                     // gateway (null for an on-link route)
+            FieldOp::Str16,                         // mInterface
+            FieldOp::Int,                           // mType (RTN_UNICAST = 1)
+            FieldOp::Int,                           // mMtu
+        ],
+        verification: Verification::Full,
+    },
+    // `IpPrefix.writeToParcel`: address bytes + prefix length.
+    ParcelableSpec {
+        class: "android.net.IpPrefix",
+        fields: &[FieldOp::ByteArray, FieldOp::Int],
+        verification: Verification::Full,
     },
     // ---- MODNOTIF3: the posted notification and its action -----------------
     //
@@ -1913,40 +1958,20 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[],
         verification: Verification::Curated,
     },
-    // ---- K2/R1: the single-user emulated volume ----------------------------
-    //
-    // `StorageVolume.writeToParcel` (image `classes3.dex`): four string8s, five
-    // booleans-as-int, the max file size long, the owner UserHandle written by
-    // `writeParcelable` (class name + int), the nullable UUID (int presence +
-    // string8), then the fsUuid and state string8s.
     ParcelableSpec {
-        class: "android.os.storage.StorageVolume",
-        fields: &[
-            FieldOp::Str8,                           // id
-            FieldOp::Str8,                           // path
-            FieldOp::Str8,                           // internalPath
-            FieldOp::Str8,                           // description
-            FieldOp::Int,                            // primary
-            FieldOp::Int,                            // removable
-            FieldOp::Int,                            // emulated
-            FieldOp::Int,                            // externallyManaged
-            FieldOp::Int,                            // allowMassStorage
-            FieldOp::Long,                           // maxFileSize
-            FieldOp::Named("android.os.UserHandle"), // owner
-            FieldOp::Cond(&[FieldOp::Str8]),         // uuid
-            FieldOp::Str8,                           // fsUuid
-            FieldOp::Str8,                           // state
-        ],
+        // `BluetoothDevice.writeToParcel` (image dex `BluetoothDevice.writeToParcel`:
+        // `writeString(mAddress)` then `writeInt(mAddressType)`; the image's
+        // `BluetoothDevice(Parcel)` reads `readString()` + `readInt()`).
+        // `writeString` is the **UTF-16** string (`Parcel.writeString`), not
+        // `writeString8`: a `Str8` here made the client read the address as
+        // UTF-16 and abandon the whole `Result`, so
+        // `BluetoothAdapter.getBondedDevices()` logged a `TimeoutException` and
+        // returned null (MODTAIL2 `BONDED null`). The bonded-device list and the
+        // `ACTION_FOUND` extra both carry this payload.
+        // `real_java_write_to_parcel_matches_the_rust_codec` byte-compares it.
+        class: "android.bluetooth.BluetoothDevice",
+        fields: &[FieldOp::Str16, FieldOp::Int],
         verification: Verification::Full,
-    },
-    ParcelableSpec {
-        class: "android.os.UserHandle",
-        fields: &[FieldOp::Int],
-        // `UserHandle` has two overloads named `writeToParcel`; the DEX scanner
-        // follows the static helper, so this one is curated rather than
-        // prefix-verified. The wire form is one int (the user id), confirmed
-        // against the image's `UserHandle(Parcel)`.
-        verification: Verification::Curated,
     },
     // `AccessibilityServiceInfo.writeToParcel`, read off the *image's* own
     // framework dex (`.cache/boot/android-34/dex/framework/classes.dex`,
@@ -2003,28 +2028,78 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // `android.app.ActivityManager$PendingIntentInfo.writeToParcel` (image dex
+    // `framework/classes.dex`): `writeString(mCreatorPackage)`,
+    // `writeInt(mCreatorUid)`, `writeBoolean(mImmutable)`,
+    // `writeInt(mIntentSenderType)`. `IActivityManager.getInfoForIntentSender`
+    // answers one, and the framework reads it on the `PendingIntent` path
+    // (PIFILLIN).
+    ParcelableSpec {
+        class: "android.app.ActivityManager$PendingIntentInfo",
+        fields: &[FieldOp::Str16, FieldOp::Int, FieldOp::Bool, FieldOp::Int],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.os.storage.StorageVolume",
+        fields: &[
+            FieldOp::Str8,                           // id
+            FieldOp::Str8,                           // path
+            FieldOp::Str8,                           // internalPath
+            FieldOp::Str8,                           // description
+            FieldOp::Int,                            // primary
+            FieldOp::Int,                            // removable
+            FieldOp::Int,                            // emulated
+            FieldOp::Int,                            // externallyManaged
+            FieldOp::Int,                            // allowMassStorage
+            FieldOp::Long,                           // maxFileSize
+            FieldOp::Named("android.os.UserHandle"), // owner
+            FieldOp::Cond(&[FieldOp::Str8]),         // uuid
+            FieldOp::Str8,                           // fsUuid
+            FieldOp::Str8,                           // state
+        ],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.os.UserHandle",
+        fields: &[FieldOp::Int],
+        // `UserHandle` has two overloads named `writeToParcel`; the DEX scanner
+        // follows the static helper, so this one is curated rather than
+        // prefix-verified. The wire form is one int (the user id), confirmed
+        // against the image's `UserHandle(Parcel)`.
+        verification: Verification::Curated,
+    },
     ParcelableSpec {
         class: "android.media.AudioAttributes",
-        // The real `AudioAttributes.writeToParcel` branches (below), so the
-        // linear `FieldOp` list cannot express it; `read_audio_attributes` /
-        // `write_audio_attributes` are the codec. The spec exists only so
-        // `spec_for` resolves the class for the scanner/verification tools, and
-        // its fields describe the **non-flattened** path (what `Notification`
-        // and a `NotificationChannel` write).
         fields: &[
-            FieldOp::Int,         // usage
-            FieldOp::Int,         // contentType
-            FieldOp::Int,         // source
+            FieldOp::Int,         // content type
             FieldOp::Int,         // flags
-            FieldOp::Int,         // parcel flags (FLATTEN_TAGS)
-            FieldOp::StringArray, // tags (FLATTEN_TAGS clear: String[])
-            FieldOp::Str16,       // formatted tags (FLATTEN_TAGS set: String)
-            FieldOp::Int,         // ATTR_PARCEL_IS_NULL_BUNDLE / VALID_BUNDLE
-            FieldOp::Bundle,      // only when VALID_BUNDLE
+            FieldOp::Int,         // usage
+            FieldOp::Int,         // capture preset
+            FieldOp::Int,         // ? (image classes2.dex)
+            FieldOp::StringArray, // tags (image writes StringArray before the string)
+            FieldOp::Str16,       // formatted tags (nullable: -1)
+            FieldOp::Int,         // bundle presence
+            FieldOp::Bundle,
         ],
         verification: Verification::Prefix,
     },
 ];
+
+/// Look up a spec by dotted class name.
+#[must_use]
+pub fn spec_for(class: &str) -> Option<&'static ParcelableSpec> {
+    SPECS.iter().find(|s| s.class == class)
+}
+
+/// True when a codec exists for `class`.
+#[must_use]
+pub fn has_codec(class: &str) -> bool {
+    spec_for(class).is_some()
+}
+
+// ---------------------------------------------------------------------------
+// `android.media.AudioAttributes` (MODNOTIF3 transcription, corrected)
+// ---------------------------------------------------------------------------
 
 /// `android.media.AudioAttributes` — `writeToParcel` switches on the parcel
 /// flags (`FLATTEN_TAGS`), so it is a curated codec like [`read_icon`].
@@ -2136,18 +2211,6 @@ fn write_audio_attributes(parcel: &mut Parcel, value: &Parcelable) -> Result<()>
     }
 }
 
-/// Look up a spec by dotted class name.
-#[must_use]
-pub fn spec_for(class: &str) -> Option<&'static ParcelableSpec> {
-    SPECS.iter().find(|s| s.class == class)
-}
-
-/// True when a codec exists for `class`.
-#[must_use]
-pub fn has_codec(class: &str) -> bool {
-    spec_for(class).is_some()
-}
-
 fn unsupported(class: &str) -> ServiceError {
     let _ = ErrorCode::UnsupportedAndroidApi;
     ServiceError::UnsupportedParcelable {
@@ -2186,21 +2249,17 @@ pub fn read_payload(class: &str, parcel: &mut Parcel) -> Result<Parcelable> {
     }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     let mut values = Vec::with_capacity(spec.fields.len());
-    // `ACOS_PARCEL_TRACE=1` prints one line per field with the parcel offset, so
-    // a desynchronised codec names the field that over/under-read instead of
-    // only the crash it caused much later. Off in every normal run.
     let trace = std::env::var_os("ACOS_PARCEL_TRACE").is_some();
-    for (index, field) in spec.fields.iter().enumerate() {
-        let offset = parcel.data_position();
-        let value = read_field(*field, parcel);
+    for (i, field) in spec.fields.iter().enumerate() {
+        let before = parcel.data_position();
+        let v = read_field(*field, parcel)?;
         if trace {
             eprintln!(
-                "parcel-trace: {class} field {index} {field:?} at {offset} (now {}) -> {:?}",
-                parcel.data_position(),
-                value
+                "  [{class} {i}] {field:?} {before}..{} = {v:?}",
+                parcel.data_position()
             );
         }
-        values.push(value?);
+        values.push(v);
     }
     Ok(Parcelable::Ordered {
         class: class.to_string(),
@@ -2273,11 +2332,21 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
         }
         FieldOp::Str8 => Value::Str8(parcel.read_string8()?),
         FieldOp::StringArray => Value::StringArray(parcel.read_string16_array()?),
+        FieldOp::String8Array => Value::StringArray(parcel.read_string8_array()?),
         FieldOp::StringList => Value::StringList(parcel.read_string16_array()?),
         FieldOp::IntArray => Value::IntArray(parcel.read_int32_array()?),
         FieldOp::LongArray => Value::LongArray(parcel.read_int64_array()?),
         FieldOp::FloatArray => Value::FloatArray(parcel.read_float_array()?),
         FieldOp::ByteArray => Value::ByteArray(parcel.read_byte_array()?),
+        FieldOp::Address => {
+            let bytes = parcel.read_byte_array()?;
+            if bytes.as_ref().is_some_and(|b| b.len() == 16) {
+                // IPv6: the writer emits the scope-id marker and value.
+                let _has_scope = parcel.read_bool()?;
+                let _scope = parcel.read_int32()?;
+            }
+            Value::ByteArray(bytes)
+        }
         FieldOp::Raw => {
             // The native `KeyCharacterMap` payload has no wire length, but it is
             // self-describing (`libs/input/KeyCharacterMap.cpp`): deviceId,
@@ -2327,12 +2396,13 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
                 }
                 let mut out = Vec::with_capacity(n);
                 for _ in 0..n {
-                    // `Parcel.writeTypedArray` writes each element through
-                    // `writeTypedObject`: an `int` presence marker (0 = null)
-                    // and then the payload. The writer in this module has
-                    // always emitted that marker; the reader must consume it,
-                    // or every following field is misaligned (found by the
-                    // notification's non-empty `actions` array).
+                    // `Parcel.writeTypedArray` writes each element with
+                    // `writeTypedObject`: a 4-byte presence marker (`0` null,
+                    // `1` present) before the payload. The writer below emits
+                    // that marker, so the reader must consume it; reading the
+                    // payload directly desynchronised every element after the
+                    // first and only stayed invisible while all typed arrays in
+                    // the replies were empty (count `-1`).
                     if parcel.read_int32()? == 0 {
                         out.push(Value::Parcelable(Parcelable::Null));
                     } else {
@@ -2461,32 +2531,8 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
                 Value::List(Some(out))
             }
         }
-        FieldOp::AddressList => {
-            let n = parcel.read_int32()?;
-            if n < 0 {
-                Value::List(None)
-            } else {
-                let n = n as usize;
-                if n > parcel.remaining() {
-                    return Err(ParcelError::BadLength {
-                        len: n,
-                        max: parcel.remaining(),
-                    }
-                    .into());
-                }
-                let mut out = Vec::with_capacity(n);
-                for _ in 0..n {
-                    let addr = parcel.read_byte_array()?;
-                    if addr.as_ref().map(Vec::len) == Some(16) && parcel.read_bool()? {
-                        let _scope = parcel.read_int32()?;
-                    }
-                    out.push(Value::ByteArray(addr));
-                }
-                Value::List(Some(out))
-            }
-        }
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
-        FieldOp::Cutout => read_cutout(parcel)?,
+
         FieldOp::Icon => Value::Parcelable(read_icon(parcel)?),
         FieldOp::ArraySet => {
             let n = parcel.read_int32()?;
@@ -2518,6 +2564,7 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
                 Value::List(Some(out))
             }
         }
+        FieldOp::Cutout => read_cutout(parcel)?,
         FieldOp::CountedNested(class) => {
             let n = parcel.read_int32()?;
             if n < 0 {
@@ -2534,6 +2581,53 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
                 let mut out = Vec::with_capacity(n);
                 for _ in 0..n {
                     out.push(Value::Parcelable(read_payload(class, parcel)?));
+                }
+                Value::List(Some(out))
+            }
+        }
+        FieldOp::Counted(inner) => {
+            let n = parcel.read_int32()?;
+            if n < 0 {
+                Value::List(None)
+            } else {
+                let n = n as usize;
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut out = Vec::with_capacity(n);
+                for _ in 0..n {
+                    let mut values = Vec::with_capacity(inner.len());
+                    for f in inner {
+                        values.push(read_field(*f, parcel)?);
+                    }
+                    out.push(Value::Cond {
+                        present: true,
+                        values,
+                    });
+                }
+                Value::List(Some(out))
+            }
+        }
+        FieldOp::ValueList => {
+            let n = parcel.read_int32()?;
+            if n < 0 {
+                Value::List(None)
+            } else {
+                let n = n as usize;
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut out = Vec::with_capacity(n);
+                for _ in 0..n {
+                    out.push(Value::Dynamic(read_dynamic(parcel)?));
                 }
                 Value::List(Some(out))
             }
@@ -2642,9 +2736,15 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
         FieldOp::Str8 => parcel.write_string8_opt(expect_str(value)?)?,
         FieldOp::StringArray => {
             let arr = expect_string_array(value)?;
-            let refs: Option<Vec<&str>> =
-                arr.map(|v| v.iter().map(|s| s.as_deref().unwrap_or("")).collect());
-            parcel.write_string16_array(refs.as_deref())?;
+            let refs: Option<Vec<Option<&str>>> =
+                arr.map(|v| v.iter().map(|s| s.as_deref()).collect());
+            parcel.write_string16_array_nullable(refs.as_deref())?;
+        }
+        FieldOp::String8Array => {
+            let arr = expect_string_array(value)?;
+            let refs: Option<Vec<Option<&str>>> =
+                arr.map(|v| v.iter().map(|s| s.as_deref()).collect());
+            parcel.write_string8_array(refs.as_deref())?;
         }
         FieldOp::StringList => {
             let items = expect_string_list(value)?;
@@ -2656,6 +2756,14 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
         FieldOp::LongArray => parcel.write_int64_array(expect_long_array(value)?)?,
         FieldOp::FloatArray => parcel.write_float_array(expect_float_array(value)?)?,
         FieldOp::ByteArray => parcel.write_byte_array(expect_byte_array(value)?)?,
+        FieldOp::Address => match value {
+            // A null (and, at 4 bytes, an IPv4 address) is bytes-only.
+            Value::ByteArray(None) => parcel.write_byte_array(None)?,
+            Value::ByteArray(Some(bytes)) if bytes.len() != 16 => {
+                parcel.write_byte_array(Some(bytes))?;
+            }
+            _ => return Err(unsupported("android.net.Inet6Address scope id")),
+        },
         FieldOp::Raw => {
             let bytes = expect_byte_array(value)?.ok_or_else(|| ServiceError::BadReply {
                 interface: "parcelable".into(),
@@ -2845,7 +2953,6 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             _ => return Err(bad(format!("expected counted typed list, got {value:?}"))),
         },
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
-        FieldOp::Cutout => write_cutout(parcel, value)?,
         FieldOp::Icon => {
             let payload = expect_parcelable(value)?;
             write_icon(parcel, payload)?;
@@ -2863,6 +2970,24 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             }
             _ => return Err(bad(format!("expected an ArraySet value, got {value:?}"))),
         },
+        FieldOp::Icon => {
+            let payload = expect_parcelable(value)?;
+            write_icon(parcel, payload)?;
+        }
+        FieldOp::ArraySet => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("ArraySet too large"))?,
+                );
+                for item in items {
+                    let p = expect_parcelable(item)?;
+                    write_dynamic(parcel, &crate::value::DynamicValue::Parcelable(p.clone()))?;
+                }
+            }
+            _ => return Err(bad(format!("expected an ArraySet value, got {value:?}"))),
+        },
+        FieldOp::Cutout => write_cutout(parcel, value)?,
         FieldOp::CountedNested(_class) => match value {
             Value::List(None) | Value::Skipped => parcel.write_int32(-1),
             Value::List(Some(items)) => {
@@ -2875,31 +3000,43 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             }
             _ => return Err(bad(format!("expected counted payloads, got {value:?}"))),
         },
-        FieldOp::AddressList => match value {
+        FieldOp::Counted(inner) => match value {
             Value::List(None) | Value::Skipped => parcel.write_int32(-1),
             Value::List(Some(items)) => {
                 parcel.write_int32(
-                    i32::try_from(items.len()).map_err(|_| bad("address list too large"))?,
+                    i32::try_from(items.len()).map_err(|_| bad("counted list too large"))?,
                 );
                 for item in items {
-                    let Value::ByteArray(Some(addr)) = item else {
-                        return Err(bad(format!("expected a byte-array address, got {item:?}")));
+                    let Value::Cond { present, values } = item else {
+                        return Err(bad(format!("expected counted element, got {item:?}")));
                     };
-                    match addr.len() {
-                        // `writeAddress`: the bytes, then (IPv6 only) whether a
-                        // scope id follows. ACOS's addresses carry no scope id.
-                        4 => parcel.write_byte_array(Some(addr))?,
-                        16 => {
-                            parcel.write_byte_array(Some(addr))?;
-                            parcel.write_bool(false);
-                        }
-                        n => {
-                            return Err(bad(format!("address is {n} bytes, not 4 or 16")));
-                        }
+                    if !*present || values.len() != inner.len() {
+                        return Err(bad(format!(
+                            "counted element expects {} fields, got {values:?}",
+                            inner.len()
+                        )));
+                    }
+                    for (f, v) in inner.iter().zip(values) {
+                        write_field(*f, parcel, v)?;
                     }
                 }
             }
-            _ => return Err(bad(format!("expected an address list, got {value:?}"))),
+            _ => return Err(bad(format!("expected counted list, got {value:?}"))),
+        },
+        FieldOp::ValueList => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("value list too large"))?,
+                );
+                for item in items {
+                    let Value::Dynamic(d) = item else {
+                        return Err(bad(format!("expected list value, got {item:?}")));
+                    };
+                    write_dynamic(parcel, d)?;
+                }
+            }
+            _ => return Err(bad(format!("expected value list, got {value:?}"))),
         },
         FieldOp::Named(_) | FieldOp::IgnoredNamed(_) => {
             let p = expect_parcelable(value)?;
@@ -3144,9 +3281,6 @@ pub fn read_bundle(parcel: &mut Parcel) -> Result<Option<Bundle>> {
 
 /// The codec key for `android.content.Intent`.
 pub const INTENT_CLASS: &str = "android.content.Intent";
-
-/// The codec key for `android.graphics.drawable.Icon`.
-pub const ICON_CLASS: &str = "android.graphics.drawable.Icon";
 
 /// `ParceledListSlice<T>` has a variable payload (count, element class name,
 /// then each element's `writeTypedObject` presence marker + payload) that no
@@ -3813,10 +3947,10 @@ fn read_value_length(parcel: &mut Parcel, tag: i32) -> Result<(usize, usize)> {
     let declared = declared as usize;
     let start = parcel.data_position();
     // The body may be shorter than its declared length: an imported parcel has
-    // had the 4-byte stability record stripped after each flat object, and the
-    // framework's length prefix counts them (see `check_value_length`). Bound
-    // the prefix by what the rest of the parcel plus those records can hold, so
-    // a hostile length still cannot make the reader skip ahead.
+    // had the 4-byte libbinder stability record stripped after each flat object,
+    // and the framework's length prefix counts them (see `check_value_length`).
+    // Bound the prefix by what the rest of the parcel plus those records can
+    // hold, so a hostile length still cannot make the reader skip ahead.
     let strippable = parcel
         .objects()
         .iter()
@@ -3857,7 +3991,7 @@ fn check_value_length(parcel: &Parcel, declared: usize, start: usize, tag: i32) 
         return Ok(());
     }
     Err(bad(format!(
-        "VAL_{tag} body consumed {actual} bytes but declared {declared}          ({stripped} bytes of binder stability records were stripped on import)"
+        "VAL_{tag} body consumed {actual} bytes but declared {declared} ({stripped} bytes of binder stability records were stripped on import)"
     )))
 }
 
@@ -3913,6 +4047,7 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
                     detail: format!("VAL_LIST count {size} is negative"),
                 });
             }
+            // Guest-controlled count: each element is at least one 4-byte tag.
             let cap = (size as usize).min(parcel.remaining() / 4);
             let mut items = Vec::with_capacity(cap);
             for _ in 0..size {
@@ -3935,7 +4070,6 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
                     detail: format!("VAL_OBJECTARRAY count {size} is negative"),
                 });
             }
-            // Guest-controlled count: each element is at least one 4-byte tag.
             let cap = (size as usize).min(parcel.remaining() / 4);
             let mut items = Vec::with_capacity(cap);
             for _ in 0..size {
@@ -4090,14 +4224,9 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
             parcel.write_int32(val::IBINDER);
             parcel.write_strong_binder_opt(*b);
         }
-        D::LongArray(a) => {
-            parcel.write_int32(val::NULL);
-            let _ = a;
-            return Err(bad("VAL_LONGARRAY is not modelled"));
-        }
         D::List(items) => match items {
-            // `writeValue(null)` is `VAL_NULL`; `writeList` is only reached for a
-            // non-null List.
+            // `writeValue(null)` is `VAL_NULL`; `writeList` is only reached for
+            // a non-null List.
             None => parcel.write_int32(val::NULL),
             Some(items) => {
                 write_value_length_prefixed(parcel, val::LIST, |parcel| {
@@ -4128,6 +4257,11 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
                 })?;
             }
         },
+        D::LongArray(a) => {
+            parcel.write_int32(val::NULL);
+            let _ = a;
+            return Err(bad("VAL_LONGARRAY is not modelled"));
+        }
         D::Parcelable(p) => {
             // `VAL_PARCELABLE` is length-prefixed (`isLengthPrefixed`,
             // Parcel.java:4908-4926) and the count covers the class name plus
@@ -4259,7 +4393,6 @@ fn write_typed_value(parcel: &mut Parcel, value: &Value) -> Result<()> {
     }
 }
 
-/// `Icon.TYPE_*` tags (`base/graphics/java/android/graphics/drawable/Icon.java:88-114`).
 const ICON_TYPE_BITMAP: i32 = 1;
 const ICON_TYPE_RESOURCE: i32 = 2;
 const ICON_TYPE_DATA: i32 = 3;
@@ -4355,6 +4488,8 @@ fn write_icon(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
     parcel.write_int32(expect_int(blend)?);
     Ok(())
 }
+
+pub const ICON_CLASS: &str = "android.graphics.drawable.Icon";
 
 fn read_cutout(parcel: &mut Parcel) -> Result<Value> {
     let variant = parcel.read_int32()?;
@@ -4477,37 +4612,121 @@ pub struct ScannedWrite {
 pub struct Scanner;
 
 impl Scanner {
-    /// Scan one class's `writeToParcel` from the Android 14 boot DEX directory.
+    /// Scan one class's `writeToParcel` from one DEX directory.
     pub fn write_to_parcel(
         dex_dir: &std::path::Path,
         class: &str,
     ) -> std::result::Result<ScannedWrite, String> {
-        scan::write_to_parcel(dex_dir, class)
+        scan::DexSet::load_dirs(&[dex_dir.to_path_buf()]).write_to_parcel(class)
     }
+
+    /// Scan one class's `writeToParcel` across every boot-classpath DEX
+    /// directory of the image, in classpath order.
+    ///
+    /// This is the oracle the test uses. Scanning a single `dex/framework`
+    /// directory let a whole class of wrong field lists hide: a spec whose
+    /// class lives in another boot jar (`android.net.*` in
+    /// `framework-connectivity`, `android.*` in the apex jars) was skipped as
+    /// "class not found" and stayed `Verification::Full` without ever being
+    /// checked.
+    pub fn write_to_parcel_boot(class: &str) -> std::result::Result<ScannedWrite, String> {
+        boot_scanner()
+            .ok_or_else(|| "boot DEX cache unavailable (run from the repo root)".to_string())?
+            .write_to_parcel(class)
+    }
+
+    /// Scan one class's `writeToParcel` across the given DEX directories, in
+    /// the order given.
+    pub fn write_to_parcel_in(
+        dirs: &[std::path::PathBuf],
+        class: &str,
+    ) -> std::result::Result<ScannedWrite, String> {
+        scan::DexSet::load_dirs(dirs).write_to_parcel(class)
+    }
+}
+
+/// Every DEX directory of the image's boot classpath, in classpath order.
+///
+/// `.cache/boot/android-34/dex/<jar-stem>/classes*.dex` is the image's own
+/// expansion of each boot-classpath jar. The set is the union of
+/// `BOOTCLASSPATH`, `SYSTEMSERVERCLASSPATH` and the other jars the image ships
+/// under `dex/`: a spec must not be able to hide in a jar that is on the
+/// classpath but not scanned, nor in one the image ships without listing.
+#[must_use]
+pub fn boot_classpath_dex_dirs() -> Option<Vec<std::path::PathBuf>> {
+    let root = crate::workspace_path(".cache/boot/android-34")?;
+    let dex_root = root.join("dex");
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    let mut listed: Vec<String> = Vec::new();
+    for name in ["BOOTCLASSPATH", "SYSTEMSERVERCLASSPATH"] {
+        let Ok(text) = std::fs::read_to_string(root.join(name)) else {
+            continue;
+        };
+        for entry in text.trim().split(':') {
+            let stem = entry.trim().trim_end_matches(".jar");
+            if stem.is_empty() {
+                continue;
+            }
+            listed.push(stem.to_string());
+        }
+    }
+    for stem in listed {
+        let dir = dex_root.join(&stem);
+        if dir.is_dir() && !dirs.contains(&dir) {
+            dirs.push(dir);
+        }
+    }
+    // The image ships more dex directories than the two classpath variables
+    // list; include them all so no shipped jar is a blind spot.
+    let mut rest: Vec<std::path::PathBuf> = std::fs::read_dir(&dex_root)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_dir() && !dirs.contains(p))
+        .collect();
+    rest.sort();
+    dirs.extend(rest);
+    Some(dirs)
+}
+
+/// Lazily loaded, all boot-classpath DEX files of the image.
+fn boot_scanner() -> Option<&'static scan::DexSet> {
+    static BOOT_SCAN: OnceLock<Option<scan::DexSet>> = OnceLock::new();
+    BOOT_SCAN
+        .get_or_init(|| {
+            let dirs = boot_classpath_dex_dirs()?;
+            Some(scan::DexSet::load_dirs(&dirs))
+        })
+        .as_ref()
 }
 
 /// Lazily cached boot DEX, used by [`verify_prefix`] tests.
 static BOOT_DEX: OnceLock<Option<Vec<acos_dex::DexFile>>> = OnceLock::new();
 
-/// Load `.cache/boot/android-34/dex/framework` if present.
+/// Load every boot-classpath DEX file of the image if present.
+///
+/// The `dex/framework`-only version of this helper is what made the
+/// `android.net` codecs unverifiable; it now returns the same set
+/// [`boot_classpath_dex_dirs`] describes.
 #[must_use]
 pub fn boot_dex() -> Option<&'static [acos_dex::DexFile]> {
     BOOT_DEX
         .get_or_init(|| {
-            let dir = crate::workspace_path(".cache/boot/android-34/dex/framework")?;
-            let dir = dir.as_path();
-            let mut paths: Vec<_> = std::fs::read_dir(dir)
-                .ok()?
-                .filter_map(|e| e.ok())
-                .map(|e| e.path())
-                .filter(|p| p.extension().map(|x| x == "dex").unwrap_or(false))
-                .collect();
-            paths.sort();
+            let dirs = boot_classpath_dex_dirs()?;
             let mut out = Vec::new();
-            for p in paths {
-                let bytes = std::fs::read(p).ok()?;
-                if let Ok(dex) = acos_dex::DexFile::parse(bytes) {
-                    out.push(dex);
+            for dir in dirs {
+                let mut paths: Vec<_> = std::fs::read_dir(&dir)
+                    .ok()?
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| p.extension().map(|x| x == "dex").unwrap_or(false))
+                    .collect();
+                paths.sort();
+                for p in paths {
+                    let bytes = std::fs::read(p).ok()?;
+                    if let Ok(dex) = acos_dex::DexFile::parse(bytes) {
+                        out.push(dex);
+                    }
                 }
             }
             Some(out)
@@ -4537,19 +4756,26 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::Str16 => call == "writeString" || call == "writeString16",
         // The scanner records `TextUtils.writeToParcel` as a single
         // `writeString` op, so a `CharSequence` field matches that one call
-        // even though the wire form is `int + writeString8`. A direct
-        // `Parcel.writeCharSequence` call (AccessibilityWindowAttributes) is
-        // the same wire form and shows up under its own name.
+        // even though the wire form is `int + writeString8`. `Parcel
+        // .writeCharSequence` is that same call one level up
+        // (`Parcel.java`: `writeCharSequence` -> `TextUtils.writeToParcel`), and
+        // the API-34 image's own dex records it under its own name
+        // (`AccessibilityWindowAttributes.writeToParcel` = `writeCharSequence`,
+        // `writeParcelable`), so both names are the one op.
         FieldOp::CharSequence => call == "writeString" || call == "writeCharSequence",
         FieldOp::Str8 => call == "writeString8",
-        FieldOp::StringArray => call == "writeString8Array" || call == "writeStringArray",
+        FieldOp::StringArray => call == "writeStringArray",
+        // `writeString8Array` and `writeStringArray` are different wire
+        // encodings; accepting either for both is how the pm codecs stayed
+        // wrong while the DEX oracle passed.
+        FieldOp::String8Array => call == "writeString8Array",
         // `Parcel.writeStringList` is a distinct call in a DEX scan, but the
         // bytes it writes are the `writeStringArray` shape (count + String16s).
-        FieldOp::StringList => call == "writeStringList" || call == "writeStringArray",
+        FieldOp::StringList => call == "writeStringList",
         FieldOp::IntArray => call == "writeIntArray",
         FieldOp::LongArray => call == "writeLongArray",
         FieldOp::FloatArray => call == "writeFloatArray",
-        FieldOp::ByteArray => call == "writeByteArray",
+        FieldOp::ByteArray | FieldOp::Address => call == "writeByteArray",
         FieldOp::SparseArray => call == "writeSparseArray",
         FieldOp::Named(_) | FieldOp::IgnoredNamed(_) => call == "writeParcelable",
         FieldOp::Typed(_) | FieldOp::IgnoredTyped(_) => call == "writeTypedObject",
@@ -4560,7 +4786,6 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::Nested(_) => call == "writeParcelable",
         FieldOp::ParcelableList(_) => call == "writeParcelableList",
         FieldOp::Dynamic => call == "writeValue",
-        FieldOp::ArraySet => call == "writeArraySet",
         FieldOp::PersistableBundle => {
             // `Parcel.writePersistableBundle`, or a direct nested
             // `PersistableBundle.writeToParcel` call (which the scanner records
@@ -4577,11 +4802,11 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::CountedTyped(_) => call == "writeInt",
         // `DisplayCutout$ParcelableWrapper.writeCutoutToParcel` is a static
         // helper, which the scanner records as a nested `writeToParcel` call.
-        FieldOp::Cutout => call == "writeParcelable",
-        // The Icon payload is a direct `Icon.writeToParcel` nested call.
+        FieldOp::ArraySet => call == "writeArraySet",
         FieldOp::Icon => call == "writeParcelable",
-        FieldOp::CountedNested(_) => call == "writeInt",
-        FieldOp::AddressList => call == "writeInt",
+        FieldOp::Cutout => call == "writeParcelable",
+        FieldOp::CountedNested(_) | FieldOp::Counted(_) => call == "writeInt",
+        FieldOp::ValueList => call == "writeList",
         // No Java `writeToParcel` call emits these bytes (the peer's native
         // reader consumes them), so a DEX scan cannot verify them.
         FieldOp::Raw => false,
@@ -4679,6 +4904,35 @@ fn field_consumes(field: FieldOp, calls: &[String]) -> usize {
                 _ => 1,
             }
         }
+        FieldOp::Address => {
+            if first != "writeByteArray" {
+                return 0;
+            }
+            // The collapsed IPv6 arm: `writeBoolean` + `writeInt`.
+            let mut n = 1;
+            if calls.get(1).map(String::as_str) == Some("writeBoolean")
+                && calls.get(2).map(String::as_str) == Some("writeInt")
+            {
+                n += 2;
+            }
+            n
+        }
+        FieldOp::Counted(inner) => {
+            if first != "writeInt" {
+                return 0;
+            }
+            // The scanner collapses the element loop to one body pass, so a
+            // body that does not follow the count is the empty-list case.
+            let mut n = 1;
+            for f in inner {
+                let c = field_consumes(*f, &calls[n..]);
+                if c == 0 {
+                    return 1;
+                }
+                n += c;
+            }
+            n
+        }
         FieldOp::CountedNested(_) => match first.as_str() {
             "writeInt" => match calls.get(1).map(String::as_str) {
                 Some("writeParcelable") => 2,
@@ -4731,32 +4985,78 @@ pub fn codec_table() -> Vec<(&'static str, usize, &'static str)> {
 }
 
 /// The scanner implementation (kept here so the crate has no `acos-dex` leak).
+///
+/// A scan is *method-level*, not file-level: the parser loads every DEX file of
+/// the image's boot classpath once, then finds a class wherever it lives. That
+/// is what makes `android.net.NetworkCapabilities` (in `framework-connectivity`)
+/// and every apex jar reachable by the same oracle as `dex/framework`.
 pub mod scan {
     use acos_dex::decode::{decode, payload_kind, payload_len};
     use acos_dex::{ClassDef, DexFile};
 
     use super::ScannedWrite;
 
-    /// Scan one class's `writeToParcel` from a boot DEX directory.
-    pub fn write_to_parcel(dex_dir: &std::path::Path, class: &str) -> Result<ScannedWrite, String> {
-        let desc = format!("L{};", class.replace('.', "/"));
-        let mut paths: Vec<_> = std::fs::read_dir(dex_dir)
-            .map_err(|e| e.to_string())?
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().map(|x| x == "dex").unwrap_or(false))
-            .collect();
-        paths.sort();
-        for path in paths {
-            let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-            let Ok(dex) = DexFile::parse(bytes) else {
-                continue;
-            };
-            if let Some(def) = dex.find_class(&desc) {
-                return scan_class(&dex, def);
+    /// Every `.dex` file of a set of boot DEX directories, in load order.
+    pub struct DexSet {
+        files: Vec<DexFile>,
+    }
+
+    impl DexSet {
+        /// Load the `.dex` files of `dirs`, in the order given.
+        #[must_use]
+        pub fn load_dirs(dirs: &[std::path::PathBuf]) -> Self {
+            let mut files = Vec::new();
+            for dir in dirs {
+                let mut paths: Vec<_> = std::fs::read_dir(dir)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| p.extension().map(|x| x == "dex").unwrap_or(false))
+                    .collect();
+                paths.sort();
+                for path in paths {
+                    let Ok(bytes) = std::fs::read(&path) else {
+                        continue;
+                    };
+                    if let Ok(dex) = DexFile::parse(bytes) {
+                        files.push(dex);
+                    }
+                }
             }
+            Self { files }
         }
-        Err(format!("class not found: {class}"))
+
+        /// Number of loaded DEX files (evidence for tests and the audit).
+        #[must_use]
+        pub fn len(&self) -> usize {
+            self.files.len()
+        }
+
+        /// True when no DEX file could be loaded.
+        #[must_use]
+        pub fn is_empty(&self) -> bool {
+            self.files.is_empty()
+        }
+
+        /// The first DEX file that defines `desc`, and its class definition.
+        fn find_class(&self, desc: &str) -> Option<(&DexFile, &ClassDef)> {
+            for dex in &self.files {
+                if let Some(def) = dex.find_class(desc) {
+                    return Some((dex, def));
+                }
+            }
+            None
+        }
+
+        /// Scan `class`'s `writeToParcel` from this DEX set.
+        pub fn write_to_parcel(&self, class: &str) -> Result<ScannedWrite, String> {
+            let desc = format!("L{};", class.replace('.', "/"));
+            let Some((dex, def)) = self.find_class(&desc) else {
+                return Err(format!("class not found: {class}"));
+            };
+            scan_class(self, dex, def)
+        }
     }
 
     /// Control-flow terminator of a scanned region.
@@ -4768,14 +5068,14 @@ pub mod scan {
         Goto(usize),
     }
 
-    fn scan_class(dex: &DexFile, def: &ClassDef) -> Result<ScannedWrite, String> {
+    fn scan_class(set: &DexSet, dex: &DexFile, def: &ClassDef) -> Result<ScannedWrite, String> {
         let mut out = ScannedWrite::default();
         let desc = dex
             .class_descriptor(def)
             .map_err(|e| e.to_string())?
             .to_string();
-        let mut visited = std::collections::HashSet::new();
-        scan_method(dex, &desc, "writeToParcel", &mut visited, &mut out)?;
+        let mut stack = Vec::new();
+        scan_method(set, &desc, "writeToParcel", &mut stack, &mut out)?;
         if out.calls.is_empty() {
             return Err("no writeToParcel".into());
         }
@@ -4786,17 +5086,34 @@ pub mod scan {
     /// execution order. `invoke-super` and direct nested `writeToParcel` calls
     /// are spliced in so the op list is the full inherited field order.
     fn scan_method(
-        dex: &DexFile,
+        set: &DexSet,
         class_desc: &str,
         method: &str,
-        visited: &mut std::collections::HashSet<String>,
+        stack: &mut Vec<String>,
         out: &mut ScannedWrite,
     ) -> Result<(), String> {
+        // A stack, not a "seen" set: the same helper is legitimately called at
+        // several positions in one writer (`LinkProperties.writeAddresses` three
+        // times, `writeAddress` four times), while a recursive
+        // `writeToParcel` chain must still terminate.
         let key = format!("{class_desc}->{method}");
-        if !visited.insert(key) {
+        if stack.iter().any(|k| k == &key) {
             return Ok(());
         }
-        let Some(def) = dex.find_class(class_desc) else {
+        stack.push(key);
+        let result = scan_method_body(set, class_desc, method, stack, out);
+        stack.pop();
+        result
+    }
+
+    fn scan_method_body(
+        set: &DexSet,
+        class_desc: &str,
+        method: &str,
+        stack: &mut Vec<String>,
+        out: &mut ScannedWrite,
+    ) -> Result<(), String> {
+        let Some((dex, def)) = set.find_class(class_desc) else {
             return Ok(());
         };
         let Some(cd) = dex.class_data(def).map_err(|e| e.to_string())? else {
@@ -4810,7 +5127,7 @@ pub mod scan {
                 continue;
             }
             let code = dex.code_item(m.code_off).map_err(|e| e.to_string())?;
-            scan_region(dex, &code.insns, 0, None, visited, out)?;
+            scan_region(set, dex, &code.insns, 0, None, stack, out)?;
             return Ok(());
         }
         Ok(())
@@ -4824,11 +5141,12 @@ pub mod scan {
     /// arms) and `ProfilerInfo.profileFd` (a presence marker + nested write)
     /// verifiable.
     fn scan_region(
+        set: &DexSet,
         dex: &DexFile,
         insns: &[u16],
         mut pc: usize,
         stop: Option<usize>,
-        visited: &mut std::collections::HashSet<String>,
+        stack: &mut Vec<String>,
         out: &mut ScannedWrite,
     ) -> Result<Term, String> {
         let mut guard = 0usize;
@@ -4867,7 +5185,8 @@ pub mod scan {
                 let fall = pc + insn.size as usize;
                 let take = (pc as i64 + i64::from(insn.target)) as usize;
                 let mut fall_out = ScannedWrite::default();
-                let fall_term = scan_region(dex, insns, fall, Some(take), visited, &mut fall_out)?;
+                let fall_term =
+                    scan_region(set, dex, insns, fall, Some(take), stack, &mut fall_out)?;
                 match fall_term {
                     Term::Fall => {
                         // if-then: the fall arm is the conditional body.
@@ -4884,7 +5203,8 @@ pub mod scan {
                             continue;
                         }
                         let mut take_out = ScannedWrite::default();
-                        let _ = scan_region(dex, insns, take, Some(join), visited, &mut take_out)?;
+                        let _ =
+                            scan_region(set, dex, insns, take, Some(join), stack, &mut take_out)?;
                         if take_out.calls.len() > fall_out.calls.len() {
                             out.calls.extend(take_out.calls);
                             out.delegates.extend(take_out.delegates);
@@ -4901,7 +5221,7 @@ pub mod scan {
                 return Ok(Term::Fall);
             }
             if insn.opcode.is_invoke() {
-                record_invoke(dex, insn.index, insn.opcode.byte(), visited, out)?;
+                record_invoke(set, dex, insn.index, insn.opcode.byte(), stack, out)?;
             }
             pc += insn.size as usize;
         }
@@ -4909,21 +5229,17 @@ pub mod scan {
     }
 
     fn record_invoke(
+        set: &DexSet,
         dex: &DexFile,
         index: u32,
         opcode: u8,
-        visited: &mut std::collections::HashSet<String>,
+        stack: &mut Vec<String>,
         out: &mut ScannedWrite,
     ) -> Result<(), String> {
         let Ok(m) = dex.method_ref(index) else {
             return Ok(());
         };
-        if m.class == "Landroid/os/Parcel;" && m.name == "writeArraySet" {
-            // `Parcel.writeArraySet` writes an `int` count (`-1` for null) and
-            // then one `writeValue` per element (`Parcel.java:1387-1393`). A
-            // spec models the whole shape as one [`FieldOp::ArraySet`].
-            out.calls.push("writeArraySet".to_string());
-        } else if m.class == "Landroid/os/Parcel;" && m.name.starts_with("write") {
+        if m.class == "Landroid/os/Parcel;" && m.name.starts_with("write") {
             if m.name != "writeInterfaceToken"
                 && m.name != "writeNoException"
                 && m.name != "writeStackTrace"
@@ -4944,20 +5260,23 @@ pub mod scan {
             out.calls.push("writeInt".to_string());
         } else if m.name == "writeToParcel" && opcode == 0x6f {
             // `invoke-super`: inline the inherited field order.
-            scan_method(dex, m.class, "writeToParcel", visited, out)?;
-        } else if m.name == "writeToParcelImpl" {
-            // The AOSP convention (`Notification.writeToParcel` and friends):
-            // `writeToParcel` wraps marshaling listeners around a private
-            // `writeToParcelImpl`, which does the actual field-by-field write.
-            // Inline it so the spec list follows the real field order instead
-            // of stopping at the delegation.
-            scan_method(dex, m.class, "writeToParcelImpl", visited, out)?;
+            scan_method(set, m.class, "writeToParcel", stack, out)?;
         } else if m.name == "writeToParcel" || m.name == "writeCutoutToParcel" {
             // A nested Parcelable written through its own `writeToParcel`
             // (not `Parcel.writeParcelable`). Record it as a `writeParcelable`
             // op so a spec's `FieldOp::Nested` can verify the position.
             out.calls.push("writeParcelable".to_string());
             out.delegates.push(m.class.to_string());
+        } else if m.name.starts_with("write")
+            && m.parameters.first() == Some(&"Landroid/os/Parcel;")
+        {
+            // A private helper that writes into the Parcel
+            // (`LinkProperties.writeAddresses`/`writeAddress`,
+            // `NetworkCapabilities.writeParcelableArraySet`). Not inlining it
+            // left those fields invisible to the oracle: `LinkProperties`
+            // claimed 17 calls when the writer emits 30. Splice the helper's
+            // own calls in, exactly like `invoke-super`.
+            scan_method(set, m.class, m.name, stack, out)?;
         }
         Ok(())
     }

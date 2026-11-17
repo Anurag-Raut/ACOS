@@ -464,15 +464,6 @@ pub fn install_with_handles_and_insets(
     // AIDL surface; it is a session service so the control op and
     // `ServiceManager` can name it.
     let intents_service = Arc::clone(&intents);
-    host.register(
-        crate::intents::SERVICE_NAME,
-        crate::intents::DESCRIPTOR,
-        move |_w| {
-            Box::new(crate::intents::IntentBrokerService::new(Arc::clone(
-                &intents_service,
-            ))) as Box<dyn ServiceObject>
-        },
-    );
     host.register("package", "android.content.pm.IPackageManager", {
         // One PMS state for the session (MODA11Y2 reads the installed service
         // list from it), wired to the one runtime-permission table (MODNOTIF2).
@@ -493,10 +484,9 @@ pub fn install_with_handles_and_insets(
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
                 if store.package.is_empty() {
-                    let primary = state.primary();
                     store.set_install_time(
-                        &primary.package.package_name.clone(),
-                        &primary.granted_permissions.clone(),
+                        &state.primary().package.package_name.clone(),
+                        &state.primary().granted_permissions.clone(),
                     );
                 }
             }
@@ -504,6 +494,34 @@ pub fn install_with_handles_and_insets(
             Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
         }
     });
+    host.register(
+        crate::intents::SERVICE_NAME,
+        crate::intents::DESCRIPTOR,
+        move |_w| {
+            Box::new(crate::intents::IntentBrokerService::new(Arc::clone(
+                &intents_service,
+            ))) as Box<dyn ServiceObject>
+        },
+    );
+    // ADR-0031: the `webviewupdate` peer is wall 3 of
+    // `WebViewFactory.getProvider()` — `getUpdateService()` ->
+    // `ServiceManager.getService("webviewupdate")` -> a null service NPEs inside
+    // `waitForAndGetProvider()` and surfaces as
+    // `MissingWebViewPackageException`. It answers from the **same** package
+    // state `PackageManager` serves (`pms_shared`, the one the accessibility
+    // module and the runtime-permission table are wired to), so the provider
+    // record cannot drift from the package's own record; with no provider
+    // package installed it answers "no provider" (null record, non-OK status),
+    // never a fake success. It is published here, after the single PMS
+    // registration above and never as a second `package` factory: a second
+    // factory would replace MODNOTIF2's one-store PMS with a table-less one.
+    host.register_dynamic_named(
+        "webviewupdate",
+        crate::webview::DESCRIPTOR,
+        Box::new(crate::webview::WebViewUpdateService::new(Arc::clone(
+            &pms_shared,
+        ))),
+    );
     host.register(
         "display",
         "android.hardware.display.IDisplayManager",

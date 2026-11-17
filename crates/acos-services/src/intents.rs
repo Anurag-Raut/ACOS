@@ -145,13 +145,15 @@ impl CapturedIntent {
                     Extra::Int(number) => serde_json::json!(number),
                     Extra::Short(number) => serde_json::json!(number),
                     Extra::Bool(flag) => serde_json::json!(flag),
+                    // MODNOTIF3/MODBLUETOOTH: the extra kinds the modules added
+                    // are rendered in the shape the Android API returns them in,
+                    // never dropped from the capture.
+                    Extra::Short(short) => serde_json::json!(short),
                     Extra::Strings(items) => serde_json::json!(items),
-                    Extra::Bytes(bytes) => serde_json::json!({"bytes": bytes.len()}),
-                    Extra::ByteArrays(arrays) => serde_json::json!({
-                        "byte_arrays": arrays.iter().map(Vec::len).collect::<Vec<_>>()
-                    }),
-                    Extra::Parcelable(payload) => {
-                        serde_json::json!({"parcelable": payload.class().unwrap_or_default()})
+                    Extra::Bytes(bytes) => serde_json::json!(bytes),
+                    Extra::ByteArrays(items) => serde_json::json!(items),
+                    Extra::Parcelable(parcelable) => {
+                        serde_json::json!({"parcelable": format!("{parcelable:?}")})
                     }
                     Extra::Present => serde_json::json!({"present": true}),
                 };
@@ -196,7 +198,7 @@ pub fn capture_eligible(facts: &IntentFacts) -> bool {
         return false;
     }
     let action = facts.action.as_deref().unwrap_or_default();
-    let mime = facts.type_.as_deref().unwrap_or_default();
+    let mime = facts.mime_type.as_deref().unwrap_or_default();
     match action {
         "android.intent.action.SEND" | "android.intent.action.SEND_MULTIPLE" => {
             mime.is_empty()
@@ -247,7 +249,7 @@ impl IntentState {
             utc_ms,
             action: facts.action.clone().unwrap_or_default(),
             data: facts.data.clone(),
-            mime_type: facts.type_.clone(),
+            mime_type: facts.mime_type.clone(),
             categories: facts.categories.clone(),
             extras: facts.extras.clone(),
             component: capture_component(),
@@ -437,7 +439,7 @@ mod tests {
         );
         IntentFacts {
             action: Some("android.intent.action.SEND".into()),
-            type_: Some("text/plain".into()),
+            mime_type: Some("text/plain".into()),
             extras,
             ..IntentFacts::default()
         }
@@ -490,7 +492,7 @@ mod tests {
             .capture(
                 &IntentFacts {
                     action: Some("android.intent.action.GET_CONTENT".into()),
-                    type_: Some("image/*".into()),
+                    mime_type: Some("image/*".into()),
                     ..IntentFacts::default()
                 },
                 0,

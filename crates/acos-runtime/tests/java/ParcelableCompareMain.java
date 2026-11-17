@@ -12,6 +12,8 @@ import android.content.pm.PermissionInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
+import android.net.LinkProperties;
+import android.net.NetworkCapabilities;
 import android.graphics.drawable.Icon;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -140,6 +142,118 @@ public final class ParcelableCompareMain {
         return b;
     }
 
+
+    /**
+     * REL3P: a `PackageInfo` carrying the arrays `PackageInfo.writeToParcel`
+     * writes with {@code writeString8Array} ({@code splitNames},
+     * {@code requestedPermissions}) plus a {@code Signature[]}. This is the
+     * shape a `getPackageInfo(pkg, 0x100024c0)` reply has, and the case that
+     * desynchronised the reader (7 209 071 signatures, 7 676 737 936-byte
+     * allocation) when ACOS encoded those arrays as String16.
+     *
+     * <p>{@code applicationInfo} stays null so the value is a pure function of
+     * these fields and the byte comparison against the Rust encoder is exact.
+     */
+    static PackageInfo packageInfoArrays() throws Exception {
+        PackageInfo pi = new PackageInfo();
+        // Public fields directly, hidden ones (@hide on the SDK stubs, present
+        // on the real framework) through `set`.
+        pi.packageName = "dev.acos.fixtures.pmsprobe";
+        pi.splitNames = new String[] {"config.xxhdpi"};
+        pi.versionCode = 7;
+        pi.versionName = "1.0";
+        pi.applicationInfo = null;
+        pi.firstInstallTime = 1L;
+        pi.lastUpdateTime = 2L;
+        pi.activities = null;
+        pi.receivers = null;
+        pi.services = null;
+        pi.providers = null;
+        pi.instrumentation = null;
+        pi.permissions = null;
+        pi.requestedPermissions =
+                new String[] {"android.permission.INTERNET", "android.permission.VIBRATE"};
+        pi.requestedPermissionsFlags = new int[] {1, 1};
+        pi.signatures = new android.content.pm.Signature[] {
+                new android.content.pm.Signature(
+                        new byte[] {0x30, (byte) 0x82, 0x01, 0x0a, 0x0d, 0x0e})
+        };
+        pi.installLocation = 0;
+        set(pi, "versionCodeMajor", 0);
+        set(pi, "baseRevisionCode", 0);
+        set(pi, "splitRevisionCodes", null);
+        set(pi, "sharedUserId", null);
+        set(pi, "sharedUserLabel", 0);
+        set(pi, "gids", null);
+        set(pi, "configPreferences", null);
+        set(pi, "reqFeatures", null);
+        set(pi, "featureGroups", null);
+        set(pi, "attributions", null);
+        set(pi, "isStub", Boolean.FALSE);
+        set(pi, "coreApp", Boolean.FALSE);
+        set(pi, "requiredForAllUsers", Boolean.FALSE);
+        set(pi, "restrictedAccountType", null);
+        set(pi, "requiredAccountType", null);
+        set(pi, "overlayTarget", null);
+        set(pi, "overlayCategory", null);
+        set(pi, "overlayPriority", 0);
+        set(pi, "mOverlayIsStatic", Boolean.FALSE);
+        set(pi, "compileSdkVersion", 0);
+        set(pi, "compileSdkVersionCodename", null);
+        set(pi, "signingInfo", null);
+        set(pi, "isApex", Boolean.FALSE);
+        set(pi, "isActiveApex", Boolean.FALSE);
+        return pi;
+    }
+
+    /**
+     * REL3P2: the capabilities of ACOS's emulated default network, built from
+     * the framework's own constants so the test also checks the cap bit
+     * positions. The uids (ArraySet of UidRange), the SSID, the underlying
+     * networks, the specifier and the transport info are null, the allowed /
+     * administrator uids and the sub ids are the constructor's empty sets: the
+     * offline values ACOS serves today.
+     */
+    static NetworkCapabilities networkCapabilities() throws Exception {
+        NetworkCapabilities nc = new NetworkCapabilities();
+        long caps = 0;
+        for (String name : new String[] {
+                "NET_CAPABILITY_NOT_METERED", "NET_CAPABILITY_INTERNET",
+                "NET_CAPABILITY_NOT_RESTRICTED", "NET_CAPABILITY_TRUSTED",
+                "NET_CAPABILITY_NOT_VPN", "NET_CAPABILITY_NOT_ROAMING",
+                "NET_CAPABILITY_FOREGROUND", "NET_CAPABILITY_NOT_CONGESTED",
+                "NET_CAPABILITY_NOT_SUSPENDED", "NET_CAPABILITY_NOT_VCN_MANAGED"}) {
+            caps |= 1L << ((Integer) field(NetworkCapabilities.class, name).get(null)).intValue();
+        }
+        set(nc, "mNetworkCapabilities", caps);
+        set(nc, "mForbiddenNetworkCapabilities", 0L);
+        set(nc, "mTransportTypes",
+                1L << ((Integer) field(NetworkCapabilities.class, "TRANSPORT_WIFI").get(null)).intValue());
+        set(nc, "mLinkUpBandwidthKbps", 0);
+        set(nc, "mLinkDownBandwidthKbps", 0);
+        set(nc, "mNetworkSpecifier", null);
+        set(nc, "mTransportInfo", null);
+        set(nc, "mSignalStrength", Integer.MIN_VALUE);
+        set(nc, "mUids", null);
+        set(nc, "mSSID", null);
+        set(nc, "mPrivateDnsBroken", Boolean.FALSE);
+        set(nc, "mOwnerUid", 1000);
+        set(nc, "mRequestorUid", 1000);
+        set(nc, "mRequestorPackageName", "android");
+        set(nc, "mUnderlyingNetworks", null);
+        set(nc, "mEnterpriseId", 0);
+        return nc;
+    }
+
+    /**
+     * REL3P2: ACOS's emulated `LinkProperties` -- the wifi interface name and
+     * the AOSP emulator's MTU, with every address, route and proxy list empty.
+     */
+    static LinkProperties linkProperties() {
+        LinkProperties lp = new LinkProperties();
+        lp.setInterfaceName("wlan0");
+        lp.setMtu(1500);
+        return lp;
     /**
      * A `Bundle` carrying the `BluetoothDevice.EXTRA_RSSI` short extra. The
      * framework writes `putShort` as `VAL_SHORT` (tag 5) with a 4-byte int
@@ -323,6 +437,9 @@ public final class ParcelableCompareMain {
     public static void main(String[] args) throws Exception {
         emit("configuration", p -> configuration().writeToParcel(p, 0));
         emit("persistable_bundle", p -> persistableBundle().writeToParcel(p, 0));
+        emit("package_info_arrays", p -> packageInfoArrays().writeToParcel(p, 0));
+        emit("network_capabilities", p -> networkCapabilities().writeToParcel(p, 0));
+        emit("link_properties", p -> linkProperties().writeToParcel(p, 0));
         emit("bundle_short", p -> rssiBundle().writeToParcel(p, 0));
         // `SynchronousResultReceiver$Result.writeToParcel` (image dex):
         // `writeValue(mObject)` then `writeValue(mException)`. The Bluetooth
@@ -467,6 +584,108 @@ public final class ParcelableCompareMain {
                         break;
                     case "package_info":
                         got = PackageInfo.CREATOR.createFromParcel(p);
+                        break;
+                    case "package_info_provider": {
+                        // WV2: the `webviewupdate` reply's `PackageInfo` — the
+                        // exact value `WebViewUpdateService` writes from the
+                        // installed `com.android.webview` record. The nested
+                        // `ApplicationInfo` is the part the Java materialiser
+                        // writes for `PackageManager` but the Rust codec writes
+                        // for this peer; a field-order difference shows up here
+                        // as a desynchronised `requestedPermissions` (the image
+                        // OOMs allocating the bogus `String[]`) or as
+                        // `enforceNoDataAvail()` seeing leftover bytes.
+                        got = PackageInfo.CREATOR.createFromParcel(p);
+                        PackageInfo pi = (PackageInfo) got;
+                        check("com.android.webview".equals(pi.packageName),
+                                "package_info_provider packageName " + pi.packageName);
+                        check(pi.versionCode == 1,
+                                "package_info_provider versionCode " + pi.versionCode);
+                        check(pi.applicationInfo != null,
+                                "package_info_provider applicationInfo is null");
+                        check("com.android.webview".equals(pi.applicationInfo.packageName),
+                                "package_info_provider applicationInfo.packageName "
+                                        + pi.applicationInfo.packageName);
+                        check(pi.applicationInfo.sourceDir.endsWith(".apk"),
+                                "package_info_provider sourceDir "
+                                        + pi.applicationInfo.sourceDir);
+                        check(pi.applicationInfo.uid > 0,
+                                "package_info_provider uid " + pi.applicationInfo.uid);
+                        check(pi.requestedPermissions != null
+                                        && pi.requestedPermissions.length == 1
+                                        && "android.permission.INTERNET".equals(
+                                                pi.requestedPermissions[0]),
+                                "package_info_provider requestedPermissions "
+                                        + java.util.Arrays.toString(pi.requestedPermissions));
+                        check(pi.splitNames == null,
+                                "package_info_provider splitNames "
+                                        + java.util.Arrays.toString(pi.splitNames));
+                        break;
+                    }
+                    case "package_info_arrays":
+                        got = PackageInfo.CREATOR.createFromParcel(p);
+                        PackageInfo pi = (PackageInfo) got;
+                        check(pi.packageName.equals("dev.acos.fixtures.pmsprobe"),
+                                "package_info_arrays packageName " + pi.packageName);
+                        check(pi.splitNames != null && pi.splitNames.length == 1
+                                && pi.splitNames[0].equals("config.xxhdpi"),
+                                "package_info_arrays splitNames " + java.util.Arrays.toString(pi.splitNames));
+                        check(pi.requestedPermissions != null && pi.requestedPermissions.length == 2
+                                && pi.requestedPermissions[0].equals("android.permission.INTERNET")
+                                && pi.requestedPermissions[1].equals("android.permission.VIBRATE"),
+                                "package_info_arrays requestedPermissions "
+                                        + java.util.Arrays.toString(pi.requestedPermissions));
+                        check(pi.requestedPermissionsFlags != null
+                                && pi.requestedPermissionsFlags.length == 2
+                                && pi.requestedPermissionsFlags[0] == 1
+                                && pi.requestedPermissionsFlags[1] == 1,
+                                "package_info_arrays requestedPermissionsFlags "
+                                        + java.util.Arrays.toString(pi.requestedPermissionsFlags));
+                        check(pi.signatures != null && pi.signatures.length == 1,
+                                "package_info_arrays signatures "
+                                        + (pi.signatures == null ? "null" : pi.signatures.length));
+                        check(pi.versionCode == 7, "package_info_arrays versionCode");
+                        break;
+                    case "network_capabilities":
+                        got = NetworkCapabilities.CREATOR.createFromParcel(p);
+                        NetworkCapabilities nc = (NetworkCapabilities) got;
+                        check(nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+                                "network_capabilities INTERNET");
+                        check(nc.hasCapability((Integer) field(NetworkCapabilities.class,
+                                        "NET_CAPABILITY_NOT_VCN_MANAGED").get(null)),
+                                "network_capabilities NOT_VCN_MANAGED");
+                        check(!nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+                                "network_capabilities VALIDATED must be off");
+                        check(nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+                                "network_capabilities WIFI transport");
+                        check(nc.getLinkUpstreamBandwidthKbps() == 0
+                                        && nc.getLinkDownstreamBandwidthKbps() == 0,
+                                "network_capabilities bandwidth");
+                        check(nc.getSignalStrength() == Integer.MIN_VALUE,
+                                "network_capabilities signalStrength "
+                                        + nc.getSignalStrength());
+                        check(nc.getNetworkSpecifier() == null,
+                                "network_capabilities specifier must be null");
+                        check(nc.getTransportInfo() == null,
+                                "network_capabilities transportInfo must be null");
+                        check(nc.getEnterpriseIds().length == 0,
+                                "network_capabilities enterprise ids");
+                        check(nc.getOwnerUid() == 1000, "network_capabilities ownerUid");
+                        break;
+                    case "link_properties":
+                        got = LinkProperties.CREATOR.createFromParcel(p);
+                        LinkProperties lp = (LinkProperties) got;
+                        check("wlan0".equals(lp.getInterfaceName()),
+                                "link_properties interface " + lp.getInterfaceName());
+                        check(lp.getMtu() == 1500, "link_properties mtu " + lp.getMtu());
+                        check(lp.getLinkAddresses().isEmpty(), "link_properties link addresses");
+                        check(lp.getDnsServers().isEmpty(), "link_properties dns servers");
+                        check(lp.getDomains() == null, "link_properties domains");
+                        check(lp.getRoutes().isEmpty(), "link_properties routes");
+                        check(lp.getHttpProxy() == null, "link_properties http proxy");
+                        check(lp.getNat64Prefix() == null, "link_properties nat64 prefix");
+                        check(lp.isWakeOnLanSupported() == false, "link_properties wake on lan");
+                        check(!lp.isWakeOnLanSupported(), "link_properties wake on lan");
                         break;
                     case "service_info":
                         got = ServiceInfo.CREATOR.createFromParcel(p);

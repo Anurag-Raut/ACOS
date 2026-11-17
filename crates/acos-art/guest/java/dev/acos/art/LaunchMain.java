@@ -10,6 +10,8 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcel;
 import android.view.View;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -2612,10 +2614,10 @@ public final class LaunchMain {
                 .append(",\"focused\":").append(focused)
                 .append(",\"checked\":").append(checked)
                 .append(",\"selected\":").append(selected);
+        StringBuilder kids = new StringBuilder();
+        boolean first = true;
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
-            boolean first = true;
-            StringBuilder kids = new StringBuilder();
             int n = g.getChildCount();
             for (int i = 0; i < n; i++) {
                 if (budget[0] <= 0) {
@@ -2632,9 +2634,132 @@ public final class LaunchMain {
                 kids.append(one);
                 first = false;
             }
+        }
+        // WV6: a WebView's page lives behind `ViewDelegate.
+        // getAccessibilityNodeProvider()` (the WIRE v1.1 `ax` tree, exposed as
+        // virtual descendants). The framework's View walker cannot see those
+        // children, so the provider's own standard enumeration is merged here:
+        // `findAccessibilityNodeInfosByText("", HOST_VIEW_ID)` returns the page
+        // nodes with the engine's display-space bounds. This is the same
+        // AccessibilityNodeProvider path an accessibility service uses -- no
+        // side channel and no provider-specific type check.
+        AccessibilityNodeProvider provider = null;
+        try {
+            provider = v.getAccessibilityNodeProvider();
+        } catch (Throwable ignored) {
+        }
+        if (provider != null) {
+            java.util.List<AccessibilityNodeInfo> virtual = null;
+            try {
+                virtual = provider.findAccessibilityNodeInfosByText(
+                        "", AccessibilityNodeProvider.HOST_VIEW_ID);
+            } catch (Throwable t) {
+                // Never a silent empty page: the WebView node says so in logcat
+                // and the tree simply carries no virtual children this sample.
+                android.util.Log.w("ACOSVIEW", "WebView virtual nodes failed: " + t);
+            }
+            if (virtual != null) {
+                for (AccessibilityNodeInfo info : virtual) {
+                    if (budget[0] <= 0) {
+                        truncated[0] = true;
+                        break;
+                    }
+                    StringBuilder one = new StringBuilder();
+                    appendVirtualNodeJson(v, info, one, budget, truncated, window);
+                    info.recycle();
+                    if (one.length() == 0) continue;
+                    if (!first) kids.append(',');
+                    kids.append(one);
+                    first = false;
+                }
+            }
+        }
+        if (kids.length() > 0) {
             out.append(",\"children\":[").append(kids).append(']');
         }
         out.append('}');
+    }
+
+    /**
+     * WV6: one page node from a WebView's `AccessibilityNodeProvider`, in the
+     * same JSON shape as a View node. Bounds are the provider's screen-space
+     * `getBoundsInScreen`; `visible` means the node intersects the WebView's
+     * own visible rect, so a selector cannot tap text clipped out of the view.
+     */
+    static void appendVirtualNodeJson(View host, AccessibilityNodeInfo info,
+            StringBuilder out, int[] budget, boolean[] truncated, String window) {
+        if (info == null || budget[0]-- <= 0) {
+            truncated[0] = true;
+            return;
+        }
+        android.graphics.Rect rect = new android.graphics.Rect();
+        try {
+            info.getBoundsInScreen(rect);
+        } catch (Throwable ignored) {
+        }
+        int[] origin = new int[2];
+        try {
+            host.getLocationOnScreen(origin);
+        } catch (Throwable ignored) {
+        }
+        android.graphics.Rect hostRect = new android.graphics.Rect(
+                origin[0], origin[1], origin[0] + host.getWidth(), origin[1] + host.getHeight());
+        android.graphics.Rect visibleRect = new android.graphics.Rect(rect);
+        boolean intersects = visibleRect.intersect(hostRect);
+        boolean visible = intersects && !visibleRect.isEmpty()
+                && info.isVisibleToUser() && host.isShown();
+        String text = "";
+        String contentDescription = "";
+        try {
+            CharSequence cs = info.getText();
+            text = cs == null ? "" : cs.toString();
+            CharSequence cd = info.getContentDescription();
+            contentDescription = cd == null ? "" : cd.toString();
+        } catch (Throwable ignored) {
+        }
+        String cls = "android.view.View";
+        try {
+            CharSequence cn = info.getClassName();
+            if (cn != null && cn.length() > 0) cls = cn.toString();
+        } catch (Throwable ignored) {
+        }
+        boolean clickable = false;
+        boolean enabled = true;
+        boolean focused = false;
+        boolean checked = false;
+        boolean selected = false;
+        try {
+            clickable = info.isClickable();
+            enabled = info.isEnabled();
+            focused = info.isFocused();
+            checked = info.isCheckable() && info.isChecked();
+            selected = info.isSelected();
+        } catch (Throwable ignored) {
+        }
+        out.append("{\"class\":\"").append(jesc(cls)).append('"')
+                .append(",\"id\":\"\"")
+                .append(",\"text\":\"").append(jesc(text)).append('"')
+                .append(",\"hint\":\"\"")
+                .append(",\"password\":false")
+                .append(",\"content_description\":\"").append(jesc(contentDescription)).append('"')
+                .append(",\"window\":\"").append(jesc(window)).append('"')
+                .append(",\"bounds\":\"[").append(rect.left).append(',').append(rect.top)
+                .append("][").append(rect.right).append(',').append(rect.bottom).append("]\"")
+                .append(",\"bounds_on_screen\":\"[").append(rect.left).append(',').append(rect.top)
+                .append("][").append(rect.right).append(',').append(rect.bottom).append("]\"")
+                .append(",\"visible_bounds\":\"")
+                .append(visibleRect.isEmpty() ? ""
+                        : "[" + visibleRect.left + "," + visibleRect.top + "]["
+                                + visibleRect.right + "," + visibleRect.bottom + "]")
+                .append('"')
+                .append(",\"visible\":").append(visible)
+                .append(",\"visibility\":0")
+                .append(",\"clickable\":").append(clickable)
+                .append(",\"enabled\":").append(enabled)
+                .append(",\"focused\":").append(focused)
+                .append(",\"checked\":").append(checked)
+                .append(",\"selected\":").append(selected)
+                .append('}');
     }
 
     static String jesc(String s) {
@@ -3627,6 +3752,25 @@ public final class LaunchMain {
                 // substitute native.
                 "register_android_hardware_HardwareBuffer",
                 "register_com_android_internal_util_VirtualRefBasePtr",
+                // WV4 (wall 8): `android.net.LocalSocketImpl`'s socket natives.
+                // The WebView provider's session transport is one `AF_UNIX`
+                // stream socket per session (`results/handoff/WVB/WIRE.md` §0);
+                // `AcosSessionSocket.open` calls
+                // `LocalSocket.connect(new LocalSocketAddress("/run/acos/webview.sock",
+                // Namespace.FILESYSTEM))`, i.e. `LocalSocketImpl.connectLocal`,
+                // whose seven natives (connectLocal, bindLocal, read_native,
+                // readba_native, write_native, writeba_native,
+                // getPeerCredentials_native) live in the image's own
+                // libandroid_runtime (`register_android_net_LocalSocketImpl`,
+                // base/core/jni/android_net_LocalSocketImpl.cpp). Without the
+                // registration the provider dies with `UnsatisfiedLinkError: No
+                // implementation found for void
+                // android.net.LocalSocketImpl.connectLocal(...)`. The image's
+                // implementation is a real `connect(2)` with real errno ->
+                // IOException (`socket_local_client_connect`), so the failure
+                // with no broker is the honest ENOENT/ECONNREFUSED, never a
+                // fabricated transport.
+                "register_android_net_LocalSocketImpl",
         };
         String[] graphics = {"register_android_graphics_classes"};
         StringBuilder missing = new StringBuilder();

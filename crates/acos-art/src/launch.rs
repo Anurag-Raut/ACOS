@@ -1219,6 +1219,53 @@ pub(crate) fn launch_session(
         Some(d) => root.run_dir_at(&d.join("run"), "launch")?,
         None => root.new_run_dir("launch")?,
     };
+    // ADR-0029: the attached module set decides what this session installs and
+    // which host endpoints it owns, so the specs are parsed **before** anything
+    // is staged or bound. `opts.services` is the launch's `services:` block; a
+    // frozen host template passes the same set in `ACOS_ART_SERVICES`.
+    let mut module_specs: Vec<acos_services::module::ModuleSpec> =
+        acos_services::module::ModuleSpec::parse_list(&serde_json::Value::Array(
+            opts.services.clone(),
+        ))
+        .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    if module_specs.is_empty() {
+        if let Ok(raw) = std::env::var("ACOS_ART_SERVICES") {
+            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
+                Error::Layout(format!("ACOS_ART_SERVICES is not JSON: {error}"))
+            })?;
+            module_specs = acos_services::module::ModuleSpec::parse_list(&value)
+                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
+        }
+    }
+    // WV8: the `webview` module owns the session's WebView socket and the
+    // provider package. With it `off` (the default) neither exists, which is
+    // Android's own "no WebView provider" path: no `com.android.webview` in the
+    // package table, `hasSystemFeature("android.software.webview")` false, no
+    // socket a `WebView` could connect to. With it `real` the launcher stages
+    // the provider APK (below) and binds this session's gate socket; the shared
+    // broker still starts only on the guest's first connect.
+    let webview_real = acos_services::modules::webview::broker_requested(&module_specs);
+    // WV4: this session's WebView socket directory (`wv/`, mounted at
+    // `/run/acos` by the sandbox). Resolved and length-checked before the guest
+    // exists: a `sun_path` overflow must read as a launch error naming the
+    // session directory, not as an unattributable `connect()` failure in the
+    // WebView.
+    let webview_socket_dir = crate::webview_socket::host_dir(run.path())?;
+    crate::webview_socket::check_sun_path(&webview_socket_dir)?;
+    // WV5b: serve this session's socket **lazily**. `start_gate` binds
+    // `<dir>/webview.sock` and starts one sleeping accept thread; the shared
+    // broker (and Chromium itself) exists only after the guest connects, which
+    // the provider does when it creates a WebView. A session without a WebView
+    // pays a socket node and a thread — measured, not assumed
+    // (`results/handoff/WV5b/REPORT.md` §3). WV8: and a session without the
+    // module pays nothing at all: the gate is the module's.
+    let webview_gate = if webview_real {
+        crate::webview_socket::start_gate(&webview_socket_dir, run.path())?
+    } else {
+        None
+    };
+    let webview_broker_socket =
+        webview_real.then(|| crate::webview_socket::broker_socket(&webview_socket_dir));
     crate::stage("run-dir");
 
     // H17: the APK is an input every guest maps (ART mmaps the dex/resources), so
@@ -1247,20 +1294,31 @@ pub(crate) fn launch_session(
     // install and a structured ABI gate. The package manager and the activity
     // manager learn about them below, before any guest exists.
     let mut extras: Vec<ExtraApk> = Vec::new();
-    for extra in &opts.extra_apks {
+    // WV8: a module's `real` profile may install a system app the session cannot
+    // work without (the `webview` provider package). The manifest names it
+    // (`system_apps`) and `module::system_apks` resolves the host file, so a
+    // scenario needs `services: [{id: webview, profile: real}]` and not a second
+    // `extra_apks:` line that could drift from the attached set.
+    let extra_apk_paths: Vec<PathBuf> = opts
+        .extra_apks
+        .iter()
+        .cloned()
+        .chain(acos_services::module::system_apks(&module_specs))
+        .collect();
+    for extra in &extra_apk_paths {
         let name = extra
             .file_name()
             .map(|f| f.to_string_lossy().to_string())
             .filter(|n| !n.is_empty())
             .ok_or_else(|| {
                 Error::Layout(format!(
-                    "--extra-apk {}: the path has no file name",
+                    "extra APK {}: the path has no file name",
                     extra.display()
                 ))
             })?;
         if name == apk_name {
             return Err(Error::Layout(format!(
-                "--extra-apk {}: the launched APK is already staged as {name}",
+                "extra APK {}: the launched APK is already staged as {name}",
                 extra.display()
             )));
         }
@@ -1269,20 +1327,20 @@ pub(crate) fn launch_session(
             .any(|e| e.guest_path == format!("/data/app/{name}"))
         {
             return Err(Error::Layout(format!(
-                "--extra-apk {}: another extra APK is already staged as {name}",
+                "extra APK {}: another APK is already staged as {name}",
                 extra.display()
             )));
         }
         let extra_package = crate::app::apk_package(extra)?;
         if extra_package == package {
             return Err(Error::Layout(format!(
-                "--extra-apk {}: package {extra_package} is the launched package",
+                "extra APK {}: package {extra_package} is the launched package",
                 extra.display()
             )));
         }
         if extras.iter().any(|e| e.package == extra_package) {
             return Err(Error::Layout(format!(
-                "--extra-apk {}: package {extra_package} is already installed by another --extra-apk",
+                "extra APK {}: package {extra_package} is already installed by another APK in this session",
                 extra.display()
             )));
         }
@@ -1580,6 +1638,17 @@ pub(crate) fn launch_session(
     session_modules
         .attach(&module_specs)
         .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    // WV8: publish the endpoints the launcher bound for the `webview` module.
+    // The module's `status` control op answers from these instead of recomputing
+    // a path the launcher already decided, so the two cannot name different
+    // sockets.
+    session_modules
+        .host_mut()
+        .set_webview_gate(acos_services::host::WebviewGate {
+            socket: webview_real
+                .then(|| crate::webview_socket::host_socket_path(&webview_socket_dir)),
+            broker_socket: webview_broker_socket.clone(),
+        });
     // NET5: the resolver proxy is served *after* the modules attach, because the
     // `network` module is what decides whether this session has one (ADR-0030
     // item 4). `sockets.0` is what the sandbox binds at `/dev/socket` (below), so
@@ -2988,6 +3057,36 @@ pub(crate) fn launch_session(
             summary.resource_limits
         ));
     }
+    // WV4/WV5b: publish where this session's WebView socket lives on the host,
+    // and whether the lazy gate is listening on it. The guest side is fixed
+    // (`/run/acos/webview.sock`, WIRE.md §0). With the gate up, the client's
+    // connect succeeds and the *first* connect wakes the shared broker
+    // (`acos-webview --shared`, one per host); with `ACOS_WEBVIEW_GATE=0` there
+    // is no listener and the connect fails with the kernel's real ENOENT.
+    match (&webview_gate, &webview_broker_socket) {
+        (Some(_), Some(broker)) => unsupported_notes.push(format!(
+            "webview socket: {} -> guest {} (module `webview` real: lazy gate listening; the \
+             first connect starts the shared broker at {})",
+            crate::webview_socket::host_socket_path(&webview_socket_dir).display(),
+            crate::webview_socket::GUEST_SOCKET_PATH,
+            broker.display()
+        )),
+        (None, _) => unsupported_notes.push(
+            "webview: module `webview` is off (no `com.android.webview` provider package, no \
+             gate socket): `WebView` takes Android's own no-provider path. Attach it with \
+             `services: [{id: webview, profile: real}]`."
+                .to_string(),
+        ),
+        (Some(_), None) => unsupported_notes.push(format!(
+            "webview socket: {} -> guest {} (lazy gate listening; no shared broker endpoint \
+             named for this session)",
+            crate::webview_socket::host_socket_path(&webview_socket_dir).display(),
+            crate::webview_socket::GUEST_SOCKET_PATH
+        )),
+    }
+    // The gate (its listener thread and the session directory) is dropped after
+    // `result` is built and before the run dir is removed.
+    let webview_gate = webview_gate;
     let mut result = LaunchResult {
         outcome,
         code,

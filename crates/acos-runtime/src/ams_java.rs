@@ -399,8 +399,11 @@ fn intent_facts(vm: &mut Vm, intent: Handle) -> JResult<IntentFacts> {
     Ok(IntentFacts {
         action,
         data,
-
-        type_,
+        // MPROC1: the two fields the capture target records too. The Rust VM
+        // path reads them from the real Intent object, never infers them.
+        mime_type: type_,
+        // PIFILLIN: `Intent.getIdentifier()`, read here because the merge
+        // copies it (`Intent.fillIn`) and the codec carries it.
         identifier,
         // MPROC1: the capture target records the flags too; the Rust VM path
         // reads them from the real Intent object, never infers them.

@@ -313,7 +313,7 @@ mod tests {
         let other = with(|o| {
             o.action = Some("android.intent.action.VIEW".into());
             o.data = Some("content://example/1".into());
-            o.type_ = Some("text/plain".into());
+            o.mime_type = Some("text/plain".into());
             o.identifier = Some("id-1".into());
             o.package = Some("dev.acos.fixtures".into());
             o.component = Some(("dev.acos.fixtures".into(), "Target".into()));
@@ -336,7 +336,7 @@ mod tests {
         );
         assert_eq!(merged.action.as_deref(), Some("android.intent.action.VIEW"));
         assert_eq!(merged.data.as_deref(), Some("content://example/1"));
-        assert_eq!(merged.type_.as_deref(), Some("text/plain"));
+        assert_eq!(merged.mime_type.as_deref(), Some("text/plain"));
         assert_eq!(merged.identifier.as_deref(), Some("id-1"));
         assert_eq!(merged.package.as_deref(), Some("dev.acos.fixtures"));
         assert_eq!(merged.source_bounds, Some([1, 2, 3, 4]));
@@ -388,7 +388,7 @@ mod tests {
     #[test]
     fn data_and_type_are_one_field_and_the_fill_in_type_clears_the_stored_data() {
         let mut target = with(|t| t.data = Some("content://stored".into()));
-        let other = with(|o| o.type_ = Some("image/png".into()));
+        let other = with(|o| o.mime_type = Some("image/png".into()));
         let changes = fill_in_value(&mut target, &other, 0).expect("merge");
         // The target has data, so `(mData == null && mType == null)` is false and
         // no flag is set: nothing is copied.
@@ -398,7 +398,7 @@ mod tests {
         let changes = fill_in_value(&mut target, &other, FILL_IN_DATA).expect("merge");
         assert_eq!(changes, FILL_IN_DATA);
         let merged = facts(&target);
-        assert_eq!(merged.type_.as_deref(), Some("image/png"));
+        assert_eq!(merged.mime_type.as_deref(), Some("image/png"));
         assert_eq!(
             merged.data, None,
             "AOSP assigns the whole data/type pair, so a type-only fill-in clears mData"
@@ -518,7 +518,7 @@ mod tests {
     fn the_content_user_hint_follows_a_copied_uri_only() {
         let mut target = with(|t| t.content_user_hint = USER_CURRENT);
         let other = with(|o| {
-            o.type_ = Some("text/plain".into());
+            o.mime_type = Some("text/plain".into());
             o.content_user_hint = 10;
         });
         fill_in_value(&mut target, &other, 0).expect("merge");
@@ -536,7 +536,7 @@ mod tests {
         // A target with its own hint keeps it.
         let mut target = with(|t| t.content_user_hint = 3);
         let other = with(|o| {
-            o.type_ = Some("text/plain".into());
+            o.mime_type = Some("text/plain".into());
             o.content_user_hint = 10;
         });
         fill_in_value(&mut target, &other, 0).expect("merge");

@@ -1,0 +1,16 @@
+I/AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+I/WVProbe: hasSystemFeature(android.software.webview)=true
+I/WVProbe: WebView.getCurrentWebViewPackage()=PackageInfo{27aed5a com.android.webview}
+I/WVProbe: myUid=10192
+I/WVProbe: own getPackageInfo(0x100024c0) -> dev.acos.fixtures.webview sigs=1
+I/WebViewFactory: Loading com.android.webview version 1.0 (code 1)
+I/ACOSWvProvider: create(WebViewDelegate present)
+E/ACOSWvProvider: ACOS WebView engine unavailable: /run/acos/webview.sock: java.io.IOException: No such file or directory
+I/WVProbe: WebView FAILED: java.lang.IllegalStateException: ACOS WebView engine unavailable (ENGINE_UNAVAILABLE): /run/acos/webview.sock: No such file or directory
+  at com.android.webview.chromium.AcosSessionSocket.open(AcosSessionSocket.java:41)
+  at com.android.webview.chromium.WebViewChromiumFactoryProvider.transport(WebViewChromiumFactoryProvider.java:29)
+  at com.android.webview.chromium.WebViewChromiumFactoryProvider.createWebView(WebViewChromiumFactoryProvider.java:41)
+  at android.webkit.WebView.ensureProviderCreated(WebView.java:2599)
+E/logdw: dev.acos.fixtures.webview.MainActivity
+E/logdw: dev.acos.fixtures.webview.MainActivity
+E/logdw: dev.acos.fixtures.webview.MainActivity

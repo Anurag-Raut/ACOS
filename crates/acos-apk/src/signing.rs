@@ -220,7 +220,7 @@ pub fn certificates(bytes: &[u8], v1_blocks: &[Vec<u8>]) -> Result<Vec<Vec<u8>>>
             .iter()
             .find_map(|id| pairs.iter().find(|(i, _)| i == id));
         if let Some((id, value)) = chosen {
-            let certs = scheme_certificates(value)
+            let certs = scheme_certificates(value, *id)
                 .map_err(|e| signing_err(format!("scheme {id:08x}: {e}")))?;
             return Ok(certs);
         }
@@ -257,19 +257,49 @@ fn push_cert(out: &mut Vec<Vec<u8>>, cert: Vec<u8>) -> Result<()> {
 }
 
 /// One **leaf** certificate per signer in a v2/v3/v3.1 value.
-fn scheme_certificates(block: &[u8]) -> std::result::Result<Vec<Vec<u8>>, &'static str> {
+///
+/// The three schemes share the signed-data layout but not the outer signer:
+/// v2 is `{signed data, signatures, public key}` while v3/v3.1 insert the
+/// minimum and maximum SDK versions (two little-endian `int32`s) between the
+/// signed data and the signatures (`apksig` `V3SchemeSigner`). Reading those
+/// eight bytes as a length prefix is how every v3-signed APK — which is every
+/// APK `tools/build-apps.sh` produces — got **zero** certificates
+/// (`APK_SIGNING_MALFORMED: scheme f05368c0: truncated signatures`), so
+/// `PackageInfo.signatures` was always empty under `GET_SIGNATURES`.
+fn scheme_certificates(
+    block: &[u8],
+    scheme: u32,
+) -> std::result::Result<Vec<Vec<u8>>, &'static str> {
     if block.len() > MAX_SIGNATURE_BLOCK_BYTES {
         return Err("signature block exceeds cap");
     }
+    // The block value is the **signers sequence**: `int32 byte-length` followed
+    // by that many signer records, each itself `int32 byte-length` + payload
+    // (`apksig` `V2SchemeSigner`/`V3SchemeSigner`, `generateSignerBlock`). The
+    // previous parser read the sequence length as the first signer's length, so
+    // `signed_data` swallowed the signatures and public key and the next read
+    // failed with `truncated signatures` — every APK `tools/build-apps.sh`
+    // signs (v2 + v3) reported **zero** certificates, so
+    // `PackageInfo.signatures` was always an empty `Signature[]`.
     let mut pos = 0;
+    let signers = der_len_prefixed(block, &mut pos).ok_or("truncated signer list")?;
     let mut out = Vec::new();
-    while pos < block.len() {
-        let signer = der_len_prefixed(block, &mut pos).ok_or("truncated signer list")?;
+    let mut s_pos = 0;
+    while s_pos < signers.len() {
+        let signer = der_len_prefixed(signers, &mut s_pos).ok_or("truncated signer list")?;
         if signer.is_empty() {
             return Err("empty signer");
         }
         let mut p = 0;
         let signed_data = der_len_prefixed(signer, &mut p).ok_or("truncated signer")?;
+        if scheme != ID_V2 {
+            // v3 / v3.1: minSdkVersion and maxSdkVersion, little-endian int32.
+            let next = p.checked_add(8).ok_or("truncated min/max SDK")?;
+            if next > signer.len() {
+                return Err("truncated min/max SDK");
+            }
+            p = next;
+        }
         let _signatures = der_len_prefixed(signer, &mut p).ok_or("truncated signatures")?;
         let _public_key = der_len_prefixed(signer, &mut p).ok_or("truncated public key")?;
         let mut q = 0;
@@ -471,7 +501,8 @@ mod tests {
         tlv(0x30, &tlv(0x30, &tbs))
     }
 
-    fn scheme_value(certs: &[&[u8]]) -> Vec<u8> {
+    /// One v2 signer record (length-prefixed: signed data, signatures, key).
+    fn signer_v2(certs: &[&[u8]]) -> Vec<u8> {
         let mut chain = Vec::new();
         for c in certs {
             chain.extend(u32p(c));
@@ -479,8 +510,43 @@ mod tests {
         let mut signed_data = u32p(b"\x00\x00\x00\x00");
         signed_data.extend(u32p(&chain));
         signed_data.extend(u32p(&[]));
-        let signer = [u32p(&signed_data), u32p(b"\x00\x00"), u32p(b"key")].concat();
-        u32p(&signer)
+        [u32p(&signed_data), u32p(b"\x00\x00"), u32p(b"key")].concat()
+    }
+
+    /// A whole block value: the signers sequence of the given signer records.
+    fn signers_value(signers: &[Vec<u8>]) -> Vec<u8> {
+        let mut seq = Vec::new();
+        for signer in signers {
+            seq.extend(u32p(signer));
+        }
+        u32p(&seq)
+    }
+
+    fn scheme_value(certs: &[&[u8]]) -> Vec<u8> {
+        signers_value(&[signer_v2(certs)])
+    }
+
+    /// The v3 / v3.1 signer shape: the same signed data, then min/max SDK as
+    /// little-endian int32s, then the signatures and the public key.
+    fn scheme_value_v3(certs: &[&[u8]]) -> Vec<u8> {
+        let mut chain = Vec::new();
+        for c in certs {
+            chain.extend(u32p(c));
+        }
+        let mut signed_data = u32p(b"\x00\x00\x00\x00");
+        signed_data.extend(u32p(&chain));
+        signed_data.extend(u32p(&[])); // additional attributes
+        let min_sdk = 26u32.to_le_bytes();
+        let max_sdk = u32::MAX.to_le_bytes();
+        let signer = [
+            u32p(&signed_data),
+            min_sdk.to_vec(),
+            max_sdk.to_vec(),
+            u32p(b"\x00\x00"),
+            u32p(b"key"),
+        ]
+        .concat();
+        signers_value(&[signer])
     }
 
     fn signing_block(pairs: &[(u32, Vec<u8>)]) -> Vec<u8> {
@@ -549,8 +615,8 @@ mod tests {
         let leaf1 = cert(1, &issuer);
         let chain1 = cert(9, &issuer);
         let leaf2 = cert(2, &issuer);
-        let value = [scheme_value(&[&leaf1, &chain1]), scheme_value(&[&leaf2])].concat();
-        let got = scheme_certificates(&value).expect("valid");
+        let value = signers_value(&[signer_v2(&[&leaf1, &chain1]), signer_v2(&[&leaf2])]);
+        let got = scheme_certificates(&value, ID_V2).expect("valid");
         assert_eq!(got, vec![leaf1, leaf2]);
     }
 
@@ -559,7 +625,10 @@ mod tests {
         let issuer = tlv(0x30, &[]);
         let v2 = cert(1, &issuer);
         let v3 = cert(2, &issuer);
-        let bytes = signing_block(&[(ID_V2, scheme_value(&[&v2])), (ID_V3, scheme_value(&[&v3]))]);
+        let bytes = signing_block(&[
+            (ID_V2, scheme_value(&[&v2])),
+            (ID_V3, scheme_value_v3(&[&v3])),
+        ]);
         assert_eq!(certificates(&bytes, &[]).unwrap(), vec![v3]);
 
         let malformed_v3 = vec![0x01];
@@ -572,11 +641,24 @@ mod tests {
         assert_eq!(err.code(), crate::error::APK_SIGNING_MALFORMED);
     }
 
+    /// REL3P: a v3-signed APK (the shape `tools/build-apps.sh` produces) must
+    /// yield its signer certificate; the min/max SDK words are not a length.
+    #[test]
+    fn v3_signer_reads_the_certificate_after_the_sdk_bounds() {
+        let issuer = tlv(0x30, &[]);
+        let leaf = cert(3, &issuer);
+        let bytes = signing_block(&[(ID_V3, scheme_value_v3(&[&leaf]))]);
+        assert_eq!(certificates(&bytes, &[]).unwrap(), vec![leaf]);
+
+        let bytes = signing_block(&[(ID_V3_1, scheme_value_v3(&[&cert(4, &issuer)]))]);
+        assert_eq!(certificates(&bytes, &[]).unwrap().len(), 1);
+    }
+
     #[test]
     fn oversized_block_is_rejected_before_parsing() {
         let huge = vec![0u8; MAX_SIGNATURE_BLOCK_BYTES + 1];
         assert_eq!(
-            scheme_certificates(&huge),
+            scheme_certificates(&huge, ID_V2),
             Err("signature block exceeds cap")
         );
         assert_eq!(pkcs7_signer_certificate(&huge), None);

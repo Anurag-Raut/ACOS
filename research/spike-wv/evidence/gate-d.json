@@ -1,0 +1,49 @@
+{
+  "gate": "d",
+  "item": "frame time < 50 ms (HeadlessExperimental.beginFrame, PNG)",
+  "items": [
+    {
+      "begin_frame": {
+        "max_ms": 3.49,
+        "mean_ms": 2.87,
+        "median_ms": 2.84,
+        "min_ms": 2.65,
+        "n": 30,
+        "p95_ms": 3.08
+      },
+      "passed": true,
+      "png_bytes_median": 36955,
+      "view": "1080x800@2.625",
+      "with_dom_change": {
+        "max_ms": 3.84,
+        "mean_ms": 3.33,
+        "median_ms": 3.24,
+        "min_ms": 3.06,
+        "n": 10,
+        "p95_ms": 3.84
+      }
+    },
+    {
+      "begin_frame": {
+        "max_ms": 8.99,
+        "mean_ms": 7.98,
+        "median_ms": 8.0,
+        "min_ms": 7.45,
+        "n": 30,
+        "p95_ms": 8.38
+      },
+      "passed": true,
+      "png_bytes_median": 72320,
+      "view": "1080x2400@2.625",
+      "with_dom_change": {
+        "max_ms": 9.07,
+        "mean_ms": 8.48,
+        "median_ms": 8.32,
+        "min_ms": 8.23,
+        "n": 10,
+        "p95_ms": 9.07
+      }
+    }
+  ],
+  "passed": true
+}

@@ -42,9 +42,11 @@ pub mod logd;
 pub mod props;
 pub mod seccomp;
 pub mod session;
+// WV4: the guest path ⇄ host path mapping of the WebView session socket.
 /// SPIKE-NET (ADR-0030 gate): pasta networking, gated on `ACOS_SPIKE_NET=1`.
 pub mod spike_net;
 pub mod watchdog;
+pub mod webview_socket;
 pub mod zygote_prod;
 
 use std::ffi::OsString;
@@ -1586,6 +1588,19 @@ impl<'a> Sandbox<'a> {
             // that opens a session; the parent only has to exist.
             a.push("--dir".into());
             a.push("/data/session".into());
+            // WV4: the WebView session socket (`results/handoff/WVB/WIRE.md`
+            // §0). The host broker listens on `host_dir/webview.sock`; the
+            // guest only ever sees `/run/acos/webview.sock` and connects to it
+            // through the image's own `LocalSocketImpl` natives. The
+            // *directory* is what is mounted (read-only), so the broker may
+            // create its listener at any point after the guest starts and the
+            // guest can connect to a node it cannot unlink. Without the broker
+            // the connect fails with the kernel's real ENOENT — there is no
+            // fallback transport.
+            let webview = crate::webview_socket::host_dir(run)?;
+            a.push("--ro-bind".into());
+            a.push(webview.into());
+            a.push(crate::webview_socket::GUEST_DIR.into());
         } else {
             a.push("--bind".into());
             a.push(r.data.join("linkerconfig").into());
@@ -2207,9 +2222,11 @@ mod tests {
     /// Tiny scratch dir under the repo `.cache/` (never `/tmp`: the directives
     /// keep ART scratch on the repo volume).
     fn scratch_dir(tag: &str) -> PathBuf {
+        // Short on purpose: a run root's socket paths (`<run>/socket/logd`,
+        // `<run>/wv/webview.sock`) live under `sun_path`'s 108-byte limit.
         let base = match repo_root() {
-            Ok(r) => r.join(".cache/test-scratch"),
-            Err(_) => std::env::temp_dir().join("acos-art-test-scratch"),
+            Ok(r) => r.join(".cache/t"),
+            Err(_) => std::env::temp_dir().join("acos-t"),
         };
         let dir = base.join(format!("{}-{tag}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -2466,6 +2483,96 @@ mod tests {
                 .map(|mut d| d.next().is_some())
                 .unwrap_or(false),
             "RunDir::drop must remove the tree"
+        );
+        let _ = fs::remove_dir_all(&data);
+    }
+
+    /// WV4: every run maps this session's WebView socket directory at
+    /// `/run/acos` (read-only), and staging — a host-side build step with no
+    /// guest — does not. That mount is the whole guest path ⇄ host path
+    /// mapping: the image's `LocalSocketImpl` connects to the literal
+    /// `/run/acos/webview.sock`, and the broker listens at
+    /// `<run>/wv/webview.sock` (or `$ACOS_WEBVIEW_SOCKET_DIR/webview.sock`).
+    #[test]
+    fn run_root_maps_the_webview_session_socket() {
+        let data = scratch_dir("webview-socket");
+        for d in [
+            "system/environ",
+            "app",
+            "overlay",
+            "lib",
+            "shim",
+            "linkerconfig",
+        ] {
+            fs::create_dir_all(data.join(d)).unwrap();
+        }
+        fs::write(
+            data.join("system/environ/classpath"),
+            "export BOOTCLASSPATH /apex/a.jar:/system/framework/framework.jar\n\
+             export DEX2OATBOOTCLASSPATH /apex/a.jar\n",
+        )
+        .unwrap();
+        let root = ArtRoot {
+            repo_root: data.clone(),
+            sysroot: data.join("sysroot"),
+            data: data.clone(),
+            modules: Vec::new(),
+        };
+        let run = root.new_run_dir("wv").expect("run dir");
+
+        let mut sb = root.sandbox();
+        sb.run_root(run.path());
+        let argv: Vec<String> = sb
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+
+        // WV5b: the default mapping is the short runtime directory, not
+        // `<run>/wv` (see `webview_socket::default_session_dir`).
+        let dir = crate::webview_socket::host_dir(run.path()).expect("webview dir");
+        assert!(
+            has_pair(
+                &argv,
+                "--ro-bind",
+                &dir.display().to_string(),
+                crate::webview_socket::GUEST_DIR
+            ),
+            "the session socket dir must be mounted at {}: {argv:?}",
+            crate::webview_socket::GUEST_DIR
+        );
+        // Read-only: the guest may connect, never unlink the broker's listener.
+        assert!(
+            !has_pair(
+                &argv,
+                "--bind",
+                &dir.display().to_string(),
+                crate::webview_socket::GUEST_DIR
+            ),
+            "the socket dir must not be writable by the guest: {argv:?}"
+        );
+        assert!(
+            dir.is_dir(),
+            "the mount source must exist before the broker"
+        );
+        // (Host path length is `check_sun_path`'s job at launch time: a unit
+        // test's scratch root is deeper than a real run's, so asserting the
+        // 108-byte budget here would test the test's own path, not the code.)
+
+        // Staging mode is a host build step: no guest, no socket mount.
+        let mut sb = root.sandbox();
+        sb.run_root(run.path());
+        sb.staging(true);
+        let staged: Vec<String> = sb
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        assert!(
+            !staged.iter().any(|a| a == crate::webview_socket::GUEST_DIR),
+            "staging mode must not mount the guest socket dir: {staged:?}"
         );
         let _ = fs::remove_dir_all(&data);
     }

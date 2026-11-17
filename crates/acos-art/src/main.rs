@@ -409,7 +409,6 @@ fn real_main() -> Result<ExitCode> {
                 animations,
 
                 services,
-
                 extra_apks,
                 idle_kill_secs,
             };

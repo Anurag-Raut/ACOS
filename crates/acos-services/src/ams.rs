@@ -32,7 +32,7 @@
 //! * Any unsupported transaction (flag, launch mode, provider method) raises
 //!   `UNSUPPORTED_ANDROID_API`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use acos_aidl::MethodInfo;
 
@@ -58,6 +58,8 @@ pub const INTENT_FIELD_ACTION: usize = crate::parcelable::INTENT_ACTION;
 pub const INTENT_FIELD_DATA: usize = crate::parcelable::INTENT_DATA;
 /// `Intent.mType` (the MIME type).
 pub const INTENT_FIELD_TYPE: usize = crate::parcelable::INTENT_TYPE;
+/// `Intent.mIdentifier`.
+pub const INTENT_FIELD_IDENTIFIER: usize = crate::parcelable::INTENT_IDENTIFIER;
 /// `Intent.mFlags`.
 pub const INTENT_FIELD_FLAGS: usize = crate::parcelable::INTENT_FLAGS;
 /// `Intent.mPackage`.
@@ -68,8 +70,6 @@ pub const INTENT_FIELD_COMPONENT: usize = crate::parcelable::INTENT_COMPONENT;
 pub const INTENT_FIELD_CATEGORIES: usize = crate::parcelable::INTENT_CATEGORIES;
 /// `Intent.mExtras` (`Bundle`).
 pub const INTENT_FIELD_EXTRAS: usize = crate::parcelable::INTENT_EXTRAS;
-/// `Intent.mIdentifier`.
-pub const INTENT_FIELD_IDENTIFIER: usize = crate::parcelable::INTENT_IDENTIFIER;
 /// `Intent.mSourceBounds` (a `Rect` parcelable, or null).
 pub const INTENT_FIELD_SOURCE_BOUNDS: usize = crate::parcelable::INTENT_SOURCE_BOUNDS;
 /// `Intent.mSelector` (a nested `Intent`, or null).
@@ -96,14 +96,14 @@ pub struct IntentFacts {
     /// `Intent.getType()` (the MIME type). MPROC1: the capture target records
     /// it and the intent-filter match uses it; `None` for an intent without a
     /// type, which is not the same as the wildcard `*/*`.
-    pub type_: Option<String>,
-    /// `Intent.getIdentifier()`.
+    pub mime_type: Option<String>,
+    /// `Intent.getIdentifier()`. PIFILLIN: `fillIn` copies it when the target
+    /// has none (or the caller asked for `FILL_IN_IDENTIFIER`), so the field is
+    /// carried, not dropped.
     pub identifier: Option<String>,
-    /// `Intent.getFlags()`. MPROC1 records it on a capture. The launch path
-    /// ORs it with the AIDL `startFlags` argument, which stock
-    /// `Instrumentation.execStartActivity` always passes as `0`: the caller's
-    /// flags travel inside the Intent, so this field is the one that carries
-    /// `FLAG_ACTIVITY_SINGLE_TOP`/`NEW_TASK`/`CLEAR_TOP` for a real app.
+    /// `Intent.getFlags()`. MPROC1 records it on a capture; the launch path
+    /// takes the flag word from the transaction's own argument (they are the
+    /// same value the framework wrote).
     pub flags: i32,
     /// `Intent.getPackage()`.
     pub package: Option<String>,
@@ -126,10 +126,6 @@ pub struct IntentFacts {
 }
 
 /// One intent extra value.
-///
-/// Not `Eq`/`serde`: a `Parcelable` variant carries a `value::Parcelable`, which
-/// is neither. The evidence JSON is produced by the module's own `to_json`
-/// (`crate::intents`), so nothing depends on a derived representation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Extra {
     /// `putExtra(String)`.
@@ -165,7 +161,7 @@ impl Default for IntentFacts {
         Self {
             action: None,
             data: None,
-            type_: None,
+            mime_type: None,
             identifier: None,
             flags: 0,
             package: None,
@@ -273,7 +269,7 @@ impl IntentFacts {
                 .get(INTENT_FIELD_DATA)
                 .and_then(Value::as_str)
                 .map(str::to_string),
-            type_: f
+            mime_type: f
                 .get(INTENT_FIELD_TYPE)
                 .and_then(Value::as_str)
                 .map(str::to_string),
@@ -344,9 +340,9 @@ impl IntentFacts {
             vec![
                 Value::Str(self.action.clone()),
                 Value::Str(self.data.clone()),
-                Value::Str(self.type_.clone()),
-                Value::Str(self.identifier.clone()),
-                Value::Int(self.flags),
+                Value::Str(self.mime_type.clone()),  // type
+                Value::Str(self.identifier.clone()), // identifier
+                Value::Int(self.flags),              // flags
                 Value::Str(self.package.clone()),
                 Value::Parcelable(component.unwrap_or(Parcelable::Null)),
                 Value::Parcelable(source_bounds.unwrap_or(Parcelable::Null)),
@@ -1145,6 +1141,21 @@ pub struct AmsState {
     next_token: u64,
     /// Last `onNewIntent` records (evidence).
     pub new_intents: Vec<(u64, IntentFacts)>,
+    /// MPROC1: the session's intent **capture target**. `Some` in a session
+    /// (set by the standard registry); `None` in a bare state machine, where an
+    /// unresolvable intent stays the structured `START_NOT_FOUND`.
+    pub intents: Option<std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>>,
+    /// W53/WV3: `IActivityManager.addPackageDependency` records, i.e. the
+    /// packages the calling guest process declared it depends on. On a device
+    /// this is `ProcessRecord.pkgDeps` — the set AMS consults when a package is
+    /// updated or removed, which is exactly why `WebViewFactory` registers
+    /// `com.android.webview` before it reads that package's `PackageInfo` ("so
+    /// that we will be killed if the package info goes out-of-date",
+    /// `WebViewFactory.java:459`). ACOS has one guest process per session and
+    /// does not uninstall packages while it runs, so the set is session state:
+    /// recorded, never fabricated, and readable as evidence. Sorted, so the
+    /// recorded order is deterministic.
+    pub package_dependencies: BTreeSet<String>,
     /// `PendingIntent` senders: the `mIntentSenderRecords` map, addressed by the
     /// pool of `IIntentSender` binders `registry::install` registers
     /// (MODNOTIF4).
@@ -1152,10 +1163,6 @@ pub struct AmsState {
     /// MPROC7: `onNewIntent` deliveries the host still owes a process
     /// (`FLAG_ACTIVITY_SINGLE_TOP` to an activity that is already the top).
     pub pending_new_intents: Vec<(u64, IntentFacts)>,
-    /// MPROC1: the session's intent **capture target**. `Some` in a session
-    /// (set by the standard registry); `None` in a bare state machine, where an
-    /// unresolvable intent stays the structured `START_NOT_FOUND`.
-    pub intents: Option<std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>>,
     /// MPROC4 step 3b: components that resolved to a package the service layer
     /// cannot run by itself. The launcher drains them and spawns the guest; a
     /// request names only what was resolved, never a pid, a tag or a command
@@ -1493,6 +1500,25 @@ impl AmsState {
             .iter()
             .position(|l| l.token == token)?;
         Some(self.pending_launches.remove(index))
+    }
+
+    /// `IActivityManager.addPackageDependency(String packageName)`: record that
+    /// the calling process depends on `packageName`, exactly like
+    /// `ActivityManagerService.addPackageDependency` adds it to the caller's
+    /// `ProcessRecord.pkgDeps`.
+    ///
+    /// Android 14's AIDL method takes **one** `String` (transaction 96): the
+    /// image's `IActivityManager$Stub$Proxy.addPackageDependency` writes
+    /// `writeString(packageName)` and nothing else, and `IActivityManager$Stub`
+    /// reads one `readString()` before `writeNoException()` (checked with
+    /// `dexdump` of `.cache/boot/android-34/dex/framework/classes.dex`; the AOSP
+    /// source cache agrees — the `(String, int)` overload is a later platform).
+    /// The reply is void.
+    ///
+    /// Returns `true` when the dependency was newly recorded. A repeat is not an
+    /// error (`pkgDeps` is a set on a device too); it does not change the set.
+    pub fn add_package_dependency(&mut self, package_name: &str) -> bool {
+        self.package_dependencies.insert(package_name.to_string())
     }
 
     /// `finishActivity`: pop the activity from its task. Returns whether the
@@ -2161,6 +2187,34 @@ pub fn dispatch(
             }
             Vec::new()
         }
+        // W53/WV3 (wall 5 of the WebView provider load):
+        // `WebViewFactory.getWebViewContextAndSetProvider` registers the chosen
+        // provider package with AMS before it reads that package's
+        // `PackageInfo`, so a provider update kills the process that holds a
+        // stale record. The faithful answer is the recorded dependency and a
+        // void reply (the transport writes `writeNoException` only).
+        "addPackageDependency" => {
+            let package =
+                value(0)
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| ServiceError::BadRequest {
+                        interface: interface.to_string(),
+                        method: method.name.clone(),
+                        detail: "arg 0: expected the package name (String)".into(),
+                    })?;
+            if package.is_empty() {
+                // AOSP only records a name it can resolve; an empty dependency
+                // is never a real package and would break the kill-on-update
+                // contract the call exists for.
+                return Err(ServiceError::BadRequest {
+                    interface: interface.to_string(),
+                    method: method.name.clone(),
+                    detail: "arg 0: empty package name".into(),
+                });
+            }
+            state.add_package_dependency(package);
+            Vec::new()
+        }
         // K2/R3: read-only queries. The guest's real memory state is the
         // host's `/proc/meminfo` (the guest runs in the host's memory cgroup);
         // an empty running-process list is the honest answer for a single
@@ -2776,5 +2830,71 @@ mod tests {
             component.field(1).and_then(Value::as_str),
             Some("dev.acos.fixtures.svcprovider.EchoService")
         );
+    }
+
+    /// Wall 5 of the WebView provider load (WV3):
+    /// `IActivityManager.addPackageDependency(String)` is AMS surface, not a
+    /// WebView hook, so it is pinned twice — against the image's own AIDL
+    /// (transaction 96, one `String`, a void reply) and behaviourally through
+    /// `dispatch` (the dependency is recorded, the reply carries no exception
+    /// word, and the same package recorded twice is still one dependency).
+    ///
+    /// Fails before the dispatch arm existed: `dispatch` returned `Ok(None)`,
+    /// which the service layer turns into
+    /// `unsupported Android API: android.app.IActivityManager code 96` — the
+    /// exact exception `WebViewFactory.getWebViewContextAndSetProvider` threw.
+    #[test]
+    fn add_package_dependency_is_recorded_and_replies_void() {
+        use acos_aidl::WireOp;
+        let method =
+            acos_aidl::lookup_by_name("android.app.IActivityManager", "addPackageDependency")
+                .expect("the table decodes addPackageDependency from the image");
+        assert_eq!(
+            method.code, 96,
+            "IActivityManager.addPackageDependency code"
+        );
+        assert!(
+            !method.oneway,
+            "the framework's proxy calls readException() on the reply"
+        );
+        assert_eq!(
+            method.args,
+            vec![WireOp::Str16],
+            "Android 14 writes one String (the (String, int) overload is newer)"
+        );
+        assert!(
+            method.reply.is_empty(),
+            "the reply is writeNoException() and nothing else"
+        );
+
+        let mut state = AmsState::new();
+        let args = vec![Value::Str(Some("com.android.webview".into()))];
+        let result = dispatch(&mut state, "android.app.IActivityManager", &method, &args)
+            .expect("dispatch")
+            .expect("addPackageDependency is handled, not UNSUPPORTED");
+        assert!(
+            result.reply.is_empty(),
+            "a void method replies with the exception word only, got {:?}",
+            result.reply
+        );
+        assert!(result.deliveries.is_empty());
+        assert!(state.package_dependencies.contains("com.android.webview"));
+
+        // Recording twice is the same dependency, not a second entry.
+        let again = dispatch(&mut state, "android.app.IActivityManager", &method, &args)
+            .expect("dispatch")
+            .expect("handled");
+        assert!(again.reply.is_empty());
+        assert_eq!(state.package_dependencies.len(), 1);
+
+        // An empty name is refused, not recorded: it could never be a package.
+        let empty = dispatch(
+            &mut state,
+            "android.app.IActivityManager",
+            &method,
+            &[Value::Str(Some(String::new()))],
+        );
+        assert!(matches!(empty, Err(ServiceError::BadRequest { .. })));
+        assert_eq!(state.package_dependencies.len(), 1);
     }
 }

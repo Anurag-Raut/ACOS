@@ -160,7 +160,7 @@ pub fn intent(facts: &IntentFacts) -> Result<Parcelable> {
     }
     Ok(intent_payload(
         facts.action.as_deref(),
-        facts.type_.as_deref(),
+        facts.mime_type.as_deref(),
         facts.flags,
         facts.package.as_deref(),
         facts

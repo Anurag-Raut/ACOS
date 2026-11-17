@@ -1,0 +1,3 @@
+run_id	scenario	variant	expected	verdict	false_pass	error.class	error.code	wall_ms	first_frame_ms	mem.cgroup_peak_mib	mem.cgroup_gib_min	mem.pss_mib	mem.anon_shmem_settled_mib	host.loadavg1	host.mem_available_mib
+01-v2-art-counter-r1	scenarios/v2-art-counter.yaml	good	pass	pass	false			3541.1	213.0	20.19	0.00072	28.26	None	2.76	48739.0
+02-negative-counter-wrong-count-r1	scenarios/negative/counter-wrong-count.yaml	negative	fail	fail	false	assertion	ASSERTION_FAILED	422.4	215.0	18.67	4.6e-05	26.82	None	2.76	48882.8

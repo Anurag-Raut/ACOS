@@ -47,7 +47,7 @@ fn send_facts() -> IntentFacts {
     );
     IntentFacts {
         action: Some("android.intent.action.SEND".into()),
-        type_: Some("text/plain".into()),
+        mime_type: Some("text/plain".into()),
         extras,
         ..IntentFacts::default()
     }
@@ -113,7 +113,7 @@ fn a_pick_is_captured_with_its_request_code_and_result_round_trips() {
     ams.intents = Some(Arc::clone(&intents));
     let pick = IntentFacts {
         action: Some("android.intent.action.GET_CONTENT".into()),
-        type_: Some("image/*".into()),
+        mime_type: Some("image/*".into()),
         categories: vec!["android.intent.category.OPENABLE".into()],
         ..IntentFacts::default()
     };

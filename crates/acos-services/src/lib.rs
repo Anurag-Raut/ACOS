@@ -74,6 +74,7 @@ pub mod modules; // ADR-0029: the shipped non-core modules
 pub mod native_libs; // W17: APK x86_64 libs -> per-run nativeLibraryDir
 pub mod netd; // the relay's control surface: protocol, client, `acos_net`'s schema
 pub mod network; // ADR-0029/NET5: which network profile this session attached
+pub mod parcel_dump; // WV2: ACOS_PARCEL_DUMP=<path> reply byte dump
 pub mod parcelable;
 pub mod pending_intent; // MODNOTIF4: PendingIntent sender records + the IIntentSender nodes
 pub mod permissions; // MODNOTIF2: the one runtime-permission table
@@ -85,7 +86,9 @@ pub mod sensors; // MODSENS: native sensorservice (SensorManager/SensorEventConn
 pub mod service_bind; // MPROC8: host-side ActiveServices for a guest bindService
 pub mod surface_client;
 pub mod trace;
+// ADR-0031: the `webviewupdate` peer (`IWebViewUpdateService`).
 pub mod value;
+pub mod webview;
 pub mod window_session;
 pub mod wms;
 

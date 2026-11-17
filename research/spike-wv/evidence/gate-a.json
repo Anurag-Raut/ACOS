@@ -1,0 +1,31 @@
+{
+  "gate": "a",
+  "item": "real HTTPS page loads",
+  "passed": true,
+  "results": [
+    {
+      "frame_ms": 16.0,
+      "frame_png_bytes": 134618,
+      "load_ms": 335.12167799972303,
+      "nodes": 22,
+      "ok": true,
+      "ready": "complete",
+      "screenshot": "../evidence/gate-a-example-com.png",
+      "title": "Example Domain",
+      "tls": "https:",
+      "url": "https://example.com/"
+    },
+    {
+      "frame_ms": 29.13,
+      "frame_png_bytes": 184817,
+      "load_ms": 514.6273860000292,
+      "nodes": 114,
+      "ok": true,
+      "ready": "complete",
+      "screenshot": "../evidence/gate-a-www-iana-org.png",
+      "title": "Example Domains",
+      "tls": "https:",
+      "url": "https://www.iana.org/help/example-domains"
+    }
+  ]
+}

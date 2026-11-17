@@ -430,30 +430,38 @@ pub fn network_parcelable() -> Parcelable {
 }
 
 /// `android.net.NetworkCapabilities` of the emulated default network.
+///
+/// The value list is `NetworkCapabilities.writeToParcel`'s field order, one
+/// value per [`crate::parcelable`] field op: the two nullable parcelables are
+/// `writeParcelable(null)` (`NamedParcelable(Null)`), `mUids` is a `null`
+/// `ArraySet` (`writeInt(-1)`, no elements), the underlying networks are a
+/// `null` `writeTypedList` (`-1`). The byte stream is unchanged from the RET1
+/// reply; only the ops that describe it changed, so a future non-null
+/// specifier, uid set or underlying network encodes in the framework's order.
 #[must_use]
 pub fn default_network_capabilities() -> Parcelable {
     Parcelable::ordered(
         "android.net.NetworkCapabilities",
         vec![
             Value::Long(default_capabilities_bits()),
-            Value::Long(0),                          // forbidden
-            Value::Long(1i64 << TRANSPORT_WIFI),     // transports
-            Value::Int(0),                           // link up kbps
-            Value::Int(0),                           // link down kbps
-            Value::Str(None),                        // NetworkSpecifier
-            Value::Str(None),                        // TransportInfo
-            Value::Int(i32::MIN),                    // SIGNAL_STRENGTH_UNSPECIFIED
-            Value::Int(-1),                          // mUids (null ArraySet)
-            Value::IntArray(Some(Vec::new())),       // mAllowedUids
-            Value::Str(None),                        // mSSID
-            Value::Bool(false),                      // mPrivateDnsBroken
-            Value::IntArray(Some(Vec::new())),       // administrator uids
-            Value::Int(1000),                        // owner uid (system)
-            Value::Int(1000),                        // requestor uid
-            Value::Str(Some("android".to_string())), // requestor package
-            Value::IntArray(Some(Vec::new())),       // mSubIds
-            Value::Int(-1),                          // underlying networks (null)
-            Value::Int(0),                           // enterprise ids
+            Value::Long(0),                           // forbidden
+            Value::Long(1i64 << TRANSPORT_WIFI),      // transports
+            Value::Int(0),                            // link up kbps
+            Value::Int(0),                            // link down kbps
+            Value::NamedParcelable(Parcelable::Null), // NetworkSpecifier
+            Value::NamedParcelable(Parcelable::Null), // TransportInfo
+            Value::Int(i32::MIN),                     // SIGNAL_STRENGTH_UNSPECIFIED
+            Value::List(None),                        // mUids (null ArraySet)
+            Value::IntArray(Some(Vec::new())),        // mAllowedUids
+            Value::Str(None),                         // mSSID
+            Value::Bool(false),                       // mPrivateDnsBroken
+            Value::IntArray(Some(Vec::new())),        // administrator uids
+            Value::Int(1000),                         // owner uid (system)
+            Value::Int(1000),                         // requestor uid
+            Value::Str(Some("android".to_string())),  // requestor package
+            Value::IntArray(Some(Vec::new())),        // mSubIds
+            Value::List(None),                        // underlying networks (null)
+            Value::Int(0),                            // enterprise ids
         ],
     )
 }
@@ -473,6 +481,12 @@ pub fn default_network_capabilities() -> Parcelable {
 /// (`169.254.2.1`, which is also the DHCP server) and the DHCP-answered DNS
 /// server (`1.1.1.1`, `spike_net::pasta_args`' `-D`). Nothing is invented: the
 /// values are the ones the namespace actually has.
+///
+/// The value list follows the framework's writer field for field: the list
+/// counts are [`Value::List`]s consumed by [`crate::parcelable::FieldOp::Counted`]
+/// (or [`Value::List`] for `writeList`), the HTTP proxy is an absent
+/// [`Value::Cond`] (a `writeByte(0)` marker), and every `writeParcelable(null)`
+/// is a [`Value::NamedParcelable`] holding [`Parcelable::Null`].
 #[must_use]
 pub fn default_link_properties() -> Parcelable {
     let (addrs, dns, dhcp, routes) = if spike_net_enabled() {
@@ -505,12 +519,15 @@ pub fn default_link_properties() -> Parcelable {
             Value::Int(1500),              // mtu
             Value::Str(None),              // tcpBufferSizes
             routes,                        // routes
-            Value::Byte(0),                // httpProxy presence
-            Value::Str(None),              // nat64Prefix
-            Value::Int(0),                 // stacked links
+            Value::Cond {
+                present: false,
+                values: Vec::new(),
+            }, // httpProxy
+            Value::NamedParcelable(Parcelable::Null), // nat64Prefix
+            Value::List(Some(Vec::new())), // stacked links (`writeList`)
             Value::Bool(false),            // wakeOnLanSupported
-            Value::Str(None),              // captivePortalApiUrl
-            Value::Str(None),              // captivePortalData
+            Value::NamedParcelable(Parcelable::Null), // captivePortalApiUrl
+            Value::NamedParcelable(Parcelable::Null), // captivePortalData
         ],
     )
 }

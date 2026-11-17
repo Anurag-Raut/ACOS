@@ -640,6 +640,43 @@ impl ModuleSpec {
     }
 }
 
+/// The host APK files a session must install for the `real` modules in `specs`
+/// (ADR-0029: a manifest's `system_apps`).
+///
+/// A module that owns a system app names it in its manifest; the launcher needs
+/// the **file** before the guest boots (the package table is how the framework
+/// finds a provider), so this resolves each declared system app to its APK. It
+/// is a pure function of the specs: no host, no module state, so the staging
+/// step and the attach step cannot disagree.
+///
+/// An unknown module id or a module with no resolver is not an error here —
+/// `attach` refuses it with the module's own message.
+#[must_use]
+pub fn system_apks(specs: &[ModuleSpec]) -> Vec<std::path::PathBuf> {
+    let mut out: Vec<std::path::PathBuf> = Vec::new();
+    for spec in specs {
+        if spec.profile != Profile::Real {
+            continue;
+        }
+        let Some(manifest) = ModuleRegistry::standard()
+            .manifests()
+            .into_iter()
+            .find(|manifest| manifest.id == spec.id)
+        else {
+            continue;
+        };
+        for app in manifest.system_apps {
+            let resolved = crate::modules::webview::system_app_apk(&spec.id, app, &spec.config);
+            if let Some(path) = resolved {
+                if !out.contains(&path) {
+                    out.push(path);
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Per-session module configuration (`services: [{id, profile, config}]`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ModuleConfig {
@@ -1137,10 +1174,10 @@ pub const TOMBSTONES: &[Tombstone] = &[
     Tombstone {
         name: "webviewupdate",
         descriptor: "android.webkit.IWebViewUpdateService",
-        module: "web.webview",
-        reason: "no WebView provider yet (ADR-0031)",
+        module: crate::modules::webview::MODULE_ID,
+        reason: "no WebView provider package installed (module `webview` is off; ADR-0031)",
         reaction: AospReaction::Null,
-        evidence: "base/core/java/android/webkit/WebViewFactory.java:614-625 resolves the service lazily and :295-300 catches the failure of `waitForAndGetProvider()` and returns a LIBLOAD_* status, so null is a handled, reported path; a tombstone would only change the logged exception, not the outcome",
+        evidence: "base/core/java/android/webkit/WebViewFactory.java:614-625 resolves the service lazily and :295-300 catches the failure of `waitForAndGetProvider()` and returns a LIBLOAD_* status, so null is a handled, reported path; a tombstone would only change the logged exception, not the outcome. With the `webview` module `real`, `core` does publish the name and it answers from the installed provider package (`crate::webview`), so this row is what an unattached session reports",
     },
 ];
 
@@ -1244,6 +1281,7 @@ impl ModuleRegistry {
             Box::new(crate::modules::bluetooth::BluetoothModule::new()),
             Box::new(crate::modules::biometric::BiometricModule::new()),
             Box::new(crate::modules::network::NetworkModule::new()),
+            Box::new(crate::modules::webview::WebviewModule::new()),
         ]
         .into_iter()
         .chain(crate::modules::tail_stubs::modules())

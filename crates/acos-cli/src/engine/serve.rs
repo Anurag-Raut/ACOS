@@ -2747,6 +2747,31 @@ fn regex_lite_matches(pattern: &str, text: &str) -> Result<bool, String> {
 /// Nothing is lost: the guest buffer is untouched (and `logs/logcat.txt` in a
 /// verify run is still the full log), `"all": true` or `min_priority: "V"`
 /// returns every record, and an explicit `tag` narrows further.
+/// MPROC1: `acos_service_ctl {module, op, args}` — one session service control
+/// op on a **core** session service (not an ADR-0029 module). `intents` is the
+/// capture target: `op:"last"`/`"list"` read what the app
+/// shared/picked, `op:"result"` scripts the answer a picker returns (and the
+/// session delivers it as the framework's own `ActivityResultItem`), `op:"clear"`
+/// empties the record. Every capture says `handled_by:"captured"`.
+fn core_service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let module =
+        args.get("module")
+            .and_then(Value::as_str)
+            .ok_or_else(|| BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "acos_service_ctl needs a string `module` (a session service name)".into(),
+            })?;
+    let op = args
+        .get("op")
+        .and_then(Value::as_str)
+        .ok_or_else(|| BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_service_ctl needs a string `op`".into(),
+        })?;
+    let inner = args.get("args").cloned().unwrap_or(Value::Null);
+    session.ctl(module, op, inner)
+}
+
 fn logs(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let records = session.logs_since(0)?;
     let crash = session.last_crash();
@@ -2970,6 +2995,30 @@ fn status_value(session: &ArtSession) -> Value {
     status
 }
 
+/// `acos_service_ctl {module, op, args?}` — the one control spelling, routed to
+/// the owner of `module`.
+///
+/// ADR-0029 gives the **module framework** the single control path, so an id the
+/// session's module registry knows (`network`, `notifications`, …) goes through
+/// [`module_service_ctl`]. MPROC1's intent capture target is a core session
+/// service, not a module, so its id (`intents`) goes to the session's own ctl
+/// path ([`core_service_ctl`]); an id neither side knows is answered by the core
+/// path's structured refusal, which names the module. The choice is made from
+/// the registry's own rows, never from a failed call (no fallback that would
+/// mask a typo as success).
+fn service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let module = args.get("module").and_then(Value::as_str).unwrap_or("");
+    let known = session
+        .modules()
+        .iter()
+        .any(|row| row.get("id").and_then(Value::as_str) == Some(module));
+    if known {
+        module_service_ctl(session, args)
+    } else {
+        core_service_ctl(session, args)
+    }
+}
+
 /// ADR-0029 item 4: `acos_service_ctl {module, op, args?}` on a live session.
 ///
 /// This is the **only** agent spelling of a module control op; it becomes the
@@ -2977,7 +3026,7 @@ fn status_value(session: &ArtSession) -> Value {
 /// travels as `ctl_op` so it cannot collide with the `acos_services` action
 /// word). The module's answer is the peer's own value, never a fabricated
 /// success.
-fn service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+fn module_service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let (Some(module), Some(ctl_op)) = (
         args.get("module").and_then(Value::as_str),
         args.get("op").and_then(Value::as_str),

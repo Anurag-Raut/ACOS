@@ -188,6 +188,14 @@ public final class SessionMain {
                 "register_android_view_InputChannel",
                 "register_android_view_KeyEvent",
                 "register_android_view_MotionEvent",
+                // WV4 (wall 8): `android.net.LocalSocketImpl`'s `AF_UNIX`
+                // natives (connect/read/write/peer-credentials). Any guest
+                // transport that runs over a Unix socket — the WebView
+                // provider's session socket (`WIRE.md` §0) is the first one —
+                // needs the image's own registration; unregistered it is
+                // `UnsatisfiedLinkError: android.net.LocalSocketImpl
+                // .connectLocal`. Same root cause as LaunchMain's list.
+                "register_android_net_LocalSocketImpl",
                 // MODA11YNATIVE: `AccessibilityService.takeScreenshot` hands the
                 // app a `HardwareBuffer`; `nReadHardwareBufferFromParcel` and the
                 // `nGet*` getters are the image's own implementations, and
