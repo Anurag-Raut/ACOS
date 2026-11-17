@@ -21,7 +21,10 @@
 #   fixtures/build/apps/multi-package-probe.apk
 #   fixtures/build/apps/sensor-probe.apk   (MODSENS: native sensorservice feed)
 #   fixtures/build/apps/notif-perm-probe.apk (MODNOTIF5: notifications + POST_NOTIFICATIONS gate)
+#   fixtures/build/apps/permissioncontroller.apk (SYSUI1: the permission-controller system app)
+#   fixtures/build/apps/perm-probe.apk   (SYSUI1: requestPermissions -> the dialog)
 #   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
+#   fixtures/build/apps/systemui.apk   (SYSUI2: the notification shade system app)
 #
 #
 # `tools/run-matrix.sh` calls this script with ACOS_APP_ONLY for any scenario
@@ -259,12 +262,20 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
-## (MERGE030 left a duplicate `for` header here with no body: removed.)
+# MERGE040A: ONE list, the union of both sides. The pre-merge tree carried two
+# `for app in` headers here (a MERGE030 artifact): the second one (with
+# looper-wake) shadowed the first, so sensor-probe and notif-perm-probe were
+# silently never built. sysui3a's side added the SYSUI system apps. Deleting
+# either list loses fixtures, so the merged list is the union and there is exactly
+# one loop.
+#
 # looper-wake is the LOOPERWAKE fixture: an idle Activity changed from a
 # non-main thread (plain Thread + runOnUiThread, HandlerThread + main Handler,
 # and View.postInvalidate from a plain thread). Nothing here needs input, so a
 # scenario can prove the main looper is woken by the post itself.
-for app in counter todo-list multi-activity finish-start form-validation settle-lab thread-heavy svg-viewbox offscreen-pager looper-wake; do
+# sensor-probe (MODSENS), notif-perm-probe (MODNOTIF5),
+# permissioncontroller + perm-probe (SYSUI1), systemui (SYSUI2).
+for app in counter todo-list multi-activity finish-start form-validation settle-lab thread-heavy svg-viewbox offscreen-pager looper-wake sensor-probe notif-perm-probe permissioncontroller perm-probe systemui; do
     build_apk "$app"
 done
 

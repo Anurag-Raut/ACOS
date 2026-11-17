@@ -408,6 +408,10 @@ pub fn install_with_handles_and_insets(
         },
     ));
     host.set_permission_store(Arc::clone(&permissions));
+    // SYSUI2: the activity manager, so a module that owns a system app can start
+    // that app's activity and read the result it answered (the same state the
+    // peer thread serves).
+    host.set_atms(Arc::clone(&atms));
     let display =
         Arc::new(Mutex::new(crate::display::DisplayState::new(
             crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {

@@ -141,6 +141,7 @@ pub fn intent(facts: &IntentFacts) -> Result<Parcelable> {
             Extra::Strings(items) => {
                 Value::StringArray(Some(items.iter().cloned().map(Some).collect()))
             }
+            Extra::Ints(items) => Value::IntArray(Some(items.clone())),
             Extra::Bytes(bytes) => Value::ByteArray(Some(bytes.clone())),
             Extra::ByteArrays(arrays) => Value::ObjectArray(Some(
                 arrays
@@ -800,7 +801,12 @@ impl AtmsState {
         self.ams.bind_launch_token(launch.token, token.0);
         self.ensure_activity(token.0, &launch.class);
         if launch.result_to != 0 && launch.result_to != token.0 {
-            self.note_result_route(token.0, launch.result_to, launch.request_code);
+            self.note_result_route(
+                token.0,
+                launch.result_to,
+                launch.request_code,
+                launch.result_who.clone(),
+            );
         }
         Ok(Some(transaction))
     }
@@ -838,12 +844,19 @@ impl AtmsState {
 
     /// MPROC7: record that the activity `token` waits for the result of the
     /// activity `caller` starts (`startActivityForResult`).
-    pub fn note_result_route(&mut self, token: u64, result_to: u64, request_code: i32) {
+    pub fn note_result_route(
+        &mut self,
+        token: u64,
+        result_to: u64,
+        request_code: i32,
+        result_who: Option<String>,
+    ) {
         let Some(index) = self.activities.iter().position(|a| a.token == token) else {
             return;
         };
         self.activities[index].result_to = result_to;
         self.activities[index].request_code = request_code;
+        self.activities[index].result_who = result_who;
     }
 
     /// Encode the `scheduleTransaction` delivery for a recorded launch.

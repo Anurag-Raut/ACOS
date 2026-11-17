@@ -33,6 +33,7 @@ fn activity(tag: u32, token: u64, lifecycle: ActivityLifecycle) -> ActivityRecor
         saved_clicks: 0,
         result_to: 0,
         request_code: 0,
+        result_who: None,
         result_code: 0,
         result_data: None,
         result_delivered: false,

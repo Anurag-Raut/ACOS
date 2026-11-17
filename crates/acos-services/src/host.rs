@@ -450,6 +450,60 @@ pub type FireSender = Arc<
         + Sync,
 >;
 
+/// SYSUI2: `(the result Intent a system-UI app set) -> the sender binders the
+/// system must fire`.
+///
+/// The shade answers a row tap with `acos.shade.tapped`; the notification layer
+/// owns the record (which notification that key names, and that the row leaves
+/// the list), while the `PendingIntent` sender table and the activity start live
+/// in the AMS. Publishing one closure keeps the notification records out of the
+/// ATMS while still letting the tap fire the real content sender, which is what
+/// systemui's own process does on a device.
+pub type SystemUiResultSink =
+    Arc<dyn Fn(&crate::ams::IntentFacts) -> Vec<u64> + Send + Sync>;
+
+/// The slot an [`crate::atms::AtmsState`] holds for a [`SystemUiResultSink`].
+///
+/// A closure has no `Debug`, and the ATMS state's own `Debug` output is read by
+/// session evidence, so the slot prints whether the seam is set instead of
+/// failing to derive.
+#[derive(Clone, Default)]
+pub struct SystemUiResultSinkSlot(Option<SystemUiResultSink>);
+
+impl SystemUiResultSinkSlot {
+    /// Publish the sink (the module that owns the system app's records).
+    pub fn set(&mut self, sink: SystemUiResultSink) {
+        self.0 = Some(sink);
+    }
+
+    /// Remove it (module detach: ADR-0029 leaves no registration behind).
+    pub fn clear(&mut self) {
+        self.0 = None;
+    }
+
+    /// The sink, when a module published one.
+    #[must_use]
+    pub fn get(&self) -> Option<SystemUiResultSink> {
+        self.0.clone()
+    }
+
+    /// Whether a sink is published.
+    #[must_use]
+    pub fn is_set(&self) -> bool {
+        self.0.is_some()
+    }
+}
+
+impl core::fmt::Debug for SystemUiResultSinkSlot {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "SystemUiResultSinkSlot({})",
+            if self.0.is_some() { "set" } else { "empty" }
+        )
+    }
+}
+
 /// The registration tables as they were at [`ServiceHost::begin_scope`].
 ///
 /// ADR-0029 requires that detaching a module leaves **no** registration behind,
@@ -595,6 +649,10 @@ pub struct ServiceHost {
     /// start live in the AMS, so the registry publishes the delivery here
     /// instead of a module reaching into the ATMS state.
     pending_intent_fire: Option<FireSender>,
+    /// SYSUI2: the session's activity manager. A module that owns a system app
+    /// starts that app's activity and reads its result through this handle (see
+    /// [`ServiceHost::set_atms`]).
+    atms: Option<std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>>,
     /// The host paths of this session's WebView endpoints, published by the
     /// launcher (WV8 `webview` module). The module answers `status` from them
     /// instead of recomputing a path the launcher already decided, so the two
@@ -681,6 +739,7 @@ impl ServiceHost {
             a11y_window_token: None,
             permission_store: None,
             pending_intent_fire: None,
+            atms: None,
             webview_gate: None,
             overwrites: Vec::new(),
             delivery_wake: None,
@@ -1687,6 +1746,30 @@ impl ServiceHost {
         self.permission_store.as_ref().map(std::sync::Arc::clone)
     }
 
+    /// Publish the session's activity manager (called by
+    /// [`crate::registry::install`]).
+    ///
+    /// SYSUI2: a module that owns a **system app** acts as the server's own
+    /// client, which is exactly system_server's role for
+    /// `GrantPermissionsActivity` and the notification shade: it starts that
+    /// app's activity for the system ([`crate::ams::AmsState::start_activity`],
+    /// whose resolution queues the spawn/launch the launcher owns) and reads the
+    /// result the app answered ([`crate::atms::AtmsState::system_ui_result_sink`]).
+    /// Both are the session's existing state, so the module gets the same handle
+    /// the peer thread uses rather than a second copy.
+    pub fn set_atms(
+        &mut self,
+        atms: std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>,
+    ) {
+        self.atms = Some(atms);
+    }
+
+    /// The session's activity manager, when a standard set published one.
+    #[must_use]
+    pub fn atms(&self) -> Option<std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>> {
+        self.atms.as_ref().map(std::sync::Arc::clone)
+    }
+
     /// Publish this session's WebView endpoints (WV8: the launcher binds the
     /// gate socket, so it is the one that knows the paths).
     pub fn set_webview_gate(&mut self, gate: WebviewGate) {
@@ -1958,6 +2041,27 @@ impl ServiceHost {
             })?;
         service.seed_attach(app_thread, seq, package);
         Ok(())
+    }
+
+    /// SYSUI3A: name the session's primary process (tag 0).
+    ///
+    /// Stock AMS's `ProcessRecord` is created by `startProcessLocked` with the
+    /// process name; ACOS's primary process is started by the **launcher**, so
+    /// the launcher (the only component that knows the session package) is the
+    /// one that records the name. `attachApplication` carries no package, so
+    /// without this the primary record stayed unnamed and
+    /// `Peer::package_of(0)` could not find the launch a `startActivity` into the
+    /// already-running primary had recorded (the notification shade's row tap).
+    /// Returns whether the activity service took the name.
+    pub fn seed_primary_package(&mut self, package: &str) -> bool {
+        let Ok(object) = self.ensure("android.app.IActivityTaskManager") else {
+            return false;
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(|service| service.set_primary_package(package))
+            .unwrap_or(false)
     }
 
     /// The dynamic receiver registrations `IActivityManager`

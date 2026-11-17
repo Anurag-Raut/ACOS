@@ -66,6 +66,32 @@ pub const MODULE_ID: &str = "system.notifications";
 /// `android.permission.POST_NOTIFICATIONS` (`Manifest.permission`).
 pub const POST_NOTIFICATIONS: &str = "android.permission.POST_NOTIFICATIONS";
 
+/// SYSUI1: the guest system-UI app that draws the notification shade
+/// (`com.android.systemui`, the package a real device's shade lives in).
+pub const SHADE_PACKAGE: &str = "com.android.systemui";
+/// SYSUI1: the shade activity (`package/class`, as a launch intent names it).
+pub const SHADE_COMPONENT: &str = "com.android.systemui/.ShadeActivity";
+/// SYSUI2: the shade activity's class (`ShadeActivity` in `com.android.systemui`).
+pub const SHADE_ACTIVITY: &str = "com.android.systemui.ShadeActivity";
+/// SYSUI1: the control op that opens the shade.
+pub const OPEN_SHADE: &str = "open_shade";
+/// SYSUI2: launch extra — one key per row, `"<id>:<tag>"` (`tag` may be empty).
+pub const SHADE_EXTRA_KEYS: &str = "acos.shade.keys";
+/// SYSUI2: launch extra — one `android.title` per row.
+pub const SHADE_EXTRA_TITLES: &str = "acos.shade.titles";
+/// SYSUI2: launch extra — one `android.text` per row.
+pub const SHADE_EXTRA_TEXTS: &str = "acos.shade.texts";
+/// SYSUI2: launch extra — one comma-joined action-title list per row.
+pub const SHADE_EXTRA_ACTIONS: &str = "acos.shade.actions";
+/// SYSUI2: result extra — the key of the row the user tapped.
+pub const SHADE_EXTRA_TAPPED: &str = "acos.shade.tapped";
+/// `config: {"shade_apk": …}` override for the shade system app.
+pub const SHADE_APK_CONFIG: &str = "shade_apk";
+/// Environment override for the shade system app.
+pub const SHADE_APK_ENV: &str = "ACOS_SYSTEMUI_APK";
+/// Workspace-relative default build output.
+pub const SHADE_APK_REL: &str = "fixtures/build/apps/systemui.apk";
+
 /// The `ServiceManager` name -> descriptor pairs this module serves.
 pub const SERVICES: &[ServiceProvide] = &[ServiceProvide {
     name: SERVICE_NAME,
@@ -77,7 +103,7 @@ pub const FLAG_ONGOING_EVENT: i32 = 0x2;
 /// `Notification.FLAG_FOREGROUND_SERVICE`.
 pub const FLAG_FOREGROUND_SERVICE: i32 = 0x40;
 
-const CONTROL_OPS: [ControlOp; 5] = [
+const CONTROL_OPS: [ControlOp; 6] = [
     ControlOp {
         name: "list",
         args: "none — every posted notification with id/tag/title/text/channel/actions/content sender",
@@ -98,6 +124,10 @@ const CONTROL_OPS: [ControlOp; 5] = [
         name: "state",
         args: "none — channels, posted, dropped (POST_NOTIFICATIONS), taps and the gate",
     },
+    ControlOp {
+        name: OPEN_SHADE,
+        args: "none — open the notification shade: start the com.android.systemui system app's ShadeActivity with one row per posted notification (starts a process lazily, like requestPermissions -> the dialog)",
+    },
 ];
 
 fn manifest_ref() -> &'static ModuleManifest {
@@ -112,7 +142,9 @@ fn manifest_ref() -> &'static ModuleManifest {
         providers: &[],
         broadcasts: &[],
         windows: &[],
-        system_apps: &[],
+        // SYSUI2: the shade is this module's system app (ADR-0029 amendment:
+        // system UI comes from system apps in the guest).
+        system_apps: &[SHADE_PACKAGE],
         requires: &[],
         requires_host_tools: &[],
         profiles: &[Profile::Real],
@@ -805,6 +837,20 @@ impl Module for NotificationsModule {
             }
         }
         self.fire = host.pending_intent_fire();
+        // SYSUI2: the shade's row tap. The shade system app answers with the
+        // tapped key; this module owns the records (which notification the key
+        // names, and that the row leaves the list) while the sender table and
+        // the activity start stay in the AMS, so the seam is one closure that
+        // answers the senders to fire.
+        if let Some(atms) = host.atms() {
+            let sink_store = Arc::clone(&store);
+            atms.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .system_ui_result_sink
+                .set(Arc::new(move |facts: &crate::ams::IntentFacts| {
+                    shade_tap_senders(&sink_store, facts)
+                }));
+        }
         self.configured = Some(json!({
             "package": config.string("package"),
             "target_sdk": config.get("target_sdk"),
@@ -825,10 +871,17 @@ impl Module for NotificationsModule {
         Ok(())
     }
 
-    fn detach(&mut self, _host: &mut ServiceHost) -> Result<()> {
+    fn detach(&mut self, host: &mut ServiceHost) -> Result<()> {
         // `end_scope` reinstates core's `INotificationManager` factory and
         // binder. The records are dropped with the module: a notification is
-        // the module's state, and core's recorder answers again.
+        // the module's state, and core's recorder answers again. The shade's
+        // result seam goes with it (ADR-0029: no registration left behind).
+        if let Some(atms) = host.atms() {
+            atms.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .system_ui_result_sink
+                .clear();
+        }
         self.store = None;
         self.fire = None;
         self.configured = None;
@@ -836,7 +889,7 @@ impl Module for NotificationsModule {
         Ok(())
     }
 
-    fn control(&mut self, _host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
+    fn control(&mut self, host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         let Some(store) = self.store.as_ref() else {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
@@ -981,6 +1034,7 @@ impl Module for NotificationsModule {
                 store.cancel(&target.package, target.tag.as_deref(), target.id);
                 Ok(json!({"dismissed": target.to_json(), "remaining": store.posted.len()}))
             }
+            OPEN_SHADE => open_shade(host, store),
             other => Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
                 detail: format!(
@@ -1014,6 +1068,131 @@ impl Module for NotificationsModule {
     }
 }
 
+/// The shade row key of a posted notification: `"<id>:<tag>"` (`tag` may be
+/// empty; a notification posted without one still gets a stable key).
+fn shade_key(posted: &PostedNotification) -> String {
+    format!("{}:{}", posted.id, posted.tag.clone().unwrap_or_default())
+}
+
+/// Parse a shade row key back into `(id, tag)`.
+fn shade_key_parts(key: &str) -> Option<(i32, Option<String>)> {
+    let (id, tag) = key.split_once(':')?;
+    let id = id.trim().parse::<i32>().ok()?;
+    Some((id, if tag.is_empty() { None } else { Some(tag.to_string()) }))
+}
+
+/// SYSUI2: open the shade — start the `com.android.systemui` system app's
+/// `ShadeActivity` with one row per posted notification.
+///
+/// This is the system's own start (`AmsState::start_activity`, the same call a
+/// guest `startActivity` makes): the launcher spawns the system app's process
+/// lazily on the queued need and the host delivers the launch, exactly like the
+/// permission dialog. No row is invented: the extras are the posted records'
+/// own id/tag, `android.title`, `android.text` and action titles.
+fn open_shade(host: &mut ServiceHost, store: &Arc<Mutex<NotificationStore>>) -> Result<Value> {
+    let Some(atms) = host.atms() else {
+        return Err(ServiceError::ModuleRejected {
+            module: MODULE_ID,
+            detail: "no activity manager is published on this host, so the shade system app \
+                     cannot be started"
+                .into(),
+        });
+    };
+    let (keys, titles, texts, actions) = {
+        let store = store
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut keys = Vec::with_capacity(store.posted.len());
+        let mut titles = Vec::with_capacity(store.posted.len());
+        let mut texts = Vec::with_capacity(store.posted.len());
+        let mut actions = Vec::with_capacity(store.posted.len());
+        for posted in &store.posted {
+            keys.push(shade_key(posted));
+            titles.push(posted.title.clone().unwrap_or_default());
+            texts.push(posted.text.clone().unwrap_or_default());
+            actions.push(
+                posted
+                    .actions
+                    .iter()
+                    .map(|action| action.title.clone())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+        }
+        (keys, titles, texts, actions)
+    };
+    let rows = keys.len();
+    let mut intent = crate::ams::IntentFacts::default();
+    intent.component = Some((SHADE_PACKAGE.to_string(), SHADE_ACTIVITY.to_string()));
+    intent.package = Some(SHADE_PACKAGE.to_string());
+    intent.flags = FLAG_ACTIVITY_NEW_TASK;
+    intent
+        .extras
+        .insert(SHADE_EXTRA_KEYS.to_string(), crate::ams::Extra::Strings(keys.clone()));
+    intent.extras.insert(
+        SHADE_EXTRA_TITLES.to_string(),
+        crate::ams::Extra::Strings(titles),
+    );
+    intent.extras.insert(
+        SHADE_EXTRA_TEXTS.to_string(),
+        crate::ams::Extra::Strings(texts),
+    );
+    intent.extras.insert(
+        SHADE_EXTRA_ACTIONS.to_string(),
+        crate::ams::Extra::Strings(actions),
+    );
+    let start_result = atms
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .ams
+        .start_activity(&intent, FLAG_ACTIVITY_NEW_TASK, 0, -1)?;
+    Ok(json!({
+        "shade": {
+            "component": SHADE_COMPONENT,
+            "rows": rows,
+            "keys": keys,
+            "start_result": start_result,
+        }
+    }))
+}
+
+/// `Intent.FLAG_ACTIVITY_NEW_TASK`: the shade is a top-level window.
+const FLAG_ACTIVITY_NEW_TASK: i32 = 0x1000_0000;
+
+/// SYSUI2: the shade's row tap, as the AMS sees it.
+///
+/// The shade answers `acos.shade.tapped`; this finds the record the key names,
+/// takes the row out of the list (`cancelNotificationWithTag`, except for a
+/// foreground-service notification, which keeps its row like a device does) and
+/// answers the content `PendingIntent` sender the AMS must fire. The started
+/// activity then follows the normal launch/spawn route.
+fn shade_tap_senders(
+    store: &Arc<Mutex<NotificationStore>>,
+    facts: &crate::ams::IntentFacts,
+) -> Vec<u64> {
+    let Some(crate::ams::Extra::String(key)) = facts.extras.get(SHADE_EXTRA_TAPPED) else {
+        return Vec::new();
+    };
+    let Some((id, tag)) = shade_key_parts(key) else {
+        return Vec::new();
+    };
+    let mut store = store
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(posted) = store
+        .posted
+        .iter()
+        .find(|posted| posted.id == id && posted.tag.as_deref() == tag.as_deref())
+        .cloned()
+    else {
+        return Vec::new();
+    };
+    if !posted.foreground_service {
+        store.cancel(&posted.package, posted.tag.as_deref(), posted.id);
+    }
+    posted.content_sender.into_iter().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1023,4 +1202,22 @@ mod tests {
         manifest_ref().validate().expect("valid manifest");
         assert_eq!(manifest_ref().replaces, &["notification"]);
     }
+}
+
+/// The host APK a module's declared **system app** installs
+/// (`crate::module::system_apks`). The shade app is SYSUI1's system app.
+#[must_use]
+pub fn system_app_apk(module: &str, app: &str, config: &ModuleConfig) -> Option<std::path::PathBuf> {
+    if module != MODULE_ID || app != SHADE_PACKAGE {
+        return None;
+    }
+    if let Some(path) = config.string(SHADE_APK_CONFIG).filter(|path| !path.is_empty()) {
+        return Some(std::path::PathBuf::from(path));
+    }
+    if let Some(path) = std::env::var_os(SHADE_APK_ENV) {
+        if !path.is_empty() {
+            return Some(std::path::PathBuf::from(path));
+        }
+    }
+    Some(crate::workspace_path(SHADE_APK_REL).unwrap_or_else(|| std::path::PathBuf::from(SHADE_APK_REL)))
 }

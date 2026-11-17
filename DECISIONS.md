@@ -1414,3 +1414,61 @@ ADR-0029 note (MODSENS, orchestrator): for a service whose framework client cach
 (sensorservice, location), `core` publishes the binder node and the module fills it
 (`core_module::FILLED_BY_MODULE` + `ServiceHost::dynamic_object_mut`); detach empties the node back to
 the honest off answer. This is the framework pattern for such names.
+
+**ADR-0029 amendment note (SYSUI1, 2026-11-17): the permission dialog is the guest system app, and
+the host routes it there.** The `permissions` module now declares
+`system_apps: ["com.android.permissioncontroller"]`; the launcher stages that APK through the one
+`modules::system_app_apk` resolver (the mechanism WV8 introduced for the WebView provider), installs
+it as a second package, and the ATMS resolves the framework's own
+`PackageManager.buildRequestPermissionsIntent` (`ACTION_REQUEST_PERMISSIONS` + package) to its
+`GrantPermissionsActivity`. The controller runs in its own ART process, spawned lazily the way a
+second app is (`request_process` → launcher); the host launches it with a host-built
+`ClientTransaction`, and the activity result comes back on the same MPROC7 path — with the AIDL
+`resultWho` the framework passed (`"@android:requestPermissions:"`), which is what makes
+`Activity.dispatchActivityResult` call `onRequestPermissionsResult` with the AOSP shape
+(`EXTRA_REQUEST_PERMISSIONS_NAMES` + `EXTRA_REQUEST_PERMISSIONS_RESULTS`). The host applies the
+answer to the one runtime-permission table the two `checkPermission` paths read.
+
+Three contract details, each documented where it lives:
+
+1. **The resolved component is written onto the launch intent.** AOSP's `ActivityStarter` does
+   `intent.setComponent(…)` before it schedules the launch; `ActivityThread.performLaunchActivity`
+   reads `r.intent.getComponent()` and crashes on null. An implicit start therefore records the
+   resolved component (SYSUI1 found this on the first ART run of the dialog).
+2. **The two facts the controller cannot query are passed in the launch.** A real controller calls
+   `IPermissionManager.getPermissionFlags`; the ACOS guest app cannot reach the hidden interface, so
+   the host puts `acos.permission.GRANTED` / `acos.permission.FIXED` (and the requesting package) in
+   the launch extras, and the app does what `GrantPermissionsActivity` does with them — skip
+   already-granted permissions, answer "don't ask again" ones denied, and return without drawing when
+   nothing is left to ask. The result Intent carries the AOSP extras plus
+   `…REQUEST_PERMISSIONS_NEVER_ASK_AGAIN` for the "Don't ask again" answer (AOSP's controller calls
+   `updatePermissionFlags(FLAG_PERMISSION_USER_FIXED)` itself; this is the same flag, one hop later).
+3. **`system_ui: dialogs|off`** (default `dialogs` for the `real` profile). `off`, an uninstalled
+   controller, or a detached module keeps MODNOTIF2's structured `PERMISSION_UI_UNAVAILABLE` — never
+   a silent grant.
+
+Open, not decided here: the controller's process launch is subject to the same lazy-spawn launch race
+`mproc3-two-process` exercises; the pre-granted arm of the SYSUI1 scenarios hits it
+(`host-transaction-timeout`, `results/handoff/SYSUI1/pregranted-finding/`), while the two dialog arms
+pass. The shade/system-UI app (item 2 of the track) is not built; the notification layer's control
+path is where `open_shade` belongs.
+
+**ADR-0029 settlement note (SYSUI3A, 2026-11-17): a tap that closes the tapped window is a pass,
+and the primary process is named by the launcher.**
+
+Two rules this track had to settle, both applied in one place each:
+
+1. **The settle contract for a dismissed window.** The guest's strict settle reports `detached`
+   (a root it still holds has no `ViewRootImpl`) or `no-draw-after-action` when the window the tap
+   landed on has gone away. That is a *completed interaction*, and reporting it as a `TIMEOUT` was a
+   harness bug (the notification shade's row tap). The backend now proves the removal against its own
+   window record — a tap, a host-observed delivery with a handled guest ack, the top-most touchable
+   pre-action window containing the point, that window absent afterwards, something still on screen —
+   and publishes `settle.bound: "window-removed", handled: "window-removed"`; `acos-verify`'s
+   `eval_tap_change` is the one place the tap contract accepts it. A window that vanishes with no
+   delivered input keeps its timeout (the guard, with tests).
+2. **The primary process's package is the launcher's fact.** `attachApplication` carries no package
+   and the primary never sends the peer handshake, so `ServiceHost::seed_primary_package` records it
+   where stock AMS's `startProcessLocked` would, and `Peer::package_of` never answers an empty name.
+   Without it a `startActivity` into the already-running primary (a notification's content sender) was
+   recorded and never encoded.

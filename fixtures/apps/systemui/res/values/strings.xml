@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">System UI</string>
+    <string name="shade_title">Notifications</string>
+    <string name="shade_empty">No notifications</string>
+</resources>

@@ -978,7 +978,7 @@ pub fn materialize_intent(vm: &mut Vm, facts: &IntentFacts) -> JResult<Handle> {
             // MODNOTIF2/MODNOTIF5: the request direction carries a `String[]`
             // (`EXTRA_REQUEST_PERMISSIONS_NAMES`), which this path does not
             // materialise back into Java; the `Present` refusal covers both.
-            Extra::Strings(_) | Extra::Present => {
+            Extra::Strings(_) | Extra::Ints(_) | Extra::Present => {
                 return Err(err(format!(
                     "cannot re-materialise extra `{key}`: its type is not carried back into Java \
                      (only the framework->system direction needs it, e.g. the permission \

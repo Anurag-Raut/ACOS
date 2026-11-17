@@ -59,6 +59,28 @@ pub const EXTRA_REQUEST_PERMISSIONS_NAMES: &str =
 /// The package `PackageManager.getPermissionControllerPackageName()` answers
 /// (`PackageManager.java:7049` -> `setPackage(...)`).
 pub const PERMISSION_CONTROLLER_PACKAGE: &str = "com.android.permissioncontroller";
+/// `PackageManager.EXTRA_REQUEST_PERMISSIONS_RESULTS` (`:5047`): the `int[]`
+/// grant results the controller returns (`PERMISSION_GRANTED`/`PERMISSION_DENIED`).
+pub const EXTRA_REQUEST_PERMISSIONS_RESULTS: &str =
+    "android.content.pm.extra.REQUEST_PERMISSIONS_RESULTS";
+/// ACOS system-app result contract: the controller's "Don't ask again" answer
+/// (`FLAG_PERMISSION_USER_FIXED`). AOSP's controller calls
+/// `IPermissionManager.updatePermissionFlags(… FLAG_PERMISSION_USER_FIXED …)`
+/// directly; the ACOS guest app cannot reach the hidden `IPermissionManager`
+/// stub, so it says so in the result Intent and the host applies the same flag.
+pub const EXTRA_REQUEST_PERMISSIONS_NEVER_ASK_AGAIN: &str =
+    "android.content.pm.extra.REQUEST_PERMISSIONS_NEVER_ASK_AGAIN";
+/// ACOS system-app launch contract: permissions already granted when the
+/// request was routed (the controller skips them, like
+/// `GrantPermissionsActivity.allRequestedPermissionsGranted`).
+pub const EXTRA_GRANTED: &str = "acos.permission.GRANTED";
+/// ACOS system-app launch contract: permissions denied with
+/// `FLAG_PERMISSION_USER_FIXED` ("don't ask again"), which the controller does
+/// not ask about again.
+pub const EXTRA_FIXED: &str = "acos.permission.FIXED";
+/// ACOS system-app launch contract: the requesting package (the controller's
+/// `getCallingPackage()` equivalent; the system app cannot read the caller).
+pub const EXTRA_CALLING_PACKAGE: &str = "acos.permission.CALLING_PACKAGE";
 
 /// A `REQUEST_PERMISSIONS` intent, reduced to what the system needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,6 +191,11 @@ pub struct PermissionStore {
     pub refused: Vec<(Vec<String>, String)>,
     /// Control-op/driver mutations, in order (`grant:camera`, ...).
     pub mutations: Vec<String>,
+    /// SYSUI1: the `permissions` module's `system_ui` setting. `true` (the
+    /// `real` profile's default) routes `requestPermissions` to the guest
+    /// permission-controller system app; `false` keeps MODNOTIF2's structured
+    /// `PERMISSION_UI_UNAVAILABLE`.
+    dialogs: bool,
 }
 
 impl PermissionStore {
@@ -188,7 +215,30 @@ impl PermissionStore {
             requests: Vec::new(),
             refused: Vec::new(),
             mutations: Vec::new(),
+            dialogs: false,
         }
+    }
+
+    /// Turn the permission dialog on/off (`system_ui: dialogs|off`).
+    pub fn set_dialogs(&mut self, enabled: bool) {
+        self.dialogs = enabled;
+        self.mutations
+            .push(format!("system_ui:{}", if enabled { "dialogs" } else { "off" }));
+    }
+
+    /// Whether the framework's request is routed to the controller system app.
+    #[must_use]
+    pub fn dialogs_enabled(&self) -> bool {
+        self.dialogs
+    }
+
+    /// True when the permission was denied with "don't ask again"
+    /// (`FLAG_PERMISSION_USER_FIXED`), which suppresses a second dialog.
+    #[must_use]
+    pub fn never_ask_again(&self, permission: &str) -> bool {
+        self.entries
+            .get(permission)
+            .is_some_and(|entry| entry.user_fixed && !entry.granted)
     }
 
     /// Attach the installed package's manifest grants (called by the PMS when
@@ -285,6 +335,47 @@ impl PermissionStore {
     pub fn refuse_request(&mut self, permissions: &[String], package: &str) {
         self.refused
             .push((permissions.to_vec(), package.to_string()));
+    }
+
+    /// Record a request the dialog system app is answering (SYSUI1): the same
+    /// `requested` flag the framework path sets, so
+    /// `shouldShowRequestPermissionRationale` keeps answering the documented
+    /// contract ("true only after the user denied it").
+    pub fn record_request(&mut self, permissions: &[String], package: &str) {
+        for permission in permissions {
+            self.entries
+                .entry(permission.clone())
+                .or_default()
+                .requested = true;
+        }
+        self.requests.push(PermissionRequest {
+            permissions: permissions.to_vec(),
+            request_code: -1,
+            package: package.to_string(),
+        });
+    }
+
+    /// Apply the controller's dialog answer to the table (SYSUI1).
+    ///
+    /// `names` and `results` are the AOSP result extras
+    /// (`EXTRA_REQUEST_PERMISSIONS_NAMES` / `EXTRA_REQUEST_PERMISSIONS_RESULTS`);
+    /// `never_ask_again` is the ACOS system-app extra for "Don't ask again".
+    /// Each permission takes the same path `IPermissionManager` takes:
+    /// granted → `grant` (USER_SET), denied → `deny` (USER_SET, + USER_FIXED
+    /// when the user ticked "Don't ask again").
+    pub fn apply_dialog_result(
+        &mut self,
+        names: &[String],
+        results: &[i32],
+        never_ask_again: bool,
+    ) {
+        for (index, permission) in names.iter().enumerate() {
+            match results.get(index).copied() {
+                Some(PERMISSION_GRANTED) => self.grant(permission),
+                Some(_) => self.deny(permission, never_ask_again),
+                None => continue,
+            }
+        }
     }
 
     /// `checkPermission`: the runtime table wins over the manifest.

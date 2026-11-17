@@ -1,0 +1,109 @@
+# SYSUI2 (finishes SYSUI1): the already-decided short-circuit.
+#
+# Both permissions are pre-granted by the scenario (the `permissions` module's
+# launch config), so `requestPermissions` does not draw a dialog: the controller
+# system app is still the component the framework's intent resolves to — it is
+# launched, sees that nothing is left to ask (`allRequestedPermissionsGranted`)
+# and answers the granted results immediately, so the app's
+# `onRequestPermissionsResult` runs and its screen is never covered.
+#
+# This is the arm that used to time out: the host's launch transaction ran and
+# the controller answered inside `onCreate`, which AOSP's
+# `ActivityThread.handleResumeActivity` does **not** resume
+# ("Skipping resume of … activity is finishing"), and the launch guard waited
+# for `mResumed`. The guard now keys on the record the transaction created
+# (`mCalled`), publishes `activity-resumed.marker` with
+# `finish_during_create=true` and keeps the process alive so the server-side
+# pause/stop/destroy and the caller's `ActivityResultItem` can follow.
+version: 1
+name: sysui1-permission-pregranted
+description: >-
+  CAMERA + LOCATION pre-granted: requestPermissions is answered by the controller
+  system app without a dialog (no Allow button in the tree), the app receives the
+  granted AOSP result shape, and the dialog activity's own log says it had nothing
+  to ask.
+app: fixtures/build/apps/perm-probe.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+services:
+  - id: system.permissions
+    profile: real
+    config:
+      grant:
+        - android.permission.CAMERA
+        - android.permission.ACCESS_FINE_LOCATION
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.permprobe/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 20000
+
+  - assert_text:
+      selector: {id: state}
+      text: {exact: "state before: CAMERA=0 LOCATION=0"}
+
+  - tap:
+      selector: {id: request}
+
+  - wait_for:
+      selector: {id: result}
+      timeout_ms: 30000
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "result request=7 n=2 m=2 CAMERA=0 LOCATION=0"}
+      timeout_ms: 20000
+
+  # No dialog was drawn.
+  - assert_not_visible:
+      selector: {id: allow_button}
+      timeout_ms: 5000
+
+  # The one runtime table the two checkPermission paths read carries both
+  # grants (the short-circuit answered through the host, not around it).
+  - service_ctl:
+      module: system.permissions
+      op: state
+      expect:
+        ok: true
+        op: state
+        value:
+          permissions:
+            - permission: android.permission.ACCESS_FINE_LOCATION
+              state: granted
+              granted: true
+              user_set: true
+              never_ask_again: false
+              requested: true
+            - permission: android.permission.CAMERA
+              state: granted
+              granted: true
+              user_set: true
+              never_ask_again: false
+              requested: true
+
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 20000
+      ordered: true
+      patterns:
+        - '^created names=android\.permission\.CAMERA,android\.permission\.ACCESS_FINE_LOCATION granted=android\.permission\.CAMERA,android\.permission\.ACCESS_FINE_LOCATION fixed= package=dev\.acos\.fixtures\.permprobe$'
+        - '^nothing to ask, returning results granted,granted$'
+        - '^result request=7 n=2 m=2 CAMERA=0 LOCATION=0$'

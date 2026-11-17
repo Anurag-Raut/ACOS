@@ -1760,7 +1760,31 @@ impl PmsService {
         if let Some(guest) = guest_source_dir {
             state.set_guest_apk_path(guest);
         }
+        // SYSUI1: the runtime-permission table describes the session's one app,
+        // and the in-process package manager is seeded with the `hello-views`
+        // fixture before boot. Binding the table's package identity only at the
+        // first `ensure("package")` (registry) left it named after the fixture
+        // forever, so a permission dialog answered for the wrong app. The install
+        // of the real APK is the moment the identity is knowable, so the table is
+        // re-pointed here, before any guest can ask.
+        let store = {
+            let state = self.state.lock().unwrap();
+            state.runtime_permissions.clone()
+        };
+        let (package, granted) = {
+            let primary = state.primary();
+            (
+                primary.package.package_name.clone(),
+                primary.granted_permissions.clone(),
+            )
+        };
         *self.state.lock().unwrap() = state;
+        if let Some(store) = store {
+            store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .set_install_time(&package, &granted);
+        }
         Ok(())
     }
 

@@ -1,0 +1,109 @@
+# SYSUI1: the dialog's Deny answer, and "Don't ask again".
+#
+# Same path as `sysui1-permission-allow`, with the denial answer: the dialog
+# returns `PERMISSION_DENIED` for both permissions and the "Don't ask again" flag,
+# so the store records `FLAG_PERMISSION_USER_SET | FLAG_PERMISSION_USER_FIXED`,
+# `shouldShowRequestPermissionRationale` answers false (the documented contract),
+# and a second `requestPermissions` is answered denied by the controller without a
+# dialog (a fixed permission is never asked again).
+version: 1
+name: sysui1-permission-deny
+description: >-
+  requestPermissions -> the system app's dialog -> tick Don't ask again, tap Deny ->
+  onRequestPermissionsResult denied, the store records USER_SET|USER_FIXED, and a
+  second request is answered denied without drawing the dialog.
+app: fixtures/build/apps/perm-probe.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+services:
+  - id: system.permissions
+    profile: real
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.permprobe/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 20000
+
+  - tap:
+      selector: {id: request}
+
+  - wait_for:
+      selector: {id: deny_button}
+      timeout_ms: 30000
+
+  - assert_windows:
+      order: [application]
+      focus: application
+      focus_type: TYPE_BASE_APPLICATION
+      types: [TYPE_BASE_APPLICATION]
+
+  - assert_text:
+      selector: {id: permission_0}
+      text: {exact: "CAMERA"}
+      timeout_ms: 10000
+
+  # Deny + "Don't ask again".
+  - tap:
+      selector: {id: dont_ask_again}
+
+  - tap:
+      selector: {id: deny_button}
+
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 30000
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "result request=7 n=2 m=2 CAMERA=-1 LOCATION=-1"}
+      timeout_ms: 20000
+
+  - assert_text:
+      selector: {id: state}
+      text: {exact: "state after: CAMERA=-1 LOCATION=-1"}
+      timeout_ms: 20000
+
+  - service_ctl:
+      module: system.permissions
+      op: state
+      expect:
+        ok: true
+        value:
+          permissions:
+            - permission: android.permission.ACCESS_FINE_LOCATION
+              state: denied
+              granted: false
+              user_set: true
+              never_ask_again: true
+              rationale: false
+            - permission: android.permission.CAMERA
+              state: denied
+              granted: false
+              user_set: true
+              never_ask_again: true
+              rationale: false
+
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 20000
+      ordered: true
+      patterns:
+        - '^deny names=android\.permission\.CAMERA,android\.permission\.ACCESS_FINE_LOCATION results=denied,denied never_ask_again=true$'
+        - '^result request=7 n=2 m=2 CAMERA=-1 LOCATION=-1$'

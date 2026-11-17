@@ -2109,17 +2109,28 @@ impl Peer {
 
     /// The package the activity manager recorded for `tag`, else the handshake
     /// name (the guest names itself by its package).
+    ///
+    /// SYSUI3A: an **empty** recorded package is not an answer. The primary
+    /// process's `attachApplication` carries no package, so the record could be
+    /// created unnamed; returning that empty name made `pending_launch_for("")`
+    /// miss the launch the running primary had been given (the shade's row tap).
+    /// The launcher seeds the primary package now
+    /// (`ServiceHost::seed_primary_package`), and this fallback still asks the
+    /// handshake name rather than inventing one.
     fn package_of(&mut self, tag: u32) -> Option<String> {
         if let Some(atms) = self.atms_service_mut() {
             if let Some((_, package, ..)) = atms
                 .process_list()
                 .into_iter()
                 .find(|(process_tag, ..)| *process_tag == tag)
+                .filter(|(_, package, ..)| !package.is_empty())
             {
                 return Some(package);
             }
         }
-        self.process_name(tag).map(str::to_string)
+        self.process_name(tag)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
     }
 
     fn atms_service_mut(&mut self) -> Option<&mut acos_services::atms::AtmsService> {
@@ -2277,6 +2288,12 @@ impl Peer {
         pending.extend(self.host.take_timed_deliveries());
         let mut out = self.frames_for_deliveries(pending);
         out.extend(self.take_ref_frames());
+        // SYSUI1: a **host-initiated** launch (a module control op starting the
+        // permission dialog or the shade) records a `PendingLaunch` with no
+        // guest frame behind it. The idle turn is exactly when it must reach an
+        // already-running process, so the host transactions are drained here
+        // too (they are the same deliveries `handle_tagged` emits after a frame).
+        out.extend(self.take_host_transactions());
         out
     }
 

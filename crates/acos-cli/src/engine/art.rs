@@ -218,6 +218,14 @@ pub struct ArtSession {
     /// [`SessionBackend::begin_input`], before the traversal a selector tap
     /// needs to resolve its point): its content hash and its tree signature.
     input_baseline: Option<(String, u64)>,
+    /// SYSUI3A: the windows (label, id, z, bounds, touchable) the session held
+    /// immediately before the current input action, snapshotted by
+    /// [`Self::begin_input`] from the bound frame. A tap whose target window the
+    /// host recorded here and which the action's own observation no longer
+    /// records is a *window removal* the interaction caused (ADR-0032's
+    /// host-recorded removal): the strict settle's `detached` reason describes
+    /// that removal, not a screen that is still changing.
+    input_windows_before: Vec<acos_protocol::ui::WindowInfo>,
     /// FB3: the tree the session held immediately before the current input
     /// action, snapshotted by [`Self::begin_input`] from the already-bound
     /// frame (no traversal, no extra guest round trip). `None` when the action
@@ -2186,6 +2194,7 @@ impl ArtSession {
             settle_budget,
             settle_polls,
             input_baseline: None,
+            input_windows_before: Vec::new(),
             diff_baseline: None,
             diff_requested: false,
             settle: SettleStats::default(),
@@ -3091,6 +3100,7 @@ impl ArtSession {
         started: Instant,
         timing: &mut InputTiming,
     ) -> Result<(), BackendError> {
+        let gesture = request.clone();
         match self.command_raw(request) {
             Ok(reply) => {
                 timing.guest_ms = started.elapsed().as_millis() as u64;
@@ -3115,6 +3125,28 @@ impl ArtSession {
                     visual_change = changed;
                 }
                 self.last_input = Some(delivery(&reply, visual_change));
+                // SYSUI3A: a tap whose *target window* the host recorded before
+                // the gesture and no longer records afterwards is a completed
+                // interaction: the strict settle's `detached` reason is that
+                // removal, not a screen that is still changing. Never on its own
+                // (an un-delivered gesture keeps the timeout) - see
+                // [`removed_window_handled`].
+                if let Some(handled) = removed_window_handled(
+                    &gesture,
+                    self.last_input_settle.as_ref(),
+                    &self.input_windows_before,
+                    self.last_input.as_ref(),
+                    self.cached.as_ref().map(|frame| &frame.tree.windows),
+                ) {
+                    if let Some(input) = self.last_input.as_mut() {
+                        input.visual_change = true;
+                        // The observation/verdict carries the handled record, not
+                        // the raw timeout: this is the evidence the tap step
+                        // binds to.
+                        input.settle = Some(handled.clone());
+                    }
+                    self.last_input_settle = Some(handled);
+                }
                 // SE2: a content-stable input is only settled once the host has
                 // proven the tree content unchanged across its own traversals.
                 // The guest's fast block is replaced by the content report, so
@@ -5491,6 +5523,14 @@ impl SessionBackend for ArtSession {
             .cached
             .as_ref()
             .map(|frame| (frame.md5.clone(), frame.signature));
+        // SYSUI3A: the window stack the action starts from. A tap that closes
+        // the window it landed on is only provable against this record: the
+        // window must have existed before and must be gone afterwards.
+        self.input_windows_before = self
+            .cached
+            .as_ref()
+            .map(|frame| frame.tree.windows.clone())
+            .unwrap_or_default();
         // FB3: the "before" side of the action's diff is the tree this session
         // already holds -- the bound frame of the previous observation. It is
         // only cloned when the caller asked for a diff (`diff:false` costs
@@ -5899,6 +5939,115 @@ fn timed_out_settle(settle: Option<&serde_json::Value>) -> Option<serde_json::Va
     } else {
         None
     }
+}
+
+/// SYSUI3A: the settle contract for **a tap that closes the window it landed
+/// on**.
+///
+/// The guest's strict settle names `detached` when a root it still holds has no
+/// `ViewRootImpl` any more (`LaunchMain.checkSettle`). That is exactly what a
+/// dismissed window looks like from inside the app, and the tap that dismissed
+/// it is the interaction that was asked for - not a screen that is still
+/// changing. Treating it as `TIMEOUT` reports a *successful* interaction as a
+/// failure (the notification shade's row tap on ART).
+///
+/// The rule is deliberately narrow, because a settle timeout is the one thing
+/// this must never turn into a pass by accident:
+///
+/// * the action must be a **tap**, and the gesture must have been **delivered**
+///   (host-observed) with at least one **handled** guest ack - a window that
+///   vanishes without any input delivered is not an interaction;
+/// * the settle must be the guest's strict timeout (any reason: a removed window
+///   reports `detached` when the stale root is still held, and
+///   `no-draw-after-action` when the removal left nothing newer to draw; the
+///   reason is copied into the handled record, never invented);
+/// * the window the tap landed on must be in the host's **own record of the
+///   window stack before the action** (top-most touchable window containing the
+///   point), and must be absent from the observation the action completed
+///   (matched by window id, else by its node label);
+/// * something must still be on screen afterwards, so "everything went away"
+///   never reads as a handled tap.
+///
+/// Returns the settle record to publish (`bound: "window-removed"`, the removal
+/// as evidence) or `None` to leave the timeout exactly as the guest reported it.
+fn removed_window_handled(
+    request: &serde_json::Value,
+    settle: Option<&serde_json::Value>,
+    before: &[acos_protocol::ui::WindowInfo],
+    input: Option<&InputDelivery>,
+    after: Option<&Vec<acos_protocol::ui::WindowInfo>>,
+) -> Option<serde_json::Value> {
+    if request.get("cmd").and_then(|v| v.as_str()) != Some("tap") {
+        return None;
+    }
+    let x = request.get("x").and_then(serde_json::Value::as_i64)? as i32;
+    let y = request.get("y").and_then(serde_json::Value::as_i64)? as i32;
+    let settle = settle?;
+    let timed_out = settle.get("settled").and_then(serde_json::Value::as_bool) == Some(false)
+        && settle.get("bound").and_then(serde_json::Value::as_str) == Some("timeout");
+    if !timed_out {
+        return None;
+    }
+    let reason = settle
+        .get("reason")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("timeout")
+        .to_string();
+    // The interaction has to be one the host really delivered, and the guest has
+    // to have handled it: a window that is gone without any input is a failure,
+    // never a pass.
+    let input = input?;
+    if !input.delivered {
+        return None;
+    }
+    let handled_acks = input.acks.iter().filter(|ack| ack.handled).count();
+    if handled_acks == 0 {
+        return None;
+    }
+    let after = after?;
+    if after.is_empty() {
+        return None;
+    }
+    // The host's own hit test over the window stack it recorded before the tap:
+    // the top-most touchable window whose bounds contain the point.
+    let target = before
+        .iter()
+        .filter(|window| window.touchable)
+        .filter(|window| {
+            window
+                .bounds
+                .is_some_and(|b| x >= b.left() && x < b.right() && y >= b.top() && y < b.bottom())
+        })
+        .max_by_key(|window| window.z)?;
+    let gone = |window: &acos_protocol::ui::WindowInfo| -> bool {
+        !after.iter().any(|other| {
+            if !window.id.is_empty() && !other.id.is_empty() {
+                other.id == window.id
+            } else {
+                !window.label.is_empty() && other.label == window.label
+            }
+        })
+    };
+    if !gone(target) {
+        return None;
+    }
+    Some(serde_json::json!({
+        "mode": "strict",
+        "settled": false,
+        "bound": "window-removed",
+        "strict_rule": "event",
+        "reason": reason,
+        "animating": false,
+        "handled": "window-removed",
+        "handled_window": if target.id.is_empty() { target.label.clone() } else { target.id.clone() },
+        "handled_window_label": target.label.clone(),
+        "acked": handled_acks,
+        "windows_before": before.len(),
+        "windows_after": after.len(),
+        "meaning": "the window the tap landed on is gone from the host's window record: the \
+                    removal is the interaction's evidence, not a screen that is still changing \
+                    (a settle timeout with no delivered gesture stays a timeout)",
+    }))
 }
 
 impl Drop for ArtSession {
@@ -6497,6 +6646,222 @@ mod tests {
         let strict = serde_json::json!({"mode": "strict", "settled": true});
         assert!(content_capture_refusal(Some(&strict)).is_none());
         assert!(content_capture_refusal(None).is_none());
+    }
+
+    /// A window record for the settle rule: `(id, label, z, bounds, touchable)`.
+    fn window(
+        id: &str,
+        label: &str,
+        z: i64,
+        bounds: (i32, i32, i32, i32),
+        touchable: bool,
+    ) -> acos_protocol::ui::WindowInfo {
+        let mut window = acos_protocol::ui::WindowInfo::new(z);
+        window.id = id.to_string();
+        window.label = label.to_string();
+        window.bounds = Some(acos_protocol::ui::Bounds::new(
+            bounds.0, bounds.1, bounds.2, bounds.3,
+        ));
+        window.touchable = touchable;
+        window
+    }
+
+    fn tap_at(x: i32, y: i32) -> serde_json::Value {
+        serde_json::json!({"cmd": "tap", "x": x, "y": y})
+    }
+
+    fn detached_timeout() -> serde_json::Value {
+        serde_json::json!({
+            "mode": "strict",
+            "settled": false,
+            "bound": "timeout",
+            "reason": "detached",
+            "ack_ms": 5,
+        })
+    }
+
+    fn delivered(handled: bool) -> InputDelivery {
+        // MERGE040A: REL3E/REL3I3 widened `InputDelivery` (the app window's own
+        // answer, its published/acked counts and the host's window-removal
+        // record). SYSUI3A's settle-rule tests only care about the ack and the
+        // settle block, so the added facts are spelled out here rather than
+        // defaulted: one ack, published, and no window removal unless a test
+        // sets it.
+        InputDelivery {
+            delivered: true,
+            visual_change: false,
+            handled: Some(handled),
+            published: 1,
+            acks: vec![InputAck {
+                seq: 1,
+                handled,
+                latency_us: Some(3000),
+            }],
+            window_removed: false,
+            target: None,
+            settle: Some(detached_timeout()),
+        }
+    }
+
+    /// SYSUI3A: the shade's row tap. The tapped window (the shade, top-most and
+    /// touchable at the point) is gone from the observation the tap completed,
+    /// the gesture was delivered and handled: the settle becomes the handled
+    /// `window-removed` record instead of a timeout.
+    #[test]
+    fn a_tap_that_closed_the_window_it_landed_on_is_handled() {
+        let before = vec![
+            window("w-app", "app", 0, (0, 0, 1080, 2400), true),
+            window("w-shade", "shade", 1, (0, 0, 1080, 2400), true),
+        ];
+        let after = vec![window("w-app", "app", 0, (0, 0, 1080, 2400), true)];
+        let handled = removed_window_handled(
+            &tap_at(500, 700),
+            Some(&detached_timeout()),
+            &before,
+            Some(&delivered(true)),
+            Some(&after),
+        )
+        .expect("a delivered tap that removed the window it landed on is handled");
+        assert_eq!(handled["bound"], "window-removed");
+        assert_eq!(handled["handled"], "window-removed");
+        assert_eq!(handled["handled_window"], "w-shade");
+        assert_eq!(handled["handled_window_label"], "shade");
+        // The step is not a settle timeout any more: the executor's gate reads
+        // exactly this predicate.
+        assert!(timed_out_settle(Some(&handled)).is_none());
+    }
+
+    /// The negative the orchestrator asked for: **a window that vanishes without
+    /// any input delivered is still not a pass**. No acks, a refused gesture, and
+    /// the host's own `delivered: false` all keep the guest's timeout.
+    #[test]
+    fn a_window_that_vanishes_without_a_delivered_gesture_stays_a_timeout() {
+        let before = vec![window("w-shade", "shade", 1, (0, 0, 1080, 2400), true)];
+        let after = vec![window("w-app", "app", 0, (0, 0, 1080, 2400), true)];
+        // Nothing was delivered at all.
+        let mut undelivered = delivered(true);
+        undelivered.delivered = false;
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&detached_timeout()),
+                &before,
+                Some(&undelivered),
+                Some(&after)
+            )
+            .is_none(),
+            "a window removal nobody interacted with is not evidence"
+        );
+        // Delivered, but the guest never handled it.
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&detached_timeout()),
+                &before,
+                Some(&delivered(false)),
+                Some(&after)
+            )
+            .is_none(),
+            "an unhandled gesture is not a handled window removal"
+        );
+        // No input record at all (the window vanished between two observations).
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&detached_timeout()),
+                &before,
+                None,
+                Some(&after)
+            )
+            .is_none()
+        );
+        // And an untouched settle stays untouched.
+        assert!(timed_out_settle(Some(&detached_timeout())).is_some());
+    }
+
+    /// The removal must be *the tapped* window: a tap beside an overlay does not
+    /// let an unrelated window's disappearance pass as its effect, and a timeout
+    /// with any other reason is none of this rule's business.
+    #[test]
+    fn only_the_tapped_window_going_away_counts() {
+        let before = vec![
+            window("w-app", "app", 0, (0, 0, 1080, 2400), true),
+            window("w-dialog", "dialog", 1, (100, 100, 500, 500), true),
+        ];
+        // The point is outside the dialog: the app window is the target and it is
+        // still there (only the dialog closed) - not this tap's removal.
+        let after = vec![window("w-app", "app", 0, (0, 0, 1080, 2400), true)];
+        assert!(
+            removed_window_handled(
+                &tap_at(900, 2000),
+                Some(&detached_timeout()),
+                &before,
+                Some(&delivered(true)),
+                Some(&after)
+            )
+            .is_none(),
+            "the tapped window (the app) did not go away"
+        );
+        // A non-touchable window is never the input target.
+        let before = vec![window("w-top", "overlay", 2, (0, 0, 1080, 2400), false)];
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&detached_timeout()),
+                &before,
+                Some(&delivered(true)),
+                Some(&after)
+            )
+            .is_none()
+        );
+        // A settle timeout whose reason is not `detached` is still handled when
+        // the tapped window really went away (the shade reports
+        // `no-draw-after-action` once the closed window leaves nothing newer to
+        // draw); the reason is copied, not rewritten.
+        let mut other = detached_timeout();
+        other["reason"] = serde_json::json!("no-draw-after-action");
+        let handled = removed_window_handled(
+            &tap_at(500, 700),
+            Some(&other),
+            &[window("w-shade", "shade", 1, (0, 0, 1080, 2400), true)],
+            Some(&delivered(true)),
+            Some(&after),
+        )
+        .expect("a removed tapped window is handled whatever the settle reason");
+        assert_eq!(handled["reason"], "no-draw-after-action");
+        // ... but an untouched window with any reason is still a timeout.
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&other),
+                &[window("w-app", "app", 0, (0, 0, 1080, 2400), true)],
+                Some(&delivered(true)),
+                Some(&after)
+            )
+            .is_none()
+        );
+        // "Everything vanished" is never a handled tap.
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&detached_timeout()),
+                &[window("w-shade", "shade", 1, (0, 0, 1080, 2400), true)],
+                Some(&delivered(true)),
+                Some(&Vec::new())
+            )
+            .is_none()
+        );
+        // A non-tap command is not affected by this rule.
+        assert!(
+            removed_window_handled(
+                &serde_json::json!({"cmd": "type_text", "text": "hi"}),
+                Some(&detached_timeout()),
+                &[window("w-shade", "shade", 1, (0, 0, 1080, 2400), true)],
+                Some(&delivered(true)),
+                Some(&Vec::new())
+            )
+            .is_none()
+        );
     }
 
     /// G3c: the launch first-frame predicate must reject the *window skeleton*

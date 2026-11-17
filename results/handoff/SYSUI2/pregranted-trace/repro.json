@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/perm-probe.apk",
+  "apk_sha256": "7389c07d89f37fb765f0d78b03fa56c8750eb78ad4420447fe3b4031fe18183d",
+  "scenario_path": "scenarios/sysui1-permission-pregranted.yaml",
+  "scenario_sha256": "e15ae7a31d8de37ae541aab1adeec27024c2eb3de56b92f007d02f16515d0064",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

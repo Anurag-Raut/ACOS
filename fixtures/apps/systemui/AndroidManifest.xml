@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SYSUI2: the notification shade app (ADR-0029 amendment: system UI comes from
+  system apps in the guest).
+
+  `com.android.systemui` is where a device's shade lives; the notification
+  module's `open_shade` control op starts this activity with the posted
+  notifications as launch extras (the system builds the list it would bind into
+  the real `NotificationStackScrollLayout`). Tapping a row answers with the row's
+  key, and the host fires that notification's content `PendingIntent` and
+  dismisses the record — the work systemui's own controller does in its process.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.android.systemui"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <application
+        android:label="@string/app_name"
+        android:allowBackup="false"
+        android:debuggable="true">
+        <activity
+            android:name=".ShadeActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop" />
+    </application>
+</manifest>
