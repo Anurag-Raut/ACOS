@@ -331,17 +331,36 @@ public final class LaunchMain {
         int runtime = initAndroidRuntime(sPkg);
         if (runtime < 0) throw new IllegalStateException("initAndroidRuntime -> " + runtime);
         System.out.println("ACOSLAUNCH MARK android-runtime ready rc=" + runtime);
-        // ADR-0029 item 1: the framework initializers the attached modules need
-        // this *process* to run before any app code. On a device each mainline
-        // module's own process does this — the phone process installs
-        // `TelephonyServiceManager`, the Bluetooth module installs
-        // `BluetoothServiceManager` — and ACOS has no such process. The launcher
-        // forwards the attached modules' `ModuleManifest::process_initializers`
-        // as `class#method#manager` entries joined by ';'; the guest runs them
-        // here, exactly once, before the app boots. A session whose modules
-        // declare none forwards nothing, so the managers stay null and the
-        // framework takes its documented missing path. Adding a module never
-        // touches this code: it is one reflective loop over the manifest's data.
+        // AOSP's process bootstrap: `ActivityThread.main` runs
+        // `initializeMainlineModules()` once per app process, before
+        // `Looper.prepareMainLooper()`/`attach()` and therefore long before
+        // BIND_APPLICATION. It installs the mainline `ServiceManager` holders
+        // the framework's service managers read in their constructors
+        // (`TelephonyServiceManager`, `StatsServiceManager`, the media platform +
+        // media `MediaServiceManager`, `BluetoothServiceManager`,
+        // `NfcServiceManager`, `DeviceConfigServiceManager`).
+        //
+        // On a device every app process gets it from that one entry point. ACOS
+        // builds the `ActivityThread` itself and never runs `main()`, so without
+        // this call the holders stay null for *every* guest process and the
+        // framework's own managers die in their constructors
+        // (MODA11Y7: `MediaSessionManager.<init>` -> `MediaServiceManager` null,
+        // Gaten's accessibility service `onCreate`). The list is the framework's
+        // own, not a per-module guess: a module declares a
+        // `process_initializer` only for a manager this call does not install
+        // (see `ModuleManifest::process_initializers`), so nothing registers
+        // twice.
+        initializeMainlineModules();
+        // ADR-0029 item 1: the extra framework initializers a module needs this
+        // *process* to run and that AOSP's own `initializeMainlineModules()`
+        // above does not install. The launcher forwards the attached modules'
+        // `ModuleManifest::process_initializers` as `class#method#manager`
+        // entries joined by ';'; the guest runs them here, exactly once, before
+        // the app boots. Telephony and Bluetooth are *not* here: AOSP's call
+        // already installs both, and their setters throw on a second call, so
+        // declaring them would be a double registration. A session whose modules
+        // declare none forwards nothing. Adding a module never touches this
+        // code: it is one reflective loop over the manifest's data.
         String initializers = System.getenv("ACOSLAUNCH_INITIALIZERS");
         if (initializers != null && !initializers.isEmpty()) {
             for (String entry : initializers.split(";")) {
@@ -5415,6 +5434,29 @@ public final class LaunchMain {
     }
 
     // ------------------------------------------------------------- helpers
+
+    // AOSP `ActivityThread.main`'s per-process mainline-module bootstrap.
+    //
+    // Hidden framework API (not in the SDK jar this guest source compiles
+    // against), so it is reached by reflection the same way `AppMain` reaches
+    // `ActivityThread`. A failure is fatal: on a device this call is not
+    // guarded either, and a process that boots with null mainline managers
+    // dies later in a constructor that names neither the manager nor this
+    // call (MODA11Y7). The image dex is the authority for both the entry point
+    // (`framework/classes.dex` `ActivityThread.main` insn 001c,
+    // `invoke-static {}, Landroid/app/ActivityThread;.initializeMainlineModules:()V`)
+    // and the list it installs.
+    static void initializeMainlineModules() throws Throwable {
+        try {
+            Class<?> at = Class.forName("android.app.ActivityThread");
+            Method init = at.getDeclaredMethod("initializeMainlineModules");
+            init.setAccessible(true);
+            init.invoke(null);
+            System.out.println("ACOSLAUNCH MARK mainline-modules initialized");
+        } catch (InvocationTargetException e) {
+            throw e.getCause() != null ? e.getCause() : e;
+        }
+    }
 
     static void set(Object o, String name, Object value) {
         for (Class<?> c = o.getClass(); c != null; c = c.getSuperclass()) {

@@ -65,7 +65,26 @@ fn a11y_state(host: &mut ServiceHost) -> Arc<Mutex<A11yState>> {
 
 /// Bind `client` as the enabled service (the state `publishService` +
 /// `IAccessibilityServiceClient.init` leave behind).
+///
+/// A bound service is an **enabled** service, so the two `Settings.Secure` keys
+/// the Settings UI writes are written here too: since GATENBOOT2 the enable set
+/// in the settings table is the authority the system reconciles the bind
+/// against (`a11y_bind::sync_enabled_services`), and a state that claims a bound
+/// service while the table says "off" is the inconsistent one.
 fn bind_service(state: &Arc<Mutex<A11yState>>, client: u64) {
+    if let Some(settings) = state.lock().expect("a11y state").settings.clone() {
+        let mut settings = settings.lock().expect("settings");
+        settings.put(
+            acos_services::provider::Namespace::Secure,
+            "enabled_accessibility_services",
+            &format!("{PACKAGE}/.A11yProbeService"),
+        );
+        settings.put(
+            acos_services::provider::Namespace::Secure,
+            "accessibility_enabled",
+            "1",
+        );
+    }
     state.lock().expect("a11y state").bind_service(
         &A11yPendingBind {
             component: format!("{PACKAGE}/.A11yProbeService"),

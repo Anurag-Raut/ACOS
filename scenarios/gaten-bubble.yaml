@@ -2,18 +2,39 @@
 # its own `AccessibilityService` owns (the 2026-11-15 agent-feedback case that
 # ACOS could not verify at all: "the service is simply never started").
 #
-# The accessibility module binds the service the launch config enables
-# (`scheduleCreateService` + `scheduleBindService` -> `publishService` ->
-# `IAccessibilityServiceClient.init`), hands it the display's overlay window
-# token, and the WMS accepts a `TYPE_ACCESSIBILITY_OVERLAY` add only on that
-# token (MODA11Y4/MODA11Y5). So the bubble is the app's own window, drawn by the
-# app's own view code, over the app's own activity.
+# What this scenario proves today, on real ART:
+#   * the accessibility module binds Gaten's own service through the framework's
+#     own path (`scheduleCreateService` + `scheduleBindService` ->
+#     `publishService` -> `IAccessibilityServiceClient.init`), the app publishes
+#     its `IAccessibilityServiceClient`, and the system delivers `init`;
+#   * Gaten's `GatenAccessibilityService.onCreate`/`onServiceConnected` run in the
+#     app's own process. That is what GATENBOOT unblocked: `onCreate` reads
+#     `getSystemService(MEDIA_SESSION_SERVICE)`, whose manager needs the
+#     per-process mainline bootstrap (`ActivityThread.initializeMainlineModules`)
+#     that ACOS's launcher never ran, then `onServiceConnected` asks
+#     `KeyguardManager.isKeyguardLocked()`, which ACOS now answers `false` (no
+#     keyguard) instead of `UNSUPPORTED_ANDROID_API`;
+#   * the app's own Screen lookup page reads the service as enabled: "Lookup
+#     mode / On" and the floating-button row's "Tap to look up" subtitle are the
+#     app's view of the same enabled-service list the module publishes.
+#
+# What it does NOT prove, and the next scenario pins as a known wall: the bubble
+# window itself. Gaten shows it only while `TriggerPreferences.floatingButtonEnabled`
+# is true, and the only in-app notifier for that flag is the runtime-registered
+# broadcast `ACTION_FLOATING_BUTTON_CHANGED`, which ACOS's AMS records but never
+# delivers to the guest (docs/IMAGE_ABI_NOTEBOOK.md §`registerReceiver`). With the
+# preference on before the bind, `onServiceConnected -> syncFloatingButton()`
+# adds the window. See results/handoff/GATENBOOT/README.md §2 and
+# scenarios/gaten-bubble-overlay.yaml (the assertion, as a pinned known wall).
+#
+# Drag needs `dispatchGesture` (MODA11Y7 §1: the guest's `MotionEvent` parcel
+# native is a structured refusal), so no drag step exists here.
 version: 1
 name: gaten-bubble
 description: >-
-  Gaten with its real AccessibilityService bound: the floating bubble appears as
-  a TYPE_ACCESSIBILITY_OVERLAY window above the activity, its content is in the
-  tree, and taps on it land on the overlay.
+  Gaten with its real AccessibilityService enabled and bound: the system binds the
+  app's own service, the app's onServiceConnected runs, and the app's Screen lookup
+  page reads the service as enabled.
 app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
 engine: native-preferred
 fallback: forbid
@@ -31,12 +52,38 @@ services:
         - com.gaten/com.gaten.app.GatenAccessibilityService
 steps:
   - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
-  - wait_for: {selector: {text: {contains: "Set up Gaten"}}, timeout_ms: 30000}
-  # The bubble is added by the service after `onServiceConnected`, which runs
-  # inside the same process as the activity. Give it a bounded window to post
-  # its first frame, then capture: the frame's tree carries the window stack.
-  - wait_for: {selector: {text: {contains: "Skip"}}, timeout_ms: 30000}
-  - capture: {name: gaten-bubble, format: png, fresh: true}
-  - assert_windows:
-      order: [application, accessibility_overlay]
-      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY]
+  # The welcome screen runs a looping Reanimated timeline, so a strict settle
+  # there honestly times out (GR3); this tap waits through it, and the Skip pages
+  # are navigation (`settle: fast`). Home is then proven strictly.
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - tap: {selector: {content_desc: {exact: Settings}}}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - tap: {selector: {text: {exact: "Screen lookup"}}}
+  - wait_for: {selector: {text: {exact: "Floating button"}}, timeout_ms: 30000}
+  # The service: enabled, published by the app, bound, and `onServiceConnected`
+  # ran (`init` delivered). This is the assertion the 2026-11-15 feedback could
+  # not make at all.
+  - service_ctl:
+      module: accessibility
+      op: status
+      expect:
+        id: accessibility
+        op: status
+        value:
+          enabled: true
+          service_bound: true
+          self_disabled: false
+          enabled_services:
+            - com.gaten/com.gaten.app.GatenAccessibilityService
+  # The app's own reading of that enabled service, on its own Settings page.
+  - assert_text:
+      selector: {text: {exact: "Lookup mode"}}
+      text: {exact: "Lookup mode"}
+  - assert_text:
+      selector: {text: {exact: "On"}}
+      text: {exact: "On"}
+  - capture: {name: gaten-screen-lookup, format: png, fresh: true}

@@ -947,40 +947,288 @@ pub struct ServiceRecord {
     pub bind_count: u32,
 }
 
+/// One `PatternMatcher` element of an `IntentFilter` (a scheme-specific part
+/// or a path), reduced to the pair the matcher needs.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DataPattern {
+    /// `PatternMatcher.mPattern`.
+    pub pattern: Option<String>,
+    /// `PatternMatcher.mType` (`PATTERN_LITERAL` = 0, `PATTERN_PREFIX` = 1,
+    /// `PATTERN_SIMPLE_GLOB` = 2, `PATTERN_ADVANCED_GLOB` = 3).
+    pub kind: i32,
+}
+
+impl DataPattern {
+    /// AOSP `PatternMatcher.match`.
+    fn matches(&self, value: &str) -> bool {
+        let Some(pattern) = self.pattern.as_deref() else {
+            return false;
+        };
+        match self.kind {
+            0 => pattern == value,
+            1 => value.starts_with(pattern),
+            // `PATTERN_SIMPLE_GLOB`: `*` and `.` wildcards, as
+            // `PatternMatcher.matchPattern`.
+            2 => glob_match(pattern, value),
+            // `PATTERN_SUFFIX`.
+            4 => value.ends_with(pattern),
+            // An advanced glob is a superset this matcher does not model; a
+            // filter that uses one must not silently match everything.
+            _ => false,
+        }
+    }
+}
+
+/// `IntentFilter$AuthorityEntry`: `mOrigHost`, `mWild`, `mPort` (`-1` = any).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DataAuthority {
+    /// The host (`*.example.com` when [`Self::wild`]).
+    pub host: Option<String>,
+    /// `-1` accepts any port.
+    pub port: i32,
+    /// The `*.host` form.
+    pub wild: bool,
+}
+
+impl DataAuthority {
+    fn matches(&self, host: &str, port: i32) -> bool {
+        let Some(declared) = self.host.as_deref() else {
+            return false;
+        };
+        if self.port != -1 && self.port != port {
+            return false;
+        }
+        if self.wild {
+            // `*.example.com` matches any sub-domain but not the domain itself
+            // (`IntentFilter.AuthorityEntry.match` compares against
+            // `mHost` = `.example.com`).
+            let suffix = declared.trim_start_matches('*');
+            return host.len() > suffix.len() && host.ends_with(suffix);
+        }
+        declared == host
+    }
+}
+
+/// The `IntentFilter` facts a dynamic registration is matched on.
+///
+/// This is the subset of `IntentFilter` that
+/// [`IntentFilter.match`](https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-14.0.0_r75/core/java/android/content/IntentFilter.java)
+/// reads for a broadcast: action, categories, and the data triple
+/// (scheme / scheme-specific part / authority+port / path) plus the MIME type
+/// list. Priority is recorded but never used for **unordered** delivery: stock
+/// orders only ordered broadcasts by it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ReceiverFilter {
+    /// `IntentFilter.mActions`.
+    pub actions: Vec<String>,
+    /// `IntentFilter.mCategories`.
+    pub categories: Vec<String>,
+    /// `IntentFilter.mDataSchemes`.
+    pub schemes: Vec<String>,
+    /// `IntentFilter.mStaticDataTypes` + `mDataTypes` (the filter's types).
+    pub data_types: Vec<String>,
+    /// `IntentFilter.mDataSchemeSpecificParts`.
+    pub scheme_specific_parts: Vec<DataPattern>,
+    /// `IntentFilter.mDataAuthorities`.
+    pub authorities: Vec<DataAuthority>,
+    /// `IntentFilter.mDataPaths`.
+    pub paths: Vec<DataPattern>,
+    /// `IntentFilter.mPriority` (recorded; unordered delivery ignores it).
+    pub priority: i32,
+}
+
+/// A parsed `data` string: the parts `IntentFilter.matchData` compares.
+struct IntentData<'a> {
+    scheme: &'a str,
+    rest: &'a str,
+    host: Option<&'a str>,
+    port: i32,
+    path: Option<&'a str>,
+}
+
+fn parse_intent_data(data: &str) -> Option<IntentData<'_>> {
+    let (scheme, rest) = data.split_once(':')?;
+    let (host, port, path) = if let Some(after) = rest.strip_prefix("//") {
+        let end = after.find(['/', '?', '#']).unwrap_or(after.len());
+        let authority = &after[..end];
+        let path = if end < after.len() {
+            Some(&after[end..])
+        } else {
+            None
+        };
+        let (host, port) = match authority.rsplit_once(':') {
+            Some((host, port)) if port.chars().all(|c| c.is_ascii_digit()) => {
+                (host, port.parse::<i32>().unwrap_or(-1))
+            }
+            _ => (authority, -1),
+        };
+        (Some(host), port, path)
+    } else {
+        (None, -1, None)
+    };
+    Some(IntentData {
+        scheme,
+        rest,
+        host,
+        port,
+        path,
+    })
+}
+
+impl ReceiverFilter {
+    /// `IntentFilter.match(action, type, scheme, data)` — the AOSP answer as a
+    /// boolean. Categories are the caller's subset rule (`matchCategories`).
+    #[must_use]
+    pub fn matches(&self, intent: &IntentFacts) -> bool {
+        // `IntentFilter.match`: `if (action != null && !matchAction(action))`.
+        // An intent with no action matches any filter.
+        if let Some(action) = &intent.action {
+            if !self.actions.iter().any(|a| a == action) {
+                return false;
+            }
+        }
+        // `matchCategories`: every intent category must be declared.
+        if !intent
+            .categories
+            .iter()
+            .all(|c| self.categories.iter().any(|f| f == c))
+        {
+            return false;
+        }
+        self.matches_data(intent)
+    }
+
+    /// `IntentFilter.matchData`. The filter has no data constraints only when
+    /// it declares no schemes and no types; then it matches an intent that
+    /// carries neither a type nor a data URI.
+    fn matches_data(&self, intent: &IntentFacts) -> bool {
+        let parsed = intent.data.as_deref().and_then(parse_intent_data);
+        let type_ = intent.mime_type.as_deref();
+        if self.schemes.is_empty() && self.data_types.is_empty() {
+            return type_.is_none() && parsed.is_none();
+        }
+        if !self.schemes.is_empty() {
+            let Some(data) = parsed.as_ref() else {
+                return false;
+            };
+            if !self.schemes.iter().any(|s| s == data.scheme) {
+                return false;
+            }
+            if !self.scheme_specific_parts.is_empty()
+                && !self
+                    .scheme_specific_parts
+                    .iter()
+                    .any(|p| p.matches(data.rest))
+            {
+                return false;
+            }
+            if !self.authorities.is_empty() {
+                let Some(host) = data.host else {
+                    return false;
+                };
+                if !self
+                    .authorities
+                    .iter()
+                    .any(|a| a.matches(host, data.port))
+                {
+                    return false;
+                }
+            }
+            if !self.paths.is_empty() {
+                let Some(path) = data.path else {
+                    return false;
+                };
+                if !self.paths.iter().any(|p| p.matches(path)) {
+                    return false;
+                }
+            }
+        } else if parsed.is_some() {
+            // A filter that declares types but no scheme does not match a
+            // `data:` URI (`IntentFilter`'s "types without schemes" case).
+            return false;
+        }
+        if self.data_types.is_empty() {
+            // `IntentFilter`: with no types declared, an intent that carries a
+            // type is a data mismatch.
+            return type_.is_none();
+        }
+        type_.is_some_and(|t| self.data_types.iter().any(|d| mime_matches(d, t)))
+    }
+}
+
+/// `IntentFilter.findMatchingType` for one filter type: `*/*` matches
+/// anything, `x/*` matches every subtype of `x`.
+fn mime_matches(filter: &str, intent: &str) -> bool {
+    if filter == intent {
+        return true;
+    }
+    let Some((filter_major, filter_minor)) = filter.split_once('/') else {
+        return false;
+    };
+    if filter_major == "*" && filter_minor == "*" {
+        return true;
+    }
+    let Some((intent_major, _)) = intent.split_once('/') else {
+        return false;
+    };
+    filter_minor == "*" && filter_major == intent_major
+}
+
+/// `PatternMatcher.PATTERN_SIMPLE_GLOB`, exactly as
+/// `PatternMatcher.matchPattern` reads it: `.` matches any one character,
+/// `X*` matches zero or more occurrences of `X` (the character immediately
+/// before the `*`), and `\\` escapes the next character. The whole string must
+/// match.
+fn glob_match(pattern: &str, value: &str) -> bool {
+    fn walk(p: &[char], v: &[char]) -> bool {
+        let Some(&first) = p.first() else {
+            return v.is_empty();
+        };
+        let (token, after) = if first == '\\' {
+            match p.get(1) {
+                Some(&escaped) => (escaped, &p[2..]),
+                None => return false,
+            }
+        } else if first == '*' {
+            // A `*` never stands alone in `PATTERN_SIMPLE_GLOB`; a pattern that
+            // starts with one matches nothing (`matchPattern`'s own refusal).
+            return false;
+        } else {
+            (first, &p[1..])
+        };
+        if after.first() == Some(&'*') {
+            let rest = &after[1..];
+            if token == '.' {
+                // `.*` is any run; the rest of the pattern decides how much.
+                return (0..=v.len()).any(|skip| walk(rest, &v[skip..]));
+            }
+            let mut same = 0;
+            while same < v.len() && v[same] == token {
+                same += 1;
+            }
+            return (0..=same).any(|n| walk(rest, &v[n..]));
+        }
+        if token == '.' {
+            return !v.is_empty() && walk(after, &v[1..]);
+        }
+        v.first() == Some(&token) && walk(after, &v[1..])
+    }
+    let pattern: Vec<char> = pattern.chars().collect();
+    let value: Vec<char> = value.chars().collect();
+    walk(&pattern, &value)
+}
+
 /// One registered `IIntentReceiver`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceiverRecord {
     /// `IIntentReceiver` binder.
     pub receiver: u64,
-    /// Owning package.
+    /// Owning package (empty when the registering caller did not name one).
     pub package: String,
-    /// Filter actions.
-    pub actions: Vec<String>,
-    /// Filter categories.
-    pub categories: Vec<String>,
+    /// The `IntentFilter` facts the broadcast is matched on.
+    pub filter: ReceiverFilter,
     /// `registerReceiver` flags.
     pub flags: i32,
-}
-
-impl ReceiverRecord {
-    fn matches(&self, intent: &IntentFacts) -> bool {
-        let action_ok = match &intent.action {
-            Some(action) => self.actions.iter().any(|a| a == action),
-            None => false,
-        };
-        if !action_ok {
-            return false;
-        }
-        let categories = if intent.categories.is_empty() {
-            vec!["android.intent.category.DEFAULT".to_string()]
-        } else {
-            intent.categories.clone()
-        };
-        categories
-            .iter()
-            .all(|c| self.categories.iter().any(|f| f == c))
-            || self.categories.is_empty()
-    }
 }
 
 /// One published content provider.
@@ -1062,18 +1310,6 @@ pub struct PendingReceiver {
 }
 
 impl PendingReceiver {
-    /// `true` for a receiver synthesized from an installed manifest, whose
-    /// marker bit [`synthesize_receiver_binder`] sets.
-    ///
-    /// An ACOS ART session has no separate process to instantiate a manifest
-    /// receiver in, so its delivery is reported, not fabricated.
-    #[must_use]
-    pub fn is_manifest(&self) -> bool {
-        self.receiver & 0x6000_0000_0000_0000 != 0
-    }
-}
-
-impl PendingReceiver {
     /// The `IIntentReceiver.performReceive` delivery for one queued match.
     ///
     /// This is the ART host's side of a broadcast: the `Intent` is written with
@@ -1109,6 +1345,31 @@ impl PendingReceiver {
     }
 }
 
+/// `Intent.FLAG_RECEIVER_REGISTERED_ONLY`: only dynamically registered
+/// receivers hear the broadcast; no manifest `<receiver>` is instantiated.
+pub const FLAG_RECEIVER_REGISTERED_ONLY: i32 = 0x4000_0000;
+
+/// A manifest `<receiver>` a broadcast matched, which the **owning app
+/// process** has to instantiate (`ActivityThread.handleReceiver`).
+///
+/// Stock `BroadcastQueue` copies the broadcast intent, sets the receiver's
+/// component on the copy, resolves the package's `ActivityInfo` and asks that
+/// process's `IApplicationThread.scheduleReceiver` to run it. ACOS's host has
+/// no Java, so the same request is a `PendingDelivery`; a match with no running
+/// process in its package is reported, never fabricated (a device would start
+/// the process, which is the launcher's decision, not this host's).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PendingManifestReceiver {
+    /// Owning package (`ActivityInfo.packageName`).
+    pub package: String,
+    /// Fully-qualified receiver class (`ActivityInfo.name`).
+    pub class: String,
+    /// The broadcast intent (the host sets the component on a copy).
+    pub intent: IntentFacts,
+    /// `BroadcastReceiver.getSentFromPackage()`'s answer.
+    pub sending_package: String,
+}
+
 /// The AMS state machine.
 #[derive(Debug, Default)]
 pub struct AmsState {
@@ -1130,6 +1391,10 @@ pub struct AmsState {
     pub pending_binds: Vec<PendingBind>,
     /// Pending `IIntentReceiver.performReceive` deliveries.
     pub pending_receivers: Vec<PendingReceiver>,
+    /// Manifest receivers that matched: the owning process instantiates the
+    /// class (`IApplicationThread.scheduleReceiver`), it is not an
+    /// `IIntentReceiver` delivery.
+    pub pending_manifest_receivers: Vec<PendingManifestReceiver>,
     /// The session's one runtime-permission table (MODNOTIF2). Only the
     /// permission-controller request path in [`dispatch`] reads it; `None` in a
     /// bare unit-test state, where a request resolves as unsupported.
@@ -1213,13 +1478,16 @@ impl AmsState {
         const CLEAR_TOP: i32 = 0x0400_0000;
         /// `Intent.FLAG_ACTIVITY_SINGLE_TOP` (MPROC7).
         const SINGLE_TOP: i32 = 0x2000_0000;
-        /// `Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED`: what a launcher-icon
-        /// start carries (`NEW_TASK|RESET_TASK_IF_NEEDED` = `0x10200000`). AOSP
-        /// runs `ActivityStarter.resetTaskIfNeeded` over the task stack; ACOS
-        /// keeps one task per process with no affinity clusters, so there is
-        /// nothing to reset — the flag is honoured as the no-op it is here
-        /// (accepting it is not "silently ignoring" a launch-affecting flag:
-        /// NEW_TASK already selects the same behaviour).
+        /// `Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED`: AOSP uses it inside
+        /// `ActivityStarter` only when an existing task is reused for a **new
+        /// root** (the task is reset to its root activity before the start,
+        /// `Task.resetTaskIfNeeded`). ACOS keeps one task per process and a
+        /// launch is always that task's root, so there is nothing to reset:
+        /// accepting the flag is the faithful read, not a silently ignored
+        /// semantic difference — NEW_TASK already selects the same behaviour.
+        /// Gaten's `LauncherActivity` starts `MainActivity` with
+        /// `NEW_TASK|RESET_TASK_IF_NEEDED` (`0x10200000`), which is why the
+        /// strict set below has to name it.
         const RESET_TASK_IF_NEEDED: i32 = 0x0020_0000;
         const HONOURED: i32 = NEW_TASK | CLEAR_TOP | SINGLE_TOP | RESET_TASK_IF_NEEDED;
         if flags & !HONOURED != 0 {
@@ -1789,6 +2057,12 @@ impl AmsState {
     }
 
     /// `registerReceiver`: record a dynamic `IIntentReceiver`.
+    ///
+    /// `actions`/`categories` are the subset the runtime-side AMS bridge decodes;
+    /// a caller that has the whole `IntentFilter` (the ART host decodes every
+    /// fact through `IntentFilter.writeToParcel`) registers with
+    /// [`Self::register_receiver_with_filter`] so data/type matching is the
+    /// filter's own.
     pub fn register_receiver(
         &mut self,
         receiver: u64,
@@ -1797,17 +2071,37 @@ impl AmsState {
         categories: Vec<String>,
         flags: i32,
     ) {
-        if flags & 0x2 != 0 {
-            // `RECEIVER_EXPORTED`/`RECEIVER_NOT_EXPORTED` are the API-34
-            // requirement; both are accepted (the fixture registers a
-            // same-package receiver). Unknown flag bits are not.
-        }
+        self.register_receiver_with_filter(
+            receiver,
+            package,
+            ReceiverFilter {
+                actions,
+                categories,
+                ..ReceiverFilter::default()
+            },
+            flags,
+        );
+    }
+
+    /// `registerReceiver` with the full `IntentFilter` facts.
+    pub fn register_receiver_with_filter(
+        &mut self,
+        receiver: u64,
+        package: &str,
+        filter: ReceiverFilter,
+        flags: i32,
+    ) {
+        // `RECEIVER_EXPORTED`/`RECEIVER_NOT_EXPORTED` (`0x2`/`0x4`) are the
+        // API-34 requirement; the permission checks that apply to an exported
+        // registration are enforced by the caller (AMS `registerReceiver`
+        // reads the filter's `mRequiredPermission`), and this host has no
+        // per-receiver permission grant to consult yet.
+        let _ = flags;
         self.receivers.retain(|r| r.receiver != receiver);
         self.receivers.push(ReceiverRecord {
             receiver,
             package: package.to_string(),
-            actions,
-            categories,
+            filter,
             flags,
         });
     }
@@ -1822,11 +2116,27 @@ impl AmsState {
     /// `broadcastIntent`: queue deliveries to every matching dynamic and
     /// manifest receiver. Returns the number of receivers the intent reached.
     ///
-    /// `ordered` mirrors `Intent.FLAG_RECEIVER_FOREGROUND`-style sequencing:
-    /// when `result_to` is non-zero the broadcast is ordered and the result
-    /// code/data start at `result_code`/`result_data` and are delivered to the
-    /// caller's `IIntentReceiver`. An `ordered` broadcast with no `resultTo`
-    /// receiver is a structured error.
+    /// The rules are `BroadcastQueue`'s for an **unordered** broadcast:
+    ///
+    /// * a package-targeted intent (`Intent.setPackage`) reaches only that
+    ///   package's receivers — `BroadcastQueue` skips every other package's
+    ///   registered receivers and manifest declarations;
+    /// * `FLAG_RECEIVER_REGISTERED_ONLY` reaches only dynamically registered
+    ///   receivers (no manifest `<receiver>` is instantiated);
+    /// * every matching receiver is reached, in the same process or not, and
+    ///   `IntentFilter.match` decides what "matching" means
+    ///   ([`ReceiverFilter::matches`]); priority is recorded, never used,
+    ///   because unordered delivery has no order;
+    /// * a manifest match is queued as a [`PendingManifestReceiver`]: the
+    ///   receiver class has to be instantiated **in its own app process**
+    ///   (`IApplicationThread.scheduleReceiver` → `ActivityThread
+    ///   .handleReceiver`), which the host does when it converts the queue;
+    /// * ordered and sticky broadcasts are **not** modelled: an ordered
+    ///   broadcast (`resultTo != null`) needs sequential delivery with
+    ///   `getResultCode`/`getResultData`/`abortBroadcast`, and a sticky
+    ///   broadcast needs a sticky store (this host keeps none, which is why
+    ///   `registerReceiver` answers a null intent). Both are structured
+    ///   refusals rather than a silent, wrong delivery.
     pub fn broadcast(
         &mut self,
         intent: &IntentFacts,
@@ -1834,14 +2144,57 @@ impl AmsState {
         result_code: i32,
         result_data: Option<String>,
     ) -> Result<i32> {
-        let ordered = result_to != 0;
+        if result_to != 0 {
+            return Err(ServiceError::UnsupportedAndroidApi {
+                interface: "android.app.IActivityManager".into(),
+                code: 14,
+                method: "sendOrderedBroadcast (ordered delivery needs sequential receivers,                          getResultCode/getResultData and abortBroadcast; this host delivers                          broadcast receivers in parallel)"
+                    .into(),
+            });
+        }
+        // A sticky broadcast is `broadcastIntent(..., sticky = true)`, which
+        // arrives with `FLAG_RECEIVER_STICKY`-style semantics only through the
+        // sticky store; nothing distinguishes it on this wire, so an app that
+        // calls `sendStickyBroadcast` gets the honest "no sticky store" answer
+        // from `registerReceiver` (a null Intent) rather than a fabricated one.
+        let registered_only = intent.flags & FLAG_RECEIVER_REGISTERED_ONLY != 0;
+        let target = intent.package.as_deref().filter(|p| !p.is_empty());
         let mut matched = 0;
 
-        // Manifest receivers first (in declared order), then dynamic ones.
-        let manifest = self.manifests.resolve_receivers(intent);
-        for component in &manifest {
+        if !registered_only {
+            for component in self.manifests.resolve_receivers(intent) {
+                if let Some(target) = target {
+                    if component.package != target {
+                        continue;
+                    }
+                }
+                self.pending_manifest_receivers.push(PendingManifestReceiver {
+                    package: component.package.clone(),
+                    class: component.class.clone(),
+                    intent: intent.clone(),
+                    sending_package: intent.package.clone().unwrap_or_default(),
+                });
+                matched += 1;
+            }
+        }
+
+        let mut dynamic: Vec<u64> = Vec::new();
+        for receiver in &self.receivers {
+            // An empty `package` is a registration whose caller did not name
+            // its package (the runtime-side `registerReceiver` mirror); a
+            // package-targeted broadcast cannot exclude what it cannot name.
+            if let Some(target) = target {
+                if !receiver.package.is_empty() && receiver.package != target {
+                    continue;
+                }
+            }
+            if receiver.filter.matches(intent) {
+                dynamic.push(receiver.receiver);
+            }
+        }
+        for receiver in dynamic {
             self.pending_receivers.push(PendingReceiver {
-                receiver: synthesize_receiver_binder(&component.package, &component.class),
+                receiver,
                 intent: intent.clone(),
                 result_code,
                 result_data: result_data.clone(),
@@ -1850,33 +2203,7 @@ impl AmsState {
             matched += 1;
         }
 
-        for receiver in &self.receivers {
-            if receiver.matches(intent) {
-                self.pending_receivers.push(PendingReceiver {
-                    receiver: receiver.receiver,
-                    intent: intent.clone(),
-                    result_code,
-                    result_data: result_data.clone(),
-                    ordered,
-                });
-                matched += 1;
-            }
-        }
-
-        if ordered {
-            // A real ordered broadcast always has a `resultTo`; if no dynamic
-            // receiver matched there is still the result callback to answer.
-            self.pending_receivers.push(PendingReceiver {
-                receiver: result_to,
-                intent: intent.clone(),
-                result_code,
-                result_data,
-                ordered: true,
-            });
-            matched += 1;
-        } else if matched == 0 {
-            // A broadcast nobody listens to is not an error on Android.
-        }
+        // A broadcast nobody listens to is not an error on Android.
         Ok(matched)
     }
 
@@ -1916,6 +2243,11 @@ impl AmsState {
         std::mem::take(&mut self.pending_receivers)
     }
 
+    /// Drain the manifest-receiver matches the owning process must instantiate.
+    pub fn take_pending_manifest_receivers(&mut self) -> Vec<PendingManifestReceiver> {
+        std::mem::take(&mut self.pending_manifest_receivers)
+    }
+
     fn task_for(&mut self, _component: &DeclaredComponent, behaviour: LaunchBehaviour) -> i32 {
         if behaviour == LaunchBehaviour::NewTask || self.tasks.is_empty() {
             let id = self.next_task_id;
@@ -1951,22 +2283,6 @@ impl AmsState {
         };
         task.activities.split_off(index + 1)
     }
-}
-
-fn synthesize_receiver_binder(package: &str, class: &str) -> u64 {
-    // A stable, collision-free id for a manifest receiver's
-    // `IIntentReceiver` stub. The runtime maps it back to the real
-    // `LoadedApk.ReceiverDispatcher` binder.
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in package
-        .bytes()
-        .chain(b"/".iter().copied())
-        .chain(class.bytes())
-    {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    0x6000_0000_0000_0000 | (hash & 0x0fff_ffff_ffff_ffff)
 }
 
 // ---------------------------------------------------------------------------
@@ -2619,26 +2935,38 @@ mod tests {
         let count = state.broadcast(&intent, 0, 0, None).expect("broadcast");
         assert_eq!(count, 2, "one manifest + one dynamic receiver");
         let deliveries = state.take_pending_receivers();
-        assert_eq!(deliveries.len(), 2);
-        assert!(deliveries.iter().any(
-            |d| matches!(d.intent.extras.get("payload"), Some(Extra::String(s)) if s == "hi")
+        assert_eq!(deliveries.len(), 1, "the dynamic receiver's performReceive");
+        assert!(matches!(
+            deliveries[0].intent.extras.get("payload"),
+            Some(Extra::String(s)) if s == "hi"
         ));
+        // The manifest receiver is instantiated by its own process
+        // (`scheduleReceiver`), so it is queued separately, never dropped.
+        let manifest = state.take_pending_manifest_receivers();
+        assert_eq!(manifest.len(), 1);
+        assert_eq!(
+            (manifest[0].package.as_str(), manifest[0].class.as_str()),
+            (
+                "dev.acos.fixtures.svcprovider",
+                "dev.acos.fixtures.svcprovider.EchoReceiver"
+            )
+        );
     }
 
     #[test]
-    fn ordered_broadcast_answers_the_result_receiver() {
+    fn an_ordered_broadcast_is_a_structured_unsupported() {
         let mut state = AmsState::new();
         state.manifests = db_with_fixture();
         let intent = IntentFacts::action("dev.acos.fixtures.svcprovider.ECHO");
-        let count = state
+        let err = state
             .broadcast(&intent, 0x99, 7, Some("done".into()))
-            .unwrap();
-        assert_eq!(count, 2, "manifest receiver + ordered result");
-        let last = state.take_pending_receivers().pop().unwrap();
-        assert!(last.ordered);
-        assert_eq!(last.receiver, 0x99);
-        assert_eq!(last.result_code, 7);
-        assert_eq!(last.result_data.as_deref(), Some("done"));
+            .expect_err("ordered delivery is not modelled");
+        assert!(matches!(err, ServiceError::UnsupportedAndroidApi { .. }));
+        assert!(
+            state.take_pending_receivers().is_empty()
+                && state.take_pending_manifest_receivers().is_empty(),
+            "a refused broadcast delivers nothing at all"
+        );
     }
 
     #[test]
@@ -2672,6 +3000,210 @@ mod tests {
             .start_activity(&intent, 0x0000_0020, 0, 0)
             .expect_err("flags");
         assert!(matches!(err, ServiceError::UnsupportedAndroidApi { .. }));
+    }
+
+    fn dynamic_filter(actions: &[&str], categories: &[&str]) -> ReceiverFilter {
+        ReceiverFilter {
+            actions: actions.iter().map(|a| (*a).to_string()).collect(),
+            categories: categories.iter().map(|c| (*c).to_string()).collect(),
+            ..ReceiverFilter::default()
+        }
+    }
+
+    /// `IntentFilter.match`: an intent with **no** action matches any filter
+    /// (only an intent that names an action the filter does not declare is a
+    /// mismatch), and categories are a pure subset rule — a filter declares
+    /// what it accepts, never a default.
+    #[test]
+    fn the_action_and_category_rules_are_aosp_intent_filter_match() {
+        let filter = dynamic_filter(&["a.ACTION"], &["c.ONE"]);
+        let matches = |intent: &IntentFacts| filter.matches(intent);
+        assert!(matches(&IntentFacts::action("a.ACTION")));
+        assert!(!matches(&IntentFacts::action("a.OTHER")));
+        // An intent with no action matches every filter.
+        assert!(matches(&IntentFacts::default()));
+        // Categories: every intent category must be declared by the filter.
+        let mut intent = IntentFacts::action("a.ACTION");
+        intent.categories = vec!["c.ONE".into()];
+        assert!(matches(&intent));
+        intent.categories.push("c.TWO".into());
+        assert!(!matches(&intent), "an undeclared category never matches");
+        // ... and a filter that declares a category does not require an intent
+        // to carry it (there is no DEFAULT rule for receivers).
+        assert!(matches(&IntentFacts::action("a.ACTION")));
+        // A filter with no actions does not match an intent that names one.
+        assert!(!dynamic_filter(&[], &[]).matches(&IntentFacts::action("a.ACTION")));
+    }
+
+    /// `IntentFilter.matchData`: a filter with no data constraint matches only
+    /// an intent with neither a type nor a URI; a scheme filter requires the
+    /// scheme; a type filter requires a matching MIME type (with `*` wildcards)
+    /// and never matches an intent that carries none.
+    #[test]
+    fn the_data_and_type_rules_follow_intent_filter_match_data() {
+        let mut filter = dynamic_filter(&["a.ACTION"], &[]);
+        let mut intent = IntentFacts::action("a.ACTION");
+        assert!(filter.matches(&intent), "no data constraint, no data");
+        intent.data = Some("https://example.com/path".into());
+        assert!(!filter.matches(&intent), "a data URI needs a scheme entry");
+        intent.data = None;
+        intent.mime_type = Some("text/plain".into());
+        assert!(!filter.matches(&intent), "a type needs a type entry");
+
+        filter.schemes = vec!["https".into()];
+        intent.mime_type = None;
+        intent.data = Some("https://example.com/path".into());
+        assert!(filter.matches(&intent));
+        intent.data = Some("http://example.com/path".into());
+        assert!(!filter.matches(&intent), "another scheme does not match");
+        // A scheme filter still matches when the intent also carries a type only
+        // if the filter declares that type: `matchData` returns NO_MATCH_DATA
+        // for a type with no type entries.
+        intent.data = Some("https://example.com/path".into());
+        intent.mime_type = Some("text/plain".into());
+        assert!(!filter.matches(&intent));
+
+        let mut typed = dynamic_filter(&["a.ACTION"], &[]);
+        typed.schemes = vec!["https".into()];
+        typed.data_types = vec!["text/*".into()];
+        let mut with_type = IntentFacts::action("a.ACTION");
+        with_type.data = Some("https://example.com/path".into());
+        with_type.mime_type = Some("text/plain".into());
+        assert!(typed.matches(&with_type));
+        with_type.mime_type = Some("image/png".into());
+        assert!(!typed.matches(&with_type));
+        // `*/*` is the universal type.
+        let mut any = typed.clone();
+        any.data_types = vec!["*/*".into()];
+        with_type.mime_type = Some("image/png".into());
+        assert!(any.matches(&with_type));
+    }
+
+    /// Authorities, ports and paths are `IntentFilter.AuthorityEntry` /
+    /// `PatternMatcher` matching, in the two pattern kinds Android itself uses
+    /// for `<data android:path>` (`literal`/`prefix`).
+    #[test]
+    fn authorities_ports_and_paths_match_like_intent_filter() {
+        let mut filter = dynamic_filter(&["a.ACTION"], &[]);
+        filter.schemes = vec!["https".into()];
+        filter.authorities = vec![
+            DataAuthority {
+                host: Some("api.example.com".into()),
+                port: 8443,
+                wild: false,
+            },
+            DataAuthority {
+                host: Some("*.example.org".into()),
+                port: -1,
+                wild: true,
+            },
+        ];
+        filter.paths = vec![DataPattern {
+            pattern: Some("/v1/".into()),
+            kind: 1, // PATTERN_PREFIX
+        }];
+        let mut intent = IntentFacts::action("a.ACTION");
+        intent.data = Some("https://api.example.com:8443/v1/items".into());
+        assert!(filter.matches(&intent));
+        intent.data = Some("https://api.example.com:9443/v1/items".into());
+        assert!(!filter.matches(&intent), "the declared port is required");
+        intent.data = Some("https://api.example.com:8443/v2/items".into());
+        assert!(!filter.matches(&intent), "the path prefix must match");
+        intent.data = Some("https://cdn.example.org/anything".into());
+        assert!(!filter.matches(&intent), "the path prefix still applies");
+        filter.paths.clear();
+        assert!(filter.matches(&intent), "`*.example.org` matches a sub-domain");
+        intent.data = Some("https://example.org/anything".into());
+        assert!(!filter.matches(&intent), "the bare domain is not a sub-domain");
+        // `PATTERN_SIMPLE_GLOB`: `X*` repeats the previous character.
+        filter.authorities.clear();
+        filter.paths = vec![DataPattern {
+            pattern: Some("/items/1*".into()),
+            kind: 2,
+        }];
+        intent.data = Some("https://api.example.com/items/111".into());
+        assert!(filter.matches(&intent));
+        intent.data = Some("https://api.example.com/items/121".into());
+        assert!(!filter.matches(&intent));
+    }
+
+    /// A package-targeted broadcast reaches only that package's receivers
+    /// (`BroadcastQueue` skips every other package), and
+    /// `FLAG_RECEIVER_REGISTERED_ONLY` reaches no manifest receiver.
+    #[test]
+    fn package_targeting_and_registered_only_follow_the_broadcast_queue() {
+        let mut state = AmsState::new();
+        state.manifests = db_with_fixture();
+        state.register_receiver_with_filter(
+            0x11,
+            "com.example.one",
+            dynamic_filter(&["a.ACTION"], &[]),
+            0x2,
+        );
+        state.register_receiver_with_filter(
+            0x22,
+            "com.example.two",
+            dynamic_filter(&["a.ACTION"], &[]),
+            0x2,
+        );
+        state.register_receiver_with_filter(
+            0x33,
+            // A mirrored registration whose caller named no package (the
+            // runtime-side registerReceiver) cannot be excluded by a target.
+            "",
+            dynamic_filter(&["a.ACTION"], &[]),
+            0x0,
+        );
+
+        let mut targeted = IntentFacts::action("a.ACTION");
+        targeted.package = Some("com.example.one".into());
+        let count = state.broadcast(&targeted, 0, 0, None).unwrap();
+        let delivered: Vec<u64> = state
+            .take_pending_receivers()
+            .iter()
+            .map(|r| r.receiver)
+            .collect();
+        assert_eq!(count, 2, "the target package's receiver + the unnamed one");
+        assert_eq!(delivered, vec![0x11, 0x33]);
+        assert!(
+            state.take_pending_manifest_receivers().is_empty(),
+            "the fixture's manifest receiver is another package"
+        );
+
+        let mut registered_only = IntentFacts::action("dev.acos.fixtures.svcprovider.ECHO");
+        registered_only.flags = FLAG_RECEIVER_REGISTERED_ONLY;
+        state.broadcast(&registered_only, 0, 0, None).unwrap();
+        assert!(
+            state.take_pending_manifest_receivers().is_empty(),
+            "REGISTERED_ONLY never instantiates a manifest receiver"
+        );
+        let plain = IntentFacts::action("dev.acos.fixtures.svcprovider.ECHO");
+        state.broadcast(&plain, 0, 0, None).unwrap();
+        assert_eq!(state.take_pending_manifest_receivers().len(), 1);
+    }
+
+    /// `FLAG_ACTIVITY_RESET_TASK_IF_NEEDED` (`0x00200000`) is what Gaten's
+    /// `LauncherActivity` sets on the `startActivity` that opens `MainActivity`
+    /// (`0x10200000` with `NEW_TASK`). AOSP resets the task to its root only
+    /// when an existing task is reused for a new root; ACOS's launch is always
+    /// that task's root, so the flag has nothing to reset and the launch must
+    /// not be refused (measured: the strict set turned Gaten's own onboarding
+    /// launch into `UnsupportedOperationException` in `LauncherActivity`).
+    #[test]
+    fn reset_task_if_needed_is_accepted_and_launches() {
+        let mut state = AmsState::new();
+        state.manifests = db_with_fixture();
+        let intent = IntentFacts::explicit(
+            "dev.acos.fixtures.svcprovider",
+            "dev.acos.fixtures.svcprovider.MainActivity",
+        );
+        assert_eq!(
+            state
+                .start_activity(&intent, 0x1020_0000, 0, -1)
+                .expect("RESET_TASK_IF_NEEDED launches"),
+            START_SUCCESS
+        );
+        assert_eq!(state.take_pending_launches().len(), 1);
     }
 
     /// W74-A: the `startActivity*` argument index map, pinned against the
