@@ -583,7 +583,10 @@ mod tests {
         s.present(1, vec![]);
         let f = s.capture().unwrap();
         let png = f.png(PngSetting::Fast);
-        assert_eq!(&png[0..8], &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+        assert_eq!(
+            &png[0..8],
+            &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]
+        );
         let qoi = f.qoi();
         assert_eq!(&qoi[0..4], b"qoif");
         // Decode the PNG back to verify.

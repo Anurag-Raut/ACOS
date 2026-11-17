@@ -233,7 +233,9 @@ fn rejected(detail: impl Into<String>) -> ServiceError {
 }
 
 fn state_of(state: &Arc<Mutex<BiometricState>>) -> std::sync::MutexGuard<'_, BiometricState> {
-    state.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 struct AuthService {
@@ -290,7 +292,9 @@ impl ServiceObject for AuthService {
                 // "no ids", which is honest for a scripted device.
                 let _user = data.read_int32().map_err(ServiceError::Parcel)?;
                 write_no_exception(reply);
-                reply.write_int64_array(Some(&[])).map_err(ServiceError::Parcel)?;
+                reply
+                    .write_int64_array(Some(&[]))
+                    .map_err(ServiceError::Parcel)?;
                 Ok(true)
             }
             AUTH_AUTHENTICATE => {
@@ -419,7 +423,9 @@ fn parse_modality(value: Option<&Value>) -> Result<i32> {
                 )))
             }
         }),
-        Some(other) => Err(rejected(format!("modality must be a string or int, got {other}"))),
+        Some(other) => Err(rejected(format!(
+            "modality must be a string or int, got {other}"
+        ))),
     }
 }
 
@@ -511,7 +517,9 @@ impl Module for BiometricModule {
 
     fn control(&mut self, host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         let Some(shared) = self.state.as_ref().cloned() else {
-            return Err(rejected(format!("module is off, so {op:?} was not applied")));
+            return Err(rejected(format!(
+                "module is off, so {op:?} was not applied"
+            )));
         };
         match op {
             "state" => Ok(state_of(&shared).to_json()),

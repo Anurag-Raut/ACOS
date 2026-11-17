@@ -23,7 +23,6 @@
 
 pub mod backend;
 pub mod base64;
-pub mod preview;
 pub mod bound;
 pub mod daemon;
 pub mod descriptors;
@@ -32,6 +31,7 @@ pub mod gate;
 pub mod help;
 pub mod jsonrpc;
 pub mod paths;
+pub mod preview;
 pub mod private_daemon;
 pub mod process;
 pub mod rn_backend;
@@ -43,9 +43,9 @@ pub mod signals;
 pub mod transport;
 
 pub use backend::{Backend, BackendConfig, BackendInfo, CallContext, Capabilities, CliBackend};
-pub use session_backend::{ArtDaemonHandle, SessionBackend};
 pub use descriptors::{
     LATEST_PROTOCOL_VERSION, SERVER_NAME, SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS,
 };
 pub use process::CancelToken;
 pub use server::{Server, ServerConfig};
+pub use session_backend::{ArtDaemonHandle, SessionBackend};

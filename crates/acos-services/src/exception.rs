@@ -105,7 +105,10 @@ mod tests {
     #[test]
     fn codes_are_stable() {
         assert_eq!(ALL_EXCEPTION_CODES.len(), 10);
-        assert_eq!(exception_class(EX_UNSUPPORTED_OPERATION), "java.lang.UnsupportedOperationException");
+        assert_eq!(
+            exception_class(EX_UNSUPPORTED_OPERATION),
+            "java.lang.UnsupportedOperationException"
+        );
         assert_eq!(exception_class(NO_EXCEPTION), "none");
     }
 

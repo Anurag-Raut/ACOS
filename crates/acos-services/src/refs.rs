@@ -183,6 +183,10 @@ mod tests {
         let _ = refs.drain_retained();
         assert!(refs.release(id(3)));
         assert_eq!(refs.release_all(), Vec::new());
-        assert_eq!(refs.drain_released(), vec![id(3)], "released once, not twice");
+        assert_eq!(
+            refs.drain_released(),
+            vec![id(3)],
+            "released once, not twice"
+        );
     }
 }

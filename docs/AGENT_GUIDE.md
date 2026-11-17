@@ -353,6 +353,7 @@ A step is a **one-key map**. Valid keys:
 |---|---|
 | `launch` | `activity` / `intent_action` / `data` / `extras` / `clear_state` |
 | `wait_for` | `selector`, `timeout_ms`, `require_visible` |
+| `wait` | `ms` — a fixed **timeline** delay, never a synchronisation primitive (see below) |
 | `tap` | `selector` or `x`+`y`, optional `timeout_ms`, `settle`, `settle_timeout_ms`, `expect_change` |
 | `type` | optional `selector`, `text`, `clear`, `settle`, `settle_timeout_ms`, `expect_change` |
 | `key` | `key` (`back`, `home`, `enter`, `tab`, `delete`, `escape`, `menu`, `dpad_*`), `settle`, `settle_timeout_ms`, `expect_change` |
@@ -375,6 +376,16 @@ A step is a **one-key map**. Valid keys:
 
 There is no `sleep` step and no polling: `wait_for` and the assertions are
 event-driven.
+
+**`wait` is only for time-based behaviour, never for synchronisation.** It
+exists so a scenario can prove something that depends on the *clock* — the
+launcher's `idle_kill_seconds` firing, a timeout expiring — because those cannot
+be observed by waiting for a UI change. It asserts nothing and it is not a way to
+let the app catch up: waiting for a fixed number of milliseconds before an
+assertion is a race (fast host: too early; loaded host: the test is slow and
+flaky). To synchronise, use `wait_for` or an assertion's own `timeout_ms`, which
+poll until the app really reached the state. Use `wait` only when the thing under
+test *is* the passage of time.
 
 **Service modules (`services:`).** A scenario attaches modules at launch with the
 same shape as the launch request. A pass that relied on `stub`/`scripted` says so

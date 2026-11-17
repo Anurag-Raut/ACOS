@@ -17,7 +17,9 @@ pub const CONFINEMENT_FAILED: &str = "CONFINEMENT_FAILED";
 #[derive(Debug, thiserror::Error)]
 pub enum ConfineError {
     /// One or more required layers could not be established.
-    #[error("CONFINEMENT_UNAVAILABLE: required confinement layers not active: {missing:?} ({message})")]
+    #[error(
+        "CONFINEMENT_UNAVAILABLE: required confinement layers not active: {missing:?} ({message})"
+    )]
     Unavailable {
         /// Layers that were required but did not end up active.
         missing: Vec<Layer>,

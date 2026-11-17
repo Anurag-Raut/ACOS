@@ -117,13 +117,8 @@ const AUDIT_ARCH: u32 = 0xC000_00B7;
 compile_error!("acos-art: no AUDIT_ARCH for this target_arch (seccomp_guest.c is x86_64-only)");
 
 /// `CLONE_NEWNS|NEWCGROUP|NEWUTS|NEWIPC|NEWUSER|NEWPID|NEWNET`.
-const CLONE_NEW_MASK: u32 = 0x0002_0000
-    | 0x0200_0000
-    | 0x0400_0000
-    | 0x0800_0000
-    | 0x1000_0000
-    | 0x2000_0000
-    | 0x4000_0000;
+const CLONE_NEW_MASK: u32 =
+    0x0002_0000 | 0x0200_0000 | 0x0400_0000 | 0x0800_0000 | 0x1000_0000 | 0x2000_0000 | 0x4000_0000;
 
 const PER_LINUX: u32 = 0;
 const PERSONALITY_QUERY: u32 = 0xffff_ffff;
@@ -239,7 +234,10 @@ struct Builder {
 
 impl Builder {
     fn new() -> Self {
-        Self { ops: Vec::new(), labels: Vec::new() }
+        Self {
+            ops: Vec::new(),
+            labels: Vec::new(),
+        }
     }
     fn label(&mut self) -> Label {
         self.labels.push(None);
@@ -270,19 +268,44 @@ impl Builder {
             .iter()
             .enumerate()
             .map(|(pc, op)| match *op {
-                Op::Ld(off) => Insn { code: LD_ABS_W, jt: 0, jf: 0, k: off },
-                Op::And(k) => Insn { code: AND_K, jt: 0, jf: 0, k },
+                Op::Ld(off) => Insn {
+                    code: LD_ABS_W,
+                    jt: 0,
+                    jf: 0,
+                    k: off,
+                },
+                Op::And(k) => Insn {
+                    code: AND_K,
+                    jt: 0,
+                    jf: 0,
+                    k,
+                },
                 Op::Jeq { k, t, f } => {
                     let jt = target(t) - pc - 1;
                     let jf = target(f) - pc - 1;
                     debug_assert!(target(t) > pc && target(f) > pc, "backward jump");
-                    Insn { code: JEQ_K, jt: jt as u8, jf: jf as u8, k }
+                    Insn {
+                        code: JEQ_K,
+                        jt: jt as u8,
+                        jf: jf as u8,
+                        k,
+                    }
                 }
                 Op::Ja(t) => {
                     debug_assert!(target(t) > pc);
-                    Insn { code: JA, jt: 0, jf: 0, k: (target(t) - pc - 1) as u32 }
+                    Insn {
+                        code: JA,
+                        jt: 0,
+                        jf: 0,
+                        k: (target(t) - pc - 1) as u32,
+                    }
                 }
-                Op::Ret(k) => Insn { code: RET_K, jt: 0, jf: 0, k },
+                Op::Ret(k) => Insn {
+                    code: RET_K,
+                    jt: 0,
+                    jf: 0,
+                    k,
+                },
             })
             .collect()
     }
@@ -309,7 +332,9 @@ impl DenyAction {
             DenyAction::Errno => 1,
             DenyAction::Kill(None) => 2,
             DenyAction::Kill(Some(list)) => {
-                3 ^ list.iter().fold(0u64, |acc, nr| acc.wrapping_mul(31).wrapping_add(*nr as u64))
+                3 ^ list.iter().fold(0u64, |acc, nr| {
+                    acc.wrapping_mul(31).wrapping_add(*nr as u64)
+                })
             }
         }
     }
@@ -422,7 +447,11 @@ fn build_program_with(action: &DenyAction, allow_inet: bool) -> Vec<Insn> {
     b.jeq(libc::SYS_clone3 as u32, clone3_deny, after_clone3);
     b.mark(after_clone3);
     let after_personality = b.label();
-    b.jeq(libc::SYS_personality as u32, personality_check, after_personality);
+    b.jeq(
+        libc::SYS_personality as u32,
+        personality_check,
+        after_personality,
+    );
     b.mark(after_personality);
     b.ja(allow);
 
@@ -672,7 +701,10 @@ mod tests {
         // The production build carries the same (unreachable) kill terminal, so
         // its last instruction is still the EACCES deny.
         let q = build_program_with(&DenyAction::Errno, false);
-        assert_eq!(q.last().map(|i| i.k), Some(RET_ERRNO | (libc::EACCES as u32 & 0xffff)));
+        assert_eq!(
+            q.last().map(|i| i.k),
+            Some(RET_ERRNO | (libc::EACCES as u32 & 0xffff))
+        );
         // A subset build jumps to the kill terminal only for the listed nrs.
         let sub = DenyAction::Kill(Some(vec![libc::SYS_ptrace as u32]));
         assert!(sub.kills(libc::SYS_ptrace as u32));
@@ -732,7 +764,10 @@ mod tests {
             ("socket", libc::SYS_socket),
             ("rt_sigaction", libc::SYS_rt_sigaction),
         ] {
-            assert!(!list.contains(&(nr as u32)), "{name} ({nr}) must stay allowed");
+            assert!(
+                !list.contains(&(nr as u32)),
+                "{name} ({nr}) must stay allowed"
+            );
         }
     }
 
@@ -740,10 +775,17 @@ mod tests {
     fn blob_has_the_sock_filter_layout() {
         let blob = build_blob();
         let n = compiled().len();
-        assert_eq!(blob.len(), n * 8, "bwrap needs a bare sock_filter[] (8-byte multiple)");
+        assert_eq!(
+            blob.len(),
+            n * 8,
+            "bwrap needs a bare sock_filter[] (8-byte multiple)"
+        );
         // First instruction: `ld [4]` (arch).
         assert_eq!(u16::from_le_bytes([blob[0], blob[1]]), LD_ABS_W);
         assert_eq!(&blob[2..4], &[0, 0]);
-        assert_eq!(u32::from_le_bytes([blob[4], blob[5], blob[6], blob[7]]), OFF_ARCH);
+        assert_eq!(
+            u32::from_le_bytes([blob[4], blob[5], blob[6], blob[7]]),
+            OFF_ARCH
+        );
     }
 }

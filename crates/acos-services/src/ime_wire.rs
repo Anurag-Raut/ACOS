@@ -44,7 +44,7 @@ use acos_aidl::WireOp;
 use acos_parcel::{BinderId, Parcel};
 
 use crate::codec;
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::exception::write_no_exception;
 use crate::host::{CallResult, ServiceObject};
 use crate::ime::{ImeService, ImeState};

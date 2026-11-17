@@ -132,13 +132,13 @@ use acos_parcel::{BinderId, Parcel};
 use serde_json::{json, Value};
 
 use crate::error::{Result, ServiceError};
-use crate::value::Value as ParcelValue;
 use crate::exception::{write_no_exception, EX_ILLEGAL_ARGUMENT, EX_SECURITY};
 use crate::host::{CallResult, PendingDelivery, ServiceHost, ServiceObject};
 use crate::module::{
     AttachMode, Budget, ControlOp, Module, ModuleConfig, ModuleManifest, ModuleReport, Profile,
     SecurityClass, ServiceProvide,
 };
+use crate::value::Value as ParcelValue;
 
 /// The `ServiceManager` name this module owns.
 pub const SERVICE_NAME: &str = "location";
@@ -1078,9 +1078,10 @@ pub fn fix_fill_in(fix: &Fix) -> crate::ams::IntentFacts {
 #[must_use]
 pub fn provider_enabled_fill_in(enabled: bool) -> crate::ams::IntentFacts {
     let mut intent = crate::ams::IntentFacts::default();
-    intent
-        .extras
-        .insert(KEY_PROVIDER_ENABLED.to_string(), crate::ams::Extra::Bool(enabled));
+    intent.extras.insert(
+        KEY_PROVIDER_ENABLED.to_string(),
+        crate::ams::Extra::Bool(enabled),
+    );
     intent
 }
 
@@ -1390,9 +1391,7 @@ fn deliver_to_registrations(state: &mut LocationState, stamp: &Stamp, mut fix: F
         // caller after the lock is dropped.
         let sink_name = match sink {
             Sink::Listener(binder) => {
-                state
-                    .pending
-                    .push(location_delivery(binder, &permitted));
+                state.pending.push(location_delivery(binder, &permitted));
                 "listener"
             }
             Sink::Current(binder) => {

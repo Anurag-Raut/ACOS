@@ -199,7 +199,9 @@ struct VibratorService {
 
 impl VibratorService {
     fn state(&self) -> std::sync::MutexGuard<'_, VibratorState> {
-        self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn unsupported(&self, method: &str) -> ServiceError {
@@ -270,16 +272,20 @@ impl ServiceObject for VibratorService {
             //              CombinedVibration vibration, VibrationAttributes
             //              attributes, String reason, IBinder token)
             7 => {
-                let uid = data.read_int32().map_err(|error| ServiceError::BadRequest {
-                    interface: DESCRIPTOR.to_string(),
-                    method: "vibrate".to_string(),
-                    detail: error.to_string(),
-                })?;
-                let device_id = data.read_int32().map_err(|error| ServiceError::BadRequest {
-                    interface: DESCRIPTOR.to_string(),
-                    method: "vibrate".to_string(),
-                    detail: error.to_string(),
-                })?;
+                let uid = data
+                    .read_int32()
+                    .map_err(|error| ServiceError::BadRequest {
+                        interface: DESCRIPTOR.to_string(),
+                        method: "vibrate".to_string(),
+                        detail: error.to_string(),
+                    })?;
+                let device_id = data
+                    .read_int32()
+                    .map_err(|error| ServiceError::BadRequest {
+                        interface: DESCRIPTOR.to_string(),
+                        method: "vibrate".to_string(),
+                        detail: error.to_string(),
+                    })?;
                 let op_pkg = data
                     .read_string16()
                     .map_err(|error| ServiceError::BadRequest {
@@ -293,7 +299,11 @@ impl ServiceObject for VibratorService {
                 // presence word, then the parcelable body whose first word is the
                 // type token.
                 let presence = data.read_int32().unwrap_or(0);
-                let token = if presence != 0 { data.read_int32().unwrap_or(0) } else { 0 };
+                let token = if presence != 0 {
+                    data.read_int32().unwrap_or(0)
+                } else {
+                    0
+                };
                 let payload_len = data.data_size().saturating_sub(payload_start);
                 let hash = fnv1a(&data.marshall());
                 {
@@ -399,7 +409,9 @@ impl Module for VibratorModule {
                     .collect::<Vec<_>>(),
             })),
             "reset" => {
-                let mut state = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                let mut state = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 *state = VibratorState::default();
                 Ok(json!({"reset": true}))
             }
@@ -427,7 +439,9 @@ impl Module for VibratorModule {
                 .state
                 .as_ref()
                 .map(|state| {
-                    let state = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     (state.vibrate_calls, state.patterns.len())
                 })
                 .unwrap_or((0, 0));

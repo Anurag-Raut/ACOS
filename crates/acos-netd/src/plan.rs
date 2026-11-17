@@ -196,7 +196,9 @@ pub fn relay_rules() -> Vec<String> {
         "iptables -w -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT".to_string(),
     ];
     for cidr in LAN_DROP_CIDRS {
-        rules.push(format!("iptables -w -A FORWARD -i {VETH_PREFIX}+ -d {cidr} -j DROP"));
+        rules.push(format!(
+            "iptables -w -A FORWARD -i {VETH_PREFIX}+ -d {cidr} -j DROP"
+        ));
     }
     rules.push(format!("iptables -w -A FORWARD -o {RELAY_IFACE} -j ACCEPT"));
     rules.push(format!("iptables -w -A FORWARD -i {VETH_PREFIX}+ -j DROP"));
@@ -208,14 +210,8 @@ pub fn relay_rules() -> Vec<String> {
 #[must_use]
 pub fn veth_attach_rules(net: &SessionNet, netns_pid: u32) -> Vec<String> {
     vec![
-        format!(
-            "ip link add {} type veth peer name {}",
-            net.veth, net.peer
-        ),
-        format!(
-            "ip link set {} netns /proc/{netns_pid}/ns/net",
-            net.peer
-        ),
+        format!("ip link add {} type veth peer name {}", net.veth, net.peer),
+        format!("ip link set {} netns /proc/{netns_pid}/ns/net", net.peer),
         format!("ip addr add {} dev {}", net.gateway_cidr(), net.veth),
         format!("ip link set {} up", net.veth),
     ]
@@ -279,9 +275,7 @@ pub fn session_offline_cmds(net: &SessionNet, netns_pid: u32) -> Vec<String> {
          ss -K state $st >/dev/null 2>&1; done; true'"
     );
     vec![
-        format!(
-            "nsenter -t {netns_pid} -n -- sh -c 'ip route del default 2>/dev/null; true'"
-        ),
+        format!("nsenter -t {netns_pid} -n -- sh -c 'ip route del default 2>/dev/null; true'"),
         kill,
         // Recorded for the report: the session really has no default route now.
         format!("nsenter -t {netns_pid} -n -- sh -c 'ip route show default'"),

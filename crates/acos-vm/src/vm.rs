@@ -9,8 +9,8 @@ use std::time::Instant;
 use acos_dex::{DexFile, EncodedValue};
 
 use crate::class::{
-    parse_signature, parse_type_list, Class, ClassId, ClassSpec, FieldDef, FieldSign, Insn,
-    Method, MethodCode, MethodId, MethodImpl, ResolvedField, TryEntry, TypeId, TypeInfo, TypeKind,
+    parse_signature, parse_type_list, Class, ClassId, ClassSpec, FieldDef, FieldSign, Insn, Method,
+    MethodCode, MethodId, MethodImpl, ResolvedField, TryEntry, TypeId, TypeInfo, TypeKind,
 };
 use crate::error::{VmError, VmResult};
 use crate::frame::Frame;
@@ -332,7 +332,8 @@ impl NativeTrace {
 
     /// Emit `natives_*.tsv`-compatible columns.
     pub fn to_tsv(&self) -> String {
-        let mut out = String::from("enters\texits\tfirst_order\tcall_site\tclass\tmethod\tsignature\n");
+        let mut out =
+            String::from("enters\texits\tfirst_order\tcall_site\tclass\tmethod\tsignature\n");
         for h in &self.hits {
             out.push_str(&format!(
                 "{}\t{}\t{}\tprogram\t{}\t{}\t{}\n",
@@ -578,8 +579,12 @@ impl Vm {
             }
             CoreLib::Real => {
                 crate::natives::install(&mut vm)?;
-                let dir = default_boot_dir(boot_dir.as_deref())
-                    .ok_or_else(|| boot_classpath_missing(Path::new(".cache/boot/android-34"), "cache directory not found"))?;
+                let dir = default_boot_dir(boot_dir.as_deref()).ok_or_else(|| {
+                    boot_classpath_missing(
+                        Path::new(".cache/boot/android-34"),
+                        "cache directory not found",
+                    )
+                })?;
                 vm.vfs.set_boot_root(&dir);
                 vm.load_boot_classpath(&dir)?;
                 vm.crate_fast_classes()?;
@@ -685,9 +690,8 @@ impl Vm {
     /// them (the current loader is eager-by-file, so this is explicit).
     pub fn load_boot_classpath(&mut self, dir: &Path) -> VmResult<()> {
         let bootlist = dir.join("BOOTCLASSPATH");
-        let text = std::fs::read_to_string(&bootlist).map_err(|_| {
-            boot_classpath_missing(dir, "BOOTCLASSPATH is not readable")
-        })?;
+        let text = std::fs::read_to_string(&bootlist)
+            .map_err(|_| boot_classpath_missing(dir, "BOOTCLASSPATH is not readable"))?;
         let jars: Vec<String> = text
             .lines()
             .map(|l| l.trim())
@@ -721,8 +725,7 @@ impl Vm {
             dexs.sort();
             for p in dexs {
                 // One parse per process, shared by every Vm (acos_dex::cache).
-                let dex = acos_dex::cache::shared_dex(&p)
-                    .map_err(VmError::Load)?;
+                let dex = acos_dex::cache::shared_dex(&p).map_err(VmError::Load)?;
                 let idx = self.add_shared_dex(dex);
                 self.dexs[idx].source = Some(p);
                 self.boot_dexs.push(idx);
@@ -762,8 +765,7 @@ impl Vm {
             dexs.sort();
             let mut found = false;
             for p in dexs {
-                let dex = acos_dex::cache::shared_dex(&p)
-                    .map_err(VmError::Load)?;
+                let dex = acos_dex::cache::shared_dex(&p).map_err(VmError::Load)?;
                 found |= dex.find_class_index(desc).is_some();
                 let idx = self.add_shared_dex(dex);
                 self.dexs[idx].source = Some(p);
@@ -798,9 +800,7 @@ impl Vm {
         self.c_throwable = self.load_class("Ljava/lang/Throwable;")?;
         self.c_thread = self.load_class("Ljava/lang/Thread;")?;
         self.c_system = self.load_class("Ljava/lang/System;")?;
-        self.c_print_stream = self
-            .load_class("Ljava/io/PrintStream;")
-            .unwrap_or(0);
+        self.c_print_stream = self.load_class("Ljava/io/PrintStream;").unwrap_or(0);
         // A process ThreadGroup for the main thread and its children.
         if let Ok(tg) = self.load_class("Ljava/lang/ThreadGroup;") {
             let group = self.alloc_instance(tg)?;
@@ -950,7 +950,9 @@ impl Vm {
             is_ref,
             width,
         };
-        self.classes[class as usize].declared_static_fields.push(def);
+        self.classes[class as usize]
+            .declared_static_fields
+            .push(def);
         for _ in 0..width {
             self.classes[class as usize].statics.push(0);
             self.classes[class as usize].static_refs.push(false);
@@ -976,7 +978,15 @@ impl Vm {
         let (params, ret) = parse_signature(sig).expect("builtin signature must be valid");
         let params: Vec<TypeId> = params.iter().map(|p| self.intern_type(p)).collect();
         let ret = self.intern_type(&ret);
-        self.add_method(class, name, sig, params, ret, access, MethodImpl::Native(func))
+        self.add_method(
+            class,
+            name,
+            sig,
+            params,
+            ret,
+            access,
+            MethodImpl::Native(func),
+        )
     }
 
     /// Register a true native implementation for a real DEX class.
@@ -987,8 +997,10 @@ impl Vm {
         sig: &str,
         func: crate::class::NativeFn,
     ) {
-        self.natives
-            .insert((class_desc.to_string(), name.to_string(), sig.to_string()), func);
+        self.natives.insert(
+            (class_desc.to_string(), name.to_string(), sig.to_string()),
+            func,
+        );
     }
 
     /// Bind a loaded DEX method to its Rust implementation, if one is
@@ -1001,11 +1013,7 @@ impl Vm {
     fn bind_dex_native(&mut self, mid: MethodId) {
         let (class, name, sig) = {
             let m = &self.methods[mid as usize];
-            (
-                m.class,
-                m.name.clone(),
-                m.sig.clone(),
-            )
+            (m.class, m.name.clone(), m.sig.clone())
         };
         let desc = self.class_desc(class).to_string();
         // Bind any registered implementation. This covers true `native`
@@ -1101,14 +1109,17 @@ impl Vm {
     pub fn link_class(&mut self, id: ClassId) -> VmResult<()> {
         let __prof = crate::profile::start();
         // Start from the superclass tables.
-        let (mut vtable, mut vindex, mut vmap) = if let Some(sup) =
-            self.classes[id as usize].super_class
-        {
-            let s = &self.classes[sup as usize];
-            (s.vtable.clone(), s.vtable_index.clone(), s.virtual_map.clone())
-        } else {
-            (Vec::new(), HashMap::new(), HashMap::new())
-        };
+        let (mut vtable, mut vindex, mut vmap) =
+            if let Some(sup) = self.classes[id as usize].super_class {
+                let s = &self.classes[sup as usize];
+                (
+                    s.vtable.clone(),
+                    s.vtable_index.clone(),
+                    s.virtual_map.clone(),
+                )
+            } else {
+                (Vec::new(), HashMap::new(), HashMap::new())
+            };
 
         // Declared virtual methods override/add slots.
         let declared = self.classes[id as usize].declared_methods.clone();
@@ -1132,7 +1143,9 @@ impl Vm {
             }
             vmap.insert(key, *mid);
             if m.is_abstract() {
-                self.classes[id as usize].abstract_methods.insert((m.name.clone(), m.sig.clone()));
+                self.classes[id as usize]
+                    .abstract_methods
+                    .insert((m.name.clone(), m.sig.clone()));
             }
         }
 
@@ -1306,8 +1319,7 @@ impl Vm {
             ifaces.push(self.load_class(&d)?);
         }
         self.classes[id as usize].interfaces = ifaces;
-        self.classes[id as usize].source_file =
-            file.source_file(def)?.map(|s| s.to_string());
+        self.classes[id as usize].source_file = file.source_file(def)?.map(|s| s.to_string());
 
         // Static field initial values (applied in order before <clinit>).
         let static_values = file.static_values(def)?.unwrap_or_default();
@@ -1328,8 +1340,7 @@ impl Vm {
                 self.add_instance_field(id, &name, &fdesc, f.access_flags);
             }
             // Apply encoded static values by position.
-            let statics: Vec<FieldDef> =
-                self.classes[id as usize].declared_static_fields.clone();
+            let statics: Vec<FieldDef> = self.classes[id as usize].declared_static_fields.clone();
             for (i, val) in static_values.iter().enumerate() {
                 if i >= statics.len() {
                     break;
@@ -1344,7 +1355,14 @@ impl Vm {
 
             // Methods.
             for m in cd.direct_methods.iter().chain(cd.virtual_methods.iter()) {
-                self.add_dex_method_from(file.clone(), dex_idx, id, m.method_idx, m.access_flags, m.code_off)?;
+                self.add_dex_method_from(
+                    file.clone(),
+                    dex_idx,
+                    id,
+                    m.method_idx,
+                    m.access_flags,
+                    m.code_off,
+                )?;
             }
         }
 
@@ -1381,11 +1399,7 @@ impl Vm {
                 vec![h]
             }
             EncodedValue::Null => vec![0],
-            other => {
-                return Err(VmError::Load(format!(
-                    "unsupported static value {other:?}"
-                )))
-            }
+            other => return Err(VmError::Load(format!("unsupported static value {other:?}"))),
         })
     }
 
@@ -1453,8 +1467,8 @@ impl Vm {
                 i += len;
                 continue;
             }
-            let ins = acos_dex::decode(raw, i)
-                .map_err(|e| VmError::Load(format!("decode: {e}")))?;
+            let ins =
+                acos_dex::decode(raw, i).map_err(|e| VmError::Load(format!("decode: {e}")))?;
             pc_to_idx[i] = insns.len() as u32;
             insns.push(Insn {
                 op: ins.opcode.byte(),
@@ -1707,9 +1721,7 @@ impl Vm {
                             stack.push(*val);
                         }
                     }
-                    BuiltinData::EnumSet { elements, .. } => {
-                        stack.extend(elements.iter().copied())
-                    }
+                    BuiltinData::EnumSet { elements, .. } => stack.extend(elements.iter().copied()),
                     BuiltinData::Entry { key, value } => {
                         stack.push(*key);
                         stack.push(*value);
@@ -1967,7 +1979,8 @@ impl Vm {
         if let Some(&m) = self.classes[class as usize].direct_map.get(&key) {
             return Ok(m);
         }
-        if kind == InvokeKind::Virtual || kind == InvokeKind::Interface || kind == InvokeKind::Super {
+        if kind == InvokeKind::Virtual || kind == InvokeKind::Interface || kind == InvokeKind::Super
+        {
             if let Some(&m) = self.classes[class as usize].virtual_map.get(&key) {
                 return Ok(m);
             }
@@ -2176,10 +2189,16 @@ impl Vm {
                     .map(|m| m.name.clone())
                     .unwrap_or_default();
                 let line = match &self.methods[f.method as usize].imp {
-                    MethodImpl::Dex { code: Some(code), .. } => code.line_for_pc(f.pc),
+                    MethodImpl::Dex {
+                        code: Some(code), ..
+                    } => code.line_for_pc(f.pc),
                     _ => 0,
                 };
-                entries.push(StackEntry { class, method, line });
+                entries.push(StackEntry {
+                    class,
+                    method,
+                    line,
+                });
             }
         }
         self.throwable_stacks.insert(throwable, entries);
@@ -2706,10 +2725,7 @@ mod boot_dir_tests {
         let boot = home.join(".cache/boot/android-34");
         std::fs::create_dir_all(&boot).expect("boot dir");
         std::fs::write(boot.join("BOOTCLASSPATH"), "x\n").expect("marker");
-        assert_eq!(
-            default_boot_dir_with_home(Some(home.as_path())),
-            Some(boot)
-        );
+        assert_eq!(default_boot_dir_with_home(Some(home.as_path())), Some(boot));
         std::fs::remove_dir_all(&home).ok();
     }
 

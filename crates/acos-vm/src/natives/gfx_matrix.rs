@@ -105,9 +105,19 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(m, "nInvert", "(JJ)Z", matrix_invert);
     vm.register_native(m, "nMapPoints", "(J[FI[FIIZ)V", matrix_map_points);
     vm.register_native(m, "nMapRadius", "(JF)F", matrix_map_radius);
-    vm.register_native(m, "nMapRect", "(JLandroid/graphics/RectF;Landroid/graphics/RectF;)Z", matrix_map_rect);
+    vm.register_native(
+        m,
+        "nMapRect",
+        "(JLandroid/graphics/RectF;Landroid/graphics/RectF;)Z",
+        matrix_map_rect,
+    );
     vm.register_native(m, "nEquals", "(JJ)Z", matrix_equals);
-    vm.register_native(m, "nSetRectToRect", "(JLandroid/graphics/RectF;Landroid/graphics/RectF;I)Z", matrix_rect_to_rect);
+    vm.register_native(
+        m,
+        "nSetRectToRect",
+        "(JLandroid/graphics/RectF;Landroid/graphics/RectF;I)Z",
+        matrix_rect_to_rect,
+    );
     vm.register_native(m, "nSetPolyToPoly", "(J[FI[FII)Z", matrix_poly_to_poly);
     Ok(())
 }
@@ -163,7 +173,10 @@ fn matrix_is_affine(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn matrix_rect_stays_rect(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    vm.ret_bool(ctx, read_matrix(vm.arg_i64(ctx, 0), |m| m.rect_stays_rect())?);
+    vm.ret_bool(
+        ctx,
+        read_matrix(vm.arg_i64(ctx, 0), |m| m.rect_stays_rect())?,
+    );
     Ok(())
 }
 
@@ -461,7 +474,10 @@ fn matrix_rect_to_rect(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let dst = read_rectf(vm, vm.arg_ref(ctx, 2));
     let mode = vm.arg_i32(ctx, 3);
     let fit = ScaleToFit::from_ordinal(mode).ok_or_else(|| {
-        VmError::unsupported_api(format!("Matrix.ScaleToFit ordinal {mode}"), "android.graphics.Matrix")
+        VmError::unsupported_api(
+            format!("Matrix.ScaleToFit ordinal {mode}"),
+            "android.graphics.Matrix",
+        )
     })?;
     let ok = with_matrix(vm.arg_i64(ctx, 0), |m| m.set_rect_to_rect(&src, &dst, fit))?;
     vm.ret_bool(ctx, ok);

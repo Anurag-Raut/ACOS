@@ -193,11 +193,7 @@ impl FakeSession {
             Bounds::new(0, 0, 1080, 2400),
         )
         .with_children(vec![count, inc, reset]);
-        UiTree::new(
-            self.frame_meta(),
-            "dev.acos.fixtures.counter",
-            vec![root],
-        )
+        UiTree::new(self.frame_meta(), "dev.acos.fixtures.counter", vec![root])
     }
 
     /// PNG bytes that change with the visible state, so the advisor's
@@ -239,10 +235,12 @@ impl FakeSession {
 
     fn tap_selector(&mut self, selector: &Selector) -> Result<(), BackendError> {
         let tree = self.build_tree();
-        let node = tree.find_one(selector).ok_or_else(|| BackendError::Failed {
-            code: acos_protocol::ErrorCode::AssertionFailed,
-            detail: format!("fake tree has no node {selector}"),
-        })?;
+        let node = tree
+            .find_one(selector)
+            .ok_or_else(|| BackendError::Failed {
+                code: acos_protocol::ErrorCode::AssertionFailed,
+                detail: format!("fake tree has no node {selector}"),
+            })?;
         let previous = self.seq;
         match node.resource_id.as_str() {
             id if id.ends_with(":id/inc") => {
@@ -353,9 +351,10 @@ impl SessionBackend for FakeSession {
         if self.fault == Fault::StaleCapture {
             // Reuse the previous frame: the engine must detect the missing
             // sequence advance instead of reporting a fresh capture.
-            return self.cached.clone().ok_or_else(|| {
-                live_frame_unavailable("the fake session has no frame to reuse")
-            });
+            return self
+                .cached
+                .clone()
+                .ok_or_else(|| live_frame_unavailable("the fake session has no frame to reuse"));
         }
         self.frame()
     }
@@ -470,12 +469,14 @@ impl SessionBackend for FakeSession {
     }
 
     fn last_input_delivery(&self) -> Option<acos_verify::backend::InputDelivery> {
-        self.settle_json.as_ref().map(|settle| acos_verify::backend::InputDelivery {
-            delivered: true,
-            visual_change: false,
-            acks: Vec::new(),
-            settle: Some(settle.clone()),
-        })
+        self.settle_json
+            .as_ref()
+            .map(|settle| acos_verify::backend::InputDelivery {
+                delivered: true,
+                visual_change: false,
+                acks: Vec::new(),
+                settle: Some(settle.clone()),
+            })
     }
 
     fn input_settle_timeout(&self) -> Option<serde_json::Value> {

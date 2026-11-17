@@ -28,24 +28,58 @@ pub const F_RSP: u32 = 2;
 pub const F_TXN: u32 = 3;
 /// Driver -> peer: the reply to the peer-initiated transaction with that `seq`.
 pub const F_REP: u32 = 4;
-/// Driver -> peer: the first frame of a connection. `seq` carries the wire
-/// protocol version, `code` the driver's capability bits. A peer must not use a
-/// message the driver did not advertise, and a driver must not assume the peer
-/// knows one.
+/// Driver -> peer: the connection handshake, sent once right after `connect`.
+///
+/// The frame carries three things at once, none of which may be inferred:
+///
+/// * `seq` — the wire protocol version the driver speaks ([`PROTOCOL_VERSION`]).
+///   A peer must not use a frame the driver did not advertise (the `F_REF`
+///   reference model) and a driver must not assume the peer knows one either.
+/// * `code` — this connection's app **process tag** (MPROC2 step 3a). Each app
+///   process has its own driver connection and every binder handle on that
+///   connection is private to it, so the peer puts the tag into every Java
+///   binder id it imports from this connection and routes deliveries back to the
+///   right one.
+/// * `data` — the process name (evidence/diagnostics only).
+///
+/// A peer that never sees a hello treats the connection as the primary process
+/// (tag 0), which is exactly the one-guest fast path that existed before.
 pub const F_HELLO: u32 = 5;
 /// Peer -> driver: one reference-count operation on a node the guest exported
 /// (the `F_REL`/refcount message the design called for). `target` is the driver
-/// wire handle, `code` is [`REF_ACQUIRE`] or [`REF_RELEASE`].
+/// wire handle, `code` is [`REF_ACQUIRE`] or [`REF_RELEASE`]. The frame goes to
+/// the connection that owns the handle.
 pub const F_REF: u32 = 6;
+/// Peer -> driver: a synthetic node handed to this process died.
+///
+/// MPROC3 step 3c: a binder that lives in *another* app process reaches this
+/// process as a synthetic node (see [`crate::peer::FOREIGN_FLAG`]). When the
+/// owning process's connection closes, the peer sends one `F_DEATH` per node
+/// that process owns and this connection holds, with `target` = the node id.
+/// The driver turns it into the `BR_DEAD_BINDER` a local `linkToDeath`
+/// registered for, so `IBinder.DeathRecipient.binderDied` runs — the same
+/// event a real kernel driver produces when a remote process dies.
+pub const F_DEATH: u32 = 7;
 
 /// The wire protocol this build speaks. Bump it for every change to the frame
-/// meanings (v2: `F_HELLO` + `F_REF`).
-pub const PROTOCOL_VERSION: u32 = 2;
+/// meanings (v2: `F_HELLO` + `F_REF`; v3: the hello also names the process tag,
+/// `F_DEATH` exists).
+pub const PROTOCOL_VERSION: u32 = 3;
 /// The host took one more strong reference on the node.
 pub const REF_ACQUIRE: u32 = 1;
 /// The host dropped one strong reference; at zero the node is released and the
 /// guest gets `BR_RELEASE` + `BR_DECREFS` (the kernel's last-release path).
 pub const REF_RELEASE: u32 = 2;
+
+/// `F_RSP` flag: the refusal means "the target process is dead".
+///
+/// The driver turns a status reply into `BR_FAILED_REPLY`; a dead target must
+/// instead reach the caller as `BR_DEAD_REPLY`, which libbinder maps to
+/// `DeadObjectException` (`IPCThreadState::executeCommand`). MPROC5b: a
+/// transaction forwarded to a process that has died (or one already waiting on
+/// it) is exactly that case, so the peer marks the reply with this bit and
+/// carries no payload.
+pub const RSP_DEAD: u32 = 0x8000_0000;
 
 /// Size of the fixed frame header (`struct fhdr`).
 pub const HEADER_SIZE: usize = 48;
@@ -61,6 +95,17 @@ pub const PING_TRANSACTION: u32 = 0x5F50_4E47;
 /// `asInterface` for the native AIDL backends (`android.gui.*`, which have no
 /// `acos-aidl` table) asks for it before dispatching any interface call.
 pub const INTERFACE_TRANSACTION: u32 = 0x5F49_4E54;
+/// The tag of the primary (launched) app process. Every session has it; a
+/// second process gets 1..=[`MAX_PROCESS_TAG`].
+pub const TAG_PRIMARY: u32 = 0;
+/// Highest process tag a connection may claim (`PROC_MASK` is 6 bits).
+pub const MAX_PROCESS_TAG: u32 = 63;
+/// One connection per app process (tag 0 plus 63 secondary ones).
+pub const MAX_PROCESSES: usize = MAX_PROCESS_TAG as usize + 1;
+/// Longest process name a hello may carry; a longer one is truncated (the name
+/// is evidence, not addressing).
+pub const MAX_PROCESS_NAME: usize = 64;
+
 /// `TF_ONE_WAY` in `binder_transaction_data.flags`.
 pub const TF_ONE_WAY: u32 = 0x01;
 /// `TF_STATUS_CODE` in `binder_transaction_data.flags`: the reply carries a
@@ -104,6 +149,44 @@ impl Frame {
             offs: Vec::new(),
             fds: Vec::new(),
         }
+    }
+
+    /// A connection handshake naming `tag` (see [`F_HELLO`]).
+    ///
+    /// `seq` carries the wire protocol version this build speaks, `code` the
+    /// process tag, `data` the process name (the three facts [`F_HELLO`]
+    /// documents).
+    #[must_use]
+    pub fn hello(tag: u32, name: &str) -> Self {
+        let mut bytes = name.as_bytes().to_vec();
+        bytes.truncate(MAX_PROCESS_NAME);
+        Self {
+            ty: F_HELLO,
+            seq: PROTOCOL_VERSION,
+            code: tag,
+            flags: 0,
+            target: 0,
+            data: bytes,
+            offs: Vec::new(),
+            fds: Vec::new(),
+        }
+    }
+
+    /// `(tag, name)` when this frame is a handshake.
+    #[must_use]
+    pub fn hello_of(&self) -> Option<(u32, String)> {
+        if self.ty != F_HELLO {
+            return None;
+        }
+        let name = String::from_utf8_lossy(&self.data).to_string();
+        Some((self.code, name))
+    }
+
+    /// The wire protocol version a handshake announced (`None` for a frame
+    /// that is not a handshake).
+    #[must_use]
+    pub fn hello_version(&self) -> Option<u32> {
+        (self.ty == F_HELLO).then_some(self.seq)
     }
 
     /// The object offsets decoded from the little-endian table.
@@ -270,7 +353,9 @@ pub fn read_frame(fd: RawFd) -> io::Result<Frame> {
         // Stream fallback: finish the frame with plain reads.
         use std::io::Read;
         let mut rest = vec![0u8; total - n];
-        let mut stream = unsafe { <std::os::unix::net::UnixStream as std::os::fd::FromRawFd>::from_raw_fd(libc::dup(fd)) };
+        let mut stream = unsafe {
+            <std::os::unix::net::UnixStream as std::os::fd::FromRawFd>::from_raw_fd(libc::dup(fd))
+        };
         stream.read_exact(&mut rest)?;
         buf[n..total].copy_from_slice(&rest);
     }
@@ -363,14 +448,21 @@ mod tests {
         let h = encode_header(&f);
         assert_eq!(h.len(), 48);
         let (g, d, o) = decode_header(&h);
-        assert_eq!((g.ty, g.seq, g.code, g.target), (F_REQ, 7, 73, 0x2_0000_0001));
+        assert_eq!(
+            (g.ty, g.seq, g.code, g.target),
+            (F_REQ, 7, 73, 0x2_0000_0001)
+        );
         assert_eq!((d, o), (4, 8));
     }
 
     #[test]
     fn object_offsets_decode() {
         let f = Frame {
-            offs: 16u64.to_le_bytes().into_iter().chain(40u64.to_le_bytes()).collect(),
+            offs: 16u64
+                .to_le_bytes()
+                .into_iter()
+                .chain(40u64.to_le_bytes())
+                .collect(),
             ..Default::default()
         };
         assert_eq!(f.object_offsets(), vec![16, 40]);
@@ -384,6 +476,33 @@ mod tests {
         let f = Frame::plain(F_REQ, 1, 5, 0, 0x2_0000_0002, vec![9, 8, 7, 6]);
         write_frame(a.as_raw_fd(), &f).unwrap();
         let g = read_frame(b.as_raw_fd()).unwrap();
-        assert_eq!((g.ty, g.seq, g.code, g.target, g.data), (F_REQ, 1, 5, 0x2_0000_0002, vec![9, 8, 7, 6]));
+        assert_eq!(
+            (g.ty, g.seq, g.code, g.target, g.data),
+            (F_REQ, 1, 5, 0x2_0000_0002, vec![9, 8, 7, 6])
+        );
+    }
+
+    #[test]
+    fn hello_names_the_process_and_round_trips_over_a_socket() {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::net::UnixStream;
+        let (a, b) = UnixStream::pair().unwrap();
+        let f = Frame::hello(3, "dev.acos.fixtures.counter");
+        write_frame(a.as_raw_fd(), &f).unwrap();
+        let g = read_frame(b.as_raw_fd()).unwrap();
+        assert_eq!(g.ty, F_HELLO);
+        assert_eq!(
+            g.hello_of(),
+            Some((3, "dev.acos.fixtures.counter".to_string()))
+        );
+        // A normal transaction is never mistaken for a handshake.
+        let req = Frame::plain(F_REQ, 1, 5, 0, 0, vec![1]);
+        assert_eq!(req.hello_of(), None);
+    }
+
+    #[test]
+    fn a_hello_name_is_bounded() {
+        let f = Frame::hello(1, &"n".repeat(MAX_PROCESS_NAME * 4));
+        assert_eq!(f.data.len(), MAX_PROCESS_NAME);
     }
 }

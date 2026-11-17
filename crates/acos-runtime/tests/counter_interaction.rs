@@ -60,8 +60,10 @@ fn launch_counter(session: &AgentSession, apk: &Path) -> bool {
     // The launch ladder must reach the published-frame rung; anything less is
     // recorded as evidence, not silently skipped.
     assert!(
-        report.stages.iter().any(|s| s.name == "first_frame"
-            && s.status == acos_runtime::session::StageStatus::Ok),
+        report
+            .stages
+            .iter()
+            .any(|s| s.name == "first_frame" && s.status == acos_runtime::session::StageStatus::Ok),
         "counter did not reach `first_frame`: {:?}\nroot_blocker={:?}",
         report
             .stages
@@ -102,7 +104,10 @@ fn counter_launch_publishes_a_real_frame_and_live_tree() {
         "frame RGBA byte length"
     );
     assert!(
-        frame.pixels.chunks_exact(4).any(|p| p[0] | p[1] | p[2] != 0),
+        frame
+            .pixels
+            .chunks_exact(4)
+            .any(|p| p[0] | p[1] | p[2] != 0),
         "frame is not entirely black: the app's View.draw produced pixels"
     );
 
@@ -155,10 +160,7 @@ fn counter_launch_publishes_a_real_frame_and_live_tree() {
         .iter()
         .find_map(|n| find_by_id(n, ":id/inc"))
         .expect("Increment button in the live tree");
-    assert_eq!(
-        inc[0], 42,
-        "Increment left is doubled (W179-A): {inc:?}"
-    );
+    assert_eq!(inc[0], 42, "Increment left is doubled (W179-A): {inc:?}");
 
     session.close();
 }

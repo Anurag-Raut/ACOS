@@ -255,7 +255,10 @@ impl InputFrame {
         };
         let n = r.i32()?;
         if !(0..=256).contains(&n) {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "bad pointer count"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "bad pointer count",
+            ));
         }
         for _ in 0..n {
             f.pointers.push(FramePointer {
@@ -279,7 +282,10 @@ struct FrameReader<'a> {
 impl<'a> FrameReader<'a> {
     fn take(&mut self, n: usize) -> io::Result<&'a [u8]> {
         if self.o + n > self.b.len() {
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "truncated frame"));
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "truncated frame",
+            ));
         }
         let s = &self.b[self.o..self.o + n];
         self.o += n;
@@ -565,7 +571,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(me, "nativeInitialize", "(JIIIIIIIIIFFFFJJI[Landroid/view/MotionEvent$PointerProperties;[Landroid/view/MotionEvent$PointerCoords;)J", me_initialize);
     vm.register_native(me, "nativeDispose", "(J)V", me_dispose);
     vm.register_native(me, "nativeCopy", "(JJZ)J", me_copy);
-    vm.register_native(me, "nativeAddBatch", "(JJ[Landroid/view/MotionEvent$PointerCoords;I)V", me_add_batch);
+    vm.register_native(
+        me,
+        "nativeAddBatch",
+        "(JJ[Landroid/view/MotionEvent$PointerCoords;I)V",
+        me_add_batch,
+    );
     vm.register_native(me, "nativeGetAction", "(J)I", me_get_action);
     vm.register_native(me, "nativeSetAction", "(JI)V", me_set_action);
     vm.register_native(me, "nativeGetActionButton", "(J)I", me_get_action_button);
@@ -592,7 +603,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(me, "nativeFindPointerIndex", "(JI)I", me_find_pointer_index);
     vm.register_native(me, "nativeGetToolType", "(JI)I", me_get_tool_type);
     vm.register_native(me, "nativeGetAxisValue", "(JIII)F", me_get_axis_value);
-    vm.register_native(me, "nativeGetRawAxisValue", "(JIII)F", me_get_raw_axis_value);
+    vm.register_native(
+        me,
+        "nativeGetRawAxisValue",
+        "(JIII)F",
+        me_get_raw_axis_value,
+    );
     vm.register_native(me, "nativeGetXOffset", "(J)F", me_get_x_offset);
     vm.register_native(me, "nativeGetYOffset", "(J)F", me_get_y_offset);
     vm.register_native(me, "nativeGetXPrecision", "(J)F", me_get_x_precision);
@@ -600,33 +616,98 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(me, "nativeGetXCursorPosition", "(J)F", me_get_x_cursor);
     vm.register_native(me, "nativeGetYCursorPosition", "(J)F", me_get_y_cursor);
     vm.register_native(me, "nativeSetCursorPosition", "(JFF)V", me_set_cursor);
-    vm.register_native(me, "nativeGetSurfaceRotation", "(J)I", me_get_surface_rotation);
+    vm.register_native(
+        me,
+        "nativeGetSurfaceRotation",
+        "(J)I",
+        me_get_surface_rotation,
+    );
     vm.register_native(me, "nativeGetHistorySize", "(J)I", me_get_history_size);
-    vm.register_native(me, "nativeGetPointerCoords", "(JIILandroid/view/MotionEvent$PointerCoords;)V", me_get_pointer_coords);
-    vm.register_native(me, "nativeGetPointerProperties", "(JILandroid/view/MotionEvent$PointerProperties;)V", me_get_pointer_properties);
+    vm.register_native(
+        me,
+        "nativeGetPointerCoords",
+        "(JIILandroid/view/MotionEvent$PointerCoords;)V",
+        me_get_pointer_coords,
+    );
+    vm.register_native(
+        me,
+        "nativeGetPointerProperties",
+        "(JILandroid/view/MotionEvent$PointerProperties;)V",
+        me_get_pointer_properties,
+    );
     vm.register_native(me, "nativeIsTouchEvent", "(J)Z", me_is_touch_event);
     vm.register_native(me, "nativeOffsetLocation", "(JFF)V", me_offset_location);
     vm.register_native(me, "nativeScale", "(JF)V", me_scale);
-    vm.register_native(me, "nativeAxisFromString", "(Ljava/lang/String;)I", me_axis_from_string);
-    vm.register_native(me, "nativeAxisToString", "(I)Ljava/lang/String;", me_axis_to_string);
-    vm.register_native(me, "nativeReadFromParcel", "(JLandroid/os/Parcel;)J", me_read_from_parcel);
-    vm.register_native(me, "nativeWriteToParcel", "(JLandroid/os/Parcel;)V", me_write_to_parcel);
-    vm.register_native(me, "nativeApplyTransform", "(JLandroid/graphics/Matrix;)V", me_apply_transform);
-    vm.register_native(me, "nativeTransform", "(JLandroid/graphics/Matrix;)V", me_apply_transform);
+    vm.register_native(
+        me,
+        "nativeAxisFromString",
+        "(Ljava/lang/String;)I",
+        me_axis_from_string,
+    );
+    vm.register_native(
+        me,
+        "nativeAxisToString",
+        "(I)Ljava/lang/String;",
+        me_axis_to_string,
+    );
+    vm.register_native(
+        me,
+        "nativeReadFromParcel",
+        "(JLandroid/os/Parcel;)J",
+        me_read_from_parcel,
+    );
+    vm.register_native(
+        me,
+        "nativeWriteToParcel",
+        "(JLandroid/os/Parcel;)V",
+        me_write_to_parcel,
+    );
+    vm.register_native(
+        me,
+        "nativeApplyTransform",
+        "(JLandroid/graphics/Matrix;)V",
+        me_apply_transform,
+    );
+    vm.register_native(
+        me,
+        "nativeTransform",
+        "(JLandroid/graphics/Matrix;)V",
+        me_apply_transform,
+    );
 
     let vt = "Landroid/view/VelocityTracker;";
     vm.register_native(vt, "nativeInitialize", "(I)J", vt_initialize);
     vm.register_native(vt, "nativeDispose", "(J)V", vt_dispose);
     vm.register_native(vt, "nativeClear", "(J)V", vt_clear);
-    vm.register_native(vt, "nativeAddMovement", "(JLandroid/view/MotionEvent;)V", vt_add_movement);
-    vm.register_native(vt, "nativeComputeCurrentVelocity", "(JIF)V", vt_compute_current_velocity);
+    vm.register_native(
+        vt,
+        "nativeAddMovement",
+        "(JLandroid/view/MotionEvent;)V",
+        vt_add_movement,
+    );
+    vm.register_native(
+        vt,
+        "nativeComputeCurrentVelocity",
+        "(JIF)V",
+        vt_compute_current_velocity,
+    );
     vm.register_native(vt, "nativeGetVelocity", "(JII)F", vt_get_velocity);
     vm.register_native(vt, "nativeIsAxisSupported", "(I)Z", vt_is_axis_supported);
 
     let ke = "Landroid/view/KeyEvent;";
     vm.register_native(ke, "nativeNextId", "()I", key_next_id);
-    vm.register_native(ke, "nativeKeyCodeFromString", "(Ljava/lang/String;)I", key_code_from_string);
-    vm.register_native(ke, "nativeKeyCodeToString", "(I)Ljava/lang/String;", key_code_to_string);
+    vm.register_native(
+        ke,
+        "nativeKeyCodeFromString",
+        "(Ljava/lang/String;)I",
+        key_code_from_string,
+    );
+    vm.register_native(
+        ke,
+        "nativeKeyCodeToString",
+        "(I)Ljava/lang/String;",
+        key_code_to_string,
+    );
 
     let kcm = "Landroid/view/KeyCharacterMap;";
     vm.register_native(kcm, "nativeDispose", "(J)V", kcm_dispose);
@@ -636,35 +717,110 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(kcm, "nativeGetDisplayLabel", "(JI)C", kcm_get_display_label);
     vm.register_native(kcm, "nativeGetNumber", "(JI)C", kcm_get_number);
     vm.register_native(kcm, "nativeGetMatch", "(JI[CI)C", kcm_get_match);
-    vm.register_native(kcm, "nativeGetEvents", "(J[C)[Landroid/view/KeyEvent;", kcm_get_events);
-    vm.register_native(kcm, "nativeGetFallbackAction", "(JIILandroid/view/KeyCharacterMap$FallbackAction;)Z", kcm_get_fallback);
-    vm.register_native(kcm, "nativeObtainEmptyKeyCharacterMap", "(I)Landroid/view/KeyCharacterMap;", kcm_obtain_empty);
-    vm.register_native(kcm, "nativeReadFromParcel", "(Landroid/os/Parcel;)J", kcm_read_from_parcel);
-    vm.register_native(kcm, "nativeWriteToParcel", "(JLandroid/os/Parcel;)V", kcm_write_to_parcel);
+    vm.register_native(
+        kcm,
+        "nativeGetEvents",
+        "(J[C)[Landroid/view/KeyEvent;",
+        kcm_get_events,
+    );
+    vm.register_native(
+        kcm,
+        "nativeGetFallbackAction",
+        "(JIILandroid/view/KeyCharacterMap$FallbackAction;)Z",
+        kcm_get_fallback,
+    );
+    vm.register_native(
+        kcm,
+        "nativeObtainEmptyKeyCharacterMap",
+        "(I)Landroid/view/KeyCharacterMap;",
+        kcm_obtain_empty,
+    );
+    vm.register_native(
+        kcm,
+        "nativeReadFromParcel",
+        "(Landroid/os/Parcel;)J",
+        kcm_read_from_parcel,
+    );
+    vm.register_native(
+        kcm,
+        "nativeWriteToParcel",
+        "(JLandroid/os/Parcel;)V",
+        kcm_write_to_parcel,
+    );
 
     let ic = "Landroid/view/InputChannel;";
-    vm.register_native(ic, "nativeOpenInputChannelPair", "(Ljava/lang/String;)[J", ic_open_pair);
+    vm.register_native(
+        ic,
+        "nativeOpenInputChannelPair",
+        "(Ljava/lang/String;)[J",
+        ic_open_pair,
+    );
     vm.register_native(ic, "nativeGetName", "(J)Ljava/lang/String;", ic_get_name);
-    vm.register_native(ic, "nativeGetToken", "(J)Landroid/os/IBinder;", ic_get_token);
+    vm.register_native(
+        ic,
+        "nativeGetToken",
+        "(J)Landroid/os/IBinder;",
+        ic_get_token,
+    );
     vm.register_native(ic, "nativeDup", "(J)J", ic_dup);
     vm.register_native(ic, "nativeDispose", "(J)V", ic_dispose);
     vm.register_native(ic, "nativeGetFinalizer", "()J", ic_get_finalizer);
-    vm.register_native(ic, "nativeReadFromParcel", "(Landroid/os/Parcel;)J", ic_read_from_parcel);
-    vm.register_native(ic, "nativeWriteToParcel", "(Landroid/os/Parcel;J)V", ic_write_to_parcel);
+    vm.register_native(
+        ic,
+        "nativeReadFromParcel",
+        "(Landroid/os/Parcel;)J",
+        ic_read_from_parcel,
+    );
+    vm.register_native(
+        ic,
+        "nativeWriteToParcel",
+        "(Landroid/os/Parcel;J)V",
+        ic_write_to_parcel,
+    );
 
     let ier = "Landroid/view/InputEventReceiver;";
-    vm.register_native(ier, "nativeInit", "(Ljava/lang/ref/WeakReference;Landroid/view/InputChannel;Landroid/os/MessageQueue;)J", ier_init);
+    vm.register_native(
+        ier,
+        "nativeInit",
+        "(Ljava/lang/ref/WeakReference;Landroid/view/InputChannel;Landroid/os/MessageQueue;)J",
+        ier_init,
+    );
     vm.register_native(ier, "nativeDispose", "(J)V", ier_dispose);
     vm.register_native(ier, "nativeFinishInputEvent", "(JIZ)V", ier_finish);
-    vm.register_native(ier, "nativeConsumeBatchedInputEvents", "(JJ)Z", ier_consume_batched);
+    vm.register_native(
+        ier,
+        "nativeConsumeBatchedInputEvents",
+        "(JJ)Z",
+        ier_consume_batched,
+    );
     vm.register_native(ier, "nativeReportTimeline", "(JIJJ)V", ier_report_timeline);
-    vm.register_native(ier, "nativeDump", "(JLjava/lang/String;)Ljava/lang/String;", ier_dump);
+    vm.register_native(
+        ier,
+        "nativeDump",
+        "(JLjava/lang/String;)Ljava/lang/String;",
+        ier_dump,
+    );
 
     let ies = "Landroid/view/InputEventSender;";
-    vm.register_native(ies, "nativeInit", "(Ljava/lang/ref/WeakReference;Landroid/view/InputChannel;Landroid/os/MessageQueue;)J", ies_init);
+    vm.register_native(
+        ies,
+        "nativeInit",
+        "(Ljava/lang/ref/WeakReference;Landroid/view/InputChannel;Landroid/os/MessageQueue;)J",
+        ies_init,
+    );
     vm.register_native(ies, "nativeDispose", "(J)V", ies_dispose);
-    vm.register_native(ies, "nativeSendMotionEvent", "(JILandroid/view/MotionEvent;)Z", ies_send_motion);
-    vm.register_native(ies, "nativeSendKeyEvent", "(JILandroid/view/KeyEvent;)Z", ies_send_key);
+    vm.register_native(
+        ies,
+        "nativeSendMotionEvent",
+        "(JILandroid/view/MotionEvent;)Z",
+        ies_send_motion,
+    );
+    vm.register_native(
+        ies,
+        "nativeSendKeyEvent",
+        "(JILandroid/view/KeyEvent;)Z",
+        ies_send_key,
+    );
     Ok(())
 }
 
@@ -881,24 +1037,102 @@ macro_rules! motion_getter {
 }
 
 motion_getter!(me_get_action, "nativeGetAction", ret_i32, action, i32);
-motion_getter!(me_get_action_button, "nativeGetActionButton", ret_i32, action_button, i32);
+motion_getter!(
+    me_get_action_button,
+    "nativeGetActionButton",
+    ret_i32,
+    action_button,
+    i32
+);
 motion_getter!(me_get_flags, "nativeGetFlags", ret_i32, flags, i32);
-motion_getter!(me_get_edge_flags, "nativeGetEdgeFlags", ret_i32, edge_flags, i32);
-motion_getter!(me_get_meta_state, "nativeGetMetaState", ret_i32, meta_state, i32);
-motion_getter!(me_get_button_state, "nativeGetButtonState", ret_i32, button_state, i32);
+motion_getter!(
+    me_get_edge_flags,
+    "nativeGetEdgeFlags",
+    ret_i32,
+    edge_flags,
+    i32
+);
+motion_getter!(
+    me_get_meta_state,
+    "nativeGetMetaState",
+    ret_i32,
+    meta_state,
+    i32
+);
+motion_getter!(
+    me_get_button_state,
+    "nativeGetButtonState",
+    ret_i32,
+    button_state,
+    i32
+);
 motion_getter!(me_get_source, "nativeGetSource", ret_i32, source, i32);
-motion_getter!(me_get_device_id, "nativeGetDeviceId", ret_i32, device_id, i32);
+motion_getter!(
+    me_get_device_id,
+    "nativeGetDeviceId",
+    ret_i32,
+    device_id,
+    i32
+);
 motion_getter!(me_get_id, "nativeGetId", ret_i32, id, i32);
-motion_getter!(me_get_display_id, "nativeGetDisplayId", ret_i32, display_id, i32);
-motion_getter!(me_get_classification, "nativeGetClassification", ret_i32, classification, i32);
-motion_getter!(me_get_down_time, "nativeGetDownTimeNanos", ret_i64, down_time, i64);
+motion_getter!(
+    me_get_display_id,
+    "nativeGetDisplayId",
+    ret_i32,
+    display_id,
+    i32
+);
+motion_getter!(
+    me_get_classification,
+    "nativeGetClassification",
+    ret_i32,
+    classification,
+    i32
+);
+motion_getter!(
+    me_get_down_time,
+    "nativeGetDownTimeNanos",
+    ret_i64,
+    down_time,
+    i64
+);
 motion_getter!(me_get_x_offset, "nativeGetXOffset", ret_f32, x_offset, f32);
 motion_getter!(me_get_y_offset, "nativeGetYOffset", ret_f32, y_offset, f32);
-motion_getter!(me_get_x_precision, "nativeGetXPrecision", ret_f32, x_precision, f32);
-motion_getter!(me_get_y_precision, "nativeGetYPrecision", ret_f32, y_precision, f32);
-motion_getter!(me_get_x_cursor, "nativeGetXCursorPosition", ret_f32, cursor_x, f32);
-motion_getter!(me_get_y_cursor, "nativeGetYCursorPosition", ret_f32, cursor_y, f32);
-motion_getter!(me_get_surface_rotation, "nativeGetSurfaceRotation", ret_i32, surface_rotation, i32);
+motion_getter!(
+    me_get_x_precision,
+    "nativeGetXPrecision",
+    ret_f32,
+    x_precision,
+    f32
+);
+motion_getter!(
+    me_get_y_precision,
+    "nativeGetYPrecision",
+    ret_f32,
+    y_precision,
+    f32
+);
+motion_getter!(
+    me_get_x_cursor,
+    "nativeGetXCursorPosition",
+    ret_f32,
+    cursor_x,
+    f32
+);
+motion_getter!(
+    me_get_y_cursor,
+    "nativeGetYCursorPosition",
+    ret_f32,
+    cursor_y,
+    f32
+);
+motion_getter!(
+    me_get_surface_rotation,
+    "nativeGetSurfaceRotation",
+    ret_i32,
+    surface_rotation,
+    i32
+);
 
 fn me_set_action(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeSetAction");
@@ -1008,7 +1242,10 @@ fn me_get_pointer_id(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let ptr = vm.arg_i64(ctx, 0) as u64;
     let index = vm.arg_i32(ctx, 1);
     let id = read_motion(ptr, |s| {
-        s.pointers.get(index.max(0) as usize).map(|p| p.id).unwrap_or(-1)
+        s.pointers
+            .get(index.max(0) as usize)
+            .map(|p| p.id)
+            .unwrap_or(-1)
     })
     .unwrap_or(-1);
     vm.ret_i32(ctx, id);
@@ -1020,7 +1257,11 @@ fn me_find_pointer_index(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let ptr = vm.arg_i64(ctx, 0) as u64;
     let id = vm.arg_i32(ctx, 1);
     let index = read_motion(ptr, |s| {
-        s.pointers.iter().position(|p| p.id == id).map(|i| i as i32).unwrap_or(-1)
+        s.pointers
+            .iter()
+            .position(|p| p.id == id)
+            .map(|i| i as i32)
+            .unwrap_or(-1)
     })
     .unwrap_or(-1);
     vm.ret_i32(ctx, index);
@@ -1764,7 +2005,9 @@ fn kcm_read_from_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 /// (`keychars::KeyMap::parcel_bytes`); the previous reader assumed a
 /// `[type, String8]` pair, which left the enclosing `InputDevice` parcel
 /// desynchronised.
-fn read_native_key_character_map(p: &mut acos_parcel::Parcel) -> Result<KeyMapState, acos_parcel::ParcelError> {
+fn read_native_key_character_map(
+    p: &mut acos_parcel::Parcel,
+) -> Result<KeyMapState, acos_parcel::ParcelError> {
     const MAX_KEYS: i32 = 8192;
     let device_id = p.read_int32()?;
     let has_map = p.read_int32()?;
@@ -1843,7 +2086,10 @@ fn read_native_key_character_map(p: &mut acos_parcel::Parcel) -> Result<KeyMapSt
         device_id,
         keyboard_type,
         layout,
-        kcm: Kcm { keyboard_type, keys },
+        kcm: Kcm {
+            keyboard_type,
+            keys,
+        },
     })
 }
 
@@ -1884,24 +2130,26 @@ fn kcm_write_to_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let ptr = vm.arg_i64(ctx, 0) as u64;
     let parcel_obj = vm.arg_ref(ctx, 1);
     let handle = parcel_ptr(vm, parcel_obj)?;
-    let state = POOLS.with(|p| {
-        p.borrow().key_maps.get(&ptr).map(|k| {
-            (
-                k.device_id,
-                k.keyboard_type,
-                k.layout.clone(),
-                k.kcm.keys.clone(),
-            )
+    let state = POOLS
+        .with(|p| {
+            p.borrow().key_maps.get(&ptr).map(|k| {
+                (
+                    k.device_id,
+                    k.keyboard_type,
+                    k.layout.clone(),
+                    k.kcm.keys.clone(),
+                )
+            })
         })
-    })
-    .unwrap_or((
-        -1,
-        kcm::KEYBOARD_FULL,
-        GENERIC_LAYOUT.to_string(),
-        std::collections::BTreeMap::new(),
-    ));
+        .unwrap_or((
+            -1,
+            kcm::KEYBOARD_FULL,
+            GENERIC_LAYOUT.to_string(),
+            std::collections::BTreeMap::new(),
+        ));
     parcel_flat(with_store(|s| {
-        s.table.with_parcel(handle, |p| write_native_key_character_map(p, &state))
+        s.table
+            .with_parcel(handle, |p| write_native_key_character_map(p, &state))
     }))?;
     Ok(())
 }
@@ -1975,8 +2223,12 @@ fn ic_open_pair(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeOpenInputChannelPair");
     let name_h = vm.arg_ref(ctx, 0);
     let name = vm.java_string_to_rust(name_h).unwrap_or_default();
-    let (a, b) = make_socketpair()
-        .map_err(|e| vm.throw_new("Ljava/lang/RuntimeException;", Some(&format!("socketpair: {e}"))))?;
+    let (a, b) = make_socketpair().map_err(|e| {
+        vm.throw_new(
+            "Ljava/lang/RuntimeException;",
+            Some(&format!("socketpair: {e}")),
+        )
+    })?;
     let id0 = register_channel(format!("{name} (server)"), a);
     let id1 = register_channel(format!("{name} (client)"), b);
     let arr = vm
@@ -2156,16 +2408,13 @@ fn ic_write_to_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let parcel_obj = vm.arg_ref(ctx, 0);
     let ptr = vm.arg_i64(ctx, 1) as u64;
     let handle = parcel_ptr(vm, parcel_obj)?;
-    let (name, dup, token) = POOLS.with(|p| {
-        let p = p.borrow();
-        let c = p.channels.get(&ptr)?;
-        Some((
-            c.name.clone(),
-            rustix::io::dup(&c.fd).ok()?,
-            c.token,
-        ))
-    })
-    .ok_or_else(|| unsupported("InputChannel.nativeWriteToParcel: dead channel"))?;
+    let (name, dup, token) = POOLS
+        .with(|p| {
+            let p = p.borrow();
+            let c = p.channels.get(&ptr)?;
+            Some((c.name.clone(), rustix::io::dup(&c.fd).ok()?, c.token))
+        })
+        .ok_or_else(|| unsupported("InputChannel.nativeWriteToParcel: dead channel"))?;
     parcel_flat(with_store(|s| {
         s.table
             .with_parcel(handle, |p| p.write_string16_opt(Some(&name)))
@@ -2194,13 +2443,16 @@ fn register_receiver(channel: u64, looper: u64, weak_ref: Handle) -> VmResult<u6
     if channel_fd(channel).is_none() {
         return Err(unsupported("InputEventReceiver: dead channel"));
     }
-    let handle: LooperHandle =
-        handle_for_ptr(looper).ok_or_else(|| unsupported("InputEventReceiver: dead MessageQueue"))?;
+    let handle: LooperHandle = handle_for_ptr(looper)
+        .ok_or_else(|| unsupported("InputEventReceiver: dead MessageQueue"))?;
     // Register the read fd on the looper's epoll set. `add_fd` takes `AsFd`, so
     // borrow the channel's descriptor; epoll holds its own reference after this.
     POOLS.with(|p| {
         let p = p.borrow();
-        let c = p.channels.get(&channel).ok_or_else(|| unsupported("dead channel"))?;
+        let c = p
+            .channels
+            .get(&channel)
+            .ok_or_else(|| unsupported("dead channel"))?;
         handle
             .add_fd(&c.fd, EventFlags::IN, channel)
             .map_err(|e| VmError::Internal(format!("add_fd: {e}")))
@@ -2235,7 +2487,9 @@ fn ier_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         _ => 0,
     };
     if channel == 0 || looper == 0 {
-        return Err(unsupported("InputEventReceiver.nativeInit: null channel/queue"));
+        return Err(unsupported(
+            "InputEventReceiver.nativeInit: null channel/queue",
+        ));
     }
     // Keep the WeakReference object alive for the receiver's lifetime.
     vm.root_handle(weak);
@@ -2347,7 +2601,10 @@ fn send_to_channel(channel: u64, frame: &InputFrame) -> io::Result<()> {
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "dead channel"))?;
         match rustix::net::send(&c.fd, &bytes, SendFlags::NOSIGNAL) {
             Ok(n) if n == bytes.len() => Ok(()),
-            Ok(_) => Err(io::Error::new(io::ErrorKind::WriteZero, "short channel send")),
+            Ok(_) => Err(io::Error::new(
+                io::ErrorKind::WriteZero,
+                "short channel send",
+            )),
             // A full seqpacket queue is not an error: queue the frame and flush
             // it once the receiver has drained, exactly like the real sender.
             Err(rustix::io::Errno::AGAIN) => {
@@ -2565,12 +2822,8 @@ fn cancel_traversal_after_input(vm: &mut Vm) {
         _ => 0,
     };
     for i in 0..count {
-        let root = match vm.call_method(
-            roots,
-            "get",
-            "(I)Ljava/lang/Object;",
-            &[JavaValue::Int(i)],
-        ) {
+        let root = match vm.call_method(roots, "get", "(I)Ljava/lang/Object;", &[JavaValue::Int(i)])
+        {
             Ok(JavaValue::Object(h)) if h != crate::heap::NULL => h,
             _ => continue,
         };
@@ -2693,45 +2946,58 @@ fn build_motion_event(vm: &mut Vm, frame: &InputFrame) -> VmResult<Option<Handle
             pressure: 1.0,
             size: 0.0,
         });
-        let pp = vm.new_instance("android/view/MotionEvent$PointerProperties").map_err(bridge_err)?;
-        vm.set_field(pp, "id", JavaValue::Int(p.id)).map_err(bridge_err)?;
-        vm.set_field(pp, "toolType", JavaValue::Int(p.tool_type)).map_err(bridge_err)?;
-        vm.set_array_element(props, i, JavaValue::Object(pp)).map_err(bridge_err)?;
+        let pp = vm
+            .new_instance("android/view/MotionEvent$PointerProperties")
+            .map_err(bridge_err)?;
+        vm.set_field(pp, "id", JavaValue::Int(p.id))
+            .map_err(bridge_err)?;
+        vm.set_field(pp, "toolType", JavaValue::Int(p.tool_type))
+            .map_err(bridge_err)?;
+        vm.set_array_element(props, i, JavaValue::Object(pp))
+            .map_err(bridge_err)?;
         vm.release_bridge_root(pp);
 
-        let pc = vm.new_instance("android/view/MotionEvent$PointerCoords").map_err(bridge_err)?;
-        vm.set_field(pc, "x", JavaValue::Float(p.x)).map_err(bridge_err)?;
-        vm.set_field(pc, "y", JavaValue::Float(p.y)).map_err(bridge_err)?;
-        vm.set_field(pc, "pressure", JavaValue::Float(p.pressure)).map_err(bridge_err)?;
-        vm.set_field(pc, "size", JavaValue::Float(p.size)).map_err(bridge_err)?;
-        vm.set_array_element(coords, i, JavaValue::Object(pc)).map_err(bridge_err)?;
+        let pc = vm
+            .new_instance("android/view/MotionEvent$PointerCoords")
+            .map_err(bridge_err)?;
+        vm.set_field(pc, "x", JavaValue::Float(p.x))
+            .map_err(bridge_err)?;
+        vm.set_field(pc, "y", JavaValue::Float(p.y))
+            .map_err(bridge_err)?;
+        vm.set_field(pc, "pressure", JavaValue::Float(p.pressure))
+            .map_err(bridge_err)?;
+        vm.set_field(pc, "size", JavaValue::Float(p.size))
+            .map_err(bridge_err)?;
+        vm.set_array_element(coords, i, JavaValue::Object(pc))
+            .map_err(bridge_err)?;
         vm.release_bridge_root(pc);
     }
     let sig = "(JJII[Landroid/view/MotionEvent$PointerProperties;[Landroid/view/MotionEvent$PointerCoords;IIFFIIIIII)Landroid/view/MotionEvent;";
-    let ev = vm.call_static(
-        "android.view.MotionEvent",
-        "obtain",
-        sig,
-        &[
-            JavaValue::Long(frame.down_time),
-            JavaValue::Long(frame.event_time),
-            JavaValue::Int(frame.action),
-            JavaValue::Int(n as i32),
-            JavaValue::Object(props),
-            JavaValue::Object(coords),
-            JavaValue::Int(frame.meta_state),
-            JavaValue::Int(frame.button_state),
-            JavaValue::Float(frame.x_precision),
-            JavaValue::Float(frame.y_precision),
-            JavaValue::Int(frame.device_id),
-            JavaValue::Int(frame.edge_flags),
-            JavaValue::Int(frame.source),
-            JavaValue::Int(frame.display_id),
-            JavaValue::Int(frame.flags),
-            JavaValue::Int(frame.classification),
-        ],
-    )
-    .map_err(bridge_err)?;
+    let ev = vm
+        .call_static(
+            "android.view.MotionEvent",
+            "obtain",
+            sig,
+            &[
+                JavaValue::Long(frame.down_time),
+                JavaValue::Long(frame.event_time),
+                JavaValue::Int(frame.action),
+                JavaValue::Int(n as i32),
+                JavaValue::Object(props),
+                JavaValue::Object(coords),
+                JavaValue::Int(frame.meta_state),
+                JavaValue::Int(frame.button_state),
+                JavaValue::Float(frame.x_precision),
+                JavaValue::Float(frame.y_precision),
+                JavaValue::Int(frame.device_id),
+                JavaValue::Int(frame.edge_flags),
+                JavaValue::Int(frame.source),
+                JavaValue::Int(frame.display_id),
+                JavaValue::Int(frame.flags),
+                JavaValue::Int(frame.classification),
+            ],
+        )
+        .map_err(bridge_err)?;
     vm.release_bridge_root(props);
     vm.release_bridge_root(coords);
     match ev {

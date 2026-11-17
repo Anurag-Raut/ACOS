@@ -135,7 +135,7 @@ fn default_network_callback_request(messenger: Option<BinderId>) -> Parcel {
     rewritten.write_interface_token(IFACE).expect("token");
     rewritten.write_int32(-1);
     rewritten.write_int32(0); // null NetworkCapabilities
-    // Re-append everything after the capabilities argument.
+                              // Re-append everything after the capabilities argument.
     let mut rest = Parcel::new();
     rest.write_int32(2);
     write_messenger_arg(&mut rest, messenger);
@@ -378,8 +378,7 @@ fn a_request_without_a_messenger_queues_no_callbacks() {
     let mut host = ServiceHost::standard();
     let conn = connectivity(&mut host);
     let mut data = request_network_request(5, None);
-    let mut reply =
-        transact(&mut host, conn, REQUEST_NETWORK, &mut data).expect("requestNetwork");
+    let mut reply = transact(&mut host, conn, REQUEST_NETWORK, &mut data).expect("requestNetwork");
     expects_no_exception(&mut reply);
     let request = read_network_request(&mut reply);
     assert_eq!(
@@ -397,10 +396,7 @@ fn listen_for_network_is_a_listen_request() {
     let mut reply = transact(&mut host, conn, LISTEN_FOR_NETWORK, &mut data).expect("listen");
     expects_no_exception(&mut reply);
     let request = read_network_request(&mut reply);
-    assert_eq!(
-        field(&request, 3),
-        &Value::Str(Some("LISTEN".to_string()))
-    );
+    assert_eq!(field(&request, 3), &Value::Str(Some("LISTEN".to_string())));
     assert_eq!(host.take_deliveries().len(), 4);
 }
 
@@ -472,11 +468,7 @@ fn network_queries_describe_the_emulated_default_network() {
         0,
         "NET_CAPABILITY_VALIDATED must stay unset: ACOS cannot probe the internet"
     );
-    assert_eq!(
-        bits & (1 << 13),
-        1 << 13,
-        "NET_CAPABILITY_NOT_RESTRICTED"
-    );
+    assert_eq!(bits & (1 << 13), 1 << 13, "NET_CAPABILITY_NOT_RESTRICTED");
     assert_eq!(field(&caps, 2), &Value::Long(1 << 1), "TRANSPORT_WIFI");
 
     // getLinkProperties(Network).
@@ -554,9 +546,8 @@ fn state_counters_record_each_registration_and_release() {
     let mut host = ServiceHost::standard();
     // The registry owns its own state; this test drives the handler directly
     // through the public `ServiceObject` surface to observe the counters.
-    let mut svc = acos_services::connectivity::ConnectivityService::new(std::sync::Arc::clone(
-        &state,
-    ));
+    let mut svc =
+        acos_services::connectivity::ConnectivityService::new(std::sync::Arc::clone(&state));
     let method = acos_aidl::lookup(IFACE, REQUEST_NETWORK).expect("requestNetwork in the table");
     assert_eq!(method.code, REQUEST_NETWORK);
     let _ = connectivity(&mut host);
@@ -627,26 +618,26 @@ fn the_connectivity_specs_match_the_boot_images_write_to_parcel() {
     assert_eq!(
         caps.calls,
         vec![
-            "writeLong",  // mNetworkCapabilities
-            "writeLong",  // mForbiddenNetworkCapabilities
-            "writeLong",  // mTransportTypes
-            "writeInt",   // mLinkUpBandwidthKbps
-            "writeInt",   // mLinkDownBandwidthKbps
+            "writeLong",       // mNetworkCapabilities
+            "writeLong",       // mForbiddenNetworkCapabilities
+            "writeLong",       // mTransportTypes
+            "writeInt",        // mLinkUpBandwidthKbps
+            "writeInt",        // mLinkDownBandwidthKbps
             "writeParcelable", // mNetworkSpecifier
             "writeParcelable", // mTransportInfo
-            "writeInt",   // mSignalStrength
+            "writeInt",        // mSignalStrength
             // `writeParcelableArraySet(mUids)` — invisible to the scanner; the
             // spec models it as the `writeInt` count it emits (-1 = null).
-            "writeIntArray", // mAllowedUids
-            "writeString",   // mSSID
-            "writeBoolean",  // mPrivateDnsBroken
-            "writeIntArray", // administrator uids
-            "writeInt",      // mOwnerUid
-            "writeInt",      // mRequestorUid
-            "writeString",   // mRequestorPackageName
-            "writeIntArray", // mSubIds
+            "writeIntArray",  // mAllowedUids
+            "writeString",    // mSSID
+            "writeBoolean",   // mPrivateDnsBroken
+            "writeIntArray",  // administrator uids
+            "writeInt",       // mOwnerUid
+            "writeInt",       // mRequestorUid
+            "writeString",    // mRequestorPackageName
+            "writeIntArray",  // mSubIds
             "writeTypedList", // mUnderlyingNetworks
-            "writeInt",      // mEnterpriseId
+            "writeInt",       // mEnterpriseId
         ],
         "the image's NetworkCapabilities.writeToParcel changed"
     );
@@ -661,21 +652,21 @@ fn the_connectivity_specs_match_the_boot_images_write_to_parcel() {
     assert_eq!(
         link.calls,
         vec![
-            "writeString", // interface name
-            "writeInt",    // link address count
+            "writeString",     // interface name
+            "writeInt",        // link address count
             "writeParcelable", // LinkAddress loop
-            "writeBoolean", // usePrivateDns
-            "writeString", // privateDnsServerName
-            "writeString", // domains
-            "writeInt",    // mtu
-            "writeString", // tcpBufferSizes
-            "writeInt",    // route count
+            "writeBoolean",    // usePrivateDns
+            "writeString",     // privateDnsServerName
+            "writeString",     // domains
+            "writeInt",        // mtu
+            "writeString",     // tcpBufferSizes
+            "writeInt",        // route count
             "writeParcelable", // RouteInfo loop
-            "writeByte",   // httpProxy presence
+            "writeByte",       // httpProxy presence
             "writeParcelable", // httpProxy
             "writeParcelable", // nat64Prefix
-            "writeList",   // stacked links
-            "writeBoolean", // wakeOnLanSupported
+            "writeList",       // stacked links
+            "writeBoolean",    // wakeOnLanSupported
             "writeParcelable", // captivePortalApiUrl
             "writeParcelable", // captivePortalData
         ],

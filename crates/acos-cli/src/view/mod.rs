@@ -271,7 +271,12 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
         return;
     }
     if request.method != "GET" {
-        let _ = respond(&mut connection, 405, "text/plain; charset=utf-8", b"405 method not allowed\n");
+        let _ = respond(
+            &mut connection,
+            405,
+            "text/plain; charset=utf-8",
+            b"405 method not allowed\n",
+        );
         return;
     }
     // Every route requires the token, including the page and the streams.
@@ -783,8 +788,7 @@ mod tests {
         write!(
             stream,
             "POST /?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nContent-Length: 0\r\n\r\n",
-            server.token,
-            server.port
+            server.token, server.port
         )
         .expect("write");
         let mut response = Vec::new();
@@ -817,7 +821,12 @@ mod tests {
         assert_eq!(ask(&format!("127.0.0.1:{}", port.wrapping_add(1))), 403);
         // No Host header at all.
         let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect");
-        write!(stream, "GET /api/sessions?t={} HTTP/1.0\r\n\r\n", server.token).expect("write");
+        write!(
+            stream,
+            "GET /api/sessions?t={} HTTP/1.0\r\n\r\n",
+            server.token
+        )
+        .expect("write");
         let mut response = Vec::new();
         let _ = stream.read_to_end(&mut response);
         assert_eq!(status_of(&response), 403);
@@ -843,7 +852,10 @@ mod tests {
         // ...so a third is closed without a response (EOF or reset), not served.
         let mut third = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect");
         let _ = third.set_read_timeout(Some(Duration::from_secs(3)));
-        let _ = write!(third, "GET /api/sessions?t={token} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let _ = write!(
+            third,
+            "GET /api/sessions?t={token} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"
+        );
         let mut response = Vec::new();
         let _ = third.read_to_end(&mut response);
         assert!(response.is_empty(), "over-cap connection was served");
@@ -926,7 +938,9 @@ mod tests {
             "stream_socket": socket.display().to_string(),
         });
         std::fs::write(
-            server.registry.join(format!("s_live-{}.json", std::process::id())),
+            server
+                .registry
+                .join(format!("s_live-{}.json", std::process::id())),
             live.to_string(),
         )
         .expect("write live");
@@ -1008,11 +1022,11 @@ mod tests {
                     let _ = send(&mut stream, b'H', hello);
                     // 1x1 PNG bytes (header + IDAT + IEND; the hub never decodes).
                     let png: &[u8] = &[
-                        0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, b'I',
-                        b'H', b'D', b'R', 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1f, 0x15,
-                        0xc4, 0x89, 0, 0, 0, 0x0a, b'I', b'D', b'A', b'T', 0x78, 0x9c, 0x63,
-                        0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0,
-                        0, 0, 0, 0, b'I', b'E', b'N', b'D', 0xae, 0x42, 0x60, 0x82,
+                        0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, b'I', b'H',
+                        b'D', b'R', 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1f, 0x15, 0xc4, 0x89,
+                        0, 0, 0, 0x0a, b'I', b'D', b'A', b'T', 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00,
+                        0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0, 0, 0, 0, 0, b'I', b'E',
+                        b'N', b'D', 0xae, 0x42, 0x60, 0x82,
                     ];
                     let mut index = 0u64;
                     loop {
@@ -1068,8 +1082,7 @@ mod tests {
         write!(
             first,
             "GET /api/frames/s_stream?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
-            server.token,
-            server.port
+            server.token, server.port
         )
         .expect("write");
         let head = read_response_head(&mut first);
@@ -1079,8 +1092,7 @@ mod tests {
         write!(
             second,
             "GET /api/frames/s_stream?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
-            server.token,
-            server.port
+            server.token, server.port
         )
         .expect("write");
         let head = read_response_head(&mut second);
@@ -1112,8 +1124,7 @@ mod tests {
         write!(
             events,
             "GET /api/events/s_stream?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
-            server.token,
-            server.port
+            server.token, server.port
         )
         .expect("write");
         let head = read_response_head(&mut events);
@@ -1161,7 +1172,11 @@ mod tests {
         assert_eq!(stats[0].upstream_connects, 1);
     }
 
-    fn send(stream: &mut std::os::unix::net::UnixStream, kind: u8, payload: &[u8]) -> io::Result<()> {
+    fn send(
+        stream: &mut std::os::unix::net::UnixStream,
+        kind: u8,
+        payload: &[u8],
+    ) -> io::Result<()> {
         let length = (payload.len() + 1) as u32;
         stream.write_all(&length.to_be_bytes())?;
         stream.write_all(&[kind])?;

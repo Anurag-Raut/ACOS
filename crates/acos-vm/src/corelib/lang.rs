@@ -43,11 +43,7 @@ fn install_interfaces(vm: &mut Vm) -> VmResult<()> {
     def(vm, "Ljava/util/Set;", &["Ljava/util/Collection;"])?;
     def(vm, "Ljava/util/Map;", &[])?;
     def(vm, "Ljava/util/Map$Entry;", &[])?;
-    def(
-        vm,
-        "Ljava/util/function/Function;",
-        &[],
-    )?;
+    def(vm, "Ljava/util/function/Function;", &[])?;
     def(vm, "Ljava/util/function/BiFunction;", &[])?;
     def(vm, "Ljava/util/function/Predicate;", &[])?;
     def(vm, "Ljava/util/function/Supplier;", &[])?;
@@ -83,7 +79,10 @@ fn install_interfaces(vm: &mut Vm) -> VmResult<()> {
     }
     let map = vm.load_class("Ljava/util/Map;")?;
     for (n, s) in [
-        ("put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"),
+        (
+            "put",
+            "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         ("get", "(Ljava/lang/Object;)Ljava/lang/Object;"),
         ("containsKey", "(Ljava/lang/Object;)Z"),
         ("size", "()I"),
@@ -131,7 +130,9 @@ fn install_interfaces(vm: &mut Vm) -> VmResult<()> {
 }
 
 fn unimpl(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
-    Err(VmError::Internal("abstract interface method invoked".into()))
+    Err(VmError::Internal(
+        "abstract interface method invoked".into(),
+    ))
 }
 
 fn install_primitives(vm: &mut Vm) -> VmResult<()> {
@@ -194,7 +195,13 @@ fn install_object(vm: &mut Vm) -> VmResult<()> {
     let id = vm.def_root_class("Ljava/lang/Object;", access::PUBLIC);
     vm.c_object = id;
     vm.add_native(id, "<init>", "()V", access::PUBLIC, obj_init);
-    vm.add_native(id, "getClass", "()Ljava/lang/Class;", access::PUBLIC, obj_get_class);
+    vm.add_native(
+        id,
+        "getClass",
+        "()Ljava/lang/Class;",
+        access::PUBLIC,
+        obj_get_class,
+    );
     vm.add_native(id, "hashCode", "()I", access::PUBLIC, obj_hash_code);
     vm.add_native(
         id,
@@ -210,7 +217,13 @@ fn install_object(vm: &mut Vm) -> VmResult<()> {
         access::PUBLIC,
         obj_to_string,
     );
-    vm.add_native(id, "clone", "()Ljava/lang/Object;", access::PUBLIC, obj_clone);
+    vm.add_native(
+        id,
+        "clone",
+        "()Ljava/lang/Object;",
+        access::PUBLIC,
+        obj_clone,
+    );
     vm.link_class(id)?;
     Ok(())
 }
@@ -294,9 +307,20 @@ fn clone_array(a: ArrayObj) -> ArrayObj {
 }
 
 fn install_class(vm: &mut Vm) -> VmResult<()> {
-    let id = vm.def_class("Ljava/lang/Class;", access::PUBLIC, Some("Ljava/lang/Object;"), &[])?;
+    let id = vm.def_class(
+        "Ljava/lang/Class;",
+        access::PUBLIC,
+        Some("Ljava/lang/Object;"),
+        &[],
+    )?;
     vm.c_class = id;
-    vm.add_native(id, "getName", "()Ljava/lang/String;", access::PUBLIC, class_get_name);
+    vm.add_native(
+        id,
+        "getName",
+        "()Ljava/lang/String;",
+        access::PUBLIC,
+        class_get_name,
+    );
     vm.add_native(
         id,
         "getSimpleName",
@@ -307,7 +331,13 @@ fn install_class(vm: &mut Vm) -> VmResult<()> {
     vm.add_native(id, "isInterface", "()Z", access::PUBLIC, class_is_interface);
     vm.add_native(id, "isEnum", "()Z", access::PUBLIC, class_is_enum);
     vm.add_native(id, "isArray", "()Z", access::PUBLIC, class_is_array);
-    vm.add_native(id, "isPrimitive", "()Z", access::PUBLIC, class_is_primitive_false);
+    vm.add_native(
+        id,
+        "isPrimitive",
+        "()Z",
+        access::PUBLIC,
+        class_is_primitive_false,
+    );
     vm.add_native(
         id,
         "getSuperclass",
@@ -473,19 +503,49 @@ fn install_string(vm: &mut Vm) -> VmResult<()> {
     vm.add_native(id, "charAt", "(I)C", p, str_char_at);
     vm.add_native(id, "codePointAt", "(I)I", p, str_code_point_at);
     vm.add_native(id, "equals", "(Ljava/lang/Object;)Z", p, str_equals);
-    vm.add_native(id, "equalsIgnoreCase", "(Ljava/lang/String;)Z", p, str_equals_ignore_case);
+    vm.add_native(
+        id,
+        "equalsIgnoreCase",
+        "(Ljava/lang/String;)Z",
+        p,
+        str_equals_ignore_case,
+    );
     vm.add_native(id, "hashCode", "()I", p, str_hash_code);
     vm.add_native(id, "compareTo", "(Ljava/lang/String;)I", p, str_compare_to);
-    vm.add_native(id, "compareTo", "(Ljava/lang/Object;)I", p, str_compare_to_obj);
+    vm.add_native(
+        id,
+        "compareTo",
+        "(Ljava/lang/Object;)I",
+        p,
+        str_compare_to_obj,
+    );
     vm.add_native(id, "toString", "()Ljava/lang/String;", p, str_self);
-    vm.add_native(id, "substring", "(I)Ljava/lang/String;", p, str_substring_from);
+    vm.add_native(
+        id,
+        "substring",
+        "(I)Ljava/lang/String;",
+        p,
+        str_substring_from,
+    );
     vm.add_native(id, "substring", "(II)Ljava/lang/String;", p, str_substring);
     vm.add_native(id, "indexOf", "(I)I", p, str_index_of_char);
     vm.add_native(id, "indexOf", "(Ljava/lang/String;)I", p, str_index_of_str);
     vm.add_native(id, "lastIndexOf", "(I)I", p, str_last_index_of_char);
-    vm.add_native(id, "startsWith", "(Ljava/lang/String;)Z", p, str_starts_with);
+    vm.add_native(
+        id,
+        "startsWith",
+        "(Ljava/lang/String;)Z",
+        p,
+        str_starts_with,
+    );
     vm.add_native(id, "endsWith", "(Ljava/lang/String;)Z", p, str_ends_with);
-    vm.add_native(id, "contains", "(Ljava/lang/CharSequence;)Z", p, str_contains);
+    vm.add_native(
+        id,
+        "contains",
+        "(Ljava/lang/CharSequence;)Z",
+        p,
+        str_contains,
+    );
     vm.add_native(id, "toUpperCase", "()Ljava/lang/String;", p, str_to_upper);
     vm.add_native(id, "toLowerCase", "()Ljava/lang/String;", p, str_to_lower);
     vm.add_native(id, "trim", "()Ljava/lang/String;", p, str_trim);
@@ -497,7 +557,13 @@ fn install_string(vm: &mut Vm) -> VmResult<()> {
         p,
         str_replace_seq,
     );
-    vm.add_native(id, "split", "(Ljava/lang/String;)[Ljava/lang/String;", p, str_split);
+    vm.add_native(
+        id,
+        "split",
+        "(Ljava/lang/String;)[Ljava/lang/String;",
+        p,
+        str_split,
+    );
     vm.add_native(
         id,
         "join",
@@ -505,13 +571,55 @@ fn install_string(vm: &mut Vm) -> VmResult<()> {
         access::PUBLIC | access::STATIC,
         str_join,
     );
-    vm.add_native(id, "valueOf", "(Ljava/lang/Object;)Ljava/lang/String;", access::PUBLIC | access::STATIC, str_value_of_object);
-    vm.add_native(id, "valueOf", "(C)Ljava/lang/String;", access::PUBLIC | access::STATIC, str_value_of_char);
-    vm.add_native(id, "valueOf", "(I)Ljava/lang/String;", access::PUBLIC | access::STATIC, str_value_of_int);
-    vm.add_native(id, "valueOf", "(J)Ljava/lang/String;", access::PUBLIC | access::STATIC, str_value_of_long);
-    vm.add_native(id, "valueOf", "(Z)Ljava/lang/String;", access::PUBLIC | access::STATIC, str_value_of_bool);
-    vm.add_native(id, "valueOf", "(D)Ljava/lang/String;", access::PUBLIC | access::STATIC, str_value_of_double);
-    vm.add_native(id, "valueOf", "(F)Ljava/lang/String;", access::PUBLIC | access::STATIC, str_value_of_float);
+    vm.add_native(
+        id,
+        "valueOf",
+        "(Ljava/lang/Object;)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        str_value_of_object,
+    );
+    vm.add_native(
+        id,
+        "valueOf",
+        "(C)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        str_value_of_char,
+    );
+    vm.add_native(
+        id,
+        "valueOf",
+        "(I)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        str_value_of_int,
+    );
+    vm.add_native(
+        id,
+        "valueOf",
+        "(J)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        str_value_of_long,
+    );
+    vm.add_native(
+        id,
+        "valueOf",
+        "(Z)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        str_value_of_bool,
+    );
+    vm.add_native(
+        id,
+        "valueOf",
+        "(D)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        str_value_of_double,
+    );
+    vm.add_native(
+        id,
+        "valueOf",
+        "(F)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        str_value_of_float,
+    );
     vm.link_class(id)?;
     Ok(())
 }
@@ -556,14 +664,22 @@ fn str_self(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn str_length(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
-    let n = if this == NULL { 0 } else { self_units(vm, this)?.len() as i32 };
+    let n = if this == NULL {
+        0
+    } else {
+        self_units(vm, this)?.len() as i32
+    };
     vm.ret_i32(ctx, n);
     Ok(())
 }
 
 fn str_is_empty(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
-    let n = if this == NULL { 0 } else { self_units(vm, this)?.len() };
+    let n = if this == NULL {
+        0
+    } else {
+        self_units(vm, this)?.len()
+    };
     vm.ret_bool(ctx, n == 0);
     Ok(())
 }
@@ -642,8 +758,12 @@ fn str_equals_ignore_case(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let b = self_units(vm, other)?.to_vec();
     let eq = a.len() == b.len()
         && a.iter().zip(b.iter()).all(|(x, y)| {
-            let cx = char::from_u32(*x as u32).map(|c| c.to_ascii_lowercase() as u16).unwrap_or(*x);
-            let cy = char::from_u32(*y as u32).map(|c| c.to_ascii_lowercase() as u16).unwrap_or(*y);
+            let cx = char::from_u32(*x as u32)
+                .map(|c| c.to_ascii_lowercase() as u16)
+                .unwrap_or(*x);
+            let cy = char::from_u32(*y as u32)
+                .map(|c| c.to_ascii_lowercase() as u16)
+                .unwrap_or(*y);
             cx == cy
         });
     vm.ret_bool(ctx, eq);
@@ -711,7 +831,11 @@ fn str_index_of_char(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let c = vm.arg_u16(ctx, 0);
     let units = self_units(vm, this)?.to_vec();
-    let pos = units.iter().position(|&x| x == c).map(|i| i as i32).unwrap_or(-1);
+    let pos = units
+        .iter()
+        .position(|&x| x == c)
+        .map(|i| i as i32)
+        .unwrap_or(-1);
     vm.ret_i32(ctx, pos);
     Ok(())
 }
@@ -729,7 +853,11 @@ fn str_last_index_of_char(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let c = vm.arg_u16(ctx, 0);
     let units = self_units(vm, this)?.to_vec();
-    let pos = units.iter().rposition(|&x| x == c).map(|i| i as i32).unwrap_or(-1);
+    let pos = units
+        .iter()
+        .rposition(|&x| x == c)
+        .map(|i| i as i32)
+        .unwrap_or(-1);
     vm.ret_i32(ctx, pos);
     Ok(())
 }
@@ -840,7 +968,10 @@ fn str_replace_char(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let from = vm.arg_u16(ctx, 0);
     let to = vm.arg_u16(ctx, 1);
     let units = self_units(vm, this)?.to_vec();
-    let out: Vec<u16> = units.into_iter().map(|c| if c == from { to } else { c }).collect();
+    let out: Vec<u16> = units
+        .into_iter()
+        .map(|c| if c == from { to } else { c })
+        .collect();
     let h = make_string(vm, out)?;
     vm.ret_ref(ctx, h);
     Ok(())
@@ -856,7 +987,10 @@ fn str_replace_seq(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < hay.len() {
-        if !from.is_empty() && i + from.len() <= hay.len() && &hay[i..i + from.len()] == from.as_slice() {
+        if !from.is_empty()
+            && i + from.len() <= hay.len()
+            && &hay[i..i + from.len()] == from.as_slice()
+        {
             out.extend_from_slice(&to);
             i += from.len();
         } else {
@@ -888,7 +1022,9 @@ fn str_split(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     // The fixture only uses a single literal comma; handle a one-char literal
     // separator generically for non-regex literals.
     let parts: Vec<String> = if pat.len() == 1 {
-        text.split(pat.chars().next().unwrap()).map(|s| s.to_string()).collect()
+        text.split(pat.chars().next().unwrap())
+            .map(|s| s.to_string())
+            .collect()
     } else {
         text.split(&pat).map(|s| s.to_string()).collect()
     };
@@ -1036,14 +1172,62 @@ fn install_string_builder(vm: &mut Vm) -> VmResult<()> {
     let p = access::PUBLIC;
     vm.add_native(id, "<init>", "()V", p, sb_init);
     vm.add_native(id, "<init>", "(Ljava/lang/String;)V", p, sb_init_str);
-    vm.add_native(id, "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", p, sb_append_str);
-    vm.add_native(id, "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", p, sb_append_obj);
-    vm.add_native(id, "append", "(C)Ljava/lang/StringBuilder;", p, sb_append_char);
-    vm.add_native(id, "append", "(I)Ljava/lang/StringBuilder;", p, sb_append_int);
-    vm.add_native(id, "append", "(J)Ljava/lang/StringBuilder;", p, sb_append_long);
-    vm.add_native(id, "append", "(Z)Ljava/lang/StringBuilder;", p, sb_append_bool);
-    vm.add_native(id, "append", "(F)Ljava/lang/StringBuilder;", p, sb_append_float);
-    vm.add_native(id, "append", "(D)Ljava/lang/StringBuilder;", p, sb_append_double);
+    vm.add_native(
+        id,
+        "append",
+        "(Ljava/lang/String;)Ljava/lang/StringBuilder;",
+        p,
+        sb_append_str,
+    );
+    vm.add_native(
+        id,
+        "append",
+        "(Ljava/lang/Object;)Ljava/lang/StringBuilder;",
+        p,
+        sb_append_obj,
+    );
+    vm.add_native(
+        id,
+        "append",
+        "(C)Ljava/lang/StringBuilder;",
+        p,
+        sb_append_char,
+    );
+    vm.add_native(
+        id,
+        "append",
+        "(I)Ljava/lang/StringBuilder;",
+        p,
+        sb_append_int,
+    );
+    vm.add_native(
+        id,
+        "append",
+        "(J)Ljava/lang/StringBuilder;",
+        p,
+        sb_append_long,
+    );
+    vm.add_native(
+        id,
+        "append",
+        "(Z)Ljava/lang/StringBuilder;",
+        p,
+        sb_append_bool,
+    );
+    vm.add_native(
+        id,
+        "append",
+        "(F)Ljava/lang/StringBuilder;",
+        p,
+        sb_append_float,
+    );
+    vm.add_native(
+        id,
+        "append",
+        "(D)Ljava/lang/StringBuilder;",
+        p,
+        sb_append_double,
+    );
     vm.add_native(id, "toString", "()Ljava/lang/String;", p, sb_to_string);
     vm.add_native(id, "length", "()I", p, sb_length);
     vm.add_native(id, "capacity", "()I", p, sb_capacity);
@@ -1135,7 +1319,11 @@ fn append_i64_utf16(buf: &mut Vec<u16>, v: i64) {
     }
     let neg = v < 0;
     // `i64::MIN` has no positive counterpart; work on the wrapped magnitude.
-    let mut u = if neg { (v as u64).wrapping_neg() } else { v as u64 };
+    let mut u = if neg {
+        (v as u64).wrapping_neg()
+    } else {
+        v as u64
+    };
     let mut tmp = [0u16; 20];
     let mut i = tmp.len();
     while u > 0 {
@@ -1397,8 +1585,18 @@ fn install_system(vm: &mut Vm) -> VmResult<()> {
         &[],
     )?;
     vm.c_system = id;
-    vm.add_static_field(id, "out", "Ljava/io/PrintStream;", access::PUBLIC | access::STATIC | access::FINAL);
-    vm.add_static_field(id, "err", "Ljava/io/PrintStream;", access::PUBLIC | access::STATIC | access::FINAL);
+    vm.add_static_field(
+        id,
+        "out",
+        "Ljava/io/PrintStream;",
+        access::PUBLIC | access::STATIC | access::FINAL,
+    );
+    vm.add_static_field(
+        id,
+        "err",
+        "Ljava/io/PrintStream;",
+        access::PUBLIC | access::STATIC | access::FINAL,
+    );
     let ps = vm.c_print_stream;
     let out = vm.alloc_instance(ps)?;
     vm.native_roots.push(out);
@@ -1415,12 +1613,30 @@ fn install_system(vm: &mut Vm) -> VmResult<()> {
     vm.classes[id as usize].static_refs[err_off] = true;
 
     let s = access::PUBLIC | access::STATIC;
-    vm.add_native(id, "arraycopy", "(Ljava/lang/Object;ILjava/lang/Object;II)V", s, sys_arraycopy);
+    vm.add_native(
+        id,
+        "arraycopy",
+        "(Ljava/lang/Object;ILjava/lang/Object;II)V",
+        s,
+        sys_arraycopy,
+    );
     vm.add_native(id, "currentTimeMillis", "()J", s, sys_current_time);
     vm.add_native(id, "nanoTime", "()J", s, sys_nano_time);
-    vm.add_native(id, "identityHashCode", "(Ljava/lang/Object;)I", s, sys_identity_hash);
+    vm.add_native(
+        id,
+        "identityHashCode",
+        "(Ljava/lang/Object;)I",
+        s,
+        sys_identity_hash,
+    );
     vm.add_native(id, "exit", "(I)V", s, sys_exit);
-    vm.add_native(id, "getProperty", "(Ljava/lang/String;)Ljava/lang/String;", s, sys_get_property);
+    vm.add_native(
+        id,
+        "getProperty",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+        s,
+        sys_get_property,
+    );
     vm.link_class(id)?;
     vm.native_roots.pop();
     vm.native_roots.pop();
@@ -1458,13 +1674,27 @@ fn sys_arraycopy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         match (&src_data, &mut b.data) {
             (ArrayData::Ref(s), ArrayData::Ref(d)) => d[dp..dp + n].copy_from_slice(&s[sp..sp + n]),
             (ArrayData::Int(s), ArrayData::Int(d)) => d[dp..dp + n].copy_from_slice(&s[sp..sp + n]),
-            (ArrayData::Byte(s), ArrayData::Byte(d)) => d[dp..dp + n].copy_from_slice(&s[sp..sp + n]),
-            (ArrayData::Char(s), ArrayData::Char(d)) => d[dp..dp + n].copy_from_slice(&s[sp..sp + n]),
-            (ArrayData::Short(s), ArrayData::Short(d)) => d[dp..dp + n].copy_from_slice(&s[sp..sp + n]),
-            (ArrayData::Long(s), ArrayData::Long(d)) => d[dp..dp + n].copy_from_slice(&s[sp..sp + n]),
-            (ArrayData::Float(s), ArrayData::Float(d)) => d[dp..dp + n].copy_from_slice(&s[sp..sp + n]),
-            (ArrayData::Double(s), ArrayData::Double(d)) => d[dp..dp + n].copy_from_slice(&s[sp..sp + n]),
-            (ArrayData::Bool(s), ArrayData::Bool(d)) => d[dp..dp + n].copy_from_slice(&s[sp..sp + n]),
+            (ArrayData::Byte(s), ArrayData::Byte(d)) => {
+                d[dp..dp + n].copy_from_slice(&s[sp..sp + n])
+            }
+            (ArrayData::Char(s), ArrayData::Char(d)) => {
+                d[dp..dp + n].copy_from_slice(&s[sp..sp + n])
+            }
+            (ArrayData::Short(s), ArrayData::Short(d)) => {
+                d[dp..dp + n].copy_from_slice(&s[sp..sp + n])
+            }
+            (ArrayData::Long(s), ArrayData::Long(d)) => {
+                d[dp..dp + n].copy_from_slice(&s[sp..sp + n])
+            }
+            (ArrayData::Float(s), ArrayData::Float(d)) => {
+                d[dp..dp + n].copy_from_slice(&s[sp..sp + n])
+            }
+            (ArrayData::Double(s), ArrayData::Double(d)) => {
+                d[dp..dp + n].copy_from_slice(&s[sp..sp + n])
+            }
+            (ArrayData::Bool(s), ArrayData::Bool(d)) => {
+                d[dp..dp + n].copy_from_slice(&s[sp..sp + n])
+            }
             _ => return Err(vm.throw_new("Ljava/lang/ArrayStoreException;", None)),
         }
     }
@@ -1535,13 +1765,7 @@ fn install_throwables(vm: &mut Vm) -> VmResult<()> {
     let p = access::PUBLIC;
     vm.add_native(id, "<init>", "()V", p, thr_init_empty);
     vm.add_native(id, "<init>", "(Ljava/lang/String;)V", p, thr_init_msg);
-    vm.add_native(
-        id,
-        "getMessage",
-        "()Ljava/lang/String;",
-        p,
-        thr_get_message,
-    );
+    vm.add_native(id, "getMessage", "()Ljava/lang/String;", p, thr_get_message);
     vm.add_native(
         id,
         "getLocalizedMessage",
@@ -1549,27 +1773,9 @@ fn install_throwables(vm: &mut Vm) -> VmResult<()> {
         p,
         thr_get_message,
     );
-    vm.add_native(
-        id,
-        "toString",
-        "()Ljava/lang/String;",
-        p,
-        thr_to_string,
-    );
-    vm.add_native(
-        id,
-        "getCause",
-        "()Ljava/lang/Throwable;",
-        p,
-        thr_get_cause,
-    );
-    vm.add_native(
-        id,
-        "printStackTrace",
-        "()V",
-        p,
-        thr_print_stack_trace,
-    );
+    vm.add_native(id, "toString", "()Ljava/lang/String;", p, thr_to_string);
+    vm.add_native(id, "getCause", "()Ljava/lang/Throwable;", p, thr_get_cause);
+    vm.add_native(id, "printStackTrace", "()V", p, thr_print_stack_trace);
     vm.link_class(id)?;
 
     let err = vm.def_class("Ljava/lang/Error;", p, Some("Ljava/lang/Throwable;"), &[])?;
@@ -1598,11 +1804,26 @@ fn install_throwables(vm: &mut Vm) -> VmResult<()> {
     )?;
     vm.link_class(link)?;
     for (desc, super_desc) in [
-        ("Ljava/lang/OutOfMemoryError;", "Ljava/lang/VirtualMachineError;"),
-        ("Ljava/lang/StackOverflowError;", "Ljava/lang/VirtualMachineError;"),
-        ("Ljava/lang/AbstractMethodError;", "Ljava/lang/IncompatibleClassChangeError;"),
-        ("Ljava/lang/NoClassDefFoundError;", "Ljava/lang/LinkageError;"),
-        ("Ljava/lang/ExceptionInInitializerError;", "Ljava/lang/LinkageError;"),
+        (
+            "Ljava/lang/OutOfMemoryError;",
+            "Ljava/lang/VirtualMachineError;",
+        ),
+        (
+            "Ljava/lang/StackOverflowError;",
+            "Ljava/lang/VirtualMachineError;",
+        ),
+        (
+            "Ljava/lang/AbstractMethodError;",
+            "Ljava/lang/IncompatibleClassChangeError;",
+        ),
+        (
+            "Ljava/lang/NoClassDefFoundError;",
+            "Ljava/lang/LinkageError;",
+        ),
+        (
+            "Ljava/lang/ExceptionInInitializerError;",
+            "Ljava/lang/LinkageError;",
+        ),
     ] {
         // define intermediate classes lazily
         let _ = super_desc;
@@ -1637,7 +1858,8 @@ fn install_throwables(vm: &mut Vm) -> VmResult<()> {
         vm.link_class(c)?;
     }
     // Pre-create fatal exceptions so throwing them never allocates.
-    vm.oom_object = vm.new_throwable("Ljava/lang/OutOfMemoryError;", Some("heap limit exceeded"))?;
+    vm.oom_object =
+        vm.new_throwable("Ljava/lang/OutOfMemoryError;", Some("heap limit exceeded"))?;
     vm.stack_overflow_object =
         vm.new_throwable("Ljava/lang/StackOverflowError;", Some("stack overflow"))?;
     vm.native_roots.push(vm.oom_object);
@@ -1797,24 +2019,132 @@ fn install_boxes(vm: &mut Vm) -> VmResult<()> {
         p,
         int_compare_to_obj,
     );
-    vm.add_native(int, "toString", "()Ljava/lang/String;", p, int_to_string_inst);
-    vm.add_native(int, "valueOf", "(I)Ljava/lang/Integer;", access::PUBLIC | access::STATIC, int_value_of);
-    vm.add_native(int, "parseInt", "(Ljava/lang/String;)I", access::PUBLIC | access::STATIC, int_parse);
-    vm.add_native(int, "parseInt", "(Ljava/lang/String;I)I", access::PUBLIC | access::STATIC, int_parse_radix);
-    vm.add_native(int, "toString", "(I)Ljava/lang/String;", access::PUBLIC | access::STATIC, int_to_string_static);
-    vm.add_native(int, "toString", "(II)Ljava/lang/String;", access::PUBLIC | access::STATIC, int_to_string_radix);
-    vm.add_native(int, "toHexString", "(I)Ljava/lang/String;", access::PUBLIC | access::STATIC, int_to_hex);
-    vm.add_native(int, "toOctalString", "(I)Ljava/lang/String;", access::PUBLIC | access::STATIC, int_to_octal);
-    vm.add_native(int, "toBinaryString", "(I)Ljava/lang/String;", access::PUBLIC | access::STATIC, int_to_binary);
-    vm.add_native(int, "bitCount", "(I)I", access::PUBLIC | access::STATIC, int_bit_count);
-    vm.add_native(int, "numberOfLeadingZeros", "(I)I", access::PUBLIC | access::STATIC, int_nlz);
-    vm.add_native(int, "numberOfTrailingZeros", "(I)I", access::PUBLIC | access::STATIC, int_ntz);
-    vm.add_native(int, "highestOneBit", "(I)I", access::PUBLIC | access::STATIC, int_highest_one);
-    vm.add_native(int, "lowestOneBit", "(I)I", access::PUBLIC | access::STATIC, int_lowest_one);
-    vm.add_native(int, "signum", "(I)I", access::PUBLIC | access::STATIC, int_signum);
-    vm.add_native(int, "rotateLeft", "(II)I", access::PUBLIC | access::STATIC, int_rotate_left);
-    vm.add_native(int, "rotateRight", "(II)I", access::PUBLIC | access::STATIC, int_rotate_right);
-    vm.add_native(int, "compare", "(II)I", access::PUBLIC | access::STATIC, int_compare_static);
+    vm.add_native(
+        int,
+        "toString",
+        "()Ljava/lang/String;",
+        p,
+        int_to_string_inst,
+    );
+    vm.add_native(
+        int,
+        "valueOf",
+        "(I)Ljava/lang/Integer;",
+        access::PUBLIC | access::STATIC,
+        int_value_of,
+    );
+    vm.add_native(
+        int,
+        "parseInt",
+        "(Ljava/lang/String;)I",
+        access::PUBLIC | access::STATIC,
+        int_parse,
+    );
+    vm.add_native(
+        int,
+        "parseInt",
+        "(Ljava/lang/String;I)I",
+        access::PUBLIC | access::STATIC,
+        int_parse_radix,
+    );
+    vm.add_native(
+        int,
+        "toString",
+        "(I)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        int_to_string_static,
+    );
+    vm.add_native(
+        int,
+        "toString",
+        "(II)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        int_to_string_radix,
+    );
+    vm.add_native(
+        int,
+        "toHexString",
+        "(I)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        int_to_hex,
+    );
+    vm.add_native(
+        int,
+        "toOctalString",
+        "(I)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        int_to_octal,
+    );
+    vm.add_native(
+        int,
+        "toBinaryString",
+        "(I)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        int_to_binary,
+    );
+    vm.add_native(
+        int,
+        "bitCount",
+        "(I)I",
+        access::PUBLIC | access::STATIC,
+        int_bit_count,
+    );
+    vm.add_native(
+        int,
+        "numberOfLeadingZeros",
+        "(I)I",
+        access::PUBLIC | access::STATIC,
+        int_nlz,
+    );
+    vm.add_native(
+        int,
+        "numberOfTrailingZeros",
+        "(I)I",
+        access::PUBLIC | access::STATIC,
+        int_ntz,
+    );
+    vm.add_native(
+        int,
+        "highestOneBit",
+        "(I)I",
+        access::PUBLIC | access::STATIC,
+        int_highest_one,
+    );
+    vm.add_native(
+        int,
+        "lowestOneBit",
+        "(I)I",
+        access::PUBLIC | access::STATIC,
+        int_lowest_one,
+    );
+    vm.add_native(
+        int,
+        "signum",
+        "(I)I",
+        access::PUBLIC | access::STATIC,
+        int_signum,
+    );
+    vm.add_native(
+        int,
+        "rotateLeft",
+        "(II)I",
+        access::PUBLIC | access::STATIC,
+        int_rotate_left,
+    );
+    vm.add_native(
+        int,
+        "rotateRight",
+        "(II)I",
+        access::PUBLIC | access::STATIC,
+        int_rotate_right,
+    );
+    vm.add_native(
+        int,
+        "compare",
+        "(II)I",
+        access::PUBLIC | access::STATIC,
+        int_compare_static,
+    );
     vm.link_class(int)?;
 
     // Long
@@ -1832,13 +2162,7 @@ fn install_boxes(vm: &mut Vm) -> VmResult<()> {
     vm.add_native(long, "doubleValue", "()D", p, long_double_value);
     vm.add_native(long, "equals", "(Ljava/lang/Object;)Z", p, long_equals);
     vm.add_native(long, "hashCode", "()I", p, long_hash);
-    vm.add_native(
-        long,
-        "compareTo",
-        "(Ljava/lang/Long;)I",
-        p,
-        long_compare_to,
-    );
+    vm.add_native(long, "compareTo", "(Ljava/lang/Long;)I", p, long_compare_to);
     vm.add_native(
         long,
         "compareTo",
@@ -1846,21 +2170,111 @@ fn install_boxes(vm: &mut Vm) -> VmResult<()> {
         p,
         long_compare_to_obj,
     );
-    vm.add_native(long, "toString", "()Ljava/lang/String;", p, long_to_string_inst);
-    vm.add_native(long, "valueOf", "(J)Ljava/lang/Long;", access::PUBLIC | access::STATIC, long_value_of);
-    vm.add_native(long, "parseLong", "(Ljava/lang/String;)J", access::PUBLIC | access::STATIC, long_parse);
-    vm.add_native(long, "toString", "(J)Ljava/lang/String;", access::PUBLIC | access::STATIC, long_to_string_static);
-    vm.add_native(long, "toString", "(JI)Ljava/lang/String;", access::PUBLIC | access::STATIC, long_to_string_radix);
-    vm.add_native(long, "toHexString", "(J)Ljava/lang/String;", access::PUBLIC | access::STATIC, long_to_hex);
-    vm.add_native(long, "toOctalString", "(J)Ljava/lang/String;", access::PUBLIC | access::STATIC, long_to_octal);
-    vm.add_native(long, "toBinaryString", "(J)Ljava/lang/String;", access::PUBLIC | access::STATIC, long_to_binary);
-    vm.add_native(long, "bitCount", "(J)I", access::PUBLIC | access::STATIC, long_bit_count);
-    vm.add_native(long, "highestOneBit", "(J)J", access::PUBLIC | access::STATIC, long_highest_one);
-    vm.add_native(long, "lowestOneBit", "(J)J", access::PUBLIC | access::STATIC, long_lowest_one);
-    vm.add_native(long, "signum", "(J)I", access::PUBLIC | access::STATIC, long_signum);
-    vm.add_native(long, "rotateLeft", "(JI)J", access::PUBLIC | access::STATIC, long_rotate_left);
-    vm.add_native(long, "rotateRight", "(JI)J", access::PUBLIC | access::STATIC, long_rotate_right);
-    vm.add_native(long, "compare", "(JJ)I", access::PUBLIC | access::STATIC, long_compare_static);
+    vm.add_native(
+        long,
+        "toString",
+        "()Ljava/lang/String;",
+        p,
+        long_to_string_inst,
+    );
+    vm.add_native(
+        long,
+        "valueOf",
+        "(J)Ljava/lang/Long;",
+        access::PUBLIC | access::STATIC,
+        long_value_of,
+    );
+    vm.add_native(
+        long,
+        "parseLong",
+        "(Ljava/lang/String;)J",
+        access::PUBLIC | access::STATIC,
+        long_parse,
+    );
+    vm.add_native(
+        long,
+        "toString",
+        "(J)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        long_to_string_static,
+    );
+    vm.add_native(
+        long,
+        "toString",
+        "(JI)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        long_to_string_radix,
+    );
+    vm.add_native(
+        long,
+        "toHexString",
+        "(J)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        long_to_hex,
+    );
+    vm.add_native(
+        long,
+        "toOctalString",
+        "(J)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        long_to_octal,
+    );
+    vm.add_native(
+        long,
+        "toBinaryString",
+        "(J)Ljava/lang/String;",
+        access::PUBLIC | access::STATIC,
+        long_to_binary,
+    );
+    vm.add_native(
+        long,
+        "bitCount",
+        "(J)I",
+        access::PUBLIC | access::STATIC,
+        long_bit_count,
+    );
+    vm.add_native(
+        long,
+        "highestOneBit",
+        "(J)J",
+        access::PUBLIC | access::STATIC,
+        long_highest_one,
+    );
+    vm.add_native(
+        long,
+        "lowestOneBit",
+        "(J)J",
+        access::PUBLIC | access::STATIC,
+        long_lowest_one,
+    );
+    vm.add_native(
+        long,
+        "signum",
+        "(J)I",
+        access::PUBLIC | access::STATIC,
+        long_signum,
+    );
+    vm.add_native(
+        long,
+        "rotateLeft",
+        "(JI)J",
+        access::PUBLIC | access::STATIC,
+        long_rotate_left,
+    );
+    vm.add_native(
+        long,
+        "rotateRight",
+        "(JI)J",
+        access::PUBLIC | access::STATIC,
+        long_rotate_right,
+    );
+    vm.add_native(
+        long,
+        "compare",
+        "(JJ)I",
+        access::PUBLIC | access::STATIC,
+        long_compare_static,
+    );
     vm.link_class(long)?;
 
     // Character
@@ -1873,19 +2287,97 @@ fn install_boxes(vm: &mut Vm) -> VmResult<()> {
     vm.add_instance_field(ch, "value", "C", access::PRIVATE | access::FINAL);
     vm.add_native(ch, "<init>", "(C)V", p, char_init);
     vm.add_native(ch, "charValue", "()C", p, char_value);
-    vm.add_native(ch, "isDigit", "(C)Z", access::PUBLIC | access::STATIC, char_is_digit);
-    vm.add_native(ch, "isLetter", "(C)Z", access::PUBLIC | access::STATIC, char_is_letter);
-    vm.add_native(ch, "isWhitespace", "(C)Z", access::PUBLIC | access::STATIC, char_is_ws);
-    vm.add_native(ch, "isUpperCase", "(C)Z", access::PUBLIC | access::STATIC, char_is_upper);
-    vm.add_native(ch, "isLowerCase", "(C)Z", access::PUBLIC | access::STATIC, char_is_lower);
-    vm.add_native(ch, "toUpperCase", "(C)C", access::PUBLIC | access::STATIC, char_to_upper);
-    vm.add_native(ch, "toLowerCase", "(C)C", access::PUBLIC | access::STATIC, char_to_lower);
-    vm.add_native(ch, "getNumericValue", "(C)I", access::PUBLIC | access::STATIC, char_numeric);
-    vm.add_native(ch, "digit", "(CI)I", access::PUBLIC | access::STATIC, char_digit);
-    vm.add_native(ch, "forDigit", "(II)C", access::PUBLIC | access::STATIC, char_for_digit);
-    vm.add_native(ch, "hashCode", "(C)I", access::PUBLIC | access::STATIC, char_hash_static);
-    vm.add_native(ch, "compare", "(CC)I", access::PUBLIC | access::STATIC, char_compare);
-    vm.add_native(ch, "valueOf", "(C)Ljava/lang/Character;", access::PUBLIC | access::STATIC, char_value_of);
+    vm.add_native(
+        ch,
+        "isDigit",
+        "(C)Z",
+        access::PUBLIC | access::STATIC,
+        char_is_digit,
+    );
+    vm.add_native(
+        ch,
+        "isLetter",
+        "(C)Z",
+        access::PUBLIC | access::STATIC,
+        char_is_letter,
+    );
+    vm.add_native(
+        ch,
+        "isWhitespace",
+        "(C)Z",
+        access::PUBLIC | access::STATIC,
+        char_is_ws,
+    );
+    vm.add_native(
+        ch,
+        "isUpperCase",
+        "(C)Z",
+        access::PUBLIC | access::STATIC,
+        char_is_upper,
+    );
+    vm.add_native(
+        ch,
+        "isLowerCase",
+        "(C)Z",
+        access::PUBLIC | access::STATIC,
+        char_is_lower,
+    );
+    vm.add_native(
+        ch,
+        "toUpperCase",
+        "(C)C",
+        access::PUBLIC | access::STATIC,
+        char_to_upper,
+    );
+    vm.add_native(
+        ch,
+        "toLowerCase",
+        "(C)C",
+        access::PUBLIC | access::STATIC,
+        char_to_lower,
+    );
+    vm.add_native(
+        ch,
+        "getNumericValue",
+        "(C)I",
+        access::PUBLIC | access::STATIC,
+        char_numeric,
+    );
+    vm.add_native(
+        ch,
+        "digit",
+        "(CI)I",
+        access::PUBLIC | access::STATIC,
+        char_digit,
+    );
+    vm.add_native(
+        ch,
+        "forDigit",
+        "(II)C",
+        access::PUBLIC | access::STATIC,
+        char_for_digit,
+    );
+    vm.add_native(
+        ch,
+        "hashCode",
+        "(C)I",
+        access::PUBLIC | access::STATIC,
+        char_hash_static,
+    );
+    vm.add_native(
+        ch,
+        "compare",
+        "(CC)I",
+        access::PUBLIC | access::STATIC,
+        char_compare,
+    );
+    vm.add_native(
+        ch,
+        "valueOf",
+        "(C)Ljava/lang/Character;",
+        access::PUBLIC | access::STATIC,
+        char_value_of,
+    );
     vm.link_class(ch)?;
 
     // Boolean
@@ -1898,8 +2390,20 @@ fn install_boxes(vm: &mut Vm) -> VmResult<()> {
     vm.add_instance_field(boolean, "value", "Z", access::PRIVATE | access::FINAL);
     vm.add_native(boolean, "<init>", "(Z)V", p, bool_init);
     vm.add_native(boolean, "booleanValue", "()Z", p, bool_value);
-    vm.add_native(boolean, "valueOf", "(Z)Ljava/lang/Boolean;", access::PUBLIC | access::STATIC, bool_value_of);
-    vm.add_native(boolean, "toString", "()Ljava/lang/String;", p, bool_to_string);
+    vm.add_native(
+        boolean,
+        "valueOf",
+        "(Z)Ljava/lang/Boolean;",
+        access::PUBLIC | access::STATIC,
+        bool_value_of,
+    );
+    vm.add_native(
+        boolean,
+        "toString",
+        "()Ljava/lang/String;",
+        p,
+        bool_to_string,
+    );
     vm.add_native(boolean, "equals", "(Ljava/lang/Object;)Z", p, bool_equals);
     vm.link_class(boolean)?;
 
@@ -1913,8 +2417,20 @@ fn install_boxes(vm: &mut Vm) -> VmResult<()> {
     vm.add_instance_field(float, "value", "F", access::PRIVATE | access::FINAL);
     vm.add_native(float, "<init>", "(F)V", p, float_init);
     vm.add_native(float, "floatValue", "()F", p, float_value);
-    vm.add_native(float, "valueOf", "(F)Ljava/lang/Float;", access::PUBLIC | access::STATIC, float_value_of);
-    vm.add_native(float, "toString", "()Ljava/lang/String;", p, float_to_string_inst);
+    vm.add_native(
+        float,
+        "valueOf",
+        "(F)Ljava/lang/Float;",
+        access::PUBLIC | access::STATIC,
+        float_value_of,
+    );
+    vm.add_native(
+        float,
+        "toString",
+        "()Ljava/lang/String;",
+        p,
+        float_to_string_inst,
+    );
     vm.link_class(float)?;
     let double = vm.def_class(
         "Ljava/lang/Double;",
@@ -1925,8 +2441,20 @@ fn install_boxes(vm: &mut Vm) -> VmResult<()> {
     vm.add_instance_field(double, "value", "D", access::PRIVATE | access::FINAL);
     vm.add_native(double, "<init>", "(D)V", p, double_init);
     vm.add_native(double, "doubleValue", "()D", p, double_value);
-    vm.add_native(double, "valueOf", "(D)Ljava/lang/Double;", access::PUBLIC | access::STATIC, double_value_of);
-    vm.add_native(double, "toString", "()Ljava/lang/String;", p, double_to_string_inst);
+    vm.add_native(
+        double,
+        "valueOf",
+        "(D)Ljava/lang/Double;",
+        access::PUBLIC | access::STATIC,
+        double_value_of,
+    );
+    vm.add_native(
+        double,
+        "toString",
+        "()Ljava/lang/String;",
+        p,
+        double_to_string_inst,
+    );
     vm.link_class(double)?;
     set_type_field(vm, "Ljava/lang/Integer;", "I")?;
     set_type_field(vm, "Ljava/lang/Long;", "J")?;
@@ -2079,7 +2607,14 @@ fn int_ntz(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 fn int_highest_one(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let v = vm.arg_i32(ctx, 0);
-    vm.ret_i32(ctx, if v == 0 { 0 } else { 1i32 << (31 - v.leading_zeros()) });
+    vm.ret_i32(
+        ctx,
+        if v == 0 {
+            0
+        } else {
+            1i32 << (31 - v.leading_zeros())
+        },
+    );
     Ok(())
 }
 fn int_lowest_one(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -2252,7 +2787,14 @@ fn long_bit_count(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 fn long_highest_one(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let v = vm.arg_i64(ctx, 0);
-    vm.ret_i64(ctx, if v == 0 { 0 } else { 1i64 << (63 - v.leading_zeros()) });
+    vm.ret_i64(
+        ctx,
+        if v == 0 {
+            0
+        } else {
+            1i64 << (63 - v.leading_zeros())
+        },
+    );
     Ok(())
 }
 fn long_lowest_one(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -2297,27 +2839,52 @@ fn char_value(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 fn char_is_digit(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let c = vm.arg_u16(ctx, 0);
-    vm.ret_bool(ctx, char::from_u32(c as u32).map(|c| c.is_ascii_digit()).unwrap_or(false));
+    vm.ret_bool(
+        ctx,
+        char::from_u32(c as u32)
+            .map(|c| c.is_ascii_digit())
+            .unwrap_or(false),
+    );
     Ok(())
 }
 fn char_is_letter(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let c = vm.arg_u16(ctx, 0);
-    vm.ret_bool(ctx, char::from_u32(c as u32).map(|c| c.is_alphabetic()).unwrap_or(false));
+    vm.ret_bool(
+        ctx,
+        char::from_u32(c as u32)
+            .map(|c| c.is_alphabetic())
+            .unwrap_or(false),
+    );
     Ok(())
 }
 fn char_is_ws(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let c = vm.arg_u16(ctx, 0);
-    vm.ret_bool(ctx, char::from_u32(c as u32).map(|c| c.is_whitespace()).unwrap_or(false));
+    vm.ret_bool(
+        ctx,
+        char::from_u32(c as u32)
+            .map(|c| c.is_whitespace())
+            .unwrap_or(false),
+    );
     Ok(())
 }
 fn char_is_upper(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let c = vm.arg_u16(ctx, 0);
-    vm.ret_bool(ctx, char::from_u32(c as u32).map(|c| c.is_uppercase()).unwrap_or(false));
+    vm.ret_bool(
+        ctx,
+        char::from_u32(c as u32)
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false),
+    );
     Ok(())
 }
 fn char_is_lower(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let c = vm.arg_u16(ctx, 0);
-    vm.ret_bool(ctx, char::from_u32(c as u32).map(|c| c.is_lowercase()).unwrap_or(false));
+    vm.ret_bool(
+        ctx,
+        char::from_u32(c as u32)
+            .map(|c| c.is_lowercase())
+            .unwrap_or(false),
+    );
     Ok(())
 }
 fn char_to_upper(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -2364,7 +2931,10 @@ fn char_for_digit(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let c = if d < 0 || d >= radix as i32 || radix > 36 {
         0
     } else {
-        crate::format::u32_to_radix(d as u32, radix).chars().next().unwrap_or('0') as u16
+        crate::format::u32_to_radix(d as u32, radix)
+            .chars()
+            .next()
+            .unwrap_or('0') as u16
     };
     vm.ret_u16(ctx, c);
     Ok(())
@@ -2424,7 +2994,10 @@ fn bool_equals(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let o = vm.arg_ref(ctx, 0);
     let a = thr_get_field(vm, this, "value") != 0;
     let b = o != NULL && thr_get_field(vm, o, "value") != 0;
-    vm.ret_bool(ctx, a == b && vm.class_of_object(o) == vm.class_of_object(this));
+    vm.ret_bool(
+        ctx,
+        a == b && vm.class_of_object(o) == vm.class_of_object(this),
+    );
     Ok(())
 }
 fn float_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {

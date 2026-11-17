@@ -384,8 +384,9 @@ impl SenderTable {
                     .position(|record| record.as_ref().map(|r| r.cancelled).unwrap_or(true))
             })
             .ok_or_else(|| ServiceError::ResourceLimit {
-                what: "pending-intent senders (every IIntentSender node is in use; cancel one first)"
-                    .into(),
+                what:
+                    "pending-intent senders (every IIntentSender node is in use; cancel one first)"
+                        .into(),
                 limit: self.nodes.len(),
             })?;
         self.records[slot] = Some(PendingIntentRecord {
@@ -408,7 +409,10 @@ impl SenderTable {
     /// (it is a pool slot) and refuses further sends, which is what a
     /// cancelled `PendingIntentRecord` does.
     pub fn cancel(&mut self, binder: u64) -> bool {
-        match self.slot_of(binder).and_then(|slot| self.records[slot].as_mut()) {
+        match self
+            .slot_of(binder)
+            .and_then(|slot| self.records[slot].as_mut())
+        {
             Some(record) if !record.cancelled => {
                 record.cancelled = true;
                 true
@@ -688,7 +692,10 @@ mod tests {
         let mut table = table();
         let intent = activity("dev.acos.fixtures.notif", "MainActivity");
         let mut extras = Bundle::new();
-        extras.put("android.title", crate::value::Value::Str(Some("first".into())));
+        extras.put(
+            "android.title",
+            crate::value::Value::Str(Some("first".into())),
+        );
         let binder = table
             .get_intent_sender(
                 TYPE_ACTIVITY,
@@ -705,7 +712,10 @@ mod tests {
         // binder, and replaces the stored extras (`PendingIntentRecord.
         // replaceExtras`).
         let mut other = Bundle::new();
-        other.put("android.title", crate::value::Value::Str(Some("second".into())));
+        other.put(
+            "android.title",
+            crate::value::Value::Str(Some("second".into())),
+        );
         let same = table
             .get_intent_sender(
                 TYPE_ACTIVITY,
@@ -777,7 +787,10 @@ mod tests {
         let record = table.record(binder).expect("record");
         assert!(record.cancelled, "FLAG_ONE_SHOT cancels after one send");
         assert_eq!(record.sends.len(), 1);
-        assert!(!table.cancel(binder), "an already-cancelled record is not cancelled twice");
+        assert!(
+            !table.cancel(binder),
+            "an already-cancelled record is not cancelled twice"
+        );
     }
 
     #[test]
@@ -868,8 +881,8 @@ mod tests {
     #[test]
     fn a_fill_in_on_a_mutable_sender_is_merged_and_delivered() {
         let (mut node, binder) = sender_node(FLAG_MUTABLE);
-        let fill_in = IntentFacts::action("fill.action")
-            .with_string_extra("location", "37.4220,-122.0841");
+        let fill_in =
+            IntentFacts::action("fill.action").with_string_extra("location", "37.4220,-122.0841");
         let mut data = send_request(0, Some(&fill_in));
         let mut reply = acos_parcel::Parcel::new();
         node.raw_transact(DESCRIPTOR, TRANSACTION_SEND, &mut data, &mut reply)
@@ -878,7 +891,10 @@ mod tests {
         let record = state.ams.intent_senders.record(binder).expect("record");
         assert_eq!(record.sends.len(), 1, "the send is recorded once");
         let evidence = &record.sends[0];
-        assert!(!evidence.fill_in_ignored, "a mutable sender never ignores it");
+        assert!(
+            !evidence.fill_in_ignored,
+            "a mutable sender never ignores it"
+        );
         assert_eq!(evidence.fill_in_changes, crate::fill_in::FILL_IN_ACTION);
         assert_eq!(
             evidence.intent.action.as_deref(),
@@ -915,10 +931,16 @@ mod tests {
         let record = state.ams.intent_senders.record(binder).expect("record");
         assert_eq!(record.sends.len(), 1);
         let evidence = &record.sends[0];
-        assert!(evidence.fill_in_ignored, "the fill-in is named on the evidence");
+        assert!(
+            evidence.fill_in_ignored,
+            "the fill-in is named on the evidence"
+        );
         assert_eq!(evidence.fill_in_changes, 0, "nothing was merged");
         assert_eq!(evidence.code, 0);
-        assert_eq!(evidence.intent.action, None, "the stored intent was delivered");
+        assert_eq!(
+            evidence.intent.action, None,
+            "the stored intent was delivered"
+        );
         assert!(evidence.intent.extras.is_empty());
     }
 

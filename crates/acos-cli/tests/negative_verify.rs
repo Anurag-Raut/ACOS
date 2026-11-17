@@ -247,11 +247,7 @@ fn broken_fixtures_never_false_pass() {
                 );
             }
             "unsupported" => {
-                assert_eq!(
-                    code, "UNSUPPORTED_NATIVE_SYMBOL",
-                    "{}: {failure}",
-                    case.apk
-                );
+                assert_eq!(code, "UNSUPPORTED_NATIVE_SYMBOL", "{}: {failure}", case.apk);
                 assert!(
                     failure["message"]
                         .as_str()

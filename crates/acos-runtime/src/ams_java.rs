@@ -218,7 +218,11 @@ impl Arg {
     }
 }
 
-fn decode_args(vm: &mut Vm, method: &acos_aidl::MethodInfo, data: &mut Parcel) -> JResult<Vec<Arg>> {
+fn decode_args(
+    vm: &mut Vm,
+    method: &acos_aidl::MethodInfo,
+    data: &mut Parcel,
+) -> JResult<Vec<Arg>> {
     let mut out = Vec::with_capacity(method.args.len());
     for op in &method.args {
         let arg = match op {
@@ -326,12 +330,7 @@ fn intent_facts(vm: &mut Vm, intent: Handle) -> JResult<IntentFacts> {
     };
 
     let categories = match vm
-        .call_method(
-            intent,
-            "getCategories",
-            "()Ljava/util/Set;",
-            &[],
-        )
+        .call_method(intent, "getCategories", "()Ljava/util/Set;", &[])
         .map_err(err)?
     {
         JavaValue::Object(h) if h != NULL => string_set(vm, h)?,
@@ -356,12 +355,7 @@ fn intent_facts(vm: &mut Vm, intent: Handle) -> JResult<IntentFacts> {
         _ => 0,
     };
     let source_bounds = match vm
-        .call_method(
-            intent,
-            "getSourceBounds",
-            "()Landroid/graphics/Rect;",
-            &[],
-        )
+        .call_method(intent, "getSourceBounds", "()Landroid/graphics/Rect;", &[])
         .map_err(err)?
     {
         JavaValue::Object(h) if h != NULL => {
@@ -381,12 +375,7 @@ fn intent_facts(vm: &mut Vm, intent: Handle) -> JResult<IntentFacts> {
         _ => None,
     };
     let selector = match vm
-        .call_method(
-            intent,
-            "getSelector",
-            "()Landroid/content/Intent;",
-            &[],
-        )
+        .call_method(intent, "getSelector", "()Landroid/content/Intent;", &[])
         .map_err(err)?
     {
         JavaValue::Object(h) if h != NULL => Some(Box::new(intent_facts(vm, h)?)),
@@ -410,8 +399,11 @@ fn intent_facts(vm: &mut Vm, intent: Handle) -> JResult<IntentFacts> {
     Ok(IntentFacts {
         action,
         data,
+
         type_,
         identifier,
+        // MPROC1: the capture target records the flags too; the Rust VM path
+        // reads them from the real Intent object, never infers them.
         flags,
         package,
         component,
@@ -459,7 +451,10 @@ fn string_set(vm: &mut Vm, set: Handle) -> JResult<Vec<String>> {
 
 /// Reduce a real `Bundle` to the `IntentFacts` extra map. A value type other
 /// than `String`/`int`/`boolean` is a structured error (never a silent drop).
-fn bundle_extras(vm: &mut Vm, bundle: Handle) -> JResult<std::collections::BTreeMap<String, Extra>> {
+fn bundle_extras(
+    vm: &mut Vm,
+    bundle: Handle,
+) -> JResult<std::collections::BTreeMap<String, Extra>> {
     let key_set = match vm
         .call_method(bundle, "keySet", "()Ljava/util/Set;", &[])
         .map_err(err)?
@@ -496,21 +491,22 @@ fn bundle_extras(vm: &mut Vm, bundle: Handle) -> JResult<std::collections::BTree
                         .map_err(err)?
                     {
                         JavaValue::Int(v) => Extra::Int(v),
-                        other => return Err(err(format!("Integer.intValue returned {}", other.kind()))),
-                    },
-                    "java.lang.Boolean" => match vm
-                        .call_method(h, "booleanValue", "()Z", &[])
-                        .map_err(err)?
-                    {
-                        JavaValue::Boolean(v) => Extra::Bool(v),
-                        JavaValue::Int(v) => Extra::Bool(v != 0),
                         other => {
-                            return Err(err(format!(
-                                "Boolean.booleanValue returned {}",
-                                other.kind()
-                            )))
+                            return Err(err(format!("Integer.intValue returned {}", other.kind())))
                         }
                     },
+                    "java.lang.Boolean" => {
+                        match vm.call_method(h, "booleanValue", "()Z", &[]).map_err(err)? {
+                            JavaValue::Boolean(v) => Extra::Bool(v),
+                            JavaValue::Int(v) => Extra::Bool(v != 0),
+                            other => {
+                                return Err(err(format!(
+                                    "Boolean.booleanValue returned {}",
+                                    other.kind()
+                                )))
+                            }
+                        }
+                    }
                     "java.lang.String[]" => {
                         let len = match vm.call_method(h, "length", "()I", &[]).map_err(err)? {
                             JavaValue::Int(v) => v,
@@ -524,9 +520,12 @@ fn bundle_extras(vm: &mut Vm, bundle: Handle) -> JResult<std::collections::BTree
                         let mut items = Vec::new();
                         for index in 0..len.max(0) {
                             let item = vm
-                                .call_method(h, "get", "(I)Ljava/lang/Object;", &[
-                                    JavaValue::Int(index),
-                                ])
+                                .call_method(
+                                    h,
+                                    "get",
+                                    "(I)Ljava/lang/Object;",
+                                    &[JavaValue::Int(index)],
+                                )
                                 .map_err(err)?;
                             match item {
                                 JavaValue::Object(item) if item != NULL => {
@@ -561,12 +560,7 @@ fn intent_filter(vm: &mut Vm, filter: Handle) -> JResult<(Vec<String>, Vec<Strin
     Ok((actions, categories))
 }
 
-fn counted_strings(
-    vm: &mut Vm,
-    obj: Handle,
-    count: &str,
-    get: &str,
-) -> JResult<Vec<String>> {
+fn counted_strings(vm: &mut Vm, obj: Handle, count: &str, get: &str) -> JResult<Vec<String>> {
     let n = match vm.call_method(obj, count, "()I", &[]).map_err(err)? {
         JavaValue::Int(v) if v > 0 => v as usize,
         _ => return Ok(Vec::new()),
@@ -574,7 +568,12 @@ fn counted_strings(
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
         match vm
-            .call_method(obj, get, "(I)Ljava/lang/String;", &[JavaValue::Int(i as i32)])
+            .call_method(
+                obj,
+                get,
+                "(I)Ljava/lang/String;",
+                &[JavaValue::Int(i as i32)],
+            )
             .map_err(err)?
         {
             JavaValue::Object(h) if h != NULL => out.push(vm.java_string_to_rust(h).map_err(err)?),
@@ -613,11 +612,7 @@ pub fn component_name(vm: &mut Vm, package: &str, class: &str) -> JResult<Handle
 /// `ComponentInfo.writeToParcel` dereferences `applicationInfo`
 /// unconditionally, so the `ProviderInfo` must carry a non-null one even when
 /// the app never reads it.
-fn provider_application_info(
-    vm: &mut Vm,
-    package: &str,
-    process_name: &str,
-) -> JResult<Handle> {
+fn provider_application_info(vm: &mut Vm, package: &str, process_name: &str) -> JResult<Handle> {
     let app = AppInfo {
         package_name: package.to_string(),
         name: String::new(),
@@ -653,12 +648,7 @@ fn provider_application_info(
 /// The field set is the API-34 `PackageItemInfo` -> `ComponentInfo` ->
 /// `ProviderInfo` chain; the framework's own `writeToParcel` writes them in
 /// order once they are set.
-fn provider_info(
-    vm: &mut Vm,
-    package: &str,
-    class: &str,
-    authority: &str,
-) -> JResult<Handle> {
+fn provider_info(vm: &mut Vm, package: &str, class: &str, authority: &str) -> JResult<Handle> {
     let h = vm
         .new_instance_ctor("android.content.pm.ProviderInfo", "()V", &[])
         .map_err(err)?;
@@ -689,7 +679,12 @@ fn provider_info(
     // ProviderInfo
     set_str(vm, h, "authority", authority)?;
     set_str(vm, h, "readPermission", "android.permission.READ_SETTINGS")?;
-    set_str(vm, h, "writePermission", "android.permission.WRITE_SETTINGS")?;
+    set_str(
+        vm,
+        h,
+        "writePermission",
+        "android.permission.WRITE_SETTINGS",
+    )?;
     set_bool(vm, h, "grantUriPermissions", false)?;
     set_bool(vm, h, "forceUriPermissions", false)?;
     vm.set_field(h, "uriPermissionPatterns", JavaValue::Null)
@@ -767,7 +762,11 @@ fn content_provider_holder(
         .map_err(err)?;
     if binder != 0 {
         let remote = vm
-            .new_instance_ctor("android.os.BinderProxy", "(J)V", &[JavaValue::Long(binder as i64)])
+            .new_instance_ctor(
+                "android.os.BinderProxy",
+                "(J)V",
+                &[JavaValue::Long(binder as i64)],
+            )
             .map_err(err)?;
         let provider = vm
             .new_instance_ctor(
@@ -801,7 +800,8 @@ fn set_int(vm: &mut Vm, obj: Handle, field: &str, value: i32) -> JResult<()> {
 }
 
 fn set_bool(vm: &mut Vm, obj: Handle, field: &str, value: bool) -> JResult<()> {
-    vm.set_field(obj, field, JavaValue::Boolean(value)).map_err(err)
+    vm.set_field(obj, field, JavaValue::Boolean(value))
+        .map_err(err)
 }
 
 /// The binder id carried by a real `IBinder`.
@@ -1062,9 +1062,10 @@ pub fn transact(
             let connection = args.get(4).map(Arg::binder).unwrap_or(0);
             let intent = intent_at(&args, 2)?;
             let flags = args.get(5).map(Arg::long).unwrap_or(0);
-            let binder = state.bind_service(connection, &intent, flags).map_err(err)?;
-            reply
-                .write_int32(i32::try_from(binder & 0x7fff_ffff).unwrap_or(0));
+            let binder = state
+                .bind_service(connection, &intent, flags)
+                .map_err(err)?;
+            reply.write_int32(i32::try_from(binder & 0x7fff_ffff).unwrap_or(0));
             Ok(Vec::new())
         }
         "unbindService" => {
@@ -1084,13 +1085,7 @@ pub fn transact(
                 _ => (Vec::new(), Vec::new()),
             };
             let flags = args.get(flags_i).map(Arg::int).unwrap_or(0);
-            state.register_receiver(
-                receiver,
-                "",
-                actions.clone(),
-                categories.clone(),
-                flags,
-            );
+            state.register_receiver(receiver, "", actions.clone(), categories.clone(), flags);
             // PIFILLIN: mirror the registration into the session's host-side
             // AMS state. A broadcast the **system** originates (a module's
             // control op: a scripted fix, an SMS, an adapter event — and a fired
@@ -1100,12 +1095,9 @@ pub fn transact(
             // `broadcastIntent` keeps using this state, so a receiver is never
             // delivered twice.
             if let Some(host) = installed_host() {
-                let _ = host.borrow_mut().mirror_dynamic_receiver(
-                    receiver,
-                    actions,
-                    categories,
-                    flags,
-                );
+                let _ = host
+                    .borrow_mut()
+                    .mirror_dynamic_receiver(receiver, actions, categories, flags);
             }
             crate::pms_java::typed_object(vm, None, reply)?;
             Ok(Vec::new())
@@ -1126,10 +1118,7 @@ pub fn transact(
             let intent = intent_at(&args, intent_i)?;
             let result_to = args.get(result_i).map(Arg::binder).unwrap_or(0);
             let result_code = args.get(code_i).map(Arg::int).unwrap_or(0);
-            let result_data = args
-                .get(data_i)
-                .and_then(Arg::string)
-                .map(str::to_string);
+            let result_data = args.get(data_i).and_then(Arg::string).map(str::to_string);
             let count = state
                 .broadcast(&intent, result_to, result_code, result_data)
                 .map_err(err)?;
@@ -1154,27 +1143,19 @@ pub fn transact(
             for holder in holders {
                 let info = match vm.get_field(holder, "info").map_err(err)? {
                     JavaValue::Object(h) if h != NULL => h,
-                    _ => {
-                        return Err(err(
-                            "publishContentProviders: holder.info is null",
-                        ))
-                    }
+                    _ => return Err(err("publishContentProviders: holder.info is null")),
                 };
-                let authority = field_string(vm, info, "authority")?
-                    .ok_or_else(|| err("publishContentProviders: ProviderInfo.authority is null"))?;
+                let authority = field_string(vm, info, "authority")?.ok_or_else(|| {
+                    err("publishContentProviders: ProviderInfo.authority is null")
+                })?;
                 let class = field_string(vm, info, "name")?
                     .ok_or_else(|| err("publishContentProviders: ProviderInfo.name is null"))?;
-                let package = field_string(vm, info, "packageName")?
-                    .unwrap_or_else(|| "".to_string());
+                let package =
+                    field_string(vm, info, "packageName")?.unwrap_or_else(|| "".to_string());
                 let binder = match vm.get_field(holder, "provider").map_err(err)? {
                     JavaValue::Object(provider) if provider != NULL => {
                         match vm
-                            .call_method(
-                                provider,
-                                "asBinder",
-                                "()Landroid/os/IBinder;",
-                                &[],
-                            )
+                            .call_method(provider, "asBinder", "()Landroid/os/IBinder;", &[])
                             .map_err(err)?
                         {
                             JavaValue::Object(b) if b != NULL => binder_id_of(vm, b)?,
@@ -1298,7 +1279,8 @@ fn dispatch_to_host(
             ))
         })?
     };
-    host.transact(target, code, request, reply, flags).map_err(err)?;
+    host.transact(target, code, request, reply, flags)
+        .map_err(err)?;
     let pending = host.take_deliveries();
     Ok(pending
         .into_iter()

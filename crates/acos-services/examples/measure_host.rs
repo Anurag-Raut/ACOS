@@ -17,11 +17,7 @@ fn status_field(name: &str) -> Option<u64> {
     for line in text.lines() {
         if let Some(rest) = line.strip_prefix(name) {
             let rest = rest.trim_start_matches(':').trim();
-            return rest
-                .trim_end_matches(" kB")
-                .trim()
-                .parse::<u64>()
-                .ok();
+            return rest.trim_end_matches(" kB").trim().parse::<u64>().ok();
         }
     }
     None
@@ -76,8 +72,14 @@ fn main() {
     let vmsize_after = status_field("VmSize").unwrap_or(0);
 
     println!("ServiceHost::standard() install: {install_ns} ns");
-    println!("lazily construct {} services:   {construct_ns} ns", launch_names.len());
-    println!("100 replayed checkPermission calls: {call_100_ns} ns ({} ns/call)", call_100_ns / 100);
+    println!(
+        "lazily construct {} services:   {construct_ns} ns",
+        launch_names.len()
+    );
+    println!(
+        "100 replayed checkPermission calls: {call_100_ns} ns ({} ns/call)",
+        call_100_ns / 100
+    );
     println!("VmRSS:  {vmrss_before} kB -> {vmrss_after} kB");
     println!("VmSize: {vmsize_before} kB -> {vmsize_after} kB");
     println!("VmHWM:  {vmhwm_after} kB");

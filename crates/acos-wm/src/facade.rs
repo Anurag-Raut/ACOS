@@ -26,11 +26,11 @@ use crate::codec::{InsetsState, LayoutParams};
 use crate::compositor::{Compositor, Transaction};
 use crate::display::DisplaySpec;
 use crate::error::{Result, WmError};
+use crate::geom::RectI;
 use crate::ime::{EditorInfo, ImeManager, InputConnection};
 use crate::input::{AnrEvent, InputDispatcher, WindowInfo};
 use crate::vsync::{VsyncDelivery, VsyncGenerator};
 use crate::wms::{AddWindowResult, RelayoutResult, SessionId, WindowId, WindowManager};
-use crate::geom::RectI;
 
 /// A fresh frame with its causal identity.
 #[derive(Debug, Clone)]
@@ -166,9 +166,9 @@ impl SessionWm {
         params: LayoutParams,
         requested_visible_types: i32,
     ) -> Result<AddWindowResult> {
-        let result = self
-            .wm
-            .add_to_display_as_user(self.id, window, params, requested_visible_types)?;
+        let result =
+            self.wm
+                .add_to_display_as_user(self.id, window, params, requested_visible_types)?;
         if result.result != crate::wms::ADD_OKAY {
             return Ok(result);
         }
@@ -179,8 +179,11 @@ impl SessionWm {
             .get(&result.window)
             .and_then(|w| w.surface_handle)
             .unwrap_or(result.window);
-        self.compositor
-            .create_layer(Some(result.window), format!("window-{}", result.window), result.window as i64);
+        self.compositor.create_layer(
+            Some(result.window),
+            format!("window-{}", result.window),
+            result.window as i64,
+        );
         // Register the input route with the dispatcher end of the channel.
         let frame = self
             .wm
@@ -199,8 +202,7 @@ impl SessionWm {
             display_id: self.display.id,
         };
         if let Some(channel) = self.wm.channels.get(result.input_channel.channel_handle) {
-            self.input
-                .register_window(info, channel.dispatcher.clone());
+            self.input.register_window(info, channel.dispatcher.clone());
         }
         let _ = layer;
         Ok(result)
@@ -234,7 +236,8 @@ impl SessionWm {
             .compositor
             .layer_for_window(window)
             .ok_or(WmError::UnknownWindow(window))?;
-        self.compositor.set_buffer(layer, buffer, frame_number, cause_id)?;
+        self.compositor
+            .set_buffer(layer, buffer, frame_number, cause_id)?;
         self.compositor.apply(&Transaction::SetVisibility {
             layer,
             visible: true,
@@ -321,7 +324,12 @@ impl SessionWm {
     /// This is `IRemoteInputConnection.commitText`, not a burst of key events:
     /// it is what an IME does and what the measured interaction trace shows
     /// (15 `IRemoteInputConnection` transports).
-    pub fn type_text(&mut self, client: BinderId, text: &str, cause_id: i64) -> Result<InputOutcome> {
+    pub fn type_text(
+        &mut self,
+        client: BinderId,
+        text: &str,
+        cause_id: i64,
+    ) -> Result<InputOutcome> {
         self.ime.commit_text(client, text, 1)?;
         Ok(InputOutcome {
             cause_id,
@@ -367,7 +375,11 @@ impl SessionWm {
     }
 
     /// Register the native layer's `IRemoteInputConnection` implementation.
-    pub fn register_input_connection(&mut self, connection: BinderId, cb: Arc<dyn InputConnection>) {
+    pub fn register_input_connection(
+        &mut self,
+        connection: BinderId,
+        cb: Arc<dyn InputConnection>,
+    ) {
         self.ime.register_connection(connection, cb);
     }
 
@@ -379,12 +391,9 @@ impl SessionWm {
         editor: EditorInfo,
     ) -> Result<()> {
         self.ime.add_client(client, Some(connection), 0)?;
-        let _ = self.ime.start_input_or_window_gained_focus(
-            client,
-            &editor,
-            Some(connection),
-            1,
-        )?;
+        let _ =
+            self.ime
+                .start_input_or_window_gained_focus(client, &editor, Some(connection), 1)?;
         Ok(())
     }
 }

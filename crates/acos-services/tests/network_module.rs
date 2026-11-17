@@ -124,7 +124,12 @@ fn the_framework_view_is_off_until_the_module_attaches() {
     let exe = std::env::current_exe().expect("test executable");
     let state = std::env::temp_dir().join(format!("acos-net5-state-{}", std::process::id()));
     let output = std::process::Command::new(exe)
-        .args(["--exact", "child_framework_view", "--nocapture", "--test-threads=1"])
+        .args([
+            "--exact",
+            "child_framework_view",
+            "--nocapture",
+            "--test-threads=1",
+        ])
         .env(CHILD_ENV, "1")
         // No relay supervisor here: the fail-closed checks are deterministic.
         .env("ACOS_NETD_STATE", &state)
@@ -171,7 +176,11 @@ fn child_framework_view() {
     // -- off ---------------------------------------------------------------
     assert!(!network::session_has_network(), "off is the default state");
     let off_caps = default_capabilities_bits();
-    assert_eq!(off_caps & (1i64 << CAP_VALIDATED), 0, "no VALIDATED network");
+    assert_eq!(
+        off_caps & (1i64 << CAP_VALIDATED),
+        0,
+        "no VALIDATED network"
+    );
     assert!(
         link_addresses().is_empty(),
         "an off session has no address, ever"
@@ -180,14 +189,21 @@ fn child_framework_view() {
     // -- a profile the module does not implement is refused ---------------
     for profile in [Profile::Stub, Profile::Scripted] {
         let error = module
-            .attach(&mut host, profile, &ModuleConfig::from_json("network", &json!({})).unwrap())
+            .attach(
+                &mut host,
+                profile,
+                &ModuleConfig::from_json("network", &json!({})).unwrap(),
+            )
             .expect_err("no stub/scripted profile");
         assert!(
             error.to_string().contains("not implemented"),
             "{profile}: {error}"
         );
     }
-    assert!(!network::session_has_network(), "a refused attach changed nothing");
+    assert!(
+        !network::session_has_network(),
+        "a refused attach changed nothing"
+    );
 
     // -- `real` without a session id fails closed --------------------------
     let error = module

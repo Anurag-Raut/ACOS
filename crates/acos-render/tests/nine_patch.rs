@@ -5,9 +5,7 @@
 //! middle band stretches — the golden expectation below is what Android's
 //! `Canvas.drawPatch` produces for this chunk.
 
-use acos_render::{
-    BitmapConfig, NinePatchChunk, Rect, RenderContext,
-};
+use acos_render::{BitmapConfig, NinePatchChunk, Rect, RenderContext};
 
 const RED: u32 = 0xffff_0000;
 const GREEN: u32 = 0xff00_ff00;
@@ -25,8 +23,20 @@ fn build_bitmap(ctx: &mut RenderContext) -> acos_render::Handle {
     // rows [0,2) [2,3) [3,5).
     for y in 0..5i32 {
         for x in 0..5i32 {
-            let cx = if x < 2 { 0 } else if x == 2 { 1 } else { 2 };
-            let cy = if y < 2 { 0 } else if y == 2 { 1 } else { 2 };
+            let cx = if x < 2 {
+                0
+            } else if x == 2 {
+                1
+            } else {
+                2
+            };
+            let cy = if y < 2 {
+                0
+            } else if y == 2 {
+                1
+            } else {
+                2
+            };
             let c = match (cx, cy) {
                 (0, 0) => RED,
                 (1, 0) => GREEN,
@@ -69,19 +79,23 @@ fn nine_patch_stretches_only_the_middle_bands() {
         padding: [0; 4],
     };
     let frame = render(chunk);
-    assert!(frame.unsupported_ops.is_empty(), "{:?}", frame.unsupported_ops);
+    assert!(
+        frame.unsupported_ops.is_empty(),
+        "{:?}",
+        frame.unsupported_ops
+    );
     // Destination 2..13 => cuts [2,4,11,13] (fixed 2px, stretch 7px).
     // Corners keep their pixel colour.
     assert_eq!(px(&frame, 3, 3), (255, 0, 0)); // top-left
     assert_eq!(px(&frame, 12, 3), (0, 0, 255)); // top-right
     assert_eq!(px(&frame, 3, 12), (255, 0, 255)); // bottom-left
     assert_eq!(px(&frame, 12, 12), (0, 0, 0)); // bottom-right
-    // Edges stretch.
+                                               // Edges stretch.
     assert_eq!(px(&frame, 7, 3), (0, 255, 0)); // top middle
     assert_eq!(px(&frame, 3, 7), (255, 255, 0)); // left middle
     assert_eq!(px(&frame, 12, 7), (0, 255, 255)); // right middle
     assert_eq!(px(&frame, 7, 12), (255, 136, 0)); // bottom middle
-    // Centre stretches both ways.
+                                                  // Centre stretches both ways.
     assert_eq!(px(&frame, 7, 7), (255, 255, 255));
     // Outside the destination is untouched (transparent black).
     assert_eq!(px(&frame, 1, 1), (0, 0, 0));

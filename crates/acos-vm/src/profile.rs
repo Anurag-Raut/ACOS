@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
-use crate::vm::{Vm, descriptor_to_dotted};
+use crate::vm::{descriptor_to_dotted, Vm};
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
 pub(crate) static INIT: std::sync::Once = std::sync::Once::new();
@@ -107,13 +107,13 @@ pub fn record_class_link(vm: &Vm, id: crate::class::ClassId, start: Option<Insta
     bump(&CLASS_LINKS, 1);
     bump(&CLASS_LINK_NS, ns);
     let map = class_links();
-        if let Ok(mut m) = map.lock() {
-            let e = m
-                .entry(descriptor_to_dotted(vm.class_desc(id)))
-                .or_insert((0, 0));
-            e.0 += 1;
-            e.1 += ns;
-        }
+    if let Ok(mut m) = map.lock() {
+        let e = m
+            .entry(descriptor_to_dotted(vm.class_desc(id)))
+            .or_insert((0, 0));
+        e.0 += 1;
+        e.1 += ns;
+    }
 }
 
 /// Record a completed class parse/load (`load_dex_class_body`) with its descriptor.
@@ -124,11 +124,11 @@ pub fn record_class_parse(desc: &str, start: Option<Instant>) {
     bump(&CLASS_PARSES, 1);
     bump(&CLASS_PARSE_NS, ns);
     let map = class_parses();
-        if let Ok(mut m) = map.lock() {
-            let e = m.entry(descriptor_to_dotted(desc)).or_insert((0, 0));
-            e.0 += 1;
-            e.1 += ns;
-        }
+    if let Ok(mut m) = map.lock() {
+        let e = m.entry(descriptor_to_dotted(desc)).or_insert((0, 0));
+        e.0 += 1;
+        e.1 += ns;
+    }
 }
 
 /// Begin a native call. The `(class, name)` key is built lazily at the first
@@ -164,7 +164,9 @@ pub fn native_begin(
 /// Finish a native call started with [`native_begin`].
 #[inline]
 pub fn native_end(v: Option<(crate::class::MethodId, Instant, String)>) {
-    let Some((_method, start, key)) = v else { return };
+    let Some((_method, start, key)) = v else {
+        return;
+    };
     let ns = start.elapsed().as_nanos().min(u64::MAX as u128) as u64;
     bump(&NATIVE_CALLS, 1);
     bump(&NATIVE_NS, ns);
@@ -206,11 +208,11 @@ pub fn clinit_end(v: Option<(String, Instant)>) {
     bump(&CLINIT_COUNT, 1);
     bump(&CLINIT_NS, ns);
     let map = clinits();
-        if let Ok(mut m) = map.lock() {
-            let e = m.entry(key).or_insert((0, 0));
-            e.0 += 1;
-            e.1 += ns;
-        }
+    if let Ok(mut m) = map.lock() {
+        let e = m.entry(key).or_insert((0, 0));
+        e.0 += 1;
+        e.1 += ns;
+    }
 }
 
 /// Record one thrown Java exception.
@@ -227,11 +229,11 @@ pub fn add_stage(name: &str, ns: u64) {
         return;
     }
     let map = stages();
-        if let Ok(mut m) = map.lock() {
-            let e = m.entry(name.to_string()).or_insert((0, 0));
-            e.0 += 1;
-            e.1 += ns;
-        }
+    if let Ok(mut m) = map.lock() {
+        let e = m.entry(name.to_string()).or_insert((0, 0));
+        e.0 += 1;
+        e.1 += ns;
+    }
 }
 
 /// Time `f` as a named stage (only when the profiler is on).
@@ -251,9 +253,9 @@ pub fn set_note(key: &str, value: u64) {
         return;
     }
     let map = notes();
-        if let Ok(mut m) = map.lock() {
-            m.insert(key.to_string(), value);
-        }
+    if let Ok(mut m) = map.lock() {
+        m.insert(key.to_string(), value);
+    }
 }
 
 /// Charge a byte count to a named allocation call-site category.
@@ -308,7 +310,10 @@ pub fn note_census(name: &str, bytes: u64, detail: &str) {
 /// The census, sorted by bytes desc, as `(name, bytes, detail)`.
 pub fn census_snapshot() -> Vec<(String, u64, String)> {
     let mut v: Vec<(String, u64, String)> = match census().lock() {
-        Ok(g) => g.iter().map(|(k, (b, d))| (k.clone(), *b, d.clone())).collect(),
+        Ok(g) => g
+            .iter()
+            .map(|(k, (b, d))| (k.clone(), *b, d.clone()))
+            .collect(),
         Err(_) => Vec::new(),
     };
     v.sort_by(|a, b| b.1.cmp(&a.1));
@@ -522,7 +527,11 @@ pub fn rss_peak_bytes() -> u64 {
     };
     for line in s.lines() {
         if let Some(rest) = line.strip_prefix("VmHWM:") {
-            if let Some(kb) = rest.split_whitespace().next().and_then(|v| v.parse::<u64>().ok()) {
+            if let Some(kb) = rest
+                .split_whitespace()
+                .next()
+                .and_then(|v| v.parse::<u64>().ok())
+            {
                 return kb * 1024;
             }
         }
@@ -545,7 +554,11 @@ fn census_vm(vm: &Vm, method_meta_bytes: u64) {
     note_census(
         "vm_heap_slots",
         sz(vm.heap.objects.capacity(), object_slot),
-        &format!("len={} cap={}", vm.heap.objects.len(), vm.heap.objects.capacity()),
+        &format!(
+            "len={} cap={}",
+            vm.heap.objects.len(),
+            vm.heap.objects.capacity()
+        ),
     );
     note_census(
         "vm_heap_gc_bitmap",
@@ -560,8 +573,7 @@ fn census_vm(vm: &Vm, method_meta_bytes: u64) {
     note_census(
         "vm_heap_field_pool",
         sz(vm.heap.field_pool.capacity(), size_of::<Vec<u32>>())
-            + vm
-                .heap
+            + vm.heap
                 .field_pool
                 .iter()
                 .map(|v| sz(v.capacity(), 4))
@@ -592,7 +604,11 @@ fn census_vm(vm: &Vm, method_meta_bytes: u64) {
     for c in &vm.classes {
         let field_bytes = |v: &[crate::class::FieldDef]| -> u64 {
             v.iter()
-                .map(|f| size_of::<crate::class::FieldDef>() as u64 + f.name.len() as u64 + f.desc.len() as u64)
+                .map(|f| {
+                    size_of::<crate::class::FieldDef>() as u64
+                        + f.name.len() as u64
+                        + f.desc.len() as u64
+                })
                 .sum()
         };
         let map_bytes = |m: &std::collections::HashMap<(String, String), u32>| -> u64 {
@@ -621,7 +637,11 @@ fn census_vm(vm: &Vm, method_meta_bytes: u64) {
                 .map(|(n, s)| 48 + n.len() as u64 + s.len() as u64)
                 .sum::<u64>();
     }
-    note_census("vm_class_meta", class_deep, &format!("classes={}", vm.classes.len()));
+    note_census(
+        "vm_class_meta",
+        class_deep,
+        &format!("classes={}", vm.classes.len()),
+    );
     note_census(
         "vm_method_meta",
         method_meta_bytes,
@@ -637,10 +657,7 @@ fn census_vm(vm: &Vm, method_meta_bytes: u64) {
     );
     note_census(
         "vm_class_by_desc",
-        vm.class_by_desc
-            .keys()
-            .map(|k| 48 + k.len() as u64)
-            .sum(),
+        vm.class_by_desc.keys().map(|k| 48 + k.len() as u64).sum(),
         "descriptor -> ClassId",
     );
 
@@ -661,7 +678,10 @@ fn census_vm(vm: &Vm, method_meta_bytes: u64) {
     );
     note_census(
         "vm_ir_quickening",
-        sz(vm.ir_fields.capacity(), size_of::<crate::exec::FieldQuick>()),
+        sz(
+            vm.ir_fields.capacity(),
+            size_of::<crate::exec::FieldQuick>(),
+        ),
         &format!("entries={}", vm.ir_fields.len()),
     );
     note_census(
@@ -698,15 +718,31 @@ fn census_vm(vm: &Vm, method_meta_bytes: u64) {
             .sum(),
         &format!("entries={}", vm.throwable_stacks.len()),
     );
-    note_census("vm_out_buffers", (vm.out_buf.capacity() + vm.err_buf.capacity()) as u64, "stdout+stderr");
+    note_census(
+        "vm_out_buffers",
+        (vm.out_buf.capacity() + vm.err_buf.capacity()) as u64,
+        "stdout+stderr",
+    );
 
     // --- per-VM DEX handle caches ---
     let mut cache_parts = [0u64; 5];
     for d in &vm.dexs {
-        cache_parts[0] += sz(d.string_cache.capacity(), size_of::<Option<crate::heap::Handle>>());
-        cache_parts[1] += sz(d.field_cache.capacity(), size_of::<Option<crate::class::ResolvedField>>());
-        cache_parts[2] += sz(d.method_cache.capacity(), size_of::<Option<crate::class::MethodId>>());
-        cache_parts[3] += sz(d.class_cache.capacity(), size_of::<Option<crate::class::ClassId>>());
+        cache_parts[0] += sz(
+            d.string_cache.capacity(),
+            size_of::<Option<crate::heap::Handle>>(),
+        );
+        cache_parts[1] += sz(
+            d.field_cache.capacity(),
+            size_of::<Option<crate::class::ResolvedField>>(),
+        );
+        cache_parts[2] += sz(
+            d.method_cache.capacity(),
+            size_of::<Option<crate::class::MethodId>>(),
+        );
+        cache_parts[3] += sz(
+            d.class_cache.capacity(),
+            size_of::<Option<crate::class::ClassId>>(),
+        );
         cache_parts[4] += sz(
             d.virtual_cache.capacity(),
             size_of::<Option<Box<crate::vm::VirtualCache>>>(),
@@ -730,7 +766,11 @@ fn census_vm(vm: &Vm, method_meta_bytes: u64) {
             size_of::<Option<Box<crate::vm::VirtualCache>>>(),
         ),
     );
-    note_census("vm_dex_handle_caches", dex_cache_bytes, &format!("files={}", vm.dexs.len()));
+    note_census(
+        "vm_dex_handle_caches",
+        dex_cache_bytes,
+        &format!("files={}", vm.dexs.len()),
+    );
 
     // --- DEX raw + parsed tables (deduped across the VM's Arc<DexFile>) ---
     let mut raw: u64 = 0;
@@ -795,14 +835,12 @@ fn note_rss_by_mapping() {
     for line in text.lines() {
         // A mapping header starts with `start-end` (both hex, 8+ digits).
         let is_header = line.split_whitespace().next().is_some_and(|range| {
-            range
-                .split_once('-')
-                .is_some_and(|(a, b)| {
-                    a.len() >= 8
-                        && b.len() >= 8
-                        && a.bytes().all(|c| c.is_ascii_hexdigit())
-                        && b.bytes().all(|c| c.is_ascii_hexdigit())
-                })
+            range.split_once('-').is_some_and(|(a, b)| {
+                a.len() >= 8
+                    && b.len() >= 8
+                    && a.bytes().all(|c| c.is_ascii_hexdigit())
+                    && b.bytes().all(|c| c.is_ascii_hexdigit())
+            })
         });
         if is_header {
             current = classify_mapping(line);
@@ -843,7 +881,12 @@ fn note_rss_by_mapping() {
         note_census(
             &format!("smaps_anon_{i:02}"),
             *bytes,
-            header.split_whitespace().take(2).collect::<Vec<_>>().join(" ").as_str(),
+            header
+                .split_whitespace()
+                .take(2)
+                .collect::<Vec<_>>()
+                .join(" ")
+                .as_str(),
         );
     }
     set_note("rss_fonts_bytes", fonts);
@@ -872,7 +915,10 @@ enum MappingKind {
 fn classify_mapping(header: &str) -> MappingKind {
     // Header form: `start-end perms offset dev inode [path]`.
     let path = header.split_whitespace().nth(5).unwrap_or("");
-    let exec = header.split_whitespace().nth(1).is_some_and(|p| p.contains('x'));
+    let exec = header
+        .split_whitespace()
+        .nth(1)
+        .is_some_and(|p| p.contains('x'));
     if path.is_empty() || path.starts_with("[anon") || path == "[heap]" || path == "[stack]" {
         MappingKind::Anon
     } else if path.ends_with(".ttf")
@@ -896,5 +942,3 @@ fn classify_mapping(header: &str) -> MappingKind {
         MappingKind::Other
     }
 }
-
-

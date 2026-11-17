@@ -209,7 +209,10 @@ fn list_scroll_button_moves_the_recycled_window() {
 
     let report = session.tap_text("Scroll to last").expect("tap accepted");
     assert!(report.accepted, "Scroll to last routed");
-    assert!(report.state_changed, "smoothScrollToPosition changed the tree");
+    assert!(
+        report.state_changed,
+        "smoothScrollToPosition changed the tree"
+    );
     let after = session
         .observe_tree(acos_runtime::view_tree::DEFAULT_MAX_NODES)
         .unwrap();
@@ -510,7 +513,12 @@ fn scroll_gesture_moves_the_list() {
         return;
     }
     let report = session
-        .swipe((540.0, 1600.0), (540.0, 600.0), Duration::from_millis(400), 10)
+        .swipe(
+            (540.0, 1600.0),
+            (540.0, 600.0),
+            Duration::from_millis(400),
+            10,
+        )
         .expect("swipe accepted");
     assert!(report.state_changed, "the swipe scrolled the list");
     let tree = session

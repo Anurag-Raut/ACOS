@@ -251,8 +251,12 @@ fn pred_match(p: Pred, c: u32) -> bool {
         Pred::Digit => ch.general_category() == GeneralCategory::DecimalNumber,
         Pred::Word => is_word_cp(c),
         Pred::Space | Pred::WhiteSpace => ch.is_whitespace(),
-        Pred::Horiz => matches!(c, 0x09 | 0x20 | 0xA0 | 0x1680 | 0x180E | 0x202F | 0x205F | 0x3000)
-            || (0x2000..=0x200A).contains(&c),
+        Pred::Horiz => {
+            matches!(
+                c,
+                0x09 | 0x20 | 0xA0 | 0x1680 | 0x180E | 0x202F | 0x205F | 0x3000
+            ) || (0x2000..=0x200A).contains(&c)
+        }
         Pred::Vert => matches!(c, 0x0A | 0x0B | 0x0C | 0x0D | 0x85 | 0x2028 | 0x2029),
         Pred::Ascii => c <= 0x7F,
         Pred::Alphabetic => ch.is_alphabetic(),
@@ -277,7 +281,10 @@ fn pred_match(p: Pred, c: u32) -> bool {
 /// Unicode `White_Space` property (`\s`) — notably NEL (U+0085) is *not*
 /// whitespace for `Character.isWhitespace`, and NBSP (U+00A0) is not either.
 fn java_whitespace(c: u32) -> bool {
-    if matches!(c, 0x09 | 0x0A | 0x0B | 0x0C | 0x0D | 0x1C | 0x1D | 0x1E | 0x1F) {
+    if matches!(
+        c,
+        0x09 | 0x0A | 0x0B | 0x0C | 0x0D | 0x1C | 0x1D | 0x1E | 0x1F
+    ) {
         return true;
     }
     match char::from_u32(c) {
@@ -547,9 +554,7 @@ impl Parser {
                     // Coalesce runs of case-insensitive literals so that full
                     // case folding can match across character boundaries
                     // (e.g. pattern `ss` against input `\u00df`).
-                    if !atom.is_empty()
-                        && atom.iter().all(|i| matches!(i, Inst::Char(_, true)))
-                    {
+                    if !atom.is_empty() && atom.iter().all(|i| matches!(i, Inst::Char(_, true))) {
                         for inst in &atom {
                             if let Inst::Char(c, true) = inst {
                                 run.push(char::from_u32(*c).unwrap_or('\u{FFFD}'));
@@ -696,7 +701,12 @@ impl Parser {
     fn parse_atom(&mut self, flags: &mut u32) -> Result<Vec<Inst>, PErr> {
         let c = match self.peek() {
             Some(c) => c,
-            None => return Err(PErr::Syntax("Unexpected end of pattern".to_string(), self.pos)),
+            None => {
+                return Err(PErr::Syntax(
+                    "Unexpected end of pattern".to_string(),
+                    self.pos,
+                ))
+            }
         };
         match c {
             '(' => self.parse_group(flags),
@@ -716,18 +726,19 @@ impl Parser {
             }
             '^' => {
                 self.pos += 1;
-                Ok(vec![Inst::Assert(AssertKind::StartLine(*flags & F_MULTILINE != 0))])
+                Ok(vec![Inst::Assert(AssertKind::StartLine(
+                    *flags & F_MULTILINE != 0,
+                ))])
             }
             '$' => {
                 self.pos += 1;
-                Ok(vec![Inst::Assert(AssertKind::EndLine(*flags & F_MULTILINE != 0))])
+                Ok(vec![Inst::Assert(AssertKind::EndLine(
+                    *flags & F_MULTILINE != 0,
+                ))])
             }
             '\\' => self.parse_escape(flags),
             ')' => Err(PErr::Syntax("Unmatched closing ')'".to_string(), self.pos)),
-            '*' | '+' | '?' => Err(PErr::Syntax(
-                format!("Dangling quantifier '{c}'"),
-                self.pos,
-            )),
+            '*' | '+' | '?' => Err(PErr::Syntax(format!("Dangling quantifier '{c}'"), self.pos)),
             _ => {
                 self.pos += 1;
                 Ok(vec![Inst::Char(c as u32, *flags & F_CASE_INSENSITIVE != 0)])
@@ -918,7 +929,13 @@ impl Parser {
                 }
             }
         }
-        if name.is_empty() || name.chars().next().map(|c| !c.is_ascii_alphabetic()).unwrap_or(true) {
+        if name.is_empty()
+            || name
+                .chars()
+                .next()
+                .map(|c| !c.is_ascii_alphabetic())
+                .unwrap_or(true)
+        {
             return Err(PErr::Syntax(
                 "Illegal capturing group name".to_string(),
                 self.pos,
@@ -1000,7 +1017,10 @@ impl Parser {
                 }
                 let name = self.read_name('>')?;
                 let idx = *self.names.get(&name).ok_or_else(|| {
-                    PErr::Syntax(format!("Named backreference to unknown group '{name}'"), self.pos)
+                    PErr::Syntax(
+                        format!("Named backreference to unknown group '{name}'"),
+                        self.pos,
+                    )
                 })?;
                 Ok(vec![Inst::Backref((idx * 2) as u16, ic)])
             }
@@ -1035,14 +1055,11 @@ impl Parser {
                 Ok(vec![Inst::Char(ch, ic)])
             }
             'c' => {
-                let ch = self.bump().ok_or_else(|| {
-                    PErr::Syntax("Illegal control escape".to_string(), self.pos)
-                })?;
+                let ch = self
+                    .bump()
+                    .ok_or_else(|| PErr::Syntax("Illegal control escape".to_string(), self.pos))?;
                 if !ch.is_ascii_alphabetic() {
-                    return Err(PErr::Syntax(
-                        "Illegal control escape".to_string(),
-                        self.pos,
-                    ));
+                    return Err(PErr::Syntax("Illegal control escape".to_string(), self.pos));
                 }
                 Ok(vec![Inst::Char((ch as u32) & 0x1F, ic)])
             }
@@ -1086,12 +1103,7 @@ impl Parser {
             match self.bump() {
                 Some('}') => break,
                 Some(c) => name.push(c),
-                None => {
-                    return Err(PErr::Syntax(
-                        "Unclosed property name".to_string(),
-                        self.pos,
-                    ))
-                }
+                None => return Err(PErr::Syntax("Unclosed property name".to_string(), self.pos)),
             }
         }
         Ok(name)
@@ -1226,7 +1238,10 @@ impl Parser {
         let mut first = true;
         loop {
             if self.peek().is_none() {
-                return Err(PErr::Syntax("Unclosed character class".to_string(), self.pos));
+                return Err(PErr::Syntax(
+                    "Unclosed character class".to_string(),
+                    self.pos,
+                ));
             }
             if self.peek() == Some(']') && !first {
                 break;
@@ -1238,7 +1253,10 @@ impl Parser {
             first = false;
             match atom {
                 ClassAtom::Single(c) => {
-                    if self.peek() == Some('-') && self.peek_at(1).is_some() && self.peek_at(1) != Some(']') {
+                    if self.peek() == Some('-')
+                        && self.peek_at(1).is_some()
+                        && self.peek_at(1) != Some(']')
+                    {
                         self.pos += 1;
                         match self.parse_class_atom(flags)? {
                             ClassAtom::Single(d) => {
@@ -1286,7 +1304,10 @@ impl Parser {
                     Ok(ClassAtom::Single(c as u32))
                 }
             }
-            None => Err(PErr::Syntax("Unclosed character class".to_string(), self.pos)),
+            None => Err(PErr::Syntax(
+                "Unclosed character class".to_string(),
+                self.pos,
+            )),
         }
     }
 
@@ -1770,11 +1791,19 @@ impl Ctx<'_> {
         if !self.transparent && (cp < self.region_start || cp >= self.region_end) {
             return false;
         }
-        self.input.cps.get(cp).map(|&c| is_word_cp(c)).unwrap_or(false)
+        self.input
+            .cps
+            .get(cp)
+            .map(|&c| is_word_cp(c))
+            .unwrap_or(false)
     }
 
     fn word_boundary(&self, cp: usize) -> bool {
-        let before = if cp == 0 { false } else { self.is_word_at(cp - 1) };
+        let before = if cp == 0 {
+            false
+        } else {
+            self.is_word_at(cp - 1)
+        };
         let after = self.is_word_at(cp);
         before != after
     }
@@ -1963,7 +1992,11 @@ impl Pattern {
                 Inst::LoopEnd { start, exit, slot } => {
                     let idx = self.caps_base + *slot as usize;
                     let empty = caps.get(idx).copied().flatten() == Some(pos);
-                    pc = if empty { *exit as usize } else { *start as usize };
+                    pc = if empty {
+                        *exit as usize
+                    } else {
+                        *start as usize
+                    };
                     continue 'main;
                 }
                 Inst::Backref(n, ic) => {
@@ -2201,7 +2234,11 @@ fn registry() -> &'static Mutex<Registry> {
             matchers: HashMap::new(),
             sources: HashMap::new(),
         };
-        if let Some(state) = STAGED_REGEX.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        if let Some(state) = STAGED_REGEX
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
             reg.next = state.next;
             for (h, source, flags) in state.patterns {
                 if let Ok(p) = Parser::new(source.chars().collect()).parse(flags) {
@@ -2283,8 +2320,18 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(m, "lookingAtImpl", "(J[I)Z", looking_at_impl);
     vm.register_native(m, "matchesImpl", "(J[I)Z", matches_impl);
     vm.register_native(m, "requireEndImpl", "(J)Z", require_end_impl);
-    vm.register_native(m, "setInputImpl", "(JLjava/lang/String;II)V", set_input_impl);
-    vm.register_native(m, "useAnchoringBoundsImpl", "(JZ)V", use_anchoring_bounds_impl);
+    vm.register_native(
+        m,
+        "setInputImpl",
+        "(JLjava/lang/String;II)V",
+        set_input_impl,
+    );
+    vm.register_native(
+        m,
+        "useAnchoringBoundsImpl",
+        "(JZ)V",
+        use_anchoring_bounds_impl,
+    );
     vm.register_native(
         m,
         "useTransparentBoundsImpl",
@@ -2432,7 +2479,11 @@ fn hit_end_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn require_end_impl(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mh = vm.arg_u64(ctx, 0);
     let reg = registry().lock().unwrap_or_else(|p| p.into_inner());
-    let v = reg.matchers.get(&mh).map(|m| m.require_end).unwrap_or(false);
+    let v = reg
+        .matchers
+        .get(&mh)
+        .map(|m| m.require_end)
+        .unwrap_or(false);
     vm.ret_bool(ctx, v);
     Ok(())
 }
@@ -2672,9 +2723,11 @@ mod tests {
     }
 
     fn compile(pat: &str, flags: u32) -> Pattern {
-        Parser::new(pat.chars().collect()).parse(flags).unwrap_or_else(|e| {
-            panic!("pattern {pat:?} failed to parse: {e:?}");
-        })
+        Parser::new(pat.chars().collect())
+            .parse(flags)
+            .unwrap_or_else(|e| {
+                panic!("pattern {pat:?} failed to parse: {e:?}");
+            })
     }
 
     fn m(pat: &str, text: &str) -> Option<Vec<Option<usize>>> {
@@ -2802,7 +2855,10 @@ mod tests {
     fn full_case_folding_expands_pattern() {
         // Pattern sharp-s folds to "ss" and consumes two input code points.
         assert!(mf("\u{00df}", F_CASE_INSENSITIVE, "ss").is_some());
-        assert_eq!(find_text("\u{00df}", F_CASE_INSENSITIVE, "SS").as_deref(), Some("SS"));
+        assert_eq!(
+            find_text("\u{00df}", F_CASE_INSENSITIVE, "SS").as_deref(),
+            Some("SS")
+        );
         assert!(mf("\u{fb01}", F_CASE_INSENSITIVE, "fi").is_some());
         assert!(mf("\u{212a}", F_CASE_INSENSITIVE, "k").is_some());
         assert!(mf("\u{03c2}", F_CASE_INSENSITIVE, "\u{03a3}").is_some());
@@ -2913,7 +2969,9 @@ mod tests {
     fn unbounded_lookbehind_is_rejected() {
         assert!(Parser::new("(?<=a+)b".chars().collect()).parse(0).is_err());
         assert!(Parser::new("(?<=a*)b".chars().collect()).parse(0).is_err());
-        assert!(Parser::new("(?<=a{2,})b".chars().collect()).parse(0).is_err());
+        assert!(Parser::new("(?<=a{2,})b".chars().collect())
+            .parse(0)
+            .is_err());
     }
 
     #[test]
@@ -2934,7 +2992,11 @@ mod tests {
         // A pathological but finite pattern must complete under the step budget
         // rather than hang.
         let p = compile("(a+)+$", 0);
-        let input = Input::build(&"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!".encode_utf16().collect::<Vec<u16>>());
+        let input = Input::build(
+            &"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!"
+                .encode_utf16()
+                .collect::<Vec<u16>>(),
+        );
         let ctx = ctx_for(&input);
         let _ = attempt(&p, &ctx, 0, true);
     }

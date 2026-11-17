@@ -317,7 +317,11 @@ fn check_java() -> Vec<Check> {
                 tool,
                 format!(
                     "`{tool}` not on PATH{}",
-                    if runtime { " (needed at run time)" } else { " (fixtures only)" }
+                    if runtime {
+                        " (needed at run time)"
+                    } else {
+                        " (fixtures only)"
+                    }
                 ),
                 "Install a JDK 11+ (e.g. `apt install openjdk-17-jdk`) and put its bin/ on PATH.",
             )),
@@ -413,7 +417,10 @@ fn check_install(home: &Path) -> Vec<Check> {
     // The ART runtime: the sysroot is the framework, and without it nothing runs.
     let sysroot = home.join(".cache/art/sysroot");
     if sysroot.join("system/apex").is_dir() {
-        out.push(Check::ok("install_sysroot", format!("{}", sysroot.display())));
+        out.push(Check::ok(
+            "install_sysroot",
+            format!("{}", sysroot.display()),
+        ));
     } else {
         out.push(Check::fail(
             "install_sysroot",
@@ -425,7 +432,10 @@ fn check_install(home: &Path) -> Vec<Check> {
     // the framework resources, both ship in the install.
     let boot = home.join(".cache/boot/android-34");
     if boot.join("fonts").is_dir() {
-        out.push(Check::ok("install_fonts", format!("{}", boot.join("fonts").display())));
+        out.push(Check::ok(
+            "install_fonts",
+            format!("{}", boot.join("fonts").display()),
+        ));
     } else {
         out.push(Check::fail(
             "install_fonts",
@@ -434,7 +444,10 @@ fn check_install(home: &Path) -> Vec<Check> {
         ));
     }
     if boot.join("overlays").is_dir() {
-        out.push(Check::ok("install_overlays", format!("{}", boot.join("overlays").display())));
+        out.push(Check::ok(
+            "install_overlays",
+            format!("{}", boot.join("overlays").display()),
+        ));
     } else {
         out.push(Check::warn(
             "install_overlays",
@@ -443,7 +456,10 @@ fn check_install(home: &Path) -> Vec<Check> {
         ));
     }
     if boot.join("BOOTCLASSPATH").is_file() {
-        out.push(Check::ok("install_bootclasspath", format!("{}", boot.join("BOOTCLASSPATH").display())));
+        out.push(Check::ok(
+            "install_bootclasspath",
+            format!("{}", boot.join("BOOTCLASSPATH").display()),
+        ));
     } else {
         out.push(Check::warn(
             "install_bootclasspath",
@@ -454,7 +470,10 @@ fn check_install(home: &Path) -> Vec<Check> {
     // The guest Java sources are compiled by `javac`+`d8` on a cold launch.
     let guest = home.join("crates/acos-art/guest/java/dev/acos/art/AppMain.java");
     if guest.is_file() {
-        out.push(Check::ok("install_guest_sources", format!("{}", guest.display())));
+        out.push(Check::ok(
+            "install_guest_sources",
+            format!("{}", guest.display()),
+        ));
     } else {
         out.push(Check::fail(
             "install_guest_sources",
@@ -478,7 +497,10 @@ fn check_install(home: &Path) -> Vec<Check> {
     match std::fs::create_dir_all(state.join("art/data")) {
         Ok(()) => out.push(Check::ok(
             "install_state",
-            format!("{} (data, sessions, sockets, build caches)", state.display()),
+            format!(
+                "{} (data, sessions, sockets, build caches)",
+                state.display()
+            ),
         )),
         Err(error) => out.push(Check::fail(
             "install_state",
@@ -514,12 +536,15 @@ fn check_sandbox_helpers() -> Vec<Check> {
 /// The NDK clang `acos-art` compiles its JNI shims with at run time.
 fn check_ndk(args: &DoctorArgs) -> Check {
     let mut roots: Vec<PathBuf> = Vec::new();
-    if let Some(p) = std::env::var_os("ANDROID_NDK_HOME").or_else(|| std::env::var_os("ANDROID_NDK_ROOT")) {
+    if let Some(p) =
+        std::env::var_os("ANDROID_NDK_HOME").or_else(|| std::env::var_os("ANDROID_NDK_ROOT"))
+    {
         roots.push(PathBuf::from(p));
     }
     if let Some(sdk) = sdk_root(args) {
         if let Ok(entries) = std::fs::read_dir(sdk.join("ndk")) {
-            let mut found: Vec<PathBuf> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+            let mut found: Vec<PathBuf> =
+                entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
             found.sort();
             found.reverse();
             roots.extend(found);

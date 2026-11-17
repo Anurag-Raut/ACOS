@@ -344,8 +344,8 @@ fn ensure_libs(apk: &Path, libdir: &Path, abi: &str) -> Result<(), FlutterSessio
         std::fs::create_dir_all(libdir)
             .map_err(|e| setup("ensure-libs", format!("{}: {e}", libdir.display())))?;
     }
-    let bytes = std::fs::read(apk)
-        .map_err(|e| setup("read-apk", format!("{}: {e}", apk.display())))?;
+    let bytes =
+        std::fs::read(apk).map_err(|e| setup("read-apk", format!("{}: {e}", apk.display())))?;
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
         .map_err(|e| setup("open-apk", e.to_string()))?;
     for name in ["libflutter.so"] {
@@ -368,8 +368,8 @@ fn ensure_libs(apk: &Path, libdir: &Path, abi: &str) -> Result<(), FlutterSessio
 
 /// Extract one zip entry to `dest`.
 fn extract_asset(apk: &Path, entry: &str, dest: &Path) -> Result<usize, FlutterSessionError> {
-    let bytes = std::fs::read(apk)
-        .map_err(|e| setup("read-apk", format!("{}: {e}", apk.display())))?;
+    let bytes =
+        std::fs::read(apk).map_err(|e| setup("read-apk", format!("{}: {e}", apk.display())))?;
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
         .map_err(|e| setup("open-apk", e.to_string()))?;
     let mut data = Vec::new();
@@ -384,8 +384,8 @@ fn extract_asset(apk: &Path, entry: &str, dest: &Path) -> Result<usize, FlutterS
 
 /// Add every `classes*.dex` in the APK to the VM.
 fn load_apk_dex(apk: &Path, vm: &mut Vm) -> Result<usize, FlutterSessionError> {
-    let bytes = std::fs::read(apk)
-        .map_err(|e| setup("read-apk", format!("{}: {e}", apk.display())))?;
+    let bytes =
+        std::fs::read(apk).map_err(|e| setup("read-apk", format!("{}: {e}", apk.display())))?;
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
         .map_err(|e| setup("open-apk", e.to_string()))?;
     let mut names: Vec<String> = (0..archive.len())
@@ -401,8 +401,7 @@ fn load_apk_dex(apk: &Path, vm: &mut Vm) -> Result<usize, FlutterSessionError> {
             .map_err(|e| setup("apk-entry", format!("{name}: {e}")))?
             .read_to_end(&mut data)
             .map_err(|e| setup("apk-entry", format!("{name}: {e}")))?;
-        let dex = DexFile::parse(data)
-            .map_err(|e| setup("apk-dex", format!("{name}: {e:?}")))?;
+        let dex = DexFile::parse(data).map_err(|e| setup("apk-dex", format!("{name}: {e:?}")))?;
         vm.add_dex(dex);
         added += 1;
     }
@@ -411,14 +410,13 @@ fn load_apk_dex(apk: &Path, vm: &mut Vm) -> Result<usize, FlutterSessionError> {
 
 impl FlutterSession {
     /// Launch the engine for `apk`. The caller must already be confined.
-    pub fn launch(
-        apk: &Path,
-        opts: FlutterSessionOptions,
-    ) -> Result<Self, FlutterSessionError> {
+    pub fn launch(apk: &Path, opts: FlutterSessionOptions) -> Result<Self, FlutterSessionError> {
         let apk = apk.to_path_buf();
         let apk_str = apk.display().to_string();
         let info = detect(&apk).map_err(|e| setup("detect", e.to_string()))?;
-        let info = info.ok_or(FlutterSessionError::NotFlutter { apk: apk_str.clone() })?;
+        let info = info.ok_or(FlutterSessionError::NotFlutter {
+            apk: apk_str.clone(),
+        })?;
         let abi = info
             .host_engine_abi()
             .ok_or_else(|| FlutterSessionError::UnsupportedAbi {
@@ -439,9 +437,8 @@ impl FlutterSession {
         let app_path = opts.scratch.join("libapp.so");
         let probe_src = opts.lib_dir.join("libapp_probe.so");
         if opts.prefer_probe_snapshot && probe_src.is_file() {
-            std::fs::copy(&probe_src, &app_path).map_err(|e| {
-                setup("stage-snapshot", format!("{}: {e}", probe_src.display()))
-            })?;
+            std::fs::copy(&probe_src, &app_path)
+                .map_err(|e| setup("stage-snapshot", format!("{}: {e}", probe_src.display())))?;
         } else {
             let entry = format!("lib/{abi}/libapp.so");
             extract_asset(&apk, &entry, &app_path)?;
@@ -449,8 +446,7 @@ impl FlutterSession {
 
         // Stage the flutter_assets manifests the engine reads.
         let assets_dir = opts.scratch.join("flutter_assets");
-        std::fs::create_dir_all(&assets_dir)
-            .map_err(|e| setup("assets-dir", e.to_string()))?;
+        std::fs::create_dir_all(&assets_dir).map_err(|e| setup("assets-dir", e.to_string()))?;
         for entry in [
             "assets/flutter_assets/AssetManifest.bin",
             "assets/flutter_assets/FontManifest.json",
@@ -489,7 +485,11 @@ impl FlutterSession {
                 std::env::set_var("ACOS_BOOT_DIR", dir);
             }
         }
-        let corelib = if boot_ok { CoreLib::Real } else { CoreLib::Bootstrap };
+        let corelib = if boot_ok {
+            CoreLib::Real
+        } else {
+            CoreLib::Bootstrap
+        };
         let mut vm = Box::new(
             Vm::new(VmOptions {
                 heap_max_bytes: opts.ram_budget_bytes,
@@ -517,13 +517,13 @@ impl FlutterSession {
             require_confinement: true,
             ..LoaderConfig::default()
         });
-        let handle = loader.load(&opts.lib_dir.join("libflutter.so"), "libflutter.so").map_err(
-            |e| FlutterSessionError::Engine {
+        let handle = loader
+            .load(&opts.lib_dir.join("libflutter.so"), "libflutter.so")
+            .map_err(|e| FlutterSessionError::Engine {
                 stage: category(&e),
                 code: e.code().to_string(),
                 detail: e.to_string(),
-            },
-        )?;
+            })?;
         let (engine_imports_total, engine_imports_missing, engine_relocations) = loader
             .report()
             .libraries
@@ -547,13 +547,11 @@ impl FlutterSession {
         }
 
         // The Java driver dex.
-        let driver_dex = opts
-            .driver_dex
-            .clone()
-            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/flutter-probe.dex"));
-        let driver_bytes = std::fs::read(&driver_dex).map_err(|e| {
-            setup("driver-dex", format!("{}: {e}", driver_dex.display()))
-        })?;
+        let driver_dex = opts.driver_dex.clone().unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/flutter-probe.dex")
+        });
+        let driver_bytes = std::fs::read(&driver_dex)
+            .map_err(|e| setup("driver-dex", format!("{}: {e}", driver_dex.display())))?;
         let driver = DexFile::parse(driver_bytes)
             .map_err(|e| setup("driver-dex", format!("{}: {e:?}", driver_dex.display())))?;
         vm.add_dex(driver);
@@ -579,9 +577,7 @@ impl FlutterSession {
 
         // Prepare the platform thread's ALooper (idempotent).
         // SAFETY: `ALooper_prepare` has no preconditions.
-        let looper = unsafe {
-            acos_native_loader::bionic::ndk::ndk_looper::alooper_prepare(0)
-        };
+        let looper = unsafe { acos_native_loader::bionic::ndk::ndk_looper::alooper_prepare(0) };
 
         let session = FlutterSession {
             vm,
@@ -645,16 +641,11 @@ impl FlutterSession {
         // Synthetic vsync on the VM-owner (platform) thread.
         let now = Instant::now();
         if now >= self.vsync_due {
-            let period = Duration::from_nanos(
-                (1_000_000_000.0 / self.opts.vsync_hz.max(1.0)) as u64,
-            );
+            let period =
+                Duration::from_nanos((1_000_000_000.0 / self.opts.vsync_hz.max(1.0)) as u64);
             self.vsync_due = now + period;
             let delay = now.duration_since(self.vsync_due).as_nanos() as i64;
-            let _ = self.call_driver(
-                "deliverVsync",
-                "(J)J",
-                &[JavaValue::Long(delay.max(0))],
-            );
+            let _ = self.call_driver("deliverVsync", "(J)J", &[JavaValue::Long(delay.max(0))]);
             self.vsync_delivered += 1;
         }
 
@@ -692,10 +683,7 @@ impl FlutterSession {
             if Instant::now() >= deadline {
                 return Err(FlutterSessionError::Budget {
                     kind: "time",
-                    detail: format!(
-                        "awaiting frame {target}, have {}",
-                        self.frames.len()
-                    ),
+                    detail: format!("awaiting frame {target}, have {}", self.frames.len()),
                 });
             }
             self.pump()?;
@@ -750,10 +738,7 @@ impl FlutterSession {
     /// Refresh and return the semantic tree from the engine's accessibility
     /// stream. Empty until the app calls `PlatformDispatcher.updateSemantics`.
     pub fn semantics(&mut self) -> Result<Vec<SemanticsNode>, FlutterSessionError> {
-        let seq = match self
-            .vm
-            .get_static_field(DRIVER_DESCRIPTOR, "sSemanticsSeq")
-        {
+        let seq = match self.vm.get_static_field(DRIVER_DESCRIPTOR, "sSemanticsSeq") {
             Ok(JavaValue::Int(v)) => v,
             Ok(_) => 0,
             Err(e) => {
@@ -768,12 +753,18 @@ impl FlutterSession {
         }
         self.semantics_seq = seq;
 
-        let buffer = match self.vm.get_static_field(DRIVER_DESCRIPTOR, "sSemanticsBuffer") {
+        let buffer = match self
+            .vm
+            .get_static_field(DRIVER_DESCRIPTOR, "sSemanticsBuffer")
+        {
             Ok(JavaValue::Object(h)) => self.read_byte_array(h)?,
             Ok(JavaValue::Null) | Err(_) => Vec::new(),
             Ok(_) => Vec::new(),
         };
-        let strings = match self.vm.get_static_field(DRIVER_DESCRIPTOR, "sSemanticsStrings") {
+        let strings = match self
+            .vm
+            .get_static_field(DRIVER_DESCRIPTOR, "sSemanticsStrings")
+        {
             Ok(JavaValue::Object(h)) => self.read_string_array(h)?,
             Ok(JavaValue::Null) | Err(_) => Vec::new(),
             Ok(_) => Vec::new(),
@@ -782,47 +773,60 @@ impl FlutterSession {
             self.semantics = Vec::new();
             return Ok(self.semantics.clone());
         }
-        let nodes = decode_semantics_update(&buffer, &strings, &[])
-            .map_err(|e| FlutterSessionError::Driver {
+        let nodes = decode_semantics_update(&buffer, &strings, &[]).map_err(|e| {
+            FlutterSessionError::Driver {
                 stage: "semantics",
                 detail: e.to_string(),
-            })?;
+            }
+        })?;
         self.semantics = nodes;
         Ok(self.semantics.clone())
     }
 
     fn read_byte_array(&mut self, h: acos_vm::Handle) -> Result<Vec<u8>, FlutterSessionError> {
-        let len = self.vm.array_length(h).map_err(|e| FlutterSessionError::Driver {
-            stage: "semantics",
-            detail: format!("{e:?}"),
-        })?;
+        let len = self
+            .vm
+            .array_length(h)
+            .map_err(|e| FlutterSessionError::Driver {
+                stage: "semantics",
+                detail: format!("{e:?}"),
+            })?;
         let mut out = Vec::with_capacity(len);
         for i in 0..len {
-            if let JavaValue::Byte(b) = self.vm.get_array_element(h, i).map_err(|e| {
-                FlutterSessionError::Driver {
-                    stage: "semantics",
-                    detail: format!("{e:?}"),
-                }
-            })? {
+            if let JavaValue::Byte(b) =
+                self.vm
+                    .get_array_element(h, i)
+                    .map_err(|e| FlutterSessionError::Driver {
+                        stage: "semantics",
+                        detail: format!("{e:?}"),
+                    })?
+            {
                 out.push(b as u8);
             }
         }
         Ok(out)
     }
 
-    fn read_string_array(&mut self, h: acos_vm::Handle) -> Result<Vec<String>, FlutterSessionError> {
-        let len = self.vm.array_length(h).map_err(|e| FlutterSessionError::Driver {
-            stage: "semantics",
-            detail: format!("{e:?}"),
-        })?;
+    fn read_string_array(
+        &mut self,
+        h: acos_vm::Handle,
+    ) -> Result<Vec<String>, FlutterSessionError> {
+        let len = self
+            .vm
+            .array_length(h)
+            .map_err(|e| FlutterSessionError::Driver {
+                stage: "semantics",
+                detail: format!("{e:?}"),
+            })?;
         let mut out = Vec::with_capacity(len);
         for i in 0..len {
-            match self.vm.get_array_element(h, i).map_err(|e| {
-                FlutterSessionError::Driver {
+            match self
+                .vm
+                .get_array_element(h, i)
+                .map_err(|e| FlutterSessionError::Driver {
                     stage: "semantics",
                     detail: format!("{e:?}"),
-                }
-            })? {
+                })? {
                 JavaValue::Object(sh) => {
                     let s = self.vm.java_string_to_rust(sh).map_err(|e| {
                         FlutterSessionError::Driver {
@@ -882,13 +886,8 @@ impl FlutterSession {
         // an effect.
         if clickable {
             let before = self.frames.len();
-            let _ = self.call_driver(
-                "dispatchSemanticsTap",
-                "(I)V",
-                &[JavaValue::Int(node_id)],
-            );
-            let _ =
-                self.pump_until_frames(before + 1, self.opts.max_pump_rounds.min(120));
+            let _ = self.call_driver("dispatchSemanticsTap", "(I)V", &[JavaValue::Int(node_id)]);
+            let _ = self.pump_until_frames(before + 1, self.opts.max_pump_rounds.min(120));
             if self.frames.len() > before {
                 return Ok([x, y]);
             }
@@ -941,9 +940,7 @@ impl FlutterSession {
     /// error. Diagnostic only.
     pub fn semantics_debug(&mut self) -> String {
         match self.call_driver("semanticsDebug", "()Ljava/lang/String;", &[]) {
-            Ok(JavaValue::Object(h)) => {
-                self.vm.java_string_to_rust(h).unwrap_or_default()
-            }
+            Ok(JavaValue::Object(h)) => self.vm.java_string_to_rust(h).unwrap_or_default(),
             Ok(other) => format!("semanticsDebug returned {other:?}"),
             Err(e) => format!("semanticsDebug failed: {e}"),
         }

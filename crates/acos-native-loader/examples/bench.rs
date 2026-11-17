@@ -102,7 +102,8 @@ fn main() {
     }
 
     let json = serde_json::to_string_pretty(&results).unwrap();
-    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../results/native-loader/load_times.json");
+    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../results/native-loader/load_times.json");
     if let Some(dir) = out.parent() {
         let _ = std::fs::create_dir_all(dir);
     }

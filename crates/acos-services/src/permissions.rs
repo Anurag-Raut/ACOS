@@ -79,9 +79,7 @@ pub struct PermissionsRequest {
 pub fn permission_request(intent: &crate::ams::IntentFacts) -> Option<PermissionsRequest> {
     let is_request = intent.action.as_deref() == Some(ACTION_REQUEST_PERMISSIONS)
         || (intent.package.as_deref() == Some(PERMISSION_CONTROLLER_PACKAGE)
-            && intent
-                .extras
-                .contains_key(EXTRA_REQUEST_PERMISSIONS_NAMES));
+            && intent.extras.contains_key(EXTRA_REQUEST_PERMISSIONS_NAMES));
     if !is_request {
         return None;
     }
@@ -237,8 +235,10 @@ impl PermissionStore {
         entry.user_set = true;
         entry.user_fixed = never_ask_again;
         entry.requested = true;
-        self.mutations
-            .push(format!("deny:{permission}{}", if never_ask_again { ":fixed" } else { "" }));
+        self.mutations.push(format!(
+            "deny:{permission}{}",
+            if never_ask_again { ":fixed" } else { "" }
+        ));
     }
 
     /// `revokeRuntimePermission`: forget the runtime state, back to install.
@@ -283,7 +283,8 @@ impl PermissionStore {
     /// Record a request that never reached a dialog: the permission controller
     /// system app does not exist yet, so the app's request was refused.
     pub fn refuse_request(&mut self, permissions: &[String], package: &str) {
-        self.refused.push((permissions.to_vec(), package.to_string()));
+        self.refused
+            .push((permissions.to_vec(), package.to_string()));
     }
 
     /// `checkPermission`: the runtime table wins over the manifest.
@@ -426,12 +427,21 @@ mod tests {
         let mut store = store();
         let camera = "android.permission.CAMERA";
         assert_eq!(store.check(camera), PERMISSION_DENIED);
-        assert!(!store.should_show_rationale(camera), "never asked: no rationale");
+        assert!(
+            !store.should_show_rationale(camera),
+            "never asked: no rationale"
+        );
         store.note_request(&[camera.to_string()], 7, "com.android.permissioncontroller");
-        assert!(!store.should_show_rationale(camera), "asked, not answered: no rationale");
+        assert!(
+            !store.should_show_rationale(camera),
+            "asked, not answered: no rationale"
+        );
         store.deny(camera, false);
         assert_eq!(store.check(camera), PERMISSION_DENIED);
-        assert!(store.should_show_rationale(camera), "denied once: show rationale");
+        assert!(
+            store.should_show_rationale(camera),
+            "denied once: show rationale"
+        );
         assert_eq!(store.flags(camera), FLAG_PERMISSION_USER_SET);
         store.deny(camera, true);
         assert!(
@@ -444,7 +454,10 @@ mod tests {
         );
         store.grant(camera);
         assert_eq!(store.check(camera), PERMISSION_GRANTED);
-        assert!(!store.should_show_rationale(camera), "granted: no rationale");
+        assert!(
+            !store.should_show_rationale(camera),
+            "granted: no rationale"
+        );
         store.revoke(camera);
         assert_eq!(
             store.check(camera),

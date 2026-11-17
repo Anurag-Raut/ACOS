@@ -121,7 +121,11 @@ pub fn spawn_if_enabled(engine: Engine) {
 /// Is the prewarm turned off by the environment?
 pub fn disabled() -> bool {
     matches!(
-        std::env::var(ENV_DISABLE).unwrap_or_default().trim().to_ascii_lowercase().as_str(),
+        std::env::var(ENV_DISABLE)
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
         "1" | "true" | "yes" | "on"
     )
 }
@@ -138,7 +142,10 @@ pub fn cap_bytes() -> u64 {
 /// Resolve the working set and read it into the page cache.
 pub fn run() -> Report {
     let cap = cap_bytes();
-    let mut report = Report { cap_bytes: cap, ..Report::default() };
+    let mut report = Report {
+        cap_bytes: cap,
+        ..Report::default()
+    };
     if cap == 0 {
         return report;
     }
@@ -167,7 +174,10 @@ pub fn run() -> Report {
             Ok(read) => {
                 report.bytes = report.bytes.saturating_add(read);
                 if verbose {
-                    eprintln!("acos serve: prewarm: warmed {} ({read} bytes)", path.display());
+                    eprintln!(
+                        "acos serve: prewarm: warmed {} ({read} bytes)",
+                        path.display()
+                    );
                 }
                 report.warmed.push((path, read));
             }
@@ -180,7 +190,11 @@ pub fn run() -> Report {
 
 fn verbose() -> bool {
     matches!(
-        std::env::var(ENV_VERBOSE).unwrap_or_default().trim().to_ascii_lowercase().as_str(),
+        std::env::var(ENV_VERBOSE)
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
         "1" | "true" | "yes" | "on"
     )
 }
@@ -215,8 +229,12 @@ fn warm(path: &Path, buffer: &mut [u8]) -> std::io::Result<u64> {
 
 /// The candidate paths, in the order a launch touches them.
 pub fn candidates() -> Vec<PathBuf> {
-    let Some(root) = repo_root() else { return Vec::new() };
-    let Some(sysroot) = sysroot(&root) else { return Vec::new() };
+    let Some(root) = repo_root() else {
+        return Vec::new();
+    };
+    let Some(sysroot) = sysroot(&root) else {
+        return Vec::new();
+    };
     let data = data_dir(&root);
     let mut out = Vec::new();
     out.extend(boot_image(&sysroot));
@@ -305,7 +323,9 @@ fn boot_image(sysroot: &Path) -> Vec<PathBuf> {
         if let Ok(rd) = std::fs::read_dir(&isa) {
             for entry in rd.flatten() {
                 let p = entry.path();
-                if p.extension().and_then(|e| e.to_str()) == Some("art") && p != isa.join("boot.art") {
+                if p.extension().and_then(|e| e.to_str()) == Some("art")
+                    && p != isa.join("boot.art")
+                {
                     out.push(p);
                 }
             }
@@ -356,7 +376,9 @@ fn shared_cache_entry() -> Option<PathBuf> {
 fn art_runtime(sysroot: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let apex = sysroot.join("system/apex");
-    let Ok(entries) = std::fs::read_dir(&apex) else { return out };
+    let Ok(entries) = std::fs::read_dir(&apex) else {
+        return out;
+    };
     let mut dirs: Vec<PathBuf> = entries.flatten().map(|entry| entry.path()).collect();
     dirs.sort();
     for dir in dirs {
@@ -389,7 +411,9 @@ fn classpath_jars(sysroot: &Path, data: &Path) -> Vec<PathBuf> {
     let mut jars: Vec<PathBuf> = Vec::new();
     if let Ok(text) = std::fs::read_to_string(&env_file) {
         for line in text.lines() {
-            let Some(rest) = line.trim().strip_prefix("export BOOTCLASSPATH ") else { continue };
+            let Some(rest) = line.trim().strip_prefix("export BOOTCLASSPATH ") else {
+                continue;
+            };
             for guest in rest.trim().split(':').filter(|entry| !entry.is_empty()) {
                 if let Some(host) = host_path_for_guest(sysroot, guest) {
                     jars.push(host);
@@ -446,7 +470,9 @@ fn is_framework_jar(path: &Path) -> bool {
 }
 
 fn file_size(path: &Path) -> u64 {
-    std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(u64::MAX)
+    std::fs::metadata(path)
+        .map(|meta| meta.len())
+        .unwrap_or(u64::MAX)
 }
 
 /// Map a device path (`/system/...`, `/apex/<mount>/...`) into the extracted
@@ -463,7 +489,9 @@ pub fn host_path_for_guest(sysroot: &Path, guest: &str) -> Option<PathBuf> {
     let entries = std::fs::read_dir(sysroot.join("system/apex")).ok()?;
     let mut dirs: Vec<PathBuf> = entries.flatten().map(|entry| entry.path()).collect();
     dirs.sort();
-    dirs.into_iter().map(|dir| dir.join(tail)).find(|path| path.is_file())
+    dirs.into_iter()
+        .map(|dir| dir.join(tail))
+        .find(|path| path.is_file())
 }
 
 /// What `launch.rs` builds into `<data>` before the guest starts: the guest
@@ -544,8 +572,14 @@ mod tests {
         let jar = root.join("system/framework/framework.jar");
         std::fs::create_dir_all(jar.parent().unwrap()).unwrap();
         std::fs::write(&jar, b"jar").unwrap();
-        assert_eq!(host_path_for_guest(&root, "/system/framework/framework.jar"), Some(jar));
-        assert_eq!(host_path_for_guest(&root, "/system/framework/absent.jar"), None);
+        assert_eq!(
+            host_path_for_guest(&root, "/system/framework/framework.jar"),
+            Some(jar)
+        );
+        assert_eq!(
+            host_path_for_guest(&root, "/system/framework/absent.jar"),
+            None
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -558,7 +592,10 @@ mod tests {
         std::fs::create_dir_all(jar.parent().unwrap()).unwrap();
         std::fs::write(&jar, b"jar").unwrap();
         assert_eq!(
-            host_path_for_guest(&root, "/apex/com.android.configinfrastructure/javalib/fw.jar"),
+            host_path_for_guest(
+                &root,
+                "/apex/com.android.configinfrastructure/javalib/fw.jar"
+            ),
             Some(jar)
         );
         let _ = std::fs::remove_dir_all(&root);
@@ -579,7 +616,10 @@ mod tests {
 "#;
         assert_eq!(
             default_font_files(xml),
-            vec!["Roboto-Regular.ttf".to_string(), "Roboto-Italic.ttf".to_string()]
+            vec![
+                "Roboto-Regular.ttf".to_string(),
+                "Roboto-Italic.ttf".to_string()
+            ]
         );
     }
 
@@ -596,8 +636,12 @@ mod tests {
             order_classpath(vec![big.clone(), small.clone(), fw.clone()], &root),
             vec![fw, small, big]
         );
-        assert!(is_framework_jar(Path::new("/x/system/framework/framework.jar")));
-        assert!(!is_framework_jar(Path::new("/x/system/framework/framework-graphics.jar")));
+        assert!(is_framework_jar(Path::new(
+            "/x/system/framework/framework.jar"
+        )));
+        assert!(!is_framework_jar(Path::new(
+            "/x/system/framework/framework-graphics.jar"
+        )));
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -609,7 +653,10 @@ mod tests {
         std::fs::write(&a, vec![0u8; 8]).unwrap();
         std::fs::write(&b, vec![0u8; 64]).unwrap();
         let cap = 16u64;
-        let mut report = Report { cap_bytes: cap, ..Report::default() };
+        let mut report = Report {
+            cap_bytes: cap,
+            ..Report::default()
+        };
         let mut buffer = vec![0u8; CHUNK];
         // Mirrors `run`'s decision order without touching the real sysroot.
         for path in [&a, &b, &a] {
@@ -644,10 +691,16 @@ mod tests {
     fn disable_and_cap_knobs_parse_conservatively() {
         // Only an explicit truthy value disables; an empty or odd value runs.
         for value in ["1", "true", "YES", "on"] {
-            assert!(matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"));
+            assert!(matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            ));
         }
         for value in ["", "0", "false", "no"] {
-            assert!(!matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"));
+            assert!(!matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            ));
         }
     }
 }

@@ -10,9 +10,7 @@ use std::path::Path;
 use acos_protocol::commands::{KeyName, ResetScope};
 use acos_protocol::UiTree;
 use acos_verify::backend::LaunchRequest;
-use acos_verify::{
-    Backend, BackendError, InputAction, LaunchOutcome, SessionObservation,
-};
+use acos_verify::{Backend, BackendError, InputAction, LaunchOutcome, SessionObservation};
 
 use super::{
     stale_frame, Engine, FrameEvidence, Mode, ObservedFrame, SessionBackend, SessionCapabilities,
@@ -48,10 +46,7 @@ impl RustVmSession {
         observation
     }
 
-    fn observed(
-        &mut self,
-        observation: SessionObservation,
-    ) -> Result<ObservedFrame, BackendError> {
+    fn observed(&mut self, observation: SessionObservation) -> Result<ObservedFrame, BackendError> {
         let png = observation
             .screenshot_png
             .clone()
@@ -145,11 +140,7 @@ impl SessionBackend for RustVmSession {
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0);
             self.cached = Some(ObservedFrame {
-                tree: acos_protocol::UiTree::new(
-                    frame.clone(),
-                    self.package.clone(),
-                    Vec::new(),
-                ),
+                tree: acos_protocol::UiTree::new(frame.clone(), self.package.clone(), Vec::new()),
                 frame: FrameEvidence {
                     frame_seq: frame.frame_seq,
                     previous_seq: 0,

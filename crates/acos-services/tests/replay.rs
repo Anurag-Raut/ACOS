@@ -165,7 +165,13 @@ fn launch_cases() -> Vec<Case> {
             name: "IActivityManager.getContentProvider",
             interface: "android.app.IActivityManager",
             method: "getContentProvider",
-            args: vec![b(app_thread), s(pkg), s("settings"), Value::Int(0), Value::Bool(false)],
+            args: vec![
+                b(app_thread),
+                s(pkg),
+                s("settings"),
+                Value::Int(0),
+                Value::Bool(false),
+            ],
         },
         Case {
             name: "IAccessibilityManager.addClient",
@@ -200,19 +206,28 @@ fn launch_cases() -> Vec<Case> {
                 Value::TypedObject(Parcelable::ordered(
                     "android.app.ActivityManager$TaskDescription",
                     vec![
-                        Value::Cond { present: false, values: vec![] }, // label
-                        Value::Cond { present: false, values: vec![] }, // icon
-                        Value::Int(0), // colorPrimary
-                        Value::Int(0), // colorBackground
-                        Value::Int(0), // statusBarColor
-                        Value::Int(0), // navigationBarColor
+                        Value::Cond {
+                            present: false,
+                            values: vec![],
+                        }, // label
+                        Value::Cond {
+                            present: false,
+                            values: vec![],
+                        }, // icon
+                        Value::Int(0),      // colorPrimary
+                        Value::Int(0),      // colorBackground
+                        Value::Int(0),      // statusBarColor
+                        Value::Int(0),      // navigationBarColor
                         Value::Bool(false), // ensureStatusBarContrast
                         Value::Bool(false), // ensureNavigationBarContrast
-                        Value::Int(2), // resizeMode
-                        Value::Int(-1), // minWidth
-                        Value::Int(-1), // minHeight
-                        Value::Cond { present: false, values: vec![] }, // iconFilename
-                        Value::Int(0), // colorBackgroundFloating
+                        Value::Int(2),      // resizeMode
+                        Value::Int(-1),     // minWidth
+                        Value::Int(-1),     // minHeight
+                        Value::Cond {
+                            present: false,
+                            values: vec![],
+                        }, // iconFilename
+                        Value::Int(0),      // colorBackgroundFloating
                     ],
                 )),
             ],
@@ -410,7 +425,10 @@ fn interaction_cases() -> Vec<Case> {
                 )),
                 Value::TypedObject(P::ordered(
                     "android.view.autofill.AutofillValue",
-                    vec![Value::Int(0), Value::Dynamic(acos_services::value::DynamicValue::Null)],
+                    vec![
+                        Value::Int(0),
+                        Value::Dynamic(acos_services::value::DynamicValue::Null),
+                    ],
                 )),
                 Value::Int(0),
                 Value::Bool(false),
@@ -427,7 +445,10 @@ fn interaction_cases() -> Vec<Case> {
             name: "IPackageManager.hasSystemFeature (interaction)",
             interface: "android.content.pm.IPackageManager",
             method: "hasSystemFeature",
-            args: vec![s("android.hardware.touchscreen.multitouch.distinct"), Value::Int(0)],
+            args: vec![
+                s("android.hardware.touchscreen.multitouch.distinct"),
+                Value::Int(0),
+            ],
         },
         Case {
             name: "IActivityTaskManager.reportAssistContextExtras",
@@ -436,8 +457,14 @@ fn interaction_cases() -> Vec<Case> {
             args: vec![
                 b(0x9000),
                 Value::Bundle(None),
-                Value::TypedObject(P::ordered("android.app.assist.AssistStructure", vec![Value::Int(0)])),
-                Value::TypedObject(P::ordered("android.app.assist.AssistContent", vec![Value::Int(0)])),
+                Value::TypedObject(P::ordered(
+                    "android.app.assist.AssistStructure",
+                    vec![Value::Int(0)],
+                )),
+                Value::TypedObject(P::ordered(
+                    "android.app.assist.AssistContent",
+                    vec![Value::Int(0)],
+                )),
                 Value::TypedObject(P::ordered(
                     "android.net.Uri",
                     vec![Value::Int(0), Value::Str8(None)],
@@ -621,7 +648,11 @@ fn replay_all_measured_outgoing_calls() {
             }
             Err(ServiceError::NotOwned { .. }) => {
                 not_owned += 1;
-                println!("{:<62} {:<8} not-owned", case.name, owner.unwrap_or("acos-wm"));
+                println!(
+                    "{:<62} {:<8} not-owned",
+                    case.name,
+                    owner.unwrap_or("acos-wm")
+                );
             }
             Err(err) => {
                 failures.push(format!("{}: {err}", case.name));
@@ -630,7 +661,11 @@ fn replay_all_measured_outgoing_calls() {
         }
     }
     println!("replayed {total} rows: {ok} ok, {not_owned} not-owned");
-    assert!(failures.is_empty(), "replay failures:\n{}", failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "replay failures:\n{}",
+        failures.join("\n")
+    );
     assert!(
         ok >= 45,
         "expected at least 45 owned rows to replay, got {ok}"

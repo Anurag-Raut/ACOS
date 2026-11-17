@@ -116,11 +116,7 @@ pub fn write_frame(dir: &Path, seq: u64, png: &[u8]) -> Result<(), VerifyError> 
 /// Same bytes as `frames/<seq>.png` (the file `steps[].frame_seq` names): a
 /// hardlink when the filesystem allows it (no extra bytes), a copy otherwise.
 /// The label is what makes "the screenshot for X" answerable from the artifacts.
-pub fn write_capture_frame(
-    dir: &Path,
-    canonical: &str,
-    named: &str,
-) -> Result<(), VerifyError> {
+pub fn write_capture_frame(dir: &Path, canonical: &str, named: &str) -> Result<(), VerifyError> {
     let source = dir.join(canonical);
     let target = dir.join(named);
     if let Some(parent) = target.parent() {
@@ -282,7 +278,10 @@ mod tests {
         // The JSON stays the machine-readable copy of the same list.
         let json: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(dir.join(REPRO_JSON)).unwrap()).unwrap();
-        assert_eq!(json["flags"], serde_json::json!(["engine=art", "variant.pre-fix=1"]));
+        assert_eq!(
+            json["flags"],
+            serde_json::json!(["engine=art", "variant.pre-fix=1"])
+        );
         // No flags: no stray `--flag` argument.
         repro.flags.clear();
         write_reproducer(&dir, &repro).unwrap();
@@ -318,9 +317,15 @@ mod tests {
             .env("PATH", "/nonexistent")
             .output()
             .expect("run sh");
-        assert!(!out.status.success(), "a replay without a directory must not run");
+        assert!(
+            !out.status.success(),
+            "a replay without a directory must not run"
+        );
         let stderr = String::from_utf8_lossy(&out.stderr);
-        assert!(stderr.contains("usage: sh repro.sh <new-artifacts-dir>"), "{stderr}");
+        assert!(
+            stderr.contains("usage: sh repro.sh <new-artifacts-dir>"),
+            "{stderr}"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

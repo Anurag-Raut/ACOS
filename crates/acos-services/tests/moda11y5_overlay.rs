@@ -56,7 +56,7 @@ fn add_window(state: &Arc<Mutex<A11yState>>, window: u64, type_: i32, token: Opt
         .clone()
         .expect("the host wires the LAYER1 window stack");
     let mut wms = wms.lock().unwrap();
-    let session = wms.session;
+    let session = wms.allocate_session();
     let mut params = acos_wm::codec::LayoutParams {
         type_,
         width: 240,
@@ -80,7 +80,12 @@ fn the_bind_registers_the_overlay_window_token_and_wms_honours_it() {
     // Before the bind there is no overlay authority at all: the add is refused
     // with AOSP's `ADD_BAD_APP_TOKEN`, not silently accepted.
     assert_eq!(
-        add_window(&state, 0x5001, TYPE_ACCESSIBILITY_OVERLAY, Some(OVERLAY_TOKEN)),
+        add_window(
+            &state,
+            0x5001,
+            TYPE_ACCESSIBILITY_OVERLAY,
+            Some(OVERLAY_TOKEN)
+        ),
         ADD_BAD_APP_TOKEN,
         "no bound service, no overlay token"
     );
@@ -98,7 +103,12 @@ fn the_bind_registers_the_overlay_window_token_and_wms_honours_it() {
     // Now the service's own overlay add is accepted, and it lands in policy
     // layer 31 (LAYER1), above the activity.
     assert_eq!(
-        add_window(&state, 0x5002, TYPE_ACCESSIBILITY_OVERLAY, Some(OVERLAY_TOKEN)),
+        add_window(
+            &state,
+            0x5002,
+            TYPE_ACCESSIBILITY_OVERLAY,
+            Some(OVERLAY_TOKEN)
+        ),
         ADD_OKAY,
         "the bound service's token authorises the overlay"
     );
@@ -126,7 +136,12 @@ fn the_bind_registers_the_overlay_window_token_and_wms_honours_it() {
     // A different token is refused even while a service is bound: the authority
     // is the token, not "some accessibility service exists".
     assert_eq!(
-        add_window(&state, 0x5004, TYPE_ACCESSIBILITY_OVERLAY, Some(0xBAD0_0000)),
+        add_window(
+            &state,
+            0x5004,
+            TYPE_ACCESSIBILITY_OVERLAY,
+            Some(0xBAD0_0000)
+        ),
         ADD_BAD_APP_TOKEN,
         "a foreign token cannot claim the accessibility overlay layer"
     );
@@ -141,7 +156,12 @@ fn the_bind_registers_the_overlay_window_token_and_wms_honours_it() {
     // Turning accessibility off removes the token authority with the service.
     a11y_state(&mut host).lock().unwrap().disable();
     assert_eq!(
-        add_window(&state, 0x5006, TYPE_ACCESSIBILITY_OVERLAY, Some(OVERLAY_TOKEN)),
+        add_window(
+            &state,
+            0x5006,
+            TYPE_ACCESSIBILITY_OVERLAY,
+            Some(OVERLAY_TOKEN)
+        ),
         ADD_BAD_APP_TOKEN,
         "a disabled module has no overlay token"
     );

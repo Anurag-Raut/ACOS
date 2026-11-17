@@ -95,6 +95,9 @@
 // in this driver's own memory, not part of the wire contract.
 #define E3G_MAX_NODE 1024
 #define E3G_MAX_HANDLE 512
+// Death registrations (`BC_REQUEST_DEATH_NOTIFICATION`): one per linkToDeath
+// on a peer-owned binder, bounded like the kernel's.
+#define E3G_MAX_DEATH 64
 
 static int g_dbg = -1;
 #define DBG(...)                                     \
@@ -187,6 +190,12 @@ static void trace_log(const char* fmt, ...) {
 // tombstoned, so a fault inside libbinder otherwise leaves no evidence at all.
 static void* __attribute__((noinline)) crash_install(void);
 
+// MPROC5b: the substrate (property table, framework natives, crash reporter,
+// fd/ioctl interception) is bionic/JNI-specific and is left out of the host
+// driver test (`native/driver_test.c` compiles the transport, object table and
+// driver layers with E3G_HOST_TEST and drives the death paths directly). The
+// guest build never defines it.
+#ifndef E3G_HOST_TEST
 // --------------------------------------------------------- (4) property table
 // (see E2D §1: Build.VERSION.<clinit> indexes SUPPORTED_ABIS[0]; a failure is
 // sticky and poisons Resources/ActivityThread/anything touching Build).
@@ -287,15 +296,32 @@ __attribute__((constructor)) static void e3g_load_runtime(void) {
     }
 }
 
+#endif  // E3G_HOST_TEST
+
 // ------------------------------------------------------------- (3) transport
 // Wire protocol (see crates/acos-binder-peer/src/protocol.rs). F_HELLO is sent
 // once by the driver right after it connects: `seq` = protocol version, `code` =
-// capability bits. F_REF is the peer's reference-count operation on a node the
-// guest exported (the `F_REL`-style message: without it a node lives for the
-// whole session even after the host dropped its last reference).
-enum { F_REQ = 1, F_RSP = 2, F_TXN = 3, F_REP = 4, F_HELLO = 5, F_REF = 6 };
+// this connection's process tag, `data` = the process name. F_REF is the peer's
+// reference-count operation on a node the guest exported (the `F_REL`-style
+// message: without it a node lives for the whole session even after the host
+// dropped its last reference). F_DEATH says a synthetic node for another
+// process's binder died.
+enum {
+    F_REQ = 1,
+    F_RSP = 2,
+    F_TXN = 3,
+    F_REP = 4,
+    F_HELLO = 5,
+    F_REF = 6,
+    F_DEATH = 7
+};
 enum { REF_ACQUIRE = 1, REF_RELEASE = 2 };
-#define ACOS_WIRE_VERSION 2
+#define ACOS_WIRE_VERSION 3
+
+// `F_RSP` flag (MPROC5b): the peer refused because the target process is dead.
+// The caller must see `BR_DEAD_REPLY` (DeadObjectException), not the generic
+// `BR_FAILED_REPLY`. No reply payload is carried.
+#define E3G_RSP_DEAD 0x80000000u
 
 struct fhdr {
     uint32_t type;
@@ -317,6 +343,7 @@ struct slot {
     uint8_t* offs;
     size_t offs_size;
     uint32_t status;
+    int dead;              // F_RSP with E3G_RSP_DEAD -> BR_DEAD_REPLY
     // Descriptors the peer sent with this reply (SCM_RIGHTS). They are owned by
     // this process until `build_reply` substitutes them into the reply
     // parcel's `BINDER_TYPE_FD` objects and closes them. Dropping them here
@@ -395,6 +422,19 @@ struct drv {
     int n_handles;
     uint32_t next_wire;
     uint32_t next_handle;
+    // MPROC5b: `BC_REQUEST_DEATH_NOTIFICATION` registrations, keyed by our
+    // local handle. A registration is one-shot: the kernel drops it when it
+    // delivers `BR_DEAD_BINDER`, and the app answers `BC_DEAD_BINDER_DONE`.
+    struct death_reg {
+        int used;
+        uint32_t handle;
+        uint64_t cookie;
+    } deaths[E3G_MAX_DEATH];
+    // Cookies queued by `F_DEATH` and not yet handed to a looper thread. The
+    // reader thread must not pend them itself: `T.pend` belongs to the thread
+    // that will later read, and only a looper thread dispatches callbacks.
+    uint64_t death_queue[E3G_MAX_DEATH];
+    int death_head, death_tail, death_count;
 };
 
 static struct drv g;
@@ -683,6 +723,72 @@ static uint64_t peer_node_for_handle(uint32_t h) {
     return peer;
 }
 
+// -------------------------------------------------- death notifications (MPROC5b)
+// Stock libbinder asks for `BC_REQUEST_DEATH_NOTIFICATION(handle, cookie)` —
+// the cookie is the `BpBinder*` it wants back in `BR_DEAD_BINDER`, and the
+// handle is our local wire handle. The peer owns liveness (a node dies when the
+// process that owns it disconnects), so the driver only remembers the
+// registrations, turns `F_DEATH(target = peer node)` into one `BR_DEAD_BINDER`
+// per registration with that exact cookie, and lets `BC_DEAD_BINDER_DONE` fall
+// through (the registration is one-shot, as in the kernel).
+static void request_death(uint32_t handle, uint64_t cookie) {
+    for (int i = 0; i < E3G_MAX_DEATH; i++) {
+        if (g.deaths[i].used && g.deaths[i].handle == handle && g.deaths[i].cookie == cookie)
+            return;
+    }
+    for (int i = 0; i < E3G_MAX_DEATH; i++) {
+        if (!g.deaths[i].used) {
+            g.deaths[i].used = 1;
+            g.deaths[i].handle = handle;
+            g.deaths[i].cookie = cookie;
+            DBG("death: handle=%u cookie=%llx registered", handle, (unsigned long long)cookie);
+            return;
+        }
+    }
+    WARN("death registration table full (handle %u cookie %llx)", handle,
+         (unsigned long long)cookie);
+}
+
+static void clear_death(uint32_t handle, uint64_t cookie) {
+    for (int i = 0; i < E3G_MAX_DEATH; i++) {
+        if (g.deaths[i].used && g.deaths[i].handle == handle && g.deaths[i].cookie == cookie) {
+            g.deaths[i].used = 0;
+            DBG("death: handle=%u cookie=%llx cleared", handle, (unsigned long long)cookie);
+            return;
+        }
+    }
+}
+
+// Queue one cookie for a looper thread. Caller holds `g.mu`.
+static void queue_death(uint64_t cookie) {
+    if (g.death_count >= E3G_MAX_DEATH) {
+        WARN("death queue full, dropping cookie %llx", (unsigned long long)cookie);
+        return;
+    }
+    g.death_queue[g.death_tail] = cookie;
+    g.death_tail = (g.death_tail + 1) % E3G_MAX_DEATH;
+    g.death_count++;
+    pthread_cond_broadcast(&g.cv_txn);
+}
+
+// The peer reported that `node` died. Every local handle standing for that peer
+// node loses its registrations, one `BR_DEAD_BINDER` each. Caller holds `g.mu`.
+static int deaths_for_node(uint64_t node) {
+    int queued = 0;
+    for (int i = 0; i < g.n_handles; i++) {
+        if (g.handles[i].peer_node != node) continue;
+        uint32_t handle = g.handles[i].h;
+        for (int d = 0; d < E3G_MAX_DEATH; d++) {
+            if (!g.deaths[d].used || g.deaths[d].handle != handle) continue;
+            uint64_t cookie = g.deaths[d].cookie;
+            g.deaths[d].used = 0;
+            queue_death(cookie);
+            queued++;
+        }
+    }
+    DBG("death: node=%llx -> %d BR_DEAD_BINDER queued", (unsigned long long)node, queued);
+    return queued;
+}
 
 // Rewrite the flat objects of a parcel in place.
 //   dir 0: ours -> peer   (BINDER->HANDLE(wire), HANDLE->BINDER(peer node))
@@ -952,6 +1058,7 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
             s->data_size = (size_t)h->data_size;
             s->offs_size = (size_t)h->offsets_size;
             s->status = h->code;
+            s->dead = (h->flags & E3G_RSP_DEAD) != 0;
             if (nfds > E3G_MAX_FD) nfds = E3G_MAX_FD;
             if (nfds > 0) memcpy(s->fds, fds, sizeof(int) * (size_t)nfds);
             s->nfds = nfds > 0 ? nfds : 0;
@@ -961,6 +1068,15 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
                         s->nfds, s->nfds > 0 ? s->fds[0] : -1);
             s->done = 1;
             pthread_cond_broadcast(&g.cv_rsp);
+            break;
+        }
+        case F_DEATH: {
+            // MPROC5b: the peer owns liveness. One `BR_DEAD_BINDER` per
+            // registration with the cookie libbinder handed the driver in
+            // `BC_REQUEST_DEATH_NOTIFICATION` (its `BpBinder*`), which is
+            // exactly what `IPCThreadState::executeCommand(BR_DEAD_BINDER)`
+            // reads back before `proxy->sendObituary()`.
+            (void)deaths_for_node(h->target);
             break;
         }
         case F_TXN: {
@@ -1025,16 +1141,38 @@ static int connect_peer(void) {
         return -1;
     }
     g.sock = s;
-    // Version handshake before any other frame: the peer must not send an
-    // `F_REF` (or use any later frame meaning) to a driver that does not speak
-    // it, and this driver refuses to guess what an older peer means either.
-    if (send_frame(F_HELLO, ACOS_WIRE_VERSION, 0 /* caps */, 0, 0, NULL, 0, NULL, 0, NULL, 0) != 0) {
-        WARN("hello to peer failed; the connection is unusable");
-        close(s);
-        g.sock = -1;
-        return -1;
+    // Handshake before any other frame: `seq` = wire protocol version, `code` =
+    // this connection's app process tag (a driver wire handle is only unique
+    // inside its own process, so the peer needs the tag to route a delivery),
+    // `data` = the process name. The peer must not send an `F_REF`/`F_DEATH`
+    // (or use any later frame meaning) to a driver that does not speak it, and
+    // this driver refuses to guess what an older peer means either.
+    {
+        const char* tag_env = getenv("ACOS_PROCESS_TAG");
+        unsigned long tag = 0;
+        if (tag_env != NULL && tag_env[0] != '\0') {
+            char* end = NULL;
+            unsigned long parsed = strtoul(tag_env, &end, 10);
+            if (end != tag_env && *end == '\0' && parsed <= 63) {
+                tag = parsed;
+            } else {
+                WARN("ACOS_PROCESS_TAG=%s is not a tag (0..63); using 0", tag_env);
+            }
+        }
+        const char* name = getenv("ACOS_PROCESS_NAME");
+        if (name == NULL) name = "primary";
+        size_t nlen = strlen(name);
+        if (nlen > 64) nlen = 64;
+        if (send_frame(F_HELLO, ACOS_WIRE_VERSION, (uint32_t)tag, 0, 0, name, nlen, NULL, 0, NULL,
+                       0) != 0) {
+            WARN("hello to peer failed; the connection is unusable");
+            close(s);
+            g.sock = -1;
+            return -1;
+        }
+        TRACE("tid=%d hello: wire protocol v%d tag=%lu name=%s", (int)syscall(__NR_gettid),
+              ACOS_WIRE_VERSION, tag, name);
     }
-    TRACE("tid=%d hello: wire protocol v%d", (int)syscall(__NR_gettid), ACOS_WIRE_VERSION);
     pthread_create(&g.reader, NULL, reader_main, NULL);
     g.reader_started = 1;
     DBG("connected to peer at %s", path);
@@ -1496,16 +1634,30 @@ static void handle_commands(const uint8_t* wbuf, size_t wsize) {
                 break;
             case BC_REQUEST_DEATH_NOTIFICATION:
             case BC_CLEAR_DEATH_NOTIFICATION: {
+                // `struct binder_handle_cookie { u32 handle; u64 cookie; }` is
+                // packed, so the body is exactly 12 bytes. The cookie is the
+                // `BpBinder*` libbinder wants back in `BR_DEAD_BINDER`.
                 if (pos + 12 > wsize) return;
-                pos += 12;  // struct binder_handle_cookie is packed
-                DBG("%s (recorded, peer liveness not modelled)",
-                    cmd == BC_REQUEST_DEATH_NOTIFICATION ? "BC_REQUEST_DEATH_NOTIFICATION"
-                                                         : "BC_CLEAR_DEATH_NOTIFICATION");
+                uint32_t handle;
+                uint64_t cookie;
+                memcpy(&handle, wbuf + pos, 4);
+                memcpy(&cookie, wbuf + pos + 4, 8);
+                pos += 12;
+                if (cmd == BC_REQUEST_DEATH_NOTIFICATION)
+                    request_death(handle, cookie);
+                else
+                    clear_death(handle, cookie);
                 break;
             }
             case BC_DEAD_BINDER_DONE: {
+                // `IPCThreadState` answers every `BR_DEAD_BINDER` with this and
+                // the pointer it was given. The registration is already gone
+                // (one-shot, as in the kernel), so the command is consumed.
                 if (pos + 8 > wsize) return;
+                uint64_t cookie;
+                memcpy(&cookie, wbuf + pos, 8);
                 pos += 8;
+                DBG("BC_DEAD_BINDER_DONE cookie=%llx", (unsigned long long)cookie);
                 break;
             }
             default:
@@ -1528,6 +1680,9 @@ static size_t br_cmd_len(const uint8_t* p, size_t avail) {
         case BR_SPAWN_LOOPER:
         case BR_DEAD_REPLY:
             return 4;
+        case BR_DEAD_BINDER:
+            // MPROC5b: the registered death cookie (`BpBinder*`).
+            return 4 + sizeof(binder_uintptr_t);
         case BR_INCREFS:
         case BR_ACQUIRE:
         case BR_RELEASE:
@@ -1610,7 +1765,12 @@ static int e3g_write_read(struct binder_write_read* bwr) {
         // BR_TRANSACTION_COMPLETE was already handed out in the previous ioctl
         // (or is still pending); make sure it precedes BR_REPLY.
             pend_cmd(BR_TRANSACTION_COMPLETE);
-        if (done.status != 0 || done.data == NULL) {
+        if (done.dead) {
+            // A transaction whose target died is `BR_DEAD_REPLY`: libbinder
+            // throws `DeadObjectException` instead of a generic runtime error.
+            uint32_t cmd = BR_DEAD_REPLY;
+            pend_append(&cmd, 4);
+        } else if (done.status != 0 || done.data == NULL) {
             uint32_t cmd = BR_FAILED_REPLY;
             pend_append(&cmd, 4);
         } else if (build_reply(&done) != 0) {
@@ -1646,11 +1806,28 @@ static int e3g_write_read(struct binder_write_read* bwr) {
     // an F_TXN frame is queued, so an untimed wait cannot miss it and adds no
     // latency; process teardown ends the thread. Non-loopers already returned
     // above and never park here.
-    while (g.in_head == NULL && !g_node_pending) {
+    while (g.in_head == NULL && !g_node_pending && g.death_count == 0) {
         pthread_cond_wait(&g.cv_txn, &g.mu);
     }
+    // MPROC5b: death notifications are queued by `F_DEATH` on the reader thread
+    // and delivered here, on the thread that dispatches callbacks. They do not
+    // use a reply slot: `BR_DEAD_BINDER` carries the registered cookie.
+    if (g.death_count > 0) {
+        while (g.death_count > 0) {
+            uint64_t cookie = g.death_queue[g.death_head];
+            g.death_head = (g.death_head + 1) % E3G_MAX_DEATH;
+            g.death_count--;
+            uint32_t cmd = BR_DEAD_BINDER;
+            pend_append(&cmd, 4);
+            pend_append(&cookie, 8);
+        }
+        pthread_mutex_unlock(&g.mu);
+        flush_pend(bwr);
+        pthread_mutex_lock(&g.mu);
+    }
     if (g.in_head == NULL) {
-        // Only node work woke us: hand the release commands out and park again.
+        // Only node work (or nothing) woke us: hand the release commands out
+        // and park again.
         pthread_mutex_unlock(&g.mu);
         drain_node_work();
         if (T.pend_len) flush_pend(bwr);
@@ -1673,6 +1850,7 @@ static int e3g_write_read(struct binder_write_read* bwr) {
     return 0;
 }
 
+#ifndef E3G_HOST_TEST
 // --------------------------------------------------- (4) fd / ioctl interception
 static const char* kBinderPaths[] = {"/dev/binder", "/dev/hwbinder", "/dev/vndbinder",
                                      "/dev/binderfs/binder", NULL};
@@ -2302,3 +2480,4 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_crashTest(JNIEnv* env, jclass klass
 }
 
 #endif  // !ACOS_DRIVER_HOST_TEST (JNI bridge / AndroidRuntime bootstrap)
+#endif  // !E3G_HOST_TEST (property table, framework natives)

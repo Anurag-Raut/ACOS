@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex};
 
 use acos_parcel::binder::BinderId;
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, ServiceObject};
 use crate::value::Value;
 
@@ -295,7 +295,12 @@ impl ImeService {
 }
 
 impl ServiceObject for ImeService {
-    fn call(&mut self, interface: &str, method: &acos_aidl::MethodInfo, args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &acos_aidl::MethodInfo,
+        args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "com.android.internal.view.IInputMethodManager" {
             return Err(unsupported(interface, method));
         }
@@ -372,7 +377,12 @@ impl ImeSessionService {
 }
 
 impl ServiceObject for ImeSessionService {
-    fn call(&mut self, interface: &str, method: &acos_aidl::MethodInfo, _args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &acos_aidl::MethodInfo,
+        _args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "com.android.internal.inputmethod.IInputMethodSession" {
             return Err(unsupported(interface, method));
         }
@@ -382,8 +392,12 @@ impl ServiceObject for ImeSessionService {
             "viewClicked" => state.view_clicked(),
             // `appPrivateCommand`/`displayCompletions`/`updateCursor` are IME ->
             // app deliveries; with no IME they are accepted no-ops.
-            "appPrivateCommand" | "displayCompletions" | "updateCursor" | "updateExtractedText"
-            | "toggleSoftInput" | "finishInput" => {}
+            "appPrivateCommand"
+            | "displayCompletions"
+            | "updateCursor"
+            | "updateExtractedText"
+            | "toggleSoftInput"
+            | "finishInput" => {}
             _ => return Err(unsupported(interface, method)),
         }
         Ok(CallResult {
@@ -407,7 +421,12 @@ impl ImeTrackerService {
 }
 
 impl ServiceObject for ImeTrackerService {
-    fn call(&mut self, interface: &str, method: &acos_aidl::MethodInfo, args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &acos_aidl::MethodInfo,
+        args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "com.android.internal.inputmethod.IImeTracker" {
             return Err(unsupported(interface, method));
         }
@@ -428,10 +447,12 @@ impl ServiceObject for ImeTrackerService {
                 let phase = int_arg(args, 1);
                 state.tracker_progress(token, phase);
             }
-            "hasPendingCancellation" => return Ok(CallResult {
-                reply: vec![Value::Bool(false)],
-                deliveries: Vec::new(),
-            }),
+            "hasPendingCancellation" => {
+                return Ok(CallResult {
+                    reply: vec![Value::Bool(false)],
+                    deliveries: Vec::new(),
+                })
+            }
             _ => return Err(unsupported(interface, method)),
         }
         Ok(CallResult {

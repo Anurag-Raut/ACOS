@@ -133,7 +133,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(Ljava/lang/String;)J",
         rs_create_builder,
     );
-    vm.register_native(RUNTIME_SHADER, "nativeCreateShader", "(JJ)J", rs_create_shader);
+    vm.register_native(
+        RUNTIME_SHADER,
+        "nativeCreateShader",
+        "(JJ)J",
+        rs_create_shader,
+    );
     vm.register_native(RUNTIME_SHADER, "nativeGetFinalizer", "()J", rs_finalizer);
     vm.register_native(
         RUNTIME_SHADER,
@@ -192,12 +197,42 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     );
     vm.register_native(RENDER_NODE_ANIMATOR, "nStart", "(J)V", rna_start);
     vm.register_native(RENDER_NODE_ANIMATOR, "nEnd", "(J)V", rna_end);
-    vm.register_native(RENDER_NODE_ANIMATOR, "nGetDuration", "(J)J", rna_get_duration);
-    vm.register_native(RENDER_NODE_ANIMATOR, "nSetDuration", "(JJ)V", rna_set_duration);
-    vm.register_native(RENDER_NODE_ANIMATOR, "nSetStartDelay", "(JJ)V", rna_set_start_delay);
-    vm.register_native(RENDER_NODE_ANIMATOR, "nSetStartValue", "(JF)V", rna_set_start_value);
-    vm.register_native(RENDER_NODE_ANIMATOR, "nSetInterpolator", "(JJ)V", rna_set_interpolator);
-    vm.register_native(RENDER_NODE_ANIMATOR, "nSetAllowRunningAsync", "(JZ)V", rna_noop_jz);
+    vm.register_native(
+        RENDER_NODE_ANIMATOR,
+        "nGetDuration",
+        "(J)J",
+        rna_get_duration,
+    );
+    vm.register_native(
+        RENDER_NODE_ANIMATOR,
+        "nSetDuration",
+        "(JJ)V",
+        rna_set_duration,
+    );
+    vm.register_native(
+        RENDER_NODE_ANIMATOR,
+        "nSetStartDelay",
+        "(JJ)V",
+        rna_set_start_delay,
+    );
+    vm.register_native(
+        RENDER_NODE_ANIMATOR,
+        "nSetStartValue",
+        "(JF)V",
+        rna_set_start_value,
+    );
+    vm.register_native(
+        RENDER_NODE_ANIMATOR,
+        "nSetInterpolator",
+        "(JJ)V",
+        rna_set_interpolator,
+    );
+    vm.register_native(
+        RENDER_NODE_ANIMATOR,
+        "nSetAllowRunningAsync",
+        "(JZ)V",
+        rna_noop_jz,
+    );
     vm.register_native(
         RENDER_NODE_ANIMATOR,
         "nSetListener",
@@ -210,10 +245,20 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     // pointer to `nSetInterpolator`. ACOS keeps a real handle per factory call
     // (the curve itself is not evaluated by the fallback animator).
     const IF: &str = INTERPOLATOR_FACTORY;
-    vm.register_native(IF, "createAccelerateDecelerateInterpolator", "()J", interp_create);
+    vm.register_native(
+        IF,
+        "createAccelerateDecelerateInterpolator",
+        "()J",
+        interp_create,
+    );
     vm.register_native(IF, "createAccelerateInterpolator", "(F)J", interp_create);
     vm.register_native(IF, "createAnticipateInterpolator", "(F)J", interp_create);
-    vm.register_native(IF, "createAnticipateOvershootInterpolator", "(F)J", interp_create);
+    vm.register_native(
+        IF,
+        "createAnticipateOvershootInterpolator",
+        "(F)J",
+        interp_create,
+    );
     vm.register_native(IF, "createBounceInterpolator", "()J", interp_create);
     vm.register_native(IF, "createCycleInterpolator", "(F)J", interp_create);
     vm.register_native(IF, "createDecelerateInterpolator", "(F)J", interp_create);
@@ -388,29 +433,38 @@ fn rna_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn rna_create_cp_float(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let start = vm.arg_f32(ctx, 1);
-    vm.ret_i64(ctx, insert_animator(Animator {
-        start_value: start,
-        ..Animator::default()
-    }));
+    vm.ret_i64(
+        ctx,
+        insert_animator(Animator {
+            start_value: start,
+            ..Animator::default()
+        }),
+    );
     Ok(())
 }
 
 fn rna_create_cp_paint(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let start = vm.arg_f32(ctx, 2);
-    vm.ret_i64(ctx, insert_animator(Animator {
-        start_value: start,
-        ..Animator::default()
-    }));
+    vm.ret_i64(
+        ctx,
+        insert_animator(Animator {
+            start_value: start,
+            ..Animator::default()
+        }),
+    );
     Ok(())
 }
 
 fn rna_create_reveal(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let _ = (vm.arg_i32(ctx, 0), vm.arg_i32(ctx, 1));
     let start = vm.arg_f32(ctx, 3);
-    vm.ret_i64(ctx, insert_animator(Animator {
-        start_value: start,
-        ..Animator::default()
-    }));
+    vm.ret_i64(
+        ctx,
+        insert_animator(Animator {
+            start_value: start,
+            ..Animator::default()
+        }),
+    );
     Ok(())
 }
 

@@ -90,7 +90,9 @@ pub fn decode_value(r: &Reader, off: usize, depth: u32) -> DexResult<(EncodedVal
     }
 
     let result = match value_type {
-        0x00 => EncodedValue::Byte(sign_extend(read_uint(r, off + 1, size)?, (size * 8) as u32) as i8),
+        0x00 => {
+            EncodedValue::Byte(sign_extend(read_uint(r, off + 1, size)?, (size * 8) as u32) as i8)
+        }
         0x02 => {
             EncodedValue::Short(sign_extend(read_uint(r, off + 1, size)?, (size * 8) as u32) as i16)
         }
@@ -98,9 +100,7 @@ pub fn decode_value(r: &Reader, off: usize, depth: u32) -> DexResult<(EncodedVal
         0x04 => {
             EncodedValue::Int(sign_extend(read_uint(r, off + 1, size)?, (size * 8) as u32) as i32)
         }
-        0x06 => {
-            EncodedValue::Long(sign_extend(read_uint(r, off + 1, size)?, (size * 8) as u32))
-        }
+        0x06 => EncodedValue::Long(sign_extend(read_uint(r, off + 1, size)?, (size * 8) as u32)),
         0x10 => EncodedValue::Float(read_uint(r, off + 1, size)? as u32),
         0x11 => EncodedValue::Double(read_uint(r, off + 1, size)?),
         0x15 => EncodedValue::MethodType(read_uint(r, off + 1, size)? as u32),
@@ -177,7 +177,11 @@ pub fn decode_value(r: &Reader, off: usize, depth: u32) -> DexResult<(EncodedVal
 }
 
 /// Decode an `encoded_annotation` (not including any visibility byte).
-pub fn decode_annotation(r: &Reader, off: usize, depth: u32) -> DexResult<(EncodedAnnotation, usize)> {
+pub fn decode_annotation(
+    r: &Reader,
+    off: usize,
+    depth: u32,
+) -> DexResult<(EncodedAnnotation, usize)> {
     if depth > MAX_DEPTH {
         return Err(DexError::BadEncodedValue {
             offset: r.base() + off as u64,

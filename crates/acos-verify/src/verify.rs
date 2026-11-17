@@ -78,10 +78,7 @@ pub fn verify_with_clock(
         );
     }
 
-    let isolation = request
-        .base
-        .isolation
-        .unwrap_or(scenario.isolation);
+    let isolation = request.base.isolation.unwrap_or(scenario.isolation);
     let mut scenario = scenario;
     scenario.isolation = isolation;
     if let Some(display) = request.base.display {
@@ -162,7 +159,10 @@ pub fn verify_with_clock(
             .unwrap_or_else(|| {
                 ProtocolError::new(
                     ErrorCode::Internal,
-                    format!("verify produced status `{}` without a failure object", verdict.verdict),
+                    format!(
+                        "verify produced status `{}` without a failure object",
+                        verdict.verdict
+                    ),
                 )
                 .with_hint(
                     "Runner invariant violated: a non-pass verdict must carry a failure object. \
@@ -191,11 +191,14 @@ pub fn verify_with_clock(
             response.verdict.request_id.clone(),
             backend.protocol_backend(),
             response.verdict.fidelity,
-            ProtocolError::new(ErrorCode::Internal, format!("cannot serialize verdict: {error}"))
-                .with_hint(
-                    "The verdict type serialized to invalid JSON (a runner type bug). Capture the \
+            ProtocolError::new(
+                ErrorCode::Internal,
+                format!("cannot serialize verdict: {error}"),
+            )
+            .with_hint(
+                "The verdict type serialized to invalid JSON (a runner type bug). Capture the \
                      scenario/artifacts and report it; the run is not a pass.",
-                ),
+            ),
             metrics,
         ),
     }

@@ -279,7 +279,11 @@ fn parse_component(node: &XmlNode, package: &str, alias: bool) -> Option<Decl> {
         action && category
     });
     // `parseActivityAlias` does not read `configChanges` for an alias.
-    let config_changes = if alias { None } else { attr_int(node, "configChanges") };
+    let config_changes = if alias {
+        None
+    } else {
+        attr_int(node, "configChanges")
+    };
     Some(Decl {
         name,
         target,
@@ -689,7 +693,9 @@ mod tests {
         // Paths are relative to the workspace root (`CARGO_MANIFEST_DIR/../..`),
         // not the crate directory: `cargo test` runs with the crate as cwd.
         fn repo_path(rel: &str) -> std::path::PathBuf {
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel)
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(rel)
         }
 
         // Built fixture: plain `<activity>`. REQUIRED: `fixtures/build` is
@@ -745,10 +751,7 @@ mod tests {
         // `sa.getInt(R.styleable.AndroidManifestActivity_configChanges, 0)`.
         let doc = dom(vec![attr_node(
             "activity",
-            &[
-                ("name", s(".Main")),
-                ("configChanges", i(0x80 | 0x400)),
-            ],
+            &[("name", s(".Main")), ("configChanges", i(0x80 | 0x400))],
             vec![filter()],
         )]);
         let got = resolve_from_dom(&doc).unwrap();

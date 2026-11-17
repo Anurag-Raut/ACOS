@@ -70,7 +70,11 @@ pub fn sandbox_flags() -> Vec<&'static str> {
     if !enabled() {
         return crate::SANDBOX_FLAGS.to_vec();
     }
-    crate::SANDBOX_FLAGS.iter().copied().filter(|f| *f != "--unshare-net").collect()
+    crate::SANDBOX_FLAGS
+        .iter()
+        .copied()
+        .filter(|f| *f != "--unshare-net")
+        .collect()
 }
 
 /// The hardened `pasta` argument list, up to and including `--`.
@@ -399,7 +403,11 @@ pub fn serve_dnsproxyd(sock_dir: &Path) -> std::io::Result<DnsProxy> {
                 }
             }
         })?;
-    Ok(DnsProxy { path, stop, thread: Some(thread) })
+    Ok(DnsProxy {
+        path,
+        stop,
+        thread: Some(thread),
+    })
 }
 
 /// [`serve_dnsproxyd`] behind the spike flag: `None` when the flag is off, so
@@ -520,7 +528,11 @@ fn log_request(request: &str, outcome: &str) {
     let Some(path) = std::env::var_os(DNS_LOG_ENV) else {
         return;
     };
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
         let _ = writeln!(f, "req={request:?} -> {outcome}");
     }
 }
@@ -544,7 +556,10 @@ fn addresses_for_the_session(answers: Vec<Answer>, ipv6: bool) -> Vec<Answer> {
     if ipv6 {
         return answers;
     }
-    answers.into_iter().filter(|answer| answer.family != libc::AF_INET6).collect()
+    answers
+        .into_iter()
+        .filter(|answer| answer.family != libc::AF_INET6)
+        .collect()
 }
 
 /// Resolve one query with the host's resolver (`libc::getaddrinfo`).
@@ -556,8 +571,16 @@ fn resolve(
     socktype: i32,
     protocol: i32,
 ) -> Option<Vec<Answer>> {
-    let c_host = if host == "^" { None } else { Some(std::ffi::CString::new(host).ok()?) };
-    let c_serv = if serv == "^" { None } else { Some(std::ffi::CString::new(serv).ok()?) };
+    let c_host = if host == "^" {
+        None
+    } else {
+        Some(std::ffi::CString::new(host).ok()?)
+    };
+    let c_serv = if serv == "^" {
+        None
+    } else {
+        Some(std::ffi::CString::new(serv).ok()?)
+    };
     let mut hints: libc::addrinfo = unsafe { std::mem::zeroed() };
     hints.ai_flags = if flags < 0 { 0 } else { flags };
     hints.ai_family = if family < 0 { libc::AF_UNSPEC } else { family };
@@ -702,7 +725,10 @@ mod dns_tests {
     /// (`ShortSocketDir` uses `/run/user/<uid>` for the same reason), not `/tmp`.
     fn scratch(tag: &str) -> PathBuf {
         let uid = unsafe { libc::getuid() };
-        let dir = PathBuf::from(format!("/run/user/{uid}/acos-dns-{tag}-{}", std::process::id()));
+        let dir = PathBuf::from(format!(
+            "/run/user/{uid}/acos-dns-{tag}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a short private socket dir");
         dir
@@ -724,13 +750,17 @@ mod dns_tests {
             .permissions()
             .mode()
             & 0o777;
-        assert_eq!(mode, 0o666, "dnsproxyd must be world-writable, got {mode:o}");
+        assert_eq!(
+            mode, 0o666,
+            "dnsproxyd must be world-writable, got {mode:o}"
+        );
 
         // Exactly the request bionic's `android_getaddrinfo_proxy` writes
         // (`getaddrinfo <host> <serv> <flags> <family> <socktype> <protocol>
         // <netid>` + NUL).
         let mut s = UnixStream::connect(proxy.path()).expect("connect");
-        s.write_all(b"getaddrinfo localhost ^ 1024 0 1 0 0\0").expect("request");
+        s.write_all(b"getaddrinfo localhost ^ 1024 0 1 0 0\0")
+            .expect("request");
         s.shutdown(Shutdown::Write).ok();
         let mut head = [0u8; 4];
         s.read_exact(&mut head).expect("a query result code");
@@ -744,7 +774,10 @@ mod dns_tests {
         // recycles a session's socket dir on every reset.
         let path = proxy.path().to_path_buf();
         drop(proxy);
-        assert!(!path.exists(), "the socket is removed when the session ends");
+        assert!(
+            !path.exists(),
+            "the socket is removed when the session ends"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -792,11 +825,17 @@ mod dns_tests {
         let ip = |a: [u8; 4]| format!("{}.{}.{}.{}", a[0], a[1], a[2], a[3]);
         let args = pasta_args();
         for (flag, expected) in [
-            ("-a", format!("{}/{}", ip(NET_GUEST_ADDRESS), NET_GUEST_PREFIX_LEN)),
+            (
+                "-a",
+                format!("{}/{}", ip(NET_GUEST_ADDRESS), NET_GUEST_PREFIX_LEN),
+            ),
             ("-g", ip(NET_GUEST_GATEWAY)),
             ("-D", ip(NET_DNS_SERVER)),
         ] {
-            let at = args.iter().position(|a| a == flag).unwrap_or_else(|| panic!("{flag}"));
+            let at = args
+                .iter()
+                .position(|a| a == flag)
+                .unwrap_or_else(|| panic!("{flag}"));
             assert_eq!(args[at + 1], expected, "{flag} must match LinkProperties");
         }
     }

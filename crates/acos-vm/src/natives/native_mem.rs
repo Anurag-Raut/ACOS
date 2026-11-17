@@ -423,7 +423,11 @@ pub(crate) fn realloc(addr: i64, new_len: usize) -> Result<i64, MemError> {
     }
     MEM.with(|m| {
         let mut m = m.borrow_mut();
-        let old_len = m.regions.get(&id).map(|r| r.data.len()).ok_or(MemError::NoRegion)?;
+        let old_len = m
+            .regions
+            .get(&id)
+            .map(|r| r.data.len())
+            .ok_or(MemError::NoRegion)?;
         let readonly = m.regions.get(&id).map(|r| r.readonly).unwrap_or(false);
         if readonly {
             return Err(MemError::ReadOnly);
@@ -1054,7 +1058,12 @@ pub(crate) fn array_write_bytes(
 }
 
 /// Write typed values into a Java primitive array at element offset `off`.
-fn array_write_as<T: ArrayElement>(vm: &mut Vm, arr: Handle, off: usize, vals: &[T]) -> VmResult<()> {
+fn array_write_as<T: ArrayElement>(
+    vm: &mut Vm,
+    arr: Handle,
+    off: usize,
+    vals: &[T],
+) -> VmResult<()> {
     let total = match vm.heap.get(arr) {
         Some(Object::Array(a)) => array_len(a),
         _ => {
@@ -1063,7 +1072,11 @@ fn array_write_as<T: ArrayElement>(vm: &mut Vm, arr: Handle, off: usize, vals: &
             ))
         }
     };
-    if off.checked_add(vals.len()).map(|e| e > total).unwrap_or(true) {
+    if off
+        .checked_add(vals.len())
+        .map(|e| e > total)
+        .unwrap_or(true)
+    {
         return Err(vm.throw_new(
             "Ljava/lang/ArrayIndexOutOfBoundsException;",
             Some(&format!(

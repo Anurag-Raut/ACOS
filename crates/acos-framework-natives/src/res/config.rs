@@ -212,11 +212,7 @@ impl ResConfig {
         field!(26, 2, c.minor_version = u16_at(data, at + 26)?);
         field!(28, 1, c.screen_layout = data[at + 28]);
         field!(29, 1, c.ui_mode = data[at + 29]);
-        field!(
-            30,
-            2,
-            c.smallest_screen_width_dp = u16_at(data, at + 30)?
-        );
+        field!(30, 2, c.smallest_screen_width_dp = u16_at(data, at + 30)?);
         field!(32, 2, c.screen_width_dp = u16_at(data, at + 32)?);
         field!(34, 2, c.screen_height_dp = u16_at(data, at + 34)?);
         field!(36, 4, c.locale_script = read_code4(data, at + 36));
@@ -314,8 +310,7 @@ impl ResConfig {
             return false;
         }
         if (self.screen_layout & MASK_SCREENLONG) != 0
-            && (self.screen_layout & MASK_SCREENLONG)
-                != (settings.screen_layout & MASK_SCREENLONG)
+            && (self.screen_layout & MASK_SCREENLONG) != (settings.screen_layout & MASK_SCREENLONG)
         {
             return false;
         }
@@ -338,8 +333,7 @@ impl ResConfig {
             return false;
         }
         if (self.input_flags & MASK_KEYSHIDDEN) != 0
-            && (self.input_flags & MASK_KEYSHIDDEN)
-                != (settings.input_flags & MASK_KEYSHIDDEN)
+            && (self.input_flags & MASK_KEYSHIDDEN) != (settings.input_flags & MASK_KEYSHIDDEN)
         {
             return false;
         }
@@ -677,29 +671,13 @@ mod tests {
     #[test]
     fn dense_selection_rule_calibrated() {
         // mdpi(160) vs hdpi(240) for request 190 → hdpi (matches aapt2).
-        assert!(density_is_better(
-            DENSITY_HIGH,
-            DENSITY_MEDIUM,
-            190
-        ));
+        assert!(density_is_better(DENSITY_HIGH, DENSITY_MEDIUM, 190));
         // request 160 → mdpi.
-        assert!(density_is_better(
-            DENSITY_MEDIUM,
-            DENSITY_HIGH,
-            160
-        ));
+        assert!(density_is_better(DENSITY_MEDIUM, DENSITY_HIGH, 160));
         // request 161 → hdpi.
-        assert!(density_is_better(
-            DENSITY_HIGH,
-            DENSITY_MEDIUM,
-            161
-        ));
+        assert!(density_is_better(DENSITY_HIGH, DENSITY_MEDIUM, 161));
         // mdpi vs xxxhdpi for 161 → xxxhdpi (strong downscale preference).
-        assert!(density_is_better(
-            DENSITY_XXXHIGH,
-            DENSITY_MEDIUM,
-            161
-        ));
+        assert!(density_is_better(DENSITY_XXXHIGH, DENSITY_MEDIUM, 161));
         // 420dpi request, xhdpi vs xxhdpi → xxhdpi.
         assert!(density_is_better(DENSITY_XXHIGH, DENSITY_XHIGH, 420));
         // Both above request: smaller wins.

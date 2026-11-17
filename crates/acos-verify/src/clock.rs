@@ -72,7 +72,9 @@ pub fn rfc3339_from_unix_ms(unix_ms: i64) -> String {
     let hour = secs_of_day / 3600;
     let minute = (secs_of_day % 3600) / 60;
     let second = secs_of_day % 60;
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis_of_second:03}Z")
+    format!(
+        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis_of_second:03}Z"
+    )
 }
 
 /// Convert days since 1970-01-01 to a civil `(year, month, day)`.

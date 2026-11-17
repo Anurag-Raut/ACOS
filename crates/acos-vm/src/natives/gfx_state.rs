@@ -19,9 +19,7 @@ use std::cell::RefCell;
 
 use acos_render::context::RenderContext;
 use acos_render::handle::Handle as RHandle;
-use acos_render::paint::{
-    Paint, PaintStyle, StrokeCap, StrokeJoin, TextAlign,
-};
+use acos_render::paint::{Paint, PaintStyle, StrokeCap, StrokeJoin, TextAlign};
 
 use crate::error::{VmError, VmResult};
 use crate::natives::gfx_paint::{self, PaintRec};

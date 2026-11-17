@@ -244,7 +244,10 @@ mod tests {
         let snapshot = parse_meminfo(text).expect("parsed");
         assert_eq!(snapshot.total_bytes, gib(60));
         assert_eq!(snapshot.available_bytes, gib(34));
-        assert_eq!(check_snapshot(snapshot, gib(2), min_free_bytes(gib(60))), Ok(()));
+        assert_eq!(
+            check_snapshot(snapshot, gib(2), min_free_bytes(gib(60))),
+            Ok(())
+        );
     }
 
     /// 8 GiB host with 7.5 GiB available: a 2 GiB guest would leave 5.5 GiB,
@@ -258,7 +261,10 @@ mod tests {
         };
         // 10% of total, computed in bytes (integer maths, so compare against
         // the same expression the guard uses rather than 8 GiB / 10).
-        assert_eq!(min_free_bytes(snapshot.total_bytes), snapshot.total_bytes / 100 * 10);
+        assert_eq!(
+            min_free_bytes(snapshot.total_bytes),
+            snapshot.total_bytes / 100 * 10
+        );
         assert!(check_snapshot(snapshot, gib(2), min_free_bytes(snapshot.total_bytes)).is_ok());
     }
 
@@ -347,9 +353,12 @@ mod tests {
             .expect("write fake meminfo");
         let denied = check_host_with(&path, |_| None).expect_err("1.5 GiB free on a 4 GiB host");
         assert_eq!(denied.requested_bytes, gib(2));
-        assert_eq!(check_host_with(&path, |key| {
-            (key == GUARD_ENV).then(|| "off".to_string())
-        }), Ok(()));
+        assert_eq!(
+            check_host_with(&path, |key| {
+                (key == GUARD_ENV).then(|| "off".to_string())
+            }),
+            Ok(())
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

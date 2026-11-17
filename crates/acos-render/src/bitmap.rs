@@ -1,9 +1,7 @@
 //! `android.graphics.Bitmap` — canonical premultiplied RGBA8 storage with
 //! `ALPHA_8`/`RGB_565` conversions at the API edges.
 
-use crate::color::{
-    argb_to_rgba, pack_premul, premultiply_channel, unpack_unpremul,
-};
+use crate::color::{argb_to_rgba, pack_premul, premultiply_channel, unpack_unpremul};
 use crate::error::{RenderError, RenderResult};
 use crate::image::DecodedImage;
 use tiny_skia::Pixmap;
@@ -94,7 +92,9 @@ impl Bitmap {
         }
         let area = (width as usize) * (height as usize);
         if area > 256 * 1024 * 1024 {
-            return Err(RenderError::size(format!("bitmap {width}x{height} too large")));
+            return Err(RenderError::size(format!(
+                "bitmap {width}x{height} too large"
+            )));
         }
         Ok(Bitmap {
             width,
@@ -246,7 +246,11 @@ impl Bitmap {
         match self.config {
             BitmapConfig::Alpha8 | BitmapConfig::Gray8 => {
                 // Alpha-only: RGB is undefined; store premultiplied white.
-                let a = if self.config == BitmapConfig::Alpha8 { a } else { r };
+                let a = if self.config == BitmapConfig::Alpha8 {
+                    a
+                } else {
+                    r
+                };
                 pack_premul(a, a, a, a)
             }
             BitmapConfig::Rgb565 => {
@@ -254,7 +258,12 @@ impl Bitmap {
                 pack_premul(r, g, b, 255)
             }
             BitmapConfig::Argb4444 => {
-                let (r, g, b, a) = (quantize_4444(r), quantize_4444(g), quantize_4444(b), quantize_4444(a));
+                let (r, g, b, a) = (
+                    quantize_4444(r),
+                    quantize_4444(g),
+                    quantize_4444(b),
+                    quantize_4444(a),
+                );
                 pack_premul(r, g, b, a)
             }
             BitmapConfig::Rgbx8888 => pack_premul(r, g, b, 255),

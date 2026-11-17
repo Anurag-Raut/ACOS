@@ -16,11 +16,11 @@ mod common;
 
 use std::collections::HashMap;
 
-use common::{compile_case, run_case_args};
 use acos_services::ams::IntentFacts;
 use acos_services::parcelable;
 use acos_services::value::{DynamicValue, Parcelable, Value};
 use acos_services::Bundle;
+use common::{compile_case, run_case_args};
 
 fn rect(left: i32, top: i32, right: i32, bottom: i32) -> Value {
     Value::Parcelable(Parcelable::ordered(
@@ -40,7 +40,7 @@ fn configuration_value() -> Parcelable {
     let window = Parcelable::ordered(
         "android.app.WindowConfiguration",
         vec![
-            rect(0, 0, 1080, 2400),                       // mBounds (Nested)
+            rect(0, 0, 1080, 2400), // mBounds (Nested)
             Value::TypedObject(Parcelable::ordered(
                 "android.graphics.Rect",
                 vec![
@@ -50,13 +50,13 @@ fn configuration_value() -> Parcelable {
                     Value::Int(2337),
                 ],
             )), // mAppBounds
-            rect(0, 0, 1080, 2400),                       // mMaxBounds (Nested)
-            Value::Int(1), // mWindowingMode
-            Value::Int(1), // mActivityType
-            Value::Int(0), // mAlwaysOnTop
-            Value::Int(0), // mRotation
-            Value::Int(1), // mDisplayWindowingMode
-            Value::Int(0), // mDisplayRotation
+            rect(0, 0, 1080, 2400), // mMaxBounds (Nested)
+            Value::Int(1),          // mWindowingMode
+            Value::Int(1),          // mActivityType
+            Value::Int(0),          // mAlwaysOnTop
+            Value::Int(0),          // mRotation
+            Value::Int(1),          // mDisplayWindowingMode
+            Value::Int(0),          // mDisplayRotation
         ],
     );
     let locale = Value::TypedObject(Parcelable::ordered(
@@ -70,24 +70,24 @@ fn configuration_value() -> Parcelable {
             Value::Int(310), // mcc
             Value::Int(260), // mnc
             locale,
-            Value::Int(1), // userSetLocale (setLocales sets it true)
-            Value::Int(3), // touchscreen
-            Value::Int(2), // keyboard
-            Value::Int(1), // keyboardHidden
-            Value::Int(1), // hardKeyboardHidden
-            Value::Int(1), // navigation
-            Value::Int(2), // navigationHidden
-            Value::Int(2), // orientation
+            Value::Int(1),    // userSetLocale (setLocales sets it true)
+            Value::Int(3),    // touchscreen
+            Value::Int(2),    // keyboard
+            Value::Int(1),    // keyboardHidden
+            Value::Int(1),    // hardKeyboardHidden
+            Value::Int(1),    // navigation
+            Value::Int(2),    // navigationHidden
+            Value::Int(2),    // orientation
             Value::Int(0x20), // screenLayout
-            Value::Int(0), // colorMode
+            Value::Int(0),    // colorMode
             Value::Int(0x11), // uiMode
-            Value::Int(411), // screenWidthDp
-            Value::Int(914), // screenHeightDp
-            Value::Int(411), // smallestScreenWidthDp
-            Value::Int(420), // densityDpi
-            Value::Int(411), // compatScreenWidthDp
-            Value::Int(914), // compatScreenHeightDp
-            Value::Int(411), // compatSmallestScreenWidthDp
+            Value::Int(411),  // screenWidthDp
+            Value::Int(914),  // screenHeightDp
+            Value::Int(411),  // smallestScreenWidthDp
+            Value::Int(420),  // densityDpi
+            Value::Int(411),  // compatScreenWidthDp
+            Value::Int(914),  // compatScreenHeightDp
+            Value::Int(411),  // compatSmallestScreenWidthDp
             Value::Parcelable(window),
             Value::Int(7),   // assetsSeq
             Value::Int(3),   // seq
@@ -100,10 +100,7 @@ fn configuration_value() -> Parcelable {
 fn persistable_bundle_value() -> Parcelable {
     let mut b = Bundle::new();
     b.put("name", Value::Str(Some("helloviews".into())));
-    Parcelable::ordered(
-        "android.os.PersistableBundle",
-        vec![Value::Bundle(Some(b))],
-    )
+    Parcelable::ordered("android.os.PersistableBundle", vec![Value::Bundle(Some(b))])
 }
 
 /// A `ServiceInfo` in the exact API-34 `writeToParcel` order, with the nested
@@ -139,22 +136,22 @@ fn instrumentation_info_value() -> Parcelable {
             Value::Int(0), // showBadge
             // InstrumentationInfo
             Value::Str8(Some("dev.acos.fixtures".into())), // targetPackage
-            Value::Str8(None),                          // targetProcesses
+            Value::Str8(None),                             // targetProcesses
             Value::Str8(Some("/data/app/base.apk".into())), // sourceDir
             Value::Str8(Some("/data/app/base.apk".into())), // publicSourceDir
-            Value::StringArray(None),                   // splitNames
-            Value::StringArray(None),                   // splitSourceDirs
-            Value::StringArray(None),                   // splitPublicSourceDirs
-            Value::List(None),                          // splitDependencies (SparseArray null)
+            Value::StringArray(None),                      // splitNames
+            Value::StringArray(None),                      // splitSourceDirs
+            Value::StringArray(None),                      // splitPublicSourceDirs
+            Value::List(None),                             // splitDependencies (SparseArray null)
             Value::Str8(Some("/data/user/0/dev.acos.fixtures".into())), // dataDir
             Value::Str8(Some("/data/user_de/0/dev.acos.fixtures".into())), // deviceProtectedDataDir
             Value::Str8(Some("/data/user/0/dev.acos.fixtures".into())), // credentialProtectedDataDir
-            Value::Str8(None), // primaryCpuAbi
-            Value::Str8(None), // secondaryCpuAbi
-            Value::Str8(Some("/data/app/lib".into())), // nativeLibraryDir
-            Value::Str8(None), // secondaryNativeLibraryDir
-            Value::Int(0),     // handleProfiling
-            Value::Int(1),     // functionalTest
+            Value::Str8(None),                                          // primaryCpuAbi
+            Value::Str8(None),                                          // secondaryCpuAbi
+            Value::Str8(Some("/data/app/lib".into())),                  // nativeLibraryDir
+            Value::Str8(None),                                          // secondaryNativeLibraryDir
+            Value::Int(0),                                              // handleProfiling
+            Value::Int(1),                                              // functionalTest
         ],
     )
 }
@@ -180,10 +177,10 @@ fn permission_info_value() -> Parcelable {
             Value::Int(0), // flags
             Value::Str8(Some("android.permission-group.NETWORK".into())), // group
             Value::Str8(None), // backgroundPermission
-            Value::Int(0),     // descriptionRes
-            Value::Int(0),     // requestRes
-            Value::Str(None),  // nonLocalizedDescription
-            Value::Int(0),     // knownCerts (empty ForStringSet: `unparcel` maps -1 to empty)
+            Value::Int(0), // descriptionRes
+            Value::Int(0), // requestRes
+            Value::Str(None), // nonLocalizedDescription
+            Value::Int(0), // knownCerts (empty ForStringSet: `unparcel` maps -1 to empty)
         ],
     )
 }
@@ -212,22 +209,22 @@ fn resolve_info_value(app: &acos_services::pms::AppInfo) -> Parcelable {
                 present: false,
                 values: Vec::new(),
             },
-            Value::Int(0),        // priority
-            Value::Int(0),        // preferredOrder
+            Value::Int(0),         // priority
+            Value::Int(0),         // preferredOrder
             Value::Int(0x10_0000), // match
-            Value::Int(-1),       // specificIndex
-            Value::Int(0),        // labelRes
-            Value::Str(None),     // nonLocalizedLabel
-            Value::Int(0),        // icon
-            Value::Str8(None),    // resolvePackageName
-            Value::Int(0),        // targetUserId
-            Value::Int(0),        // system
-            Value::Int(0),        // noResourceId
-            Value::Int(0),        // iconResourceId
-            Value::Int(0),        // handleAllWebDataURI
-            Value::Int(0),        // mAutoResolutionAllowed
-            Value::Int(0),        // isInstantAppAvailable
-            Value::Int(-2),       // userHandle == USER_CURRENT
+            Value::Int(-1),        // specificIndex
+            Value::Int(0),         // labelRes
+            Value::Str(None),      // nonLocalizedLabel
+            Value::Int(0),         // icon
+            Value::Str8(None),     // resolvePackageName
+            Value::Int(0),         // targetUserId
+            Value::Int(0),         // system
+            Value::Int(0),         // noResourceId
+            Value::Int(0),         // iconResourceId
+            Value::Int(0),         // handleAllWebDataURI
+            Value::Int(0),         // mAutoResolutionAllowed
+            Value::Int(0),         // isInstantAppAvailable
+            Value::Int(-2),        // userHandle == USER_CURRENT
         ],
     )
 }
@@ -305,8 +302,8 @@ fn notification_value(content_intent: Option<u64>) -> Parcelable {
     Parcelable::ordered(
         "android.app.Notification",
         vec![
-            Value::Int(1),     // version
-            Value::Binder(None), // mAllowlistToken
+            Value::Int(1),                  // version
+            Value::Binder(None),            // mAllowlistToken
             Value::Long(1_700_000_000_000), // when
             Value::Long(1_700_000_000_000), // creationTime
             Value::Cond {
@@ -325,28 +322,28 @@ fn notification_value(content_intent: Option<u64>) -> Parcelable {
                     ],
                 ))],
             },
-            Value::Int(1), // number
-            content,       // contentIntent
-            absent(),      // deleteIntent
-            absent(),      // tickerText
-            absent(),      // tickerView
-            absent(),      // contentView
-            absent(),      // mLargeIcon
-            Value::Int(0),     // defaults
-            Value::Int(0x10),  // flags (FLAG_ONGOING_EVENT)
-            absent(),          // sound
-            Value::Int(0),     // audioStreamType
-            absent(),          // audioAttributes
-            Value::LongArray(None), // vibrate
-            Value::Int(0),     // ledARGB
-            Value::Int(0),     // ledOnMS
-            Value::Int(0),     // ledOffMS
-            Value::Int(0),     // iconLevel
-            absent(),          // fullScreenIntent
-            Value::Int(0),     // priority (PRIORITY_DEFAULT)
-            Value::Str8(None), // category
+            Value::Int(1),                             // number
+            content,                                   // contentIntent
+            absent(),                                  // deleteIntent
+            absent(),                                  // tickerText
+            absent(),                                  // tickerView
+            absent(),                                  // contentView
+            absent(),                                  // mLargeIcon
+            Value::Int(0),                             // defaults
+            Value::Int(0x10),                          // flags (FLAG_ONGOING_EVENT)
+            absent(),                                  // sound
+            Value::Int(0),                             // audioStreamType
+            absent(),                                  // audioAttributes
+            Value::LongArray(None),                    // vibrate
+            Value::Int(0),                             // ledARGB
+            Value::Int(0),                             // ledOnMS
+            Value::Int(0),                             // ledOffMS
+            Value::Int(0),                             // iconLevel
+            absent(),                                  // fullScreenIntent
+            Value::Int(0),                             // priority (PRIORITY_DEFAULT)
+            Value::Str8(None),                         // category
             Value::Str8(Some("fixture-group".into())), // mGroupKey
-            Value::Str8(None), // mSortKey
+            Value::Str8(None),                         // mSortKey
             Value::Bundle(Some({
                 let mut b = Bundle::new();
                 b.put("android.title", Value::Str(Some("hello".into())));
@@ -363,16 +360,16 @@ fn notification_value(content_intent: Option<u64>) -> Parcelable {
                 present: true,
                 values: vec![Value::Str8(Some("fixture-channel".into()))],
             },
-            Value::Long(0), // mTimeout
-            absent(),       // mShortcutId
-            absent(),       // mLocusId
-            Value::Int(0),  // mBadgeIcon
-            absent(),       // mSettingsText
-            Value::Int(0),  // mGroupAlertBehavior
-            absent(),       // mBubbleMetadata
+            Value::Long(0),    // mTimeout
+            absent(),          // mShortcutId
+            absent(),          // mLocusId
+            Value::Int(0),     // mBadgeIcon
+            absent(),          // mSettingsText
+            Value::Int(0),     // mGroupAlertBehavior
+            absent(),          // mBubbleMetadata
             Value::Bool(true), // mAllowSystemGeneratedContextualActions (the image's default)
-            Value::Int(0),  // mFgsDeferBehavior
-            all_pending,    // allPendingIntents
+            Value::Int(0),     // mFgsDeferBehavior
+            all_pending,       // allPendingIntents
         ],
     )
 }
@@ -381,11 +378,11 @@ fn notification_value(content_intent: Option<u64>) -> Parcelable {
 /// expected FILL_IN_* change mask)`, mirroring the Java builders in
 /// `ParcelableCompareMain.java` field for field.
 fn fill_in_cases() -> Vec<(&'static str, IntentFacts, IntentFacts, i32, i32)> {
-    use acos_services::fill_in::{
-        FILL_IN_ACTION, FILL_IN_CATEGORIES, FILL_IN_COMPONENT, FILL_IN_DATA,
-        FILL_IN_IDENTIFIER, FILL_IN_PACKAGE, FILL_IN_SELECTOR, FILL_IN_SOURCE_BOUNDS,
-    };
     use acos_services::ams::Extra;
+    use acos_services::fill_in::{
+        FILL_IN_ACTION, FILL_IN_CATEGORIES, FILL_IN_COMPONENT, FILL_IN_DATA, FILL_IN_IDENTIFIER,
+        FILL_IN_PACKAGE, FILL_IN_SELECTOR, FILL_IN_SOURCE_BOUNDS,
+    };
 
     let mut empty_fill = IntentFacts::action("android.intent.action.VIEW");
     empty_fill.type_ = Some("text/plain".into());
@@ -745,9 +742,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
             outcome.stdout
         );
         assert!(
-            outcome
-                .stdout
-                .contains(&format!("roundtrip.{name}=")),
+            outcome.stdout.contains(&format!("roundtrip.{name}=")),
             "the real Intent did not re-emit {name}:\n{}",
             outcome.stdout
         );

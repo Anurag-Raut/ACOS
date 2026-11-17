@@ -149,7 +149,10 @@ fn nio_fs_on_the_real_framework() {
     assert_eq!(get("list_size"), "1", "readdir must skip . and ..");
 
     // realpath returns an absolute guest path.
-    assert_eq!(get("realpath"), "/data/user/0/com.example.nio/files/probe.bin");
+    assert_eq!(
+        get("realpath"),
+        "/data/user/0/com.example.nio/files/probe.bin"
+    );
     assert_eq!(get("realpath_abs"), "true");
 
     // fstatat + getpwuid: attributes and an owner name resolved through the

@@ -51,10 +51,7 @@ impl FrameDisplayGeometry {
 /// (identity). Guessing an origin for an unexpected frame size is exactly the
 /// 128-px error this module exists to prevent.
 #[must_use]
-pub fn frame_display_geometry(
-    frame_width: u32,
-    frame_height: u32,
-) -> Option<FrameDisplayGeometry> {
+pub fn frame_display_geometry(frame_width: u32, frame_height: u32) -> Option<FrameDisplayGeometry> {
     frame_display_geometry_for(
         frame_width,
         frame_height,
@@ -106,10 +103,7 @@ pub fn frame_display_geometry_with(
                 app_size: if insets_mode.is_report() {
                     [width, height]
                 } else {
-                    [
-                        width,
-                        height.saturating_sub(status_bar as u32 + nav_bar),
-                    ]
+                    [width, height.saturating_sub(status_bar as u32 + nav_bar)]
                 },
                 source: "display-override",
             }
@@ -124,7 +118,10 @@ pub fn frame_display_geometry_with(
                 } else {
                     [app.left, app.top]
                 },
-                display_size: [display.width().max(0) as u32, display.height().max(0) as u32],
+                display_size: [
+                    display.width().max(0) as u32,
+                    display.height().max(0) as u32,
+                ],
                 app_size: [app.width().max(0) as u32, app.height().max(0) as u32],
                 source: "wms-reference",
             }

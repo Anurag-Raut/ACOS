@@ -130,7 +130,10 @@ fn raw_bytes_are_exact_and_unpadded() {
     assert_eq!(p.read_raw_bytes(3).unwrap(), vec![0xAA, 0xBB, 0xCC]);
     assert_eq!(p.read_int32().unwrap(), 0x1122_3344);
     assert_eq!(p.data_avail(), 0);
-    assert!(p.read_raw_bytes(1).is_err(), "a short read is an error, not zeros");
+    assert!(
+        p.read_raw_bytes(1).is_err(),
+        "a short read is an error, not zeros"
+    );
 }
 
 #[test]
@@ -242,18 +245,13 @@ fn parcel_table_lifecycle_and_generations() {
     let h = table.create();
     assert!(table.contains(h));
     table.with_parcel(h, |p| p.write_int32(42)).unwrap();
-    let v = table
-        .with_parcel_shared(h, |p| p.marshall())
-        .unwrap();
+    let v = table.with_parcel_shared(h, |p| p.marshall()).unwrap();
     assert_eq!(v, vec![42, 0, 0, 0]);
 
     table.free(h).unwrap();
     assert!(!table.contains(h));
     assert!(table.with_parcel(h, |_| ()).is_err());
-    assert_eq!(
-        table.free(h).unwrap_err().code(),
-        "PARCEL_STALE_HANDLE"
-    );
+    assert_eq!(table.free(h).unwrap_err().code(), "PARCEL_STALE_HANDLE");
 
     // The slot is reused with a bumped generation: the old handle stays dead.
     let h2 = table.create();
@@ -272,7 +270,9 @@ fn parcel_table_is_thread_safe() {
         handles.push(std::thread::spawn(move || {
             for i in 0..64i32 {
                 let h = table.create();
-                table.with_parcel(h, |p| p.write_int32(t * 1000 + i)).unwrap();
+                table
+                    .with_parcel(h, |p| p.write_int32(t * 1000 + i))
+                    .unwrap();
                 let v = table.with_parcel_shared(h, |p| p.marshall()).unwrap();
                 assert_eq!(v, (t * 1000 + i).to_le_bytes().to_vec());
                 table.free(h).unwrap();

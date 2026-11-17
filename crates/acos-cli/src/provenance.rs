@@ -86,10 +86,7 @@ pub fn annotate_verdict(verdict: &mut Value, trust: Trust) {
     };
     let run = run_evidence(trust);
     object.insert("trust".to_string(), json!(trust.as_str()));
-    object.insert(
-        "certification".to_string(),
-        run["certification"].clone(),
-    );
+    object.insert("certification".to_string(), run["certification"].clone());
     object.insert(
         "certification_limits".to_string(),
         run["certification_limits"].clone(),
@@ -157,7 +154,10 @@ pub fn annotate_step_artifacts(verdict: &Value, artifacts: &std::path::Path, tru
                 "certification".to_string(),
                 json!(crate::trust::CERTIFICATION.label()),
             );
-            object.insert("certification_limits".to_string(), crate::trust::limits_pointer());
+            object.insert(
+                "certification_limits".to_string(),
+                crate::trust::limits_pointer(),
+            );
             object.insert("provenance".to_string(), step_provenance(kind));
         }
         let _ = std::fs::write(

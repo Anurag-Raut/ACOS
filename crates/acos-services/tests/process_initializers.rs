@@ -109,7 +109,12 @@ fn the_bluetooth_module_forwards_its_framework_initializer_when_attached() {
 fn two_attached_modules_forward_two_initializers_in_attach_order() {
     let (mut host, mut registry) = session();
     registry
-        .attach(&mut host, "hw.bluetooth", Profile::Stub, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "hw.bluetooth",
+            Profile::Stub,
+            &ModuleConfig::default(),
+        )
         .expect("bluetooth attaches");
     registry
         .attach(
@@ -218,7 +223,9 @@ fn an_unusable_initializer_fails_manifest_validation() {
         manager: "android.os.TestManager",
         evidence: "frameworks/base/test/TestFrameworkInitializer.java",
     }];
-    base(good).validate().expect("a complete initializer is valid");
+    base(good)
+        .validate()
+        .expect("a complete initializer is valid");
 
     let no_evidence: &'static [ProcessInitializer] = &[ProcessInitializer {
         class: "android.test.FrameworkInitializer",

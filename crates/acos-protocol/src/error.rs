@@ -771,9 +771,9 @@ impl ErrorCode {
             | ErrorCode::UntrustedApkNotCertified => ErrorClass::Unsupported,
 
             // The app is wrong, or the evidence check is.
-            ErrorCode::JavaException
-            | ErrorCode::AppCrashed
-            | ErrorCode::AppNotResponding => ErrorClass::AppCrash,
+            ErrorCode::JavaException | ErrorCode::AppCrashed | ErrorCode::AppNotResponding => {
+                ErrorClass::AppCrash
+            }
             ErrorCode::AssertionFailed
             | ErrorCode::ElementNotFound
             | ErrorCode::ElementOffscreen
@@ -1193,12 +1193,18 @@ mod tests {
         assert_eq!(ErrorCode::HostPanic.retryable(), false);
         assert_eq!(ErrorCode::HostPanic.class(), ErrorClass::Harness);
         assert_eq!(ErrorCode::HostMemoryLimit.retryable(), true);
-        assert_eq!(ErrorCode::SeccompUnavailable.class(), ErrorClass::Unsupported);
+        assert_eq!(
+            ErrorCode::SeccompUnavailable.class(),
+            ErrorClass::Unsupported
+        );
         assert_eq!(ErrorCode::GuestExited.class(), ErrorClass::Harness);
         assert_eq!(ErrorCode::HostDiskFull.as_str(), "HOST_DISK_FULL");
         assert_eq!(ErrorCode::HostPanic.as_str(), "HOST_PANIC");
         assert_eq!(ErrorCode::HostMemoryLimit.as_str(), "HOST_MEMORY_LIMIT");
-        assert_eq!(ErrorCode::SeccompUnavailable.as_str(), "SECCOMP_UNAVAILABLE");
+        assert_eq!(
+            ErrorCode::SeccompUnavailable.as_str(),
+            "SECCOMP_UNAVAILABLE"
+        );
         assert_eq!(ErrorCode::GuestExited.as_str(), "GUEST_EXITED");
     }
 

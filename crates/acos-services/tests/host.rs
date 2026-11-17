@@ -7,7 +7,11 @@ use proptest::prelude::*;
 #[test]
 fn services_are_constructed_lazily() {
     let mut host = ServiceHost::standard();
-    assert_eq!(host.constructions(), 0, "no service object built at install");
+    assert_eq!(
+        host.constructions(),
+        0,
+        "no service object built at install"
+    );
     assert!(host.descriptors().len() >= 16);
 
     let display = host.check_service("display").unwrap().unwrap();
@@ -24,7 +28,10 @@ fn services_are_constructed_lazily() {
 #[test]
 fn unknown_service_name_returns_none() {
     let mut host = ServiceHost::standard();
-    assert!(host.check_service("definitely_not_a_service").unwrap().is_none());
+    assert!(host
+        .check_service("definitely_not_a_service")
+        .unwrap()
+        .is_none());
 }
 
 /// Regression (W40-A): the PMS is seeded with `hello-views`; the launch path
@@ -67,7 +74,8 @@ fn unknown_transaction_is_structured_error() {
     let activity = host.check_service("activity").unwrap().unwrap();
     // Code 4_000_000 is far outside the decoded table.
     let mut data = Parcel::new();
-    data.write_interface_token("android.app.IActivityManager").unwrap();
+    data.write_interface_token("android.app.IActivityManager")
+        .unwrap();
     data.write_int32(0);
     data.set_data_position(0);
     let mut reply = Parcel::new();
@@ -92,10 +100,13 @@ fn interface_token_mismatch_is_rejected() {
     let activity = host.check_service("activity").unwrap().unwrap();
     let mut data = Parcel::new();
     // Wrong interface token for this binder.
-    data.write_interface_token("android.content.pm.IPackageManager").unwrap();
+    data.write_interface_token("android.content.pm.IPackageManager")
+        .unwrap();
     data.set_data_position(0);
     let mut reply = Parcel::new();
-    let err = host.transact(activity, 9, &mut data, &mut reply, 0).unwrap_err();
+    let err = host
+        .transact(activity, 9, &mut data, &mut reply, 0)
+        .unwrap_err();
     assert_eq!(err.code(), acos_services::codes::SERVICE_BAD_REQUEST);
 }
 
@@ -110,7 +121,10 @@ fn not_owned_interfaces_name_the_owner() {
     assert_eq!(registry::owner_of("android.view.IWindowSession"), None);
     // T-38: the IME is served by `acos-services::ime`; only the app-side
     // delivery targets stay with the VM.
-    assert_eq!(registry::owner_of("com.android.internal.view.IInputMethodManager"), None);
+    assert_eq!(
+        registry::owner_of("com.android.internal.view.IInputMethodManager"),
+        None
+    );
     assert_eq!(
         registry::owner_of("com.android.internal.inputmethod.IInputMethodClient"),
         Some("acos-vm (delivery)")

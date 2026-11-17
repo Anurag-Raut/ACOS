@@ -293,12 +293,7 @@ pub(crate) fn make_constructor(vm: &mut Vm, cid: ClassId, mid: MethodId) -> VmRe
     make_executable(vm, "Ljava/lang/reflect/Constructor;", cid, mid)
 }
 
-fn make_executable(
-    vm: &mut Vm,
-    desc: &str,
-    cid: ClassId,
-    mid: MethodId,
-) -> VmResult<Handle> {
+fn make_executable(vm: &mut Vm, desc: &str, cid: ClassId, mid: MethodId) -> VmResult<Handle> {
     let cls = vm.load_class(desc)?;
     let obj = vm.alloc_instance(cls)?;
     vm.native_roots.push(obj);
@@ -625,11 +620,7 @@ fn annotations_of_method(vm: &Vm, cid: ClassId, method_idx: u32) -> Vec<Annotati
     Vec::new()
 }
 
-fn parameter_annotations_of_method(
-    vm: &Vm,
-    cid: ClassId,
-    method_idx: u32,
-) -> Vec<Vec<Annotation>> {
+fn parameter_annotations_of_method(vm: &Vm, cid: ClassId, method_idx: u32) -> Vec<Vec<Annotation>> {
     let Some((dex, def_idx)) = class_dex_def(vm, cid) else {
         return Vec::new();
     };
@@ -651,7 +642,9 @@ fn parameter_annotations_of_method(
 /// The DEX `(dex, method_idx)` behind an ACOS method id, if DEX-backed.
 fn dex_method(vm: &Vm, mid: MethodId) -> Option<(u32, u32)> {
     match &vm.methods[mid as usize].imp {
-        crate::class::MethodImpl::Dex { dex, method_idx, .. } => Some((*dex, *method_idx)),
+        crate::class::MethodImpl::Dex {
+            dex, method_idx, ..
+        } => Some((*dex, *method_idx)),
         _ => None,
     }
 }
@@ -952,11 +945,11 @@ fn method_get_default_value(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         vm.ret_ref(ctx, NULL);
         return Ok(());
     };
-    let Some(entry) = defaults
-        .elements
-        .iter()
-        .find(|e| file.string(e.name_idx).map(|n| n == method_name).unwrap_or(false))
-    else {
+    let Some(entry) = defaults.elements.iter().find(|e| {
+        file.string(e.name_idx)
+            .map(|n| n == method_name)
+            .unwrap_or(false)
+    }) else {
         vm.ret_ref(ctx, NULL);
         return Ok(());
     };
@@ -1005,8 +998,12 @@ fn annotation_present(
 fn field_identity(vm: &Vm, this: Handle) -> Option<(ClassId, String)> {
     let dc = vm.get_instance_field_by_name(this, "declaringClass")?;
     let cid = vm.class_id_of_class_object(dc)?;
-    let idx = vm.get_instance_field_by_name(this, "artFieldIndex").unwrap_or(0) as usize;
-    let access = vm.get_instance_field_by_name(this, "accessFlags").unwrap_or(0);
+    let idx = vm
+        .get_instance_field_by_name(this, "artFieldIndex")
+        .unwrap_or(0) as usize;
+    let access = vm
+        .get_instance_field_by_name(this, "accessFlags")
+        .unwrap_or(0);
     let c = &vm.classes[cid as usize];
     let def = if access & acos_dex::access::STATIC != 0 {
         c.declared_static_fields.get(idx)
@@ -1195,7 +1192,11 @@ pub(crate) fn decode_value(
                 .find(|f| f.name == const_name)
                 .map(|f| f.offset as usize);
             match slot {
-                Some(off) => Ok(vm.classes[cid as usize].statics.get(off).copied().unwrap_or(0)),
+                Some(off) => Ok(vm.classes[cid as usize]
+                    .statics
+                    .get(off)
+                    .copied()
+                    .unwrap_or(0)),
                 None => Ok(NULL),
             }
         }
@@ -1350,4 +1351,3 @@ pub(crate) fn unbox_primitive(vm: &mut Vm, kind: char, obj: Handle) -> VmResult<
     let mid = vm.find_method(cid, method, sig, InvokeKind::Virtual)?;
     crate::interp::call_method(vm, mid, obj, &[])
 }
-

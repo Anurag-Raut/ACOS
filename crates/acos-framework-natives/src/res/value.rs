@@ -137,9 +137,7 @@ impl ResValue {
                     "false".to_string()
                 }
             }
-            TYPE_INT_COLOR_ARGB8
-            | TYPE_INT_COLOR_RGB8
-            | TYPE_INT_COLOR_ARGB4
+            TYPE_INT_COLOR_ARGB8 | TYPE_INT_COLOR_RGB8 | TYPE_INT_COLOR_ARGB4
             | TYPE_INT_COLOR_RGB4 => format!("#{:08x}", self.data),
             _ => format!("{:#x}", self.data),
         })

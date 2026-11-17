@@ -37,10 +37,9 @@ fn fixture_names() -> Vec<String> {
 }
 
 fn run(name: &str, gc_stress: bool, general: bool) -> (i32, String) {
-    let dex = std::fs::read(repo_root().join(format!(
-        "fixtures/build/dexprogs/{name}/classes.dex"
-    )))
-    .expect("read dex");
+    let dex =
+        std::fs::read(repo_root().join(format!("fixtures/build/dexprogs/{name}/classes.dex")))
+            .expect("read dex");
     // The IR path is only taken when `count_opcodes` is false; the general path
     // is forced by `count_opcodes` and never consults the switch.
     exec::set_enabled(Some(!general));

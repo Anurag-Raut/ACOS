@@ -234,10 +234,16 @@ fn untrusted_run_without_the_test_override_is_allowed_and_labelled() {
     let verdict = load_verdict(&run);
     assert_eq!(verdict["trust"], "untrusted");
     assert_eq!(verdict["certification"], "certified-with-limits");
-    assert_eq!(verdict["certification_limits"]["doc"], "docs/SANDBOX_CERTIFICATION.md");
+    assert_eq!(
+        verdict["certification_limits"]["doc"],
+        "docs/SANDBOX_CERTIFICATION.md"
+    );
     assert_eq!(verdict["certification_limits"]["section"], "§8.7");
     // The tree stays guest-asserted: the run is allowed, the claim is not.
-    assert_eq!(verdict["steps"][1]["error"]["code"], "INSUFFICIENT_HOST_EVIDENCE");
+    assert_eq!(
+        verdict["steps"][1]["error"]["code"],
+        "INSUFFICIENT_HOST_EVIDENCE"
+    );
     assert_eq!(envelope["result"]["trust"], "untrusted");
     assert_eq!(envelope["result"]["certification"], "certified-with-limits");
 }
@@ -287,14 +293,20 @@ fn untrusted_flag_is_allowed_without_the_override() {
         "--untrusted is allowed without any env var: {envelope}"
     );
     assert!(marker.exists(), "the ART session must start");
-    assert!(!output.status.success(), "a tree-only step still fails closed");
+    assert!(
+        !output.status.success(),
+        "a tree-only step still fails closed"
+    );
     assert_eq!(envelope["result"]["trust"], "untrusted");
     assert_eq!(envelope["result"]["certification"], "certified-with-limits");
     let verdict: Value = serde_json::from_str(
         &std::fs::read_to_string(artifacts.join("verdict.json")).expect("verdict"),
     )
     .expect("verdict json");
-    assert_eq!(verdict["steps"][1]["error"]["code"], "INSUFFICIENT_HOST_EVIDENCE");
+    assert_eq!(
+        verdict["steps"][1]["error"]["code"],
+        "INSUFFICIENT_HOST_EVIDENCE"
+    );
 }
 
 #[test]

@@ -57,7 +57,9 @@ pub unsafe extern "C" fn anativewindow_tosurface(
     env: *mut c_void,
     window: *mut c_void,
 ) -> *mut c_void {
-    let Some(id) = handle_id(window) else { return std::ptr::null_mut() };
+    let Some(id) = handle_id(window) else {
+        return std::ptr::null_mut();
+    };
     match with_host(|h| h.window_to_surface(env as usize, id)) {
         Ok(sid) => handle(sid),
         Err(e) => host_failed(LIB, "ANativeWindow_toSurface", e, std::ptr::null_mut()),
@@ -87,7 +89,9 @@ pub unsafe extern "C" fn anativewindow_release(window: *mut c_void) {
 }
 
 fn info(window: *mut c_void, what: &str, pick: impl Fn(&super::WindowInfo) -> c_int) -> c_int {
-    let Some(id) = handle_id(window) else { return 0 };
+    let Some(id) = handle_id(window) else {
+        return 0;
+    };
     match with_host(|h| h.window_info(id)) {
         Ok(i) => pick(&i),
         Err(e) => host_failed(LIB, what, e, 0),
@@ -128,7 +132,9 @@ pub unsafe extern "C" fn anativewindow_setbuffersgeometry(
     height: c_int,
     format: c_int,
 ) -> c_int {
-    let Some(id) = handle_id(window) else { return -1 };
+    let Some(id) = handle_id(window) else {
+        return -1;
+    };
     match with_host(|h| h.window_set_geometry(id, width, height, format)) {
         Ok(()) => 0,
         Err(e) => host_failed(LIB, "ANativeWindow_setBuffersGeometry", e, -1),
@@ -146,7 +152,9 @@ pub unsafe extern "C" fn anativewindow_setbuffersdataspace(
     window: *mut c_void,
     _dataspace: i32,
 ) -> c_int {
-    let Some(id) = handle_id(window) else { return -1 };
+    let Some(id) = handle_id(window) else {
+        return -1;
+    };
     match with_host(|h| h.window_info(id)) {
         Ok(_) => super::unsupported(
             LIB,
@@ -170,7 +178,9 @@ pub unsafe extern "C" fn anativewindow_lock(
     if out.is_null() {
         return -1;
     }
-    let Some(id) = handle_id(window) else { return -1 };
+    let Some(id) = handle_id(window) else {
+        return -1;
+    };
     match with_host(|h| h.window_lock(id, rect(dirty))) {
         Ok(buf) => {
             out.write(buf);
@@ -185,7 +195,9 @@ pub unsafe extern "C" fn anativewindow_lock(
 /// # Safety
 /// `window` must be locked.
 pub unsafe extern "C" fn anativewindow_unlockandpost(window: *mut c_void) -> c_int {
-    let Some(id) = handle_id(window) else { return -1 };
+    let Some(id) = handle_id(window) else {
+        return -1;
+    };
     match with_host(|h| h.window_unlock_and_post(id)) {
         Ok(()) => 0,
         Err(e) => host_failed(LIB, "ANativeWindow_unlockAndPost", e, -1),
@@ -223,9 +235,18 @@ pub fn table() -> Vec<(&'static str, *const c_void)> {
             "ANativeWindow_toSurface",
             anativewindow_tosurface as *const c_void,
         ),
-        ("ANativeWindow_acquire", anativewindow_acquire as *const c_void),
-        ("ANativeWindow_release", anativewindow_release as *const c_void),
-        ("ANativeWindow_getWidth", anativewindow_getwidth as *const c_void),
+        (
+            "ANativeWindow_acquire",
+            anativewindow_acquire as *const c_void,
+        ),
+        (
+            "ANativeWindow_release",
+            anativewindow_release as *const c_void,
+        ),
+        (
+            "ANativeWindow_getWidth",
+            anativewindow_getwidth as *const c_void,
+        ),
         (
             "ANativeWindow_getHeight",
             anativewindow_getheight as *const c_void,

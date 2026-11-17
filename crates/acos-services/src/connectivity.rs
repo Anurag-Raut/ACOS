@@ -63,7 +63,7 @@ use std::sync::{Arc, Mutex};
 use acos_aidl::MethodInfo;
 use acos_parcel::{BinderId, Parcel};
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, PendingDelivery, ServiceObject};
 use crate::parcelable;
 use crate::value::{Parcelable, Value};
@@ -386,7 +386,10 @@ impl ConnectivityState {
                     data: encode_message(
                         CALLBACK_LOST,
                         0,
-                        &[("NetworkRequest", &record.request), ("Network", &network_parcelable())],
+                        &[
+                            ("NetworkRequest", &record.request),
+                            ("Network", &network_parcelable()),
+                        ],
                     )
                     .expect("callback bundle"),
                 });
@@ -433,24 +436,24 @@ pub fn default_network_capabilities() -> Parcelable {
         "android.net.NetworkCapabilities",
         vec![
             Value::Long(default_capabilities_bits()),
-            Value::Long(0),                                      // forbidden
-            Value::Long(1i64 << TRANSPORT_WIFI),                 // transports
-            Value::Int(0),                                       // link up kbps
-            Value::Int(0),                                       // link down kbps
-            Value::Str(None),                                    // NetworkSpecifier
-            Value::Str(None),                                    // TransportInfo
-            Value::Int(i32::MIN),                                // SIGNAL_STRENGTH_UNSPECIFIED
-            Value::Int(-1),                                      // mUids (null ArraySet)
-            Value::IntArray(Some(Vec::new())),                   // mAllowedUids
-            Value::Str(None),                                    // mSSID
-            Value::Bool(false),                                  // mPrivateDnsBroken
-            Value::IntArray(Some(Vec::new())),                   // administrator uids
-            Value::Int(1000),                                    // owner uid (system)
-            Value::Int(1000),                                    // requestor uid
-            Value::Str(Some("android".to_string())),             // requestor package
-            Value::IntArray(Some(Vec::new())),                   // mSubIds
-            Value::Int(-1),                                      // underlying networks (null)
-            Value::Int(0),                                       // enterprise ids
+            Value::Long(0),                          // forbidden
+            Value::Long(1i64 << TRANSPORT_WIFI),     // transports
+            Value::Int(0),                           // link up kbps
+            Value::Int(0),                           // link down kbps
+            Value::Str(None),                        // NetworkSpecifier
+            Value::Str(None),                        // TransportInfo
+            Value::Int(i32::MIN),                    // SIGNAL_STRENGTH_UNSPECIFIED
+            Value::Int(-1),                          // mUids (null ArraySet)
+            Value::IntArray(Some(Vec::new())),       // mAllowedUids
+            Value::Str(None),                        // mSSID
+            Value::Bool(false),                      // mPrivateDnsBroken
+            Value::IntArray(Some(Vec::new())),       // administrator uids
+            Value::Int(1000),                        // owner uid (system)
+            Value::Int(1000),                        // requestor uid
+            Value::Str(Some("android".to_string())), // requestor package
+            Value::IntArray(Some(Vec::new())),       // mSubIds
+            Value::Int(-1),                          // underlying networks (null)
+            Value::Int(0),                           // enterprise ids
         ],
     )
 }
@@ -491,23 +494,23 @@ pub fn default_link_properties() -> Parcelable {
         "android.net.LinkProperties",
         vec![
             Value::Str(Some("wlan0".to_string())),
-            addrs,          // link addresses
-            dns,            // DNS servers
+            addrs,                         // link addresses
+            dns,                           // DNS servers
             Value::List(Some(Vec::new())), // validated private DNS servers
-            Value::Bool(false), // usePrivateDns
-            Value::Str(None),   // privateDnsServerName
+            Value::Bool(false),            // usePrivateDns
+            Value::Str(None),              // privateDnsServerName
             Value::List(Some(Vec::new())), // PCSCF servers
-            Value::Str(None),   // domains
-            dhcp,               // dhcp server address
-            Value::Int(1500),   // mtu
-            Value::Str(None),   // tcpBufferSizes
-            routes,             // routes
-            Value::Byte(0),     // httpProxy presence
-            Value::Str(None),   // nat64Prefix
-            Value::Int(0),      // stacked links
-            Value::Bool(false), // wakeOnLanSupported
-            Value::Str(None),   // captivePortalApiUrl
-            Value::Str(None),   // captivePortalData
+            Value::Str(None),              // domains
+            dhcp,                          // dhcp server address
+            Value::Int(1500),              // mtu
+            Value::Str(None),              // tcpBufferSizes
+            routes,                        // routes
+            Value::Byte(0),                // httpProxy presence
+            Value::Str(None),              // nat64Prefix
+            Value::Int(0),                 // stacked links
+            Value::Bool(false),            // wakeOnLanSupported
+            Value::Str(None),              // captivePortalApiUrl
+            Value::Str(None),              // captivePortalData
         ],
     )
 }
@@ -980,7 +983,10 @@ impl ServiceObject for ConnectivityService {
                     (_, caps) => caps,
                 };
                 let messenger = messenger_binder(args.get(3));
-                let legacy_type = args.get(6).and_then(Value::as_int).unwrap_or(LEGACY_TYPE_NONE);
+                let legacy_type = args
+                    .get(6)
+                    .and_then(Value::as_int)
+                    .unwrap_or(LEGACY_TYPE_NONE);
                 let callback_flags = args.get(7).and_then(Value::as_int).unwrap_or(0);
                 let package = args
                     .get(8)

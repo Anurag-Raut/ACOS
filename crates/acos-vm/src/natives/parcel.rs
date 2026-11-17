@@ -223,7 +223,12 @@ fn byte_array_slice(vm: &Vm, h: Handle, offset: i32, len: i32) -> Option<Vec<u8>
             let offset = offset.max(0) as usize;
             let len = len.max(0) as usize;
             let end = offset.saturating_add(len).min(v.len());
-            Some(v[offset.min(v.len())..end].iter().map(|&b| b as u8).collect())
+            Some(
+                v[offset.min(v.len())..end]
+                    .iter()
+                    .map(|&b| b as u8)
+                    .collect(),
+            )
         }
         _ => None,
     }
@@ -335,14 +340,16 @@ fn native_data_avail(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_data_capacity(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let n = with_store(|s| s.table.with_parcel_shared(handle, Parcel::data_capacity)).map_err(perr)?;
+    let n =
+        with_store(|s| s.table.with_parcel_shared(handle, Parcel::data_capacity)).map_err(perr)?;
     vm.ret_i32(ctx, n as i32);
     Ok(())
 }
 
 fn native_data_position(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let n = with_store(|s| s.table.with_parcel_shared(handle, Parcel::data_position)).map_err(perr)?;
+    let n =
+        with_store(|s| s.table.with_parcel_shared(handle, Parcel::data_position)).map_err(perr)?;
     vm.ret_i32(ctx, n as i32);
     Ok(())
 }
@@ -407,13 +414,19 @@ fn native_write_double(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn native_write_string8(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
     let s = vm.string_to_rust(vm.arg_ref(ctx, 1));
-    flat(with_store(|s_| s_.table.with_parcel(handle, |p| p.write_string8_opt(s.as_deref()))))
+    flat(with_store(|s_| {
+        s_.table
+            .with_parcel(handle, |p| p.write_string8_opt(s.as_deref()))
+    }))
 }
 
 fn native_write_string16(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
     let s = vm.string_to_rust(vm.arg_ref(ctx, 1));
-    flat(with_store(|s_| s_.table.with_parcel(handle, |p| p.write_string16_opt(s.as_deref()))))
+    flat(with_store(|s_| {
+        s_.table
+            .with_parcel(handle, |p| p.write_string16_opt(s.as_deref()))
+    }))
 }
 
 fn native_write_byte_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -422,7 +435,10 @@ fn native_write_byte_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let offset = vm.arg_i32(ctx, 2);
     let len = vm.arg_i32(ctx, 3);
     let bytes = byte_array_slice(vm, arr, offset, len).unwrap_or_default();
-    flat(with_store(|s| s.table.with_parcel(handle, |p| p.write_byte_array(Some(&bytes)))))
+    flat(with_store(|s| {
+        s.table
+            .with_parcel(handle, |p| p.write_byte_array(Some(&bytes)))
+    }))
 }
 
 /// `writeBlob` uses the inline form: `int32 len` then `int32 0` marker then the
@@ -471,7 +487,11 @@ fn native_write_strong_binder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
     let binder = vm.arg_ref(ctx, 1);
     let id = strong_binder_id(vm, binder);
-    with_store(|s| s.table.with_parcel(handle, |p| p.write_strong_binder_opt(id))).map_err(perr)
+    with_store(|s| {
+        s.table
+            .with_parcel(handle, |p| p.write_strong_binder_opt(id))
+    })
+    .map_err(perr)
 }
 
 fn native_write_file_descriptor(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -485,7 +505,9 @@ fn native_write_file_descriptor(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
                 Ok(file) => p.write_file_descriptor(file.as_fd()),
                 Err(e) => Err(ParcelError::Fd(format!("open /proc/self/fd/{fd}: {e}"))),
             },
-            None => Err(ParcelError::Fd("writeFileDescriptor on a null fd".to_string())),
+            None => Err(ParcelError::Fd(
+                "writeFileDescriptor on a null fd".to_string(),
+            )),
         })
     }))
 }
@@ -493,7 +515,10 @@ fn native_write_file_descriptor(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn native_write_interface_token(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
     let descriptor = vm.string_to_rust(vm.arg_ref(ctx, 1)).unwrap_or_default();
-    flat(with_store(|s| s.table.with_parcel(handle, |p| p.write_interface_token(&descriptor))))
+    flat(with_store(|s| {
+        s.table
+            .with_parcel(handle, |p| p.write_interface_token(&descriptor))
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -502,35 +527,40 @@ fn native_write_interface_token(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_read_int(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let v = with_store(|s| s.table.with_parcel(handle, Parcel::read_int32_lenient)).map_err(perr)?;
+    let v =
+        with_store(|s| s.table.with_parcel(handle, Parcel::read_int32_lenient)).map_err(perr)?;
     vm.ret_i32(ctx, v);
     Ok(())
 }
 
 fn native_read_long(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let v = with_store(|s| s.table.with_parcel(handle, Parcel::read_int64_lenient)).map_err(perr)?;
+    let v =
+        with_store(|s| s.table.with_parcel(handle, Parcel::read_int64_lenient)).map_err(perr)?;
     vm.ret_i64(ctx, v);
     Ok(())
 }
 
 fn native_read_float(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let v = with_store(|s| s.table.with_parcel(handle, Parcel::read_float_lenient)).map_err(perr)?;
+    let v =
+        with_store(|s| s.table.with_parcel(handle, Parcel::read_float_lenient)).map_err(perr)?;
     vm.ret_f32(ctx, v);
     Ok(())
 }
 
 fn native_read_double(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let v = with_store(|s| s.table.with_parcel(handle, Parcel::read_double_lenient)).map_err(perr)?;
+    let v =
+        with_store(|s| s.table.with_parcel(handle, Parcel::read_double_lenient)).map_err(perr)?;
     vm.ret_f64(ctx, v);
     Ok(())
 }
 
 fn native_read_string8(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let s = with_store(|s_| s_.table.with_parcel(handle, Parcel::read_string8_lenient)).map_err(perr)?;
+    let s = with_store(|s_| s_.table.with_parcel(handle, Parcel::read_string8_lenient))
+        .map_err(perr)?;
     match s {
         Some(s) => {
             let h = vm.new_string(&s)?;
@@ -543,7 +573,8 @@ fn native_read_string8(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_read_string16(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let s = with_store(|s_| s_.table.with_parcel(handle, Parcel::read_string16_lenient)).map_err(perr)?;
+    let s = with_store(|s_| s_.table.with_parcel(handle, Parcel::read_string16_lenient))
+        .map_err(perr)?;
     match s {
         Some(s) => {
             let h = vm.new_string(&s)?;
@@ -556,7 +587,9 @@ fn native_read_string16(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_create_byte_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let bytes = flat(with_store(|s| s.table.with_parcel(handle, Parcel::read_byte_array)))?;
+    let bytes = flat(with_store(|s| {
+        s.table.with_parcel(handle, Parcel::read_byte_array)
+    }))?;
     match bytes {
         Some(b) => {
             let h = new_byte_array(vm, &b)?;
@@ -571,7 +604,9 @@ fn native_read_byte_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
     let dest = vm.arg_ref(ctx, 1);
     let dest_len = vm.arg_i32(ctx, 2).max(0) as usize;
-    let bytes = flat(with_store(|s| s.table.with_parcel(handle, Parcel::read_byte_array)))?;
+    let bytes = flat(with_store(|s| {
+        s.table.with_parcel(handle, Parcel::read_byte_array)
+    }))?;
     let ok = match bytes {
         Some(b) if b.len() == dest_len => write_byte_array_into(vm, dest, &b),
         _ => false,
@@ -582,12 +617,15 @@ fn native_read_byte_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_read_blob(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let len = with_store(|s| s.table.with_parcel(handle, Parcel::read_int32_lenient)).map_err(perr)?;
+    let len =
+        with_store(|s| s.table.with_parcel(handle, Parcel::read_int32_lenient)).map_err(perr)?;
     if len < 0 {
         vm.ret_ref(ctx, NULL);
         return Ok(());
     }
-    let bytes = flat(with_store(|s| s.table.with_parcel(handle, |p| p.read_blob(len as usize))))?;
+    let bytes = flat(with_store(|s| {
+        s.table.with_parcel(handle, |p| p.read_blob(len as usize))
+    }))?;
     match bytes {
         Some(b) => {
             let h = new_byte_array(vm, &b)?;
@@ -600,7 +638,9 @@ fn native_read_blob(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_read_strong_binder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let id = flat(with_store(|s| s.table.with_parcel(handle, Parcel::read_strong_binder)))?;
+    let id = flat(with_store(|s| {
+        s.table.with_parcel(handle, Parcel::read_strong_binder)
+    }))?;
     let obj = match id {
         Some(id) => strong_binder_object(vm, id).unwrap_or(NULL),
         None => NULL,
@@ -638,7 +678,8 @@ fn native_read_file_descriptor(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_marshall(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let bytes = with_store(|s| s.table.with_parcel_shared(handle, Parcel::marshall)).map_err(perr)?;
+    let bytes =
+        with_store(|s| s.table.with_parcel_shared(handle, Parcel::marshall)).map_err(perr)?;
     let h = new_byte_array(vm, &bytes)?;
     vm.ret_ref(ctx, h);
     Ok(())
@@ -659,7 +700,10 @@ fn native_append_from(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let offset = vm.arg_i32(ctx, 2).max(0) as usize;
     let len = vm.arg_i32(ctx, 3).max(0) as usize;
     let src = with_store(|s| s.table.with_parcel_shared(other, Clone::clone)).map_err(perr)?;
-    flat(with_store(|s| s.table.with_parcel(handle, |p| p.append_from(&src, offset, len))))
+    flat(with_store(|s| {
+        s.table
+            .with_parcel(handle, |p| p.append_from(&src, offset, len))
+    }))
 }
 
 fn native_compare_data(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -693,7 +737,10 @@ fn native_compare_data_in_range(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn native_enforce_interface(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
     let descriptor = vm.string_to_rust(vm.arg_ref(ctx, 1)).unwrap_or_default();
-    let result = with_store(|s| s.table.with_parcel(handle, |p| p.enforce_interface(&descriptor)));
+    let result = with_store(|s| {
+        s.table
+            .with_parcel(handle, |p| p.enforce_interface(&descriptor))
+    });
     match result {
         Ok(Ok(())) => Ok(()),
         Ok(Err(e)) | Err(e) => {
@@ -704,8 +751,11 @@ fn native_enforce_interface(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn native_has_file_descriptors(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = handle_arg(vm, ctx);
-    let v = with_store(|s| s.table.with_parcel_shared(handle, Parcel::has_file_descriptors))
-        .map_err(perr)?;
+    let v = with_store(|s| {
+        s.table
+            .with_parcel_shared(handle, Parcel::has_file_descriptors)
+    })
+    .map_err(perr)?;
     vm.ret_bool(ctx, v);
     Ok(())
 }
@@ -849,18 +899,43 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "nativeDataAvail", "(J)I", native_data_avail);
     vm.register_native(c, "nativeDataCapacity", "(J)I", native_data_capacity);
     vm.register_native(c, "nativeDataPosition", "(J)I", native_data_position);
-    vm.register_native(c, "nativeSetDataPosition", "(JI)V", native_set_data_position);
+    vm.register_native(
+        c,
+        "nativeSetDataPosition",
+        "(JI)V",
+        native_set_data_position,
+    );
     vm.register_native(c, "nativeSetDataSize", "(JI)V", native_set_data_size);
-    vm.register_native(c, "nativeSetDataCapacity", "(JI)V", native_set_data_capacity);
+    vm.register_native(
+        c,
+        "nativeSetDataCapacity",
+        "(JI)V",
+        native_set_data_capacity,
+    );
 
     // writers
     vm.register_native(c, "nativeWriteInt", "(JI)I", native_write_int);
     vm.register_native(c, "nativeWriteLong", "(JJ)I", native_write_long);
     vm.register_native(c, "nativeWriteFloat", "(JF)I", native_write_float);
     vm.register_native(c, "nativeWriteDouble", "(JD)I", native_write_double);
-    vm.register_native(c, "nativeWriteString8", "(JLjava/lang/String;)V", native_write_string8);
-    vm.register_native(c, "nativeWriteString16", "(JLjava/lang/String;)V", native_write_string16);
-    vm.register_native(c, "nativeWriteByteArray", "(J[BII)V", native_write_byte_array);
+    vm.register_native(
+        c,
+        "nativeWriteString8",
+        "(JLjava/lang/String;)V",
+        native_write_string8,
+    );
+    vm.register_native(
+        c,
+        "nativeWriteString16",
+        "(JLjava/lang/String;)V",
+        native_write_string16,
+    );
+    vm.register_native(
+        c,
+        "nativeWriteByteArray",
+        "(J[BII)V",
+        native_write_byte_array,
+    );
     vm.register_native(c, "nativeWriteBlob", "(J[BII)V", native_write_blob);
     vm.register_native(
         c,
@@ -886,9 +961,24 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "nativeReadLong", "(J)J", native_read_long);
     vm.register_native(c, "nativeReadFloat", "(J)F", native_read_float);
     vm.register_native(c, "nativeReadDouble", "(J)D", native_read_double);
-    vm.register_native(c, "nativeReadString8", "(J)Ljava/lang/String;", native_read_string8);
-    vm.register_native(c, "nativeReadString16", "(J)Ljava/lang/String;", native_read_string16);
-    vm.register_native(c, "nativeCreateByteArray", "(J)[B", native_create_byte_array);
+    vm.register_native(
+        c,
+        "nativeReadString8",
+        "(J)Ljava/lang/String;",
+        native_read_string8,
+    );
+    vm.register_native(
+        c,
+        "nativeReadString16",
+        "(J)Ljava/lang/String;",
+        native_read_string16,
+    );
+    vm.register_native(
+        c,
+        "nativeCreateByteArray",
+        "(J)[B",
+        native_create_byte_array,
+    );
     vm.register_native(c, "nativeReadByteArray", "(J[BI)Z", native_read_byte_array);
     vm.register_native(c, "nativeReadBlob", "(J)[B", native_read_blob);
     vm.register_native(
@@ -923,7 +1013,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(JLjava/lang/String;)V",
         native_enforce_interface,
     );
-    vm.register_native(c, "nativeHasFileDescriptors", "(J)Z", native_has_file_descriptors);
+    vm.register_native(
+        c,
+        "nativeHasFileDescriptors",
+        "(J)Z",
+        native_has_file_descriptors,
+    );
     vm.register_native(
         c,
         "nativeHasFileDescriptorsInRange",
@@ -932,7 +1027,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     );
     vm.register_native(c, "nativeIsForRpc", "(J)Z", native_is_for_rpc);
     vm.register_native(c, "nativePushAllowFds", "(JZ)Z", native_push_allow_fds);
-    vm.register_native(c, "nativeRestoreAllowFds", "(JZ)V", native_restore_allow_fds);
+    vm.register_native(
+        c,
+        "nativeRestoreAllowFds",
+        "(JZ)V",
+        native_restore_allow_fds,
+    );
     vm.register_native(
         c,
         "nativeMarkForBinder",
@@ -940,7 +1040,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         native_mark_for_binder,
     );
     vm.register_native(c, "nativeMarkSensitive", "(J)V", native_mark_sensitive);
-    vm.register_native(c, "nativeGetOpenAshmemSize", "(J)J", native_get_open_ashmem_size);
+    vm.register_native(
+        c,
+        "nativeGetOpenAshmemSize",
+        "(J)J",
+        native_get_open_ashmem_size,
+    );
     vm.register_native(
         c,
         "nativeReadCallingWorkSourceUid",
@@ -953,7 +1058,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(JI)Z",
         native_replace_calling_work_source_uid,
     );
-    vm.register_native(c, "nativeSignalExceptionForError", "(I)V", native_signal_exception_for_error);
+    vm.register_native(
+        c,
+        "nativeSignalExceptionForError",
+        "(I)V",
+        native_signal_exception_for_error,
+    );
     vm.register_native(c, "getGlobalAllocCount", "()J", get_global_alloc_count);
     vm.register_native(c, "getGlobalAllocSize", "()J", get_global_alloc_size);
 
@@ -1000,11 +1110,7 @@ mod tests {
         }
 
         impl super::super::binder::BinderTransport for RootingTransport {
-            fn binder_id_of(
-                &self,
-                vm: &mut Vm,
-                obj: Handle,
-            ) -> Option<BinderId> {
+            fn binder_id_of(&self, vm: &mut Vm, obj: Handle) -> Option<BinderId> {
                 if obj == NULL {
                     return None;
                 }

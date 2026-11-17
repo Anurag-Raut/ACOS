@@ -79,21 +79,36 @@ mod tests {
     #[test]
     fn reads_lines_and_reports_eof() {
         let mut r = Cursor::new(b"one\ntwo\n".to_vec());
-        assert_eq!(read_line_bounded(&mut r, 64).unwrap(), ReadOutcome::Line(b"one".to_vec()));
-        assert_eq!(read_line_bounded(&mut r, 64).unwrap(), ReadOutcome::Line(b"two".to_vec()));
+        assert_eq!(
+            read_line_bounded(&mut r, 64).unwrap(),
+            ReadOutcome::Line(b"one".to_vec())
+        );
+        assert_eq!(
+            read_line_bounded(&mut r, 64).unwrap(),
+            ReadOutcome::Line(b"two".to_vec())
+        );
         assert_eq!(read_line_bounded(&mut r, 64).unwrap(), ReadOutcome::Eof);
     }
 
     #[test]
     fn oversized_line_is_drained() {
         let mut r = Cursor::new(b"aaaaaaaaaa\nok\n".to_vec());
-        assert_eq!(read_line_bounded(&mut r, 4).unwrap(), ReadOutcome::Oversized);
-        assert_eq!(read_line_bounded(&mut r, 4).unwrap(), ReadOutcome::Line(b"ok".to_vec()));
+        assert_eq!(
+            read_line_bounded(&mut r, 4).unwrap(),
+            ReadOutcome::Oversized
+        );
+        assert_eq!(
+            read_line_bounded(&mut r, 4).unwrap(),
+            ReadOutcome::Line(b"ok".to_vec())
+        );
     }
 
     #[test]
     fn crlf_is_tolerated() {
         let mut r = Cursor::new(b"hi\r\n".to_vec());
-        assert_eq!(read_line_bounded(&mut r, 64).unwrap(), ReadOutcome::Line(b"hi".to_vec()));
+        assert_eq!(
+            read_line_bounded(&mut r, 64).unwrap(),
+            ReadOutcome::Line(b"hi".to_vec())
+        );
     }
 }

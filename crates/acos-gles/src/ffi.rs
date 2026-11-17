@@ -115,7 +115,11 @@ fn gl_ctx<R>(call: &'static str, default: R, f: impl FnOnce(&mut Gl) -> R) -> R 
 }
 
 /// Run `f` against the current context + draw target; log when there is none.
-fn gl_draw<R>(call: &'static str, default: R, f: impl FnOnce(&mut Gl, &mut crate::raster::Framebuffer) -> R) -> R {
+fn gl_draw<R>(
+    call: &'static str,
+    default: R,
+    f: impl FnOnce(&mut Gl, &mut crate::raster::Framebuffer) -> R,
+) -> R {
     match egl::with_gl_or_null(f) {
         Some(v) => v,
         None => {
@@ -385,7 +389,10 @@ pub unsafe extern "C" fn egl_create_image_khr(
 
 /// `eglDestroyImageKHR`.
 pub unsafe extern "C" fn egl_destroy_image_khr(_display: u64, _image: usize) -> i32 {
-    unsupported("eglDestroyImageKHR", "EGL image objects are not implemented");
+    unsupported(
+        "eglDestroyImageKHR",
+        "EGL image objects are not implemented",
+    );
     egl::EGL_FALSE
 }
 
@@ -640,7 +647,9 @@ pub unsafe extern "C" fn gl_buffer_data(target: u32, size: i32, data: usize, usa
     let len = size.max(0) as usize;
     // SAFETY: the guest passes `size` readable bytes or a null pointer.
     let payload = unsafe { bytes(data, len) }.unwrap_or(&[]);
-    gl_ctx("glBufferData", (), |gl| gl.buffer_data(target, payload, usage));
+    gl_ctx("glBufferData", (), |gl| {
+        gl.buffer_data(target, payload, usage)
+    });
 }
 
 /// `glBufferSubData`.
@@ -659,7 +668,10 @@ pub unsafe extern "C" fn gl_get_buffer_parameteriv(target: u32, pname: u32, para
     /// `GL_BUFFER_USAGE`.
     const BUFFER_USAGE: u32 = 0x8765;
     let v = gl_ctx("glGetBufferParameteriv", 0, |gl| match pname {
-        BUFFER_SIZE => gl.buffers.get(&gl.array_buffer).map_or(0, |b| b.len() as i32),
+        BUFFER_SIZE => gl
+            .buffers
+            .get(&gl.array_buffer)
+            .map_or(0, |b| b.len() as i32),
         BUFFER_USAGE => 0x88E4,
         other => {
             unsupported("glGetBufferParameteriv", format!("pname {other:#x}"));
@@ -686,7 +698,9 @@ pub unsafe extern "C" fn gl_delete_shader(shader: u32) {
 /// `glShaderSource`.
 pub unsafe extern "C" fn gl_shader_source(shader: u32, count: i32, string: usize, length: usize) {
     if count <= 0 || string == 0 {
-        gl_ctx("glShaderSource", (), |gl| gl.shader_source(shader, String::new()));
+        gl_ctx("glShaderSource", (), |gl| {
+            gl.shader_source(shader, String::new())
+        });
         return;
     }
     let mut src = String::new();
@@ -803,7 +817,9 @@ pub unsafe extern "C" fn gl_attach_shader(program: u32, shader: u32) {
 pub unsafe extern "C" fn gl_bind_attrib_location(program: u32, index: u32, name: usize) {
     // SAFETY: the guest passes a NUL-terminated attribute name.
     let Some(n) = (unsafe { cstr(name) }) else {
-        gl_ctx("glBindAttribLocation", (), |gl| gl.set_error(c::INVALID_VALUE));
+        gl_ctx("glBindAttribLocation", (), |gl| {
+            gl.set_error(c::INVALID_VALUE)
+        });
         return;
     };
     gl_ctx("glBindAttribLocation", (), |gl| {
@@ -1099,8 +1115,7 @@ pub unsafe extern "C" fn gl_draw_arrays(mode: u32, first: i32, count: i32) {
 pub unsafe extern "C" fn gl_draw_elements(mode: u32, count: i32, ty: u32, indices: usize) {
     if count > 0 {
         let max_index =
-            egl::with_current_state(|gl| gl.max_element_index(count, ty, indices as i32))
-                .flatten();
+            egl::with_current_state(|gl| gl.max_element_index(count, ty, indices as i32)).flatten();
         if let Some(max_index) = max_index {
             prepare_client_arrays(max_index, "glDrawElements");
         }
@@ -1213,7 +1228,9 @@ pub unsafe extern "C" fn gl_tex_image2d(
     let len = if comps == 0 || width <= 0 || height <= 0 {
         0
     } else {
-        (width as usize).saturating_mul(height as usize).saturating_mul(comps)
+        (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(comps)
     };
     let payload = if len == 0 {
         Vec::new()
@@ -1258,7 +1275,9 @@ pub unsafe extern "C" fn gl_tex_sub_image2d(
     let len = if comps == 0 || width <= 0 || height <= 0 {
         0
     } else {
-        (width as usize).saturating_mul(height as usize).saturating_mul(comps)
+        (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(comps)
     };
     let payload = if len == 0 {
         Vec::new()
@@ -1390,8 +1409,13 @@ pub unsafe extern "C" fn gl_tex_storage2d(
     _width: i32,
     _height: i32,
 ) {
-    unsupported("glTexStorage2D", "GLES3 immutable texture storage is not implemented");
-    gl_ctx("glTexStorage2D", (), |gl| gl.set_error(c::INVALID_OPERATION));
+    unsupported(
+        "glTexStorage2D",
+        "GLES3 immutable texture storage is not implemented",
+    );
+    gl_ctx("glTexStorage2D", (), |gl| {
+        gl.set_error(c::INVALID_OPERATION)
+    });
 }
 
 // -- framebuffers / renderbuffers -----------------------------------------
@@ -1407,9 +1431,15 @@ pub unsafe extern "C" fn gl_gen_framebuffers(n: i32, framebuffers: usize) {
 /// `glDeleteFramebuffers`.
 pub unsafe extern "C" fn gl_delete_framebuffers(n: i32, framebuffers: usize) {
     let ids: Vec<u32> = (0..n.max(0))
-        .map(|i| unsafe { (framebuffers as *const u32).add(i as usize).read_unaligned() })
+        .map(|i| unsafe {
+            (framebuffers as *const u32)
+                .add(i as usize)
+                .read_unaligned()
+        })
         .collect();
-    gl_ctx("glDeleteFramebuffers", (), |gl| gl.delete_framebuffers(&ids));
+    gl_ctx("glDeleteFramebuffers", (), |gl| {
+        gl.delete_framebuffers(&ids)
+    });
 }
 
 /// `glBindFramebuffer`.
@@ -1474,8 +1504,10 @@ pub unsafe extern "C" fn gl_get_framebuffer_attachment_parameteriv(
     const OBJECT_NAME: u32 = 0x8CD1;
     /// `GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL`.
     const TEXTURE_LEVEL: u32 = 0x8CDC;
-    let v = gl_ctx("glGetFramebufferAttachmentParameteriv", 0, |gl| {
-        match pname {
+    let v = gl_ctx(
+        "glGetFramebufferAttachmentParameteriv",
+        0,
+        |gl| match pname {
             OBJECT_TYPE => 0x1702,
             OBJECT_NAME => gl
                 .fbo_color
@@ -1492,8 +1524,8 @@ pub unsafe extern "C" fn gl_get_framebuffer_attachment_parameteriv(
                 gl.set_error(c::INVALID_ENUM);
                 0
             }
-        }
-    });
+        },
+    );
     unsafe { write_i32(params, v) };
 }
 
@@ -1510,7 +1542,11 @@ pub unsafe extern "C" fn gl_gen_renderbuffers(n: i32, renderbuffers: usize) {
 /// `glDeleteRenderbuffers`.
 pub unsafe extern "C" fn gl_delete_renderbuffers(n: i32, renderbuffers: usize) {
     let ids: Vec<u32> = (0..n.max(0))
-        .map(|i| unsafe { (renderbuffers as *const u32).add(i as usize).read_unaligned() })
+        .map(|i| unsafe {
+            (renderbuffers as *const u32)
+                .add(i as usize)
+                .read_unaligned()
+        })
         .collect();
     gl_ctx("glDeleteRenderbuffers", (), |gl| {
         gl.delete_renderbuffers(&ids)
@@ -1537,18 +1573,20 @@ pub unsafe extern "C" fn gl_renderbuffer_storage(
 }
 
 /// `glGetRenderbufferParameteriv`.
-pub unsafe extern "C" fn gl_get_renderbuffer_parameteriv(
-    _target: u32,
-    pname: u32,
-    params: usize,
-) {
+pub unsafe extern "C" fn gl_get_renderbuffer_parameteriv(_target: u32, pname: u32, params: usize) {
     /// `GL_RENDERBUFFER_WIDTH`.
     const WIDTH: u32 = 0x8D42;
     /// `GL_RENDERBUFFER_HEIGHT`.
     const HEIGHT: u32 = 0x8D43;
     let v = gl_ctx("glGetRenderbufferParameteriv", 0, |gl| match pname {
-        WIDTH => gl.renderbuffers.get(&gl.renderbuffer).map_or(0, |r| r.width as i32),
-        HEIGHT => gl.renderbuffers.get(&gl.renderbuffer).map_or(0, |r| r.height as i32),
+        WIDTH => gl
+            .renderbuffers
+            .get(&gl.renderbuffer)
+            .map_or(0, |r| r.width as i32),
+        HEIGHT => gl
+            .renderbuffers
+            .get(&gl.renderbuffer)
+            .map_or(0, |r| r.height as i32),
         other => {
             unsupported("glGetRenderbufferParameteriv", format!("pname {other:#x}"));
             gl.set_error(c::INVALID_ENUM);
@@ -1617,7 +1655,10 @@ pub unsafe extern "C" fn gl_delete_queries(_n: i32, _ids: usize) {
 
 /// `glGetQueryObjectuiv`.
 pub unsafe extern "C" fn gl_get_query_objectuiv(_id: u32, _pname: u32, params: usize) {
-    unsupported("glGetQueryObjectuiv", "occlusion queries are not implemented");
+    unsupported(
+        "glGetQueryObjectuiv",
+        "occlusion queries are not implemented",
+    );
     unsafe { write_i32(params, 0) };
 }
 
@@ -1828,8 +1869,5 @@ pub fn table() -> &'static [(&'static str, usize)] {
 /// Entry point by name (`eglGetProcAddress`, tests).
 #[must_use]
 pub fn lookup(name: &str) -> Option<usize> {
-    table()
-        .iter()
-        .find(|(n, _)| *n == name)
-        .map(|(_, p)| *p)
+    table().iter().find(|(n, _)| *n == name).map(|(_, p)| *p)
 }

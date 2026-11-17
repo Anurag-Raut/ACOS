@@ -12,19 +12,41 @@ use proptest::prelude::*;
 
 #[derive(Debug, Clone)]
 enum Op {
-    AddWindow { id: u64 },
-    RemoveWindow { id: u64 },
-    Relayout { id: u64 },
-    Tap { x: i32, y: i32, cause: i64 },
-    Swipe { x0: i32, y0: i32, x1: i32, y1: i32, steps: u8 },
-    Key { code: i32 },
+    AddWindow {
+        id: u64,
+    },
+    RemoveWindow {
+        id: u64,
+    },
+    Relayout {
+        id: u64,
+    },
+    Tap {
+        x: i32,
+        y: i32,
+        cause: i64,
+    },
+    Swipe {
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        steps: u8,
+    },
+    Key {
+        code: i32,
+    },
     AckFirst,
     AckLast,
-    Advance { nanos: u32 },
+    Advance {
+        nanos: u32,
+    },
     PumpVsync,
     PumpAnr,
     Capture,
-    UpdateVisible { types: i32 },
+    UpdateVisible {
+        types: i32,
+    },
 }
 
 fn op_strategy() -> impl Strategy<Value = Op> {
@@ -33,8 +55,15 @@ fn op_strategy() -> impl Strategy<Value = Op> {
         (1u64..4).prop_map(|id| Op::RemoveWindow { id }),
         (1u64..4).prop_map(|id| Op::Relayout { id }),
         (0i32..1200, 0i32..2500, 0i64..100).prop_map(|(x, y, cause)| Op::Tap { x, y, cause }),
-        (0i32..1200, 0i32..2500, 0i32..1200, 0i32..2500, 1u8..6)
-            .prop_map(|(x0, y0, x1, y1, steps)| Op::Swipe { x0, y0, x1, y1, steps }),
+        (0i32..1200, 0i32..2500, 0i32..1200, 0i32..2500, 1u8..6).prop_map(
+            |(x0, y0, x1, y1, steps)| Op::Swipe {
+                x0,
+                y0,
+                x1,
+                y1,
+                steps
+            }
+        ),
         (0i32..300).prop_map(|code| Op::Key { code }),
         Just(Op::AckFirst),
         Just(Op::AckLast),
@@ -51,11 +80,7 @@ fn run(ops: &[Op]) {
     let mut s = SessionWm::with_clock(DisplaySpec::reference_1080x2400(), clock.clone()).unwrap();
     // A pool of windows the ops can address.
     for id in 1..4u64 {
-        let _ = s.add_window(
-            BinderId(id),
-            LayoutParams::application("pkg", "Main"),
-            0,
-        );
+        let _ = s.add_window(BinderId(id), LayoutParams::application("pkg", "Main"), 0);
     }
 
     for op in ops {

@@ -95,7 +95,10 @@ fn shim_with_relative_sink(dir: &Path) -> PathBuf {
         .status()
         .expect("run the C compiler");
     assert!(st.success(), "{cc} failed to build the shim");
-    let mode = fs::metadata(&out).expect("shim metadata").permissions().mode();
+    let mode = fs::metadata(&out)
+        .expect("shim metadata")
+        .permissions()
+        .mode();
     assert!(mode & 0o400 != 0, "the shim must be readable: {mode:o}");
     out
 }
@@ -299,7 +302,11 @@ fn an_entry_written_before_the_sink_exists_does_not_silence_the_stream() {
         .env("LD_PRELOAD", &shim)
         .output()
         .expect("writer exits");
-    assert!(out.status.success(), "writer exits 0: {:?}", out.status.code());
+    assert!(
+        out.status.success(),
+        "writer exits 0: {:?}",
+        out.status.code()
+    );
     let keeper = wait_for(&s.keeper, 1);
     assert_eq!(keeper, vec!["keeper-line".to_string()]);
 

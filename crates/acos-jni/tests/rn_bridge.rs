@@ -49,7 +49,8 @@ fn ensure_libs(apk: &Path, libdir: &Path) -> Result<(), String> {
     }
     std::fs::create_dir_all(libdir).map_err(|e| e.to_string())?;
     let bytes = std::fs::read(apk).map_err(|e| e.to_string())?;
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
+    let mut archive =
+        zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
     for name in ORDER {
         let entry = format!("lib/x86_64/{name}");
         let mut data = Vec::new();
@@ -65,7 +66,8 @@ fn ensure_libs(apk: &Path, libdir: &Path) -> Result<(), String> {
 
 fn extract_asset(apk: &Path, entry: &str, dest: &Path) -> Result<usize, String> {
     let bytes = std::fs::read(apk).map_err(|e| e.to_string())?;
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
+    let mut archive =
+        zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
     let mut data = Vec::new();
     archive
         .by_name(entry)
@@ -78,7 +80,8 @@ fn extract_asset(apk: &Path, entry: &str, dest: &Path) -> Result<usize, String> 
 
 fn load_apk_dex(apk: &Path, vm: &mut Vm) -> Result<usize, String> {
     let bytes = std::fs::read(apk).map_err(|e| e.to_string())?;
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
+    let mut archive =
+        zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
     let mut names: Vec<String> = (0..archive.len())
         .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
         .filter(|n| n.starts_with("classes") && n.ends_with(".dex"))
@@ -233,11 +236,19 @@ fn rn_bridge_child_worker() {
     }
 
     let boot_ok = boot_dir.join("BOOTCLASSPATH").is_file();
-    let corelib = if boot_ok { CoreLib::Real } else { CoreLib::Bootstrap };
+    let corelib = if boot_ok {
+        CoreLib::Real
+    } else {
+        CoreLib::Bootstrap
+    };
     let mut vm = match Vm::new(VmOptions {
         heap_max_bytes: 1024 * 1024 * 1024,
         corelib,
-        boot_dir: if boot_ok { Some(boot_dir.clone()) } else { None },
+        boot_dir: if boot_ok {
+            Some(boot_dir.clone())
+        } else {
+            None
+        },
         ..VmOptions::default()
     }) {
         Ok(vm) => vm,
@@ -395,7 +406,10 @@ fn rn_bridge_reaches_uimanager_under_confinement() {
     let apk = repo_root().join("fixtures/build/apps/rn-hello.apk");
     let libdir = default_lib_dir();
     if let Err(e) = ensure_libs(&apk, &libdir) {
-        panic!("could not extract the fixture x86_64 libs to {}: {e}", libdir.display());
+        panic!(
+            "could not extract the fixture x86_64 libs to {}: {e}",
+            libdir.display()
+        );
     }
 
     let scratch = std::env::temp_dir().join(format!("acos-rn-w88a-{}", std::process::id()));

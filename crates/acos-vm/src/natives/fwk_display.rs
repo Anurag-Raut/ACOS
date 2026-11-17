@@ -36,12 +36,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         write_to_parcel,
     );
     vm.register_native(c, "nSupportFp16ForHdr", "(J)Z", support_fp16);
-    vm.register_native(
-        c,
-        "nSupportMixedColorSpaces",
-        "(J)Z",
-        support_mixed,
-    );
+    vm.register_native(c, "nSupportMixedColorSpaces", "(J)Z", support_mixed);
     Ok(())
 }
 
@@ -86,10 +81,5 @@ fn read_bool(vm: &mut Vm, parcel: crate::heap::Handle) -> bool {
 }
 
 fn write_bool(vm: &mut Vm, parcel: crate::heap::Handle, v: bool) {
-    let _ = vm.call_method(
-        parcel,
-        "writeBoolean",
-        "(Z)V",
-        &[JavaValue::Boolean(v)],
-    );
+    let _ = vm.call_method(parcel, "writeBoolean", "(Z)V", &[JavaValue::Boolean(v)]);
 }

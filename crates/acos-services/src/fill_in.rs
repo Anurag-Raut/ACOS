@@ -82,7 +82,11 @@ pub const USER_CURRENT: i32 = -2;
 /// [`crate::parcelable::INTENT_CLASS`] values with
 /// [`crate::parcelable::INTENT_FIELDS`] fields. Returns the `FILL_IN_*` bits of
 /// the fields that changed (AOSP's return value).
-pub fn fill_in_value(target: &mut Parcelable, other: &Parcelable, flags: i32) -> crate::Result<i32> {
+pub fn fill_in_value(
+    target: &mut Parcelable,
+    other: &Parcelable,
+    flags: i32,
+) -> crate::Result<i32> {
     let Parcelable::Ordered {
         class: target_class,
         values: target_values,
@@ -133,10 +137,8 @@ pub fn fill_in_value(target: &mut Parcelable, other: &Parcelable, flags: i32) ->
         let empty = str_at(target_values, INTENT_DATA).is_none()
             && str_at(target_values, INTENT_TYPE).is_none();
         if empty || flags & FILL_IN_DATA != 0 {
-            target_values[INTENT_DATA] =
-                Value::Str(other_data.map(str::to_string));
-            target_values[INTENT_TYPE] =
-                Value::Str(other_type.map(str::to_string));
+            target_values[INTENT_DATA] = Value::Str(other_data.map(str::to_string));
+            target_values[INTENT_TYPE] = Value::Str(other_type.map(str::to_string));
             changes |= FILL_IN_DATA;
             may_have_copied_uris = true;
         }
@@ -182,8 +184,7 @@ pub fn fill_in_value(target: &mut Parcelable, other: &Parcelable, flags: i32) ->
 
     // clipData
     if !is_null_parcelable(&other_values[INTENT_CLIP_DATA])
-        && (is_null_parcelable(&target_values[INTENT_CLIP_DATA])
-            || flags & FILL_IN_CLIP_DATA != 0)
+        && (is_null_parcelable(&target_values[INTENT_CLIP_DATA]) || flags & FILL_IN_CLIP_DATA != 0)
     {
         target_values[INTENT_CLIP_DATA] = other_values[INTENT_CLIP_DATA].clone();
         changes |= FILL_IN_CLIP_DATA;
@@ -319,7 +320,8 @@ mod tests {
             o.categories = vec!["android.intent.category.DEFAULT".into()];
             o.source_bounds = Some([1, 2, 3, 4]);
             o.flags = 0x1000_0000;
-            o.extras.insert("kept".into(), crate::ams::Extra::String("yes".into()));
+            o.extras
+                .insert("kept".into(), crate::ams::Extra::String("yes".into()));
         });
         let changes = fill_in_value(&mut target, &other, 0).expect("fill in");
         let merged = facts(&target);
@@ -380,10 +382,7 @@ mod tests {
         assert_eq!(merged.action.as_deref(), Some("fill"));
         assert_eq!(merged.categories, vec!["fill".to_string()]);
         assert_eq!(merged.package.as_deref(), Some("fill.pkg"));
-        assert_eq!(
-            merged.component,
-            Some(("fill.pkg".into(), "Fill".into()))
-        );
+        assert_eq!(merged.component, Some(("fill.pkg".into(), "Fill".into())));
     }
 
     #[test]
@@ -459,7 +458,10 @@ mod tests {
         values[crate::parcelable::INTENT_PACKAGE] = Value::Str(Some("fill.pkg".into()));
         let mut fresh = with(|t| t.action = Some("outer".into()));
         let changes = fill_in_value(&mut fresh, &both_other, FILL_IN_SELECTOR).expect("merge");
-        assert_eq!(changes, FILL_IN_PACKAGE, "the package wins, the selector is blocked");
+        assert_eq!(
+            changes, FILL_IN_PACKAGE,
+            "the package wins, the selector is blocked"
+        );
         assert_eq!(facts(&fresh).package.as_deref(), Some("fill.pkg"));
         assert_eq!(facts(&fresh).selector, None);
     }
@@ -469,14 +471,12 @@ mod tests {
         let mut target = with(|t| {
             t.extras
                 .insert("stored".into(), crate::ams::Extra::String("mine".into()));
-            t.extras
-                .insert("shared".into(), crate::ams::Extra::Int(1));
+            t.extras.insert("shared".into(), crate::ams::Extra::Int(1));
         });
         let other = with(|o| {
             o.extras
                 .insert("fresh".into(), crate::ams::Extra::Bool(true));
-            o.extras
-                .insert("shared".into(), crate::ams::Extra::Int(2));
+            o.extras.insert("shared".into(), crate::ams::Extra::Int(2));
         });
         fill_in_value(&mut target, &other, 0).expect("merge");
         let merged = facts(&target);

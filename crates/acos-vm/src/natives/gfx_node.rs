@@ -208,7 +208,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     // RenderEffect factories (W78-A).
     const RE: &str = "Landroid/graphics/RenderEffect;";
     vm.register_native(RE, "nativeCreateBlurEffect", "(FFJI)J", re_blur);
-    vm.register_native(RE, "nativeCreateColorFilterEffect", "(JJ)J", re_color_filter);
+    vm.register_native(
+        RE,
+        "nativeCreateColorFilterEffect",
+        "(JJ)J",
+        re_color_filter,
+    );
     vm.register_native(RE, "nativeGetFinalizer", "()J", re_finalizer);
 
     // Matrices.
@@ -223,7 +228,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(N, "nAddAnimator", "(JJ)V", n_add_animator);
     vm.register_native(N, "nEndAllAnimators", "(J)V", n_end_animators);
     vm.register_native(N, "nForceEndAnimators", "(J)V", n_end_animators);
-    vm.register_native(N, "nRequestPositionUpdates", "(JLjava/lang/ref/WeakReference;)V", n_noop);
+    vm.register_native(
+        N,
+        "nRequestPositionUpdates",
+        "(JLjava/lang/ref/WeakReference;)V",
+        n_noop,
+    );
     Ok(())
 }
 
@@ -302,7 +312,10 @@ fn n_alloc_size(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn n_discard(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
-    with_ctx(|c| c.render_node_clear_display_list(h).map_err(|e| render_err("RenderNode.discardDisplayList", e)))?;
+    with_ctx(|c| {
+        c.render_node_clear_display_list(h)
+            .map_err(|e| render_err("RenderNode.discardDisplayList", e))
+    })?;
     Ok(())
 }
 
@@ -452,7 +465,10 @@ set_f32!(n_set_rot_y, rotation_y);
 fn n_set_alpha(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let v = vm.arg_f32(ctx, 1);
-    with_ctx(|c| c.render_node_set_alpha(h, v).map_err(|e| render_err("RenderNode.setAlpha", e)))?;
+    with_ctx(|c| {
+        c.render_node_set_alpha(h, v)
+            .map_err(|e| render_err("RenderNode.setAlpha", e))
+    })?;
     vm.ret_bool(ctx, true);
     Ok(())
 }
@@ -461,7 +477,10 @@ fn n_set_pivot_x(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let x = vm.arg_f32(ctx, 1);
     let y = with_ctx(|c| c.render_nodes.get(h).map(|n| n.pivot_y)).unwrap_or(0.0);
-    with_ctx(|c| c.render_node_set_pivot(h, x, y).map_err(|e| render_err("RenderNode.setPivotX", e)))?;
+    with_ctx(|c| {
+        c.render_node_set_pivot(h, x, y)
+            .map_err(|e| render_err("RenderNode.setPivotX", e))
+    })?;
     vm.ret_bool(ctx, true);
     Ok(())
 }
@@ -469,7 +488,10 @@ fn n_set_pivot_y(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let y = vm.arg_f32(ctx, 1);
     let x = with_ctx(|c| c.render_nodes.get(h).map(|n| n.pivot_x)).unwrap_or(0.0);
-    with_ctx(|c| c.render_node_set_pivot(h, x, y).map_err(|e| render_err("RenderNode.setPivotY", e)))?;
+    with_ctx(|c| {
+        c.render_node_set_pivot(h, x, y)
+            .map_err(|e| render_err("RenderNode.setPivotY", e))
+    })?;
     vm.ret_bool(ctx, true);
     Ok(())
 }
@@ -501,7 +523,10 @@ fn n_get_camera(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn n_set_clip_bounds_flag(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let v = vm.arg_bool(ctx, 1);
-    with_ctx(|c| c.render_node_set_clip_to_bounds(h, v).map_err(|e| render_err("RenderNode.setClipToBounds", e)))?;
+    with_ctx(|c| {
+        c.render_node_set_clip_to_bounds(h, v)
+            .map_err(|e| render_err("RenderNode.setClipToBounds", e))
+    })?;
     vm.ret_bool(ctx, true);
     Ok(())
 }
@@ -514,7 +539,10 @@ fn n_get_clip_bounds_flag(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn n_set_clip_outline(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let v = vm.arg_bool(ctx, 1);
-    with_ctx(|c| c.render_node_set_clip_to_outline(h, v).map_err(|e| render_err("RenderNode.setClipToOutline", e)))?;
+    with_ctx(|c| {
+        c.render_node_set_clip_to_outline(h, v)
+            .map_err(|e| render_err("RenderNode.setClipToOutline", e))
+    })?;
     vm.ret_bool(ctx, true);
     Ok(())
 }
@@ -526,7 +554,12 @@ fn n_get_clip_outline(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 fn n_set_clip_bounds(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
-    let v = (vm.arg_i32(ctx, 1), vm.arg_i32(ctx, 2), vm.arg_i32(ctx, 3), vm.arg_i32(ctx, 4));
+    let v = (
+        vm.arg_i32(ctx, 1),
+        vm.arg_i32(ctx, 2),
+        vm.arg_i32(ctx, 3),
+        vm.arg_i32(ctx, 4),
+    );
     extra(h, |e| e.clip_bounds = Some(v));
     vm.ret_bool(ctx, true);
     Ok(())
@@ -567,7 +600,10 @@ fn n_set_outline_path(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 }
 fn n_outline_none(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
-    with_ctx(|c| c.render_node_set_outline_none(h).map_err(|e| render_err("RenderNode.setOutlineNone", e)))?;
+    with_ctx(|c| {
+        c.render_node_set_outline_none(h)
+            .map_err(|e| render_err("RenderNode.setOutlineNone", e))
+    })?;
     vm.ret_bool(ctx, true);
     Ok(())
 }
@@ -595,7 +631,13 @@ fn n_set_reveal(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let on = vm.arg_bool(ctx, 1);
     let v = (vm.arg_f32(ctx, 2), vm.arg_f32(ctx, 3), vm.arg_f32(ctx, 4));
-    extra(h, |e| e.reveal_clip = if on { Some((true, v.0, v.1, v.2)) } else { None });
+    extra(h, |e| {
+        e.reveal_clip = if on {
+            Some((true, v.0, v.1, v.2))
+        } else {
+            None
+        }
+    });
     vm.ret_bool(ctx, true);
     Ok(())
 }
@@ -603,7 +645,10 @@ fn n_set_reveal(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn n_set_elevation(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let v = vm.arg_f32(ctx, 1);
-    with_ctx(|c| c.render_node_set_elevation(h, v).map_err(|e| render_err("RenderNode.setElevation", e)))?;
+    with_ctx(|c| {
+        c.render_node_set_elevation(h, v)
+            .map_err(|e| render_err("RenderNode.setElevation", e))
+    })?;
     vm.ret_bool(ctx, true);
     Ok(())
 }
@@ -643,7 +688,10 @@ fn n_has_shadow(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn n_set_layer_type(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let v = vm.arg_i32(ctx, 1);
-    with_ctx(|c| c.render_node_set_layer_type(h, v).map_err(|e| render_err("RenderNode.setLayerType", e)))?;
+    with_ctx(|c| {
+        c.render_node_set_layer_type(h, v)
+            .map_err(|e| render_err("RenderNode.setLayerType", e))
+    })?;
     vm.ret_bool(ctx, true);
     Ok(())
 }
@@ -657,20 +705,27 @@ fn n_set_layer_paint(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let p = vm.arg_i64(ctx, 1);
     let handle = if p == 0 { None } else { Some(rh(p)) };
-    with_ctx(|c| c.render_node_set_layer_paint(h, handle).map_err(|e| render_err("RenderNode.setLayerPaint", e)))?;
+    with_ctx(|c| {
+        c.render_node_set_layer_paint(h, handle)
+            .map_err(|e| render_err("RenderNode.setLayerPaint", e))
+    })?;
     vm.ret_bool(ctx, true);
     Ok(())
 }
 fn n_set_overlapping(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let v = vm.arg_bool(ctx, 1);
-    with_ctx(|c| c.render_node_set_overlapping(h, v).map_err(|e| render_err("RenderNode.setHasOverlappingRendering", e)))?;
+    with_ctx(|c| {
+        c.render_node_set_overlapping(h, v)
+            .map_err(|e| render_err("RenderNode.setHasOverlappingRendering", e))
+    })?;
     vm.ret_bool(ctx, true);
     Ok(())
 }
 fn n_get_overlapping(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
-    let v = with_ctx(|c| c.render_nodes.get(h).map(|n| n.has_overlapping_rendering)).unwrap_or(true);
+    let v =
+        with_ctx(|c| c.render_nodes.get(h).map(|n| n.has_overlapping_rendering)).unwrap_or(true);
     vm.ret_bool(ctx, v);
     Ok(())
 }
@@ -714,11 +769,7 @@ fn n_set_project_backwards(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn n_set_render_effect(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let v = vm.arg_i64(ctx, 1);
-    let spec = if v == 0 {
-        None
-    } else {
-        Some(effect_spec(v)?)
-    };
+    let spec = if v == 0 { None } else { Some(effect_spec(v)?) };
     extra(h, |e| e.render_effect = if v == 0 { None } else { Some(v) });
     with_ctx(|c| {
         if let Some(n) = c.render_nodes.get_mut(h) {
@@ -825,14 +876,18 @@ fn n_get_anim_matrix(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn n_set_static_matrix(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let m = vm.arg_i64(ctx, 1);
-    extra(h, |e| e.static_matrix = if m == 0 { None } else { Some(rh(m)) });
+    extra(h, |e| {
+        e.static_matrix = if m == 0 { None } else { Some(rh(m)) }
+    });
     vm.ret_bool(ctx, true);
     Ok(())
 }
 fn n_set_anim_matrix(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = node(vm, ctx)?;
     let m = vm.arg_i64(ctx, 1);
-    extra(h, |e| e.animation_matrix = if m == 0 { None } else { Some(rh(m)) });
+    extra(h, |e| {
+        e.animation_matrix = if m == 0 { None } else { Some(rh(m)) }
+    });
     vm.ret_bool(ctx, true);
     Ok(())
 }

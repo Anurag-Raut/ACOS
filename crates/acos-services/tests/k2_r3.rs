@@ -25,13 +25,7 @@ fn round_trip(interface: &str, name: &str, reply: Vec<Value>) -> Vec<Value> {
     )
     .expect("reply encodes");
     parcel.set_data_position(0);
-    read_args(
-        &mut parcel,
-        &method(interface, name).reply,
-        interface,
-        name,
-    )
-    .expect("reply decodes")
+    read_args(&mut parcel, &method(interface, name).reply, interface, name).expect("reply decodes")
 }
 
 #[test]
@@ -95,9 +89,12 @@ fn install_source_info_has_the_image_field_order() {
     .expect("encodes");
     parcel.set_data_position(0);
     assert_eq!(parcel.read_int32().expect("typed presence"), 1);
-    let decoded = read_payload("android.content.pm.InstallSourceInfo", &mut parcel)
-        .expect("decodes");
-    assert_eq!(decoded.class(), Some("android.content.pm.InstallSourceInfo"));
+    let decoded =
+        read_payload("android.content.pm.InstallSourceInfo", &mut parcel).expect("decodes");
+    assert_eq!(
+        decoded.class(),
+        Some("android.content.pm.InstallSourceInfo")
+    );
 }
 
 #[test]
@@ -107,13 +104,13 @@ fn permission_controller_name_is_the_aosp_module_package() {
     let reply = pms
         .call(
             "android.content.pm.IPackageManager",
-            method("android.content.pm.IPackageManager", "getPermissionControllerPackageName"),
+            method(
+                "android.content.pm.IPackageManager",
+                "getPermissionControllerPackageName",
+            ),
             &[],
         )
         .expect("supported")
         .reply;
-    assert_eq!(
-        reply[0].as_str(),
-        Some("com.android.permissioncontroller")
-    );
+    assert_eq!(reply[0].as_str(), Some("com.android.permissioncontroller"));
 }

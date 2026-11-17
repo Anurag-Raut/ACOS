@@ -113,7 +113,10 @@ fn add_to_display_delivers_one_dispatch_app_visibility_to_the_window_binder() {
             .collect::<Vec<_>>()
     );
     let d = &deliveries[0];
-    assert_eq!(d.target, window, "addressed at the app's own IWindow binder");
+    assert_eq!(
+        d.target, window,
+        "addressed at the app's own IWindow binder"
+    );
     assert_eq!(d.interface, IWINDOW);
     assert_eq!(d.code, DISPATCH_APP_VISIBILITY);
     assert_eq!(d.method, "dispatchAppVisibility");
@@ -122,7 +125,8 @@ fn add_to_display_delivers_one_dispatch_app_visibility_to_the_window_binder() {
     // (already written) + one bool, and nothing else.
     let mut body = d.data.clone();
     body.set_data_position(0);
-    body.enforce_interface(IWINDOW).expect("android.view.IWindow token");
+    body.enforce_interface(IWINDOW)
+        .expect("android.view.IWindow token");
     assert_eq!(body.read_bool().expect("visible"), true);
     body.enforce_no_data_avail().expect("no trailing bytes");
 
@@ -140,7 +144,11 @@ fn relayout_delivers_nothing_and_a_repeated_add_does_not_re_deliver() {
     let window = BinderId(0x5701);
 
     add(&mut host, session, window);
-    assert_eq!(host.take_deliveries().len(), 1, "the first add delivers once");
+    assert_eq!(
+        host.take_deliveries().len(),
+        1,
+        "the first add delivers once"
+    );
 
     let mut reply = transact(&mut host, session, RELAYOUT, &mut relayout_request(window));
     assert_eq!(reply.read_int32().expect("exception"), NO_EXCEPTION);

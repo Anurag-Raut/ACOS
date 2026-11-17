@@ -93,7 +93,13 @@ impl ReplayReport {
             };
             out.push_str(&format!(
                 "| {} | {} | {} | {} | {} | {} | {} |\n",
-                o.row.order, o.row.direction, o.row.interface, o.row.method, o.row.count, status, o.shape
+                o.row.order,
+                o.row.direction,
+                o.row.interface,
+                o.row.method,
+                o.row.count,
+                status,
+                o.shape
             ));
         }
         out
@@ -242,9 +248,11 @@ impl ReplayHarness {
             }
             ("android.view.IWindowSession", "relayout") => {
                 self.ensure_window()?;
-                let r = self
-                    .wm
-                    .relayout(self.window.0, LayoutParams::application("dev.acos.fixtures.helloviews", "MainActivity"), 1)?;
+                let r = self.wm.relayout(
+                    self.window.0,
+                    LayoutParams::application("dev.acos.fixtures.helloviews", "MainActivity"),
+                    1,
+                )?;
                 Ok(format!(
                     "RelayoutResult{{result=0x{:x}, frame={:?}, surface={}}}",
                     r.result, r.frames.frame, r.surface.name
@@ -256,9 +264,7 @@ impl ReplayHarness {
                 let mut bmp =
                     acos_render::Bitmap::new(1080, 2400, acos_render::BitmapConfig::Rgba8888)?;
                 bmp.erase(0xff20_3040);
-                let seq = self
-                    .wm
-                    .finish_drawing(self.window.0, bmp, 1, 0x11)?;
+                let seq = self.wm.finish_drawing(self.window.0, bmp, 1, 0x11)?;
                 Ok(format!("presented={seq:?}"))
             }
             ("android.view.IWindowSession", "setOnBackInvokedCallbackInfo") => {
@@ -267,14 +273,17 @@ impl ReplayHarness {
             }
             ("android.view.IWindowSession", "updateRequestedVisibleTypes") => {
                 self.ensure_window()?;
-                self.wm.wm.update_requested_visible_types(self.window.0, 0)?;
+                self.wm
+                    .wm
+                    .update_requested_visible_types(self.window.0, 0)?;
                 Ok("void (recorded)".into())
             }
             ("android.view.IWindowSession", "onRectangleOnScreenRequested") => {
                 self.ensure_window()?;
-                self.wm
-                    .wm
-                    .on_rectangle_on_screen_requested(self.window.0, Some(crate::RectI::new(0, 0, 10, 10)))?;
+                self.wm.wm.on_rectangle_on_screen_requested(
+                    self.window.0,
+                    Some(crate::RectI::new(0, 0, 10, 10)),
+                )?;
                 Ok("void (recorded)".into())
             }
             ("android.view.IWindowSession", "remove") => {
@@ -286,11 +295,12 @@ impl ReplayHarness {
             }
 
             ("android.view.IWindow", "dispatchAppVisibility") => {
-                Ok(self.callback_shape(crate::WmCallback::DispatchAppVisibility { visible: true })?)
+                Ok(self
+                    .callback_shape(crate::WmCallback::DispatchAppVisibility { visible: true })?)
             }
-            ("android.view.IWindow", "windowFocusChanged") => Ok(self.callback_shape(
-                crate::WmCallback::WindowFocusChanged { focused: true },
-            )?),
+            ("android.view.IWindow", "windowFocusChanged") => {
+                Ok(self.callback_shape(crate::WmCallback::WindowFocusChanged { focused: true })?)
+            }
             ("android.view.IWindow", "insetsControlChanged") => {
                 self.ensure_window()?;
                 let state = self
@@ -298,10 +308,12 @@ impl ReplayHarness {
                     .insets_state(self.window.0)
                     .cloned()
                     .unwrap_or_else(|| crate::wms::empty_insets_state(&self.wm.display));
-                Ok(self.callback_shape(crate::WmCallback::InsetsControlChanged {
-                    state: Box::new(state),
-                    controls: Box::new(InsetsSourceControlArray(vec![])),
-                })?)
+                Ok(
+                    self.callback_shape(crate::WmCallback::InsetsControlChanged {
+                        state: Box::new(state),
+                        controls: Box::new(InsetsSourceControlArray(vec![])),
+                    })?,
+                )
             }
             ("android.view.IWindow", "resized") => {
                 self.ensure_window()?;
@@ -316,9 +328,9 @@ impl ReplayHarness {
                 Ok(self.callback_shape(crate::WmCallback::Resized {
                     frames: Box::new(frames),
                     report_draw: true,
-                    merged_configuration: Box::new(
-                        crate::wms::reference_merged_configuration(&self.wm.display),
-                    ),
+                    merged_configuration: Box::new(crate::wms::reference_merged_configuration(
+                        &self.wm.display,
+                    )),
                     insets_state: Box::new(
                         self.wm
                             .insets_state(self.window.0)
@@ -332,31 +344,31 @@ impl ReplayHarness {
                     drag_resizing: false,
                 })?)
             }
-            ("android.view.IWindow", "showInsets") => Ok(self.callback_shape(
-                crate::WmCallback::ShowInsets {
+            ("android.view.IWindow", "showInsets") => {
+                Ok(self.callback_shape(crate::WmCallback::ShowInsets {
                     types: 1,
                     from_ime: false,
                     token: None,
-                },
-            )?),
-            ("android.view.IWindow", "hideInsets") => Ok(self.callback_shape(
-                crate::WmCallback::HideInsets {
+                })?)
+            }
+            ("android.view.IWindow", "hideInsets") => {
+                Ok(self.callback_shape(crate::WmCallback::HideInsets {
                     types: 1,
                     from_ime: false,
                     token: None,
-                },
-            )?),
-            ("android.view.IWindow", "executeCommand") => Ok(self.callback_shape(
-                crate::WmCallback::ExecuteCommand {
+                })?)
+            }
+            ("android.view.IWindow", "executeCommand") => {
+                Ok(self.callback_shape(crate::WmCallback::ExecuteCommand {
                     command: "test".into(),
                     parameters: String::new(),
-                },
-            )?),
-            ("android.view.IWindow", "closeSystemDialogs") => Ok(self.callback_shape(
-                crate::WmCallback::CloseSystemDialogs {
+                })?)
+            }
+            ("android.view.IWindow", "closeSystemDialogs") => {
+                Ok(self.callback_shape(crate::WmCallback::CloseSystemDialogs {
                     reason: "test".into(),
-                },
-            )?),
+                })?)
+            }
 
             ("com.android.internal.view.IInputMethodManager", "addClient") => {
                 self.wm
@@ -367,10 +379,7 @@ impl ReplayHarness {
             ("com.android.internal.view.IInputMethodManager", "isImeTraceEnabled") => {
                 Ok(format!("b={}", self.wm.ime.is_ime_trace_enabled()))
             }
-            (
-                "com.android.internal.view.IInputMethodManager",
-                "startInputOrWindowGainedFocus",
-            ) => {
+            ("com.android.internal.view.IInputMethodManager", "startInputOrWindowGainedFocus") => {
                 let info = EditorInfo {
                     input_type: 1,
                     ime_options: 6,
@@ -388,16 +397,15 @@ impl ReplayHarness {
                     bind.result, bind.method
                 ))
             }
-            ("com.android.internal.view.IInputMethodManager", "showSoftInput") => {
-                Ok(format!("b={}", self.wm.ime.show_soft_input(self.ime_client, None)?))
-            }
-            ("com.android.internal.view.IInputMethodManager", "hideSoftInput") => {
-                Ok(format!("b={}", self.wm.ime.hide_soft_input(self.ime_client, None)?))
-            }
-            (
-                "com.android.internal.view.IInputMethodManager",
-                "reportPerceptibleAsync",
-            ) => {
+            ("com.android.internal.view.IInputMethodManager", "showSoftInput") => Ok(format!(
+                "b={}",
+                self.wm.ime.show_soft_input(self.ime_client, None)?
+            )),
+            ("com.android.internal.view.IInputMethodManager", "hideSoftInput") => Ok(format!(
+                "b={}",
+                self.wm.ime.hide_soft_input(self.ime_client, None)?
+            )),
+            ("com.android.internal.view.IInputMethodManager", "reportPerceptibleAsync") => {
                 self.wm.ime.report_perceptible_async();
                 Ok("void (oneway)".into())
             }
@@ -462,68 +470,39 @@ impl ReplayHarness {
                     bind.result, bind.method
                 ))
             }
-            (
-                "com.android.internal.inputmethod.IInputMethodClient",
-                "reportFullscreenMode",
-            )
+            ("com.android.internal.inputmethod.IInputMethodClient", "reportFullscreenMode")
             | ("com.android.internal.inputmethod.IInputMethodClient", "onUnbindMethod") => {
                 Ok("void (oneway)".into())
             }
-            (
-                "com.android.internal.inputmethod.IRemoteInputConnection",
-                "commitText",
-            ) => {
+            ("com.android.internal.inputmethod.IRemoteInputConnection", "commitText") => {
                 self.wm.type_text(self.ime_client, "World", 1)?;
                 Ok("void (oneway)".into())
             }
-            (
-                "com.android.internal.inputmethod.IRemoteInputConnection",
-                "getSurroundingText",
-            ) => {
-                let s = self
-                    .wm
-                    .ime
-                    .get_surrounding_text(self.ime_client, 8, 8, 0)?;
+            ("com.android.internal.inputmethod.IRemoteInputConnection", "getSurroundingText") => {
+                let s = self.wm.ime.get_surrounding_text(self.ime_client, 8, 8, 0)?;
                 Ok(format!("SurroundingText{{len={}}}", s.text.len()))
             }
-            (
-                "com.android.internal.inputmethod.IRemoteInputConnection",
-                "setComposingRegion",
-            ) => {
+            ("com.android.internal.inputmethod.IRemoteInputConnection", "setComposingRegion") => {
                 self.wm.ime.set_composing_region(self.ime_client, 0, 5)?;
                 Ok("void (oneway)".into())
             }
-            (
-                "com.android.internal.inputmethod.IRemoteInputConnection",
-                "clearMetaKeyStates",
-            ) => {
+            ("com.android.internal.inputmethod.IRemoteInputConnection", "clearMetaKeyStates") => {
                 self.wm.ime.clear_meta_key_states(self.ime_client, 0)?;
                 Ok("void (oneway)".into())
             }
-            (
-                "com.android.internal.inputmethod.IRemoteInputConnection",
-                "finishComposingText",
-            ) => {
+            ("com.android.internal.inputmethod.IRemoteInputConnection", "finishComposingText") => {
                 self.wm.ime.finish_composing_text(self.ime_client)?;
                 Ok("void (oneway)".into())
             }
-            (
-                "com.android.internal.inputmethod.IRemoteInputConnection",
-                "getTextBeforeCursor",
-            ) => {
-                let s = self
-                    .wm
-                    .ime
-                    .get_text_before_cursor(self.ime_client, 8, 0)?;
+            ("com.android.internal.inputmethod.IRemoteInputConnection", "getTextBeforeCursor") => {
+                let s = self.wm.ime.get_text_before_cursor(self.ime_client, 8, 0)?;
                 Ok(format!("String(len={})", s.len()))
             }
             (
                 "com.android.internal.inputmethod.IRemoteInputConnection",
                 "deleteSurroundingText",
             ) => {
-                self.wm
-                    .ime
-                    .delete_surrounding_text(self.ime_client, 1, 0)?;
+                self.wm.ime.delete_surrounding_text(self.ime_client, 1, 0)?;
                 Ok("void (oneway)".into())
             }
             _ => Err(WmError::Unsupported(format!(
@@ -643,8 +622,8 @@ mod tests {
     #[test]
     fn tsv_parser_reads_both_traces() {
         let root = workspace_root();
-        let launch = parse_tsv(&root.join("research/dynamic-trace/data/binder_calls_launch.tsv"))
-            .unwrap();
+        let launch =
+            parse_tsv(&root.join("research/dynamic-trace/data/binder_calls_launch.tsv")).unwrap();
         let interaction =
             parse_tsv(&root.join("research/dynamic-trace/data/binder_calls_interaction.tsv"))
                 .unwrap();
@@ -656,7 +635,9 @@ mod tests {
     fn wm_owned_classification_is_exact() {
         assert!(wm_owned("android.view.IWindowSession"));
         assert!(wm_owned("android.view.IWindow"));
-        assert!(wm_owned("com.android.internal.inputmethod.IRemoteInputConnection"));
+        assert!(wm_owned(
+            "com.android.internal.inputmethod.IRemoteInputConnection"
+        ));
         assert!(!wm_owned("android.content.pm.IPackageManager"));
         assert!(!wm_owned("android.app.IActivityManager"));
     }
@@ -665,7 +646,8 @@ mod tests {
     fn relayout_request_and_reply_shapes_match_the_layout() {
         let params = LayoutParams::application("dev.acos.fixtures.helloviews", "MainActivity");
         let mut req = build_relayout_request(BinderId(0x4001), &params).unwrap();
-        req.enforce_interface("android.view.IWindowSession").unwrap();
+        req.enforce_interface("android.view.IWindowSession")
+            .unwrap();
         let _window = req.read_strong_binder().unwrap();
         let decoded = LayoutParams::read_from_parcel(&mut req).unwrap();
         assert_eq!(decoded.package_name, params.package_name);

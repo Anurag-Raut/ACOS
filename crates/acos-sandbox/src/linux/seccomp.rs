@@ -88,13 +88,8 @@ const AND_K: u16 = 0x54; // BPF_ALU | BPF_AND | BPF_K
 /// `CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWUTS | CLONE_NEWIPC |
 /// CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNET`: every namespace-creating
 /// `clone` flag (W67A #2).
-const CLONE_NEW_MASK: u32 = 0x0002_0000
-    | 0x0200_0000
-    | 0x0400_0000
-    | 0x0800_0000
-    | 0x1000_0000
-    | 0x2000_0000
-    | 0x4000_0000;
+const CLONE_NEW_MASK: u32 =
+    0x0002_0000 | 0x0200_0000 | 0x0400_0000 | 0x0800_0000 | 0x1000_0000 | 0x2000_0000 | 0x4000_0000;
 
 /// `kexec_file_load` on targets whose libc does not export the constant.
 ///
@@ -131,11 +126,7 @@ type Label = usize;
 enum Op {
     Ld(u32),
     And(u32),
-    Jeq {
-        k: u32,
-        t: Label,
-        f: Label,
-    },
+    Jeq { k: u32, t: Label, f: Label },
     Ja(Label),
     Ret(u32),
 }
@@ -391,7 +382,11 @@ fn build() -> Vec<SockFilter> {
     b.jeq(libc::SYS_rt_tgsigqueueinfo as u32, sigq_check, after_tgsigq);
     b.mark(after_tgsigq);
     let after_personality = b.label();
-    b.jeq(libc::SYS_personality as u32, personality_check, after_personality);
+    b.jeq(
+        libc::SYS_personality as u32,
+        personality_check,
+        after_personality,
+    );
     b.mark(after_personality);
     b.ja(allow);
 
@@ -545,4 +540,3 @@ mod tests {
         assert!(filter.iter().all(|i| i.code != 0 || i.k != 0));
     }
 }
-

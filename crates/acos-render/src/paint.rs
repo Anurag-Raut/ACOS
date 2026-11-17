@@ -237,11 +237,19 @@ pub enum PathEffectSpec {
 /// A colour filter description.
 #[derive(Clone, PartialEq, Debug)]
 pub enum ColorFilterSpec {
-    PorterDuff { color: u32, mode: PorterDuffMode },
-    BlendMode { color: u32, mode: AndroidBlendMode },
+    PorterDuff {
+        color: u32,
+        mode: PorterDuffMode,
+    },
+    BlendMode {
+        color: u32,
+        mode: AndroidBlendMode,
+    },
     /// 4x5 row-major colour matrix (RGBA + translation), like
     /// `android.graphics.ColorMatrix`.
-    ColorMatrix { matrix: [f32; 20] },
+    ColorMatrix {
+        matrix: [f32; 20],
+    },
     /// Identity colour filter — used by `PorterDuffColorFilter` with SRC_OVER
     /// as a fast path? Kept explicit so callers can see the intent.
     None,

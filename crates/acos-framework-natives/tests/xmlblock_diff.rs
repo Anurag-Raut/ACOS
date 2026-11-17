@@ -62,7 +62,11 @@ fn complex_to_float(complex: u32, units: &[&str]) -> (f32, String) {
     ];
     let radix = ((complex >> 4) & 0x3) as usize;
     let value = (complex & (0xFF_FFFF << 8)) as f32 * RADIX_MULTS[radix];
-    let unit = units.get((complex & 0xF) as usize).copied().unwrap_or("?").to_string();
+    let unit = units
+        .get((complex & 0xF) as usize)
+        .copied()
+        .unwrap_or("?")
+        .to_string();
     (value, unit)
 }
 
@@ -327,7 +331,10 @@ fn retrieve_attributes_through_manager() {
         }
         assert_ne!(ev, acos_framework_natives::res::END_DOCUMENT);
     }
-    assert_eq!(mgr.parse_state(state).unwrap().get_source_res_id(), 0x7f020000);
+    assert_eq!(
+        mgr.parse_state(state).unwrap().get_source_res_id(),
+        0x7f020000
+    );
     let attrs = [0x0101_00c4i32, 0x0101_00d5, 0x0101_00f4, 0x0101_00f5];
     let mut out_values = vec![0i32; attrs.len() * 7];
     // `TypedArray.mIndices` is `len + 1` long: `[count, styleable_index...]`.
@@ -465,8 +472,14 @@ fn retrieve_attributes_clears_stale_slots_from_a_recycled_typed_array() {
     );
     assert_eq!(out_values[3] as u32, 0, "absent resourceId must be zero");
     // fillColor `@0x0106000b` (color/white) must resolve to an ARGB8 color.
-    assert_eq!(out_values[7], 0x1c, "fillColor type should be TYPE_INT_COLOR_ARGB8");
-    assert_eq!(out_values[8] as u32, 0xffff_ffff, "fillColor should be #ffffffff");
+    assert_eq!(
+        out_values[7], 0x1c,
+        "fillColor type should be TYPE_INT_COLOR_ARGB8"
+    );
+    assert_eq!(
+        out_values[8] as u32, 0xffff_ffff,
+        "fillColor should be #ffffffff"
+    );
     assert_eq!(out_values[10] as u32, 0x0106_000b, "fillColor resourceId");
     // FillColor and pathData were found (request indices 1 and 2); the
     // `mIndices` array is `len + 1` long, so the trailing slot stays -1.

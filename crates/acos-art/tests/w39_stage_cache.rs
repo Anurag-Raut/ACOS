@@ -38,8 +38,16 @@ fn write_tree(dir: &Path, marker: &str) {
     fs::create_dir_all(dir.join("com.android.art")).unwrap();
     fs::create_dir_all(dir.join("com.android.runtime")).unwrap();
     fs::write(dir.join("ld.config.txt"), format!("ld {marker}\n")).unwrap();
-    fs::write(dir.join("apex.libraries.config.txt"), format!("apex {marker}\n")).unwrap();
-    fs::write(dir.join("com.android.art/ld.config.txt"), format!("art {marker}\n")).unwrap();
+    fs::write(
+        dir.join("apex.libraries.config.txt"),
+        format!("apex {marker}\n"),
+    )
+    .unwrap();
+    fs::write(
+        dir.join("com.android.art/ld.config.txt"),
+        format!("art {marker}\n"),
+    )
+    .unwrap();
     fs::write(
         dir.join("com.android.runtime/ld.config.txt"),
         format!("runtime {marker}\n"),
@@ -55,8 +63,7 @@ fn tree_entry_reuses_every_nested_file() {
     write_tree(&src, "v1");
 
     let _lock = build_cache::lock(&key).unwrap();
-    let built =
-        build_cache::publish_tree_locked(&key, &src, &|rel| rel == ".mounts").unwrap();
+    let built = build_cache::publish_tree_locked(&key, &src, &|rel| rel == ".mounts").unwrap();
     assert!(!built.reused, "cold cache must publish");
     assert!(built.dir.join("com.android.art/ld.config.txt").is_file());
 
@@ -65,7 +72,11 @@ fn tree_entry_reuses_every_nested_file() {
     let files = build_cache::reuse_tree_to(&key, &dest)
         .unwrap()
         .expect("a published tree must be reusable");
-    assert_eq!(files.len(), 4, "every manifest file is installed: {files:?}");
+    assert_eq!(
+        files.len(),
+        4,
+        "every manifest file is installed: {files:?}"
+    );
     assert_eq!(
         fs::read_to_string(dest.join("com.android.art/ld.config.txt")).unwrap(),
         "art v1\n"
@@ -87,7 +98,9 @@ fn corrupted_nested_file_is_detected_and_reports_miss() {
 
     // Flip one byte of a *nested* file: reuse must refuse the entry and remove
     // it, so the caller's builder runs again instead of serving bad bytes.
-    let victim = build_cache::cache_root().join(&key).join("com.android.art/ld.config.txt");
+    let victim = build_cache::cache_root()
+        .join(&key)
+        .join("com.android.art/ld.config.txt");
     fs::write(&victim, b"tampered\n").unwrap();
     let dest = dir.join("dest");
     assert!(
@@ -112,10 +125,14 @@ fn unlisted_extra_file_is_a_corrupt_entry() {
 
     // An extra file that no manifest line covers means the entry is a different
     // build (e.g. a previous sysroot's per-APEX namespace): refuse it.
-    let stale = build_cache::cache_root().join(&key).join("com.android.media");
+    let stale = build_cache::cache_root()
+        .join(&key)
+        .join("com.android.media");
     fs::create_dir_all(&stale).unwrap();
     fs::write(stale.join("ld.config.txt"), b"stale\n").unwrap();
-    assert!(build_cache::reuse_tree_to(&key, &dir.join("dest")).unwrap().is_none());
+    assert!(build_cache::reuse_tree_to(&key, &dir.join("dest"))
+        .unwrap()
+        .is_none());
 }
 
 #[test]
@@ -135,9 +152,18 @@ fn publish_tree_skips_stamps_and_logs() {
 
     let entry = build_cache::cache_root().join(&key);
     assert!(entry.join("ld.config.txt").is_file());
-    assert!(!entry.join(".mounts").exists(), "the data-dir stamp is not an artefact");
-    assert!(!entry.join("linkerconfig.log").exists(), "the log is not an artefact");
-    assert!(!entry.join("PixelConfigOverlayCommon.apk").exists(), "staged APKs are not artefacts");
+    assert!(
+        !entry.join(".mounts").exists(),
+        "the data-dir stamp is not an artefact"
+    );
+    assert!(
+        !entry.join("linkerconfig.log").exists(),
+        "the log is not an artefact"
+    );
+    assert!(
+        !entry.join("PixelConfigOverlayCommon.apk").exists(),
+        "staged APKs are not artefacts"
+    );
 
     let dest = dir.join("dest");
     let files = build_cache::reuse_tree_to(&key, &dest).unwrap().unwrap();
@@ -159,8 +185,16 @@ fn image_digest_follows_the_extracted_image() {
         fs::write(s.join("MANIFEST.txt"), manifest).unwrap();
     }
     let first = build_cache::image_digest(&a);
-    assert_eq!(first, build_cache::image_digest(&a), "same image, same digest");
-    assert_ne!(first, build_cache::image_digest(&b), "different sysroot, different digest");
+    assert_eq!(
+        first,
+        build_cache::image_digest(&a),
+        "same image, same digest"
+    );
+    assert_ne!(
+        first,
+        build_cache::image_digest(&b),
+        "different sysroot, different digest"
+    );
 
     // A repaired/re-extracted image changes MANIFEST.txt: the memoised digest
     // must follow the new bytes, not the path.

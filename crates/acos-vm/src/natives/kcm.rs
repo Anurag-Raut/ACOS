@@ -714,16 +714,13 @@ mod tests {
         assert_eq!(k.character(29, 0), 'a' as u16);
         assert_eq!(k.character(29, META_SHIFT), 'A' as u16);
         assert_eq!(k.character(29, META_CAPS_LOCK), 'A' as u16);
-        assert_eq!(
-            k.character(29, META_SHIFT | META_CAPS_LOCK),
-            'a' as u16
-        );
+        assert_eq!(k.character(29, META_SHIFT | META_CAPS_LOCK), 'a' as u16);
         // Digits and their shifted symbols.
         assert_eq!(k.character(8, 0), '1' as u16);
         assert_eq!(k.character(8, META_SHIFT), '!' as u16);
         assert_eq!(k.character(55, META_SHIFT), '<' as u16); // COMMA
         assert_eq!(k.character(62, 0), ' ' as u16); // SPACE
-        // A key that produces nothing under base.
+                                                    // A key that produces nothing under base.
         assert_eq!(k.character(111, 0), 0); // ESCAPE (only a fallback)
     }
 

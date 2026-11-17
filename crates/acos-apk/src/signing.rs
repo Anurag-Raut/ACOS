@@ -491,7 +491,13 @@ mod tests {
             body.extend(u32p_u64(&pair));
         }
         let size = (body.len() + 8 + 16) as u64;
-        [&size.to_le_bytes()[..], &body, &size.to_le_bytes()[..], BLOCK_MAGIC].concat()
+        [
+            &size.to_le_bytes()[..],
+            &body,
+            &size.to_le_bytes()[..],
+            BLOCK_MAGIC,
+        ]
+        .concat()
     }
 
     fn u32p_u64(bytes: &[u8]) -> Vec<u8> {
@@ -505,7 +511,10 @@ mod tests {
         for (_, c) in serials_and_certs {
             certs.extend_from_slice(c);
         }
-        let sid = tlv(0x30, &[issuer.to_vec(), tlv(0x02, &[signer_serial])].concat());
+        let sid = tlv(
+            0x30,
+            &[issuer.to_vec(), tlv(0x02, &[signer_serial])].concat(),
+        );
         let signer_info = tlv(0x30, &[tlv(0x02, &[1]), sid].concat());
         let signed_data = tlv(
             0x30,
@@ -521,7 +530,9 @@ mod tests {
         let ci = tlv(
             0x30,
             &[
-                vec![0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02],
+                vec![
+                    0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02,
+                ],
                 tlv(0xA0, &signed_data),
             ]
             .concat(),
@@ -531,7 +542,10 @@ mod tests {
 
     #[test]
     fn scheme_returns_one_leaf_per_signer_not_the_chain() {
-        let issuer = tlv(0x30, &tlv(0x31, &tlv(0x30, &[0x06, 0x03, b'a', b'b', b'c'])));
+        let issuer = tlv(
+            0x30,
+            &tlv(0x31, &tlv(0x30, &[0x06, 0x03, b'a', b'b', b'c'])),
+        );
         let leaf1 = cert(1, &issuer);
         let chain1 = cert(9, &issuer);
         let leaf2 = cert(2, &issuer);
@@ -545,10 +559,7 @@ mod tests {
         let issuer = tlv(0x30, &[]);
         let v2 = cert(1, &issuer);
         let v3 = cert(2, &issuer);
-        let bytes = signing_block(&[
-            (ID_V2, scheme_value(&[&v2])),
-            (ID_V3, scheme_value(&[&v3])),
-        ]);
+        let bytes = signing_block(&[(ID_V2, scheme_value(&[&v2])), (ID_V3, scheme_value(&[&v3]))]);
         assert_eq!(certificates(&bytes, &[]).unwrap(), vec![v3]);
 
         let malformed_v3 = vec![0x01];
@@ -564,7 +575,10 @@ mod tests {
     #[test]
     fn oversized_block_is_rejected_before_parsing() {
         let huge = vec![0u8; MAX_SIGNATURE_BLOCK_BYTES + 1];
-        assert_eq!(scheme_certificates(&huge), Err("signature block exceeds cap"));
+        assert_eq!(
+            scheme_certificates(&huge),
+            Err("signature block exceeds cap")
+        );
         assert_eq!(pkcs7_signer_certificate(&huge), None);
     }
 

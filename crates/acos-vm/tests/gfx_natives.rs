@@ -36,9 +36,12 @@ fn stale_handle_is_a_structured_error_not_a_panic() {
     let h2 = t.insert(2);
     assert_ne!(h, h2);
     assert!(matches!(t.get(h), Err(HandleError::Stale { .. })));
-    assert_eq!(t.get(Handle(0xffff_ffff)), Err(HandleError::Stale {
-        handle: Handle(0xffff_ffff)
-    }));
+    assert_eq!(
+        t.get(Handle(0xffff_ffff)),
+        Err(HandleError::Stale {
+            handle: Handle(0xffff_ffff)
+        })
+    );
 }
 
 #[test]
@@ -106,7 +109,9 @@ fn compile_case(name: &str) -> Option<PathBuf> {
         return None;
     }
     let root = repo_root();
-    let src = root.join("crates/acos-vm/tests/java").join(format!("{name}.java"));
+    let src = root
+        .join("crates/acos-vm/tests/java")
+        .join(format!("{name}.java"));
     if !src.is_file() {
         return None;
     }
@@ -170,8 +175,7 @@ fn run_case() -> Result<String, String> {
 }
 
 fn line_value<'a>(out: &'a str, key: &str) -> Option<&'a str> {
-    out.lines()
-        .find_map(|l| l.strip_prefix(&format!("{key}=")))
+    out.lines().find_map(|l| l.strip_prefix(&format!("{key}=")))
 }
 
 #[test]
@@ -222,10 +226,18 @@ fn gfx_natives_on_the_real_framework() {
     );
     // Android's `Paint.measureText` wraps the native advance in `Math.ceil`
     // (verified in the framework DEX), so the Java-visible value is the ceiling.
-    assert_eq!(measured, expected.ceil(), "measureText must be ceil(advance)");
+    assert_eq!(
+        measured,
+        expected.ceil(),
+        "measureText must be ceil(advance)"
+    );
 
     // Path ops/bounds.
-    assert_eq!(line_value(&out, "bounds"), Some("0.0,0.0,10.0,5.0"), "{out}");
+    assert_eq!(
+        line_value(&out, "bounds"),
+        Some("0.0,0.0,10.0,5.0"),
+        "{out}"
+    );
     // Matrix map points.
     assert_eq!(line_value(&out, "mapped"), Some("6.0,9.0"), "{out}");
     // Shaders (W75-A): gradient/bitmap/compose construction reaches

@@ -21,10 +21,7 @@ fn service_manager_checks_activity() {
         )
         .expect("checkService");
     let id = out[0].as_binder().expect("binder");
-    assert_eq!(
-        host.descriptor_of(id),
-        Some("android.app.IActivityManager")
-    );
+    assert_eq!(host.descriptor_of(id), Some("android.app.IActivityManager"));
 }
 
 #[test]
@@ -87,7 +84,11 @@ fn package_application_info_from_apk() {
     let p = out[0].as_parcelable().expect("ApplicationInfo");
     let app = acos_services::pms::AppInfo::from_parcelable(p).expect("decode ApplicationInfo");
     assert_eq!(app.package_name, "dev.acos.fixtures.helloviews");
-    assert!(app.source_dir.ends_with("hello-views.apk"), "sourceDir={}", app.source_dir);
+    assert!(
+        app.source_dir.ends_with("hello-views.apk"),
+        "sourceDir={}",
+        app.source_dir
+    );
     assert_eq!(app.uid, 10192);
     assert_eq!(app.target_sdk, 34);
     assert_eq!(app.data_dir, "/data/user/0/dev.acos.fixtures.helloviews");
@@ -96,7 +97,9 @@ fn package_application_info_from_apk() {
 #[test]
 fn settings_read_and_generation() {
     let mut host = ServiceHost::standard();
-    let provider = host.aux("android.content.IContentProvider").expect("provider");
+    let provider = host
+        .aux("android.content.IContentProvider")
+        .expect("provider");
     let args = |method: &str, arg: &str| {
         // `ContentProviderProxy.call(AttributionSource, authority, method, arg, extras)`.
         vec![
@@ -128,8 +131,5 @@ fn settings_read_and_generation() {
         )
         .expect("GET_system");
     let values = out[0].as_bundle().expect("bundle");
-    assert_eq!(
-        values.get("value").and_then(Value::as_str),
-        Some("1")
-    );
+    assert_eq!(values.get("value").and_then(Value::as_str), Some("1"));
 }

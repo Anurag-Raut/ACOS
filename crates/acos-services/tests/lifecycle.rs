@@ -72,9 +72,17 @@ fn replay_lifecycle_summary_order() {
         .events
         .iter()
         .map(|e| e.state)
-        .filter(|s| !matches!(s, LifecycleState::AppCreated | LifecycleState::ProcessStarted))
+        .filter(|s| {
+            !matches!(
+                s,
+                LifecycleState::AppCreated | LifecycleState::ProcessStarted
+            )
+        })
         .collect();
-    assert_eq!(actual, expected, "lifecycle order must match the ART fixture");
+    assert_eq!(
+        actual, expected,
+        "lifecycle order must match the ART fixture"
+    );
     // `finishAttachApplication` counts as the first (synthesised) transaction.
     assert_eq!(atms.transactions.len(), 5);
 }

@@ -266,7 +266,12 @@ pub unsafe extern "C" fn jni_GetJavaVM(_env: usize, vm_out: *mut usize) -> i32 {
 macro_rules! call_a {
     ($name:ident, $static:expr, $ret:ty) => {
         #[no_mangle]
-        pub unsafe extern "C" fn $name(_env: usize, target: usize, mid: usize, args: *const u64) -> $ret {
+        pub unsafe extern "C" fn $name(
+            _env: usize,
+            target: usize,
+            mid: usize,
+            args: *const u64,
+        ) -> $ret {
             let raw = raw_args_for(mid, args);
             perform_call(target, mid, $static, &raw) as $ret
         }

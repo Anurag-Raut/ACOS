@@ -131,8 +131,7 @@ fn flush_raster(canvas: i64) -> VmResult<()> {
             .as_ref()
             .map(|r| (r.bitmap, c.node, c.ops.clone(), r.base.clone()))
     })
-    .flatten()
-    else {
+    .flatten() else {
         return Ok(());
     };
     if bitmap == 0 {
@@ -224,7 +223,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(C, "nGetMatrix", "(JJ)V", c_get_matrix);
     vm.register_native(C, "nClipRect", "(JFFFFI)Z", c_clip_rect);
     vm.register_native(C, "nClipPath", "(JJI)Z", c_clip_path);
-    vm.register_native(C, "nGetClipBounds", "(JLandroid/graphics/Rect;)Z", c_get_clip_bounds);
+    vm.register_native(
+        C,
+        "nGetClipBounds",
+        "(JLandroid/graphics/Rect;)Z",
+        c_get_clip_bounds,
+    );
     vm.register_native(C, "nQuickReject", "(JFFFF)Z", c_quick_reject_rect);
     vm.register_native(C, "nQuickReject", "(JJ)Z", c_quick_reject_rect);
     vm.register_native(C, "nGetWidth", "(J)I", c_width);
@@ -235,7 +239,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(C, "nSetDrawFilter", "(JJ)V", noop);
     vm.register_native(C, "nSetBitmap", "(JJ)V", c_set_bitmap);
     vm.register_native(C, "nSaveUnclippedLayer", "(JIIII)I", c_save_unclipped_layer);
-    vm.register_native(C, "nRestoreUnclippedLayer", "(JIJ)V", c_restore_unclipped_layer);
+    vm.register_native(
+        C,
+        "nRestoreUnclippedLayer",
+        "(JIJ)V",
+        c_restore_unclipped_layer,
+    );
 
     // --- Draw ops (declared on both BaseCanvas and BaseRecordingCanvas) ---
     for class in [B, R] {
@@ -250,9 +259,19 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         vm.register_native(class, "nDrawColor", "(JII)V", d_color);
         vm.register_native(class, "nDrawColor", "(JJJI)V", d_color_long);
         vm.register_native(class, "nDrawPaint", "(JJ)V", d_paint);
-        vm.register_native(class, "nDrawText", "(JLjava/lang/String;IIFFIJ)V", d_text_string);
+        vm.register_native(
+            class,
+            "nDrawText",
+            "(JLjava/lang/String;IIFFIJ)V",
+            d_text_string,
+        );
         vm.register_native(class, "nDrawText", "(J[CIIFFIJ)V", d_text_chars);
-        vm.register_native(class, "nDrawTextRun", "(JLjava/lang/String;IIIIFFZJ)V", d_text_run);
+        vm.register_native(
+            class,
+            "nDrawTextRun",
+            "(JLjava/lang/String;IIIIFFZJ)V",
+            d_text_run,
+        );
         vm.register_native(class, "nDrawTextRun", "(J[CIIIIFFZJJ)V", d_text_run);
         vm.register_native(class, "nDrawBitmap", "(JJFFJIII)V", d_bitmap_xy);
         vm.register_native(class, "nDrawBitmap", "(JJFFFFFFFFJII)V", d_bitmap_rects);
@@ -413,8 +432,7 @@ fn c_set_bitmap(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         r.base = if bitmap == 0 {
             Vec::new()
         } else {
-            with_ctx(|x| x.bitmaps.get(rh(bitmap)).map(|b| b.pixels().to_vec()))
-                .unwrap_or_default()
+            with_ctx(|x| x.bitmaps.get(rh(bitmap)).map(|b| b.pixels().to_vec())).unwrap_or_default()
         };
         // `setBitmap` re-initialises the canvas state and clears the list.
         c.ops.clear();
@@ -423,9 +441,9 @@ fn c_set_bitmap(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         c.matrix = Matrix3x3::identity();
         c.clip = RectF::new(0.0, 0.0, c.width.max(0) as f32, c.height.max(0) as f32);
         if bitmap != 0 {
-            if let Some((bw, bh)) = with_ctx(|x| {
-                x.bitmaps.get(rh(bitmap)).map(|b| (b.width(), b.height()))
-            }) {
+            if let Some((bw, bh)) =
+                with_ctx(|x| x.bitmaps.get(rh(bitmap)).map(|b| (b.width(), b.height())))
+            {
                 c.width = bw as i32;
                 c.height = bh as i32;
                 c.clip = RectF::new(0.0, 0.0, bw as f32, bh as f32);
@@ -468,7 +486,8 @@ fn c_save_unclipped_layer(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             .matrix
             .map_rect(&bounds)
             .unwrap_or_else(|| RectF::new(0.0, 0.0, 0.0, 0.0));
-        c.ops.push(DisplayOp::ClipRect(bounds, ClipOp::Replace, false));
+        c.ops
+            .push(DisplayOp::ClipRect(bounds, ClipOp::Replace, false));
         c.ops.push(DisplayOp::SaveLayerAlpha(Some(bounds), 255));
         c.unclipped.push(c.ops.len() - 1);
         c.stack.len() as i32 + 1
@@ -577,7 +596,8 @@ fn c_translate(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let (dx, dy) = (vm.arg_f32(ctx, 1), vm.arg_f32(ctx, 2));
     rec(h, |c| {
         c.matrix.pre_translate(dx, dy);
-        c.ops.push(DisplayOp::Concat(Matrix3x3::translate_matrix(dx, dy)));
+        c.ops
+            .push(DisplayOp::Concat(Matrix3x3::translate_matrix(dx, dy)));
     });
     Ok(())
 }
@@ -587,7 +607,8 @@ fn c_scale(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let (sx, sy) = (vm.arg_f32(ctx, 1), vm.arg_f32(ctx, 2));
     rec(h, |c| {
         c.matrix.pre_scale(sx, sy);
-        c.ops.push(DisplayOp::Concat(Matrix3x3::scale_matrix(sx, sy)));
+        c.ops
+            .push(DisplayOp::Concat(Matrix3x3::scale_matrix(sx, sy)));
     });
     Ok(())
 }
@@ -607,7 +628,8 @@ fn c_skew(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let (kx, ky) = (vm.arg_f32(ctx, 1), vm.arg_f32(ctx, 2));
     rec(h, |c| {
         c.matrix.pre_concat(&Matrix3x3::skew_matrix(kx, ky));
-        c.ops.push(DisplayOp::Concat(Matrix3x3::skew_matrix(kx, ky)));
+        c.ops
+            .push(DisplayOp::Concat(Matrix3x3::skew_matrix(kx, ky)));
     });
     Ok(())
 }
@@ -920,7 +942,11 @@ fn d_text_string(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         .unwrap_or_default();
     let a = start.max(0) as usize;
     let b = end.max(0) as usize;
-    let text = if a <= b && b <= all.len() { all[a..b].to_vec() } else { all };
+    let text = if a <= b && b <= all.len() {
+        all[a..b].to_vec()
+    } else {
+        all
+    };
     let (x, y) = (vm.arg_f32(ctx, 4), vm.arg_f32(ctx, 5));
     let p = snap(vm.arg_i64(ctx, 7))?;
     push(h, DisplayOp::DrawText(text, x, y, p))
@@ -939,7 +965,11 @@ fn d_text_chars(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     };
     let a = start.max(0) as usize;
     let b = end.max(0) as usize;
-    let text = if a <= b && b <= all.len() { all[a..b].to_vec() } else { all };
+    let text = if a <= b && b <= all.len() {
+        all[a..b].to_vec()
+    } else {
+        all
+    };
     let (x, y) = (vm.arg_f32(ctx, 4), vm.arg_f32(ctx, 5));
     let p = snap(vm.arg_i64(ctx, 7))?;
     push(h, DisplayOp::DrawText(text, x, y, p))
@@ -968,7 +998,11 @@ fn d_text_run(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     };
     let a = start.max(0) as usize;
     let b = end.max(0) as usize;
-    let text = if a <= b && b <= all.len() { all[a..b].to_vec() } else { all };
+    let text = if a <= b && b <= all.len() {
+        all[a..b].to_vec()
+    } else {
+        all
+    };
     let (x, y) = (vm.arg_f32(ctx, 6), vm.arg_f32(ctx, 7));
     let p = snap(vm.arg_i64(ctx, 9))?;
     push(h, DisplayOp::DrawText(text, x, y, p))
@@ -1009,7 +1043,10 @@ fn d_bitmap_rects(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         vm.arg_f32(ctx, 9),
     );
     let p = snap_opt(vm.arg_i64(ctx, 10))?;
-    push(h, DisplayOp::DrawBitmap(rh(bitmap), Some(src), dst, p, true))
+    push(
+        h,
+        DisplayOp::DrawBitmap(rh(bitmap), Some(src), dst, p, true),
+    )
 }
 
 fn d_nine_patch(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -1036,7 +1073,10 @@ fn d_nine_patch(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         dst.right as i32,
         dst.bottom as i32,
     );
-    push(h, DisplayOp::DrawNinePatch(rh(bitmap), chunk, dst_i, p, true))
+    push(
+        h,
+        DisplayOp::DrawNinePatch(rh(bitmap), chunk, dst_i, p, true),
+    )
 }
 
 fn nine_patch_chunk(handle: i64) -> VmResult<NinePatchChunk> {

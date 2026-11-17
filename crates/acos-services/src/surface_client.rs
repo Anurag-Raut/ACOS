@@ -855,7 +855,7 @@ impl SurfaceState {
             current = next;
         }
         (layer.geometry.z, 0.0)
-        }
+    }
 
     /// Build the kernel's geometry input for every layer in the registry.
     ///
@@ -939,16 +939,17 @@ impl SurfaceState {
     /// metadata read under the caller's compositor lock.
     #[must_use]
     pub fn latest_frame_metadata(&self) -> Option<FrameMetadata> {
-        self.newest_frame_layer().map(|(layer, buffer)| FrameMetadata {
-            layer_id: layer.layer_id,
-            layer_name: layer.name.clone(),
-            width: buffer.width,
-            height: buffer.height,
-            frame_number: buffer.frame_number,
-            buffer_id: buffer.buffer_id,
-            producer_id: buffer.producer_id,
-            generation: layer.latest_generation,
-        })
+        self.newest_frame_layer()
+            .map(|(layer, buffer)| FrameMetadata {
+                layer_id: layer.layer_id,
+                layer_name: layer.name.clone(),
+                width: buffer.width,
+                height: buffer.height,
+                frame_number: buffer.frame_number,
+                buffer_id: buffer.buffer_id,
+                producer_id: buffer.producer_id,
+                generation: layer.latest_generation,
+            })
     }
 
     /// The layer whose newest stored buffer is the newest across all layers.
@@ -1049,7 +1050,7 @@ impl SurfaceState {
             // hidden, or an ancestor's invalid transform.
             if snapshot.hidden_by_policy || snapshot.alpha <= 0.0 {
                 continue;
-                }
+            }
             if snapshot.invalid_transform {
                 // No old-path fallback: a singular transform is not drawn and the
                 // reason is a structured trace line (stock resets it and hides
@@ -1101,10 +1102,10 @@ impl SurfaceState {
                 p.row.buffer.expect("placed has a buffer").height,
                 p.row.buffer.expect("placed has a buffer").stride,
             )
-                .ok_or(CompositeError::CanvasTooLarge {
+            .ok_or(CompositeError::CanvasTooLarge {
                 width: i64::from(p.row.buffer.expect("placed has a buffer").width),
                 height: i64::from(p.row.buffer.expect("placed has a buffer").height),
-                })?;
+            })?;
             input_bytes = input_bytes.saturating_add(bytes);
         }
         if min_x == i64::MAX {
@@ -1329,9 +1330,9 @@ impl SurfaceState {
     /// pixels ([`FLAG_SECURE`]).
     #[must_use]
     pub fn has_secure_window(&self) -> bool {
-        self.layers.values().any(|layer| {
-            layer.placement.is_some_and(|placement| placement.secure) && !layer.hidden
-        })
+        self.layers
+            .values()
+            .any(|layer| layer.placement.is_some_and(|placement| placement.secure) && !layer.hidden)
     }
 
     /// Every layer (callers should key by handle; the map order is not a
@@ -2684,7 +2685,7 @@ fn on_transaction_completed_delivery(
     }
     data.write_int64(latch_time);
     data.write_bool(false); // no present fence
-    // ParcelableVector<SurfaceStats>: one stat for this layer.
+                            // ParcelableVector<SurfaceStats>: one stat for this layer.
     data.write_int32(1);
     data.write_int32(1);
     data.write_strong_binder(handle);
@@ -2703,7 +2704,7 @@ fn on_transaction_completed_delivery(
         data.write_int64(0);
     }
     data.write_int32(0); // no jank data
-    // Parcelable ReleaseCallbackId (previous buffer).
+                         // Parcelable ReleaseCallbackId (previous buffer).
     data.write_int32(1);
     data.write_uint64(previous.buffer_id);
     data.write_uint64(previous.frame_number);

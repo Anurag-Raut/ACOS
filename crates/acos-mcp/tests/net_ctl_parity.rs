@@ -35,7 +35,10 @@ fn mcp_advertises_the_modules_verb_under_its_own_name() {
     assert!(SESSION_TOOL_NAMES.contains(&NET_CTL_TOOL));
     let tool = advertised();
     assert_eq!(tool.tool_name, "acos_net", "the CLI verb's name, verbatim");
-    assert_eq!(tool.command, None, "served by the session backend, not a CLI subprocess");
+    assert_eq!(
+        tool.command, None,
+        "served by the session backend, not a CLI subprocess"
+    );
     assert!(tool.available, "the default acos-mcp binary holds sessions");
     assert!(tool.reason.is_none());
     assert!(
@@ -68,7 +71,10 @@ fn the_advertised_schema_is_the_session_apis_schema() {
         .cloned()
         .collect::<Vec<_>>();
     for key in ARG_KEYS.iter().chain(IDENTITY_KEYS) {
-        assert!(properties.contains(&(*key).to_string()), "schema lacks `{key}`");
+        assert!(
+            properties.contains(&(*key).to_string()),
+            "schema lacks `{key}`"
+        );
     }
     assert_eq!(
         properties.len(),
@@ -82,7 +88,7 @@ fn the_advertised_schema_is_the_session_apis_schema() {
 #[test]
 fn every_advertised_argument_parses_and_nothing_else_does() {
     for args in [
-        json!({}),                                             // status (default)
+        json!({}), // status (default)
         json!({"action": "status"}),
         json!({"action": "offline"}),
         json!({"action": "online"}),
@@ -97,8 +103,8 @@ fn every_advertised_argument_parses_and_nothing_else_does() {
     }
     for args in [
         json!({"action": "offline", "port": 8081}), // key means nothing for this action
-        json!({"offline": true}),                 // spelling of the *result*, not an arg
-        json!({"action": "hostport"}),            // port is required
+        json!({"offline": true}),                   // spelling of the *result*, not an arg
+        json!({"action": "hostport"}),              // port is required
         json!({"action": "hostport", "port": 0}),
         json!({"action": "delay", "loss_pct": 101}),
         json!({"action": "restart"}),

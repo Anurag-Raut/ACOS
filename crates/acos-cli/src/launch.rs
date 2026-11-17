@@ -107,6 +107,16 @@ pub struct LaunchArgs {
     #[arg(long = "service", value_name = "id[:profile][,config]")]
     pub service: Vec<String>,
 
+    /// MPROC1: install this APK into the session beside the launched one
+    /// (repeatable). Each extra package gets its own uid and its own guest
+    /// paths, and is reachable through `PackageManager` /
+    /// `createPackageContext` — the way a second app exists on the device.
+    ///
+    /// ART only: the frozen Rust VM loads exactly one APK and refuses rather
+    /// than pretending a second package is installed.
+    #[arg(long = "extra-apk", value_name = "APK")]
+    pub extra_apk: Vec<PathBuf>,
+
     /// P12: framework animation scales for an ART session (`on`/`off`).
     ///
     /// `off` sets Android's three animation scales to 0 for functional checks
@@ -115,6 +125,13 @@ pub struct LaunchArgs {
     /// animators, so it refuses `off` rather than pretending.
     #[arg(long, value_name = "on|off")]
     pub animations: Option<String>,
+
+    /// MPROC7: how long a lazily spawned secondary ART process may sit idle
+    /// (no started activity, no started/bound service, no visible window)
+    /// before the launcher kills it; the next intent respawns it. `0` disables
+    /// the idle kill. Launch-time only, ART sessions only.
+    #[arg(long, value_name = "SECS")]
+    pub idle_kill_seconds: Option<u64>,
 }
 
 /// Build the display override for `acos launch` from its flags.
@@ -192,6 +209,16 @@ pub fn run(args: LaunchArgs) -> ExitCode {
     let art = engine == Some(Engine::Art);
     if art && crate::native_launch::native_requested(args.native) {
         return reject_engine_conflict(&request_id, &args);
+    }
+    // MPROC1: `--extra-apk` installs packages into an ART session. The Rust VM
+    // runs one APK and has no package manager, so it refuses instead of
+    // accepting the flag and installing nothing.
+    if !args.extra_apk.is_empty() && !art {
+        eprintln!(
+            "launch: --extra-apk installs packages into an ART session; add \n\
+             `--engine art` (the Rust VM runs one APK and would silently install nothing)."
+        );
+        return ExitCode::FAILURE;
     }
     // A Flutter APK can only be driven by the confined child, so it always
     // routes through the daemon even without `--keep`: the session must outlive
@@ -335,6 +362,12 @@ fn run_keep(
         "display": display.map(|o| o.spec()),
         "insets": args.insets.clone(),
         "animations": args.animations.clone(),
+        "extra_apks": args
+            .extra_apk
+            .iter()
+            .map(|path| json!(path.display().to_string()))
+            .collect::<Vec<_>>(),
+        "idle_kill_seconds": args.idle_kill_seconds,
         "timeout_ms": args.timeout.saturating_mul(1000),
         "services": services,
     });

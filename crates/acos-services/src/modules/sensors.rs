@@ -239,9 +239,10 @@ fn build_feed(profile: Profile, config: &ModuleConfig) -> Result<SensorFeed> {
         if selected.is_empty() {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
-                detail: "config.sensors selected no sensor; an empty feed is the `off` profile, not \
+                detail:
+                    "config.sensors selected no sensor; an empty feed is the `off` profile, not \
                          an attached one"
-                    .to_string(),
+                        .to_string(),
             });
         }
         SensorFeed::new(selected)
@@ -275,21 +276,28 @@ fn build_feed(profile: Profile, config: &ModuleConfig) -> Result<SensorFeed> {
             let Some(list) = value.as_array() else {
                 return Err(ServiceError::ModuleRejected {
                     module: MODULE_ID,
-                    detail: format!("config.values.{name} must be an array of numbers, got {value}"),
+                    detail: format!(
+                        "config.values.{name} must be an array of numbers, got {value}"
+                    ),
                 });
             };
             let mut sample = [0.0f32; 16];
             if list.len() > 16 {
                 return Err(ServiceError::ModuleRejected {
                     module: MODULE_ID,
-                    detail: format!("config.values.{name} has {} values; a sensor event carries 16", list.len()),
+                    detail: format!(
+                        "config.values.{name} has {} values; a sensor event carries 16",
+                        list.len()
+                    ),
                 });
             }
             for (index, item) in list.iter().enumerate() {
                 let Some(number) = item.as_f64() else {
                     return Err(ServiceError::ModuleRejected {
                         module: MODULE_ID,
-                        detail: format!("config.values.{name}[{index}] must be a number, got {item}"),
+                        detail: format!(
+                            "config.values.{name}[{index}] must be a number, got {item}"
+                        ),
                     });
                 };
                 sample[index] = number as f32;
@@ -320,7 +328,10 @@ fn parse_values(values: Option<&Value>, method: &str) -> Result<[f32; 16]> {
     if list.is_empty() || list.len() > 16 {
         return Err(ServiceError::ModuleRejected {
             module: MODULE_ID,
-            detail: format!("{method}: `values` needs 1..=16 entries, got {}", list.len()),
+            detail: format!(
+                "{method}: `values` needs 1..=16 entries, got {}",
+                list.len()
+            ),
         });
     }
     for (index, item) in list.iter().enumerate() {
@@ -356,7 +367,11 @@ impl Module for SensorsModule {
             });
         }
         let feed = build_feed(profile, config)?;
-        let configured: Vec<i32> = feed.sensors.iter().map(|sensor| sensor.sensor_type).collect();
+        let configured: Vec<i32> = feed
+            .sensors
+            .iter()
+            .map(|sensor| sensor.sensor_type)
+            .collect();
         // The node `core` published. It is a dynamic (`raw_transact`-served) node,
         // so it is configured through `dynamic_object_mut` + the documented
         // `as_any_mut` downcast seam: no second registration, so an app's
@@ -643,7 +658,10 @@ fn parse_samples(args: &Value) -> Result<Vec<Sample>> {
     if list.len() > 4096 {
         return Err(ServiceError::ModuleRejected {
             module: MODULE_ID,
-            detail: format!("`play` scheduled {} samples; the ceiling is 4096", list.len()),
+            detail: format!(
+                "`play` scheduled {} samples; the ceiling is 4096",
+                list.len()
+            ),
         });
     }
     let mut out = Vec::with_capacity(list.len());
@@ -665,13 +683,12 @@ fn parse_samples(args: &Value) -> Result<Vec<Sample>> {
                 });
             }
         }
-        let t_ms = object
-            .get("t_ms")
-            .and_then(Value::as_i64)
-            .ok_or_else(|| ServiceError::ModuleRejected {
+        let t_ms = object.get("t_ms").and_then(Value::as_i64).ok_or_else(|| {
+            ServiceError::ModuleRejected {
                 module: MODULE_ID,
                 detail: format!("`play`: samples[{index}] needs an integer t_ms"),
-            })?;
+            }
+        })?;
         if t_ms < 0 {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,

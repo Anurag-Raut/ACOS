@@ -64,7 +64,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     //   them back, so they are declared no-ops like the `DdmServer` discard.
     let t = "Landroid/graphics/Typeface;";
     vm.register_native(t, "nativeGetReleaseFunc", "()J", typeface_no_release_func);
-    vm.register_native(t, "preloadFontFile", "(Ljava/lang/String;)V", typeface_preload_font);
+    vm.register_native(
+        t,
+        "preloadFontFile",
+        "(Ljava/lang/String;)V",
+        typeface_preload_font,
+    );
     vm.register_native(
         t,
         "nativeRegisterLocaleList",
@@ -230,7 +235,11 @@ fn ip_time_to_values(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
         let t0 = times[i];
         let t1 = times[i + 1];
-        let f = if t1 > t0 { (msec - t0) / (t1 - t0) } else { 0.0 };
+        let f = if t1 > t0 {
+            (msec - t0) / (t1 - t0)
+        } else {
+            0.0
+        };
         for k in 0..value_count {
             let a = values[i * value_count + k];
             let b = values[(i + 1) * value_count + k];

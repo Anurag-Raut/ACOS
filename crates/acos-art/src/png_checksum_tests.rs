@@ -105,24 +105,8 @@ fn empty_and_single_byte_inputs_match_the_oracle() {
 fn random_buffers_match_the_oracle_at_every_boundary() {
     let mut rng = Rng::new(0xAC05_0001_0000_0001);
     let lengths = [
-        0usize,
-        1,
-        2,
-        3,
-        7,
-        8,
-        9,
-        255,
-        256,
-        4096,
-        5551,
-        5552,
-        5553,
-        5554,
-        11_104,
-        65_535,
-        1_000_003,
-        9_500_000,
+        0usize, 1, 2, 3, 7, 8, 9, 255, 256, 4096, 5551, 5552, 5553, 5554, 11_104, 65_535,
+        1_000_003, 9_500_000,
     ];
     for len in lengths {
         let data = rng.fill(len);
@@ -247,7 +231,10 @@ fn a_high_entropy_canvas_is_never_materially_worse_than_stored() {
         });
         out
     };
-    assert!(stored.len() > 9_000_000, "the stored baseline is still ~9.5 MB");
+    assert!(
+        stored.len() > 9_000_000,
+        "the stored baseline is still ~9.5 MB"
+    );
     // Pure noise is the one input fixed-Huffman deflate cannot shrink: the
     // encoder falls back to the stored layout, so the weight never grows past
     // the pre-SHOTZ file (the 12 bytes per IDAT chunk are the only difference).
@@ -297,7 +284,8 @@ fn stride_padding_and_short_rows_still_decode_to_the_padded_rows() {
             }
             let got = &decoded.2[y * row..(y + 1) * row];
             assert_eq!(
-                got, &want[..],
+                got,
+                &want[..],
                 "row {y} differs for {width}x{height} stride {stride}"
             );
         }
@@ -318,7 +306,10 @@ fn the_streamed_encoder_writes_the_same_file_as_the_buffered_encoder() {
         streamed.extend_from_slice(bytes)
     });
     assert_eq!(streamed.len(), buffered.len(), "PNG length changed");
-    assert!(streamed == buffered, "the streamed PNG differs from the buffered one");
+    assert!(
+        streamed == buffered,
+        "the streamed PNG differs from the buffered one"
+    );
     // Deterministic: a second encode is byte-identical (the capture path hashes
     // exactly these bytes, and the same frame must hash the same).
     assert_eq!(encode_png_rgba(width, height, width, &rgba), buffered);

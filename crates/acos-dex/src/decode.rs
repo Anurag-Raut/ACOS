@@ -390,8 +390,7 @@ pub fn decode_payload(insns: &[u16], pc: usize) -> DexResult<Payload> {
     match kind {
         1 => {
             let size = insns[pc + 1] as usize;
-            let first_key =
-                (insns[pc + 2] as u32 | ((insns[pc + 3] as u32) << 16)) as i32;
+            let first_key = (insns[pc + 2] as u32 | ((insns[pc + 3] as u32) << 16)) as i32;
             let mut keys = Vec::with_capacity(size);
             let mut targets = Vec::with_capacity(size);
             for i in 0..size {

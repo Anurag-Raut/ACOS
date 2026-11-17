@@ -1,0 +1,11 @@
+package=dev.acos.fixtures.proca
+activity=dev.acos.fixtures.proca.ProcAActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@c5d316d
+timeout_ms=12000
+first_traversal=traversed=true source=onDraw skip=none
+draw_skip=none
+resume_ready=first-traversal

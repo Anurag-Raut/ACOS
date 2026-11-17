@@ -33,10 +33,9 @@ fn fixture_names() -> Vec<String> {
 }
 
 fn run(name: &str, gc_stress: bool, fast: bool) -> (i32, String) {
-    let dex = std::fs::read(repo_root().join(format!(
-        "fixtures/build/dexprogs/{name}/classes.dex"
-    )))
-    .expect("read dex");
+    let dex =
+        std::fs::read(repo_root().join(format!("fixtures/build/dexprogs/{name}/classes.dex")))
+            .expect("read dex");
     let mut vm = Vm::new(VmOptions {
         heap_max_bytes: 256 * 1024 * 1024,
         gc_stress,

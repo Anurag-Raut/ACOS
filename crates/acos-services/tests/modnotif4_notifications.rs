@@ -44,14 +44,12 @@ fn notification(sender: u64) -> Parcelable {
             Value::Int(5), // BlendMode.SRC_IN
         ],
     );
-    let pending = |binder: u64| {
-        Value::Cond {
-            present: true,
-            values: vec![Value::Parcelable(Parcelable::ordered(
-                "android.app.PendingIntent",
-                vec![Value::Binder(Some(BinderId(binder)))],
-            ))],
-        }
+    let pending = |binder: u64| Value::Cond {
+        present: true,
+        values: vec![Value::Parcelable(Parcelable::ordered(
+            "android.app.PendingIntent",
+            vec![Value::Binder(Some(BinderId(binder)))],
+        ))],
     };
     let absent = || Value::Cond {
         present: false,
@@ -68,18 +66,18 @@ fn notification(sender: u64) -> Parcelable {
                 present: true,
                 values: vec![Value::Parcelable(icon)],
             },
-            Value::Int(1),  // number
-            pending(sender), // contentIntent
-            absent(),       // deleteIntent
-            absent(),       // tickerText
-            absent(),       // tickerView
-            absent(),       // contentView
-            absent(),       // mLargeIcon
-            Value::Int(0),  // defaults
+            Value::Int(1),    // number
+            pending(sender),  // contentIntent
+            absent(),         // deleteIntent
+            absent(),         // tickerText
+            absent(),         // tickerView
+            absent(),         // contentView
+            absent(),         // mLargeIcon
+            Value::Int(0),    // defaults
             Value::Int(0x10), // flags
-            absent(),       // sound
-            Value::Int(0),  // audioStreamType
-            absent(),       // audioAttributes
+            absent(),         // sound
+            Value::Int(0),    // audioStreamType
+            absent(),         // audioAttributes
             Value::LongArray(None),
             Value::Int(0),
             Value::Int(0),
@@ -94,9 +92,9 @@ fn notification(sender: u64) -> Parcelable {
             Value::List(Some(vec![Value::Parcelable(Parcelable::ordered(
                 "android.app.Notification$Action",
                 vec![
-                    absent(),                       // icon
+                    absent(),                         // icon
                     Value::Str(Some("Reply".into())), // title
-                    pending(sender),                // actionIntent
+                    pending(sender),                  // actionIntent
                     Value::Bundle(None),
                     Value::List(None),
                     Value::Int(1),
@@ -105,10 +103,10 @@ fn notification(sender: u64) -> Parcelable {
                     Value::Int(0),
                 ],
             ))])),
-            absent(), // bigContentView
-            absent(), // headsUpContentView
+            absent(),      // bigContentView
+            absent(),      // headsUpContentView
             Value::Int(1), // visibility
-            absent(), // publicVersion
+            absent(),      // publicVersion
             Value::Int(0), // color
             Value::Cond {
                 present: true,
@@ -130,7 +128,8 @@ fn notification(sender: u64) -> Parcelable {
 
 fn enqueue_request(sender: u64, id: i32) -> Parcel {
     let mut data = Parcel::new();
-    data.write_interface_token(NOTIFICATION_MANAGER).expect("token");
+    data.write_interface_token(NOTIFICATION_MANAGER)
+        .expect("token");
     data.write_string16_opt(Some(PACKAGE)).expect("pkg");
     data.write_string16_opt(None).expect("opPkg");
     data.write_string16_opt(Some("probe-tag")).expect("tag");
@@ -168,7 +167,12 @@ fn installed_session() -> (ServiceHost, ModuleRegistry) {
     // The gate reads the permissions module's store, so a session that cares
     // about POST_NOTIFICATIONS attaches both.
     registry
-        .attach(&mut host, "system.permissions", Profile::Real, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "system.permissions",
+            Profile::Real,
+            &ModuleConfig::default(),
+        )
         .expect("the permissions module attaches");
     let config = ModuleConfig::from_json(
         "system.notifications",
@@ -211,7 +215,12 @@ fn a_real_notify_request_posts_through_the_module_and_the_gate_follows_the_permi
     );
 
     let state = registry
-        .control(&mut host, "system.notifications", "list", &serde_json::json!({}))
+        .control(
+            &mut host,
+            "system.notifications",
+            "list",
+            &serde_json::json!({}),
+        )
         .expect("list");
     let posted = state["posted"].as_array().expect("posted[]");
     assert_eq!(posted.len(), 1, "one notification is posted: {state}");
@@ -227,7 +236,8 @@ fn a_real_notify_request_posts_through_the_module_and_the_gate_follows_the_permi
 
     // `areNotificationsEnabled` over the wire.
     let mut data = Parcel::new();
-    data.write_interface_token(NOTIFICATION_MANAGER).expect("token");
+    data.write_interface_token(NOTIFICATION_MANAGER)
+        .expect("token");
     data.write_string16_opt(Some(PACKAGE)).expect("pkg");
     let mut reply = transact(&mut host, "notification", ARE_NOTIFICATIONS_ENABLED, data);
     assert_eq!(reply.read_int32().expect("exception"), 0);
@@ -255,7 +265,12 @@ fn a_real_notify_request_posts_through_the_module_and_the_gate_follows_the_permi
         "a dropped notification is not an exception to the app"
     );
     let state = registry
-        .control(&mut host, "system.notifications", "list", &serde_json::json!({}))
+        .control(
+            &mut host,
+            "system.notifications",
+            "list",
+            &serde_json::json!({}),
+        )
         .expect("list");
     assert_eq!(
         state["posted"].as_array().expect("posted").len(),
@@ -307,7 +322,9 @@ fn tap_and_dismiss_drive_the_posted_notification() {
         .expect_err("no such sender record exists on this host");
     assert_eq!(error.code(), "SERVICE_BAD_REQUEST", "{error}");
     assert!(
-        error.to_string().contains("not a live pending-intent sender"),
+        error
+            .to_string()
+            .contains("not a live pending-intent sender"),
         "{error}"
     );
 
@@ -322,7 +339,12 @@ fn tap_and_dismiss_drive_the_posted_notification() {
         .expect("dismiss");
     assert_eq!(dismissed["remaining"], 0);
     let state = registry
-        .control(&mut host, "system.notifications", "list", &serde_json::json!({}))
+        .control(
+            &mut host,
+            "system.notifications",
+            "list",
+            &serde_json::json!({}),
+        )
         .expect("list");
     assert_eq!(state["posted"].as_array().expect("posted").len(), 0);
 }
@@ -365,20 +387,24 @@ fn attaching_the_module_takes_the_name_over_and_detach_restores_core() {
     // The module answers `areNotificationsEnabled` from the gate (true with no
     // runtime table), which is not core's hard-coded `false`.
     let mut data = Parcel::new();
-    data.write_interface_token(NOTIFICATION_MANAGER).expect("token");
+    data.write_interface_token(NOTIFICATION_MANAGER)
+        .expect("token");
     data.write_string16_opt(Some(PACKAGE)).expect("pkg");
     let mut reply = transact(&mut host, "notification", ARE_NOTIFICATIONS_ENABLED, data);
     assert_eq!(reply.read_int32().expect("exception"), 0);
     assert_eq!(reply.read_int32().expect("enabled"), 1);
 
-    registry.detach(&mut host, "system.notifications").expect("detach");
+    registry
+        .detach(&mut host, "system.notifications")
+        .expect("detach");
     assert_eq!(
         binder_of(&mut host, "notification"),
         core_binder,
         "detach restores core's binder and factory"
     );
     let mut data = Parcel::new();
-    data.write_interface_token(NOTIFICATION_MANAGER).expect("token");
+    data.write_interface_token(NOTIFICATION_MANAGER)
+        .expect("token");
     data.write_string16_opt(Some(PACKAGE)).expect("pkg");
     let mut reply = transact(&mut host, "notification", ARE_NOTIFICATIONS_ENABLED, data);
     assert_eq!(reply.read_int32().expect("exception"), 0);
@@ -394,7 +420,11 @@ fn attaching_the_module_takes_the_name_over_and_detach_restores_core() {
 #[test]
 fn get_intent_sender_returns_a_sender_whose_send_starts_the_activity() {
     let apk = std::path::Path::new("../../fixtures/build/apps/hello-views.apk");
-    assert!(apk.exists(), "the hello-views fixture is built: {}", apk.display());
+    assert!(
+        apk.exists(),
+        "the hello-views fixture is built: {}",
+        apk.display()
+    );
     // The sender pool is registered by `registry::install`; the request carries
     // an explicit component intent for hello-views' launcher activity.
     // The same component table the launcher seeds for a live session.
@@ -433,7 +463,10 @@ fn get_intent_sender_returns_a_sender_whose_send_starts_the_activity() {
         !records.pending_launches.is_empty(),
         "the sender's send queued the target activity's launch"
     );
-    assert_eq!(records.new_intents.len() + records.pending_launches.len(), 1);
+    assert_eq!(
+        records.new_intents.len() + records.pending_launches.len(),
+        1
+    );
     // The evidence is on the record, so `tap` can report what it fired.
     let record = records.intent_senders.record(binder).expect("record");
     assert_eq!(record.sends.len(), 1);
@@ -441,7 +474,10 @@ fn get_intent_sender_returns_a_sender_whose_send_starts_the_activity() {
     // A cancel refuses the next send instead of starting it again.
     assert!(records.intent_senders.cancel(binder));
     let evidence = records.send_pending_intent(binder, 0).expect("send");
-    assert!(evidence.refused_cancelled, "a cancelled sender refuses: {evidence:?}");
+    assert!(
+        evidence.refused_cancelled,
+        "a cancelled sender refuses: {evidence:?}"
+    );
     assert_eq!(records.pending_launches.len(), 1);
 }
 
@@ -456,7 +492,7 @@ fn get_intent_sender_decodes_the_framework_wire_form() {
     data.write_strong_binder_opt(None); // activity token: null
     data.write_string16_opt(None).expect("who");
     data.write_int32(11); // requestCode
-    // writeTypedArray(Intent[]): count, then each element's presence + payload.
+                          // writeTypedArray(Intent[]): count, then each element's presence + payload.
     data.write_int32(1);
     data.write_int32(1);
     let intent = acos_services::ams::IntentFacts::explicit(

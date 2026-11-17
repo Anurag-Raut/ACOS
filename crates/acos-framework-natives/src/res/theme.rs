@@ -259,34 +259,34 @@ impl AssetManager {
         for i in 0..n {
             let attr = attrs[i] as u32;
             if let Some((value, _idx)) = map.get(&attr) {
-                    // `nativeRetrieveAttributes` must chase a raw `@resid`
-                    // attribute value to its concrete resource, exactly like
-                    // `applyStyle` does. `Resources.obtainAttributes` with a
-                    // null theme (what `ColorStateList.inflate` uses) routes
-                    // here, and `TypedArray.getColor` raises `Can't convert
-                    // value at index N to color: type=0x1` on a raw
-                    // `TYPE_REFERENCE` (framework `res/color/*.xml`).
-                    // `build_typed_value` also decodes a resolved string into
-                    // the right asset cookie, so `TypedArray.getValueAt` reads
-                    // the ARSC pool instead of the XML pool.
-                    let built = match value.data_type {
-                        TYPE_REFERENCE | TYPE_DYNAMIC_REFERENCE if value.data != 0 => self
-                            .resolve_references(value.data, true)
-                            .and_then(|(si, entry, fid)| {
-                                self.build_typed_value(si, &entry, attr, fid, 0)
-                            }),
-                        _ => None,
-                    };
-                    let tv = match built {
-                        Some((_cookie, tv)) => tv,
-                        None => null_or_raw_typed_value(*value, attr),
-                    };
-                    tv.write_style(&mut out_values[i * STYLE_NUM_ENTRIES..]);
-                    let slot = count as usize + 1;
-                    if slot < out_indices.len() {
-                        out_indices[slot] = i as i32;
-                    }
-                    count += 1;
+                // `nativeRetrieveAttributes` must chase a raw `@resid`
+                // attribute value to its concrete resource, exactly like
+                // `applyStyle` does. `Resources.obtainAttributes` with a
+                // null theme (what `ColorStateList.inflate` uses) routes
+                // here, and `TypedArray.getColor` raises `Can't convert
+                // value at index N to color: type=0x1` on a raw
+                // `TYPE_REFERENCE` (framework `res/color/*.xml`).
+                // `build_typed_value` also decodes a resolved string into
+                // the right asset cookie, so `TypedArray.getValueAt` reads
+                // the ARSC pool instead of the XML pool.
+                let built = match value.data_type {
+                    TYPE_REFERENCE | TYPE_DYNAMIC_REFERENCE if value.data != 0 => self
+                        .resolve_references(value.data, true)
+                        .and_then(|(si, entry, fid)| {
+                            self.build_typed_value(si, &entry, attr, fid, 0)
+                        }),
+                    _ => None,
+                };
+                let tv = match built {
+                    Some((_cookie, tv)) => tv,
+                    None => null_or_raw_typed_value(*value, attr),
+                };
+                tv.write_style(&mut out_values[i * STYLE_NUM_ENTRIES..]);
+                let slot = count as usize + 1;
+                if slot < out_indices.len() {
+                    out_indices[slot] = i as i32;
+                }
+                count += 1;
             }
         }
         if !out_indices.is_empty() {
@@ -424,11 +424,7 @@ impl AssetManager {
                 .unwrap_or(attr);
             let resolved = themed
                 .get_tagged(wanted)
-                .or_else(|| {
-                    sources
-                        .iter()
-                        .find_map(|m| m.get(&wanted).copied())
-                });
+                .or_else(|| sources.iter().find_map(|m| m.get(&wanted).copied()));
             if let Some((prov, value)) = resolved {
                 // Chase the value to its concrete form, exactly like
                 // `AssetManager2::ResolveAttributeReference` + `ResolveReference`:
@@ -505,7 +501,8 @@ impl AssetManager {
                 let themed = if value.data_type == TYPE_ATTRIBUTE
                     || value.data_type == crate::res::value::TYPE_DYNAMIC_ATTRIBUTE
                 {
-                    self.theme(theme).map(|t| resolve_theme_attributes(t, (prov, value)))
+                    self.theme(theme)
+                        .map(|t| resolve_theme_attributes(t, (prov, value)))
                 } else {
                     Some((prov, value))
                 };

@@ -33,19 +33,19 @@ pub mod capture;
 pub mod cgroup;
 pub mod crash;
 pub mod host_zygote;
-pub mod zygote_prod;
 pub mod jvm;
-pub mod launch;
-pub mod session;
 pub mod landlock;
+pub mod launch;
 pub mod launcher;
 pub mod live_view;
 pub mod logd;
 pub mod props;
 pub mod seccomp;
+pub mod session;
 /// SPIKE-NET (ADR-0030 gate): pasta networking, gated on `ACOS_SPIKE_NET=1`.
 pub mod spike_net;
 pub mod watchdog;
+pub mod zygote_prod;
 
 use std::ffi::OsString;
 use std::fs;
@@ -110,7 +110,9 @@ const APEX_INFO_MARKER: &str = "<!-- acos-art apex-info-list v3 -->\n";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("runtime root not found (set ACOS_HOME for an installed ACOS, or ACOS_ROOT for a checkout)")]
+    #[error(
+        "runtime root not found (set ACOS_HOME for an installed ACOS, or ACOS_ROOT for a checkout)"
+    )]
     NoRepoRoot,
     #[error(
         "ART sysroot not found: {0} (run tools/art-sysroot.sh --out {0}, or set ACOS_ART_SYSROOT)"
@@ -198,8 +200,8 @@ impl Classpaths {
     /// and its derivation would silently drop `framework.jar`.
     pub fn is_complete(&self) -> bool {
         let has_framework = self.boot.iter().any(|j| j.ends_with("/framework.jar"));
-        let prefix_ok =
-            self.dex2oat.len() < self.boot.len() && self.boot[..self.dex2oat.len()] == self.dex2oat[..];
+        let prefix_ok = self.dex2oat.len() < self.boot.len()
+            && self.boot[..self.dex2oat.len()] == self.dex2oat[..];
         has_framework && prefix_ok
     }
 }
@@ -247,7 +249,12 @@ impl ArtRoot {
             },
         };
         let modules = read_modules(&sysroot)?;
-        Ok(Self { repo_root, sysroot, data, modules })
+        Ok(Self {
+            repo_root,
+            sysroot,
+            data,
+            modules,
+        })
     }
 
     // ---- layout -----------------------------------------------------------
@@ -313,7 +320,13 @@ impl ArtRoot {
     pub fn run_dir_at(&self, path: &Path, tag: &str) -> Result<RunDir> {
         let label: String = tag
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect();
         for d in [
             "dalvik-cache/x86_64",
@@ -331,15 +344,27 @@ impl ArtRoot {
         // from a pid that has been reused since (H1's leak-check lesson).
         let start = fs::read_to_string("/proc/self/stat")
             .ok()
-            .and_then(|s| s.rfind(')').map(|i| s[i + 2..].split_whitespace().nth(19).map(str::to_string)).flatten())
+            .and_then(|s| {
+                s.rfind(')')
+                    .map(|i| s[i + 2..].split_whitespace().nth(19).map(str::to_string))
+                    .flatten()
+            })
             .unwrap_or_else(|| "0".to_string());
         fs::write(
             path.join("owner"),
-            format!("pid={}\nstart={}\ntag={}\n", std::process::id(), start, label),
+            format!(
+                "pid={}\nstart={}\ntag={}\n",
+                std::process::id(),
+                start,
+                label
+            ),
         )?;
         let keep = std::env::var_os("ACOS_ART_KEEP_RUN").is_some()
             || std::env::var_os("ACOS_ZYGOTE_SESSION").is_some();
-        Ok(RunDir { path: path.to_path_buf(), keep })
+        Ok(RunDir {
+            path: path.to_path_buf(),
+            keep,
+        })
     }
 
     /// Remove run dirs that have no live owner pid and are older than the TTL
@@ -349,7 +374,9 @@ impl ArtRoot {
     pub fn sweep_stale_runs(&self) -> Result<usize> {
         let ttl = run_ttl_from_env();
         let root = self.runs_dir();
-        let Ok(rd) = fs::read_dir(&root) else { return Ok(0) };
+        let Ok(rd) = fs::read_dir(&root) else {
+            return Ok(0);
+        };
         let mut removed = 0;
         for e in rd.flatten() {
             let path = e.path();
@@ -388,7 +415,9 @@ impl ArtRoot {
     pub fn write_apex_info_list(&self) -> Result<()> {
         let out = self.apex_info_list();
         let modules = self.modules_path();
-        let have_marker = fs::read_to_string(&out).map(|t| t.contains(APEX_INFO_MARKER)).unwrap_or(false);
+        let have_marker = fs::read_to_string(&out)
+            .map(|t| t.contains(APEX_INFO_MARKER))
+            .unwrap_or(false);
         let stale = !have_marker
             || match (fs::metadata(&out), fs::metadata(&modules)) {
                 (Ok(o), Ok(m)) => match (o.modified(), m.modified()) {
@@ -441,7 +470,9 @@ impl ArtRoot {
         // invalidates an existing ld.config.txt.
         let stamp = self.data.join("linkerconfig/.mounts");
         let mounts = self.mount_stamp();
-        let stamp_ok = fs::read_to_string(&stamp).map(|s| s.trim() == mounts).unwrap_or(false);
+        let stamp_ok = fs::read_to_string(&stamp)
+            .map(|s| s.trim() == mounts)
+            .unwrap_or(false);
         if ld.is_file() && stamp_ok && !regen {
             return Ok(());
         }
@@ -469,10 +500,10 @@ impl ArtRoot {
         let mut sb = self.sandbox();
         sb.staging(true); // host build step: /linkerconfig is regenerated here
         sb.with_shim(true);
-        let mut cmd = sb.command("/apex/com.android.runtime/bin/linkerconfig", &[
-            "--target".into(),
-            "/linkerconfig".into(),
-        ])?;
+        let mut cmd = sb.command(
+            "/apex/com.android.runtime/bin/linkerconfig",
+            &["--target".into(), "/linkerconfig".into()],
+        )?;
         let log = self.data.join("linkerconfig.log");
         let out = cmd.output()?;
         let mut text = Vec::new();
@@ -535,8 +566,12 @@ impl ArtRoot {
         let mut cp = Classpaths::default();
         for line in text.lines() {
             let line = line.trim();
-            let Some(rest) = line.strip_prefix("export ") else { continue };
-            let Some((key, value)) = rest.split_once(char::is_whitespace) else { continue };
+            let Some(rest) = line.strip_prefix("export ") else {
+                continue;
+            };
+            let Some((key, value)) = rest.split_once(char::is_whitespace) else {
+                continue;
+            };
             let list: Vec<String> = value
                 .trim()
                 .split(':')
@@ -565,7 +600,11 @@ impl ArtRoot {
         if let Some(dir) = out.parent() {
             fs::create_dir_all(dir)?;
         }
-        if !regen && out.is_file() && self.classpaths().is_some() && self.classpath_env_is_fresh(&out) {
+        if !regen
+            && out.is_file()
+            && self.classpaths().is_some()
+            && self.classpath_env_is_fresh(&out)
+        {
             return Ok(());
         }
         let key = self.classpath_env_cache_key();
@@ -573,7 +612,10 @@ impl ArtRoot {
         if cached {
             let _lock = crate::build_cache::lock(&key)?;
             if !regen {
-                let dir = out.parent().map(Path::to_path_buf).unwrap_or_else(|| self.data.clone());
+                let dir = out
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .unwrap_or_else(|| self.data.clone());
                 if crate::build_cache::reuse_to(&key, &["classpath"], &dir)?.is_some() {
                     crate::stage("classpath-hit");
                     return Ok(());
@@ -624,15 +666,26 @@ impl ArtRoot {
         }
         // Every enumerated jar must exist in the sysroot, otherwise ART would
         // fail far away from the cause.
-        let missing: Vec<&String> = cp.boot.iter().filter(|j| !self.host_path(j).is_file()).collect();
+        let missing: Vec<&String> = cp
+            .boot
+            .iter()
+            .filter(|j| !self.host_path(j).is_file())
+            .collect();
         if !missing.is_empty() {
             return Err(Error::Layout(format!(
                 "BOOTCLASSPATH names jars the sysroot lacks: {} (re-run tools/art-sysroot.sh)",
-                missing.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                missing
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )));
         }
         if cached {
-            let dir = out.parent().map(Path::to_path_buf).unwrap_or_else(|| self.data.clone());
+            let dir = out
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| self.data.clone());
             crate::build_cache::publish_locked(&key, &dir, &["classpath"])?;
         }
         crate::stage("classpath-built");
@@ -654,7 +707,10 @@ impl ArtRoot {
 
     fn classpath_env_is_fresh(&self, out: &Path) -> bool {
         let newer = |p: &Path| -> bool {
-            match (fs::metadata(p).and_then(|m| m.modified()), fs::metadata(out).and_then(|m| m.modified())) {
+            match (
+                fs::metadata(p).and_then(|m| m.modified()),
+                fs::metadata(out).and_then(|m| m.modified()),
+            ) {
                 (Ok(src), Ok(dst)) => dst >= src,
                 _ => false,
             }
@@ -679,14 +735,18 @@ impl ArtRoot {
             return Ok(prefix);
         }
         // Last resort: keep one jar for the mainline remainder.
-        Ok(boot.split_last().map(|(_, rest)| rest.to_vec()).unwrap_or_default())
+        Ok(boot
+            .split_last()
+            .map(|(_, rest)| rest.to_vec())
+            .unwrap_or_default())
     }
 
     /// Jars the image's `bootclasspath.pb` fragments put in
     /// `DEX2OATBOOTCLASSPATH` (proto `ClasspathEntry{string jar=1; Classpath
     /// classpath=2;}` with `DEX2OATBOOTCLASSPATH = 1`).
     fn dex2oat_fragment_jars(&self) -> Vec<String> {
-        let mut files: Vec<PathBuf> = vec![self.sysroot.join("system/etc/classpaths/bootclasspath.pb")];
+        let mut files: Vec<PathBuf> =
+            vec![self.sysroot.join("system/etc/classpaths/bootclasspath.pb")];
         if let Ok(rd) = fs::read_dir(self.sysroot.join("system/apex")) {
             for e in rd.filter_map(|e| e.ok()) {
                 files.push(e.path().join("etc/classpaths/bootclasspath.pb"));
@@ -733,7 +793,9 @@ impl ArtRoot {
 
     /// Jars the reference boot classpath names but the sysroot lacks.
     pub fn bootclasspath_missing(&self) -> Vec<String> {
-        self.bootclasspath_entries().map(|e| e.1).unwrap_or_default()
+        self.bootclasspath_entries()
+            .map(|e| e.1)
+            .unwrap_or_default()
     }
 
     fn bootclasspath_entries(&self) -> Result<(Vec<String>, Vec<String>)> {
@@ -759,7 +821,8 @@ impl ArtRoot {
         }
         // Legacy sysroots (the E1A scratch dir) only ship a bare jar-name list.
         let list = [
-            self.repo_root.join("research/art-feasibility/a-dalvikvm/bootclasspath.txt"),
+            self.repo_root
+                .join("research/art-feasibility/a-dalvikvm/bootclasspath.txt"),
             self.repo_root.join(".cache/boot/android-34/BOOTCLASSPATH"),
         ]
         .into_iter()
@@ -771,7 +834,11 @@ impl ArtRoot {
             ))
         })?;
         for line in list.lines().map(str::trim).filter(|l| !l.is_empty()) {
-            let jar = Path::new(line).file_name().unwrap().to_string_lossy().to_string();
+            let jar = Path::new(line)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
             match self.find_jar(&jar) {
                 Some(dev) => resolved.push(dev),
                 None => missing.push(jar),
@@ -814,10 +881,17 @@ impl ArtRoot {
                 None => (rest, ""),
             };
             if module == "sharedlibs" {
-                return self.sysroot.join("system/apex/com.google.mainline.primary.libs").join(tail);
+                return self
+                    .sysroot
+                    .join("system/apex/com.google.mainline.primary.libs")
+                    .join(tail);
             }
             // Device path (`/apex/<apex_manifest name>`) or host directory name.
-            if let Some(m) = self.modules.iter().find(|m| m.mount == module || m.name == module) {
+            if let Some(m) = self
+                .modules
+                .iter()
+                .find(|m| m.mount == module || m.name == module)
+            {
                 return self.sysroot.join("system/apex").join(&m.name).join(tail);
             }
             return self.sysroot.join("system/apex").join(module).join(tail);
@@ -828,7 +902,10 @@ impl ArtRoot {
     /// Map a host sysroot path to its on-device absolute path.
     pub fn dev_path(&self, host: &Path) -> String {
         let s = host.to_string_lossy().to_string();
-        let s = s.replace(&format!("{}/system/apex/", self.sysroot.display()), "/apex/");
+        let s = s.replace(
+            &format!("{}/system/apex/", self.sysroot.display()),
+            "/apex/",
+        );
         let s = s.replace(&self.sysroot.display().to_string(), "");
         s
     }
@@ -925,14 +1002,18 @@ pub fn keeps_run_tree_for_crash(signal: Option<i32>, has_native_crash: bool) -> 
 /// Kept crash trees under `runs_root`, oldest first (marker mtime, then path).
 fn kept_crash_trees(runs_root: &Path) -> Vec<(std::time::SystemTime, PathBuf)> {
     let mut trees: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
-    let Ok(rd) = fs::read_dir(runs_root) else { return trees };
+    let Ok(rd) = fs::read_dir(runs_root) else {
+        return trees;
+    };
     for e in rd.flatten() {
         let dir = e.path();
         if !e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             continue;
         }
         let marker = dir.join(CRASH_KEEP_MARKER);
-        let Ok(meta) = fs::metadata(&marker) else { continue };
+        let Ok(meta) = fs::metadata(&marker) else {
+            continue;
+        };
         let at = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
         trees.push((at, dir));
     }
@@ -1128,7 +1209,9 @@ fn run_ttl_from_env() -> u64 {
 
 /// Is the pid recorded in `<run>/owner` still alive **and** the same process?
 fn run_dir_is_live(path: &Path) -> bool {
-    let Ok(text) = fs::read_to_string(path.join("owner")) else { return false };
+    let Ok(text) = fs::read_to_string(path.join("owner")) else {
+        return false;
+    };
     let mut pid = 0u32;
     let mut start = String::new();
     for line in text.lines() {
@@ -1141,9 +1224,17 @@ fn run_dir_is_live(path: &Path) -> bool {
     if pid == 0 {
         return false;
     }
-    let Ok(stat) = fs::read_to_string(format!("/proc/{pid}/stat")) else { return false };
-    let Some(i) = stat.rfind(')') else { return false };
-    let now_start = stat[i + 2..].split_whitespace().nth(19).unwrap_or("").to_string();
+    let Ok(stat) = fs::read_to_string(format!("/proc/{pid}/stat")) else {
+        return false;
+    };
+    let Some(i) = stat.rfind(')') else {
+        return false;
+    };
+    let now_start = stat[i + 2..]
+        .split_whitespace()
+        .nth(19)
+        .unwrap_or("")
+        .to_string();
     !start.is_empty() && now_start == start
 }
 
@@ -1213,9 +1304,7 @@ fn guest_uid() -> Result<Option<u32>> {
         return Ok(None);
     }
     let uid = value.parse::<u32>().map_err(|_| {
-        Error::InvalidGuestUid(format!(
-            "{raw:?} is neither `host` nor an application uid"
-        ))
+        Error::InvalidGuestUid(format!("{raw:?} is neither `host` nor an application uid"))
     })?;
     if uid != acos_services::pms::FIXTURE_UID as u32 {
         return Err(Error::InvalidGuestUid(format!(
@@ -1281,14 +1370,23 @@ impl<'a> Sandbox<'a> {
     fn new(root: &'a ArtRoot) -> Self {
         let mut env = vec![
             ("ANDROID_ROOT".into(), android_root_for_guest().to_string()),
-            ("ANDROID_RUNTIME_ROOT".into(), "/apex/com.android.runtime".into()),
+            (
+                "ANDROID_RUNTIME_ROOT".into(),
+                "/apex/com.android.runtime".into(),
+            ),
             ("ANDROID_ART_ROOT".into(), "/apex/com.android.art".into()),
             ("ANDROID_I18N_ROOT".into(), "/apex/com.android.i18n".into()),
-            ("ANDROID_TZDATA_ROOT".into(), "/apex/com.google.android.tzdata5".into()),
+            (
+                "ANDROID_TZDATA_ROOT".into(),
+                "/apex/com.google.android.tzdata5".into(),
+            ),
             ("ANDROID_DATA".into(), "/data".into()),
             ("ANDROID_STORAGE".into(), "/data".into()),
             ("ANDROID_TMP".into(), "/data/tmp".into()),
-            ("ANDROID_ART_PROPERTIES".into(), "/data/acos.properties".into()),
+            (
+                "ANDROID_ART_PROPERTIES".into(),
+                "/data/acos.properties".into(),
+            ),
         ];
         env.push(("BOOTCLASSPATH".into(), String::new())); // filled in command()
         Self {
@@ -1347,12 +1445,14 @@ impl<'a> Sandbox<'a> {
     }
 
     pub fn ro_bind(&mut self, host: impl AsRef<Path>, guest: &str) -> &mut Self {
-        self.ro_binds.push((host.as_ref().to_path_buf(), guest.to_string()));
+        self.ro_binds
+            .push((host.as_ref().to_path_buf(), guest.to_string()));
         self
     }
 
     pub fn rw_bind(&mut self, host: impl AsRef<Path>, guest: &str) -> &mut Self {
-        self.rw_binds.push((host.as_ref().to_path_buf(), guest.to_string()));
+        self.rw_binds
+            .push((host.as_ref().to_path_buf(), guest.to_string()));
         self
     }
 
@@ -1459,7 +1559,11 @@ impl<'a> Sandbox<'a> {
                 ("dalvik-cache", "/data/dalvik-cache"),
                 ("misc", "/data/misc"),
             ] {
-                let host = if shared_cache { r.data.join(sub) } else { run.join(sub) };
+                let host = if shared_cache {
+                    r.data.join(sub)
+                } else {
+                    run.join(sub)
+                };
                 let _ = fs::create_dir_all(&host);
                 a.push("--bind".into());
                 a.push(host.into());
@@ -1528,8 +1632,7 @@ impl<'a> Sandbox<'a> {
         if self.seccomp_guest {
             // The filter blob and the freestanding installer: read-only inputs.
             let dir = r.data.join("seccomp");
-            if !dir.join("seccomp.bpf").is_file()
-                || !dir.join("libacos_seccomp_guest.so").is_file()
+            if !dir.join("seccomp.bpf").is_file() || !dir.join("libacos_seccomp_guest.so").is_file()
             {
                 return Err(Error::SeccompUnavailable(format!(
                     "guest guard not built in {} (run `acos-art build-shim`)",
@@ -1575,7 +1678,10 @@ impl<'a> Sandbox<'a> {
         let (bc, dx) = match r.classpaths() {
             Some(cp) => (cp.boot, Some(cp.dex2oat)),
             // Before `derive_classpath` has run (e.g. the linkerconfig step).
-            None => (r.device_bootclasspath()?, Some(r.fallback_dex2oat_classpath()?)),
+            None => (
+                r.device_bootclasspath()?,
+                Some(r.fallback_dex2oat_classpath()?),
+            ),
         };
         // One LD_PRELOAD line, assembled from every source: the guest seccomp
         // guard first (its constructor installs the filter before any other
@@ -1598,7 +1704,11 @@ impl<'a> Sandbox<'a> {
             if k == "LD_PRELOAD" {
                 continue;
             }
-            let v = if k.as_str() == "BOOTCLASSPATH" { bc.join(":") } else { v.clone() };
+            let v = if k.as_str() == "BOOTCLASSPATH" {
+                bc.join(":")
+            } else {
+                v.clone()
+            };
             a.push("--setenv".into());
             a.push(k.as_str().into());
             a.push(v.as_str().into());
@@ -1617,7 +1727,11 @@ impl<'a> Sandbox<'a> {
             // A boot image is a build input: the guest may read it, never
             // rewrite it (S4's canary test). Staging (`build-image`) keeps the
             // writable bind, because that is where dex2oat writes it.
-            a.push(if run_root.is_some() { "--ro-bind".into() } else { "--bind".into() });
+            a.push(if run_root.is_some() {
+                "--ro-bind".into()
+            } else {
+                "--bind".into()
+            });
             a.push(img.clone().into());
             a.push("/data/img".into());
         }
@@ -1627,7 +1741,13 @@ impl<'a> Sandbox<'a> {
             a.push(arg.as_str().into());
         }
         if std::env::var_os("ACOS_ART_DEBUG_ARGV").is_some() {
-            eprintln!("bwrap {}", a.iter().map(|x| x.to_string_lossy().to_string()).collect::<Vec<_>>().join(" "));
+            eprintln!(
+                "bwrap {}",
+                a.iter()
+                    .map(|x| x.to_string_lossy().to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
         }
         if spike_net::enabled() {
             match spike_net::arm() {
@@ -1688,12 +1808,20 @@ pub fn stage(name: &str) {
 fn exec_elapsed_ms() -> u128 {
     let uptime = fs::read_to_string("/proc/uptime")
         .ok()
-        .and_then(|s| s.split_whitespace().next().and_then(|v| v.parse::<f64>().ok()))
+        .and_then(|s| {
+            s.split_whitespace()
+                .next()
+                .and_then(|v| v.parse::<f64>().ok())
+        })
         .unwrap_or(0.0);
     let start_ticks = fs::read_to_string("/proc/self/stat")
         .ok()
         .and_then(|s| s.rfind(')').map(|i| s[i + 2..].to_string()))
-        .and_then(|rest| rest.split_whitespace().nth(19).and_then(|v| v.parse::<u64>().ok()))
+        .and_then(|rest| {
+            rest.split_whitespace()
+                .nth(19)
+                .and_then(|v| v.parse::<u64>().ok())
+        })
         .unwrap_or(0);
     ((uptime * 1000.0) as u128).saturating_sub((start_ticks as u128) * 10)
 }
@@ -1797,13 +1925,17 @@ fn proto_fields(bytes: &[u8]) -> Vec<(u64, u8, Vec<u8>)> {
     let mut out = Vec::new();
     let mut i = 0usize;
     while i < bytes.len() {
-        let Some((key, next)) = read_varint(bytes, i) else { break };
+        let Some((key, next)) = read_varint(bytes, i) else {
+            break;
+        };
         i = next;
         let field = key >> 3;
         let wire = (key & 7) as u8;
         match wire {
             0 => {
-                let Some((v, next)) = read_varint(bytes, i) else { break };
+                let Some((v, next)) = read_varint(bytes, i) else {
+                    break;
+                };
                 i = next;
                 out.push((field, wire, v.to_le_bytes().to_vec()));
             }
@@ -1815,7 +1947,9 @@ fn proto_fields(bytes: &[u8]) -> Vec<(u64, u8, Vec<u8>)> {
                 i += 8;
             }
             2 => {
-                let Some((len, next)) = read_varint(bytes, i) else { break };
+                let Some((len, next)) = read_varint(bytes, i) else {
+                    break;
+                };
                 let end = next.saturating_add(len as usize);
                 if end > bytes.len() {
                     break;
@@ -1856,7 +1990,9 @@ fn read_varint(bytes: &[u8], mut i: usize) -> Option<(u64, usize)> {
 /// Device mount name of an APEX (`apex_manifest.pb` field 1, a string), which
 /// is what apexd mounts under `/apex/<name>`.
 fn apex_mount_name(dir: &Path, fallback: &str) -> String {
-    let Ok(bytes) = fs::read(dir.join("apex_manifest.pb")) else { return fallback.to_string() };
+    let Ok(bytes) = fs::read(dir.join("apex_manifest.pb")) else {
+        return fallback.to_string();
+    };
     for (field, wire, value) in proto_fields(&bytes) {
         if field == 1 && wire == 2 {
             if let Ok(name) = std::str::from_utf8(&value) {
@@ -1898,7 +2034,11 @@ fn read_modules(sysroot: &Path) -> Result<Vec<ApexModule>> {
             let file = it.next().unwrap_or(&name).to_string();
             let Some(dir) = real_dir(&name) else { continue };
             let mount = apex_mount_name(&sysroot.join("system/apex").join(&dir), &dir);
-            out.push(ApexModule { name: dir, file, mount });
+            out.push(ApexModule {
+                name: dir,
+                file,
+                mount,
+            });
         }
         if !out.is_empty() {
             return Ok(out);
@@ -1926,7 +2066,10 @@ fn read_modules(sysroot: &Path) -> Result<Vec<ApexModule>> {
         out.push(ApexModule { name, file, mount });
     }
     if out.is_empty() {
-        return Err(Error::Layout(format!("no APEX payloads under {}", dir.display())));
+        return Err(Error::Layout(format!(
+            "no APEX payloads under {}",
+            dir.display()
+        )));
     }
     Ok(out)
 }
@@ -1962,7 +2105,10 @@ pub fn build_shim(dest_dir: &Path) -> Result<PathBuf> {
             .status()
             .map_err(|e| Error::Tool(format!("running {clang}: {e}")))?;
         if !st.success() {
-            return Err(Error::Tool(format!("{clang} failed to build {}", src.display())));
+            return Err(Error::Tool(format!(
+                "{clang} failed to build {}",
+                src.display()
+            )));
         }
         fs::remove_file(&src)?;
         Ok(())
@@ -2008,7 +2154,11 @@ mod tests {
     #[test]
     fn unset_home_resolves_to_the_checkout_unchanged() {
         let resolved = repo_root_with(None).expect("a checkout resolves");
-        assert!(resolved.join("Cargo.toml").is_file(), "{}", resolved.display());
+        assert!(
+            resolved.join("Cargo.toml").is_file(),
+            "{}",
+            resolved.display()
+        );
         assert!(resolved.join("crates").is_dir(), "{}", resolved.display());
         // Today's asset paths, relative to that root.
         assert!(
@@ -2047,7 +2197,11 @@ mod tests {
     #[test]
     fn compiled_root_is_the_checkout() {
         let root = compiled_root();
-        assert!(root.join("crates/acos-art/guest/java").is_dir(), "{}", root.display());
+        assert!(
+            root.join("crates/acos-art/guest/java").is_dir(),
+            "{}",
+            root.display()
+        );
     }
 
     /// Tiny scratch dir under the repo `.cache/` (never `/tmp`: the directives
@@ -2116,9 +2270,7 @@ mod tests {
             "ACOS_ART_GWP_ASAN=on restores libc's own sampling for one run"
         );
         // An explicit host knob wins and is forwarded verbatim (A/B runs).
-        let host = |k: &str| {
-            (k == "GWP_ASAN_PROCESS_SAMPLING").then(|| "1".to_string())
-        };
+        let host = |k: &str| (k == "GWP_ASAN_PROCESS_SAMPLING").then(|| "1".to_string());
         assert_eq!(
             gwp_asan_guest_env(host, Some("off")),
             vec![("GWP_ASAN_PROCESS_SAMPLING".to_string(), "1".to_string())]
@@ -2149,8 +2301,10 @@ mod tests {
             // mtime is what retention orders by; force it so the test is not
             // dependent on filesystem timestamp granularity.
             let f = fs::OpenOptions::new().write(true).open(&marker).unwrap();
-            f.set_modified(std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000 + i))
-                .unwrap();
+            f.set_modified(
+                std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000 + i),
+            )
+            .unwrap();
             kept.push(dir);
         }
         // An explicit `ACOS_ART_KEEP_RUN` tree (no marker) must never be pruned.
@@ -2164,8 +2318,14 @@ mod tests {
             kept[0..3].to_vec(),
             "the three *oldest* kept crash trees are the ones removed"
         );
-        assert!(kept[3].is_dir() && kept[4].is_dir(), "the two newest survive");
-        assert!(explicit.is_dir(), "a non-crash (explicit --keep) tree survives");
+        assert!(
+            kept[3].is_dir() && kept[4].is_dir(),
+            "the two newest survive"
+        );
+        assert!(
+            explicit.is_dir(),
+            "a non-crash (explicit --keep) tree survives"
+        );
         assert_eq!(kept_crash_trees(&root).len(), 2);
 
         // `ACOS_ART_KEEP_CRASH_MAX=0` means keep none.
@@ -2181,7 +2341,15 @@ mod tests {
     #[test]
     fn run_root_makes_shared_inputs_read_only() {
         let data = scratch_dir("run-root");
-        for d in ["system/environ", "app", "overlay", "lib", "shim", "linkerconfig", "img/x86_64"] {
+        for d in [
+            "system/environ",
+            "app",
+            "overlay",
+            "lib",
+            "shim",
+            "linkerconfig",
+            "img/x86_64",
+        ] {
             fs::create_dir_all(data.join(d)).unwrap();
         }
         fs::write(
@@ -2190,7 +2358,11 @@ mod tests {
              export DEX2OATBOOTCLASSPATH /apex/a.jar\n",
         )
         .unwrap();
-        for f in ["acos.properties", "apex-info-list.xml", "shim/libartshim.so"] {
+        for f in [
+            "acos.properties",
+            "apex-info-list.xml",
+            "shim/libartshim.so",
+        ] {
             fs::write(data.join(f), "x").unwrap();
         }
         fs::write(data.join("img/x86_64/boot.art"), "x").unwrap();
@@ -2233,12 +2405,22 @@ mod tests {
             );
         }
         assert!(
-            has_pair(&argv, "--ro-bind", &data.join("linkerconfig").display().to_string(), "/linkerconfig"),
+            has_pair(
+                &argv,
+                "--ro-bind",
+                &data.join("linkerconfig").display().to_string(),
+                "/linkerconfig"
+            ),
             "linkerconfig must be read-only in a run"
         );
         for f in ["acos.properties", "apex-info-list.xml"] {
             assert!(
-                has_pair(&argv, "--ro-bind", &data.join(f).display().to_string(), &format!("/data/{f}")),
+                has_pair(
+                    &argv,
+                    "--ro-bind",
+                    &data.join(f).display().to_string(),
+                    &format!("/data/{f}")
+                ),
                 "{f} must be read-only in a run"
             );
         }
@@ -2266,7 +2448,10 @@ mod tests {
             .map(|a| a.to_string_lossy().to_string())
             .collect();
         assert!(
-            staged.iter().enumerate().any(|(i, a)| a == "--bind" && staged[i + 1].trim_end_matches('/') == data_s),
+            staged
+                .iter()
+                .enumerate()
+                .any(|(i, a)| a == "--bind" && staged[i + 1].trim_end_matches('/') == data_s),
             "staging mode must still bind the shared tree rw: {staged:?}"
         );
         assert!(
@@ -2274,16 +2459,24 @@ mod tests {
             "staging mode must not use a per-run root: {staged:?}"
         );
         drop(run);
-        assert!(!data.join("runs").read_dir().map(|mut d| d.next().is_some()).unwrap_or(false),
-            "RunDir::drop must remove the tree");
+        assert!(
+            !data
+                .join("runs")
+                .read_dir()
+                .map(|mut d| d.next().is_some())
+                .unwrap_or(false),
+            "RunDir::drop must remove the tree"
+        );
         let _ = fs::remove_dir_all(&data);
     }
 
     /// `flag src dst` appears as consecutive argv elements.
     fn has_pair(argv: &[String], flag: &str, src: &str, dst: &str) -> bool {
-        argv.iter()
-            .enumerate()
-            .any(|(i, a)| a == flag && argv.get(i + 1).map(String::as_str) == Some(src) && argv.get(i + 2).map(String::as_str) == Some(dst))
+        argv.iter().enumerate().any(|(i, a)| {
+            a == flag
+                && argv.get(i + 1).map(String::as_str) == Some(src)
+                && argv.get(i + 2).map(String::as_str) == Some(dst)
+        })
     }
 
     /// The argv `Sandbox::command` builds: hardening flags are the prefix (so
@@ -2306,20 +2499,41 @@ mod tests {
             modules: Vec::new(),
         };
         let sb = root.sandbox();
-        let cmd = sb.command("/system/bin/prog", &["one".into(), "two".into()]).expect("argv");
-        let argv: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().to_string()).collect();
+        let cmd = sb
+            .command("/system/bin/prog", &["one".into(), "two".into()])
+            .expect("argv");
+        let argv: Vec<String> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
 
         // 1. The exact flag prefix, in order, before anything else.
-        assert_eq!(&argv[..SANDBOX_FLAGS.len()], SANDBOX_FLAGS, "argv: {argv:?}");
+        assert_eq!(
+            &argv[..SANDBOX_FLAGS.len()],
+            SANDBOX_FLAGS,
+            "argv: {argv:?}"
+        );
         // 2. No mount, bind or exec may precede the namespace setup.
         let first_mount = argv.iter().position(|a| a == "--tmpfs").expect("--tmpfs /");
-        assert_eq!(first_mount, SANDBOX_FLAGS.len(), "flags must be the argv prefix");
-        for flag in ["--unshare-pid", "--unshare-net", "--die-with-parent", "--clearenv"] {
+        assert_eq!(
+            first_mount,
+            SANDBOX_FLAGS.len(),
+            "flags must be the argv prefix"
+        );
+        for flag in [
+            "--unshare-pid",
+            "--unshare-net",
+            "--die-with-parent",
+            "--clearenv",
+        ] {
             let at = argv.iter().position(|a| a == flag).expect(flag);
             assert!(at < first_mount, "{flag} must precede --tmpfs /");
         }
         // 3. `--unshare-pid` without a fresh /proc would show the host's pids.
-        assert!(argv.iter().any(|a| a == "--proc"), "--unshare-pid needs --proc /proc");
+        assert!(
+            argv.iter().any(|a| a == "--proc"),
+            "--unshare-pid needs --proc /proc"
+        );
         // 4. `--clearenv` + explicit `--setenv` only: every var is set after the
         //    clear, and the list is the complete set the guest needs.
         let keys: Vec<String> = argv
@@ -2342,8 +2556,14 @@ mod tests {
         ] {
             assert!(keys.iter().any(|x| x == k), "missing --setenv {k}");
         }
-        let clearenv = argv.iter().position(|a| a == "--clearenv").expect("--clearenv");
-        let last_setenv = argv.iter().rposition(|a| a == "--setenv").expect("--setenv");
+        let clearenv = argv
+            .iter()
+            .position(|a| a == "--clearenv")
+            .expect("--clearenv");
+        let last_setenv = argv
+            .iter()
+            .rposition(|a| a == "--setenv")
+            .expect("--setenv");
         assert!(clearenv < last_setenv, "--setenv after --clearenv");
         // 5. The exec tail (program + its args) still ends the argv.
         let sep = argv.iter().rposition(|a| a == "--").expect("--");
@@ -2357,7 +2577,10 @@ mod tests {
                     export DEX2OATBOOTCLASSPATH /apex/a.jar:/apex/b.jar\n\
                     export SYSTEMSERVERCLASSPATH /system/framework/services.jar\n";
         let cp = ArtRoot::parse_classpath_env(text).expect("parsed");
-        assert_eq!(cp.boot, vec!["/apex/a.jar", "/apex/b.jar", "/system/framework/c.jar"]);
+        assert_eq!(
+            cp.boot,
+            vec!["/apex/a.jar", "/apex/b.jar", "/system/framework/c.jar"]
+        );
         assert_eq!(cp.dex2oat, vec!["/apex/a.jar", "/apex/b.jar"]);
         // The invariant ART CHECKs: DEX2OATBOOTCLASSPATH is the prefix of
         // BOOTCLASSPATH and something is left over (the mainline framework).
@@ -2412,7 +2635,10 @@ mod tests {
             "com.android.configinfrastructure"
         );
         // Absent manifest: keep the host directory name.
-        assert_eq!(apex_mount_name(&dir.join("nope"), "com.android.art"), "com.android.art");
+        assert_eq!(
+            apex_mount_name(&dir.join("nope"), "com.android.art"),
+            "com.android.art"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -2435,8 +2661,15 @@ mod tests {
         let mut seen = Vec::new();
         use std::io::Read;
         held.read_to_end(&mut seen).expect("read the held fd");
-        assert_eq!(seen, old, "the open fd must still see the old file, complete");
-        assert_eq!(fs::read(&path).expect("path"), new, "a new open sees the new file");
+        assert_eq!(
+            seen, old,
+            "the open fd must still see the old file, complete"
+        );
+        assert_eq!(
+            fs::read(&path).expect("path"),
+            new,
+            "a new open sees the new file"
+        );
         // Identical bytes are a no-op (the inode does not churn).
         use std::os::unix::fs::MetadataExt;
         let inode_before = fs::metadata(&path).expect("meta").ino();

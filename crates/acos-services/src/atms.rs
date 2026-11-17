@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 use acos_aidl::MethodInfo;
 use acos_protocol::{Event, LifecycleState};
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, PendingDelivery, ServiceObject, Wiring};
 use crate::parcelable;
 use crate::value::{Parcelable, Value};
@@ -141,6 +141,40 @@ impl ClientTransactionItem {
         }
     }
 
+    /// The framework parcelable one lifecycle item is written as.
+    ///
+    /// The item encodings live in [`crate::client_transaction`] (MPROC6): the
+    /// host builds launch transactions and lifecycle transactions with the
+    /// **same** item constructors, from the image's own `writeToParcel` order
+    /// (this image's `StopActivityItem` has no `showWindow` on the wire, and its
+    /// `PauseActivityItem` carries `mAutoEnteringPip`). `None` means ACOS has no
+    /// decoded shape for the item on this path (a launch is built from the
+    /// resolved intent + `ActivityInfo`, which only the launch encoder has), and
+    /// nothing is written for it — the item is never invented.
+    #[must_use]
+    pub fn to_parcelable(&self) -> Option<Parcelable> {
+        match self {
+            // `PauseActivityItem(mFinished, mUserLeaving, mConfigChanges,
+            // mDontReport, mAutoEnteringPip)`.
+            Self::PauseActivity { finished } => Some(crate::client_transaction::pause_item(
+                *finished, false, 0, false, false,
+            )),
+            // `StopActivityItem(configChanges)`.
+            Self::StopActivity { .. } => Some(crate::client_transaction::stop_item(0)),
+            // `ResumeActivityItem(procState, updateProcState, isForward,
+            // shouldSendCompatFakeFocus)`; `PROCESS_STATE_TOP` is 2
+            // (`ProcessList`), and the process state is genuinely re-evaluated.
+            Self::ResumeActivity => Some(crate::client_transaction::resume_item(
+                2, true, false, false,
+            )),
+            // `DestroyActivityItem(mFinished, mConfigChanges)`.
+            Self::DestroyActivity { finished } => {
+                Some(crate::client_transaction::destroy_item(*finished, 0))
+            }
+            Self::LaunchActivity { .. } | Self::RelaunchActivity { .. } => None,
+        }
+    }
+
     /// The lifecycle events this item executes in the app.
     #[must_use]
     pub fn events(&self) -> Vec<LifecycleState> {
@@ -178,6 +212,34 @@ impl ClientTransaction {
             ))],
         )
     }
+
+    /// The **framework wire shape** of a one-item lifecycle transaction.
+    ///
+    /// `ClientTransaction.writeToParcel` (image dex) writes the activity-token
+    /// presence flag + binder, the named lifecycle request, and the
+    /// **callbacks-presence** flag. A lifecycle-only transaction has no
+    /// callbacks, so the framework writes `false` and then no list at all
+    /// (`mActivityCallbacks` stays null in `ClientTransaction.obtain`; MPROC6
+    /// answered MPROC5's open question with the image's bytecode and the
+    /// real-Java differential, and MPROC5b measured the failure it caused: the
+    /// old encoding wrote a binder behind a `false` token marker and a `-1`
+    /// list count behind a `false` callbacks marker, so the guest read a null
+    /// token — `proc-a-paused-or-stopped-under-b` FAIL in run0/run1). The item
+    /// is the transaction's lifecycle request, which is exactly what
+    /// `TransactionExecutor` runs on the app's main thread. The encoding itself
+    /// is the one [`crate::client_transaction`] encoder (MPROC6), shared with
+    /// the launch path.
+    ///
+    /// `None` when the item has no decoded shape (nothing is fabricated).
+    #[must_use]
+    pub fn lifecycle_parcelable(item: &ClientTransactionItem, token: u64) -> Option<Parcelable> {
+        let item = item.to_parcelable()?;
+        Some(crate::client_transaction::client_transaction(
+            Some(acos_parcel::BinderId(token)),
+            Some(item),
+            Vec::new(),
+        ))
+    }
 }
 
 /// Typed `AppBindData` for `IApplicationThread.bindApplication`.
@@ -210,7 +272,6 @@ pub struct BindApplicationData {
     pub persistent: bool,
 }
 
-
 /// The synthetic activity token used by the in-process launch flow.
 pub const FIXTURE_ACTIVITY_TOKEN: u64 = 0xabc;
 
@@ -240,6 +301,22 @@ pub struct ActivityRecord {
     pub finished: bool,
     /// Saved instance state (`clicks`).
     pub saved_clicks: u32,
+    /// MPROC7: the activity token that waits for this activity's result
+    /// (`PendingLaunch.result_to`, i.e. the caller's activity token; `0` when
+    /// nobody waits).
+    pub result_to: u64,
+    /// MPROC7: `startActivityForResult` request code (`-1`/`0` for a plain
+    /// `startActivity`).
+    pub request_code: i32,
+    /// MPROC7: the result `finish(resultCode, data)` set (`RESULT_CANCELED` =
+    /// `0` until the app sets one).
+    pub result_code: i32,
+    /// MPROC7: the result `Intent` (`finish`'s data; `None` when it passed
+    /// `null`).
+    pub result_data: Option<crate::ams::IntentFacts>,
+    /// MPROC7: the result was taken from the record and queued to the caller's
+    /// `IApplicationThread` (delivered once).
+    pub result_delivered: bool,
 }
 
 impl ActivityRecord {
@@ -254,6 +331,11 @@ impl ActivityRecord {
             idle: false,
             finished: false,
             saved_clicks: 0,
+            result_to: 0,
+            request_code: 0,
+            result_code: 0,
+            result_data: None,
+            result_delivered: false,
         }
     }
 }
@@ -270,6 +352,9 @@ pub struct LifecycleEvent {
 /// The process record.
 #[derive(Debug, Clone)]
 pub struct ProcessRecord {
+    /// MPROC4 step 3b: the app process's tag (`0` = the launched/primary
+    /// process). One record per tag; a tag is what names a process here.
+    pub tag: u32,
     /// Synthetic pid (the reference app pid is not stable across runs).
     pub pid: i32,
     /// uid.
@@ -284,6 +369,9 @@ pub struct ProcessRecord {
     pub attached: bool,
     /// Render thread tid.
     pub render_thread_tid: Option<i32>,
+    /// MPROC5c: when this process last held the foreground (its spawn time for a
+    /// process that never resumed). The idle kill measures from here.
+    pub last_active: std::time::Instant,
 }
 
 /// One `PatternMatcher` element of an `IntentFilter` (scheme-specific part or
@@ -362,8 +450,8 @@ pub struct ReceiverRegistration {
 /// The mini-ATMS state machine.
 #[derive(Debug)]
 pub struct AtmsState {
-    /// Process record.
-    pub process: Option<ProcessRecord>,
+    /// Process records, one per app process tag (MPROC4 step 3b).
+    pub processes: Vec<ProcessRecord>,
     /// Activity records (V1: one).
     pub activities: Vec<ActivityRecord>,
     /// Typed event stream.
@@ -374,13 +462,36 @@ pub struct AtmsState {
     pub transactions: Vec<ClientTransaction>,
     /// Pending `system -> app` calls as `(method, args)`.
     pub pending_app_thread_calls: Vec<(String, Vec<Value>)>,
+
+    /// MPROC5: the top-of-task activity token of each process (`tag -> token`).
+    ///
+    /// A device keeps this in the task record (`Task.topRunningActivity`); one
+    /// record per process is enough here because ACOS schedules one task per
+    /// process, and it is what the cross-process pause/stop/resume rule reads.
+    pub tops: std::collections::BTreeMap<u32, u64>,
+    /// MPROC5: lifecycle `ClientTransaction`s queued for a **specific**
+    /// process's `IApplicationThread` (`tag`, method, args). `AtmsService::call`
+    /// encodes them into `PendingDelivery`s; the peer routes each to the
+    /// process that owns the target binder.
+    pub pending_lifecycle_calls: Vec<(u32, String, Vec<Value>)>,
+    /// MPROC5: the activity that was the session's top **before** the current
+    /// one (`tag`, token). When the top finishes, stock resumes the activity
+    /// below it in the task stack; ACOS keeps one task per process, so the
+    /// record that just lost the top is the one below.
+    pub previous_top: Option<(u32, u64)>,
+    /// MPROC5: the session's foreground process tag, published to the launcher
+    /// (`LiveHandles::top_process`) so the served probe tree/screenshot come
+    /// from the process whose window is on top.
+    pub top_process: Option<Arc<std::sync::atomic::AtomicU32>>,
+
     /// Granted permissions (install-time manifest grants; the runtime table in
     /// [`crate::permissions`] wins for a permission it has an answer for).
     pub granted_permissions: Vec<String>,
     /// The one runtime-permission table, shared with the PMS and the
     /// `permissions` module (MODNOTIF2). `None` in a bare unit-test state, in
     /// which case a granted permission answers from `granted_permissions`.
-    pub runtime_permissions: Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    pub runtime_permissions:
+        Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
     /// Logical clock (ms) advanced per event; the VM supplies the real clock.
     clock_ms: u64,
     /// Next event seq.
@@ -411,12 +522,16 @@ impl AtmsState {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            process: None,
+            processes: Vec::new(),
             activities: Vec::new(),
             events: Vec::new(),
             protocol_events: Vec::new(),
             transactions: Vec::new(),
             pending_app_thread_calls: Vec::new(),
+            tops: std::collections::BTreeMap::new(),
+            previous_top: None,
+            pending_lifecycle_calls: Vec::new(),
+            top_process: None,
             granted_permissions: vec!["android.permission.INTERNET".into()],
             runtime_permissions: None,
             clock_ms: 1,
@@ -478,7 +593,8 @@ impl AtmsState {
             registration.categories.clone(),
             registration.flags,
         );
-        self.receiver_registrations.retain(|r| r.receiver != receiver);
+        self.receiver_registrations
+            .retain(|r| r.receiver != receiver);
         self.receiver_registrations.push(registration);
         if receiver != 0 {
             // A registration *is* a strong reference on the guest's
@@ -499,7 +615,8 @@ impl AtmsState {
     /// `LoadedApk` bookkeeping is the authority on what it registered).
     pub fn unregister_receiver(&mut self, receiver: u64) -> bool {
         let before = self.receiver_registrations.len();
-        self.receiver_registrations.retain(|r| r.receiver != receiver);
+        self.receiver_registrations
+            .retain(|r| r.receiver != receiver);
         self.ams.unregister_receiver(receiver);
         if receiver != 0 {
             self.refs.release(acos_parcel::BinderId(receiver));
@@ -515,28 +632,228 @@ impl AtmsState {
         removed
     }
 
-    /// Record an attach and emit `process_started`.
+    /// Record an attach and emit `process_started` (primary process).
     pub fn attach_application(&mut self, app_thread: u64, seq: i64, package: &str) {
-        self.process = Some(ProcessRecord {
+        self.attach_application_for(0, app_thread, seq, package);
+    }
+
+    /// The record of process `tag`, if it has one.
+    #[must_use]
+    pub fn process(&self, tag: u32) -> Option<&ProcessRecord> {
+        self.processes.iter().find(|p| p.tag == tag)
+    }
+
+    /// The mutable record of process `tag`.
+    pub fn process_mut(&mut self, tag: u32) -> Option<&mut ProcessRecord> {
+        self.processes.iter_mut().find(|p| p.tag == tag)
+    }
+
+    /// MPROC4 step 3b: a process exists because its guest connected with `tag`.
+    ///
+    /// `ActivityManagerService.startProcessLocked` creates the record when the
+    /// zygote forks; the peer's handshake names the tag and the package, so this
+    /// is the same event at the same point (before any attach). A record that
+    /// already exists keeps its pid/uid (a re-attach is not a new process).
+    pub fn process_started(&mut self, tag: u32, package: &str, uid: i32) {
+        if self.process(tag).is_some() {
+            return;
+        }
+        self.processes.push(ProcessRecord {
+            tag,
             pid: 4242,
-            uid: crate::pms::FIXTURE_UID,
+            uid,
             package_name: package.to_string(),
-            app_thread: Some(app_thread),
-            attach_seq: seq,
+            app_thread: None,
+            attach_seq: 0,
             attached: false,
             render_thread_tid: None,
+            last_active: std::time::Instant::now(),
         });
         self.emit(LifecycleState::ProcessStarted, None);
     }
 
-    /// `finishAttachApplication`: build and queue `bindApplication`, then the
-    /// launch transaction.
+    /// MPROC5c: a process is gone (idle kill, crash, disconnect).
+    ///
+    /// Stock `ActivityManagerService.removeProcessLocked` drops the
+    /// `ProcessRecord`; the tag's records (top-of-task, its activities) go with
+    /// it, so the process list stops reporting it and a later `startActivity`
+    /// for its package is a spawn again.
+    pub fn process_died(&mut self, tag: u32) {
+        let before = self.processes.len();
+        self.processes.retain(|p| p.tag != tag);
+        self.tops.remove(&tag);
+        self.activities.retain(|a| process_tag_of(a.token) != tag);
+        // MPROC7: the launcher serves the **foreground process's** probe sample.
+        // When the process it published dies (idle kill, crash), that tag has no
+        // samples left, so a tree reply would wait forever on a stale sample
+        // (`probe-floor`, `tree_age_ms` growing). Stock moves the foreground to
+        // the activity below; here that is `previous_top`, else any surviving
+        // top, else the primary process.
+        let published = self
+            .top_process
+            .as_ref()
+            .map(|top| top.load(std::sync::atomic::Ordering::Relaxed));
+        if published == Some(tag) {
+            let next = self
+                .previous_top
+                .filter(|(other, _)| *other != tag && self.process(*other).is_some())
+                .map(|(other, _)| other)
+                .or_else(|| self.tops.keys().copied().find(|other| *other != tag))
+                .unwrap_or(0);
+            if let Some(top) = &self.top_process {
+                top.store(next, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+        if self.processes.len() != before {
+            self.emit(LifecycleState::ProcessKilled, None);
+        }
+    }
+
+    /// MPROC5c: mark `tag` as having just held the foreground.
+    pub fn mark_process_active(&mut self, tag: u32) {
+        if let Some(record) = self.processes.iter_mut().find(|p| p.tag == tag) {
+            record.last_active = std::time::Instant::now();
+        }
+    }
+
+    /// MPROC5c: whether `tag` has anything that keeps its process alive: a
+    /// started/resumed/paused activity of its own, a started or bound service
+    /// of its package, or (measured by the launcher) a visible window.
+    #[must_use]
+    pub fn process_has_work(&self, tag: u32) -> bool {
+        let running = self.activities.iter().any(|a| {
+            process_tag_of(a.token) == tag
+                && !a.finished
+                // Only a *started* activity keeps a process alive (stock: a
+                // paused/stopped one is a cached process candidate).
+                && matches!(a.lifecycle, ActivityLifecycle::Started | ActivityLifecycle::Resumed)
+        });
+        if running {
+            return true;
+        }
+        let package = self
+            .processes
+            .iter()
+            .find(|p| p.tag == tag)
+            .map(|p| p.package_name.as_str())
+            .unwrap_or_default();
+        self.ams
+            .services
+            .values()
+            .any(|s| s.package == package && (s.started || s.bind_count > 0))
+    }
+
+    /// MPROC5c: the processes the idle kill may take, with how long each has
+    /// been idle.
+    ///
+    /// Only **lazily spawned** secondaries are candidates (`tag != 0`: the
+    /// launched primary is the session's own process), and only while they hold
+    /// nothing that needs a process — no started activity, no started/bound
+    /// service. A process that has been idle for `idle` is returned.
+    #[must_use]
+    pub fn idle_processes(&self, idle: std::time::Duration) -> Vec<(u32, String, u64)> {
+        let now = std::time::Instant::now();
+        self.processes
+            .iter()
+            .filter(|p| p.tag != 0)
+            .filter(|p| !self.process_has_work(p.tag))
+            .filter_map(|p| {
+                let idle_ms = now.duration_since(p.last_active).as_millis() as u64;
+                (idle_ms >= idle.as_millis() as u64)
+                    .then(|| (p.tag, p.package_name.clone(), idle_ms))
+            })
+            .collect()
+    }
+
+    /// MPROC5c: when the next idle process reaches `idle`, so the launcher's
+    /// event loop can wake exactly then instead of polling.
+    #[must_use]
+    pub fn next_idle_deadline(&self, idle: std::time::Duration) -> Option<std::time::Instant> {
+        self.processes
+            .iter()
+            .filter(|p| p.tag != 0)
+            .filter(|p| !self.process_has_work(p.tag))
+            .map(|p| p.last_active + idle)
+            .min()
+    }
+
+    /// The process list a reply/verdict reports: one entry per process, in tag
+    /// order (`tag`, package, uid, pid, `IApplicationThread` binder, attached).
+    #[must_use]
+    pub fn process_list(&self) -> Vec<(u32, String, i32, i32, Option<u64>, bool)> {
+        let mut out: Vec<_> = self
+            .processes
+            .iter()
+            .map(|p| {
+                (
+                    p.tag,
+                    p.package_name.clone(),
+                    p.uid,
+                    p.pid,
+                    p.app_thread,
+                    p.attached,
+                )
+            })
+            .collect();
+        out.sort_by_key(|p| p.0);
+        out
+    }
+
+    /// Record an attach for process `tag` and emit `process_started`.
+    pub fn attach_application_for(&mut self, tag: u32, app_thread: u64, seq: i64, package: &str) {
+        let package = if package.is_empty() {
+            self.process(tag)
+                .map(|p| p.package_name.clone())
+                .unwrap_or_default()
+        } else {
+            package.to_string()
+        };
+        if let Some(process) = self.processes.iter_mut().find(|p| p.tag == tag) {
+            process.app_thread = Some(app_thread);
+            process.attach_seq = seq;
+            if !package.is_empty() {
+                process.package_name = package;
+            }
+            self.emit(LifecycleState::ProcessStarted, None);
+            return;
+        }
+        self.processes.push(ProcessRecord {
+            tag,
+            pid: 4242,
+            uid: crate::pms::FIXTURE_UID,
+            package_name: package,
+            app_thread: Some(app_thread),
+            attach_seq: seq,
+            attached: false,
+            render_thread_tid: None,
+            last_active: std::time::Instant::now(),
+        });
+        self.emit(LifecycleState::ProcessStarted, None);
+    }
+
+    /// `finishAttachApplication` (primary process).
     pub fn finish_attach_application(&mut self, seq: i64) -> Result<BindApplicationData> {
+        self.finish_attach_application_for(0, seq)
+    }
+
+    /// `finishAttachApplication` for process `tag`.
+    ///
+    /// The primary process (tag 0) keeps the historical behaviour: the host
+    /// synthesises the `bindApplication` + launch transaction it always did. A
+    /// secondary process marshals its **own** `bindApplication` and
+    /// `ClientTransaction` in the guest (the guest is this session's app side)
+    /// and pushes them to the peer, so nothing is synthesised for it here — the
+    /// peer delivers exactly what that process marshalled.
+    pub fn finish_attach_application_for(
+        &mut self,
+        tag: u32,
+        seq: i64,
+    ) -> Result<BindApplicationData> {
         let data = {
-            let Some(process) = self.process.as_mut() else {
+            let Some(process) = self.processes.iter_mut().find(|p| p.tag == tag) else {
                 return Err(ServiceError::IllegalState {
                     component: "atms",
-                    detail: "finishAttachApplication before attachApplication".into(),
+                    detail: format!("finishAttachApplication for unknown process tag {tag}"),
                 });
             };
             if process.attach_seq != seq {
@@ -561,6 +878,9 @@ impl AtmsState {
             }
         };
         self.emit(LifecycleState::AppCreated, None);
+        if tag != 0 {
+            return Ok(data);
+        }
         // Real Android schedules the launch transaction after the bind. ACOS
         // synthesises the same two-item transaction so the first
         // `activityResumed`/`activityIdle` callbacks have a live record.
@@ -633,21 +953,21 @@ impl AtmsState {
                 detail: format!("no activity for token {token:#x}"),
             });
         };
-        let (next, name) = {
-            let activity = &mut self.activities[index];
-            let next = activity
-                .lifecycle
-                .apply(transition)
-                .ok_or_else(|| ServiceError::IllegalState {
-                    component: "atms",
-                    detail: format!(
-                        "illegal transition {:?} from {:?}",
-                        transition, activity.lifecycle
-                    ),
+        let (next, name) =
+            {
+                let activity = &mut self.activities[index];
+                let next = activity.lifecycle.apply(transition).ok_or_else(|| {
+                    ServiceError::IllegalState {
+                        component: "atms",
+                        detail: format!(
+                            "illegal transition {:?} from {:?}",
+                            transition, activity.lifecycle
+                        ),
+                    }
                 })?;
-            activity.lifecycle = next;
-            (next, activity.activity.clone())
-        };
+                activity.lifecycle = next;
+                (next, activity.activity.clone())
+            };
         match transition {
             Transition::Create => self.emit(LifecycleState::Created, Some(&name)),
             Transition::Start => self.emit(LifecycleState::Started, Some(&name)),
@@ -731,7 +1051,7 @@ impl AtmsState {
         if token == 0 {
             return false;
         }
-        if !self.process.as_ref().is_some_and(|p| p.attached) {
+        if !self.processes.iter().any(|p| p.attached) {
             return false;
         }
         if self.activities.iter().any(|a| a.token == token) {
@@ -751,8 +1071,10 @@ impl AtmsState {
         if let Some(old) = placeholder {
             self.activities.retain(|a| a.token != old);
         }
-        self.activities.retain(|a| a.token != FIXTURE_ACTIVITY_TOKEN);
-        self.activities.push(ActivityRecord::new(token, name.clone()));
+        self.activities
+            .retain(|a| a.token != FIXTURE_ACTIVITY_TOKEN);
+        self.activities
+            .push(ActivityRecord::new(token, name.clone()));
         self.log_event(
             "ActivityManagerAdopt",
             acos_protocol::LogLevel::Debug,
@@ -781,10 +1103,189 @@ impl AtmsState {
     }
 
     /// Report `activityResumed`.
+    ///
+    /// The app reporting a resume is proof that `onCreate`/`onStart`/`onResume`
+    /// already ran, so this is the writer that establishes the record's state
+    /// when the host adopted the guest's own token (W38): an adopted record
+    /// starts in `Uncreated`, and before MPROC5b the next honest report — the
+    /// `activityStopped` a finishing activity sends — was rejected as
+    /// `illegal transition Stop from Uncreated` (MPROC5b run0/run1).
     pub fn activity_resumed(&mut self, token: u64, resumed: bool) -> Result<()> {
         let index = self.ensure_known(token)?;
-        self.activities[index].resumed = resumed;
+        if !resumed {
+            self.activities[index].resumed = false;
+            return Ok(());
+        }
+        match self.activities[index].lifecycle {
+            ActivityLifecycle::Uncreated => {
+                self.transition(token, Transition::Create)?;
+                self.transition(token, Transition::Start)?;
+            }
+            ActivityLifecycle::Created => {
+                self.transition(token, Transition::Start)?;
+            }
+            ActivityLifecycle::Resumed => {
+                // A repeated report (the framework sends one per resume): the
+                // record is already where it belongs.
+                self.activities[index].resumed = true;
+                self.top_of_task(token);
+                return Ok(());
+            }
+            _ => {}
+        }
+        self.transition(token, Transition::Resume)?;
+        self.top_of_task(token);
         Ok(())
+    }
+
+    /// Publish a process tag as the session's foreground process.
+    fn publish_top(&mut self, tag: u32) {
+        if let Some(top) = &self.top_process {
+            top.store(tag, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// MPROC5: ATMS's **per-process** top-of-task rule.
+    ///
+    /// `token` just became the resumed activity of its process, so it is that
+    /// process's top. On a device `ActivityTaskSupervisor` then sends the
+    /// previous top's `PauseActivityItem` followed by its
+    /// `StopActivityItem` to **that activity's own** `IApplicationThread`; here
+    /// the same two framework items are queued for the process that lost the
+    /// top (encoded from the image's `writeToParcel` shapes, delivered by the
+    /// existing `PendingDelivery` transport). No state transition is applied
+    /// locally: stock AMS also waits for `activityPaused`/`activityStopped`
+    /// before the record moves, and the app's callbacks are the evidence.
+    fn top_of_task(&mut self, token: u64) {
+        let tag = self.activity_tag(token);
+        let losers: Vec<(u32, u64)> = self
+            .tops
+            .iter()
+            .filter(|(other, _)| **other != tag)
+            .map(|(other, top)| (*other, *top))
+            .collect();
+        for (other_tag, other_token) in losers {
+            let record = self
+                .activities
+                .iter()
+                .find(|a| a.token == other_token)
+                .cloned();
+            let Some(record) = record else {
+                self.tops.remove(&other_tag);
+                continue;
+            };
+            if record.finished {
+                self.tops.remove(&other_tag);
+                continue;
+            }
+            // `resumed` is the flag the app's own `activityResumed` set; a
+            // record can be `Started` in this model while the app has already
+            // reported the resume, and stock ATMS pauses exactly the activity
+            // that is resumed on screen.
+            if record.resumed || matches!(record.lifecycle, ActivityLifecycle::Resumed) {
+                self.queue_lifecycle(
+                    other_tag,
+                    other_token,
+                    ClientTransactionItem::PauseActivity { finished: false },
+                );
+            }
+            if matches!(
+                record.lifecycle,
+                ActivityLifecycle::Resumed | ActivityLifecycle::Started | ActivityLifecycle::Paused
+            ) {
+                self.queue_lifecycle(
+                    other_tag,
+                    other_token,
+                    ClientTransactionItem::StopActivity { show_window: false },
+                );
+            }
+            self.tops.remove(&other_tag);
+            // The displaced top is the activity below the new one: the record a
+            // finish of the new top returns to.
+            self.previous_top = Some((other_tag, other_token));
+        }
+        self.tops.insert(tag, token);
+        self.publish_top(tag);
+        // MPROC5c: the foreground transition is what starts (and restarts) every
+        // process's idle clock: the winner is active now, and the losers became
+        // background now.
+        self.mark_process_active(tag);
+    }
+
+    /// The process tag an activity token belongs to (peer binder id bits).
+    fn activity_tag(&self, token: u64) -> u32 {
+        self.activities
+            .iter()
+            .find(|a| a.token == token)
+            .map(|_| process_tag_of(token))
+            .unwrap_or_else(|| process_tag_of(token))
+    }
+
+    /// Queue one lifecycle item for process `tag`'s `IApplicationThread`.
+    fn queue_lifecycle(&mut self, tag: u32, token: u64, item: ClientTransactionItem) {
+        let Some(transaction) = ClientTransaction::lifecycle_parcelable(&item, token) else {
+            self.log_event(
+                "ActivityManagerLifecycle",
+                acos_protocol::LogLevel::Warn,
+                format!("tag={tag} token={token:#x} item={item:?} has no decoded wire shape"),
+            );
+            return;
+        };
+        self.pending_lifecycle_calls.push((
+            tag,
+            "scheduleTransaction".into(),
+            vec![Value::TypedObject(transaction)],
+        ));
+        self.log_event(
+            "ActivityManagerLifecycle",
+            acos_protocol::LogLevel::Debug,
+            format!("tag={tag} token={token:#x} item={item:?}"),
+        );
+    }
+
+    /// MPROC5: the activity under a finished one resumes, across processes.
+    ///
+    /// Same-process resumes stay the app's own job (the framework's W38/ROT6
+    /// watchers schedule `DestroyActivityItem` + `ResumeActivityItem`); when the
+    /// activity below the finished one belongs to **another** process, the host
+    /// is the only one that can reach it, so it queues one
+    /// `ResumeActivityItem` for that process — the item stock ATMS sends.
+    fn resume_below_after_finish(&mut self, finished: u64) {
+        let finished_tag = self.activity_tag(finished);
+        let next = self
+            .ams
+            .tasks
+            .iter()
+            .filter_map(|t| t.activities.last().copied())
+            .find(|t| *t != finished)
+            // MPROC5: the primary launched Activity is not created by a
+            // `startActivity` the host recorded, so it is not in `ams.tasks`;
+            // the process that lost the top (and was just paused) is the
+            // activity below, exactly what stock resumes.
+            .or_else(|| {
+                self.previous_top
+                    .filter(|(tag, _)| *tag != finished_tag)
+                    .map(|(_, token)| token)
+            });
+        let Some(next) = next else { return };
+        let next_tag = self.activity_tag(next);
+        if next_tag == finished_tag {
+            return;
+        }
+        let alive = self
+            .activities
+            .iter()
+            .any(|a| a.token == next && !a.finished);
+        if !alive {
+            return;
+        }
+        self.queue_lifecycle(next_tag, next, ClientTransactionItem::ResumeActivity);
+        self.tops.insert(next_tag, next);
+        self.publish_top(next_tag);
+        // MPROC5c: the finished process just went to the background, so its idle
+        // clock starts now (the resumed one is active).
+        self.mark_process_active(next_tag);
+        self.mark_process_active(finished_tag);
     }
 
     /// Report `activityIdle` (launch complete).
@@ -801,8 +1302,28 @@ impl AtmsState {
     }
 
     /// Report `activityStopped` (with saved state).
+    ///
+    /// A stop for an activity that is already **destroyed** is a no-op, exactly
+    /// as stock answers it: `ActivityTaskManagerService.activityStopped` looks
+    /// the token up in the task manager's record map, which
+    /// `onActivityDestroyed` has already cleared, so a late stop is ignored
+    /// rather than an illegal transition. The guest produces that order itself:
+    /// `ActivityThread.handleStopActivity` reports `activityStopped` from a
+    /// posted `PendingTransactionActions.StopInfo` runnable, so a finishing
+    /// activity's Stop report lands *after* its Destroy transaction's
+    /// `activityDestroyed` (MPROC7 measured `illegal transition Stop from
+    /// Destroyed` on proc-b's finish). AOSP's answer is the honest one; ACOS
+    /// must not turn it into a structured error.
     pub fn activity_stopped(&mut self, token: u64, saved_clicks: Option<u32>) -> Result<()> {
-        self.ensure_known(token)?;
+        let index = self.ensure_known(token)?;
+        if self.activities[index].lifecycle == ActivityLifecycle::Destroyed {
+            self.log_event(
+                "ActivityManagerStopped",
+                acos_protocol::LogLevel::Debug,
+                format!("token={token:#x} stop after destroy ignored (stock: record is gone)"),
+            );
+            return Ok(());
+        }
         if let Some(clicks) = saved_clicks {
             self.save_instance_state(token, clicks);
         }
@@ -812,7 +1333,11 @@ impl AtmsState {
     /// Report `activityDestroyed`.
     pub fn activity_destroyed(&mut self, token: u64) -> Result<()> {
         self.ensure_known(token)?;
-        self.transition(token, Transition::Destroy).map(|_| ())
+        self.transition(token, Transition::Destroy)?;
+        // MPROC7: the activity is gone; the result it set (if any) is final and
+        // goes to the caller's own app thread.
+        self.deliver_result(token);
+        Ok(())
     }
 
     /// `onSaveInstanceState` bookkeeping.
@@ -823,8 +1348,19 @@ impl AtmsState {
         self.emit(LifecycleState::SaveInstanceState, None);
     }
 
-    /// `finishActivity` (the app asked to finish).
-    pub fn finish_activity(&mut self, token: u64) -> Result<()> {
+    /// `finishActivity` (the app asked to finish), with the result the app set.
+    ///
+    /// `IClientController.finishActivity(IBinder token, int resultCode, Intent
+    /// resultData, boolean finishTask)` carries the `setResult` answer; stock
+    /// AMS keeps it on the record and delivers it to the caller
+    /// (`resultTo`) once the activity is gone. ACOS records the same fields and
+    /// [delivers](Self::deliver_result) them at destroy.
+    pub fn finish_activity(
+        &mut self,
+        token: u64,
+        result_code: i32,
+        result_data: Option<crate::ams::IntentFacts>,
+    ) -> Result<()> {
         if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
             eprintln!(
                 "ACOSATMS finish-request token={token:#x} known={:?} n={}",
@@ -842,11 +1378,132 @@ impl AtmsState {
             }
         };
         self.activities[index].finished = true;
+        self.activities[index].result_code = result_code;
+        if result_data.is_some() {
+            self.activities[index].result_data = result_data;
+        }
         // Keep `AmsState`'s task stack in step: the finished Activity leaves the
         // task, so the record below it is the new top (what the guest's
         // destroy+resume transactions return to).
         self.ams.finish_activity(token);
+        // MPROC7: the finished process's idle clock starts at the finish. Stock
+        // refreshes it when the activity leaves the top; with a result delivery
+        // the resume below is deferred to `deliver_result`, so this would
+        // otherwise leave a stale `last_active` and make a just-finished process
+        // an immediate idle-kill candidate.
+        self.mark_process_active(self.activity_tag(token));
+        // MPROC7: when the caller waits for a result, its resume travels with
+        // that result (`ActivityResultItem` + `ResumeActivityItem`, stock ATMS's
+        // shape), not as a second, earlier resume.
+        let result_to = self.activities[index].result_to;
+        let owes_result = result_to != 0 && result_to != token;
+        if owes_result {
+            self.log_event(
+                "ActivityManagerResult",
+                acos_protocol::LogLevel::Debug,
+                format!(
+                    "token={token:#x} finished code={result_code} -> result_to={result_to:#x} \
+                     request={}",
+                    self.activities[index].request_code
+                ),
+            );
+        } else {
+            // MPROC5: when the activity below belongs to another process, the
+            // host resumes it (the guest can only resume its own process's
+            // records).
+            self.resume_below_after_finish(token);
+        }
         Ok(())
+    }
+
+    /// MPROC7: deliver a finished activity's result to its caller.
+    ///
+    /// Stock `ActivityTaskSupervisor` sends the caller one `ClientTransaction`
+    /// whose callback is `ActivityResultItem` (a `ResultInfo` with the who /
+    /// requestCode / resultCode / data `Intent`) and whose lifecycle request is
+    /// `ResumeActivityItem`: `onActivityResult` runs, then the caller resumes.
+    /// This is the host-built transaction the ADR requires (no guest helper),
+    /// encoded by the one MPROC6 encoder and handed to the caller's own
+    /// `IApplicationThread` through the existing per-tag delivery transport.
+    fn deliver_result(&mut self, token: u64) {
+        let trace = std::env::var_os("ACOS_ATMS_TRACE").is_some();
+        let Some(index) = self.activities.iter().position(|a| a.token == token) else {
+            return;
+        };
+        let record = &self.activities[index];
+        if trace {
+            eprintln!(
+                "ACOSATMS result token={token:#x} result_to={:#x} request={} delivered={} \
+                 finished={}",
+                record.result_to, record.request_code, record.result_delivered, record.finished
+            );
+        }
+        if record.result_delivered || record.result_to == 0 || record.result_to == token {
+            return;
+        }
+        let caller = record.result_to;
+        let request_code = record.request_code;
+        let result_code = record.result_code;
+        let data = record.result_data.clone();
+        let tag = self.activity_tag(caller);
+        if !self.processes.iter().any(|p| p.tag == tag && p.attached) {
+            self.log_event(
+                "ActivityManagerResult",
+                acos_protocol::LogLevel::Warn,
+                format!(
+                    "result for token={caller:#x} belongs to process {tag}, which is not attached"
+                ),
+            );
+            return;
+        }
+        let data_intent = match data {
+            Some(facts) => match crate::client_transaction::intent(&facts) {
+                Ok(intent) => Some(intent),
+                Err(err) => {
+                    self.log_event(
+                        "ActivityManagerResult",
+                        acos_protocol::LogLevel::Warn,
+                        format!("result data Intent could not be encoded: {err}"),
+                    );
+                    None
+                }
+            },
+            None => None,
+        };
+        // `mResultWho` is **null** for a normal `startActivityForResult`
+        // (`Instrumentation.execStartActivity` passes `mEmbeddedID`, which is
+        // null; only an `ActivityGroup`-style embedded activity has a value).
+        // `Activity.dispatchActivityResult` treats a non-null `who` as an
+        // embedded id and does **not** call `onActivityResult` for it, so an
+        // empty string silently swallowed the result (MPROC7).
+        let info =
+            crate::client_transaction::result_info(None, request_code, result_code, data_intent);
+        let item = crate::client_transaction::activity_result_item(vec![info]);
+        let resume = crate::client_transaction::resume_item(2, true, false, false);
+        let transaction = crate::client_transaction::client_transaction(
+            Some(acos_parcel::BinderId(caller)),
+            Some(resume),
+            vec![item],
+        );
+        self.log_event(
+            "ActivityManagerResult",
+            acos_protocol::LogLevel::Debug,
+            format!(
+                "tag={tag} token={caller:#x} ActivityResultItem(request={request_code}, \
+                 code={result_code}) + ResumeActivityItem"
+            ),
+        );
+        self.pending_lifecycle_calls.push((
+            tag,
+            "scheduleTransaction".into(),
+            vec![Value::TypedObject(transaction)],
+        ));
+        self.activities[index].result_delivered = true;
+        // The caller is the resumed, foreground activity now (stock: the result
+        // transaction resumes it).
+        self.tops.insert(tag, caller);
+        self.publish_top(tag);
+        self.mark_process_active(tag);
     }
 
     /// `checkPermission`: the shared runtime table first, then install-time.
@@ -882,7 +1539,6 @@ impl Default for AtmsState {
         Self::new()
     }
 }
-
 
 /// Which interface a [`AtmsService`] is answering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -932,9 +1588,7 @@ impl AtmsService {
         caller: &str,
         state: &mut AtmsState,
     ) -> Option<Parcelable> {
-        let entry = state
-            .provider_registry
-            .acquire(method, authority, caller)?;
+        let entry = state.provider_registry.acquire(method, authority, caller)?;
         let app = crate::pms::AppInfo::hello_views_fallback(std::path::Path::new(&format!(
             "{}.apk",
             entry.package
@@ -998,14 +1652,93 @@ impl AtmsService {
             .unwrap_or_default()
     }
 
+    /// MPROC4 step 3b: record that process `tag` exists (its guest connected).
+    ///
+    /// The uid is the uid already recorded for that package, else `0` (never a
+    /// guessed uid).
+    pub fn note_process_started(&mut self, tag: u32, package: &str) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        let uid = state
+            .processes
+            .iter()
+            .find(|p| p.package_name == package)
+            .map(|p| p.uid)
+            .unwrap_or(0);
+        state.process_started(tag, package, uid);
+    }
+
+    /// MPROC7: the launch recorded for `package` that the host still owes,
+    /// as `(placeholder token, activity class)`.
+    #[must_use]
+    pub fn pending_launch_for(&self, package: &str) -> Option<(u64, String)> {
+        let state = self.state.lock().ok()?;
+        state
+            .ams
+            .pending_launch_for(package)
+            .map(|launch| (launch.token, launch.class.clone()))
+    }
+
+    /// MPROC5c: record that process `tag` is gone (idle kill, crash, transport
+    /// disconnect): its `ProcessRecord` and per-process records go with it.
+    pub fn note_process_died(&mut self, tag: u32) {
+        if let Ok(mut state) = self.state.lock() {
+            state.process_died(tag);
+        }
+    }
+
+    /// MPROC5c: the processes the idle kill may take
+    /// (`tag`, package, idle milliseconds).
+    #[must_use]
+    pub fn idle_processes(&self, idle: std::time::Duration) -> Vec<(u32, String, u64)> {
+        self.state
+            .lock()
+            .map(|state| state.idle_processes(idle))
+            .unwrap_or_default()
+    }
+
+    /// MPROC5c: when the next idle process reaches `idle` (the launcher's wake).
+    #[must_use]
+    pub fn next_idle_deadline(&self, idle: std::time::Duration) -> Option<std::time::Instant> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|state| state.next_idle_deadline(idle))
+    }
+
+    /// MPROC4 step 3b: the processes this session has (one `ProcessRecord` per
+    /// app process tag), as `(tag, package, uid, pid, app_thread, attached)`.
+    #[must_use]
+    pub fn process_list(&self) -> Vec<(u32, String, i32, i32, Option<u64>, bool)> {
+        self.state
+            .lock()
+            .map(|state| state.process_list())
+            .unwrap_or_default()
+    }
+
+    /// MPROC4 step 3b: drain the spawn requests the resolution paths recorded
+    /// (`startActivity`/`startService`/`bindService`). The launcher owns the
+    /// processes, so it is the one that turns a request into a guest.
+    pub fn take_spawn_requests(&mut self) -> Vec<crate::ams::ProcessSpawnRequest> {
+        self.state
+            .lock()
+            .map(|mut state| state.ams.take_spawn_requests())
+            .unwrap_or_default()
+    }
+
     /// The attached process record, if any: `(app thread binder id, attach
     /// seq, package)` (T-43 restore re-seed).
     #[must_use]
     pub fn attached_process(&self) -> Option<(u64, i64, String)> {
         self.state.lock().ok().and_then(|s| {
-            s.process
-                .as_ref()
-                .map(|p| (p.app_thread.unwrap_or(0), p.attach_seq, p.package_name.clone()))
+            s.process(0).map(|p| {
+                (
+                    p.app_thread.unwrap_or(0),
+                    p.attach_seq,
+                    p.package_name.clone(),
+                )
+            })
         })
     }
 
@@ -1028,8 +1761,20 @@ impl AtmsService {
     /// when the APK declared the target. The launcher calls this once, before
     /// the guest boots, with the same APK it installs in the PMS.
     pub fn seed_manifest_from_apk(&mut self, apk: &std::path::Path) -> Result<()> {
+        self.seed_manifest_from_apk_with_uid(apk, crate::pms::FIXTURE_UID)
+    }
+
+    /// [`Self::seed_manifest_from_apk`] with the uid the package manager
+    /// assigned. MPROC1: every installed package's manifest record must carry
+    /// its **own** uid, because that uid decides which guest process an
+    /// `android:process` declaration / component belongs to.
+    pub fn seed_manifest_from_apk_with_uid(
+        &mut self,
+        apk: &std::path::Path,
+        uid: i32,
+    ) -> Result<()> {
         let mut state = self.state.lock().unwrap();
-        state.ams.manifests.add_apk(apk, crate::pms::FIXTURE_UID)
+        state.ams.manifests.add_apk(apk, uid)
     }
 
     /// The dynamic receiver registrations recorded so far, oldest first, with
@@ -1135,12 +1880,7 @@ fn take_receiver_deliveries(state: &mut AtmsState) -> Vec<crate::host::PendingDe
 }
 
 impl ServiceObject for AtmsService {
-    fn call(
-        &mut self,
-        interface: &str,
-        method: &MethodInfo,
-        args: &[Value],
-    ) -> Result<CallResult> {
+    fn call(&mut self, interface: &str, method: &MethodInfo, args: &[Value]) -> Result<CallResult> {
         let expected = match self.interface {
             AtmsInterface::ActivityManager => "android.app.IActivityManager",
             AtmsInterface::ActivityTaskManager => "android.app.IActivityTaskManager",
@@ -1163,11 +1903,12 @@ impl ServiceObject for AtmsService {
             (AtmsInterface::ActivityManager, "attachApplication") => {
                 let app_thread = args.first().and_then(Value::as_binder).map(|b| b.0);
                 let seq = args.get(1).and_then(Value::as_long).unwrap_or(0);
-                state.attach_application(
-                    app_thread.unwrap_or(0),
-                    seq,
-                    "dev.acos.fixtures.helloviews",
-                );
+                // MPROC4 step 3b: the `IApplicationThread` binder carries its
+                // owning process tag in the peer's binder id, so the attach lands
+                // on the right `ProcessRecord`. The package is the one the
+                // process was started for (never a fabricated name).
+                let tag = process_tag_of(app_thread.unwrap_or(0));
+                state.attach_application_for(tag, app_thread.unwrap_or(0), seq, "");
                 vec![]
             }
             (AtmsInterface::ActivityManager, "handleApplicationWtf") => {
@@ -1250,8 +1991,20 @@ impl ServiceObject for AtmsService {
             }
             (AtmsInterface::ActivityManager, "finishAttachApplication") => {
                 let seq = args.first().and_then(Value::as_long).unwrap_or(0);
-                let data = state.finish_attach_application(seq)?;
-                state.queue_bind_application(&data);
+                // The calling process is the one that just attached: the app
+                // thread it named is recorded, and the last attach that is not
+                // yet finished is that process (MPROC4 step 3b).
+                let tag = state
+                    .processes
+                    .iter()
+                    .filter(|p| !p.attached)
+                    .max_by_key(|p| p.attach_seq)
+                    .map(|p| p.tag)
+                    .unwrap_or(0);
+                let data = state.finish_attach_application_for(tag, seq)?;
+                if tag == 0 {
+                    state.queue_bind_application(&data);
+                }
                 vec![]
             }
             (AtmsInterface::ActivityManager, "getContentProvider") => {
@@ -1263,8 +2016,12 @@ impl ServiceObject for AtmsService {
                 // `Settings$NameValueCache` NPE'd before `Activity.onCreate`.
                 let caller = args.get(1).and_then(Value::as_str).unwrap_or_default();
                 let authority = args.get(2).and_then(Value::as_str).unwrap_or_default();
-                let holder =
-                    self.content_provider_holder("getContentProvider", authority, caller, &mut state);
+                let holder = self.content_provider_holder(
+                    "getContentProvider",
+                    authority,
+                    caller,
+                    &mut state,
+                );
                 vec![match holder {
                     Some(h) => Value::TypedObject(h),
                     None => Value::TypedObject(Parcelable::Null),
@@ -1290,7 +2047,11 @@ impl ServiceObject for AtmsService {
                 // One-way: `removeContentProvider(IBinder connection, boolean
                 // stable)`. The connection is the token this host handed out in
                 // the holder, so the registry resolves the authority from it.
-                let connection = args.first().and_then(Value::as_binder).map(|b| b.0).unwrap_or(0);
+                let connection = args
+                    .first()
+                    .and_then(Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
                 state
                     .provider_registry
                     .release("removeContentProvider", None, connection, "");
@@ -1310,18 +2071,29 @@ impl ServiceObject for AtmsService {
             (AtmsInterface::ActivityManager, "refContentProvider") => {
                 // `refContentProvider(IBinder connection, int stable, int
                 // unstable)`: the framework asserts on a `false` reply.
-                let connection = args.first().and_then(Value::as_binder).map(|b| b.0).unwrap_or(0);
+                let connection = args
+                    .first()
+                    .and_then(Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
                 let stable = args.get(1).and_then(Value::as_int).unwrap_or(0);
                 let unstable = args.get(2).and_then(Value::as_int).unwrap_or(0);
-                vec![Value::Bool(state.provider_registry.ref_content_provider(
-                    connection,
-                    stable,
-                    unstable,
-                ))]
+                vec![Value::Bool(
+                    state
+                        .provider_registry
+                        .ref_content_provider(connection, stable, unstable),
+                )]
             }
             (AtmsInterface::ActivityManager, "setRenderThread") => {
                 let tid = args.first().and_then(Value::as_int);
-                if let Some(process) = state.process.as_mut() {
+                // MPROC4: the render thread belongs to the calling process.
+                let tag = process_tag_of(
+                    args.first()
+                        .and_then(Value::as_binder)
+                        .map(|b| b.0)
+                        .unwrap_or(0),
+                );
+                if let Some(process) = state.processes.iter_mut().find(|p| p.tag == tag) {
                     process.render_thread_tid = tid;
                 }
                 vec![]
@@ -1337,8 +2109,15 @@ impl ServiceObject for AtmsService {
             (AtmsInterface::ClientController, "getDisplayId") => vec![Value::Int(0)],
             (AtmsInterface::ClientController, "activityResumed") => {
                 let token = binder_u64(args.first());
-                let resumed = args.get(1).and_then(Value::as_bool).unwrap_or(true);
-                state.activity_resumed(token, resumed)?;
+                // The AIDL boolean is `handleSplashScreenExit`, NOT a resumed
+                // flag (image `IActivityClientController`
+                // `oneway void activityResumed(IBinder token, boolean
+                // handleSplashScreenExit)`). Reading it as "resumed" meant the
+                // host recorded `resumed=false` on every real resume and never
+                // ran the top-of-task rule (MPROC5b run0/run1: no
+                // `activityPaused` reached proc-a). The callback itself is the
+                // resume.
+                state.activity_resumed(token, true)?;
                 Vec::new()
             }
             (AtmsInterface::ClientController, "activityIdle") => {
@@ -1369,8 +2148,16 @@ impl ServiceObject for AtmsService {
             (AtmsInterface::ClientController, "setTaskDescription")
             | (AtmsInterface::ClientController, "reportSizeConfigurations") => Vec::new(),
             (AtmsInterface::ClientController, "finishActivity") => {
+                // `finishActivity(IBinder token, int resultCode, Intent
+                // resultData, int finishTask)`: the `setResult` answer travels
+                // with the finish, exactly as stock AMS reads it.
                 let token = binder_u64(args.first());
-                state.finish_activity(token)?;
+                let result_code = args.get(1).and_then(Value::as_int).unwrap_or(0);
+                let result_data = args
+                    .get(2)
+                    .and_then(Value::as_parcelable)
+                    .map(crate::ams::IntentFacts::from_parcelable);
+                state.finish_activity(token, result_code, result_data)?;
                 vec![Value::Bool(true)]
             }
             (AtmsInterface::ClientController, "activityLocalRelaunch") => {
@@ -1432,28 +2219,75 @@ impl ServiceObject for AtmsService {
         };
 
         // Encode any queued `IApplicationThread` transaction deliveries.
-        if let Some(process) = state.process.as_ref() {
-            if let Some(app_thread) = process.app_thread {
-                let pending = std::mem::take(&mut state.pending_app_thread_calls);
-                for (name, values) in pending {
-                    if let Some(info) = acos_aidl::lookup_by_name("android.app.IApplicationThread", &name) {
-                        let Ok(data) = crate::codec::build_request(
-                            "android.app.IApplicationThread",
-                            info,
-                            &values,
-                        ) else {
-                            // The full `AppBindData` parcelables are a documented
-                            // V1 gap; never fail the attach handshake because of it.
-                            continue;
-                        };
-                        deliveries.push(PendingDelivery {
-                            target: acos_parcel::BinderId(app_thread),
-                            interface: "android.app.IApplicationThread".into(),
-                            code: info.code,
-                            method: name,
-                            data,
-                        });
-                    }
+        //
+        // MPROC5: the per-process top-of-task items (pause/stop/resume) are
+        // queued with the tag they belong to, because on a device every one of
+        // them goes to **that** activity's own app thread, never to "the"
+        // attached process.
+        let lifecycle = std::mem::take(&mut state.pending_lifecycle_calls);
+        for (tag, name, values) in lifecycle {
+            let Some(app_thread) = state
+                .processes
+                .iter()
+                .find(|p| p.tag == tag)
+                .and_then(|p| p.app_thread)
+            else {
+                state.log_event(
+                    "ActivityManagerLifecycle",
+                    acos_protocol::LogLevel::Warn,
+                    format!("tag={tag} has no IApplicationThread; {name} not delivered"),
+                );
+                continue;
+            };
+            let Some(info) = acos_aidl::lookup_by_name("android.app.IApplicationThread", &name)
+            else {
+                continue;
+            };
+            let Ok(data) =
+                crate::codec::build_request("android.app.IApplicationThread", info, &values)
+            else {
+                state.log_event(
+                    "ActivityManagerLifecycle",
+                    acos_protocol::LogLevel::Warn,
+                    format!("tag={tag} {name} could not be encoded"),
+                );
+                continue;
+            };
+            deliveries.push(PendingDelivery {
+                target: acos_parcel::BinderId(app_thread),
+                interface: "android.app.IApplicationThread".into(),
+                code: info.code,
+                method: name,
+                data,
+            });
+        }
+        if let Some(app_thread) = state
+            .processes
+            .iter()
+            .find(|p| p.attached)
+            .and_then(|p| p.app_thread)
+        {
+            let pending = std::mem::take(&mut state.pending_app_thread_calls);
+            for (name, values) in pending {
+                if let Some(info) =
+                    acos_aidl::lookup_by_name("android.app.IApplicationThread", &name)
+                {
+                    let Ok(data) = crate::codec::build_request(
+                        "android.app.IApplicationThread",
+                        info,
+                        &values,
+                    ) else {
+                        // The full `AppBindData` parcelables are a documented
+                        // V1 gap; never fail the attach handshake because of it.
+                        continue;
+                    };
+                    deliveries.push(PendingDelivery {
+                        target: acos_parcel::BinderId(app_thread),
+                        interface: "android.app.IApplicationThread".into(),
+                        code: info.code,
+                        method: name,
+                        data,
+                    });
                 }
             }
         }
@@ -1485,6 +2319,16 @@ impl ServiceObject for AtmsService {
 
 fn binder_u64(v: Option<&Value>) -> u64 {
     v.and_then(Value::as_binder).map(|b| b.0).unwrap_or(0)
+}
+
+/// The app process tag a peer binder id names (MPROC4 step 3b).
+///
+/// `acos-binder-peer` writes a process tag into bits 34..40 of every binder id it
+/// imports from a guest (`PROC_SHIFT`/`PROC_MASK`); a host binder has none of
+/// those bits set, so it names the primary process (tag 0).
+#[must_use]
+pub fn process_tag_of(binder: u64) -> u32 {
+    ((binder >> 34) & 0x3f) as u32
 }
 
 /// One-line description of a decoded `ParcelableCrashInfo` for the guest log.
@@ -1574,10 +2418,8 @@ fn receiver_registration(
     record.authorities = authorities(filter.field(7));
     record.paths = patterns(filter.field(8));
     record.priority = filter.field(9).and_then(Value::as_int).unwrap_or(0);
-    record.has_static_partial_types =
-        filter.field(10).and_then(Value::as_int).unwrap_or(0) != 0;
-    record.has_dynamic_partial_types =
-        filter.field(11).and_then(Value::as_int).unwrap_or(0) != 0;
+    record.has_static_partial_types = filter.field(10).and_then(Value::as_int).unwrap_or(0) != 0;
+    record.has_dynamic_partial_types = filter.field(11).and_then(Value::as_int).unwrap_or(0) != 0;
     record.auto_verify = filter.field(12).and_then(Value::as_int).unwrap_or(0) != 0;
     record.instant_app_visibility = filter.field(13).and_then(Value::as_int).unwrap_or(0);
     record.order = filter.field(14).and_then(Value::as_int).unwrap_or(0);
@@ -1630,7 +2472,10 @@ fn patterns(value: Option<&Value>) -> Vec<PatternFacts> {
                     .and_then(|p| p.field(0))
                     .and_then(Value::as_str)
                     .map(str::to_string),
-                kind: p.and_then(|p| p.field(1)).and_then(Value::as_int).unwrap_or(0),
+                kind: p
+                    .and_then(|p| p.field(1))
+                    .and_then(Value::as_int)
+                    .unwrap_or(0),
             }
         })
         .collect()
@@ -1646,8 +2491,15 @@ fn authorities(value: Option<&Value>) -> Vec<AuthorityFacts> {
                     .and_then(|p| p.field(0))
                     .and_then(Value::as_str)
                     .map(str::to_string),
-                wild: p.and_then(|p| p.field(2)).and_then(Value::as_int).unwrap_or(0) != 0,
-                port: p.and_then(|p| p.field(3)).and_then(Value::as_int).unwrap_or(0),
+                wild: p
+                    .and_then(|p| p.field(2))
+                    .and_then(Value::as_int)
+                    .unwrap_or(0)
+                    != 0,
+                port: p
+                    .and_then(|p| p.field(3))
+                    .and_then(Value::as_int)
+                    .unwrap_or(0),
             }
         })
         .collect()

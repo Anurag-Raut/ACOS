@@ -81,9 +81,8 @@ pub fn set_view_client(name: &str, version: &str) {
 pub fn view_client_env() -> Option<String> {
     let slot = VIEW_CLIENT.get_or_init(|| Mutex::new(None));
     let slot = slot.lock().unwrap_or_else(|e| e.into_inner());
-    slot.as_ref().map(|(name, version)| {
-        json!({"name": name, "version": version}).to_string()
-    })
+    slot.as_ref()
+        .map(|(name, version)| json!({"name": name, "version": version}).to_string())
 }
 
 /// The engine name to pass to `acos serve --engine`.
@@ -355,11 +354,7 @@ fn private_runtime_dir_in(base: PathBuf) -> io::Result<PathBuf> {
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
     let n = NEXT.fetch_add(1, Ordering::SeqCst);
-    Ok(base.join(format!(
-        "mcp-{}-{:08x}{n}",
-        std::process::id(),
-        nanos
-    )))
+    Ok(base.join(format!("mcp-{}-{:08x}{n}", std::process::id(), nanos)))
 }
 
 /// Create the per-process directory 0700 and make sure the **base** it sits in

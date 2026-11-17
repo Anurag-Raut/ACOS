@@ -56,92 +56,86 @@ fn fake_daemon(path: &Path) -> FakeDaemon {
     let (stop_tx, stop_rx) = channel::<()>();
     let table = Arc::clone(&sessions);
     let counter = Arc::new(std::sync::atomic::AtomicU64::new(0));
-    std::thread::spawn(move || {
-        loop {
-            if stop_rx.try_recv().is_ok() {
-                return;
-            }
-            let Ok((stream, _)) = listener.accept() else {
-                return;
-            };
-            let table = Arc::clone(&table);
-            let counter = Arc::clone(&counter);
-            let tx = tx.clone();
-            std::thread::spawn(move || {
-                let mut writer = stream.try_clone().expect("clone stream");
-                let mut reader = BufReader::new(stream);
-                loop {
-                    let mut line = String::new();
-                    match reader.read_line(&mut line) {
-                        Ok(0) | Err(_) => return,
-                        Ok(_) => {}
+    std::thread::spawn(move || loop {
+        if stop_rx.try_recv().is_ok() {
+            return;
+        }
+        let Ok((stream, _)) = listener.accept() else {
+            return;
+        };
+        let table = Arc::clone(&table);
+        let counter = Arc::clone(&counter);
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            let mut writer = stream.try_clone().expect("clone stream");
+            let mut reader = BufReader::new(stream);
+            loop {
+                let mut line = String::new();
+                match reader.read_line(&mut line) {
+                    Ok(0) | Err(_) => return,
+                    Ok(_) => {}
+                }
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let request: Value = serde_json::from_str(&line).expect("daemon request JSON");
+                let id = request.get("id").cloned().unwrap_or(Value::Null);
+                let tool = request
+                    .get("tool")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let args = request.get("args").cloned().unwrap_or_else(|| json!({}));
+                let session = args
+                    .pointer("/base/session_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let mut result = json!({"server": "fake-daemon"});
+                match tool.as_str() {
+                    "acos_launch" => {
+                        let seq = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                        let token = format!("tok-{seq}");
+                        table.lock().unwrap().insert(session.clone(), token.clone());
+                        result = json!({
+                            "session_id": session,
+                            "session_token": token,
+                            "launched": true,
+                        });
                     }
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-                    let request: Value = serde_json::from_str(&line).expect("daemon request JSON");
-                    let id = request.get("id").cloned().unwrap_or(Value::Null);
-                    let tool = request
-                        .get("tool")
-                        .and_then(Value::as_str)
-                        .unwrap_or("")
-                        .to_string();
-                    let args = request.get("args").cloned().unwrap_or_else(|| json!({}));
-                    let session = args
-                        .pointer("/base/session_id")
-                        .and_then(Value::as_str)
-                        .unwrap_or("")
-                        .to_string();
-                    let mut result = json!({"server": "fake-daemon"});
-                    match tool.as_str() {
-                        "acos_launch" => {
-                            let seq =
-                                counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-                            let token = format!("tok-{seq}");
-                            table
-                                .lock()
-                                .unwrap()
-                                .insert(session.clone(), token.clone());
-                            result = json!({
-                                "session_id": session,
-                                "session_token": token,
-                                "launched": true,
-                            });
-                        }
-                        "session_list" => {
-                            let held = table.lock().unwrap();
-                            let list: Vec<Value> = held
+                    "session_list" => {
+                        let held = table.lock().unwrap();
+                        let list: Vec<Value> = held
                                 .iter()
                                 .map(|(id, token)| {
                                     json!({"session_id": id, "session_token": token, "engine": "art"})
                                 })
                                 .collect();
-                            result = json!({"sessions": list, "count": list.len()});
-                        }
-                        "acos_destroy" => {
-                            let removed = table.lock().unwrap().remove(&session).is_some();
-                            result = json!({"destroyed": removed, "already_absent": !removed});
-                        }
-                        _ => {}
+                        result = json!({"sessions": list, "count": list.len()});
                     }
-                    let _ = tx.send(json!({"tool": tool, "session_id": session}));
-                    let envelope = Envelope::pass(
-                        "req_daemon",
-                        ProtocolBackend::AcosNative,
-                        Fidelity::ArtReference,
-                        Metrics::wall_ms(0),
-                    )
-                    .with_value_result(result);
-                    let reply = json!({"id": id, "envelope": envelope});
-                    let mut payload = serde_json::to_string(&reply).expect("serialize reply");
-                    payload.push('\n');
-                    if writer.write_all(payload.as_bytes()).is_err() {
-                        return;
+                    "acos_destroy" => {
+                        let removed = table.lock().unwrap().remove(&session).is_some();
+                        result = json!({"destroyed": removed, "already_absent": !removed});
                     }
-                    let _ = writer.flush();
+                    _ => {}
                 }
-            });
-        }
+                let _ = tx.send(json!({"tool": tool, "session_id": session}));
+                let envelope = Envelope::pass(
+                    "req_daemon",
+                    ProtocolBackend::AcosNative,
+                    Fidelity::ArtReference,
+                    Metrics::wall_ms(0),
+                )
+                .with_value_result(result);
+                let reply = json!({"id": id, "envelope": envelope});
+                let mut payload = serde_json::to_string(&reply).expect("serialize reply");
+                payload.push('\n');
+                if writer.write_all(payload.as_bytes()).is_err() {
+                    return;
+                }
+                let _ = writer.flush();
+            }
+        });
     });
     FakeDaemon {
         sessions,

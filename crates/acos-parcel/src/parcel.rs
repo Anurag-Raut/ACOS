@@ -75,7 +75,10 @@ impl std::fmt::Debug for Parcel {
             .field("pos", &self.pos)
             .field("data_size", &self.data.len())
             .field("objects", &self.objects)
-            .field("fds", &self.fds.iter().map(ParcelFd::as_raw_fd).collect::<Vec<_>>())
+            .field(
+                "fds",
+                &self.fds.iter().map(ParcelFd::as_raw_fd).collect::<Vec<_>>(),
+            )
             .field("allow_fds", &self.allow_fds)
             .finish()
     }
@@ -1105,6 +1108,31 @@ impl Parcel {
         self.objects.len()
     }
 
+    /// The binder ids this parcel carries, in object-table order (MPROC2 3a).
+    ///
+    /// A `system_server`-side caller that receives a request has to know *which
+    /// binders the caller handed over* — those belong to the caller's process,
+    /// and a delivery to one of them must be routed back there. File-descriptor
+    /// objects are skipped (their `id` is a descriptor, not a binder id), and an
+    /// object whose offset is out of range is ignored rather than read past the
+    /// buffer.
+    #[must_use]
+    pub fn binder_ids(&self) -> Vec<BinderId> {
+        let mut out = Vec::new();
+        for &o in &self.objects {
+            if o + FLAT_OBJECT_SIZE > self.data.len() {
+                continue;
+            }
+            let mut bytes = [0u8; FLAT_OBJECT_SIZE];
+            bytes.copy_from_slice(&self.data[o..o + FLAT_OBJECT_SIZE]);
+            let obj = FlatObject::from_bytes(&bytes);
+            if obj.is_binder() && obj.id != 0 {
+                out.push(BinderId(obj.id));
+            }
+        }
+        out
+    }
+
     // ------------------------------------------------------------------
     // append / marshal / recycle
     // ------------------------------------------------------------------
@@ -1217,6 +1245,20 @@ impl Parcel {
         }
     }
 
+    /// Replace the parcel contents with `bytes` plus the object table the wire
+    /// carried (the binder driver's `offsets` array), in one step.
+    ///
+    /// [`Parcel::unmarshall`] copies bytes only; the importer installs each
+    /// rewritten object position through [`Parcel::register_object`].
+    pub fn unmarshall_with_objects(&mut self, bytes: &[u8], offsets: &[usize]) {
+        self.unmarshall(bytes);
+        for offset in offsets {
+            if offset.saturating_add(FLAT_OBJECT_SIZE) <= self.data.len() {
+                self.register_object(*offset);
+            }
+        }
+    }
+
     /// `nativeFreeBuffer` / `Parcel.recycle`: drop data, objects and fds.
     pub fn recycle(&mut self) {
         self.reset();
@@ -1238,10 +1280,7 @@ impl Parcel {
     pub fn enforce_no_data_avail(&self) -> Result<()> {
         let n = self.data_avail();
         if n > 0 {
-            Err(ParcelError::BadLength {
-                len: n,
-                max: 0,
-            })
+            Err(ParcelError::BadLength { len: n, max: 0 })
         } else {
             Ok(())
         }
@@ -1380,7 +1419,10 @@ impl ParcelTable {
     /// Number of live parcels.
     #[must_use]
     pub fn len(&self) -> usize {
-        lock(&self.slots).iter().filter(|s| s.parcel.is_some()).count()
+        lock(&self.slots)
+            .iter()
+            .filter(|s| s.parcel.is_some())
+            .count()
     }
 
     /// `true` when no parcels are live.

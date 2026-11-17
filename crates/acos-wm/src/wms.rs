@@ -19,9 +19,8 @@ use crate::callbacks::{CallbackQueue, WmCallback};
 use crate::codec::{
     inset_type, ClientWindowFrames, Configuration, Cutout, CutoutPathParserInfo, DisplayCutout,
     DisplayShape, InsetsSource, InsetsSourceControl, InsetsSourceControlArray, InsetsState,
-    LayoutParams,
-    MergedConfiguration, PrivacyIndicatorBounds, RoundedCorner, RoundedCorners, SurfaceControlInfo,
-    WindowConfiguration,
+    LayoutParams, MergedConfiguration, PrivacyIndicatorBounds, RoundedCorner, RoundedCorners,
+    SurfaceControlInfo, WindowConfiguration,
 };
 use crate::display::{DisplaySpec, InsetsMode};
 use crate::error::{Result, WmError};
@@ -424,10 +423,8 @@ impl WindowManager {
         self.renumber_z();
 
         // Measured launch order: visibility → focus → insetsControlChanged.
-        self.callbacks.push(
-            id,
-            WmCallback::DispatchAppVisibility { visible: true },
-        );
+        self.callbacks
+            .push(id, WmCallback::DispatchAppVisibility { visible: true });
         // LAYER1: focus follows the layer stack, not "first focusable add":
         // a dialog above the activity takes focus; a FLAG_NOT_FOCUSABLE
         // overlay above it does not. The transition is published as
@@ -522,8 +519,8 @@ impl WindowManager {
         let (surface_width, surface_height) = record.surface_size();
         // Stock resizes the window surface when the frame *or* the surface
         // insets change (`RELAYOUT_RES_SURFACE_RESIZED`).
-        let resized = record.frame != old_frame
-            || (surface_width, surface_height) != old_surface_size;
+        let resized =
+            record.frame != old_frame || (surface_width, surface_height) != old_surface_size;
         record.relayout_seq += 1;
         let sync_seq_out = if sync_seq >= 0 {
             sync_seq as u64
@@ -599,6 +596,28 @@ impl WindowManager {
             insets_controls,
             sync_seq: sync_seq_out,
         })
+    }
+
+    /// Session death (stock `Session.kill` / process death): drop the session
+    /// and every window it owns, returning the window ids that went with it.
+    ///
+    /// An unknown session is not an error here: the caller is a teardown path
+    /// that races nothing (a second death report must not fail).
+    pub fn close_session(&mut self, session: SessionId) -> Vec<WindowId> {
+        let Some(record) = self.sessions.remove(&session) else {
+            return Vec::new();
+        };
+        let windows = record.windows.clone();
+        for window in &windows {
+            let _ = self.remove(*window);
+        }
+        windows
+    }
+
+    /// The session that owns `window`, when the window is known.
+    #[must_use]
+    pub fn window_session(&self, window: WindowId) -> Option<SessionId> {
+        self.windows.get(&window).map(|record| record.session)
     }
 
     /// `IWindowSession.remove`.
@@ -967,11 +986,19 @@ pub fn compute_frame_for_requested(
         rw = if params.width >= 0 { params.width } else { pw };
     }
     if rh == UNSPECIFIED_LENGTH {
-        rh = if params.height >= 0 { params.height } else { ph };
+        rh = if params.height >= 0 {
+            params.height
+        } else {
+            ph
+        };
     }
 
     let w = if params.width == MATCH_PARENT { pw } else { rw };
-    let h = if params.height == MATCH_PARENT { ph } else { rh };
+    let h = if params.height == MATCH_PARENT {
+        ph
+    } else {
+        rh
+    };
 
     let x = params.x + (params.horizontal_margin * pw as f32) as i32;
     let y = params.y + (params.vertical_margin * ph as f32) as i32;
@@ -1156,7 +1183,12 @@ pub fn reference_insets_state(display: &DisplaySpec, ime_visible: bool) -> Inset
         RectI::new(0, 0, 0, 0)
     };
     let mut sources = vec![
-        InsetsSource::new(0x9b1a_0000u32 as i32, inset_type::STATUS_BAR, b.status_bar, true),
+        InsetsSource::new(
+            0x9b1a_0000u32 as i32,
+            inset_type::STATUS_BAR,
+            b.status_bar,
+            true,
+        ),
         InsetsSource::new(
             0xfc05_0001u32 as i32,
             inset_type::NAVIGATION_BAR,
@@ -1172,12 +1204,7 @@ pub fn reference_insets_state(display: &DisplaySpec, ime_visible: bool) -> Inset
             flags: 0,
             insets_rounded_corner_frame: false,
         },
-        InsetsSource::new(
-            27,
-            inset_type::DISPLAY_CUTOUT,
-            b.display_cutout,
-            true,
-        ),
+        InsetsSource::new(27, inset_type::DISPLAY_CUTOUT, b.display_cutout, true),
         InsetsSource::new(
             0x9b1a_0005u32 as i32,
             inset_type::MANDATORY_SYSTEM_GESTURES,
@@ -1389,16 +1416,16 @@ pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfigurat
         mnc: 260,
         locale_list: Some("en-US".to_string()),
         user_set_locale: false,
-        touchscreen: 3,       // TOUCHSCREEN_FINGER
-        keyboard: 2,          // KEYBOARD_QWERTY
-        keyboard_hidden: 1,   // KEYBOARDHIDDEN_YES
+        touchscreen: 3,     // TOUCHSCREEN_FINGER
+        keyboard: 2,        // KEYBOARD_QWERTY
+        keyboard_hidden: 1, // KEYBOARDHIDDEN_YES
         hard_keyboard_hidden: 1,
-        navigation: 1,        // NAVIGATION_DPAD
+        navigation: 1, // NAVIGATION_DPAD
         navigation_hidden: 1,
         orientation: if display.is_landscape() { 2 } else { 1 },
         screen_layout: REFERENCE_SCREEN_LAYOUT, // ldltr nrml long (measured `display.txt`)
-        color_mode: 0,        // HDR_UNDEFINED / sRGB
-        ui_mode: 0x11,        // UI_MODE_TYPE_NORMAL | NIGHT_NO
+        color_mode: 0,                          // HDR_UNDEFINED / sRGB
+        ui_mode: 0x11,                          // UI_MODE_TYPE_NORMAL | NIGHT_NO
         // W7: under `report` the configuration describes the full display,
         // exactly like the device (`sw432dp w432dp h960dp` on the Moto G35 at
         // 400 dpi). `carve` keeps the measured API-34 application-area values
@@ -1429,7 +1456,8 @@ pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfigurat
         } else {
             842
         },
-        compat_smallest_screen_width_dp: if display.insets_mode.is_report() || display.rotation != 0 {
+        compat_smallest_screen_width_dp: if display.insets_mode.is_report() || display.rotation != 0
+        {
             display.screen_width_dp().min(display.screen_height_dp())
         } else {
             411
@@ -1507,7 +1535,11 @@ mod tests {
         assert_eq!(REFERENCE_SCREEN_LAYOUT & 0x0f, 0x02, "SIZE_NORMAL");
         assert_eq!(REFERENCE_SCREEN_LAYOUT & 0x30, 0x20, "LONG_YES");
         assert_eq!(REFERENCE_SCREEN_LAYOUT & 0xc0, 0x40, "LAYOUTDIR_LTR");
-        assert_ne!(REFERENCE_SCREEN_LAYOUT & 0x0f, 0x04, "must not be SIZE_XLARGE");
+        assert_ne!(
+            REFERENCE_SCREEN_LAYOUT & 0x0f,
+            0x04,
+            "must not be SIZE_XLARGE"
+        );
 
         // Negative check: the pre-fix values really are different. `0x1a` is
         // not a valid size (0xa), and the guest's `0` is SIZE_UNDEFINED; both
@@ -1590,17 +1622,19 @@ mod tests {
             .unwrap();
         assert_eq!(r.result, ADD_OKAY);
         assert_eq!(r.out_frame, RectI::new(0, 128, 1080, 2337));
-        assert_eq!(r.insets_state.visible_insets_for(inset_type::STATUS_BAR).top, 128);
+        assert_eq!(
+            r.insets_state
+                .visible_insets_for(inset_type::STATUS_BAR)
+                .top,
+            128
+        );
         assert_eq!(
             r.insets_state
                 .visible_insets_for(inset_type::NAVIGATION_BAR)
                 .bottom,
             63
         );
-        assert!(matches!(
-            r.insets_state.display_cutout,
-            Cutout::Present(_)
-        ));
+        assert!(matches!(r.insets_state.display_cutout, Cutout::Present(_)));
     }
 
     #[test]
@@ -1757,7 +1791,10 @@ mod tests {
         assert_eq!(physical.frame, RectI::new(0, 0, 128, 1080));
         // No control is invented for the strip: it owns no surface.
         let controls = reference_insets_controls(&land, 0x100);
-        assert!(!controls.0.iter().any(|c| c.id == CONFIG_STATUS_BAR_SOURCE_ID));
+        assert!(!controls
+            .0
+            .iter()
+            .any(|c| c.id == CONFIG_STATUS_BAR_SOURCE_ID));
     }
 
     // ------------------------------------------------------- LAYER0 (stack)
@@ -1783,8 +1820,13 @@ mod tests {
         let (sess, _b) = wm.open_session(None);
         // Overlay and IME first, the activity last (a real launch order: the
         // system windows exist before the app's window does).
-        wm.add_to_display_as_user(sess, BinderId(0x20), overlay_params(TYPE_INPUT_METHOD, 0), 0)
-            .unwrap();
+        wm.add_to_display_as_user(
+            sess,
+            BinderId(0x20),
+            overlay_params(TYPE_INPUT_METHOD, 0),
+            0,
+        )
+        .unwrap();
         wm.add_to_display_as_user(
             sess,
             BinderId(0x10),
@@ -1816,7 +1858,7 @@ mod tests {
     #[test]
     fn hit_test_and_focus_follow_the_stack_and_the_flags() {
         use crate::layers::{
-            TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY, FLAG_NOT_FOCUSABLE, FLAG_NOT_TOUCHABLE,
+            FLAG_NOT_FOCUSABLE, FLAG_NOT_TOUCHABLE, TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY,
         };
         let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
         let (sess, _b) = wm.open_session(None);
@@ -1873,10 +1915,8 @@ mod tests {
     /// that lost focus and `(true)` for the one that gained it.
     #[test]
     fn focus_moves_with_the_layer_stack_on_add_and_remove() {
-        use crate::layers::{
-            TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY, FLAG_NOT_FOCUSABLE,
-        };
         use crate::callbacks::WmCallback;
+        use crate::layers::{FLAG_NOT_FOCUSABLE, TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY};
         let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
         let (sess, _b) = wm.open_session(None);
         let activity = wm
@@ -1888,7 +1928,11 @@ mod tests {
             .add_to_display_as_user(sess, BinderId(0x02), overlay_params(TYPE_APPLICATION, 0), 0)
             .unwrap()
             .window;
-        assert_eq!(wm.focus, Some(dialog), "a dialog above the activity takes focus");
+        assert_eq!(
+            wm.focus,
+            Some(dialog),
+            "a dialog above the activity takes focus"
+        );
 
         // A focusable overlay above the dialog takes focus too...
         let overlay = wm

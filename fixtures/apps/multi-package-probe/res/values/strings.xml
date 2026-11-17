@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Multi-package probe</string>
+    <string name="title">Second package</string>
+    <string name="reprobe">Probe again</string>
+    <string name="none">none</string>
+</resources>

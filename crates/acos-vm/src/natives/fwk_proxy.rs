@@ -22,7 +22,8 @@ use super::fwk_annotations::{
 };
 
 const PROXY: &str = "Ljava/lang/reflect/Proxy;";
-const HANDLER_SIG: &str = "(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;)Ljava/lang/Object;";
+const HANDLER_SIG: &str =
+    "(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;)Ljava/lang/Object;";
 
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(
@@ -187,9 +188,14 @@ fn proxy_dispatch(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         .class_of_object(handler)
         .ok_or_else(|| vm.throw_new("Ljava/lang/InternalError;", Some("handler class")))?;
     let invoke = vm.find_method(hcid, "invoke", HANDLER_SIG, InvokeKind::Interface)?;
-    let result =
-        crate::interp::call_method(vm, invoke, handler, &[this as u64, method_h as u64, args_arr as u64]);
-    vm.native_roots.truncate(vm.native_roots.len().saturating_sub(2));
+    let result = crate::interp::call_method(
+        vm,
+        invoke,
+        handler,
+        &[this as u64, method_h as u64, args_arr as u64],
+    );
+    vm.native_roots
+        .truncate(vm.native_roots.len().saturating_sub(2));
 
     let r = result? as u32;
     if ret_kind == TypeKind::Void {
@@ -276,7 +282,9 @@ fn build_args(vm: &mut Vm, ctx: NativeCtx, params: &[crate::class::TypeId]) -> V
 fn ctor_new_instance0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let args_arr = vm.arg_ref(ctx, 0);
-    let dc = vm.get_instance_field_by_name(this, "declaringClass").unwrap_or(NULL);
+    let dc = vm
+        .get_instance_field_by_name(this, "declaringClass")
+        .unwrap_or(NULL);
     let Some(cid) = vm.class_id_of_class_object(dc) else {
         return Err(vm.throw_new("Ljava/lang/InstantiationException;", None));
     };

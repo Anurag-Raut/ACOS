@@ -411,16 +411,12 @@ fn fchown(vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
 fn mkdir0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let path = path_arg(vm, ctx, 0)?;
     let mode = vm.arg_i32(ctx, 1);
-    vm.vfs
-        .mkdir(&path, mode)
-        .map_err(|e| unix_exception(vm, e))
+    vm.vfs.mkdir(&path, mode).map_err(|e| unix_exception(vm, e))
 }
 
 fn unlink0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let path = path_arg(vm, ctx, 0)?;
-    vm.vfs
-        .remove(&path)
-        .map_err(|e| unix_exception(vm, e))
+    vm.vfs.remove(&path).map_err(|e| unix_exception(vm, e))
 }
 
 fn unlinkat0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -428,9 +424,7 @@ fn unlinkat0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let raw = path_arg(vm, ctx, 1)?;
     let _ = vm.arg_i32(ctx, 2); // AT_REMOVEDIR: `remove` handles both kinds.
     let path = resolve_at(vm, dirfd, &raw)?;
-    vm.vfs
-        .remove(&path)
-        .map_err(|e| unix_exception(vm, e))
+    vm.vfs.remove(&path).map_err(|e| unix_exception(vm, e))
 }
 
 fn mknod0(vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
@@ -441,9 +435,7 @@ fn mknod0(vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
 fn rename0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let from = path_arg(vm, ctx, 0)?;
     let to = path_arg(vm, ctx, 1)?;
-    vm.vfs
-        .rename(&from, &to)
-        .map_err(|e| unix_exception(vm, e))
+    vm.vfs.rename(&from, &to).map_err(|e| unix_exception(vm, e))
 }
 
 fn renameat0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -453,17 +445,13 @@ fn renameat0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let new_raw = path_arg(vm, ctx, 3)?;
     let from = resolve_at(vm, oldfd, &old_raw)?;
     let to = resolve_at(vm, newfd, &new_raw)?;
-    vm.vfs
-        .rename(&from, &to)
-        .map_err(|e| unix_exception(vm, e))
+    vm.vfs.rename(&from, &to).map_err(|e| unix_exception(vm, e))
 }
 
 fn link0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let old = path_arg(vm, ctx, 0)?;
     let new = path_arg(vm, ctx, 1)?;
-    vm.vfs
-        .link(&old, &new)
-        .map_err(|e| unix_exception(vm, e))
+    vm.vfs.link(&old, &new).map_err(|e| unix_exception(vm, e))
 }
 
 fn symlink0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -575,10 +563,7 @@ fn write(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let addr = vm.arg_i64(ctx, 1);
     let len = vm.arg_i32(ctx, 2).max(0) as usize;
     let data = native_mem::read_bytes_at(vm, addr, len)?;
-    let n = vm
-        .vfs
-        .write(fd, &data)
-        .map_err(|e| unix_exception(vm, e))?;
+    let n = vm.vfs.write(fd, &data).map_err(|e| unix_exception(vm, e))?;
     vm.ret_i32(ctx, n as i32);
     Ok(())
 }
@@ -596,10 +581,7 @@ fn opendir0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn fdopendir(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let fd = vm.arg_i32(ctx, 0);
-    let handle = vm
-        .vfs
-        .fdopendir(fd)
-        .map_err(|e| unix_exception(vm, e))?;
+    let handle = vm.vfs.fdopendir(fd).map_err(|e| unix_exception(vm, e))?;
     vm.ret_i64(ctx, handle as i64);
     Ok(())
 }
@@ -618,9 +600,7 @@ fn readdir(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn closedir(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let dir = vm.arg_i64(ctx, 0) as u64;
-    vm.vfs
-        .closedir(dir)
-        .map_err(|e| unix_exception(vm, e))
+    vm.vfs.closedir(dir).map_err(|e| unix_exception(vm, e))
 }
 
 // ---------------------------------------------------------------------------
@@ -659,10 +639,7 @@ fn fopen0(_vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn statvfs0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let path = path_arg(vm, ctx, 0)?;
     let attrs = vm.arg_ref(ctx, 1);
-    let st = vm
-        .vfs
-        .statvfs(&path)
-        .map_err(|e| unix_exception(vm, e))?;
+    let st = vm.vfs.statvfs(&path).map_err(|e| unix_exception(vm, e))?;
     fill_file_store(vm, attrs, &st);
     Ok(())
 }

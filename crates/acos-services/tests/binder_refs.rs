@@ -138,9 +138,7 @@ fn a_telephony_module_detach_releases_the_listeners_it_rooted() {
     // The module detaches while the guest is alive: the registrations are gone,
     // so the nodes must not stay rooted (the object is dropped with the scope,
     // and a `Drop` has no host to report to).
-    registry
-        .detach(&mut host, "net.telephony")
-        .expect("detach");
+    registry.detach(&mut host, "net.telephony").expect("detach");
     assert_eq!(host.held_refs(first), 0);
     assert_eq!(host.held_refs(second), 0);
     let released = host.take_released_binders();
@@ -465,9 +463,8 @@ fn a_network_callback_messenger_is_referenced_until_the_request_is_released() {
     );
     let present = reply.read_int32().expect("NetworkRequest presence");
     assert_eq!(present, 1);
-    let request =
-        acos_services::parcelable::read_payload("android.net.NetworkRequest", &mut reply)
-            .expect("NetworkRequest payload");
+    let request = acos_services::parcelable::read_payload("android.net.NetworkRequest", &mut reply)
+        .expect("NetworkRequest payload");
 
     let mut data = Parcel::new();
     data.write_interface_token(CONNECTIVITY).expect("token");

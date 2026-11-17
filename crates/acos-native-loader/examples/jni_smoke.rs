@@ -45,14 +45,19 @@ fn main() {
         .symbol("Java_dev_acos_fixtures_hellojni_MainActivity_add")
         .unwrap();
     let f: unsafe extern "C" fn(*mut c_void, *mut c_void, i32, i32) -> i32 = unsafe { sym_fn(a) };
-    println!("add(2,3) = {}", unsafe { f(env, thiz as *mut c_void, 2, 3) });
+    println!("add(2,3) = {}", unsafe {
+        f(env, thiz as *mut c_void, 2, 3)
+    });
 
     let sa = h
         .symbol("Java_dev_acos_fixtures_hellojni_MainActivity_sumArray")
         .unwrap();
-    let f: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i32 = unsafe { sym_fn(sa) };
+    let f: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i32 =
+        unsafe { sym_fn(sa) };
     let arr = jni.new_int_array(&[1, 2, 3, 4, 5]);
-    println!("sumArray = {}", unsafe { f(env, thiz as *mut c_void, arr as *mut c_void) });
+    println!("sumArray = {}", unsafe {
+        f(env, thiz as *mut c_void, arr as *mut c_void)
+    });
 
     let cb = h
         .symbol("Java_dev_acos_fixtures_hellojni_MainActivity_callBack")

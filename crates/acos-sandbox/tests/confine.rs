@@ -25,11 +25,8 @@ struct Sandbox {
 impl Sandbox {
     fn new() -> Self {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-        let root = std::env::temp_dir().join(format!(
-            "acos-sandbox-test-{}-{}",
-            std::process::id(),
-            id
-        ));
+        let root =
+            std::env::temp_dir().join(format!("acos-sandbox-test-{}-{}", std::process::id(), id));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("ro")).expect("create ro");
         std::fs::create_dir_all(root.join("rw")).expect("create rw");
@@ -171,7 +168,14 @@ fn probe_reports_which_layers_are_active() {
     let report: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("probe emitted JSON");
 
-    for layer in ["no_new_privs", "close_fds", "sanitize_env", "rlimits", "landlock", "seccomp"] {
+    for layer in [
+        "no_new_privs",
+        "close_fds",
+        "sanitize_env",
+        "rlimits",
+        "landlock",
+        "seccomp",
+    ] {
         let status = report["layers"]
             .as_array()
             .expect("layers array")
@@ -182,7 +186,9 @@ fn probe_reports_which_layers_are_active() {
         assert_eq!(status, "active", "layer {layer} should be active: {report}");
     }
     assert_eq!(report["active"], serde_json::Value::Bool(true));
-    let abi = report["landlock_abi"].as_u64().expect("landlock ABI reported");
+    let abi = report["landlock_abi"]
+        .as_u64()
+        .expect("landlock ABI reported");
     assert!(abi >= 1, "landlock ABI should be present: {report}");
 
     // On ABI >= 6 the landlock layer must also scope signals and abstract UNIX

@@ -228,7 +228,10 @@ impl Vm {
         if a == NULL || b == NULL {
             return Ok(false);
         }
-        if let (Some(x), Some(y)) = (self.str_units(a).map(|u| u.to_vec()), self.str_units(b).map(|u| u.to_vec())) {
+        if let (Some(x), Some(y)) = (
+            self.str_units(a).map(|u| u.to_vec()),
+            self.str_units(b).map(|u| u.to_vec()),
+        ) {
             return Ok(x == y);
         }
         // Boxed `Integer.equals` fast path: `HashMap`/`ArrayList` linear scans
@@ -249,7 +252,10 @@ impl Vm {
 
     /// Natural ordering via `compareTo`.
     pub(crate) fn compare_objects(&mut self, a: Handle, b: Handle) -> VmResult<i32> {
-        if let (Some(x), Some(y)) = (self.str_units(a).map(|u| u.to_vec()), self.str_units(b).map(|u| u.to_vec())) {
+        if let (Some(x), Some(y)) = (
+            self.str_units(a).map(|u| u.to_vec()),
+            self.str_units(b).map(|u| u.to_vec()),
+        ) {
             let n = x.len().min(y.len());
             for i in 0..n {
                 if x[i] != y[i] {
@@ -274,7 +280,11 @@ impl Vm {
         match self.heap.get(h) {
             Some(Object::Instance { class, fields }) => {
                 let c = &self.classes[*class as usize];
-                if let Some(f) = c.declared_instance_fields.iter().find(|f| f.name == "value") {
+                if let Some(f) = c
+                    .declared_instance_fields
+                    .iter()
+                    .find(|f| f.name == "value")
+                {
                     fields[f.offset as usize] as i32
                 } else {
                     0

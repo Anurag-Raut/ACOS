@@ -1372,7 +1372,8 @@ impl Vfs {
     fn alloc_dir(&mut self, entries: Vec<String>) -> u64 {
         let handle = self.next_dir.max(1);
         self.next_dir = handle.wrapping_add(1).max(1);
-        self.dir_streams.insert(handle, DirStream { entries, pos: 0 });
+        self.dir_streams
+            .insert(handle, DirStream { entries, pos: 0 });
         handle
     }
 
@@ -1471,7 +1472,12 @@ impl Vfs {
     /// sandbox-safe case (`ParcelFileDescriptor.createPipe`,
     /// `LocalSocket`); every other family/protocol is refused rather than
     /// touching the host network.
-    pub fn socketpair(&mut self, domain: i32, type_: i32, protocol: i32) -> Result<(i32, i32), i32> {
+    pub fn socketpair(
+        &mut self,
+        domain: i32,
+        type_: i32,
+        protocol: i32,
+    ) -> Result<(i32, i32), i32> {
         self.check_broken()?;
         const AF_UNIX: i32 = 1;
         const EAFNOSUPPORT: i32 = 97;
@@ -1500,8 +1506,8 @@ impl Vfs {
         if flags & O_NONBLOCK != 0 {
             sflags |= SocketFlags::NONBLOCK;
         }
-        let (a, b) =
-            rustix::net::socketpair(AddressFamily::UNIX, sock_type, sflags, None).map_err(rustix_errno)?;
+        let (a, b) = rustix::net::socketpair(AddressFamily::UNIX, sock_type, sflags, None)
+            .map_err(rustix_errno)?;
         if self.fd_table.len() + 2 > self.max_open_fds {
             return Err(EMFILE);
         }
@@ -2027,7 +2033,11 @@ mod tests {
         // The synthetic `/system/apex/...` spelling keeps working too.
         let fd = sb
             .vfs
-            .open("/system/apex/com.android.i18n/etc/icu/icudt72l.dat", O_RDONLY, 0)
+            .open(
+                "/system/apex/com.android.i18n/etc/icu/icudt72l.dat",
+                O_RDONLY,
+                0,
+            )
             .expect("open icudt72l.dat under /system/apex");
         sb.vfs.close(fd).unwrap();
     }

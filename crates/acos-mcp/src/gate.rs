@@ -42,7 +42,11 @@ impl Gate {
     }
 
     /// Acquire a permit, waiting at most `timeout` while polling `cancel`.
-    pub fn acquire(&self, timeout: Duration, cancel: &CancelToken) -> Result<Permit<'_>, GateError> {
+    pub fn acquire(
+        &self,
+        timeout: Duration,
+        cancel: &CancelToken,
+    ) -> Result<Permit<'_>, GateError> {
         let deadline = Instant::now() + timeout;
         let mut in_use = self.in_use.lock().unwrap_or_else(|e| e.into_inner());
         loop {
@@ -93,9 +97,8 @@ mod tests {
         let first = gate.acquire(Duration::from_millis(50), &cancel).unwrap();
         let gate2 = Arc::clone(&gate);
         let cancel2 = cancel.clone();
-        let waiter = std::thread::spawn(move || {
-            gate2.acquire(Duration::from_secs(5), &cancel2).map(|_| ())
-        });
+        let waiter =
+            std::thread::spawn(move || gate2.acquire(Duration::from_secs(5), &cancel2).map(|_| ()));
         std::thread::sleep(Duration::from_millis(30));
         drop(first);
         assert!(waiter.join().unwrap().is_ok());

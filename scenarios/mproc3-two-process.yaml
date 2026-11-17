@@ -1,0 +1,148 @@
+# MPROC5c: two guest processes in one session — the cross-process top of task
+# (step 1) and the idle kill (step 2), on the real ART engine.
+#
+# STEP 1 (top of task, cross-process). proc-a starts proc-b's Activity
+# (`startActivityForResult`). The host resolves a component of an installed
+# package with no live process, the launcher spawns that guest lazily, and the
+# window on top becomes proc-b's — so the tree served to the agent is proc-b's
+# ("Finish B") — while proc-a's own `IApplicationThread` receives the framework's
+# `PauseActivityItem` + `StopActivityItem` (the app logs `paused`/`stopped`).
+# Finishing B returns to proc-a, and proc-a's window is the served one again.
+#
+# STEP 2 (idle kill). After B finishes it holds nothing — no started activity,
+# no started/bound service, no visible window — so the launcher's idle kill takes
+# its process after this launch step's `idle_kill_seconds` (MPROC7: the option is
+# part of the scenario, and the same value reaches the launcher through
+# `acos-art launch --idle-kill-seconds` / ACOSLAUNCH_IDLE_KILL_SECS). The
+# activity manager's `ProcessRecord` and the process's `IWindowSession` go with
+# it, and the next "Start B" is a **spawn**. The proof is `process-start`: proc-b
+# logs it from `Application.onCreate`, which runs exactly once per guest
+# process, so two `process-start` lines can only come from a second process
+# instance (the activity's own `created` line repeats for a new instance in the
+# same process and is *not* proof on its own).
+#
+# STEP 3 (MPROC7): the result of `startActivityForResult` — proc-a's
+# `onActivityResult` runs with the request/result codes and B's data
+# (`A result -1 from-b`), delivered by the host as `ActivityResultItem` +
+# `ResumeActivityItem`.
+version: 1
+name: mproc3-two-process
+description: >-
+  One session, two guest processes: proc-a starts proc-b, proc-b's window comes
+  on top (proc-a paused and stopped underneath), finishing it returns to proc-a,
+  the idle kill takes the idle process (record and window session included), and
+  the next intent spawns it again.
+app: fixtures/build/apps/proc-a.apk
+extra_apks:
+  - fixtures/build/apps/proc-b.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.proca/.ProcAActivity
+      clear_state: true
+      # MPROC7: B is killed two seconds after it goes idle, inside this scenario.
+      idle_kill_seconds: 2
+
+  # Step 1: the lazy spawn. proc-a's own window is the served tree first.
+  - assert_text:
+      selector: {id: start_b}
+      text: {exact: "Start B"}
+      timeout_ms: 10000
+
+  - tap:
+      selector: {id: start_b}
+
+  # proc-b's window is what is on top now: its "Finish B" button is in the
+  # served tree, which is proc-b's own process's tree. `wait_for` is the
+  # event-driven wait; the assertion after it pins the text.
+  - wait_for:
+      selector: {id: finish}
+      timeout_ms: 30000
+
+  - assert_text:
+      selector: {id: finish}
+      text: {exact: "Finish B"}
+
+  # The lifecycle of both processes, in order: B resumed (in its own process),
+  # A paused and then stopped (its own `IApplicationThread` received the items).
+  # No tag filter: the ordered sequence spans two processes (AcosProcA and
+  # AcosProcB); the ACOSPROBE messages themselves name the process.
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 20000
+      ordered: true
+      patterns:
+        - '^ACOSPROBE b created pkg=dev\.acos\.fixtures\.procb\b'
+        - '^ACOSPROBE b resumed pkg=dev\.acos\.fixtures\.procb$'
+        - '^ACOSPROBE a paused$'
+        - '^ACOSPROBE a stopped$'
+
+  # Back from B returns to A, and B's result reached A's onActivityResult
+  # (MPROC7: ActivityResultItem + ResumeActivityItem, request 7 / code -1).
+  - tap:
+      selector: {id: finish}
+
+  - wait_for:
+      selector: {id: start_b}
+      timeout_ms: 30000
+
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "A result -1 from-b"}
+
+  - assert_text:
+      selector: {id: start_b}
+      text: {exact: "Start B"}
+
+  # Step 2: B is idle now; give the launcher's two-second idle kill the time it
+  # needs (the wait asserts nothing, and its reply carries `waited_ms`). The
+  # next Start B must then be a real spawn.
+  - wait:
+      ms: 3000
+
+  - tap:
+      selector: {id: start_b}
+
+  - wait_for:
+      selector: {id: finish}
+      timeout_ms: 30000
+
+  - assert_text:
+      selector: {id: finish}
+      text: {exact: "Finish B"}
+
+  # No tag filter: the ordered sequence spans two processes (AcosProcA and
+  # AcosProcB); the ACOSPROBE messages themselves name the process.
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 20000
+      min_matches: 2
+      patterns:
+        - '^ACOSPROBE b created pkg=dev\.acos\.fixtures\.procb\b'
+
+  # The idle kill itself: `Application.onCreate` ran twice, i.e. two guest
+  # processes. A reused (never killed) process still shows exactly one.
+  # No tag filter: the ordered sequence spans two processes (AcosProcA and
+  # AcosProcB); the ACOSPROBE messages themselves name the process.
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 20000
+      min_matches: 2
+      patterns:
+        - '^ACOSPROBE b process-start pid=\d+ pkg=dev\.acos\.fixtures\.procb$'

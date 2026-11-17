@@ -17,10 +17,13 @@
 #   fixtures/build/apps/svg-viewbox.apk
 #   fixtures/build/apps/offscreen-pager.apk
 #   fixtures/build/apps/insets-probe.apk
+
 #   fixtures/build/apps/sensor-probe.apk   (MODSENS: native sensorservice feed)
 #   fixtures/build/apps/notif-perm-probe.apk (MODNOTIF5: notifications + POST_NOTIFICATIONS gate)
 #   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
 #
+
+#   fixtures/build/apps/multi-package-probe.apk
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -231,6 +234,7 @@ for app in counter todo-list multi-activity form-validation settle-lab thread-he
     build_apk "$app"
 done
 
+
 # a11y-probe is the ADR-0029 accessibility-module fixture: reads the real
 # AccessibilityManager state (enabled + installed/enabled lists) and sends a
 # real event through IAccessibilityManager.sendAccessibilityEvent.
@@ -245,6 +249,20 @@ build_apk tail-probe
 # updates from a scripted track and the geocoder state on screen, so a scenario
 # can assert what the app really received (fixtures/apps/location-probe).
 build_apk location-probe
+
+# multi-package-probe (MPROC1) is the multi-package session fixture: it asks
+# `PackageManager` about a second installed package (`dev.acos.fixtures.counter`)
+# and builds that package's Context/resources. It needs no second APK at build
+# time; the session installs `counter.apk` with `--extra-apk`.
+build_apk multi-package-probe
+# MPROC4: the two-process pair (proc-a starts/binds components of proc-b).
+build_apk proc-a
+build_apk proc-b
+
+# intent-probe (MPROC1 step 2) drives the two intents a device routes to another
+# app: an implicit ACTION_SEND text share (`startActivity`) and an
+# ACTION_GET_CONTENT image pick (`startActivityForResult`, requestCode 42).
+build_apk intent-probe
 
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from

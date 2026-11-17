@@ -128,7 +128,9 @@ impl MotionEvent {
     /// The pointer at `action_index`.
     #[must_use]
     pub fn action_pointer(&self) -> Option<PointerCoords> {
-        self.pointers.get(self.action_index.max(0) as usize).copied()
+        self.pointers
+            .get(self.action_index.max(0) as usize)
+            .copied()
     }
 }
 
@@ -639,7 +641,12 @@ impl InputDispatcher {
     }
 
     /// Inject a key press/release pair.
-    pub fn inject_key(&mut self, session: SessionId, key_code: i32, cause_id: i64) -> Result<Vec<u32>> {
+    pub fn inject_key(
+        &mut self,
+        session: SessionId,
+        key_code: i32,
+        cause_id: i64,
+    ) -> Result<Vec<u32>> {
         let clock = self.clock.clone();
         let now = clock.now_nanos();
         let mk = |action: i32| KeyEvent {
@@ -661,7 +668,13 @@ impl InputDispatcher {
     }
 
     /// Inject a tap (DOWN then UP at the same point).
-    pub fn inject_tap(&mut self, session: SessionId, x: f32, y: f32, cause_id: i64) -> Result<Vec<u32>> {
+    pub fn inject_tap(
+        &mut self,
+        session: SessionId,
+        x: f32,
+        y: f32,
+        cause_id: i64,
+    ) -> Result<Vec<u32>> {
         let clock = self.clock.clone();
         let now = clock.now_nanos();
         let mk = |action: i32, t: i64| MotionEvent {
@@ -942,7 +955,13 @@ mod tests {
         }
         assert_eq!(
             actions,
-            vec![ACTION_DOWN, ACTION_MOVE, ACTION_MOVE, ACTION_MOVE, ACTION_UP]
+            vec![
+                ACTION_DOWN,
+                ACTION_MOVE,
+                ACTION_MOVE,
+                ACTION_MOVE,
+                ACTION_UP
+            ]
         );
         assert!(xs[0] == 100.0 && xs[4] == 400.0);
         assert!(xs[1] < xs[2] && xs[2] < xs[3]);

@@ -78,12 +78,7 @@ pub fn pop_calling_identity() -> Option<CallingIdentity> {
 /// Effective caller identity: the top of the stack, else the process identity.
 #[must_use]
 pub fn calling_identity() -> CallingIdentity {
-    IDENTITY_STACK.with(|s| {
-        s.borrow()
-            .last()
-            .copied()
-            .unwrap_or_else(process_identity)
-    })
+    IDENTITY_STACK.with(|s| s.borrow().last().copied().unwrap_or_else(process_identity))
 }
 
 /// `Binder.getCallingUid()`.
@@ -428,9 +423,15 @@ mod tests {
         assert_eq!(calling_pid(), 1234);
         push_calling_identity(1000, 999);
         assert_eq!(calling_uid(), 1000);
-        assert_eq!(pop_calling_identity(), Some(CallingIdentity::new(1000, 999)));
+        assert_eq!(
+            pop_calling_identity(),
+            Some(CallingIdentity::new(1000, 999))
+        );
         assert_eq!(calling_uid(), 10192);
-        assert_eq!(pop_calling_identity(), Some(CallingIdentity::new(10192, 1234)));
+        assert_eq!(
+            pop_calling_identity(),
+            Some(CallingIdentity::new(10192, 1234))
+        );
         assert_eq!(calling_identity(), process_identity());
     }
 
@@ -462,12 +463,18 @@ mod tests {
     fn service_table_and_registry() {
         let reg = BinderRegistry::new();
         let id = reg.register_local("android.app.IActivityManager");
-        assert_eq!(reg.descriptor(id).as_deref(), Some("android.app.IActivityManager"));
+        assert_eq!(
+            reg.descriptor(id).as_deref(),
+            Some("android.app.IActivityManager")
+        );
         assert!(reg.contains(id));
         assert!(reg.add_service("activity", id).is_ok());
 
         let found = reg.check_service("activity").unwrap();
-        assert_eq!(reg.descriptor(found).as_deref(), Some("android.app.IActivityManager"));
+        assert_eq!(
+            reg.descriptor(found).as_deref(),
+            Some("android.app.IActivityManager")
+        );
         assert_eq!(reg.check_service("nope"), None);
         assert_eq!(reg.list_services(), vec!["activity".to_string()]);
 

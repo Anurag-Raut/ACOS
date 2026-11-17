@@ -198,9 +198,8 @@ impl ServiceObject for PermissionsService {
                 .unwrap_or_default()
                 .to_string()
         };
-        let int = |index: usize| -> i32 {
-            args.get(index).and_then(WireValue::as_int).unwrap_or(0)
-        };
+        let int =
+            |index: usize| -> i32 { args.get(index).and_then(WireValue::as_int).unwrap_or(0) };
         let reply = match method.name.as_str() {
             // `getPermissionFlags(String packageName, String permissionName, int userId)`
             "getPermissionFlags" => {
@@ -210,7 +209,9 @@ impl ServiceObject for PermissionsService {
             // `shouldShowRequestPermissionRationale(String packageName, String permissionName, int userId)`
             "shouldShowRequestPermissionRationale" => {
                 let permission = string(1);
-                vec![WireValue::Bool(self.store().should_show_rationale(&permission))]
+                vec![WireValue::Bool(
+                    self.store().should_show_rationale(&permission),
+                )]
             }
             // `checkPermission(String packageName, String permissionName, int userId)`
             "checkPermission" => {
@@ -286,7 +287,6 @@ impl ServiceObject for PermissionsService {
             deliveries: Vec::new(),
         })
     }
-
 }
 
 /// Apply a launch-config `grant`/`deny`/`deny_never_ask_again` list.

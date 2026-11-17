@@ -191,11 +191,16 @@ impl RecordedWindowHost {
 
 impl WindowHost for RecordedWindowHost {
     fn geometry(&self, window: u64) -> Option<(u32, u32)> {
-        self.windows.lock().ok().and_then(|g| g.get(&window).copied())
+        self.windows
+            .lock()
+            .ok()
+            .and_then(|g| g.get(&window).copied())
     }
 
     fn present(&self, window: u64, width: u32, height: u32, rgba: &[u8]) -> u64 {
-        let Ok(mut g) = self.frames.lock() else { return 0 };
+        let Ok(mut g) = self.frames.lock() else {
+            return 0;
+        };
         g.push(RecordedFrame {
             window,
             width,
@@ -438,7 +443,9 @@ pub fn get_config_attrib(display: u64, config: u64, name: i32) -> Option<i32> {
     if !check_display(display) {
         return None;
     }
-    let Ok(reg) = registry().lock() else { return None };
+    let Ok(reg) = registry().lock() else {
+        return None;
+    };
     let Some(cfg) = reg.configs.get(&config) else {
         set_error(EGL_BAD_CONFIG);
         return None;
@@ -459,7 +466,9 @@ pub fn get_config_attrib(display: u64, config: u64, name: i32) -> Option<i32> {
         attrib::COLOR_BUFFER_TYPE => 0x308E,
         attrib::TRANSPARENT_TYPE => 0x3038,
         attrib::LEVEL => 0,
-        attrib::MAX_PBUFFER_WIDTH | attrib::MAX_PBUFFER_HEIGHT => crate::error::consts::MAX_DIM as i32,
+        attrib::MAX_PBUFFER_WIDTH | attrib::MAX_PBUFFER_HEIGHT => {
+            crate::error::consts::MAX_DIM as i32
+        }
         attrib::MAX_PBUFFER_PIXELS => {
             (crate::error::consts::MAX_DIM * crate::error::consts::MAX_DIM) as i32
         }
@@ -493,7 +502,11 @@ pub fn create_window_surface(display: u64, config: u64, native_window: u64) -> u
         set_error(EGL_BAD_NATIVE_WINDOW);
         return EGL_NO_HANDLE;
     };
-    if width == 0 || height == 0 || width > crate::error::consts::MAX_DIM || height > crate::error::consts::MAX_DIM {
+    if width == 0
+        || height == 0
+        || width > crate::error::consts::MAX_DIM
+        || height > crate::error::consts::MAX_DIM
+    {
         set_error(EGL_BAD_ALLOC);
         return EGL_NO_HANDLE;
     }
@@ -773,7 +786,9 @@ pub fn query_surface(display: u64, surface: u64, name: i32) -> Option<i32> {
     if !check_display(display) {
         return None;
     }
-    let Ok(reg) = registry().lock() else { return None };
+    let Ok(reg) = registry().lock() else {
+        return None;
+    };
     let Some(s) = reg.surfaces.get(&surface) else {
         set_error(EGL_BAD_SURFACE);
         return None;
@@ -838,7 +853,10 @@ pub fn bind_api(api: i32) -> i32 {
     if api == attrib::OPENGL_ES_API {
         return EGL_TRUE;
     }
-    unsupported("eglBindAPI", format!("api {api:#x} (only EGL_OPENGL_ES_API)"));
+    unsupported(
+        "eglBindAPI",
+        format!("api {api:#x} (only EGL_OPENGL_ES_API)"),
+    );
     set_error(EGL_BAD_PARAMETER);
     EGL_FALSE
 }
@@ -950,7 +968,10 @@ mod tests {
         // Before `eglInitialize`, every display-dependent call fails closed.
         assert!(choose_config(DISPLAY, &[attrib::RED_SIZE, 8, attrib::NONE]).is_empty());
         assert_eq!(get_error(), EGL_NOT_INITIALIZED);
-        assert_eq!(create_context(DISPLAY, 1, 0, &[attrib::NONE]), EGL_NO_HANDLE);
+        assert_eq!(
+            create_context(DISPLAY, 1, 0, &[attrib::NONE]),
+            EGL_NO_HANDLE
+        );
         assert_eq!(get_error(), EGL_NOT_INITIALIZED);
         let d = get_display(attrib::DEFAULT_DISPLAY);
         assert_eq!(d, DISPLAY);

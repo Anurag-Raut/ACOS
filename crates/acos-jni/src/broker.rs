@@ -45,7 +45,7 @@ use acos_vm::natives::safe_point;
 use acos_vm::Vm;
 
 use crate::error::JniError;
-use crate::state::{current_vm, runtime_state, set_vm, set_forced_thread, State};
+use crate::state::{current_vm, runtime_state, set_forced_thread, set_vm, State};
 
 /// Default request deadline in milliseconds. Overridable with
 /// `ACOS_JNI_BROKER_TIMEOUT_MS`.
@@ -55,33 +55,99 @@ const DEFAULT_TIMEOUT_MS: u64 = 5_000;
 /// cross threads; no VM pointer, handle table or `Rc` is ever stored here.
 #[derive(Debug)]
 pub enum Op {
-    FindClass { name: Vec<u8> },
-    NewStringUtf { bytes: Vec<u8> },
-    NewString { units: Vec<u16> },
-    MethodCodes { mid: usize },
-    AllocObject { class: usize },
-    GetMethodId { class: usize, name: Vec<u8>, sig: Vec<u8>, is_static: bool },
-    GetFieldId { class: usize, name: Vec<u8>, sig: Vec<u8>, is_static: bool },
-    CallMethod { target: usize, mid: usize, mode: i32, words: Vec<u64> },
-    CallNonvirtual { obj: usize, cls: usize, mid: usize, words: Vec<u64> },
-    GetField { obj: usize, fid: usize },
-    SetField { obj: usize, fid: usize, bits: u64 },
-    GetStringLength { s: usize },
-    GetStringUtfChars { s: usize },
-    ReleaseStringUtfChars { s: usize, chars: usize },
+    FindClass {
+        name: Vec<u8>,
+    },
+    NewStringUtf {
+        bytes: Vec<u8>,
+    },
+    NewString {
+        units: Vec<u16>,
+    },
+    MethodCodes {
+        mid: usize,
+    },
+    AllocObject {
+        class: usize,
+    },
+    GetMethodId {
+        class: usize,
+        name: Vec<u8>,
+        sig: Vec<u8>,
+        is_static: bool,
+    },
+    GetFieldId {
+        class: usize,
+        name: Vec<u8>,
+        sig: Vec<u8>,
+        is_static: bool,
+    },
+    CallMethod {
+        target: usize,
+        mid: usize,
+        mode: i32,
+        words: Vec<u64>,
+    },
+    CallNonvirtual {
+        obj: usize,
+        cls: usize,
+        mid: usize,
+        words: Vec<u64>,
+    },
+    GetField {
+        obj: usize,
+        fid: usize,
+    },
+    SetField {
+        obj: usize,
+        fid: usize,
+        bits: u64,
+    },
+    GetStringLength {
+        s: usize,
+    },
+    GetStringUtfChars {
+        s: usize,
+    },
+    ReleaseStringUtfChars {
+        s: usize,
+        chars: usize,
+    },
     ExceptionCheck,
     ExceptionOccurred,
     ExceptionClear,
-    PushLocalFrame { cap: i32 },
-    PopLocalFrame { result: usize },
-    NewGlobalRef { obj: usize },
-    DeleteGlobalRef { obj: usize },
-    DeleteLocalRef { obj: usize },
-    GetObjectClass { obj: usize },
-    IsSameObject { a: usize, b: usize },
-    Throw { obj: usize },
-    ThrowNew { class: usize, message: Vec<u8> },
-    GetObjectRefType { obj: usize },
+    PushLocalFrame {
+        cap: i32,
+    },
+    PopLocalFrame {
+        result: usize,
+    },
+    NewGlobalRef {
+        obj: usize,
+    },
+    DeleteGlobalRef {
+        obj: usize,
+    },
+    DeleteLocalRef {
+        obj: usize,
+    },
+    GetObjectClass {
+        obj: usize,
+    },
+    IsSameObject {
+        a: usize,
+        b: usize,
+    },
+    Throw {
+        obj: usize,
+    },
+    ThrowNew {
+        class: usize,
+        message: Vec<u8>,
+    },
+    GetObjectRefType {
+        obj: usize,
+    },
     Detach,
 }
 
@@ -410,7 +476,11 @@ pub unsafe fn service(vm_ptr: *mut Vm) -> usize {
         let Some(id) = next else { break };
         let (worker, op) = {
             let mut b = broker().lock().unwrap_or_else(|e| e.into_inner());
-            match b.owners.get_mut(&owner).and_then(|q| q.requests.get_mut(&id)) {
+            match b
+                .owners
+                .get_mut(&owner)
+                .and_then(|q| q.requests.get_mut(&id))
+            {
                 Some(req) if req.op.is_some() => (req.worker, req.op.take().unwrap()),
                 _ => continue,
             }
@@ -436,7 +506,12 @@ pub unsafe fn service(vm_ptr: *mut Vm) -> usize {
 }
 
 /// Execute one request on the owner thread with the worker's forced thread id.
-fn execute(vm_ptr: *mut Vm, rt: &std::rc::Rc<RefCell<State>>, worker: usize, op: Op) -> Result<u64, JniError> {
+fn execute(
+    vm_ptr: *mut Vm,
+    rt: &std::rc::Rc<RefCell<State>>,
+    worker: usize,
+    op: Op,
+) -> Result<u64, JniError> {
     if !matches!(op, Op::Detach) {
         broker()
             .lock()
@@ -495,7 +570,13 @@ fn cstring(bytes: &[u8]) -> CString {
     CString::new(bytes.to_vec()).unwrap_or_default()
 }
 
-fn dispatch(vm: &mut Vm, rt: &std::rc::Rc<RefCell<State>>, env: usize, worker: usize, op: Op) -> u64 {
+fn dispatch(
+    vm: &mut Vm,
+    rt: &std::rc::Rc<RefCell<State>>,
+    env: usize,
+    worker: usize,
+    op: Op,
+) -> u64 {
     use crate::jni::*;
     match op {
         Op::FindClass { name } => {
@@ -515,7 +596,12 @@ fn dispatch(vm: &mut Vm, rt: &std::rc::Rc<RefCell<State>>, env: usize, worker: u
         }
         Op::MethodCodes { mid } => crate::jni::acos_jni_method_codes(mid) as u64,
         Op::AllocObject { class } => unsafe { crate::jni::jni_AllocObject(env, class) as u64 },
-        Op::GetMethodId { class, name, sig, is_static } => {
+        Op::GetMethodId {
+            class,
+            name,
+            sig,
+            is_static,
+        } => {
             let n = cstring(&name);
             let s = cstring(&sig);
             unsafe {
@@ -526,7 +612,12 @@ fn dispatch(vm: &mut Vm, rt: &std::rc::Rc<RefCell<State>>, env: usize, worker: u
                 }
             }
         }
-        Op::GetFieldId { class, name, sig, is_static } => {
+        Op::GetFieldId {
+            class,
+            name,
+            sig,
+            is_static,
+        } => {
             let n = cstring(&name);
             let s = cstring(&sig);
             unsafe {
@@ -537,8 +628,17 @@ fn dispatch(vm: &mut Vm, rt: &std::rc::Rc<RefCell<State>>, env: usize, worker: u
                 }
             }
         }
-        Op::CallMethod { target, mid, mode, words } => {
-            let ptr = if words.is_empty() { std::ptr::null() } else { words.as_ptr() };
+        Op::CallMethod {
+            target,
+            mid,
+            mode,
+            words,
+        } => {
+            let ptr = if words.is_empty() {
+                std::ptr::null()
+            } else {
+                words.as_ptr()
+            };
             let r = unsafe { acos_jni_va_invoke(env, target, mid, mode, ptr, words.len() as i32) };
             // `NewObject` (mode 2) already creates a local; plain calls must
             // root the returned object in the worker's frame or GC stress can
@@ -549,8 +649,17 @@ fn dispatch(vm: &mut Vm, rt: &std::rc::Rc<RefCell<State>>, env: usize, worker: u
                 root_ref_return(vm, rt, worker, mid, r.bits)
             }
         }
-        Op::CallNonvirtual { obj, cls, mid, words } => {
-            let ptr = if words.is_empty() { std::ptr::null() } else { words.as_ptr() };
+        Op::CallNonvirtual {
+            obj,
+            cls,
+            mid,
+            words,
+        } => {
+            let ptr = if words.is_empty() {
+                std::ptr::null()
+            } else {
+                words.as_ptr()
+            };
             let r = unsafe {
                 acos_jni_va_invoke_nonvirtual(env, obj, cls, mid, 0, ptr, words.len() as i32)
             };
@@ -746,7 +855,12 @@ pub(crate) fn worker_get_field_id(
 
 /// Route a class lookup through the broker (worker threads only).
 pub(crate) fn worker_find_class(name: &[u8]) -> Option<u64> {
-    match worker_op(Op::FindClass { name: name.to_vec() }, "FindClass") {
+    match worker_op(
+        Op::FindClass {
+            name: name.to_vec(),
+        },
+        "FindClass",
+    ) {
         None => None,
         Some(Ok(v)) => Some(v),
         Some(Err(e)) => {
@@ -758,7 +872,12 @@ pub(crate) fn worker_find_class(name: &[u8]) -> Option<u64> {
 
 /// Route `NewStringUTF` through the broker.
 pub(crate) fn worker_new_string_utf(bytes: &[u8]) -> Option<u64> {
-    match worker_op(Op::NewStringUtf { bytes: bytes.to_vec() }, "NewStringUTF") {
+    match worker_op(
+        Op::NewStringUtf {
+            bytes: bytes.to_vec(),
+        },
+        "NewStringUTF",
+    ) {
         None => None,
         Some(Ok(v)) => Some(v),
         Some(Err(e)) => {
@@ -770,7 +889,12 @@ pub(crate) fn worker_new_string_utf(bytes: &[u8]) -> Option<u64> {
 
 /// Route `NewString` through the broker.
 pub(crate) fn worker_new_string(units: &[u16]) -> Option<u64> {
-    match worker_op(Op::NewString { units: units.to_vec() }, "NewString") {
+    match worker_op(
+        Op::NewString {
+            units: units.to_vec(),
+        },
+        "NewString",
+    ) {
         None => None,
         Some(Ok(v)) => Some(v),
         Some(Err(e)) => {

@@ -14,9 +14,7 @@
 
 use acos_parcel::binder::{BinderId, BinderKind};
 use acos_parcel::parcel::Parcel;
-use acos_parcel::{
-    ParcelError, SYSTEM_INTERFACE_TOKEN_HEADER, VNDK_INTERFACE_TOKEN_HEADER,
-};
+use acos_parcel::{ParcelError, SYSTEM_INTERFACE_TOKEN_HEADER, VNDK_INTERFACE_TOKEN_HEADER};
 
 /// `IDisplayManager.getDisplayInfo(int displayId)` with `displayId = 0`.
 /// Measured at launch (`binder_calls_launch.tsv` order 3926).
@@ -154,7 +152,7 @@ fn interface_token_prefix_bytes_and_word_order() {
     // Word 3: the magic, and its on-wire bytes.
     assert_eq!(&b[8..12], &SYSTEM_INTERFACE_TOKEN_HEADER.to_le_bytes());
     assert_eq!(&b[8..12], &[0x54, 0x53, 0x59, 0x53]); // "SYST"
-    // Then String16(descriptor).
+                                                      // Then String16(descriptor).
     p.set_data_position(12);
     assert_eq!(
         p.read_string16().unwrap().as_deref(),
@@ -171,7 +169,7 @@ fn interface_token_prefix_bytes_and_word_order() {
     let vb = v.marshall();
     assert_eq!(&vb[8..12], &VNDK_INTERFACE_TOKEN_HEADER.to_le_bytes());
     assert_eq!(&vb[8..12], &[0x52, 0x44, 0x4e, 0x56]); // "RDNV" on the wire
-    // enforce accepts the VNDK header only while the parcel expects VNDK.
+                                                       // enforce accepts the VNDK header only while the parcel expects VNDK.
     v.set_data_position(0);
     v.enforce_interface("android.app.IActivityManager").unwrap();
 
@@ -299,9 +297,12 @@ fn append_from_bytes_and_object_offsets() {
 #[test]
 fn enforce_interface_token_mismatch_and_bad_header() {
     let mut p = Parcel::new();
-    p.write_interface_token("android.app.IActivityManager").unwrap();
+    p.write_interface_token("android.app.IActivityManager")
+        .unwrap();
     p.set_data_position(0);
-    let err = p.enforce_interface("android.view.IWindowManager").unwrap_err();
+    let err = p
+        .enforce_interface("android.view.IWindowManager")
+        .unwrap_err();
     assert_eq!(err.code(), "PARCEL_TOKEN_MISMATCH");
     assert_eq!(err.status(), -1);
 
@@ -312,7 +313,9 @@ fn enforce_interface_token_mismatch_and_bad_header() {
     bad.write_int32(VNDK_INTERFACE_TOKEN_HEADER as i32);
     bad.write_string16("android.app.IActivityManager").unwrap();
     bad.set_data_position(0);
-    let err = bad.enforce_interface("android.app.IActivityManager").unwrap_err();
+    let err = bad
+        .enforce_interface("android.app.IActivityManager")
+        .unwrap_err();
     assert_eq!(err.code(), "PARCEL_BAD_TOKEN_HEADER");
     assert!(matches!(
         err,

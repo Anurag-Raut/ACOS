@@ -160,7 +160,8 @@ impl FdChannel {
         .map_err(|e| WmError::Fd(format!("socketpair: {e}")))?;
         // Non-blocking recv on both ends keeps the state machine timer-free.
         for fd in [&a, &b] {
-            let flags = rustix::fs::fcntl_getfl(fd).map_err(|e| WmError::Fd(format!("getfl: {e}")))?;
+            let flags =
+                rustix::fs::fcntl_getfl(fd).map_err(|e| WmError::Fd(format!("getfl: {e}")))?;
             rustix::fs::fcntl_setfl(fd, flags | rustix::fs::OFlags::NONBLOCK)
                 .map_err(|e| WmError::Fd(format!("setfl: {e}")))?;
         }
@@ -173,7 +174,10 @@ impl ChannelEnd for FdChannel {
         let n = rustix::net::send(&self.fd, frame, rustix::net::SendFlags::NOSIGNAL)
             .map_err(|e| WmError::Fd(format!("send: {e}")))?;
         if n != frame.len() {
-            return Err(WmError::Fd(format!("short seqpacket send {n}/{}", frame.len())));
+            return Err(WmError::Fd(format!(
+                "short seqpacket send {n}/{}",
+                frame.len()
+            )));
         }
         Ok(())
     }

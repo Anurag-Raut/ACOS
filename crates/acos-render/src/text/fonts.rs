@@ -179,15 +179,17 @@ impl FontCollection {
                     let lang = node.attribute("lang").map(|s| s.to_string());
                     let fallback_for = node.attribute("fallbackFor").map(|s| s.to_string());
                     let mut fonts = Vec::new();
-                    for f in node.children().filter(|n| n.is_element() && n.tag_name().name() == "font") {
+                    for f in node
+                        .children()
+                        .filter(|n| n.is_element() && n.tag_name().name() == "font")
+                    {
                         let weight = f
                             .attribute("weight")
                             .and_then(|s| s.parse::<u16>().ok())
                             .unwrap_or(400);
                         let style = f.attribute("style").unwrap_or("normal");
                         let italic = style == "italic";
-                        let post_script_name =
-                            f.attribute("postScriptName").map(|s| s.to_string());
+                        let post_script_name = f.attribute("postScriptName").map(|s| s.to_string());
                         let filename = f
                             .children()
                             .find(|n| n.is_text())
@@ -201,15 +203,21 @@ impl FontCollection {
                             continue;
                         };
                         let mut axes = Vec::new();
-                        for a in f.children().filter(|n| n.is_element() && n.tag_name().name() == "axis") {
+                        for a in f
+                            .children()
+                            .filter(|n| n.is_element() && n.tag_name().name() == "axis")
+                        {
                             if let (Some(tag), Some(v)) = (
                                 a.attribute("tag"),
-                                a.attribute("stylevalue").and_then(|s| s.parse::<f32>().ok()),
+                                a.attribute("stylevalue")
+                                    .and_then(|s| s.parse::<f32>().ok()),
                             ) {
                                 axes.push((tag.to_string(), v));
                             }
                         }
-                        if let Some(file) = map_font(path, post_script_name.as_deref(), &mut next_id) {
+                        if let Some(file) =
+                            map_font(path, post_script_name.as_deref(), &mut next_id)
+                        {
                             fonts.push(FontEntry {
                                 file,
                                 weight,
@@ -524,7 +532,11 @@ fn collect_font_files(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) -> Optio
     Some(())
 }
 
-fn map_font(path: &Path, post_script_name: Option<&str>, next_id: &mut u64) -> Option<Arc<FontFile>> {
+fn map_font(
+    path: &Path,
+    post_script_name: Option<&str>,
+    next_id: &mut u64,
+) -> Option<Arc<FontFile>> {
     let file = std::fs::File::open(path).ok()?;
     // SAFETY: the file is opened read-only; the mapping is never written and
     // is only accessed through immutable slices (`&[u8]`). `Mmap` is `Sync`,
@@ -620,7 +632,10 @@ pub fn candidate_font_dirs() -> Vec<PathBuf> {
         }
     }
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    for rel in ["../../.cache/boot/android-34/fonts", ".cache/boot/android-34/fonts"] {
+    for rel in [
+        "../../.cache/boot/android-34/fonts",
+        ".cache/boot/android-34/fonts",
+    ] {
         let p = manifest.join(rel);
         if p.exists() {
             dirs.push(p);
@@ -656,22 +671,32 @@ mod tests {
     #[test]
     fn parses_the_real_fonts_xml_if_available() {
         let dirs = candidate_font_dirs();
-        let Some(dir) = dirs
-            .iter()
-            .find(|d| d.join("fonts.xml").exists())
-        else {
+        let Some(dir) = dirs.iter().find(|d| d.join("fonts.xml").exists()) else {
             eprintln!("SKIP: no Android fonts.xml found (set ACOS_FONT_DIR)");
             return;
         };
         let fc = FontCollection::load_from_dir(dir).expect("load fonts");
-        assert!(fc.family_count() > 1, "family count = {}", fc.family_count());
+        assert!(
+            fc.family_count() > 1,
+            "family count = {}",
+            fc.family_count()
+        );
         let roboto = fc.resolve_typeface(None, 400, false).expect("roboto");
-        assert!(roboto.file.path.to_string_lossy().contains("Roboto") || roboto.family_key == fc.default_family);
+        assert!(
+            roboto.file.path.to_string_lossy().contains("Roboto")
+                || roboto.family_key == fc.default_family
+        );
         // A CJK fallback should be found when the Noto CJK font is present.
         let chain = fc.fallback_chain(Some("sans-serif"));
         if let Some(f) = fc.font_for_char(&chain, '漢' as u32, 400, false) {
-            assert!(f.file.path.to_string_lossy().to_lowercase().contains("cjk")
-                || f.file.path.to_string_lossy().to_lowercase().contains("noto"));
+            assert!(
+                f.file.path.to_string_lossy().to_lowercase().contains("cjk")
+                    || f.file
+                        .path
+                        .to_string_lossy()
+                        .to_lowercase()
+                        .contains("noto")
+            );
         } else {
             eprintln!("SKIP: no CJK fallback font available");
         }

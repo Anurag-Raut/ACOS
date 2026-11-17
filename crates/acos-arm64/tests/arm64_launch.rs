@@ -66,11 +66,7 @@ fn compile_guest(clang: &Path, out: &Path) -> std::io::Result<()> {
 }
 
 fn scratch_dir(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "acos-arm64-test-{}-{}",
-        std::process::id(),
-        tag
-    ));
+    let dir = std::env::temp_dir().join(format!("acos-arm64-test-{}-{}", std::process::id(), tag));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create scratch dir");
     dir

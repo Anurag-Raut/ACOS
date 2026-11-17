@@ -141,7 +141,10 @@ fn main() {
     ];
 
     println!("# acos-parcel micro-benchmarks\n");
-    println!("Release build, {} samples x {} iterations per sample.\n", SAMPLES, ITERS);
+    println!(
+        "Release build, {} samples x {} iterations per sample.\n",
+        SAMPLES, ITERS
+    );
     println!("| Benchmark | p50 (ns) | p95 (ns) | mean (ns) |");
     println!("|---|---:|---:|---:|");
     for (line, _) in &rows {

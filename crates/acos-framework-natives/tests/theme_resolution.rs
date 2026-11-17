@@ -133,7 +133,11 @@ fn merged_bag(styles: &HashMap<u32, StyleBag>, id: u32) -> BTreeMap<u32, String>
 }
 
 /// Render a raw engine value the same way aapt does in a bag entry.
-fn aapt_display(table: &acos_framework_natives::res::ResTableIndex, bytes: &[u8], v: ResValue) -> String {
+fn aapt_display(
+    table: &acos_framework_natives::res::ResTableIndex,
+    bytes: &[u8],
+    v: ResValue,
+) -> String {
     match v.data_type {
         0x01 => format!("(reference) 0x{:08x}", v.data),
         0x02 => format!("(attribute) 0x{:08x}", v.data),
@@ -278,10 +282,7 @@ fn theme_device_default_light_dark_action_bar() {
         .get_resource_value(color_bg.data, 420, true)
         .expect("resolve colorBackground");
     assert!(
-        matches!(
-            resolved.data_type,
-            TYPE_INT_COLOR_ARGB8..=0x1f
-        ),
+        matches!(resolved.data_type, TYPE_INT_COLOR_ARGB8..=0x1f),
         "colorBackground should resolve to a color, got type {:#04x}",
         resolved.data_type
     );
@@ -323,7 +324,8 @@ fn theme_device_default_light_dark_action_bar() {
         &mut out_values,
         &mut out_indices,
     );
-    let text_size = acos_framework_natives::res::TypedValueOut::read_style(&out_values[..7]).unwrap();
+    let text_size =
+        acos_framework_natives::res::TypedValueOut::read_style(&out_values[..7]).unwrap();
     eprintln!(
         "applyStyle(textViewStyle): textSize type={:#04x} data={:#010x} index={} textColor type={:#04x}",
         text_size.data_type, text_size.data, out_indices[0], out_values[7]
@@ -335,7 +337,10 @@ fn theme_device_default_light_dark_action_bar() {
         );
         let px = sp * 420.0 / 160.0;
         eprintln!("applyStyle textSize = {sp}{unit} -> {px:.3}px at 420dpi");
-        assert!((sp - 14.0).abs() < 0.001, "applyStyle expected 14sp, got {sp}{unit}");
+        assert!(
+            (sp - 14.0).abs() < 0.001,
+            "applyStyle expected 14sp, got {sp}{unit}"
+        );
     }
 }
 
@@ -382,7 +387,15 @@ fn style_bag_string_keeps_its_asset_cookie() {
     let attrs = [0x0101_03aci32];
     let mut out_values = vec![0i32; attrs.len() * 7];
     let mut out_indices = vec![-1i32; attrs.len() + 1];
-    mgr.apply_style(theme, 0, 0x0103_0068, 0, &attrs, &mut out_values, &mut out_indices);
+    mgr.apply_style(
+        theme,
+        0,
+        0x0103_0068,
+        0,
+        &attrs,
+        &mut out_values,
+        &mut out_indices,
+    );
     let tv = acos_framework_natives::res::TypedValueOut::read_style(&out_values[..7]).unwrap();
     assert_eq!(tv.data_type, 0x03, "fontFamily must be TYPE_STRING");
     assert_eq!(
@@ -450,15 +463,25 @@ fn device_default_dark_action_bar_resolves_to_neutral_900() {
     );
 
     // 2. Both resolve to the same opaque neutral-900 device colour.
-    for (name, attr) in [("colorPrimary", 0x0101_0433u32), ("colorPrimaryDark", 0x0101_0434)] {
+    for (name, attr) in [
+        ("colorPrimary", 0x0101_0433u32),
+        ("colorPrimaryDark", 0x0101_0434),
+    ] {
         let (argb, final_id) = theme_color(&mgr, theme, attr);
         assert_eq!(argb, 0xff19_1c1e, "{name} should be system_neutral1_900");
-        assert_eq!(final_id, 0x0106_0028, "{name} should end at system_neutral1_900");
+        assert_eq!(
+            final_id, 0x0106_0028,
+            "{name} should end at system_neutral1_900"
+        );
     }
 
     // 3. `actionBarStyle` comes from the Material parent (the DeviceDefault
     //    theme does not override it) ...
-    let abs = mgr.theme(theme).unwrap().get(0x0101_02ce).expect("actionBarStyle");
+    let abs = mgr
+        .theme(theme)
+        .unwrap()
+        .get(0x0101_02ce)
+        .expect("actionBarStyle");
     assert_eq!(
         (abs.data_type, abs.data),
         (0x01, 0x0103_0290),
@@ -495,7 +518,10 @@ fn device_default_dark_action_bar_resolves_to_neutral_900() {
         tv.data_type, tv.data, out_indices
     );
     assert_eq!(tv.data_type, 0x1d, "action bar background must be a colour");
-    assert_eq!(tv.data, 0xff19_1c1e, "action bar background must be #191c1e");
+    assert_eq!(
+        tv.data, 0xff19_1c1e,
+        "action bar background must be #191c1e"
+    );
 }
 
 /// `actionBarTheme` (`ThemeOverlay.Material.Dark.ActionBar`) is applied to the
@@ -607,8 +633,7 @@ fn retrieve_attributes_clears_unset_slots() {
             .enumerate()
             .find_map(|(i, ev)| match ev {
                 acos_framework_natives::res::xmlblock::XmlEvent::StartTag(t) => {
-                    (block.doc.string_block.get(t.name_index) == Some("corners"))
-                        .then_some(i)
+                    (block.doc.string_block.get(t.name_index) == Some("corners")).then_some(i)
                 }
                 _ => None,
             })
@@ -622,7 +647,13 @@ fn retrieve_attributes_clears_unset_slots() {
     }
     // `DrawableCorners` styleable order: radius, topLeft, topRight, bottomLeft,
     // bottomRight. Only `radius` is present on `<corners>`.
-    let attrs = [0x0101_01a8i32, 0x0101_01a9, 0x0101_01aa, 0x0101_01ab, 0x0101_01ac];
+    let attrs = [
+        0x0101_01a8i32,
+        0x0101_01a9,
+        0x0101_01aa,
+        0x0101_01ab,
+        0x0101_01ac,
+    ];
     // Poison every slot with the stale `TYPE_INT_DEC` that used to leak in.
     let mut out_values = vec![0x10i32; attrs.len() * 7];
     let mut out_indices = vec![-1i32; attrs.len() + 1];
@@ -662,8 +693,9 @@ fn static_overlay_overrides_framework_bool() {
         eprintln!("framework-res.apk missing; skipping");
         return;
     }
-    if !acos_test_support::have_fixture(".cache/boot/android-34/overlays/PixelConfigOverlayCommon.apk")
-    {
+    if !acos_test_support::have_fixture(
+        ".cache/boot/android-34/overlays/PixelConfigOverlayCommon.apk",
+    ) {
         eprintln!("PixelConfigOverlayCommon.apk missing; skipping");
         return;
     }
@@ -690,7 +722,9 @@ fn static_overlay_overrides_framework_bool() {
         before.data, 0xFFFF_FFFF,
         "framework-res declares config_buttonTextAllCaps=true"
     );
-    let untouched_before = base.get_resource_value(UNTOUCHED, 0, true).map(|(_, v)| v.data);
+    let untouched_before = base
+        .get_resource_value(UNTOUCHED, 0, true)
+        .map(|(_, v)| v.data);
 
     let overridden = base.apply_overlay(ApkAssets::open(&overlay_path).unwrap());
     assert!(
@@ -698,7 +732,9 @@ fn static_overlay_overrides_framework_bool() {
         "the overlay must map at least one framework resource"
     );
 
-    let (_, after) = base.get_resource_value(ID, 0, true).expect("overlaid value");
+    let (_, after) = base
+        .get_resource_value(ID, 0, true)
+        .expect("overlaid value");
     assert_eq!(after.data_type, 0x12);
     assert_eq!(
         after.data, 0,

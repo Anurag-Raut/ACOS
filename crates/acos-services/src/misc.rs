@@ -899,8 +899,9 @@ impl A11yState {
         let pms = pms
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        pms.services
+        pms.packages
             .iter()
+            .flat_map(|installed| installed.services.iter())
             .filter(|service| service.permission == "android.permission.BIND_ACCESSIBILITY_SERVICE")
             .map(|service| {
                 let package = service.package_name.clone();

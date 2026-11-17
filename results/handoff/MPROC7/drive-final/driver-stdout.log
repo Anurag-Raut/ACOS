@@ -1,0 +1,143 @@
+PASS ready: {"package": "dev.acos.fixtures.proca"}
+PASS no-second-process-before: {"processes": [], "requests": []}
+PASS tap-start-b: {"animations": "on", "buffer_generation": 54, "buffer_id": 8589934593, "capture_label": "ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)", "capture_source": "acos-c1-buffer", "cmd": "tap", "frame_number": 54, "frame_seq": 2, "gesture": {"acks": [{"handled": true, "latency_us": 5081, "seq": 3}, {"handled": true, "latency_us": 5077, "seq": 4}], "new_buffer_generation":
+PASS start-b-button-in-tree: {"tree_present": true}
+PASS second-process-spawned: {"processes": [{"activity": "dev.acos.fixtures.procb.ProcBActivity", "alive": true, "package": "dev.acos.fixtures.procb", "pid": 3749297, "tag": 1}], "requests": [{"activity": "dev.acos.fixtures.procb.ProcBActivity", "component": "dev.acos.fixtures.procb/dev.acos.fixtures.procb.ProcBActivity", "package": "dev.acos.fixtures.procb", "pid": 3749297, "reason": "startActivity", "since_ms": 1338, "spawn
+PASS second-process-is-proc-b: [{"activity": "dev.acos.fixtures.procb.ProcBActivity", "alive": true, "package": "dev.acos.fixtures.procb", "pid": 3749297, "tag": 1}]
+PASS proc-b-window-on-top: {"probe_seq": 42}
+PASS proc-b-resumed-in-its-own-process: {"lines": ["ACOSPROBE b process-start pid=2 pkg=dev.acos.fixtures.procb", "ACOSPROBE b created pkg=dev.acos.fixtures.procb note=hello pid=2", "ACOSPROBE b resumed pkg=dev.acos.fixtures.procb"]}
+PASS proc-a-paused-or-stopped-under-b: {"lines": ["ACOSPROBE a ready pkg=dev.acos.fixtures.proca pid=2", "ACOSPROBE a resumed", "ACOSPROBE a start-b component=dev.acos.fixtures.procb/.ProcBActivity", "ACOSPROBE a paused", "ACOSPROBE a stopped", "ACOSPROBE a resumed", "ACOSPROBE a paused"]}
+PASS proc-b-intent-extras: {"lines": ["ACOSPROBE b created pkg=dev.acos.fixtures.procb note=hello pid=2"]}
+PASS tap-start-b-again: {"animations": "on", "buffer_generation": 78, "buffer_id": 8589934592, "capture_label": "ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)", "capture_source": "acos-c1-buffer", "cmd": "tap", "frame_number": 23, "frame_seq": 5, "gesture": {"acks": [{"handled": true, "latency_us": 5090, "seq": 3}, {"handled": true, "latency_us": 5087, "seq": 4}], "new_buffer_generation":
+PASS proc-b-onNewIntent-from-single-top: {"line": "ACOSPROBE b newIntent note=again pid=2"}
+PASS tap-finish-b: {"animations": "on", "bound": "timeout", "buffer_generation": 81, "buffer_id": 8589934595, "capture_label": "ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)", "capture_source": "acos-c1-buffer", "cmd": "tap", "frame_number": 1, "frame_seq": 6, "gesture": {"acks": [{"handled": true, "latency_us": 5092, "seq": 5}, {"handled": true, "latency_us": 5090, "seq": 6}], "seqs
+PASS proc-a-onActivityResult-from-b: {"line": "ACOSPROBE a result request=7 code=-1 data=from-b"}
+PASS back-from-b-returns-to-a: {"probe_seq": 44}
+PASS tap-bind-b: {"animations": "on", "buffer_generation": 97, "buffer_id": 8589934595, "capture_label": "ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)", "capture_source": "acos-c1-buffer", "cmd": "tap", "frame_number": 17, "frame_seq": 8, "gesture": {"acks": [{"handled": true, "latency_us": 5094, "seq": 5}, {"handled": true, "latency_us": 5091, "seq": 6}], "new_buffer_generation":
+FAIL aidl-round-trip-through-foreign-node: {"line": null}
+FAIL transaction-ran-in-proc-b: {"lines": []}
+PASS process-table-still-has-b: {"processes": [{"activity": "dev.acos.fixtures.procb.ProcBActivity", "alive": true, "package": "dev.acos.fixtures.procb", "pid": 3749297, "tag": 1}]}
+EXIT -9
+FACTS {
+  "ready": {
+    "ok": true,
+    "detail": {
+      "package": "dev.acos.fixtures.proca"
+    },
+    "step": "3b"
+  },
+  "no-second-process-before": {
+    "ok": true,
+    "detail": {
+      "processes": [],
+      "requests": []
+    },
+    "step": "3b"
+  },
+  "tap-start-b": {
+    "ok": true,
+    "detail": {
+      "animations": "on",
+      "buffer_generation": 54,
+      "buffer_id": 8589934593,
+      "capture_label": "ACOS C1 buffer capture (compositor-client stored buffer; not a device capture)",
+      "capture_source": "acos-c1-buffer",
+      "cmd": "tap",
+      "frame_number": 54,
+      "frame_seq": 2,
+      "gesture": {
+        "acks": [
+          {
+            "handled": true,
+            "latency_us": 5081,
+            "seq": 3
+          },
+          {
+            "handled": true,
+            "latency_us": 5077,
+            "seq": 4
+          }
+        ],
+        "new_buffer_generation": 54,
+        "new_probe_seq": 37,
+        "seqs": [
+          3,
+          4
+        ],
+        "token": "0x100000009",
+        "x": 157.0,
+        "y": 431.0
+      },
+      "height": 2400,
+      "layer_id": 3,
+      "layer_name": "bbq-wrapper",
+      "md5": "25db9ec7eab314597391c7b1b4273a69",
+      "non_zero_pixels": 2592000,
+      "ok": true,
+      "pixels_fnv1a": "ed25c77513916e23",
+      "png": "results/handoff/MPROC7/drive-final/live-frames/acos-c1-layer3-frame-54-g54-c2.png",
+      "png_bytes": 75903,
+      "probe_at_ms": 1794823189922,
+      "probe_seq": 37,
+      "producer_id": 1,
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 97,
+        "frame_ms": 922,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "tree": {
+        "emit_us": 407,
+        "node_budget": 2000,
+        "nodes": [
+          {
+            "bounds": "[0,0][1080,2400]",
+            "bounds_on_screen": "[0,0][1080,2400]",
+            "checked": false,
+            "children": [
+              {
+                "bounds": "[0,0][1080,2337]",
+                "bounds_on_screen": "[0,0][1080,2337]",
+                "checked": false,
+                "children": [
+                  {
+                    "bounds": "[0,275][1080,2337]",
+                    "bounds_on_screen": "[0,275][1080,2337]",
+                    "checked": false,
+                    "children": [
+                      {
+                        "bounds": "[0,275][1080,2337]",
+                        "bounds_on_screen": "[0,275][1080,2337]",
+                        "checked": false,
+                        "children": [
+                          {
+                            "bounds": "[42,317][1038,368]",
+                            "bounds_on_screen": "[42,317][1038,368]",
+                            "checked": false,
+                            "class": "android.widget.TextView",
+                            "clickable": false,
+                            "content_description": "",
+                            "enabled": true,
+                            "focused": false,
+                            "hint": "",
+                            "id": "dev.acos.fixtures.proca:id/status",
+                            "password": false,
+                            "selected": false,
+                            "text": "A started B",
+                            "visibility": 0,
+                            "visible": true,
+                            "visible_bounds": "[42,317][1038,368]",
+                            "window": "main"
+                          },
+                          {
+                            "bounds": "[42,368][273,494]",
+                            "bounds_on_screen": "[42,368][273,494]",
+           
+FAILURES_3B []
+OPEN_3C ["aidl-round-trip-through-foreign-node", "transaction-ran-in-proc-b"]

@@ -134,7 +134,9 @@ pub enum OpSpec {
         #[serde(default)]
         paint: Option<PaintSpec>,
     },
-    Color { color: String },
+    Color {
+        color: String,
+    },
     Path {
         commands: Vec<serde_json::Value>,
         #[serde(default)]
@@ -263,7 +265,8 @@ impl Scene {
         let surface = ctx.surface_create(self.width, self.height, self.density)?;
         let (root, count) = self.build_tree(ctx, &self.root)?;
         if let Some(bg) = &self.background {
-            let color = parse_color(bg).ok_or_else(|| RenderError::invalid("bad background colour"))?;
+            let color =
+                parse_color(bg).ok_or_else(|| RenderError::invalid("bad background colour"))?;
             // Background is the first display-list op so the per-frame clear
             // does not wipe it.
             if let Some(node) = ctx.render_nodes.get_mut(root) {
@@ -272,7 +275,10 @@ impl Scene {
         }
         let seq = ctx.surface_render_node(surface, root, cause_id)?;
         let frame = ctx.surface_capture_fresh(surface, 0)?;
-        let unsupported_ops = ctx.surface_capture(surface)?.map(|f| f.unsupported_ops).unwrap_or_default();
+        let unsupported_ops = ctx
+            .surface_capture(surface)?
+            .map(|f| f.unsupported_ops)
+            .unwrap_or_default();
         Ok(SceneRender {
             seq,
             frame_class: frame.class,
@@ -283,12 +289,20 @@ impl Scene {
     }
 
     /// Build the render-node tree, returning (root handle, node count).
-    pub fn build_tree(&self, ctx: &mut RenderContext, root: &SceneNode) -> RenderResult<(Handle, usize)> {
+    pub fn build_tree(
+        &self,
+        ctx: &mut RenderContext,
+        root: &SceneNode,
+    ) -> RenderResult<(Handle, usize)> {
         build_node(ctx, root, None)
     }
 }
 
-fn build_node(ctx: &mut RenderContext, node: &SceneNode, _parent: Option<Handle>) -> RenderResult<(Handle, usize)> {
+fn build_node(
+    ctx: &mut RenderContext,
+    node: &SceneNode,
+    _parent: Option<Handle>,
+) -> RenderResult<(Handle, usize)> {
     let h = ctx.render_node_create(node.name.as_deref().unwrap_or("node"));
     let mut count = 1;
     if let Some(b) = node.bounds {
@@ -368,7 +382,12 @@ fn build_op(ctx: &mut RenderContext, op: &OpSpec) -> RenderResult<Option<Display
             let p = build_paint(ctx, paint.as_ref())?;
             Some(DisplayOp::DrawRect(rect4(rect), p))
         }
-        OpSpec::RoundRect { rect, rx, ry, paint } => {
+        OpSpec::RoundRect {
+            rect,
+            rx,
+            ry,
+            paint,
+        } => {
             let p = build_paint(ctx, paint.as_ref())?;
             Some(DisplayOp::DrawRoundRect(rect4(rect), *rx, *ry, p))
         }
@@ -380,7 +399,13 @@ fn build_op(ctx: &mut RenderContext, op: &OpSpec) -> RenderResult<Option<Display
             let p = build_paint(ctx, paint.as_ref())?;
             Some(DisplayOp::DrawCircle(*cx, *cy, *r, p))
         }
-        OpSpec::Line { x0, y0, x1, y1, paint } => {
+        OpSpec::Line {
+            x0,
+            y0,
+            x1,
+            y1,
+            paint,
+        } => {
             let p = build_paint(ctx, paint.as_ref())?;
             Some(DisplayOp::DrawLine(*x0, *y0, *x1, *y1, p))
         }
@@ -420,18 +445,17 @@ fn build_op(ctx: &mut RenderContext, op: &OpSpec) -> RenderResult<Option<Display
             let p = build_paint(ctx, paint.as_ref())?;
             Some(DisplayOp::DrawPath(ph, p))
         }
-        OpSpec::Bitmap { path, dst, src: _, filter } => {
+        OpSpec::Bitmap {
+            path,
+            dst,
+            src: _,
+            filter,
+        } => {
             let bytes = std::fs::read(path).map_err(|e| RenderError::Io {
                 msg: format!("reading bitmap {path}: {e}"),
             })?;
             let bh = ctx.bitmap_create_from_bytes(&bytes)?;
-            Some(DisplayOp::DrawBitmap(
-                bh,
-                None,
-                rect4(dst),
-                None,
-                *filter,
-            ))
+            Some(DisplayOp::DrawBitmap(bh, None, rect4(dst), None, *filter))
         }
     })
 }
@@ -500,7 +524,11 @@ fn build_paint(ctx: &mut RenderContext, spec: Option<&PaintSpec>) -> RenderResul
     Ok(h)
 }
 
-fn apply_shader(ctx: &mut RenderContext, paint: Handle, shader: &ShaderSpecJson) -> RenderResult<()> {
+fn apply_shader(
+    ctx: &mut RenderContext,
+    paint: Handle,
+    shader: &ShaderSpecJson,
+) -> RenderResult<()> {
     match shader {
         ShaderSpecJson::Linear {
             start,
@@ -584,7 +612,11 @@ fn build_path(commands: &[serde_json::Value]) -> RenderResult<AcosPath> {
             .as_array()
             .ok_or_else(|| RenderError::invalid("path command must be an array"))?;
         let op = arr.first().and_then(|v| v.as_str()).unwrap_or("");
-        let n: Vec<f32> = arr[1..].iter().filter_map(|v| v.as_f64()).map(|v| v as f32).collect();
+        let n: Vec<f32> = arr[1..]
+            .iter()
+            .filter_map(|v| v.as_f64())
+            .map(|v| v as f32)
+            .collect();
         match op {
             "M" => path.move_to(n[0], n[1]),
             "L" => path.line_to(n[0], n[1]),

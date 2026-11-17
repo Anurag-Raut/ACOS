@@ -127,7 +127,11 @@ fn run_scenario(name: &str, steps: &str, trust: &str, allow_untrusted: bool) -> 
     )
     .expect("scenario");
     let apk = workspace().join("fixtures/build/apps/counter.apk");
-    assert!(apk.is_file(), "build fixtures first: missing {}", apk.display());
+    assert!(
+        apk.is_file(),
+        "build fixtures first: missing {}",
+        apk.display()
+    );
     let mut command = Command::cargo_bin("acos").expect("acos binary");
     command
         .env("ACOS_NO_DAEMON", "1")
@@ -181,7 +185,10 @@ fn untrusted_forged_forest_cannot_pass_a_tree_assertion() {
         "{LAUNCH}  - assert_text:\n      selector: {{id: ghost}}\n      text: {{exact: \"FORGED FOREST\"}}\n"
     );
     let run = run_scenario("forest-untrusted", &steps, "trust: untrusted\n", true);
-    assert!(!run.output.status.success(), "the forged forest must not pass");
+    assert!(
+        !run.output.status.success(),
+        "the forged forest must not pass"
+    );
     let v = verdict(&run);
     assert_eq!(step_code(&v, 1), "INSUFFICIENT_HOST_EVIDENCE");
     assert_eq!(v["trust"], "untrusted");
@@ -201,7 +208,10 @@ fn trusted_forged_forest_is_element_not_found_not_tree_truncated() {
         "{LAUNCH}  - assert_text:\n      selector: {{id: ghost}}\n      text: {{exact: \"FORGED FOREST\"}}\n"
     );
     let run = run_scenario("forest-trusted", &steps, "", false);
-    assert!(!run.output.status.success(), "the trusted control must fail");
+    assert!(
+        !run.output.status.success(),
+        "the trusted control must fail"
+    );
     let v = verdict(&run);
     assert_eq!(
         step_code(&v, 1),
@@ -212,11 +222,13 @@ fn trusted_forged_forest_is_element_not_found_not_tree_truncated() {
 
 #[test]
 fn untrusted_wait_for_refresh_also_fails_closed() {
-    let steps = format!(
-        "{LAUNCH}  - wait_for:\n      selector: {{id: ghost}}\n      timeout_ms: 100\n"
-    );
+    let steps =
+        format!("{LAUNCH}  - wait_for:\n      selector: {{id: ghost}}\n      timeout_ms: 100\n");
     let run = run_scenario("wait-untrusted", &steps, "trust: untrusted\n", true);
-    assert!(!run.output.status.success(), "wait_for must not pass on the forged tree");
+    assert!(
+        !run.output.status.success(),
+        "wait_for must not pass on the forged tree"
+    );
     let v = verdict(&run);
     assert_eq!(
         step_code(&v, 1),
@@ -231,11 +243,17 @@ fn untrusted_assert_log_is_refused_not_matched() {
         "{LAUNCH}  - assert_log:\n      patterns: [\"FORGED FOREST\"]\n      timeout_ms: 100\n"
     );
     let run = run_scenario("log-untrusted", &steps, "trust: untrusted\n", true);
-    assert!(!run.output.status.success(), "a guest log must not justify a pass");
+    assert!(
+        !run.output.status.success(),
+        "a guest log must not justify a pass"
+    );
     let v = verdict(&run);
     let code = step_code(&v, 1);
     assert!(
-        matches!(code.as_str(), "UNSUPPORTED_BACKEND" | "INSUFFICIENT_HOST_EVIDENCE"),
+        matches!(
+            code.as_str(),
+            "UNSUPPORTED_BACKEND" | "INSUFFICIENT_HOST_EVIDENCE"
+        ),
         "a guest log must fail closed, got {code}"
     );
 }

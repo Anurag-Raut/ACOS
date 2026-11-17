@@ -86,8 +86,7 @@ fn flutter_launch_observe_tap_round_trip() {
     );
     eprintln!(
         "E2E launch wall_ms={} engine={}",
-        envelope["result"]["wall_ms"],
-        envelope["result"]["engine"]
+        envelope["result"]["wall_ms"], envelope["result"]["engine"]
     );
 
     // observe must not time out: the frame is sampled on the engine's own
@@ -109,7 +108,9 @@ fn flutter_launch_observe_tap_round_trip() {
             && observed["result"]["frame"]["height"].as_u64().unwrap_or(0) > 0,
         "the observed frame must carry non-zero geometry: {observed:#?}"
     );
-    let frame0_seq = observed["result"]["frame"]["frame_seq"].as_u64().unwrap_or(0);
+    let frame0_seq = observed["result"]["frame"]["frame_seq"]
+        .as_u64()
+        .unwrap_or(0);
     let frame0_png = observed["result"]["png_base64"]
         .as_str()
         .expect("first observe must return a PNG")
@@ -166,7 +167,11 @@ fn flutter_launch_observe_tap_round_trip() {
         .as_array()
         .cloned()
         .unwrap_or_default();
-    assert_eq!(tapped_at.len(), 2, "tap must report the resolved point: {tapped:#?}");
+    assert_eq!(
+        tapped_at.len(),
+        2,
+        "tap must report the resolved point: {tapped:#?}"
+    );
 
     // Frames are presented asynchronously and the engine can coalesce or
     // duplicate a present, so poll until the post-tap frame content differs
@@ -186,7 +191,9 @@ fn flutter_launch_observe_tap_round_trip() {
             observed2["status"], "pass",
             "post-tap observe must return a frame: {observed2:#?}"
         );
-        frame1_seq = observed2["result"]["frame"]["frame_seq"].as_u64().unwrap_or(0);
+        frame1_seq = observed2["result"]["frame"]["frame_seq"]
+            .as_u64()
+            .unwrap_or(0);
         let png = observed2["result"]["png_base64"]
             .as_str()
             .expect("post-tap observe must return a PNG");

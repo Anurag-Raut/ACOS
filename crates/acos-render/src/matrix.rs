@@ -335,12 +335,7 @@ impl Matrix3x3 {
             return false;
         }
         let (use_sx, use_sy, tx, ty) = if mode == ScaleToFit::Fill {
-            (
-                sx,
-                sy,
-                dst.left - src.left * sx,
-                dst.top - src.top * sy,
-            )
+            (sx, sy, dst.left - src.left * sx, dst.top - src.top * sy)
         } else {
             // START / CENTER / END preserve aspect ratio with a uniform scale.
             let s = sx.min(sy);

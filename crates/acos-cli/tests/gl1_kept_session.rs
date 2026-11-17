@@ -260,7 +260,10 @@ fn a_kept_session_survives_the_launching_client() {
     // connection that created the session. Before GL1 the guest died here.
     let launch = daemon.call(&["launch", &apk_arg, "--keep", "--json"]);
     let launched = ok_calls(&launch);
-    assert_eq!(launched["engine"], Value::Bool(false).as_bool().map(|_| "art").unwrap());
+    assert_eq!(
+        launched["engine"],
+        Value::Bool(false).as_bool().map(|_| "art").unwrap()
+    );
     assert_eq!(launched["engine"], "art", "{launch:#?}");
 
     // The guest must be alive right now, i.e. the launch's connection thread is
@@ -308,24 +311,22 @@ fn a_kept_session_survives_the_launching_client() {
 
     let shot = daemon.scratch.log("kept.png");
     let shot_arg = shot.display().to_string();
-    let observe = daemon.call(&[
-        "session",
-        "observe",
-        "--screenshot",
-        &shot_arg,
-        "--json",
-    ]);
+    let observe = daemon.call(&["session", "observe", "--screenshot", &shot_arg, "--json"]);
     ok_calls(&observe);
     let mut head = [0u8; 8];
     let mut file = std::fs::File::open(&shot).expect("the screenshot exists");
-    file.read_exact(&mut head).expect("the screenshot is readable");
+    file.read_exact(&mut head)
+        .expect("the screenshot is readable");
     assert_eq!(&head[..4], &[0x89, b'P', b'N', b'G'], "not a PNG: {head:?}");
     let bytes = std::fs::metadata(&shot).unwrap().len();
     assert!(bytes > 1000, "PNG too small: {bytes} bytes");
 
     // Teardown: the guest is gone, and provably so (no leftover acos-art).
     let before = guest_processes(&daemon.scratch.dir);
-    assert!(!before.is_empty(), "the guest should still be running: {before:?}");
+    assert!(
+        !before.is_empty(),
+        "the guest should still be running: {before:?}"
+    );
     let destroy = daemon.call(&["session", "destroy", "--json"]);
     let destroyed = ok_calls(&destroy);
     assert_eq!(destroyed["destroyed"], Value::Bool(true), "{destroy:#?}");
@@ -389,7 +390,10 @@ fn a_sigkilled_daemon_takes_its_guests_with_it() {
             })
             .map(|state| state != "Z")
             .unwrap_or(false);
-        assert!(!alive, "guest {guest} is still running after the daemon died");
+        assert!(
+            !alive,
+            "guest {guest} is still running after the daemon died"
+        );
     }
 }
 
@@ -460,7 +464,10 @@ fn explicit_destruction_is_bounded_and_leaves_nothing_behind() {
             "the engine's own teardown timer says {teardown:#?}"
         );
         assert!(
-            matches!(teardown["lifecycle"].as_str(), Some("lifecycle") | Some("killed")),
+            matches!(
+                teardown["lifecycle"].as_str(),
+                Some("lifecycle") | Some("killed")
+            ),
             "the destroy reply must name the path: {teardown:#?}"
         );
         // No process of that session may survive, and the id must be gone.

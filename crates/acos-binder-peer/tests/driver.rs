@@ -90,7 +90,10 @@ fn driver_delivers_callbacks_and_answers_dead_nodes() {
         stderr
     );
     // Guard against a harness that reports success without running its checks.
-    let checks = stdout.lines().filter(|line| line.starts_with("ok ")).count();
+    let checks = stdout
+        .lines()
+        .filter(|line| line.starts_with("ok "))
+        .count();
     assert!(
         checks >= 18,
         "driver test ran {checks} checks, expected at least 18:\n{stdout}"
@@ -98,5 +101,58 @@ fn driver_delivers_callbacks_and_answers_dead_nodes() {
     assert!(
         stdout.lines().any(|line| line == "RESULT failures=0"),
         "driver test did not report RESULT failures=0:\n{stdout}"
+    );
+}
+
+/// The death-notification half of the driver test (`native/driver_death_test.c`,
+/// MPROC5b): `BC_REQUEST_DEATH_NOTIFICATION` + `F_DEATH` deliver one
+/// `BR_DEAD_BINDER` with the registered cookie, the registration is one-shot,
+/// and an `F_RSP` carrying `E3G_RSP_DEAD` reaches the caller as `BR_DEAD_REPLY`
+/// (a `DeadObjectException`), never the generic `BR_FAILED_REPLY`.
+///
+/// It is a separate program from `driver_test.c` because each carries its own
+/// `main`; both compile the same `binder_driver.c`.
+#[test]
+fn driver_reports_remote_death_to_link_to_death() {
+    let Some(cc) = compiler() else {
+        panic!("driver test needs a host C compiler (set CC or install cc/gcc/clang)");
+    };
+    let dir = native_dir();
+    let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("acos_binder_driver_death_test");
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent).expect("create tmp dir");
+    }
+    let build = Command::new(&cc)
+        .args(["-O1", "-g", "-pthread", "-o"])
+        .arg(&out)
+        .arg(dir.join("driver_death_test.c"))
+        .output()
+        .expect("run the C compiler");
+    assert!(
+        build.status.success(),
+        "compiling native/driver_death_test.c failed:\n{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let run = Command::new(&out)
+        .output()
+        .expect("run the driver death test binary");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(
+        run.status.success(),
+        "driver death test failed:\n{stdout}\n--- diagnostics ---\n{stderr}"
+    );
+    // This program reports on stderr (its `CHECK` macro is `dprintf(2, ..)`,
+    // so the lines interleave with the driver's own diagnostics in order).
+    let combined = format!("{stdout}{stderr}");
+    assert!(
+        combined.contains("driver_test: PASS"),
+        "driver death test did not report PASS:\n{combined}"
+    );
+    assert!(
+        combined
+            .lines()
+            .any(|line| line.contains("F_RSP + E3G_RSP_DEAD reached the caller as BR_DEAD_REPLY")),
+        "the dead-reply check did not run:\n{combined}"
     );
 }

@@ -76,10 +76,8 @@ fn activity_params() -> Parcel {
 /// The dialog window's params as the image's `ViewRootImpl.setView` sends them:
 /// `type = TYPE_APPLICATION (2)`, `token = null`, `WRAP_CONTENT` for both axes.
 fn dialog_params() -> Parcel {
-    let mut lp = acos_wm::codec::LayoutParams::application(
-        "dev.acos.fixtures.helloviews",
-        "MainActivity",
-    );
+    let mut lp =
+        acos_wm::codec::LayoutParams::application("dev.acos.fixtures.helloviews", "MainActivity");
     lp.type_ = 2;
     lp.token = None;
     lp.width = -2;
@@ -97,7 +95,8 @@ fn add_request(window: BinderId, params: &Parcel) -> Parcel {
     let mut body = params.clone();
     body.set_data_position(0);
     let avail = body.data_avail();
-    data.append_from(&body, 0, avail).expect("LayoutParams body");
+    data.append_from(&body, 0, avail)
+        .expect("LayoutParams body");
     data.write_int32(0); // viewVisibility
     data.write_int32(-1); // layerStackId
     data.write_int32(0); // userId
@@ -119,7 +118,10 @@ fn read_add_reply(reply: &mut Parcel) -> AddReply {
     assert_eq!(reply.read_int32().expect("InputChannel present"), 1);
     assert_eq!(reply.read_int32().expect("isInitialized"), 1);
     let channel_token = reply.read_strong_binder().expect("channel token");
-    let channel_name = reply.read_string16().expect("channel name").expect("channel name");
+    let channel_name = reply
+        .read_string16()
+        .expect("channel name")
+        .expect("channel name");
     let _fd = reply.read_file_descriptor().expect("channel fd");
     // InsetsState / InsetsSourceControl.Array / Rect are not this test's subject;
     // skip them with the framework's presence words so the reply is consumed.
@@ -155,7 +157,8 @@ fn relayout_request(window: BinderId, params: Option<&Parcel>, width: i32, heigh
             let mut body = p.clone();
             body.set_data_position(0);
             let avail = body.data_avail();
-            data.append_from(&body, 0, avail).expect("LayoutParams body");
+            data.append_from(&body, 0, avail)
+                .expect("LayoutParams body");
         }
         None => data.write_int32(0),
     }
@@ -175,8 +178,8 @@ fn read_relayout_reply(reply: &mut Parcel) -> RelayoutReply {
     let frames =
         acos_wm::codec::ClientWindowFrames::read_from_parcel(reply).expect("ClientWindowFrames");
     assert_eq!(reply.read_int32().expect("config present"), 1);
-    let _ = acos_wm::codec::MergedConfiguration::read_from_parcel(reply)
-        .expect("MergedConfiguration");
+    let _ =
+        acos_wm::codec::MergedConfiguration::read_from_parcel(reply).expect("MergedConfiguration");
     assert_eq!(reply.read_int32().expect("surface present"), 1);
     let surface = SurfaceControlInfo::read_from_parcel(reply).expect("SurfaceControl");
     assert_eq!(reply.read_int32().expect("insets present"), 1);
@@ -334,7 +337,11 @@ fn a_duplicate_or_null_dialog_add_is_a_typed_refusal() {
         !dup.channel_initialized,
         "the duplicate must not get a second channel to install a receiver on"
     );
-    assert_eq!(reply.data_avail(), 0, "the refusal reply is consumed exactly");
+    assert_eq!(
+        reply.data_avail(),
+        0,
+        "the refusal reply is consumed exactly"
+    );
 
     // A null IWindow cannot be a window: ADD_BAD_APP_TOKEN, never a fabricated
     // channel (the reply still carries the uninitialised-channel body).

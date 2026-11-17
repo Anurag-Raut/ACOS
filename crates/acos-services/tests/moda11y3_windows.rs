@@ -47,7 +47,7 @@ fn add_window(state: &Arc<Mutex<A11yState>>, window: u64, type_: i32) {
         .clone()
         .expect("the host wires the LAYER1 window stack");
     let mut wms = wms.lock().unwrap();
-    let session = wms.session;
+    let session = wms.allocate_session();
     let mut params = acos_wm::codec::LayoutParams {
         type_,
         width: 400,
@@ -197,9 +197,7 @@ fn get_windows_reports_the_layer1_stack_topmost_first() {
 }
 
 /// `(id, layer, type, frame, booleanProperties)` from the payload.
-fn read_window_info_with_class(
-    parcel: &mut Parcel,
-) -> (i32, i32, i32, (i32, i32, i32, i32), i32) {
+fn read_window_info_with_class(parcel: &mut Parcel) -> (i32, i32, i32, (i32, i32, i32, i32), i32) {
     // `writeParcelable` writes the item's class name.
     assert_eq!(
         parcel.read_string16().unwrap().as_deref(),
@@ -210,9 +208,7 @@ fn read_window_info_with_class(
 
 /// The payload of one `AccessibilityWindowInfo` (no class name, no presence
 /// marker): what `writeTypedObject` carries for `getWindow`.
-fn read_window_payload(
-    parcel: &mut Parcel,
-) -> (i32, i32, i32, (i32, i32, i32, i32), i32) {
+fn read_window_payload(parcel: &mut Parcel) -> (i32, i32, i32, (i32, i32, i32, i32), i32) {
     assert_eq!(parcel.read_int32().unwrap(), 0, "display id");
     let type_ = parcel.read_int32().unwrap();
     let layer = parcel.read_int32().unwrap();
@@ -323,7 +319,10 @@ fn a_find_by_text_request_uses_the_text_connection_code() {
     );
     let deliveries = host.take_deliveries();
     assert_eq!(deliveries.len(), 1);
-    assert_eq!(deliveries[0].code, 3, "IAccessibilityInteractionConnection by text");
+    assert_eq!(
+        deliveries[0].code, 3,
+        "IAccessibilityInteractionConnection by text"
+    );
     let mut data = deliveries[0].data.clone();
     data.set_data_position(0);
     data.enforce_interface(INTERACTION).unwrap();

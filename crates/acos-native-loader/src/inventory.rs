@@ -43,11 +43,17 @@ impl Provision {
 /// the inventory cannot claim more than the loader delivers.
 pub const PARTIAL_SYMBOLS: &[(&str, &str)] = &[
     ("dladdr", "reports the object but not the nearest symbol"),
-    ("dlopen", "search-path confined, no RTLD_GLOBAL/LOCAL semantics"),
+    (
+        "dlopen",
+        "search-path confined, no RTLD_GLOBAL/LOCAL semantics",
+    ),
     ("dlsym", "RTLD_NEXT unsupported"),
     ("dlclose", "unloads on last handle only"),
     ("dlerror", "always NULL (no error text)"),
-    ("android_dlopen_ext", "extinfo now honoured for fd+offset; other flags ignored"),
+    (
+        "android_dlopen_ext",
+        "extinfo now honoured for fd+offset; other flags ignored",
+    ),
     ("dl_iterate_phdr", "guest objects only, no host objects"),
     ("__system_property_find", "returns NULL"),
     ("__system_property_read_callback", "no-op"),
@@ -55,7 +61,10 @@ pub const PARTIAL_SYMBOLS: &[(&str, &str)] = &[
     ("__system_property_serial", "returns 0"),
     ("__system_property_area_serial", "returns 0"),
     ("getauxval", "host auxv, not Android's"),
-    ("pthread_getattr_np", "reports the host stack, not the guest one"),
+    (
+        "pthread_getattr_np",
+        "reports the host stack, not the guest one",
+    ),
     ("__cxa_thread_atexit_impl", "runs on host thread exit only"),
 ];
 
@@ -305,10 +314,7 @@ fn section<'a>(elf: &Elf<'a>, va: u64, size: u64) -> Option<&'a [u8]> {
 }
 
 /// Decode RELA/REL/RELR/APS2 into a flat relocation list.
-pub fn decode_relocations(
-    elf: &Elf<'_>,
-    info: &DynInfo,
-) -> (Vec<RawReloc>, RelocReport) {
+pub fn decode_relocations(elf: &Elf<'_>, info: &DynInfo) -> (Vec<RawReloc>, RelocReport) {
     let mut out = Vec::new();
     let mut report = RelocReport {
         textrel: info.textrel,
@@ -349,7 +355,11 @@ pub fn decode_relocations(
     }
     if let Some((va, sz)) = info.jmprel {
         if let Some(d) = section(elf, va, sz) {
-            containers.insert(if info.jmprel_is_rela { "JMPREL-RELA" } else { "JMPREL-REL" });
+            containers.insert(if info.jmprel_is_rela {
+                "JMPREL-RELA"
+            } else {
+                "JMPREL-REL"
+            });
             let entsz = if info.jmprel_is_rela { 24 } else { 16 };
             for c in d.chunks_exact(entsz) {
                 let offset = u64::from_le_bytes(c[0..8].try_into().unwrap());
@@ -484,7 +494,9 @@ pub fn inventory_bytes(path: &str, name: &str, bytes: &[u8]) -> Result<LibraryIn
     let mut ifuncs = Vec::new();
     let mut tls_syms = 0usize;
     for (i, s) in info.symbols.iter().enumerate() {
-        let Some(n) = info.symbol_name(i) else { continue };
+        let Some(n) = info.symbol_name(i) else {
+            continue;
+        };
         if n.is_empty() {
             continue;
         }
@@ -517,10 +529,7 @@ pub fn inventory_bytes(path: &str, name: &str, bytes: &[u8]) -> Result<LibraryIn
     let tls = TlsModels {
         general_dynamic: has(R_X86_64_TLS_DTPMOD)
             || has(R_X86_64_TLS_DTPOFF)
-            || relocations
-                .by_type
-                .keys()
-                .any(|k| k.starts_with("TLS_GD")),
+            || relocations.by_type.keys().any(|k| k.starts_with("TLS_GD")),
         initial_exec: has(R_X86_64_TLS_TPOFF)
             || relocations
                 .by_type
@@ -680,7 +689,6 @@ pub fn aggregate(abi: &str, libs: Vec<LibraryInventory>) -> InventoryReport {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -708,7 +716,10 @@ mod tests {
         assert_eq!(classify("eglGetDisplay"), Provision::Partial);
         assert_eq!(classify("glReadPixels"), Provision::Partial);
         assert_eq!(classify("uprv_getICUData_core"), Provision::Missing);
-        assert_eq!(classify("acos_definitely_missing_symbol"), Provision::Missing);
+        assert_eq!(
+            classify("acos_definitely_missing_symbol"),
+            Provision::Missing
+        );
     }
 
     #[test]

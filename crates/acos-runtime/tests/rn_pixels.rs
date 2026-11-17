@@ -60,17 +60,21 @@ fn rn_pixels_child_worker() {
     match acos_sandbox::confine(&profile) {
         Ok(report) => println!("W164A_CONFINE {}", serde_json::json!(report)),
         Err(e) => {
-            println!("W164A_SUMMARY {}", serde_json::json!({"confined": false, "error": e.to_string()}));
+            println!(
+                "W164A_SUMMARY {}",
+                serde_json::json!({"confined": false, "error": e.to_string()})
+            );
             return;
         }
     }
 
-    let session = acos_runtime::session::AgentSession::start(acos_runtime::session::SessionOptions {
-        trace_natives: true,
-        native: true,
-        wall_secs: 240,
-        ..acos_runtime::session::SessionOptions::default()
-    });
+    let session =
+        acos_runtime::session::AgentSession::start(acos_runtime::session::SessionOptions {
+            trace_natives: true,
+            native: true,
+            wall_secs: 240,
+            ..acos_runtime::session::SessionOptions::default()
+        });
     match session.launch(&apk) {
         Ok(report) => {
             println!(
@@ -84,10 +88,19 @@ fn rn_pixels_child_worker() {
                     "classes_loaded": report.classes_loaded,
                 })
             );
-            let events: Vec<&String> = report.events.iter().filter(|e| {
-                let e = e.to_lowercase();
-                e.contains("acos") || e.contains("react") || e.contains("frame") || e.contains("error") || e.contains("exception")
-            }).take(40).collect();
+            let events: Vec<&String> = report
+                .events
+                .iter()
+                .filter(|e| {
+                    let e = e.to_lowercase();
+                    e.contains("acos")
+                        || e.contains("react")
+                        || e.contains("frame")
+                        || e.contains("error")
+                        || e.contains("exception")
+                })
+                .take(40)
+                .collect();
             println!("W164A_EVENTS {}", serde_json::json!(events));
             match session.observe(None) {
                 Ok(o) => println!(
@@ -97,7 +110,10 @@ fn rn_pixels_child_worker() {
                         "non_black": o.frame.as_ref().map(|f| f.pixels.chunks_exact(4).any(|p| p[0] | p[1] | p[2] != 0)),
                     })
                 ),
-                Err(e) => println!("W164A_FRAME {}", serde_json::json!({"code": e.code, "error": e.message})),
+                Err(e) => println!(
+                    "W164A_FRAME {}",
+                    serde_json::json!({"code": e.code, "error": e.message})
+                ),
             }
         }
         Err(e) => println!(
@@ -124,7 +140,12 @@ fn rn_platform_launch_probe() {
         .env(CHILD_ENV, "1")
         .env(APK_ENV, &apk)
         .env(OUT_ENV, &scratch)
-        .args(["--exact", "rn_pixels_child_worker", "--nocapture", "--test-threads=1"])
+        .args([
+            "--exact",
+            "rn_pixels_child_worker",
+            "--nocapture",
+            "--test-threads=1",
+        ])
         .output()
         .expect("spawn child");
     let text = String::from_utf8_lossy(&out.stdout);

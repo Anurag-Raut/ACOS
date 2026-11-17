@@ -105,8 +105,7 @@ mod tests {
         let manifest = load_manifest(&apk).unwrap();
         assert_eq!(manifest.package, "dev.acos.fixtures.helloviews");
         assert_eq!(manifest.target_sdk, 34);
-        assert!(manifest
-            .declares_activity("dev.acos.fixtures.helloviews/.MainActivity"));
+        assert!(manifest.declares_activity("dev.acos.fixtures.helloviews/.MainActivity"));
         assert!(!manifest.declares_activity("dev.acos.fixtures.helloviews/.Nope"));
         assert_eq!(manifest.sha256.len(), 64);
     }

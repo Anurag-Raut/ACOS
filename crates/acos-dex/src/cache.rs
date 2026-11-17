@@ -96,10 +96,8 @@ impl BootCache {
         }
 
         // Read + parse outside the lock: a boot DEX is several MiB.
-        let bytes =
-            std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-        let parsed = DexFile::parse(bytes)
-            .map_err(|e| format!("parse {}: {e}", path.display()))?;
+        let bytes = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let parsed = DexFile::parse(bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
         let parsed = Arc::new(parsed);
         self.loads.fetch_add(1, Ordering::Relaxed);
 
@@ -139,8 +137,9 @@ impl BootCache {
         let parsed = match tables {
             Some(tables) => match DexFile::from_tables(tables, raw.clone()) {
                 Ok(file) => file,
-                Err(_) => DexFile::parse(raw)
-                    .map_err(|e| format!("parse {}: {e}", path.display()))?,
+                Err(_) => {
+                    DexFile::parse(raw).map_err(|e| format!("parse {}: {e}", path.display()))?
+                }
             },
             None => DexFile::parse(raw).map_err(|e| format!("parse {}: {e}", path.display()))?,
         };
@@ -153,10 +152,7 @@ impl BootCache {
 
     /// Number of parsed files currently resident.
     pub fn len(&self) -> usize {
-        self.map
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .len()
+        self.map.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -189,10 +185,7 @@ impl BootCache {
 
     /// Drop every entry. Existing `Arc` owners keep their parsed file alive.
     pub fn clear(&self) {
-        self.map
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear();
+        self.map.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 }
 

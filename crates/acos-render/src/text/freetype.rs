@@ -531,7 +531,9 @@ pub fn rasterize_subpixel_coords(
         return None;
     }
     let subpixel = if subpixel_x.is_finite() {
-        ((subpixel_x.rem_euclid(1.0)) * 64.0).round().clamp(0.0, 63.0) as u8
+        ((subpixel_x.rem_euclid(1.0)) * 64.0)
+            .round()
+            .clamp(0.0, 63.0) as u8
     } else {
         0
     };

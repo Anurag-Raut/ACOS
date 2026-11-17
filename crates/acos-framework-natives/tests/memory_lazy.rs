@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use acos_framework_natives::res::{ApkAssets, ResConfig, AssetSource};
+use acos_framework_natives::res::{ApkAssets, AssetSource, ResConfig};
 
 fn workspace_root() -> PathBuf {
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

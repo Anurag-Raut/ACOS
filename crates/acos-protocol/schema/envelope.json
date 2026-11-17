@@ -785,6 +785,13 @@
           "type": "string"
         },
         {
+          "description": "The network relay (`acos-netd`) is down, so the session has **no** network: reported instead of a silent offline session or a fake success (fail closed, ADR-0030 amendment 3). The supervisor restarts `pasta` itself, so a retry after the relay is back succeeds.",
+          "enum": [
+            "NETWORK_UNAVAILABLE"
+          ],
+          "type": "string"
+        },
+        {
           "description": "ACOS itself failed (distinct from an app crash).",
           "enum": [
             "INTERNAL"

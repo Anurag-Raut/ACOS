@@ -200,7 +200,14 @@ fn build_stress(dir: &Path) -> PathBuf {
     let bin = dir.join("txn_heap_stress");
     let cc = std::env::var("CC").unwrap_or_else(|_| "cc".to_string());
     let out = Command::new(&cc)
-        .args(["-O2", "-pthread", "-Wall", "-Wextra", "-Wno-unused-parameter", "-o"])
+        .args([
+            "-O2",
+            "-pthread",
+            "-Wall",
+            "-Wextra",
+            "-Wno-unused-parameter",
+            "-o",
+        ])
         .arg(&bin)
         .arg(&src)
         .arg(native_dir().join("txn_heap.c"))

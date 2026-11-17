@@ -101,7 +101,10 @@ fn stub_jar(tools: &Tools) -> Option<PathBuf> {
     let out = root.join("target/tmp/acos-runtime/stubs");
     let jar = out.join("hidden-stubs.jar");
     let mut sources = Vec::new();
-    collect_java(&root.join("crates/acos-runtime/tests/java/stubs"), &mut sources);
+    collect_java(
+        &root.join("crates/acos-runtime/tests/java/stubs"),
+        &mut sources,
+    );
     sources.sort();
     if is_fresh(&jar, &sources) {
         return Some(jar);
@@ -147,7 +150,10 @@ pub fn compile_case(names: &[&str]) -> Option<PathBuf> {
     let dex = out.join("classes.dex");
     let sources: Vec<PathBuf> = names
         .iter()
-        .map(|n| root.join("crates/acos-runtime/tests/java").join(format!("{n}.java")))
+        .map(|n| {
+            root.join("crates/acos-runtime/tests/java")
+                .join(format!("{n}.java"))
+        })
         .collect();
     let stubs = stub_jar(&tools)?;
     let mut deps = sources.clone();
@@ -159,7 +165,11 @@ pub fn compile_case(names: &[&str]) -> Option<PathBuf> {
     std::fs::create_dir_all(&classes).ok()?;
     let ok = Command::new(&tools.javac)
         .args(["--release", "11", "-encoding", "UTF-8", "-cp"])
-        .arg(format!("{}:{}", stubs.display(), tools.android_jar.display()))
+        .arg(format!(
+            "{}:{}",
+            stubs.display(),
+            tools.android_jar.display()
+        ))
         .arg("-d")
         .arg(&classes)
         .args(&sources)

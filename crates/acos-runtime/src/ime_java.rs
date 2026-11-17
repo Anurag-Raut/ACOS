@@ -114,10 +114,7 @@ pub fn transact(
     // host's `ImeService` records into, so the Java and VM-free paths agree.
     // The recorded result is the ACOS `NO_IME` marker; the wire value below is
     // the framework's own `InputBindResult.NO_IME.result`.
-    let (_result, _method, _session) = shared()
-        .lock()
-        .unwrap()
-        .start_input(client, reason, remote);
+    let (_result, _method, _session) = shared().lock().unwrap().start_input(client, reason, remote);
 
     reply.reset();
     acos_services::exception::write_no_exception(reply);
@@ -157,16 +154,22 @@ fn input_bind_result(vm: &mut Vm, sequence: i32) -> JResult<Handle> {
     let h = vm
         .new_instance("com.android.internal.inputmethod.InputBindResult")
         .map_err(err)?;
-    vm.set_field(h, "result", JavaValue::Int(result)).map_err(err)?;
+    vm.set_field(h, "result", JavaValue::Int(result))
+        .map_err(err)?;
     vm.set_field(h, "method", JavaValue::Null).map_err(err)?;
     vm.set_field(h, "accessibilitySessions", JavaValue::Null)
         .map_err(err)?;
     vm.set_field(h, "channel", JavaValue::Null).map_err(err)?;
     vm.set_field(h, "id", JavaValue::Null).map_err(err)?;
-    vm.set_field(h, "sequence", JavaValue::Int(sequence)).map_err(err)?;
+    vm.set_field(h, "sequence", JavaValue::Int(sequence))
+        .map_err(err)?;
     vm.set_field(h, "mVirtualDisplayToScreenMatrixValues", JavaValue::Null)
         .map_err(err)?;
-    vm.set_field(h, "isInputMethodSuppressingSpellChecker", JavaValue::Boolean(false))
-        .map_err(err)?;
+    vm.set_field(
+        h,
+        "isInputMethodSuppressingSpellChecker",
+        JavaValue::Boolean(false),
+    )
+    .map_err(err)?;
     Ok(h)
 }

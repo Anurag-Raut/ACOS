@@ -8,8 +8,8 @@
 //! `results/handoff/MODLOC/`.
 
 use acos_parcel::{BinderId, Parcel};
-use acos_services::module::{ModuleConfig, ModuleRegistry, ModuleSpec, Profile};
 use acos_services::host::FireSender;
+use acos_services::module::{ModuleConfig, ModuleRegistry, ModuleSpec, Profile};
 use acos_services::{ServiceError, ServiceHost};
 use serde_json::json;
 
@@ -607,7 +607,9 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
         .expect_err("the emptied node must not answer a fix");
     assert_eq!(stale.code(), "UNSUPPORTED_ANDROID_API");
     match &stale {
-        ServiceError::UnsupportedAndroidApi { interface, method, .. } => {
+        ServiceError::UnsupportedAndroidApi {
+            interface, method, ..
+        } => {
             assert_eq!(interface, "android.location.ILocationManager");
             assert!(
                 method.contains("not attached") && method.contains("id\": \"location"),
@@ -650,11 +652,11 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
 /// start result; the module's contract is "queue the fill-in, fire it once".
 #[test]
 fn the_pending_intent_form_keeps_the_sender_and_fires_the_fix_as_a_fill_in() {
+    use acos_services::ams::Extra;
     use acos_services::modules::location::{
         KEY_LOCATION_CHANGED, KEY_PROVIDER_ENABLED, LOCATION_CLASS, LOCATION_LATITUDE,
         LOCATION_LONGITUDE, LOCATION_PROVIDER,
     };
-    use acos_services::ams::Extra;
     use acos_services::value::Value;
     use std::sync::{Arc, Mutex};
 
@@ -717,7 +719,10 @@ fn the_pending_intent_form_keeps_the_sender_and_fires_the_fix_as_a_fill_in() {
         assert_eq!(fired.len(), 2, "one registration fire + one fix fire");
         let fill_in = fired[1].1.clone().expect("a fill-in");
         let Some(Extra::Parcelable(location)) = fill_in.extras.get(KEY_LOCATION_CHANGED) else {
-            panic!("the fix must travel under {KEY_LOCATION_CHANGED}: {:?}", fill_in.extras);
+            panic!(
+                "the fix must travel under {KEY_LOCATION_CHANGED}: {:?}",
+                fill_in.extras
+            );
         };
         assert_eq!(location.class(), Some(LOCATION_CLASS));
         let fields = location.fields().expect("Location fields");
@@ -729,7 +734,10 @@ fn the_pending_intent_form_keeps_the_sender_and_fires_the_fix_as_a_fill_in() {
         let mut parcel = Parcel::new();
         acos_services::parcelable::write_payload(&mut parcel, location).expect("encode Location");
         parcel.set_data_position(0);
-        assert_eq!(parcel.read_string8().expect("provider").as_deref(), Some("gps"));
+        assert_eq!(
+            parcel.read_string8().expect("provider").as_deref(),
+            Some("gps")
+        );
     }
 
     // A provider toggle fires `providerEnabled` for the registration.
@@ -746,7 +754,9 @@ fn the_pending_intent_form_keeps_the_sender_and_fires_the_fix_as_a_fill_in() {
         let fired = fired.lock().expect("fired");
         let (_, fill_in) = fired.last().expect("a fire");
         assert_eq!(
-            fill_in.as_ref().and_then(|f| f.extras.get(KEY_PROVIDER_ENABLED)),
+            fill_in
+                .as_ref()
+                .and_then(|f| f.extras.get(KEY_PROVIDER_ENABLED)),
             Some(&Extra::Bool(false))
         );
     }

@@ -274,7 +274,9 @@ pub fn claim_run_dir(
             ErrorCode::InvalidArgument,
             "run marker has an empty request_id",
         )
-        .with_hint("This is a runner bug: every run has a request id before it writes artifacts."));
+        .with_hint(
+            "This is a runner bug: every run has a request id before it writes artifacts.",
+        ));
     }
     let mut claim = RunDirClaim::default();
     if dir.exists() {
@@ -939,9 +941,15 @@ mod tests {
     #[test]
     fn capture_names_are_sanitised_and_deterministic() {
         // Plain labels pass through.
-        assert_eq!(sanitize_capture_name("meanings-collapsed"), "meanings-collapsed");
+        assert_eq!(
+            sanitize_capture_name("meanings-collapsed"),
+            "meanings-collapsed"
+        );
         // Sloppy labels become one safe component: no separators, no spaces.
-        assert_eq!(sanitize_capture_name("meanings collapsed"), "meanings-collapsed");
+        assert_eq!(
+            sanitize_capture_name("meanings collapsed"),
+            "meanings-collapsed"
+        );
         assert_eq!(sanitize_capture_name("a/b\\c:d"), "a-b-c-d");
         assert_eq!(sanitize_capture_name("  leading"), "leading");
         // Non-ASCII has no shell-safe representation: a placeholder, never a
@@ -965,11 +973,23 @@ mod tests {
     #[test]
     fn claim_refuses_a_directory_another_run_owns() {
         let dir = test_dir("claim-owned");
-        let first = RunMarker::new("req_first", "2026-11-15T00:00:00Z", "s.yaml", "a.apk", "0.2.0");
+        let first = RunMarker::new(
+            "req_first",
+            "2026-11-15T00:00:00Z",
+            "s.yaml",
+            "a.apk",
+            "0.2.0",
+        );
         claim_run_dir(&dir, &first, false).expect("an empty directory is claimable");
         write_file(&dir, "frames/16.png", b"png");
 
-        let second = RunMarker::new("req_second", "2026-11-15T00:01:00Z", "s.yaml", "a.apk", "0.2.0");
+        let second = RunMarker::new(
+            "req_second",
+            "2026-11-15T00:01:00Z",
+            "s.yaml",
+            "a.apk",
+            "0.2.0",
+        );
         let error = claim_run_dir(&dir, &second, false)
             .expect_err("a second run must not interleave with the first");
         assert_eq!(error.code, ErrorCode::InvalidArgument);
@@ -986,12 +1006,24 @@ mod tests {
     #[test]
     fn claim_overwrite_replaces_the_previous_run_and_records_it() {
         let dir = test_dir("claim-overwrite");
-        let first = RunMarker::new("req_first", "2026-11-15T00:00:00Z", "s.yaml", "a.apk", "0.2.0");
+        let first = RunMarker::new(
+            "req_first",
+            "2026-11-15T00:00:00Z",
+            "s.yaml",
+            "a.apk",
+            "0.2.0",
+        );
         claim_run_dir(&dir, &first, false).unwrap();
         write_file(&dir, "frames/16.png", b"png");
         write_file(&dir, VERDICT_JSON, br#"{"request_id":"req_first"}"#);
 
-        let second = RunMarker::new("req_second", "2026-11-15T00:01:00Z", "s.yaml", "a.apk", "0.2.0");
+        let second = RunMarker::new(
+            "req_second",
+            "2026-11-15T00:01:00Z",
+            "s.yaml",
+            "a.apk",
+            "0.2.0",
+        );
         let claim = claim_run_dir(&dir, &second, true).expect("overwrite is the explicit opt-in");
         assert!(claim.overwrote);
         assert_eq!(claim.previous_run_id.as_deref(), Some("req_first"));
@@ -1044,7 +1076,11 @@ mod tests {
         let marker = RunMarker::new("req_2", "2026-11-15T00:00:00Z", "s.yaml", "a.apk", "0.2.0");
         let error = claim_run_dir(&dir, &marker, false).expect_err("not fresh");
         assert_eq!(error.code, ErrorCode::InvalidArgument);
-        assert!(error.message.contains("incomplete earlier run"), "{}", error.message);
+        assert!(
+            error.message.contains("incomplete earlier run"),
+            "{}",
+            error.message
+        );
         assert!(error.details.unwrap()["previous_run_id"].is_null());
         std::fs::remove_dir_all(&dir).unwrap();
     }

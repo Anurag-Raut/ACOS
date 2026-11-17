@@ -120,7 +120,11 @@ fn compile_case(name: &str) -> Option<PathBuf> {
     }
     let ok = Command::new(&tools.javac)
         .args(["--release", "11", "-encoding", "UTF-8", "-cp"])
-        .arg(format!("{}:{}", stubs.display(), tools.android_jar.display()))
+        .arg(format!(
+            "{}:{}",
+            stubs.display(),
+            tools.android_jar.display()
+        ))
         .args(["-d"])
         .arg(&classes)
         .arg(&src)
@@ -220,9 +224,8 @@ fn core_os_natives_on_the_real_framework() {
     };
 
     // ---- Build.*: served by the seeded property table ----
-    let prop = |k: &str| {
-        os_props::get(k).unwrap_or_else(|| panic!("property {k} is unset in the seed"))
-    };
+    let prop =
+        |k: &str| os_props::get(k).unwrap_or_else(|| panic!("property {k} is unset in the seed"));
     assert_eq!(get("sdk_prop"), "34");
     assert_eq!(get("sdk_prop_int"), "34", "getInt parses the same property");
     assert_eq!(get("sdk"), "34", "Build.VERSION.SDK_INT");
@@ -290,8 +293,16 @@ fn core_os_natives_on_the_real_framework() {
 
     // ---- Guest environment (HONESTY_AUDIT.md #5): the VM-owned table, never
     // the host process environment.
-    assert_eq!(get("env_path_null"), "true", "host PATH must not leak to guest");
-    assert_eq!(get("env_android_root"), "/system", "fixed Android-like seed");
+    assert_eq!(
+        get("env_path_null"),
+        "true",
+        "host PATH must not leak to guest"
+    );
+    assert_eq!(
+        get("env_android_root"),
+        "/system",
+        "fixed Android-like seed"
+    );
     assert_eq!(get("env_setenv"), "round-trip", "Os.setenv round-trips");
     assert_eq!(get("env_unset"), "true", "Os.unsetenv removes the key");
     assert_eq!(
@@ -301,7 +312,11 @@ fn core_os_natives_on_the_real_framework() {
     );
 
     // ---- LockSupport park/unpark (HONESTY_AUDIT.md #7).
-    assert_eq!(get("park_nanos_ok"), "true", "parkNanos must block then wake");
+    assert_eq!(
+        get("park_nanos_ok"),
+        "true",
+        "parkNanos must block then wake"
+    );
     assert_eq!(
         get("park_permit_ok"),
         "true",
@@ -326,7 +341,10 @@ fn core_os_natives_on_the_real_framework() {
         .lines()
         .find(|l| l.contains("AcosFixture: onCreate"))
         .expect("reference capture has the onCreate line");
-    assert_eq!(reference, "11-10 13:51:14.009  7361  7361 I AcosFixture: onCreate");
+    assert_eq!(
+        reference,
+        "11-10 13:51:14.009  7361  7361 I AcosFixture: onCreate"
+    );
     // The pid/tid fields widen past 5 digits on a host `cargo test` process,
     // exactly like logcat's `%5d`; the fixed-width layout itself is pinned by
     // the `os_log` unit test against the same reference line.

@@ -173,7 +173,9 @@ pub fn append_toasts(
 
 /// The toasts the system service currently has on screen, oldest first.
 #[must_use]
-pub fn visible_toasts(host: &acos_services::ServiceHost) -> Vec<acos_services::declared::ToastRecord> {
+pub fn visible_toasts(
+    host: &acos_services::ServiceHost,
+) -> Vec<acos_services::declared::ToastRecord> {
     let Some(state) = host.notification_state() else {
         return Vec::new();
     };
@@ -500,13 +502,7 @@ fn int_call(vm: &mut Vm, obj: Handle, name: &str, sig: &str) -> Option<i32> {
     }
 }
 
-fn bool_call(
-    vm: &mut Vm,
-    obj: Handle,
-    name: &str,
-    sig: &str,
-    args: &[JavaValue],
-) -> Option<bool> {
+fn bool_call(vm: &mut Vm, obj: Handle, name: &str, sig: &str, args: &[JavaValue]) -> Option<bool> {
     match vm.call_method(obj, name, sig, args) {
         Ok(JavaValue::Boolean(v)) => Some(v),
         Ok(_) => None,
@@ -545,8 +541,13 @@ fn resource_id(vm: &mut Vm, view: Handle) -> String {
         "()Landroid/content/res/Resources;",
         &[],
     ) {
-        if let Some(name) = string_call(vm, res, "getResourceName", "(I)Ljava/lang/String;", &[JavaValue::Int(id)])
-        {
+        if let Some(name) = string_call(
+            vm,
+            res,
+            "getResourceName",
+            "(I)Ljava/lang/String;",
+            &[JavaValue::Int(id)],
+        ) {
             return name;
         }
     }

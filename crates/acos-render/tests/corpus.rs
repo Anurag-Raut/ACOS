@@ -199,8 +199,8 @@ fn fixture_scenes_match_art_reference() {
             );
             continue;
         }
-        let scene_path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/scenes/{}.json", case.app));
+        let scene_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("tests/scenes/{}.json", case.app));
         assert!(
             scene_path.exists(),
             "missing corpus scene {}",
@@ -311,7 +311,11 @@ fn fixture_scenes_match_art_reference() {
             report.differing_fraction * 100.0,
             case.max_differing
         );
-        assert!(!report.identical, "{} frame was pixel-identical to reference", case.app);
+        assert!(
+            !report.identical,
+            "{} frame was pixel-identical to reference",
+            case.app
+        );
     }
 
     assert!(!rows.is_empty(), "no corpus references were available");
@@ -323,10 +327,17 @@ fn fixture_scenes_match_art_reference() {
         "scenes": rows,
     });
     let out = out_dir().join("corpus-metrics.json");
-    std::fs::write(&out, serde_json::to_vec_pretty(&aggregate).expect("serialize")).expect("write");
+    std::fs::write(
+        &out,
+        serde_json::to_vec_pretty(&aggregate).expect("serialize"),
+    )
+    .expect("write");
     eprintln!("wrote {}", rel(&out));
 }
 
 fn rel(p: &Path) -> String {
-    p.strip_prefix(repo_root()).unwrap_or(p).display().to_string()
+    p.strip_prefix(repo_root())
+        .unwrap_or(p)
+        .display()
+        .to_string()
 }

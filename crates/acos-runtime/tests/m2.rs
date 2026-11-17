@@ -151,8 +151,7 @@ fn m2_lifecycle_create_start_resume_matches_reference() {
     // that reached `onResume` and then threw (W170-A H7 restored this guard).
     // `ACOS_M2_ALLOW_POST_RESUME_ERROR=1` is the explicit, printed tolerance for
     // a host where the first traversal raises after `onResume`.
-    if report.error.is_some() && std::env::var_os("ACOS_M2_ALLOW_POST_RESUME_ERROR").is_some()
-    {
+    if report.error.is_some() && std::env::var_os("ACOS_M2_ALLOW_POST_RESUME_ERROR").is_some() {
         eprintln!(
             "tolerating a post-onResume framework error because \
              ACOS_M2_ALLOW_POST_RESUME_ERROR is set: {:?}",

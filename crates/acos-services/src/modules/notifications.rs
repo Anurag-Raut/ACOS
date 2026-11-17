@@ -569,18 +569,14 @@ impl ServiceObject for NotificationsService {
                 .unwrap_or_default()
                 .to_string()
         };
-        let int = |index: usize| -> i32 {
-            args.get(index).and_then(WireValue::as_int).unwrap_or(0)
-        };
+        let int =
+            |index: usize| -> i32 { args.get(index).and_then(WireValue::as_int).unwrap_or(0) };
         let reply = match method.name.as_str() {
             // `enqueueNotificationWithTag(String pkg, String opPkg, String tag,
             //  int id, Notification notification, int userId)`
             "enqueueNotificationWithTag" => {
                 let package = string(0);
-                let tag = args
-                    .get(2)
-                    .and_then(WireValue::as_str)
-                    .map(str::to_string);
+                let tag = args.get(2).and_then(WireValue::as_str).map(str::to_string);
                 let id = int(3);
                 let payload = args
                     .get(4)
@@ -623,10 +619,7 @@ impl ServiceObject for NotificationsService {
             //  int id, int userId)`
             "cancelNotificationWithTag" => {
                 let package = string(0);
-                let tag = args
-                    .get(2)
-                    .and_then(WireValue::as_str)
-                    .map(str::to_string);
+                let tag = args.get(2).and_then(WireValue::as_str).map(str::to_string);
                 let id = int(3);
                 let mut store = self.store();
                 let blocked = store
@@ -714,7 +707,8 @@ impl ServiceObject for NotificationsService {
                     .collect();
                 vec![WireValue::TypedObject(parceled_list_of(items))]
             }
-            "createNotificationChannels" | "createNotificationChannelsForPackage"
+            "createNotificationChannels"
+            | "createNotificationChannelsForPackage"
             | "createNotificationChannelGroups" => {
                 let package = string(0);
                 let slice_index = if method.name == "createNotificationChannels" {
@@ -803,10 +797,11 @@ impl Module for NotificationsModule {
             // same answer AOSP gives an app with no runtime-permission state.
             store.permissions = host.permission_store();
             if let Some(sdk) = config.get("target_sdk").and_then(Value::as_i64) {
-                store.target_sdk = i32::try_from(sdk).map_err(|_| ServiceError::ModuleRejected {
-                    module: MODULE_ID,
-                    detail: format!("target_sdk {sdk} is out of range"),
-                })?;
+                store.target_sdk =
+                    i32::try_from(sdk).map_err(|_| ServiceError::ModuleRejected {
+                        module: MODULE_ID,
+                        detail: format!("target_sdk {sdk} is out of range"),
+                    })?;
             }
         }
         self.fire = host.pending_intent_fire();
@@ -918,7 +913,8 @@ impl Module for NotificationsModule {
                     detail: format!(
                         "notification {} has no {} PendingIntent",
                         target.id,
-                        action_index.map_or_else(|| "content".to_string(), |i| format!("action {i}"))
+                        action_index
+                            .map_or_else(|| "content".to_string(), |i| format!("action {i}"))
                     ),
                 })?;
                 let Some(fire) = self.fire.clone() else {

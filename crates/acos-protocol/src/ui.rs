@@ -985,15 +985,26 @@ mod tests {
 
     #[test]
     fn selectors_skip_offscreen_nodes_and_tap_the_visible_rect() {
-        let mut hidden =
-            UiNode::new("off", "android.widget.TextView", Bounds::new(1122, 317, 1239, 368))
-                .with_text("Hidden");
+        let mut hidden = UiNode::new(
+            "off",
+            "android.widget.TextView",
+            Bounds::new(1122, 317, 1239, 368),
+        )
+        .with_text("Hidden");
         hidden.visible = false;
-        let shown = UiNode::new("on", "android.widget.TextView", Bounds::new(42, 317, 196, 368))
-            .with_text("Page one")
-            .with_visible_bounds(Bounds::new(52, 320, 186, 365));
+        let shown = UiNode::new(
+            "on",
+            "android.widget.TextView",
+            Bounds::new(42, 317, 196, 368),
+        )
+        .with_text("Page one")
+        .with_visible_bounds(Bounds::new(52, 320, 186, 365));
         let frame = frame();
-        let tree = UiTree::new(frame, "dev.acos.fixtures.offscreenpager", vec![hidden, shown]);
+        let tree = UiTree::new(
+            frame,
+            "dev.acos.fixtures.offscreenpager",
+            vec![hidden, shown],
+        );
 
         // GR2 W4: present in the tree but not a selector match.
         assert!(tree.find_one(&Selector::by_text("Hidden")).is_none());
@@ -1016,8 +1027,12 @@ mod tests {
         assert_eq!(node.visible_rect(), Bounds::new(52, 320, 186, 365));
         assert_eq!(node.tap_point(), (119, 342));
         // Same rect, moved so the full-bounds centre is outside the visible part.
-        let clipped = UiNode::new("on", "android.widget.TextView", Bounds::new(42, 317, 196, 368))
-            .with_visible_bounds(Bounds::new(120, 317, 196, 368));
+        let clipped = UiNode::new(
+            "on",
+            "android.widget.TextView",
+            Bounds::new(42, 317, 196, 368),
+        )
+        .with_visible_bounds(Bounds::new(120, 317, 196, 368));
         assert_eq!(clipped.tap_point(), (158, 342));
         assert_ne!(clipped.tap_point(), clipped.bounds.center());
     }
@@ -1038,7 +1053,11 @@ mod tests {
     /// field is empty) and whose accessible *name* is the content description.
     fn rn_search_field(collapsed_text: bool) -> UiNode {
         UiNode::new("n27_", "Z4.g", Bounds::new(189, 366, 978, 482))
-            .with_text(if collapsed_text { "猫, ねこ, neko..." } else { "" })
+            .with_text(if collapsed_text {
+                "猫, ねこ, neko..."
+            } else {
+                ""
+            })
             .with_password(false)
     }
 
@@ -1055,7 +1074,10 @@ mod tests {
         let tree = UiTree::new(
             frame(),
             "com.gaten",
-            vec![with_content_desc(rn_search_field(true), "Search Japanese dictionary")],
+            vec![with_content_desc(
+                rn_search_field(true),
+                "Search Japanese dictionary",
+            )],
         );
         let desc = Selector {
             content_desc: Some(TextMatch::exact("Search Japanese dictionary")),
@@ -1104,15 +1126,18 @@ mod tests {
         // RNTAP: an exact text match outranks a content-description match, and
         // the stages are never mixed, so the candidates of one answer belong to
         // one field.
-        let label = UiNode::new("n1", "X4.e", Bounds::new(362, 2214, 445, 2251))
-            .with_text("Home");
+        let label = UiNode::new("n1", "X4.e", Bounds::new(362, 2214, 445, 2251)).with_text("Home");
         let pressable = with_content_desc(
             UiNode::new("n2", "b5.g", Bounds::new(280, 2151, 453, 2316)),
             "Home",
         );
         let tree = UiTree::new(frame(), "com.gaten", vec![label, pressable]);
         let candidates = tree.find_input_candidates(&Selector::by_text("Home"));
-        assert_eq!(candidates.len(), 1, "the drawn label is the only text match");
+        assert_eq!(
+            candidates.len(),
+            1,
+            "the drawn label is the only text match"
+        );
         assert_eq!(candidates[0].class, "X4.e");
         // With no text match at all, the content description answers alone.
         let tree = UiTree::new(

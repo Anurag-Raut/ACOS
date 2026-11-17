@@ -7,8 +7,8 @@ use acos_wm::clock::{Clock, VirtualClock};
 use acos_wm::codec::LayoutParams;
 use acos_wm::display::DisplaySpec;
 use acos_wm::facade::SessionWm;
-use acos_wm::input::{InputMessage, ACTION_DOWN, ACTION_MOVE, ACTION_UP};
 use acos_wm::ime::EditorInfo;
+use acos_wm::input::{InputMessage, ACTION_DOWN, ACTION_MOVE, ACTION_UP};
 
 fn session(clock: Arc<VirtualClock>) -> SessionWm {
     SessionWm::with_clock(DisplaySpec::reference_1080x2400(), clock).unwrap()
@@ -83,7 +83,13 @@ fn swipe_produces_down_moves_up_in_order() {
     }
     assert_eq!(
         actions,
-        vec![ACTION_DOWN, ACTION_MOVE, ACTION_MOVE, ACTION_MOVE, ACTION_UP]
+        vec![
+            ACTION_DOWN,
+            ACTION_MOVE,
+            ACTION_MOVE,
+            ACTION_MOVE,
+            ACTION_UP
+        ]
     );
     for seq in outcome.seqs {
         s.ack(seq).unwrap();

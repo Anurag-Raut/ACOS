@@ -1757,7 +1757,10 @@ mod tests {
         .encode()
         .unwrap();
         assert_eq!(t.len(), 0x10);
-        assert_eq!(u32::from_le_bytes(t[0..4].try_into().unwrap()), TYPE_TOUCH_MODE);
+        assert_eq!(
+            u32::from_le_bytes(t[0..4].try_into().unwrap()),
+            TYPE_TOUCH_MODE
+        );
         assert_eq!(t[0x0c], 0);
     }
 

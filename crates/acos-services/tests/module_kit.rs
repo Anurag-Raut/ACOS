@@ -285,7 +285,12 @@ fn attaching_the_vibrator_serves_the_name_and_the_report_says_which_profile() {
     host.transact(binder, 7, &mut data, &mut reply, 0)
         .expect("vibrate answers");
     let calls = registry
-        .control(&mut host, "feedback.vibrator", "calls", &serde_json::Value::Null)
+        .control(
+            &mut host,
+            "feedback.vibrator",
+            "calls",
+            &serde_json::Value::Null,
+        )
         .expect("calls control op");
     assert_eq!(calls["vibrate_calls"], 1);
 

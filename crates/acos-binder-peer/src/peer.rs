@@ -40,18 +40,44 @@ use acos_parcel::{BinderId, BinderKind, FlatObject, Parcel};
 use acos_services::{codes, exception, registry, ServiceError, ServiceHost};
 
 use crate::protocol::{
-    Frame, F_HELLO, F_REF, F_REP, F_REQ, F_RSP, F_TXN, INTERFACE_TRANSACTION, PING_TRANSACTION,
-    PROTOCOL_VERSION, REF_RELEASE, TF_ONE_WAY, TF_STATUS_CODE,
+    Frame, F_DEATH, F_HELLO, F_REF, F_REP, F_REQ, F_RSP, F_TXN, INTERFACE_TRANSACTION,
+    PING_TRANSACTION, PROTOCOL_VERSION, REF_RELEASE, RSP_DEAD, TF_ONE_WAY, TF_STATUS_CODE,
 };
 
 /// Bit 32 marks a driver wire handle (a Java local binder).
 pub const JAVA_TAG: u64 = 1 << 32;
 /// Bit 33 marks one of this peer's service nodes.
 pub const NODE_TAG: u64 = 1 << 33;
+/// Bits 34..40 of a `JAVA_TAG` id name the app **process** that owns the driver
+/// wire handle in the low 32 bits (MPROC2 step 3a).
+///
+/// A driver wire handle is only unique inside one guest process (each process
+/// has its own driver with `next_handle = 1`), so `JAVA_TAG | wire` alone would
+/// make two processes collide on the same [`BinderId`] — the second process's
+/// `IApplicationThread` would then receive the first process's deliveries. The
+/// tag is part of the id, so a delivery is routed to the connection that owns
+/// it without a separate lookup and without an ambiguous id ever existing.
+pub const PROC_SHIFT: u32 = 34;
+/// The tag field width (`0x3f` = tags 0..=63).
+pub const PROC_MASK: u64 = 0x3f;
 /// The `acos.launch` peer node (P4a): the ART guest pushes the marshalled
 /// `IApplicationThread.bindApplication` request here, and the peer delivers it
 /// to the real `ApplicationThread` binder after `attachApplication`.
 pub const LAUNCH_NODE: u64 = 1 << 40;
+/// Bit 41 marks a **synthetic node for a binder that lives in another app
+/// process** (MPROC3 step 3c).
+///
+/// A binder handle is only meaningful inside the process that owns it, so a
+/// reply that carries another process's `BINDER_TYPE_HANDLE` would make the
+/// receiver call a *different object*. The peer therefore hands the receiver a
+/// node instead: `FOREIGN_FLAG | n` names `(owner_tag, owner_wire)`, and a
+/// transaction addressed to it is forwarded to the owner's connection and its
+/// reply relayed back. This is the routing ADR-0029 assigns to the Rust service
+/// layer; the guest still sees one ordinary `IBinder` (`BinderProxy`), and its
+/// `linkToDeath` works through [`crate::protocol::F_DEATH`].
+pub const FOREIGN_FLAG: u64 = 1 << 41;
+/// Foreign nodes one peer may allocate before it starts refusing (bounded, R1).
+pub const MAX_FOREIGN_NODES: usize = 4096;
 
 // --- bounded queues (R1 defence in depth) ---------------------------------
 //
@@ -135,13 +161,150 @@ impl UnsupportedRecord {
     }
 }
 
-/// The peer. One instance serves one driver connection.
+/// Per-connection launch state (the `acos.launch` pushes).
+///
+/// Every app process performs its own `attachApplication`, pushes its own
+/// `bindApplication` bytes and its own `ClientTransaction`, so this state is
+/// per process and never shared.
+#[derive(Debug, Default)]
+struct LaunchState {
+    /// `IApplicationThread.bindApplication` bytes stashed by the guest.
+    bind: Option<Vec<u8>>,
+    /// The `IDisplayManager.getDisplayInfo` reply, marshalled by the
+    /// framework's own `DisplayInfo.writeToParcel` in the guest.
+    display_reply: Option<Vec<u8>>,
+    /// Framework-marshalled reply parcels keyed by `(descriptor, code)`.
+    replies: HashMap<(String, u32), Vec<u8>>,
+    /// The `IApplicationThread` wire handle named by `attachApplication`.
+    app_thread: Option<u32>,
+    /// The launch delivery was queued (once).
+    delivered: bool,
+    /// The `IApplicationThread.scheduleTransaction` request bytes stashed by the
+    /// guest (one `ClientTransaction`, framework-marshalled). The guest no
+    /// longer pushes one; kept so an older guest still works.
+    txn: Option<Vec<u8>>,
+    /// MPROC7: the host-encoded launch request (`LaunchActivityItem` +
+    /// `ResumeActivityItem`, ADR-0029 amendment) delivered to this process's
+    /// app thread instead of a guest-marshalled transaction. A `Parcel` (not
+    /// bytes) because its activity token is a binder object: the frame writer
+    /// must emit the object table and stability record.
+    host_txn: Option<Parcel>,
+    /// The transaction delivery was queued (once).
+    txn_delivered: bool,
+}
+
+/// One app process's connection to the peer.
+///
+/// Step 3a: a session accepts **N** tagged connections (one per app process).
+/// Everything a connection owns that used to live on [`Peer`] — the Java binder
+/// table, the launch state — lives here, because a wire handle is only unique
+/// inside its own process.
+#[derive(Debug)]
+pub struct ProcessConn {
+    /// The process tag (`0` = the primary process).
+    pub tag: u32,
+    /// The process name from the handshake (evidence / diagnostics).
+    pub name: String,
+    /// Driver wire handle -> service name registered with `addService`.
+    java_binders: HashMap<u32, String>,
+    /// The connection is still open.
+    connected: bool,
+    launch: LaunchState,
+}
+
+impl ProcessConn {
+    fn new(tag: u32, name: impl Into<String>) -> Self {
+        Self {
+            tag,
+            name: name.into(),
+            java_binders: HashMap::new(),
+            connected: true,
+            launch: LaunchState::default(),
+        }
+    }
+
+    /// Driver wire handle -> service name registered with `addService`.
+    #[must_use]
+    pub fn java_binders(&self) -> &HashMap<u32, String> {
+        &self.java_binders
+    }
+
+    /// True while the guest's connection is open.
+    #[must_use]
+    pub fn connected(&self) -> bool {
+        self.connected
+    }
+}
+
+/// Why a connection handshake was refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TagRefusal {
+    /// The tag is above [`crate::protocol::MAX_PROCESS_TAG`].
+    OutOfRange(u32),
+    /// Another live connection already claimed the tag.
+    AlreadyConnected(u32),
+    /// Every process slot is taken.
+    TooManyProcesses(usize),
+}
+
+impl TagRefusal {
+    /// Stable machine-readable reason.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::OutOfRange(_) => "PROCESS_TAG_OUT_OF_RANGE",
+            Self::AlreadyConnected(_) => "PROCESS_TAG_IN_USE",
+            Self::TooManyProcesses(_) => "PROCESS_TABLE_FULL",
+        }
+    }
+}
+
+impl std::fmt::Display for TagRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OutOfRange(tag) => write!(
+                f,
+                "process tag {tag} is above the maximum {}",
+                crate::protocol::MAX_PROCESS_TAG
+            ),
+            Self::AlreadyConnected(tag) => {
+                write!(f, "process tag {tag} is already connected")
+            }
+            Self::TooManyProcesses(limit) => {
+                write!(f, "the process table is full ({limit} processes)")
+            }
+        }
+    }
+}
+
+/// Empty table returned for a process that never connected.
+static EMPTY_BINDERS: std::sync::LazyLock<HashMap<u32, String>> =
+    std::sync::LazyLock::new(HashMap::new);
+
+/// One synthetic node the peer allocated for a binder owned by another process
+/// (MPROC3 step 3c).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForeignNode {
+    /// The process whose driver wire handle this node stands for.
+    pub owner_tag: u32,
+    /// That process's driver wire handle.
+    pub wire: u32,
+    /// Processes this node was written to. The node lives while it has holders;
+    /// each holder is released when its connection closes (a per-handle release
+    /// needs the driver's `BC_RELEASE` path, see `docs`/`STATUS` note).
+    pub holders: Vec<u32>,
+}
+
+/// Name the primary connection carries until its own handshake arrives.
+const DEFAULT_PRIMARY_NAME: &str = "primary";
+
+/// The peer. One instance serves one session (N tagged driver connections).
 pub struct Peer {
     host: ServiceHost,
     log_path: Option<PathBuf>,
     log: Option<File>,
-    /// Driver wire handle -> service name registered with `addService`.
-    java_binders: HashMap<u32, String>,
+    /// One entry per app process, indexed by tag.
+    conns: Vec<Option<ProcessConn>>,
     /// Deliveries produced by the direct-dispatch path (the host owns the rest).
     local_deliveries: Vec<acos_services::PendingDelivery>,
     next_txn_seq: u32,
@@ -155,22 +318,6 @@ pub struct Peer {
     unsupported_dropped: u64,
     /// JSONL log lines written (`MAX_UNSUPPORTED_RECORDS` worth, at most).
     log_lines: usize,
-    /// `IApplicationThread.bindApplication` bytes stashed by the guest.
-    launch_bind: Option<Vec<u8>>,
-    /// The `IDisplayManager.getDisplayInfo` reply, marshalled by the framework's
-    /// own `DisplayInfo.writeToParcel` in the guest.
-    launch_display_reply: Option<Vec<u8>>,
-    /// Framework-marshalled reply parcels keyed by `(descriptor, code)`.
-    launch_replies: HashMap<(String, u32), Vec<u8>>,
-    /// The `IApplicationThread` wire handle named by `attachApplication`.
-    launch_app_thread: Option<u32>,
-    /// The launch delivery was queued (once).
-    launch_delivered: bool,
-    /// The `IApplicationThread.scheduleTransaction` request bytes stashed by the
-    /// guest (one `ClientTransaction`, framework-marshalled).
-    launch_txn: Option<Vec<u8>>,
-    /// The transaction delivery was queued (once).
-    launch_txn_delivered: bool,
     /// Reverse replies received from Java (peer-initiated transactions are
     /// two-way here, matching the runtime's `BinderDelivery`).
     pub reverse_replies: u64,
@@ -186,13 +333,31 @@ pub struct Peer {
     /// `UNKNOWN_TRANSACTION` from a node that was not rooted). Counting these
     /// separately is what stops "20 replies" from being read as "20 deliveries".
     pub reverse_failed: u64,
+    /// Synthetic nodes for binders owned by another process, by node id.
+    foreign: HashMap<u64, ForeignNode>,
+    /// `(owner_tag, wire)` -> synthetic node, so one binder has one node.
+    foreign_index: HashMap<(u32, u32), u64>,
+    /// Next synthetic node number (1-based; [`FOREIGN_FLAG`] is the tag bit).
+    foreign_next: u64,
+    /// Transactions the peer forwarded to an owner, keyed by
+    /// `(owner_tag, forwarded seq)` -> `(caller tag, caller seq, node)`.
+    pending_foreign: HashMap<(u32, u32), (u32, u32, u64)>,
+    /// Death notifications waiting for the serve loop to write them.
+    pending_deaths: Vec<(u32, Frame)>,
+    /// Cross-process transactions forwarded to their owner and relayed back.
+    pub foreign_forwards: u64,
+    /// Cross-process transactions that found no live owner (structured refusals).
+    pub foreign_dead: u64,
+    /// Synthetic nodes freed because no holder process is left.
+    pub foreign_released: u64,
 }
 
 impl std::fmt::Debug for Peer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Peer")
             .field("host", &self.host)
-            .field("java_binders", &self.java_binders)
+            .field("processes", &self.tags())
+            .field("java_binders", &self.java_binders())
             .field("unsupported", &self.unsupported.len())
             .field("reverse_replies", &self.reverse_replies)
             .field("reverse_failed", &self.reverse_failed)
@@ -216,18 +381,20 @@ impl Peer {
     /// A peer around an existing host.
     #[must_use]
     pub fn with_host(host: ServiceHost, log_path: Option<PathBuf>) -> Self {
-        let log = log_path.as_ref().and_then(|p| {
-            OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(p)
-                .ok()
-        });
+        let log = log_path
+            .as_ref()
+            .and_then(|p| OpenOptions::new().create(true).append(true).open(p).ok());
+        let mut conns: Vec<Option<ProcessConn>> =
+            (0..crate::protocol::MAX_PROCESSES).map(|_| None).collect();
+        conns[crate::protocol::TAG_PRIMARY as usize] = Some(ProcessConn::new(
+            crate::protocol::TAG_PRIMARY,
+            DEFAULT_PRIMARY_NAME,
+        ));
         Self {
             host,
             log_path,
             log,
-            java_binders: HashMap::new(),
+            conns,
             local_deliveries: Vec::new(),
             next_txn_seq: 1,
             unsupported: Vec::new(),
@@ -235,17 +402,18 @@ impl Peer {
             resource_limits: 0,
             unsupported_dropped: 0,
             log_lines: 0,
-            launch_bind: None,
-            launch_display_reply: None,
-            launch_replies: HashMap::new(),
-            launch_app_thread: None,
-            launch_delivered: false,
-            launch_txn: None,
-            launch_txn_delivered: false,
             reverse_replies: 0,
             reverse_failed: 0,
             driver_protocol: None,
             ref_frames_suppressed: 0,
+            foreign: HashMap::new(),
+            foreign_index: HashMap::new(),
+            foreign_next: 1,
+            pending_foreign: HashMap::new(),
+            pending_deaths: Vec::new(),
+            foreign_forwards: 0,
+            foreign_dead: 0,
+            foreign_released: 0,
         }
     }
 
@@ -268,10 +436,60 @@ impl Peer {
         self.log_path.as_deref()
     }
 
-    /// Java binders registered through `addService` (`wire handle -> name`).
+    /// The live process tags, ascending (tag 0 first when connected).
+    #[must_use]
+    pub fn tags(&self) -> Vec<u32> {
+        self.conns
+            .iter()
+            .flatten()
+            .filter(|c| c.connected)
+            .map(|c| c.tag)
+            .collect()
+    }
+
+    /// How many processes are connected.
+    #[must_use]
+    pub fn process_count(&self) -> usize {
+        self.tags().len()
+    }
+
+    /// One process's connection state.
+    #[must_use]
+    pub fn process(&self, tag: u32) -> Option<&ProcessConn> {
+        self.conns.get(tag as usize).and_then(Option::as_ref)
+    }
+
+    /// A process's name from the handshake.
+    #[must_use]
+    pub fn process_name(&self, tag: u32) -> Option<&str> {
+        self.process(tag).map(|c| c.name.as_str())
+    }
+
+    /// Java binders registered through `addService` by the primary process
+    /// (`wire handle -> name`).
     #[must_use]
     pub fn java_binders(&self) -> &HashMap<u32, String> {
-        &self.java_binders
+        self.java_binders_for(crate::protocol::TAG_PRIMARY)
+    }
+
+    /// Java binders registered by process `tag` (`wire handle -> name`).
+    #[must_use]
+    pub fn java_binders_for(&self, tag: u32) -> &HashMap<u32, String> {
+        self.process(tag)
+            .map_or(&EMPTY_BINDERS, |c| c.java_binders())
+    }
+
+    /// Every `(tag, wire, service name)` the session registered, ascending.
+    #[must_use]
+    pub fn all_java_binders(&self) -> Vec<(u32, u32, String)> {
+        let mut v = Vec::new();
+        for conn in self.conns.iter().flatten() {
+            for (wire, name) in conn.java_binders() {
+                v.push((conn.tag, *wire, name.clone()));
+            }
+        }
+        v.sort();
+        v
     }
 
     /// Transactions forwarded to the `ServiceHost` so far, in order (at most
@@ -297,43 +515,71 @@ impl Peer {
     /// The guest pushed the `bindApplication` request bytes.
     #[must_use]
     pub fn launch_bind_len(&self) -> Option<usize> {
-        self.launch_bind.as_ref().map(Vec::len)
+        self.launch_state(crate::protocol::TAG_PRIMARY)?
+            .bind
+            .as_ref()
+            .map(Vec::len)
     }
 
-    /// The `attachApplication` binder wire handle.
+    /// The `attachApplication` binder wire handle (primary process).
     #[must_use]
     pub fn launch_app_thread(&self) -> Option<u32> {
-        self.launch_app_thread
+        self.launch_app_thread_for(crate::protocol::TAG_PRIMARY)
+    }
+
+    /// The `attachApplication` binder wire handle of process `tag`.
+    #[must_use]
+    pub fn launch_app_thread_for(&self, tag: u32) -> Option<u32> {
+        self.launch_state(tag)?.app_thread
     }
 
     /// True when `bindApplication` was delivered to the app thread.
     #[must_use]
     pub fn launch_delivered(&self) -> bool {
-        self.launch_delivered
+        self.launch_delivered_for(crate::protocol::TAG_PRIMARY)
+    }
+
+    /// True when `bindApplication` was delivered to process `tag`.
+    #[must_use]
+    pub fn launch_delivered_for(&self, tag: u32) -> bool {
+        self.launch_state(tag).is_some_and(|l| l.delivered)
     }
 
     /// The guest pushed a marshalled `ClientTransaction`.
     #[must_use]
     pub fn launch_txn_len(&self) -> Option<usize> {
-        self.launch_txn.as_ref().map(Vec::len)
+        self.launch_state(crate::protocol::TAG_PRIMARY)?
+            .txn
+            .as_ref()
+            .map(Vec::len)
     }
 
     /// True when the `scheduleTransaction` delivery was queued.
     #[must_use]
     pub fn launch_txn_delivered(&self) -> bool {
-        self.launch_txn_delivered
+        self.launch_state(crate::protocol::TAG_PRIMARY)
+            .is_some_and(|l| l.txn_delivered)
     }
 
     /// The framework-marshalled `getDisplayInfo` reply, if the guest pushed one.
     #[must_use]
     pub fn launch_display_reply(&self) -> Option<&[u8]> {
-        self.launch_display_reply.as_deref()
+        self.launch_state(crate::protocol::TAG_PRIMARY)?
+            .display_reply
+            .as_deref()
     }
 
     /// A framework-marshalled reply pushed by the guest for `(descriptor, code)`.
     #[must_use]
     pub fn launch_reply_for(&self, descriptor: &str, code: u32) -> Option<&[u8]> {
-        self.launch_replies
+        self.launch_reply_for_tag(crate::protocol::TAG_PRIMARY, descriptor, code)
+    }
+
+    /// A framework-marshalled reply pushed by process `tag`'s guest.
+    #[must_use]
+    pub fn launch_reply_for_tag(&self, tag: u32, descriptor: &str, code: u32) -> Option<&[u8]> {
+        self.launch_state(tag)?
+            .replies
             .get(&(descriptor.to_string(), code))
             .map(Vec::as_slice)
     }
@@ -367,12 +613,17 @@ impl Peer {
         self.host.held_refs(id)
     }
 
-    /// Turn the host's dropped references into `F_REF` release frames.
+    /// Turn the host's dropped references into `F_REF` release frames, with the
+    /// tag of the connection each must be written to.
     ///
     /// A node exists while the host references it: this is the message that
     /// tells the driver to unroot and free it (→ `BR_RELEASE` + `BR_DECREFS` on
     /// the guest). Drivers that did not announce protocol v2 never get one.
-    fn take_ref_frames(&mut self) -> Vec<Frame> {
+    ///
+    /// A guest binder id carries its owning process ([`owner_process`]), so the
+    /// release goes to the connection whose driver owns the node — the same
+    /// routing a delivery uses.
+    fn take_ref_frames(&mut self) -> Vec<(u32, Frame)> {
         let released = self.host.take_released_binders();
         if released.is_empty() {
             return Vec::new();
@@ -385,41 +636,295 @@ impl Peer {
             .into_iter()
             .filter_map(|id| {
                 let wire = java_wire(id)?;
-                Some(Frame::plain(
-                    F_REF,
-                    0,
-                    REF_RELEASE,
-                    0,
-                    u64::from(wire),
-                    Vec::new(),
+                let tag = owner_process(id).unwrap_or(crate::protocol::TAG_PRIMARY);
+                Some((
+                    tag,
+                    Frame::plain(F_REF, 0, REF_RELEASE, 0, u64::from(wire), Vec::new()),
                 ))
             })
             .collect()
     }
 
-    /// The guest process is gone (its socket closed, or the runtime is being
-    /// torn down): release every strong reference the host still holds.
+    /// Release the host-held references on binders **owned by process `tag`**
+    /// (its connection closed; the nodes it exported are gone).
     ///
-    /// The driver dies with the guest in the current model, so the frames this
-    /// would send have nowhere to go; the point is that the host does not keep a
-    /// reference table for a process that no longer exists (a long-lived peer —
-    /// the `MPROC` death path — sends `F_REF` releases here instead of leaking
-    /// the nodes). What was released is returned for the caller's log.
+    /// Returns what was released. The frames this queues are for a driver that
+    /// no longer exists, so the caller drains them with [`Self::take_ref_frames`]
+    /// only to keep the accounting honest (a long-lived peer must not keep a
+    /// reference table for a process that is gone).
+    pub fn release_process_refs(&mut self, tag: u32) -> Vec<BinderId> {
+        let owned: Vec<BinderId> = self
+            .host
+            .held_ref_ids()
+            .into_iter()
+            .filter(|id| owner_process(*id) == Some(tag))
+            .collect();
+        for id in &owned {
+            while self.host.release_binder(*id) > 0 {}
+        }
+        owned
+    }
+
+    /// The whole session is gone (its last driver connection closed, or the
+    /// runtime is being torn down): release every strong reference the host
+    /// still holds.
+    ///
+    /// The point is that the host does not keep a reference table for a guest
+    /// that no longer exists. What was released is returned for the caller's
+    /// log; the `F_REF` frames this queues have no live driver and are
+    /// suppressed (`ref_frames_suppressed`) by the next drain.
     pub fn release_all_refs(&mut self) -> Vec<BinderId> {
         self.host.release_all_refs()
     }
 
+    fn launch_state(&self, tag: u32) -> Option<&LaunchState> {
+        self.process(tag).map(|c| &c.launch)
+    }
+
+    fn launch_state_mut(&mut self, tag: u32) -> Option<&mut LaunchState> {
+        self.conns
+            .get_mut(tag as usize)
+            .and_then(Option::as_mut)
+            .map(|c| &mut c.launch)
+    }
+
+    /// Register a driver connection's process tag (the `F_HELLO` handshake).
+    ///
+    /// Tag 0 is the primary process and always exists; a hello for it only
+    /// records the name. A duplicate, out-of-range or overflowing tag is a
+    /// [`TagRefusal`] — the caller must refuse the connection, never silently
+    /// fold it into another process.
+    pub fn register_process(&mut self, tag: u32, name: &str) -> Result<(), TagRefusal> {
+        if tag > crate::protocol::MAX_PROCESS_TAG {
+            return Err(TagRefusal::OutOfRange(tag));
+        }
+        if self.conns.len() < crate::protocol::MAX_PROCESSES {
+            self.conns
+                .resize_with(crate::protocol::MAX_PROCESSES, || None);
+        }
+        let slot = &mut self.conns[tag as usize];
+        match slot {
+            Some(conn) if conn.connected => {
+                if tag == crate::protocol::TAG_PRIMARY {
+                    // The primary process re-announcing itself (a driver that
+                    // reconnects after a restart) keeps its state and just
+                    // updates the name.
+                    if !name.is_empty() {
+                        conn.name = name.to_string();
+                    }
+                    return Ok(());
+                }
+                Err(TagRefusal::AlreadyConnected(tag))
+            }
+            _ => {
+                let name = if name.is_empty() {
+                    format!("process-{tag}")
+                } else {
+                    name.to_string()
+                };
+                eprintln!("acos-binder-peer: process tag {tag} connected ({name})");
+                *slot = Some(ProcessConn::new(tag, name.clone()));
+                // MPROC4 step 3b: a process exists from the moment its guest
+                // connects, exactly where `ActivityManagerService
+                // .startProcessLocked` creates the record on a device. The
+                // activity manager's `ProcessRecord` is per tag, so the attach
+                // and the process list name the right package.
+                self.record_process_started(tag, &name);
+                Ok(())
+            }
+        }
+    }
+
+    /// MPROC4 step 3b: tell the activity manager that process `tag` exists.
+    ///
+    /// The peer owns the handshake (the first thing a guest does) and the
+    /// activity manager owns the `ProcessRecord`; the package name comes from the
+    /// guest's own `ACOS_PROCESS_NAME`, so nothing is invented here.
+    fn record_process_started(&mut self, tag: u32, package: &str) {
+        let Ok(object) = self.host.ensure("android.app.IActivityTaskManager") else {
+            return;
+        };
+        if let Some(atms) = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+        {
+            atms.note_process_started(tag, package);
+        }
+    }
+
+    /// MPROC5c: close every window session a dead process owned.
+    ///
+    /// A session is closed when its recorded process tag is `tag` or when one
+    /// of its windows is a binder the process owned. Returns
+    /// `(sessions closed, windows dropped)`.
+    fn close_process_window_sessions(
+        &mut self,
+        tag: u32,
+        window_binders: &[BinderId],
+    ) -> (usize, usize) {
+        let Ok(object) = self.host.ensure("android.view.IWindowManager") else {
+            return (0, 0);
+        };
+        let Some(wms) = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::wms::WmsService>())
+            .map(|wms| wms.shared_state())
+        else {
+            return (0, 0);
+        };
+        let owners = self.host.node_registrar();
+        let closed = wms
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .close_process_sessions(tag, window_binders, |binder| owners.binder_owner(binder));
+        for (session, binder, windows) in &closed {
+            self.host.drop_dynamic_node(*binder);
+            eprintln!(
+                "acos-binder-peer: process tag {tag} disconnected: window session {session} \
+                 closed ({binder:#x}, {} window(s): {windows:?})",
+                windows.len(),
+                binder = binder.0
+            );
+        }
+        (
+            closed.len(),
+            closed.iter().map(|(_, _, windows)| windows.len()).sum(),
+        )
+    }
+
+    /// MPROC5c: tell the activity manager a process is gone.
+    fn record_process_died(&mut self, tag: u32) {
+        let Ok(object) = self.host.ensure("android.app.IActivityTaskManager") else {
+            return;
+        };
+        if let Some(atms) = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+        {
+            atms.note_process_died(tag);
+        }
+    }
+
+    /// MPROC4 step 3b: drain the spawn requests the activity manager recorded
+    /// while handling frames (`startActivity`, `startService`, `bindService` to a
+    /// package with no process).
+    pub fn take_spawn_requests(&mut self) -> Vec<acos_services::ams::ProcessSpawnRequest> {
+        let Ok(object) = self.host.ensure("android.app.IActivityTaskManager") else {
+            return Vec::new();
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+            .map(acos_services::atms::AtmsService::take_spawn_requests)
+            .unwrap_or_default()
+    }
+
+    /// MPROC4 step 3b: the activity manager's process list
+    /// (`tag`, package, uid, pid, `IApplicationThread`, attached).
+    pub fn process_list(&mut self) -> Vec<(u32, String, i32, i32, Option<u64>, bool)> {
+        let Ok(object) = self.host.ensure("android.app.IActivityTaskManager") else {
+            return Vec::new();
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+            .map(|atms| atms.process_list())
+            .unwrap_or_default()
+    }
+
+    /// Mark a process's connection closed and drop what it owned: its Java
+    /// binder table and every binder the host recorded as owned by it (a
+    /// delivery to a dead process must fail, not reach another process's
+    /// handle).
+    ///
+    /// The launch state (whether `bindApplication` and the launch
+    /// `ClientTransaction` were stashed and delivered, and the app-thread wire)
+    /// is **kept**: it is the record of what the host already did for this
+    /// process, and the launcher reads it after the guest has ended to classify
+    /// the outcome (`PeerSummary`). Dropping it here made an ordinary launch
+    /// whose guest exits right after `bindApplication` look like a launch whose
+    /// bind never happened (`application_created=false`, `GUEST_EXITED`). A
+    /// process that reconnects under the same tag gets a fresh
+    /// [`ProcessConn`] from [`Self::register_process`], so nothing stale is
+    /// ever delivered to a new guest.
+    ///
+    /// Returns `(jave binders dropped, host binder records dropped)`.
+    pub fn disconnect_process(&mut self, tag: u32) -> (usize, usize) {
+        let mut binders = 0;
+        if let Some(slot) = self.conns.get_mut(tag as usize) {
+            if let Some(conn) = slot.as_mut() {
+                conn.connected = false;
+                binders = conn.java_binders.len();
+                conn.java_binders.clear();
+                eprintln!(
+                    "acos-binder-peer: process tag {tag} disconnected 
+                     ({binders} java binders dropped)"
+                );
+            }
+        }
+        // MPROC5c: the process's window sessions die with it (stock
+        // `Session.kill` when the client dies): their windows, their compositor
+        // layers and their host nodes go, and a later call on a stale session
+        // binder fails structurally. The window binders are read before the
+        // owner records are dropped.
+        let window_binders = self.host.binders_of_process(tag);
+        let owners = self.host.drop_process_binders(tag);
+        self.close_process_window_sessions(tag, &window_binders);
+        // MPROC5c: the activity manager's `ProcessRecord` for the tag goes too
+        // (stock `ActivityManagerService.removeProcessLocked`), so an idle-killed
+        // process is not reported as running and the next intent respawns it.
+        self.record_process_died(tag);
+        // MPROC3 step 3c: the process's binders that other processes hold as
+        // synthetic nodes are dead now. Release them and queue one
+        // `F_DEATH` per holder (plus a structured refusal for every forwarded
+        // transaction still waiting for an answer), so `linkToDeath` fires in
+        // the holders instead of their next call hanging or reaching a
+        // recycled handle.
+        let released = self.release_foreign_of(tag);
+        let freed_as_holder = self.release_foreign_holders_of(tag);
+        if released > 0 {
+            eprintln!(
+                "acos-binder-peer: process tag {tag} disconnected ({released} foreign nodes \
+                 released, {freed_as_holder} freed as holder, {} holders notified)",
+                self.pending_deaths.len()
+            );
+        }
+        (binders, owners)
+    }
+
     /// Handle one incoming frame and return the frames to send back.
+    ///
+    /// This is the primary process's connection (tag 0): the one-guest fast
+    /// path every pre-MPROC2 caller and test uses.
     pub fn handle(&mut self, frame: Frame) -> Vec<Frame> {
-        let mut out = Vec::new();
+        // The one-guest path (every pre-MPROC2 caller and test): the frames are
+        // written to the single connection, whatever tag they name. A session
+        // with several processes serves them with `handle_tagged`, which keeps
+        // the routing.
+        self.handle_tagged(crate::protocol::TAG_PRIMARY, frame)
+            .into_iter()
+            .map(|(_, f)| f)
+            .collect()
+    }
+
+    /// Handle one frame from process `tag`'s connection.
+    ///
+    /// The returned frames carry the tag of the connection they must be written
+    /// to: a reply goes back on the caller's connection, a reverse delivery to
+    /// the process that owns the target binder.
+    pub fn handle_tagged(&mut self, tag: u32, frame: Frame) -> Vec<(u32, Frame)> {
+        let mut out: Vec<(u32, Frame)> = Vec::new();
         match frame.ty {
             F_HELLO => {
+                // The handshake carries three facts (protocol.rs F_HELLO):
+                // `seq` = wire protocol version, `code` = process tag, `data` =
+                // process name. Record the version first: a peer must never use
+                // a frame the driver did not advertise (`F_REF`/`F_DEATH`), and
+                // a newer driver than this peer must be recorded as evidence,
+                // not guessed at.
                 let version = frame.seq;
                 self.driver_protocol = Some(version);
                 if version > PROTOCOL_VERSION {
-                    // The driver speaks something newer. Nothing in this build
-                    // is optional, so record it as evidence and keep talking v2
-                    // frames only: an unknown frame must never be guessed at.
                     let record = UnsupportedRecord {
                         descriptor: "<wire>".into(),
                         code: version,
@@ -431,18 +936,48 @@ impl Peer {
                     };
                     self.log_unsupported(&record);
                 }
+                // A handshake on an established connection never carries a
+                // transaction; it either confirms the tag the launcher already
+                // registered (and updates the name) or reports a mismatch.
+                let (hello_tag, name) = frame.hello_of().unwrap_or((tag, String::new()));
+                if hello_tag != tag {
+                    self.log_unsupported(&UnsupportedRecord {
+                        descriptor: "<peer>".into(),
+                        code: 0,
+                        method: "hello".into(),
+                        error: codes::UNSUPPORTED_ANDROID_API.into(),
+                        message: format!(
+                            "handshake for tag {hello_tag} on the connection of tag {tag}"
+                        ),
+                    });
+                } else if !name.is_empty() {
+                    if let Some(conn) = self.conns.get_mut(tag as usize).and_then(Option::as_mut) {
+                        conn.name = name;
+                    }
+                }
                 return out;
             }
             F_REQ => {
-                if let Some(reply) = self.handle_request(&frame) {
+                // A transaction addressed to a synthetic foreign node belongs to
+                // another process (MPROC3 step 3c): forward it to the owner and
+                // relay the owner's reply back. It has no immediate reply, so it
+                // is never written to this connection.
+                if frame.target & FOREIGN_FLAG != 0 {
+                    let (dest, forwarded) = self.forward_foreign(tag, frame.target, &frame);
+                    out.push((dest, forwarded));
+                } else if let Some(reply) = self.handle_request(tag, &frame) {
                     if frame.flags & TF_ONE_WAY == 0 {
-                        out.push(reply);
+                        out.push((tag, reply));
                     }
                 }
             }
             F_REP => {
                 self.reverse_replies += 1;
-                if frame.flags & TF_STATUS_CODE != 0 {
+                // A reply to a transaction this peer forwarded from another
+                // process goes back to that process, with its own seq.
+                if let Some(relay) = self.relay_foreign_reply(tag, &frame) {
+                    out.push(relay);
+                } else if frame.flags & TF_STATUS_CODE != 0 {
                     self.reverse_failed += 1;
                     // The guest's driver answers a transaction to a node it can
                     // no longer address with a `TF_STATUS_CODE` reply instead of
@@ -456,9 +991,9 @@ impl Peer {
                         .and_then(|b| b.try_into().ok())
                         .map(i32::from_le_bytes);
                     eprintln!(
-                        "acos-binder-peer: reverse delivery seq={} was NOT dispatched \
-                         (TF_STATUS_CODE reply: libbinder never reached onTransact, \
-                         status={:?})",
+                        "acos-binder-peer: process {tag}: reverse delivery seq={} was NOT \
+                         dispatched (TF_STATUS_CODE reply: libbinder never reached \
+                         onTransact, status={:?})",
                         frame.seq, status
                     );
                     let record = serde_json::json!({
@@ -482,7 +1017,7 @@ impl Peer {
                         .map(|b| *b as char)
                         .collect();
                     eprintln!(
-                        "acos-binder-peer: reverse delivery seq={} reply {} bytes: {}",
+                        "acos-binder-peer: process {tag}: reverse delivery seq={} reply {} bytes: {}",
                         frame.seq,
                         frame.data.len(),
                         text
@@ -503,7 +1038,7 @@ impl Peer {
                 }
             }
             other => {
-                eprintln!("acos-binder-peer: ignoring frame type {other}");
+                eprintln!("acos-binder-peer: ignoring frame type {other} from process {tag}");
             }
         }
         // Deliveries first, then reference frames. A release must never
@@ -513,13 +1048,343 @@ impl Peer {
         // registration (and its reference) still existed.
         out.extend(self.take_delivery_frames());
         out.extend(self.take_ref_frames());
-        if let Some(frame) = self.take_launch_delivery() {
-            out.push(frame);
+        for frame in self.take_launch_delivery(tag) {
+            out.push((tag, frame));
         }
+        out.extend(self.take_host_transactions());
+        out.extend(self.take_death_frames());
         out
     }
 
-    fn handle_request(&mut self, frame: &Frame) -> Option<Frame> {
+    // --- cross-process binder routing (MPROC3 step 3c) --------------------
+
+    /// The synthetic node that stands for `(owner_tag, wire)` inside process
+    /// `holder`, allocating it on first use.
+    ///
+    /// One node per `(owner, wire)` pair, whatever the number of holders: the
+    /// pair *is* the object, and two holders must see two proxies to one object,
+    /// not two objects. `None` means the bounded table is full, which the caller
+    /// reports as `ART_RESOURCE_LIMIT` — never a fabricated handle.
+    #[must_use]
+    pub fn foreign_node(&mut self, owner_tag: u32, wire: u32, holder: u32) -> Option<u64> {
+        let key = (owner_tag, wire);
+        let node = match self.foreign_index.get(&key) {
+            Some(node) => *node,
+            None => {
+                if self.foreign.len() >= MAX_FOREIGN_NODES {
+                    self.resource_limits = self.resource_limits.saturating_add(1);
+                    eprintln!(
+                        "acos-binder-peer: ART_RESOURCE_LIMIT: foreign node table is full \u{2014} \
+                         refusing to proxy (owner tag {owner_tag}, wire {wire})"
+                    );
+                    return None;
+                }
+                let node = FOREIGN_FLAG | self.foreign_next;
+                self.foreign_next = self.foreign_next.wrapping_add(1).max(1);
+                self.foreign_index.insert(key, node);
+                self.foreign.insert(
+                    node,
+                    ForeignNode {
+                        owner_tag,
+                        wire,
+                        holders: Vec::new(),
+                    },
+                );
+                node
+            }
+        };
+        let owner_dead = !self.process(owner_tag).is_some_and(ProcessConn::connected);
+        let entry = self.foreign.get_mut(&node).expect("just inserted");
+        if !entry.holders.contains(&holder) {
+            entry.holders.push(holder);
+        }
+        if owner_dead {
+            // A proxy to an already-dead object: the death notification is due
+            // as soon as the receiver holds it, exactly as a kernel driver
+            // reports a dead binder on the first reference.
+            self.queue_death(node, holder);
+        }
+        Some(node)
+    }
+
+    /// The `(owner tag, owner wire handle)` a synthetic node stands for.
+    #[must_use]
+    pub fn foreign_owner(&self, node: u64) -> Option<(u32, u32)> {
+        self.foreign.get(&node).map(|n| (n.owner_tag, n.wire))
+    }
+
+    /// Every live foreign node, as `(node, owner tag, wire, holders)` — the
+    /// evidence a reply/verdict carries.
+    #[must_use]
+    pub fn foreign_nodes(&self) -> Vec<(u64, u32, u32, Vec<u32>)> {
+        let mut out: Vec<(u64, u32, u32, Vec<u32>)> = self
+            .foreign
+            .iter()
+            .map(|(node, n)| (*node, n.owner_tag, n.wire, n.holders.clone()))
+            .collect();
+        out.sort_by_key(|x| x.0);
+        out
+    }
+
+    /// How many synthetic nodes are live.
+    #[must_use]
+    pub fn foreign_node_count(&self) -> usize {
+        self.foreign.len()
+    }
+
+    /// Rewrite a reply/delivery parcel so that process `dest` receives every
+    /// binder as something that process can actually call.
+    ///
+    /// Public because it is the routing contract: every parcel the peer writes
+    /// into a process's connection (host reply, reverse delivery, forwarded
+    /// transaction, relayed reply) goes through here.
+    ///
+    /// A binder of `dest` itself stays a wire handle (its own handle space). A
+    /// binder of another process becomes a synthetic node ([`FOREIGN_FLAG`]);
+    /// the driver maps that node to a local handle, and a transaction on it comes
+    /// back as an [`F_REQ`] with the node as `target`, which
+    /// [`Self::forward_foreign`] forwards to the owner.
+    pub fn export_for_process(&mut self, dest: u32, parcel: &Parcel) -> Parcel {
+        let foreign: Vec<(BinderId, u32, u32)> = parcel
+            .binder_ids()
+            .into_iter()
+            .filter_map(|id| {
+                let owner = owner_process(id)?;
+                if owner == dest {
+                    return None;
+                }
+                let wire = java_wire(id)?;
+                Some((id, owner, wire))
+            })
+            .collect();
+        if foreign.is_empty() {
+            return parcel.clone();
+        }
+        let mut nodes: HashMap<u64, u64> = HashMap::new();
+        for (id, owner, wire) in &foreign {
+            if let Some(node) = self.foreign_node(*owner, *wire, dest) {
+                nodes.insert(id.0, node);
+            }
+        }
+        if nodes.is_empty() {
+            return parcel.clone();
+        }
+        // Rebuild the parcel with the node ids in place of the Java binder ids.
+        // `frame_from_parcel` then writes `BINDER_TYPE_BINDER(node)` for a
+        // `FOREIGN_FLAG` id (see its binder branch), which is what the driver
+        // turns into a local handle for the receiver.
+        let data = parcel.marshall();
+        let mut out = data.clone();
+        for &off in parcel.objects() {
+            if off + 16 > out.len() {
+                continue;
+            }
+            let id = u64::from_le_bytes(out[off + 8..off + 16].try_into().expect("id"));
+            if let Some(node) = nodes.get(&id) {
+                out[off..off + 4]
+                    .copy_from_slice(&acos_parcel::binder::BINDER_TYPE_BINDER.to_le_bytes());
+                out[off + 8..off + 16].copy_from_slice(&node.to_le_bytes());
+            }
+        }
+        let offsets = parcel.objects().to_vec();
+        let mut rewritten = Parcel::new();
+        rewritten.unmarshall_with_objects(&out, &offsets);
+        rewritten.set_data_position(0);
+        rewritten
+    }
+
+    /// Forward a transaction addressed to a synthetic foreign node to the
+    /// process that owns the binder.
+    ///
+    /// The caller waits for the reply: the peer remembers
+    /// `(owner, forwarded seq) -> (caller, caller seq, node)` and relays the
+    /// owner's [`F_REP`] back as the caller's [`F_RSP`]. A one-way transaction is
+    /// fire-and-forget (the owner sends no reply for it). A node whose owner has
+    /// no live connection is a structured refusal, never a hang and never a
+    /// fabricated success.
+    fn forward_foreign(&mut self, tag: u32, node: u64, frame: &Frame) -> (u32, Frame) {
+        let Some((owner, wire)) = self.foreign_owner(node) else {
+            let record = UnsupportedRecord {
+                descriptor: "<foreign-node>".into(),
+                code: frame.code,
+                method: format!("code {}", frame.code),
+                error: codes::SERVICE_UNKNOWN_BINDER.into(),
+                message: format!("target {node:#x} is not a synthetic foreign node"),
+            };
+            self.log_unsupported(&record);
+            return (
+                tag,
+                self.error_reply(frame, &ServiceError::UnknownBinder { handle: node }),
+            );
+        };
+        if !self.process(owner).is_some_and(ProcessConn::connected) {
+            self.foreign_dead = self.foreign_dead.saturating_add(1);
+            let record = UnsupportedRecord {
+                descriptor: "<foreign-node>".into(),
+                code: frame.code,
+                method: format!("code {}", frame.code),
+                error: codes::SERVICE_UNKNOWN_BINDER.into(),
+                message: format!(
+                    "transaction on node {node:#x} (process {tag}) but its owner process \
+                     {owner} has no connection"
+                ),
+            };
+            self.log_unsupported(&record);
+            let mut reply = self.error_reply(frame, &ServiceError::UnknownBinder { handle: node });
+            reply.flags |= crate::protocol::RSP_DEAD;
+            return (tag, reply);
+        }
+        let data = import_parcel_for(tag, frame);
+        let exported = self.export_for_process(owner, &data);
+        let one_way = frame.flags & TF_ONE_WAY != 0;
+        let seq = self.next_txn_seq;
+        self.next_txn_seq = self.next_txn_seq.wrapping_add(1).max(1);
+        if !one_way {
+            self.pending_foreign
+                .insert((owner, seq), (tag, frame.seq, node));
+        }
+        self.foreign_forwards = self.foreign_forwards.saturating_add(1);
+        let base = Frame {
+            ty: F_TXN,
+            seq,
+            code: frame.code,
+            flags: frame.flags,
+            target: u64::from(wire),
+            ..Default::default()
+        };
+        (owner, frame_from_parcel(F_TXN, &base, &exported))
+    }
+
+    /// Relay an owner's [`F_REP`] back to the process that called into it.
+    ///
+    /// Returns `None` when the reply belongs to a reverse delivery instead (the
+    /// pre-MPROC3 case, which keeps its existing logging path).
+    fn relay_foreign_reply(&mut self, owner: u32, frame: &Frame) -> Option<(u32, Frame)> {
+        let (caller, caller_seq, node) = self.pending_foreign.remove(&(owner, frame.seq))?;
+        if !self.process(caller).is_some_and(ProcessConn::connected) {
+            return None;
+        }
+        if frame.flags & TF_STATUS_CODE != 0 {
+            // libbinder never reached `onTransact` in the owner: the call failed.
+            self.reverse_failed = self.reverse_failed.saturating_add(1);
+            let base = Frame::plain(F_RSP, caller_seq, 0, 0, 0, Vec::new());
+            let reply = self.error_reply(&base, &ServiceError::UnknownBinder { handle: node });
+            return Some((caller, reply));
+        }
+        let data = import_parcel_for(owner, frame);
+        let exported = self.export_for_process(caller, &data);
+        let base = Frame::plain(F_RSP, caller_seq, 0, 0, 0, Vec::new());
+        Some((caller, frame_from_parcel(F_RSP, &base, &exported)))
+    }
+
+    /// Queue a [`crate::protocol::F_DEATH`] for one holder of a node.
+    fn queue_death(&mut self, node: u64, holder: u32) {
+        let frame = Frame::plain(crate::protocol::F_DEATH, 0, 0, 0, node, Vec::new());
+        self.pending_deaths.push((holder, frame));
+    }
+
+    /// The death notifications the serve loop must write now.
+    pub fn take_death_frames(&mut self) -> Vec<(u32, Frame)> {
+        std::mem::take(&mut self.pending_deaths)
+    }
+
+    /// The owner of every foreign node this process holds died: notify the
+    /// holders and refuse the transactions still waiting for an answer.
+    ///
+    /// The nodes stay in the table (a dead proxy is still a proxy: a late call
+    /// on it must fail, not resolve to whatever reuses the number), but their
+    /// `(owner, wire)` index entry goes, so a restarted owner's reused wire
+    /// handle becomes a *new* object with a new node. Called from
+    /// [`Self::disconnect_process`]; the notifications are queued for the serve
+    /// loop, which writes them to the holders' connections.
+    pub fn release_foreign_of(&mut self, tag: u32) -> usize {
+        let owned: Vec<(u64, u32, u32)> = self
+            .foreign
+            .iter()
+            .filter(|(_, n)| n.owner_tag == tag)
+            .map(|(node, n)| (*node, n.owner_tag, n.wire))
+            .collect();
+        for (node, owner, wire) in &owned {
+            self.foreign_index.remove(&(*owner, *wire));
+            let holders = self
+                .foreign
+                .get(node)
+                .map(|n| n.holders.clone())
+                .unwrap_or_default();
+            for holder in holders {
+                self.queue_death(*node, holder);
+            }
+            // A node nobody holds any more cannot be reached again.
+            if let Some(n) = self.foreign.get(node) {
+                if n.holders.is_empty() {
+                    self.foreign.remove(node);
+                }
+            }
+        }
+        // Requests still waiting for this owner can never be answered.
+        let waiting: Vec<(u32, u32)> = self
+            .pending_foreign
+            .iter()
+            .filter(|((owner, _), _)| *owner == tag)
+            .map(|(key, _)| *key)
+            .collect();
+        for key in waiting {
+            if let Some((caller, caller_seq, node)) = self.pending_foreign.remove(&key) {
+                self.foreign_dead = self.foreign_dead.saturating_add(1);
+                if self.process(caller).is_some_and(ProcessConn::connected) {
+                    let base = Frame::plain(F_RSP, caller_seq, 0, 0, 0, Vec::new());
+                    let mut reply =
+                        self.error_reply(&base, &ServiceError::UnknownBinder { handle: node });
+                    // The owner is dead: the caller must see BR_DEAD_REPLY.
+                    reply.flags |= crate::protocol::RSP_DEAD;
+                    self.pending_deaths.push((caller, reply));
+                }
+            }
+        }
+        owned.len()
+    }
+
+    /// Drop every reference process `tag` holds to other processes' binders
+    /// (its connection is gone, so it can never release them itself).
+    ///
+    /// Returns the number of nodes freed.
+    pub fn release_foreign_holders_of(&mut self, tag: u32) -> usize {
+        let held: Vec<u64> = self
+            .foreign
+            .iter()
+            .filter(|(_, n)| n.holders.contains(&tag))
+            .map(|(node, _)| *node)
+            .collect();
+        let mut freed = 0;
+        for node in held {
+            if self.release_foreign_holder(node, tag) {
+                freed += 1;
+            }
+        }
+        freed
+    }
+
+    /// Release one holder's reference to a node (the driver's `BC_RELEASE`
+    /// path). The node is freed once no process holds it; while any holder is
+    /// left the same node id keeps naming the same object.
+    ///
+    /// Returns true when the node was freed.
+    pub fn release_foreign_holder(&mut self, node: u64, holder: u32) -> bool {
+        let Some(entry) = self.foreign.get_mut(&node) else {
+            return false;
+        };
+        entry.holders.retain(|h| *h != holder);
+        if !entry.holders.is_empty() {
+            return false;
+        }
+        let (owner_tag, wire) = (entry.owner_tag, entry.wire);
+        self.foreign.remove(&node);
+        self.foreign_index.remove(&(owner_tag, wire));
+        self.foreign_released = self.foreign_released.saturating_add(1);
+        true
+    }
+
+    fn handle_request(&mut self, tag: u32, frame: &Frame) -> Option<Frame> {
         if frame.code == PING_TRANSACTION {
             // `IBinder::PING_TRANSACTION` is answered with an empty parcel; a
             // reply header here would make libbinder read garbage (E3G §0).
@@ -533,7 +1398,7 @@ impl Peer {
             ));
         }
         if frame.target == 0 {
-            return Some(self.service_manager(frame));
+            return Some(self.service_manager(tag, frame));
         }
         if frame.target & NODE_TAG != 0 {
             let host_id = frame.target & !NODE_TAG;
@@ -541,9 +1406,9 @@ impl Peer {
                 return Some(self.interface_transaction(frame, host_id));
             }
             if host_id == LAUNCH_NODE {
-                return Some(self.launch_push(frame));
+                return Some(self.launch_push(tag, frame));
             }
-            return Some(self.service_transaction(frame, host_id));
+            return Some(self.service_transaction(tag, frame, host_id));
         }
         // A transaction for a handle the driver never mapped to a peer node.
         let (descriptor, _) = peek(frame);
@@ -555,9 +1420,12 @@ impl Peer {
             message: format!("no service node for target {:#x}", frame.target),
         };
         self.log_unsupported(&record);
-        Some(self.error_reply(frame, &ServiceError::UnknownBinder {
-            handle: frame.target,
-        }))
+        Some(self.error_reply(
+            frame,
+            &ServiceError::UnknownBinder {
+                handle: frame.target,
+            },
+        ))
     }
 
     /// `IBinder::INTERFACE_TRANSACTION`: answer the node's AIDL descriptor.
@@ -582,16 +1450,16 @@ impl Peer {
         frame_from_parcel(F_RSP, frame, &reply)
     }
 
-    fn service_manager(&mut self, frame: &Frame) -> Frame {
+    fn service_manager(&mut self, tag: u32, frame: &Frame) -> Frame {
         // addService is the one IServiceManager call the service host cannot
         // answer: it registers a binder that lives in the *app* process.
         if frame.code == 3 {
-            return self.add_service(frame);
+            return self.add_service(tag, frame);
         }
         // `acos.launch` is a peer-owned node (the ART launch path needs one
         // binder the ServiceHost does not model); everything else is the host's.
         if frame.code == SM_GET_SERVICE || frame.code == SM_CHECK_SERVICE {
-            let mut data = import_parcel(frame);
+            let mut data = import_parcel_for(tag, frame);
             if let Ok(Some(name)) = data
                 .enforce_interface("android.os.IServiceManager")
                 .and_then(|()| data.read_string16())
@@ -604,15 +1472,21 @@ impl Peer {
                 }
             }
         }
-        let mut data = import_parcel(frame);
+        let mut data = import_parcel_for(tag, frame);
         let mut reply = Parcel::new();
-        let Some(sm) = self.host.binder_for_descriptor("android.os.IServiceManager") else {
+        let Some(sm) = self
+            .host
+            .binder_for_descriptor("android.os.IServiceManager")
+        else {
             return self.error_reply(
                 frame,
                 &ServiceError::Internal("IServiceManager binder is not registered".into()),
             );
         };
-        match self.host.transact(sm, frame.code, &mut data, &mut reply, frame.flags) {
+        match self
+            .host
+            .transact(sm, frame.code, &mut data, &mut reply, frame.flags)
+        {
             Ok(()) => frame_from_parcel(F_RSP, frame, &reply),
             Err(err) => {
                 self.record_error(frame, &mut data, &err);
@@ -623,8 +1497,8 @@ impl Peer {
         }
     }
 
-    fn add_service(&mut self, frame: &Frame) -> Frame {
-        let mut data = import_parcel(frame);
+    fn add_service(&mut self, tag: u32, frame: &Frame) -> Frame {
+        let mut data = import_parcel_for(tag, frame);
         let mut reply = Parcel::new();
         let parsed = (|| -> Result<(String, BinderId), ServiceError> {
             data.enforce_interface("android.os.IServiceManager")?;
@@ -638,8 +1512,8 @@ impl Peer {
             Ok((name, binder)) => {
                 if binder.0 & JAVA_TAG != 0 {
                     let wire = (binder.0 & MASK32) as u32;
-                    if !self.java_binders.contains_key(&wire)
-                        && self.java_binders.len() >= MAX_JAVA_BINDERS
+                    let count = self.java_binders_for(tag).len();
+                    if !self.java_binders_for(tag).contains_key(&wire) && count >= MAX_JAVA_BINDERS
                     {
                         let err = ServiceError::ResourceLimit {
                             what: "peer java binder table".into(),
@@ -647,14 +1521,19 @@ impl Peer {
                         };
                         return self.limit_reply(frame, &err);
                     }
-                    self.java_binders.insert(wire, name.clone());
+                    let id = java_binder_id(tag, wire);
+                    self.host.set_binder_owner(id, tag);
+                    if let Some(conn) = self.conns.get_mut(tag as usize).and_then(Option::as_mut) {
+                        conn.java_binders.insert(wire, name.clone());
+                    }
                     eprintln!(
-                        "acos-binder-peer: addService({name:?}) -> java binder wire={wire} ({} registered)",
-                        self.java_binders.len()
+                        "acos-binder-peer: process {tag}: addService({name:?}) -> java binder wire={wire} 
+                         ({} registered)",
+                        self.java_binders_for(tag).len()
                     );
                 } else {
                     eprintln!(
-                        "acos-binder-peer: addService({name:?}) -> non-Java binder {:#x} recorded",
+                        "acos-binder-peer: process {tag}: addService({name:?}) -> non-Java binder {:#x} recorded",
                         binder.0
                     );
                 }
@@ -668,9 +1547,13 @@ impl Peer {
         }
     }
 
-    fn service_transaction(&mut self, frame: &Frame, host_id: u64) -> Frame {
+    fn service_transaction(&mut self, tag: u32, frame: &Frame, host_id: u64) -> Frame {
         let binder = BinderId(host_id);
-        let mut data = import_parcel(frame);
+        let mut data = import_parcel_for(tag, frame);
+        // Every Java binder this process hands the system in this transaction
+        // is owned by this process: record that on the host, so a delivery to
+        // it (or a later cleanup of the process) names the right connection.
+        self.record_binder_owners(tag, &data);
         let mut reply = Parcel::new();
         let descriptor = data.peek_interface_token().ok().flatten();
         let method = descriptor
@@ -691,9 +1574,10 @@ impl Peer {
         // visible in the minimal-surface list; only the parcel writer is the
         // framework's instead of `acos-services`'.
         if let (Some(d), Some(m)) = (descriptor.as_deref(), method.as_ref()) {
-            if let Some(bytes) = self.launch_reply_for(d, frame.code) {
+            if let Some(bytes) = self.launch_reply_for_tag(tag, d, frame.code) {
                 eprintln!(
-                    "acos-binder-peer: {d}.{} answered from a framework-marshalled reply ({} bytes)",
+                    "acos-binder-peer: process {tag}: {d}.{} answered from a framework-marshalled \
+                     reply ({} bytes)",
                     m.name,
                     bytes.len()
                 );
@@ -702,8 +1586,9 @@ impl Peer {
         }
         // The attach handshake is where the launch path learns the real
         // `IApplicationThread` binder it must answer with `bindApplication`.
-        let attach_thread = if method.as_ref().map(|m| m.name.as_str()) == Some("attachApplication") {
-            let mut args_data = import_parcel(frame);
+        let attach_thread = if method.as_ref().map(|m| m.name.as_str()) == Some("attachApplication")
+        {
+            let mut args_data = import_parcel_for(tag, frame);
             descriptor
                 .as_deref()
                 .zip(method.as_ref())
@@ -711,7 +1596,10 @@ impl Peer {
                     args_data.enforce_interface(d).ok()?;
                     acos_services::codec::read_args(&mut args_data, &m.args, d, &m.name).ok()
                 })
-                .and_then(|args| args.first().and_then(acos_services::value::Value::as_binder))
+                .and_then(|args| {
+                    args.first()
+                        .and_then(acos_services::value::Value::as_binder)
+                })
                 .and_then(java_wire)
         } else {
             None
@@ -723,9 +1611,10 @@ impl Peer {
         if descriptor.as_deref() == Some("android.hardware.display.IDisplayManager")
             && method.as_ref().map(|m| m.name.as_str()) == Some("getDisplayInfo")
         {
-            if let Some(bytes) = self.launch_display_reply.clone() {
+            if let Some(bytes) = self.launch_state(tag).and_then(|l| l.display_reply.clone()) {
                 eprintln!(
-                    "acos-binder-peer: IDisplayManager.getDisplayInfo answered from the framework-marshalled reply ({} bytes)",
+                    "acos-binder-peer: process {tag}: IDisplayManager.getDisplayInfo answered from \
+                     the framework-marshalled reply ({} bytes)",
                     bytes.len()
                 );
                 return Frame::plain(F_RSP, frame.seq, 0, 0, 0, bytes);
@@ -748,17 +1637,35 @@ impl Peer {
             }
         });
         let result = match registered {
-            Some((descriptor, _)) => self.direct_dispatch(binder, &descriptor, frame.code, &mut data, &mut reply),
+            Some((descriptor, _)) => {
+                self.direct_dispatch(binder, &descriptor, frame.code, &mut data, &mut reply)
+            }
             None => self
                 .host
                 .transact(binder, frame.code, &mut data, &mut reply, frame.flags),
         };
         match result {
             Ok(()) => {
+                // MPROC5c: a node a service created while answering (the fresh
+                // `IWindowSession` of `openSession`) must be routable before the
+                // reply reaches the guest.
+                self.host.install_pending_nodes();
                 if let Some(wire) = attach_thread {
-                    self.launch_app_thread = Some(wire);
+                    // The process told the system which binder answers its
+                    // deliveries: record it as owned by this process, so the
+                    // launch delivery and every later callback are addressed to
+                    // the connection that can actually receive them.
+                    self.host.set_binder_owner(java_binder_id(tag, wire), tag);
+                    if let Some(state) = self.launch_state_mut(tag) {
+                        state.app_thread = Some(wire);
+                    }
                 }
-                frame_from_parcel(F_RSP, frame, &reply)
+                // Every binder this reply carries reaches the caller as
+                // something it can call: its own wire handle for its own
+                // binders, a synthetic node for another process's (MPROC3
+                // step 3c). No fabricated handle can be produced here.
+                let exported = self.export_for_process(tag, &reply);
+                frame_from_parcel(F_RSP, frame, &exported)
             }
             Err(err) => {
                 // This parcel has already been decoded (the descriptor and
@@ -816,7 +1723,13 @@ impl Peer {
         self.local_deliveries.extend(call.deliveries);
         reply.reset();
         exception::write_no_exception(reply);
-        acos_services::codec::write_reply(reply, &method.reply, &call.reply, descriptor, &method.name)
+        acos_services::codec::write_reply(
+            reply,
+            &method.reply,
+            &call.reply,
+            descriptor,
+            &method.name,
+        )
     }
 
     fn error_reply(&self, frame: &Frame, err: &ServiceError) -> Frame {
@@ -913,8 +1826,8 @@ impl Peer {
     /// `acos.launch` node: the guest pushes the marshalled `bindApplication`
     /// request (code 1) and framework-marshalled reply parcels (code 2). Both
     /// are replayed verbatim later; nothing is invented in Rust.
-    fn launch_push(&mut self, frame: &Frame) -> Frame {
-        let mut data = import_parcel(frame);
+    fn launch_push(&mut self, tag: u32, frame: &Frame) -> Frame {
+        let mut data = import_parcel_for(tag, frame);
         let mut reply = Parcel::new();
         let parsed = (|| -> Result<(Option<(String, u32)>, Vec<u8>), ServiceError> {
             let mut key = None;
@@ -924,28 +1837,34 @@ impl Peer {
                 let _policy = data.read_int32()?;
                 let _work_source = data.read_int32()?;
                 let _header = data.read_int32()?;
-                let descriptor = data.read_string16()?.ok_or_else(|| ServiceError::BadRequest {
-                    interface: "dev.acos.art.ILaunch".into(),
-                    method: "pushReply".into(),
-                    detail: "missing descriptor".into(),
-                })?;
+                let descriptor = data
+                    .read_string16()?
+                    .ok_or_else(|| ServiceError::BadRequest {
+                        interface: "dev.acos.art.ILaunch".into(),
+                        method: "pushReply".into(),
+                        detail: "missing descriptor".into(),
+                    })?;
                 let code = data.read_int32()? as u32;
                 key = Some((descriptor, code));
             } else {
                 data.enforce_interface("dev.acos.art.ILaunch")?;
             }
-            let bytes = data.read_byte_array()?.ok_or_else(|| ServiceError::BadRequest {
-                interface: "dev.acos.art.ILaunch".into(),
-                method: "pushBindApplication".into(),
-                detail: "missing parcel bytes".into(),
-            })?;
+            let bytes = data
+                .read_byte_array()?
+                .ok_or_else(|| ServiceError::BadRequest {
+                    interface: "dev.acos.art.ILaunch".into(),
+                    method: "pushBindApplication".into(),
+                    detail: "missing parcel bytes".into(),
+                })?;
             Ok((key, bytes))
         })();
         match parsed {
             Ok((Some((descriptor, code)), bytes)) => {
-                if self.launch_replies.len() >= MAX_LAUNCH_REPLIES
-                    && !self.launch_replies.contains_key(&(descriptor.clone(), code))
-                {
+                let used = self.launch_state(tag).map_or(0, |l| l.replies.len());
+                let known = self
+                    .launch_state(tag)
+                    .is_some_and(|l| l.replies.contains_key(&(descriptor.clone(), code)));
+                if used >= MAX_LAUNCH_REPLIES && !known {
                     let err = ServiceError::ResourceLimit {
                         what: "peer launch reply table".into(),
                         limit: MAX_LAUNCH_REPLIES,
@@ -953,31 +1872,43 @@ impl Peer {
                     return self.limit_reply(frame, &err);
                 }
                 eprintln!(
-                    "acos-binder-peer: launch reply template stashed for {descriptor} code {code} ({} bytes, framework-marshalled)",
+                    "acos-binder-peer: process {tag}: launch reply template stashed for 
+                     {descriptor} code {code} ({} bytes, framework-marshalled)",
                     bytes.len()
                 );
-                if descriptor == "android.hardware.display.IDisplayManager" && code == 1 {
-                    self.launch_display_reply = Some(bytes.clone());
+                let is_display =
+                    descriptor == "android.hardware.display.IDisplayManager" && code == 1;
+                if let Some(state) = self.launch_state_mut(tag) {
+                    if is_display {
+                        state.display_reply = Some(bytes.clone());
+                    }
+                    state.replies.insert((descriptor, code), bytes);
                 }
-                self.launch_replies.insert((descriptor, code), bytes);
                 exception::write_no_exception(&mut reply);
                 frame_from_parcel(F_RSP, frame, &reply)
             }
             Ok((None, bytes)) => {
-                if frame.code == LAUNCH_PUSH_TRANSACTION {
+                let is_txn = frame.code == LAUNCH_PUSH_TRANSACTION;
+                if is_txn {
                     eprintln!(
-                        "acos-binder-peer: launch ClientTransaction request stashed ({} bytes, framework-marshalled)",
+                        "acos-binder-peer: process {tag}: launch ClientTransaction request stashed 
+                         ({} bytes, framework-marshalled)",
                         bytes.len()
                     );
-                    self.launch_txn = Some(bytes);
-                    exception::write_no_exception(&mut reply);
-                    return frame_from_parcel(F_RSP, frame, &reply);
+                } else {
+                    eprintln!(
+                        "acos-binder-peer: process {tag}: launch bindApplication request stashed 
+                         ({} bytes)",
+                        bytes.len()
+                    );
                 }
-                eprintln!(
-                    "acos-binder-peer: launch bindApplication request stashed ({} bytes)",
-                    bytes.len()
-                );
-                self.launch_bind = Some(bytes);
+                if let Some(state) = self.launch_state_mut(tag) {
+                    if is_txn {
+                        state.txn = Some(bytes);
+                    } else {
+                        state.bind = Some(bytes);
+                    }
+                }
                 exception::write_no_exception(&mut reply);
                 frame_from_parcel(F_RSP, frame, &reply)
             }
@@ -988,20 +1919,41 @@ impl Peer {
         }
     }
 
-    /// Queue the one `bindApplication` delivery, after `attachApplication`, then
-    /// the one `scheduleTransaction` delivery once the guest pushed it (P4b).
-    fn take_launch_delivery(&mut self) -> Option<Frame> {
-        let wire = self.launch_app_thread?;
-        if !self.launch_delivered {
-            let bytes = self.launch_bind.clone()?;
+    /// Queue the one `bindApplication` delivery for process `tag`, after its
+    /// `attachApplication`, then its one launch `ClientTransaction` (P4b,
+    /// MPROC7).
+    ///
+    /// The transaction the host delivers is its **own** encoding
+    /// ([`Self::encode_host_launch`], ADR-0029: the host builds launch
+    /// transactions) when the activity manager has a launch pending for this
+    /// process. The guest-pushed `txn` is only a fallback for an older guest.
+    fn take_launch_delivery(&mut self, tag: u32) -> Vec<Frame> {
+        let mut out = Vec::new();
+        let Some(wire) = self.launch_state(tag).and_then(|s| s.app_thread) else {
+            return out;
+        };
+        let bind = {
+            let Some(state) = self.launch_state(tag) else {
+                return out;
+            };
+            if state.delivered {
+                None
+            } else {
+                state.bind.clone()
+            }
+        };
+        if let Some(bytes) = bind {
+            if let Some(state) = self.launch_state_mut(tag) {
+                state.delivered = true;
+            }
             let seq = self.next_launch_seq();
-            self.launch_delivered = true;
             eprintln!(
-                "acos-binder-peer: delivering bindApplication ({} bytes, code {}) to java binder wire={wire}",
+                "acos-binder-peer: process {tag}: delivering bindApplication ({} bytes, code {}) to 
+                 java binder wire={wire}",
                 bytes.len(),
                 BIND_APPLICATION_CODE
             );
-            return Some(Frame::plain(
+            out.push(Frame::plain(
                 F_TXN,
                 seq,
                 BIND_APPLICATION_CODE,
@@ -1010,26 +1962,260 @@ impl Peer {
                 bytes,
             ));
         }
-        if self.launch_txn_delivered {
-            return None;
+        if !self.launch_state(tag).is_some_and(|s| s.delivered)
+            || self.launch_state(tag).is_some_and(|s| s.txn_delivered)
+        {
+            return out;
         }
-        let bytes = self.launch_txn.clone()?;
+        // MPROC7: the host owns the first launch of a spawned process; encode it
+        // once, then deliver it (the guest waits for it instead of building its
+        // own).
+        let host = match self.launch_state(tag).and_then(|s| s.host_txn.clone()) {
+            Some(parcel) => Some(parcel),
+            None => {
+                let encoded = self.encode_host_launch(tag);
+                if let (Some(parcel), Some(state)) = (encoded.clone(), self.launch_state_mut(tag)) {
+                    state.host_txn = Some(parcel);
+                }
+                encoded
+            }
+        };
+        if let Some(parcel) = host {
+            if let Some(state) = self.launch_state_mut(tag) {
+                state.txn_delivered = true;
+            }
+            let seq = self.next_launch_seq();
+            let mut frame = frame_from_parcel(
+                F_TXN,
+                &Frame {
+                    seq,
+                    ..Default::default()
+                },
+                &parcel,
+            );
+            frame.target = u64::from(wire);
+            frame.code = SCHEDULE_TRANSACTION_CODE;
+            frame.flags = 0;
+            eprintln!(
+                "acos-binder-peer: process {tag}: delivering ClientTransaction ({} bytes, \
+                 IApplicationThread.scheduleTransaction code {}) to java binder wire={wire}",
+                frame.data.len(),
+                SCHEDULE_TRANSACTION_CODE
+            );
+            out.push(frame);
+            return out;
+        }
+        let Some(bytes) = self.launch_state(tag).and_then(|s| s.txn.clone()) else {
+            return out;
+        };
+        if let Some(state) = self.launch_state_mut(tag) {
+            state.txn_delivered = true;
+        }
         let seq = self.next_launch_seq();
-        self.launch_txn_delivered = true;
         eprintln!(
-            "acos-binder-peer: delivering ClientTransaction ({} bytes, \
-             IApplicationThread.scheduleTransaction code {}) to java binder wire={wire}",
-            bytes.len(),
-            SCHEDULE_TRANSACTION_CODE
+            "acos-binder-peer: process {tag}: delivering guest-marshalled ClientTransaction \
+             ({} bytes) to java binder wire={wire}",
+            bytes.len()
         );
-        Some(Frame::plain(
+        out.push(Frame::plain(
             F_TXN,
             seq,
             SCHEDULE_TRANSACTION_CODE,
             0,
             u64::from(wire),
             bytes,
-        ))
+        ));
+        out
+    }
+
+    /// MPROC7: encode, with the host's one MPROC6 encoder, the launch the
+    /// activity manager recorded for process `tag`'s package.
+    ///
+    /// This is the ADR-0029 shape: the `ActivityInfo`/`ApplicationInfo` come
+    /// from the real PMS, the `ClientTransaction` from
+    /// [`acos_services::client_transaction`], and the activity token is a binder
+    /// the host mints ([`ServiceHost::register_activity_token`]). Returns the
+    /// `IApplicationThread.scheduleTransaction` request parcel bytes.
+    fn encode_host_launch(&mut self, tag: u32) -> Option<Parcel> {
+        let package = self.package_of(tag)?;
+        let class = {
+            let atms = self.atms_service_mut()?;
+            atms.pending_launch_for(&package)?.1
+        };
+        let (app, activity) = {
+            let object = self
+                .host
+                .ensure("android.content.pm.IPackageManager")
+                .ok()?;
+            let pms = object
+                .as_any_mut()?
+                .downcast_mut::<acos_services::pms::PmsService>()?;
+            let state = pms.shared_state();
+            let state = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let installed = state.lookup(Some(&package))?;
+            let activity = installed
+                .package
+                .activities
+                .iter()
+                .find(|a| a.name == class)
+                .cloned()
+                .unwrap_or(acos_services::pms::ActivityInfo {
+                    name: class.clone(),
+                    package_name: package.clone(),
+                    launch_mode: 0,
+                    // ActivityInfo.FLAG_HARDWARE_ACCELERATED, the API default.
+                    flags: 0x200,
+                    theme: 0,
+                    exported: true,
+                    parent_activity_name: String::new(),
+                    meta_data: Vec::new(),
+                });
+            (installed.app.clone(), activity)
+        };
+        let token = self.host.register_activity_token(tag);
+        let transaction = {
+            let atms = self.atms_service_mut()?;
+            let state = atms.shared_state();
+            let mut state = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state
+                .take_launch_for_process(&package, &app, &activity, token)
+                .ok()??
+        };
+        let parcel = acos_services::client_transaction::schedule_transaction_request(&transaction)
+            .map_err(|err| {
+                eprintln!(
+                    "acos-binder-peer: process {tag}: host launch transaction could not be \
+                     encoded: {err}"
+                );
+            })
+            .ok()?;
+        eprintln!(
+            "acos-binder-peer: process {tag}: host-built launch for {package}/{class} \
+             (token={:#x}, {} bytes)",
+            token.0,
+            parcel.data_size()
+        );
+        Some(parcel)
+    }
+
+    /// The package the activity manager recorded for `tag`, else the handshake
+    /// name (the guest names itself by its package).
+    fn package_of(&mut self, tag: u32) -> Option<String> {
+        if let Some(atms) = self.atms_service_mut() {
+            if let Some((_, package, ..)) = atms
+                .process_list()
+                .into_iter()
+                .find(|(process_tag, ..)| *process_tag == tag)
+            {
+                return Some(package);
+            }
+        }
+        self.process_name(tag).map(str::to_string)
+    }
+
+    fn atms_service_mut(&mut self) -> Option<&mut acos_services::atms::AtmsService> {
+        let object = self.host.ensure("android.app.IActivityTaskManager").ok()?;
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+    }
+
+    /// MPROC7: deliver every host-owned transaction whose process is ready.
+    ///
+    /// Called after each handled frame: a `startActivity` into an
+    /// **already-running** process records a launch (or an `onNewIntent`) with
+    /// no spawn request, so this is what makes it reach the process's app
+    /// thread. A process whose `bindApplication` has not been delivered yet is
+    /// skipped; [`Self::take_launch_delivery`] sends the launch right after the
+    /// bind.
+    fn take_host_transactions(&mut self) -> Vec<(u32, Frame)> {
+        let mut out = Vec::new();
+        let tags: Vec<u32> = self
+            .conns
+            .iter()
+            .flatten()
+            .filter(|c| c.connected)
+            .map(|c| c.tag)
+            .collect();
+        for tag in tags {
+            let Some(wire) = self.launch_state(tag).and_then(|s| s.app_thread) else {
+                continue;
+            };
+            if !self.launch_state(tag).is_some_and(|s| s.delivered) {
+                continue;
+            }
+            // A pending launch for this process's package (startActivity into a
+            // running process). The first launch (bind time) is delivered by
+            // `take_launch_delivery`; every later launch is a new transaction and
+            // must not be gated on `txn_delivered`.
+            let launch = self.encode_host_launch(tag);
+            if let Some(parcel) = launch {
+                if let Some(state) = self.launch_state_mut(tag) {
+                    state.host_txn = Some(parcel.clone());
+                    state.txn_delivered = true;
+                }
+                let seq = self.next_launch_seq();
+                let mut frame = frame_from_parcel(
+                    F_TXN,
+                    &Frame {
+                        seq,
+                        ..Default::default()
+                    },
+                    &parcel,
+                );
+                frame.target = u64::from(wire);
+                frame.code = SCHEDULE_TRANSACTION_CODE;
+                frame.flags = 0;
+                eprintln!(
+                    "acos-binder-peer: process {tag}: delivering host-built ClientTransaction \
+                     ({} bytes, IApplicationThread.scheduleTransaction) to java binder wire={wire}",
+                    frame.data.len()
+                );
+                out.push((tag, frame));
+            }
+            // An `onNewIntent` owed to this process's resumed activity.
+            let new_intent = {
+                let atms = self.atms_service_mut();
+                atms.map(|atms| {
+                    let state = atms.shared_state();
+                    let mut state = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    state.take_new_intent_for_tag(tag)
+                })
+                .flatten()
+            };
+            if let Some(transaction) = new_intent {
+                if let Ok(parcel) =
+                    acos_services::client_transaction::schedule_transaction_request(&transaction)
+                {
+                    let exported = self.export_for_process(tag, &parcel);
+                    let seq = self.next_launch_seq();
+                    let mut frame = frame_from_parcel(
+                        F_TXN,
+                        &Frame {
+                            seq,
+                            ..Default::default()
+                        },
+                        &exported,
+                    );
+                    frame.target = u64::from(wire);
+                    frame.code = SCHEDULE_TRANSACTION_CODE;
+                    frame.flags = 0;
+                    eprintln!(
+                        "acos-binder-peer: process {tag}: delivering host-built NewIntentItem \
+                         ({} bytes) to java binder wire={wire}",
+                        frame.data.len()
+                    );
+                    out.push((tag, frame));
+                }
+            }
+        }
+        out
     }
 
     fn next_launch_seq(&mut self) -> u32 {
@@ -1038,14 +2224,18 @@ impl Peer {
         seq
     }
 
-    /// The `system -> app` frames queued by anything that ran on the host (a
-    /// binder transaction, or a module's live `control` op).
+    /// Reverse deliveries with the tag of the connection each must be written
+    /// to.
+    ///
+    /// The tag comes from the target binder id ([`owner_process`]), which is why
+    /// a `JAVA_TAG` id carries its process: two processes can both have driver
+    /// wire handle 7, and a delivery must reach the one the system meant.
     ///
     /// [`Self::tick`] is what the launcher calls after a control request and on
     /// the idle turn: a control op can park a delivery in the module's **own**
     /// object (that is where a scripted feed lives), and only the timed drain
     /// reaches it. This plain drain stays for the transaction path.
-    pub fn take_delivery_frames(&mut self) -> Vec<Frame> {
+    fn take_delivery_frames(&mut self) -> Vec<(u32, Frame)> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());
         self.frames_for_deliveries(pending)
@@ -1059,14 +2249,16 @@ impl Peer {
     /// app would see the feed only when it happened to call something. The peer
     /// loop asks [`Self::next_timed_deadline`] how long it may sleep and calls
     /// this when that deadline (or a guest frame) arrives.
-    pub fn tick(&mut self) -> Vec<Frame> {
+    pub fn tick(&mut self) -> Vec<(u32, Frame)> {
         // `take_timed_deliveries` (not the plain queue): a module's feed lives in
         // the module's own object, which only this idle turn may lock, and it
         // advances a timed schedule (`Module::advance_timed`) to the instant the
         // peer slept until.
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_timed_deliveries());
-        self.frames_for_deliveries(pending)
+        let mut out = self.frames_for_deliveries(pending);
+        out.extend(self.take_ref_frames());
+        out
     }
 
     /// The instant the earliest **module** delivery is due.
@@ -1083,7 +2275,10 @@ impl Peer {
         self.host.next_timed_deadline()
     }
 
-    fn frames_for_deliveries(&mut self, mut pending: Vec<acos_services::PendingDelivery>) -> Vec<Frame> {
+    fn frames_for_deliveries(
+        &mut self,
+        mut pending: Vec<acos_services::PendingDelivery>,
+    ) -> Vec<(u32, Frame)> {
         // Defence in depth: even the frames produced in one turn are bounded, so a
         // single transaction that fans out into thousands of reverse deliveries
         // cannot grow this turn's `out` without limit.
@@ -1099,12 +2294,19 @@ impl Peer {
         }
         if std::env::var_os("ACOS_SERVICE_CTL_LOG").is_some() && !pending.is_empty() {
             let path = std::env::var("ACOS_SERVICE_CTL_LOG").unwrap_or_default();
-            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+            {
                 let _ = writeln!(
                     file,
                     "deliveries={} targets={:?}",
                     pending.len(),
-                    pending.iter().map(|d| (d.interface.clone(), d.code, d.target.0)).collect::<Vec<_>>()
+                    pending
+                        .iter()
+                        .map(|d| (d.interface.clone(), d.code, d.target.0))
+                        .collect::<Vec<_>>()
                 );
             }
         }
@@ -1124,15 +2326,48 @@ impl Peer {
                 self.log_unsupported(&record);
                 continue;
             };
+            let tag = owner_process(d.target).unwrap_or(crate::protocol::TAG_PRIMARY);
+            if !self.process(tag).is_some_and(ProcessConn::connected) {
+                let record = UnsupportedRecord {
+                    descriptor: d.interface.clone(),
+                    code: d.code,
+                    method: d.method.clone(),
+                    error: codes::UNSUPPORTED_ANDROID_API.into(),
+                    message: format!(
+                        "delivery target {:#x} belongs to process {tag}, which has no connection",
+                        d.target.0
+                    ),
+                };
+                self.log_unsupported(&record);
+                continue;
+            }
             let seq = self.next_txn_seq;
             self.next_txn_seq = self.next_txn_seq.wrapping_add(1).max(1);
-            let mut frame = frame_from_parcel(F_TXN, &Frame { seq, ..Default::default() }, &d.data);
+            let exported = self.export_for_process(tag, &d.data);
+            let mut frame = frame_from_parcel(
+                F_TXN,
+                &Frame {
+                    seq,
+                    ..Default::default()
+                },
+                &exported,
+            );
             frame.target = u64::from(wire);
             frame.code = d.code;
             frame.flags = 0;
-            out.push(frame);
+            out.push((tag, frame));
         }
         out
+    }
+
+    /// Record the host-side owner of every Java binder a process just handed to
+    /// the system in this request parcel.
+    fn record_binder_owners(&mut self, tag: u32, data: &Parcel) {
+        for id in data.binder_ids() {
+            if id.0 & JAVA_TAG != 0 {
+                self.host.set_binder_owner(id, tag);
+            }
+        }
     }
 }
 
@@ -1140,6 +2375,21 @@ impl Default for Peer {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// `BinderId` of a Java local binder that belongs to app process `tag`.
+#[must_use]
+pub fn java_binder_id(tag: u32, wire: u32) -> BinderId {
+    BinderId(JAVA_TAG | ((u64::from(tag) & PROC_MASK) << PROC_SHIFT) | u64::from(wire))
+}
+
+/// The app process that owns a Java local binder id (`None` for a host node).
+#[must_use]
+pub fn owner_process(id: BinderId) -> Option<u32> {
+    if id.0 & JAVA_TAG == 0 {
+        return None;
+    }
+    Some(((id.0 >> PROC_SHIFT) & PROC_MASK) as u32)
 }
 
 /// `BinderId` -> driver wire handle when it is a Java local binder.
@@ -1163,29 +2413,41 @@ pub fn peer_node(id: BinderId) -> u64 {
 }
 
 fn peek(frame: &Frame) -> (Option<String>, usize) {
-    let mut p = import_parcel_raw(frame);
+    let mut p = import_parcel_raw(crate::protocol::TAG_PRIMARY, frame);
     let d = p.peek_interface_token().ok().flatten();
     (d, p.data_size())
 }
 
-/// Import a frame's parcel into an `acos-parcel` `Parcel`.
+/// Import a frame's parcel into an `acos-parcel` `Parcel` (primary process).
+#[must_use]
+pub fn import_parcel(frame: &Frame) -> Parcel {
+    import_parcel_for(crate::protocol::TAG_PRIMARY, frame)
+}
+
+/// Import a frame's parcel for the connection of process `tag`.
 ///
 /// Binder objects are rewritten from the driver's wire form to the peer's
 /// `BinderId` form (`JAVA_TAG`/`NODE_TAG`), and `BINDER_TYPE_FD` objects get the
 /// descriptor that arrived in `SCM_RIGHTS` (one per object, in order).
+///
+/// A `BINDER_TYPE_HANDLE` is a driver wire handle, which is only meaningful
+/// inside the process that wrote it: the id carries `tag` so two processes'
+/// handles never collide (MPROC2 step 3a).
 #[must_use]
-pub fn import_parcel(frame: &Frame) -> Parcel {
-    import_parcel_raw(frame)
+pub fn import_parcel_for(tag: u32, frame: &Frame) -> Parcel {
+    import_parcel_raw(tag, frame)
 }
 
-fn import_parcel_raw(frame: &Frame) -> Parcel {
+fn import_parcel_raw(tag: u32, frame: &Frame) -> Parcel {
     // libbinder writes a 4-byte stability record right after every
     // `flat_binder_object` (`Parcel::unflattenBinder` reads it back). The
     // in-process `acos-parcel` format does not carry it, so strip it here and
     // rebase the object offsets. Without this every binder reads as null and
     // the following argument is misaligned.
     let mut out = Vec::with_capacity(frame.data.len());
-    let mut object_offsets: Vec<usize> = Vec::new();
+    // Object offsets in the *rebased* stream, so the imported parcel keeps a
+    // real object table (a caller can then ask which binders it carries).
+    let mut offsets = Vec::with_capacity(frame.object_offsets().len());
     let mut cursor = 0usize;
     let mut fds = frame.fds.iter().copied();
     // Offsets of the rewritten flat objects in `out`: the imported parcel has no
@@ -1216,7 +2478,7 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
                 if id == 0 {
                     0
                 } else {
-                    JAVA_TAG | (id & MASK32)
+                    java_binder_id(tag, (id & MASK32) as u32).0
                 }
             }
             BINDER_TYPE_FD => fds.next().map_or(id, |fd| fd as u64),
@@ -1232,7 +2494,10 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
         // parcel answered zero objects for every guest request. MODNOTIF5 also
         // needs them for `writeValue` length accounting (a framework length
         // prefix still counts the 4-byte stability records import strips).
-        object_offsets.push(out.len());
+        //
+        // A null binder is listed in the wire offsets here (the peer wrote it),
+        // and `binder_ids` skips it; keeping the entry preserves the table.
+        offsets.push(out.len());
         out.extend_from_slice(&obj);
         let mut next = off + 24;
         let binder = matches!(
@@ -1249,10 +2514,7 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     }
     out.extend_from_slice(&frame.data[cursor..]);
     let mut parcel = Parcel::new();
-    parcel.unmarshall(&out);
-    for offset in object_offsets {
-        parcel.register_object(offset);
-    }
+    parcel.unmarshall_with_objects(&out, &offsets);
     parcel.set_data_position(0);
     // The guest's libbinder wrote this parcel: a null binder carries the 4-byte
     // stability record but no object-table entry (L1 §3.6).
@@ -1308,6 +2570,12 @@ pub fn frame_from_parcel(ty: u32, base: &Frame, parcel: &Parcel) -> Frame {
                 (acos_parcel::binder::BINDER_TYPE_BINDER, 0u64)
             } else if parsed.id & NODE_TAG != 0 {
                 (acos_parcel::binder::BINDER_TYPE_BINDER, parsed.id)
+            } else if parsed.id & FOREIGN_FLAG != 0 {
+                // A synthetic node for a binder that lives in another app
+                // process (MPROC3 step 3c). It must reach the receiver as a
+                // *node* (`BINDER_TYPE_BINDER`), never as a handle: its low
+                // bits are the peer's node number, not a driver handle.
+                (acos_parcel::binder::BINDER_TYPE_BINDER, parsed.id)
             } else if let Some(wire) = java_wire(BinderId(parsed.id)) {
                 (acos_parcel::binder::BINDER_TYPE_HANDLE, u64::from(wire))
             } else {
@@ -1317,8 +2585,7 @@ pub fn frame_from_parcel(ty: u32, base: &Frame, parcel: &Parcel) -> Frame {
                 )
             };
             obj[0..4].copy_from_slice(&tag.to_le_bytes());
-            obj[4..8]
-                .copy_from_slice(&acos_parcel::binder::STRONG_BINDER_FLAGS.to_le_bytes());
+            obj[4..8].copy_from_slice(&acos_parcel::binder::STRONG_BINDER_FLAGS.to_le_bytes());
             obj[8..16].copy_from_slice(&id.to_le_bytes());
             obj[16..24].copy_from_slice(&0u64.to_le_bytes());
         }

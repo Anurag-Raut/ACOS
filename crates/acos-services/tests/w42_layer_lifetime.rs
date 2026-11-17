@@ -55,7 +55,8 @@ fn rig() -> Rig {
         .expect("lookup infallible")
         .expect("SurfaceFlinger resolves");
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.set_data_position(0);
     let mut reply = Parcel::new();
     host.transact(sf, CREATE_CONNECTION, &mut data, &mut reply, 0)
@@ -412,7 +413,11 @@ fn destroyed_layer_is_not_drawn_and_its_memfd_is_released() {
     assert_eq!(dropped, 1, "the top layer is destroyed");
     let state = rig.state.lock().expect("state");
     assert_eq!(state.retained_buffers(), 1, "only the base buffer is left");
-    assert_eq!(state.released_buffers(), 1, "the top buffer's memfd is gone");
+    assert_eq!(
+        state.released_buffers(),
+        1,
+        "the top buffer's memfd is gone"
+    );
     assert_eq!(state.destroyed_layers(), 1);
     assert_eq!(
         state.open_buffer_fds(),
@@ -423,7 +428,11 @@ fn destroyed_layer_is_not_drawn_and_its_memfd_is_released() {
 
     let after = rig.capture().expect("base layer");
     assert_eq!(after.layers, 1, "the destroyed layer is not composited");
-    assert_eq!(pixel(&after, 4, 4), RED, "the Activity below is what is shown");
+    assert_eq!(
+        pixel(&after, 4, 4),
+        RED,
+        "the Activity below is what is shown"
+    );
 }
 
 #[test]
@@ -516,7 +525,12 @@ fn window_surface_destroy_drops_its_blast_child() {
     // The BLAST child the app draws into (parent = the window surface handle).
     let (child_handle, child_id) = rig.create_surface("bbq-wrapper", Some(binding.handle));
     let pixels = Buf::solid(8, 8, 8, 0x42_0000_0031, BLUE);
-    rig.apply(&mut transaction(&[buffered(child_handle, child_id, 1, &pixels)]));
+    rig.apply(&mut transaction(&[buffered(
+        child_handle,
+        child_id,
+        1,
+        &pixels,
+    )]));
     let before = rig.capture().expect("the child is drawn");
     assert_eq!(pixel(&before, 4, 4), BLUE);
 
@@ -531,10 +545,7 @@ fn window_surface_destroy_drops_its_blast_child() {
     assert!(state.latest_buffer(binding.handle).is_none());
     drop(state);
     assert!(
-        matches!(
-            rig.capture(),
-            Err(surface_client::CompositeError::NoFrame)
-        ),
+        matches!(rig.capture(), Err(surface_client::CompositeError::NoFrame)),
         "no layer is left to draw after the window is destroyed"
     );
 }

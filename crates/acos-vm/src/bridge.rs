@@ -81,7 +81,11 @@ fn coder_of(units: &[u16]) -> u32 {
 fn class_field(vm: &mut Vm, id: ClassId, name: &str) -> Option<u32> {
     match name {
         "accessFlags" => Some(vm.classes[id as usize].access),
-        "primitiveType" => Some(if vm.classes[id as usize].is_primitive { 1 } else { 0 }),
+        "primitiveType" => Some(if vm.classes[id as usize].is_primitive {
+            1
+        } else {
+            0
+        }),
         "classFlags" => Some(0),
         "classLoader" => Some(0),
         "componentType" => {

@@ -74,8 +74,7 @@ fn compile_case() -> Option<(PathBuf, PathBuf)> {
     // Rebuild when the source is newer than the compiled class.
     let class_file = classes.join("JavaFileMain.class");
     let stale = !class_file.is_file()
-        || class_file.metadata().ok()?.modified().ok()?
-            < src.metadata().ok()?.modified().ok()?;
+        || class_file.metadata().ok()?.modified().ok()? < src.metadata().ok()?.modified().ok()?;
     if stale || !dex.is_file() {
         let ok = Command::new(&javac)
             .args(["--release", "11", "-encoding", "UTF-8", "-d"])
@@ -216,7 +215,11 @@ fn unix_file_system_matches_real_java() {
     assert_eq!(get("can_write_restored"), "true", "setPermission(W)");
     assert_eq!(get("can_execute_set"), "true", "setPermission(X)");
     assert_eq!(get("can_execute_cleared"), "false", "setPermission(!X)");
-    assert_eq!(get("last_modified"), "1600000000000", "get/setLastModifiedTime");
+    assert_eq!(
+        get("last_modified"),
+        "1600000000000",
+        "get/setLastModifiedTime"
+    );
     assert_eq!(get("rename"), "true", "rename0");
     assert_eq!(get("old_exists"), "false");
     assert_eq!(get("delete"), "true", "delete0");

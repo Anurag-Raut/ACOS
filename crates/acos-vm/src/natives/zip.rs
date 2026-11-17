@@ -212,11 +212,10 @@ fn dos_time_from(dt: &zip::DateTime) -> u32 {
 /// `ZipFile.open(String name, int mode, long lastModified, boolean usemmap)`.
 fn zipfile_open(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let name = vm.string_to_rust(vm.arg_ref(ctx, 0)).unwrap_or_default();
-    let bytes = read_guest_all(vm, &name).map_err(|e| {
-        vm.throw_new("Ljava/io/IOException;", Some(&format!("{name}: {e}")))
-    })?;
-    let state = parse_zip(bytes)
-        .map_err(|e| vm.throw_new("Ljava/util/zip/ZipException;", Some(&e)))?;
+    let bytes = read_guest_all(vm, &name)
+        .map_err(|e| vm.throw_new("Ljava/io/IOException;", Some(&format!("{name}: {e}"))))?;
+    let state =
+        parse_zip(bytes).map_err(|e| vm.throw_new("Ljava/util/zip/ZipException;", Some(&e)))?;
     let handle = next_handle();
     ZIP.with(|r| r.borrow_mut().insert(handle, state));
     vm.ret_i64(ctx, handle as i64);
@@ -345,9 +344,10 @@ fn zipfile_get_entry(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let name = vm.arg_ref(ctx, 1);
     let ignore_case = vm.arg_bool(ctx, 2);
     let needle = match vm.heap.get(name) {
-        Some(Object::Array(ArrayObj { data: ArrayData::Byte(v), .. })) => {
-            v.iter().map(|&b| b as u8).collect()
-        }
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Byte(v),
+            ..
+        })) => v.iter().map(|&b| b as u8).collect(),
         _ => Vec::new(),
     };
     let found = ZIP.with(|r| {
@@ -596,12 +596,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     // through these to enumerate `lib/<abi>/*.so`; the boot-classpath
     // `JarFile`/resource readers use the same surface.
     let z = "Ljava/util/zip/ZipFile;";
-    vm.register_native(
-        z,
-        "open",
-        "(Ljava/lang/String;IJZ)J",
-        zipfile_open,
-    );
+    vm.register_native(z, "open", "(Ljava/lang/String;IJZ)J", zipfile_open);
     vm.register_native(z, "close", "(J)V", zipfile_close);
     vm.register_native(z, "getTotal", "(J)I", zipfile_get_total);
     vm.register_native(z, "startsWithLOC", "(J)Z", zipfile_starts_with_loc);
@@ -629,7 +624,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     // `String.getBytes("UTF-8")` and `new String(byte[])` use them too.
     let u = "Llibcore/util/CharsetUtils;";
     vm.register_native(u, "toUtf8Bytes", "(Ljava/lang/String;II)[B", to_utf8_bytes);
-    vm.register_native(u, "toAsciiBytes", "(Ljava/lang/String;II)[B", to_ascii_bytes);
+    vm.register_native(
+        u,
+        "toAsciiBytes",
+        "(Ljava/lang/String;II)[B",
+        to_ascii_bytes,
+    );
     vm.register_native(
         u,
         "toIsoLatin1Bytes",
@@ -699,7 +699,9 @@ fn byte_array(vm: &mut Vm, data: Vec<u8>) -> VmResult<Handle> {
 
 fn substring_units(units: &[u16], offset: i32, length: i32) -> Vec<u16> {
     let start = offset.max(0) as usize;
-    let end = start.saturating_add(length.max(0) as usize).min(units.len());
+    let end = start
+        .saturating_add(length.max(0) as usize)
+        .min(units.len());
     units[start.min(units.len())..end].to_vec()
 }
 
@@ -807,7 +809,10 @@ fn inflater_inflate_bytes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         };
         let before_in = st.dec.total_in();
         let before_out = st.dec.total_out();
-        match st.dec.decompress(&input, &mut outbuf, FlushDecompress::None) {
+        match st
+            .dec
+            .decompress(&input, &mut outbuf, FlushDecompress::None)
+        {
             Ok(status) => {
                 let consumed = (st.dec.total_in() - before_in) as usize;
                 let produced = (st.dec.total_out() - before_out) as usize;
@@ -930,7 +935,11 @@ fn deflater_deflate_bytes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     // `setLevel`/`setStrategy` only flip `setParams`. The pure-Rust backend
     // cannot change level mid-stream, so consume the flag and keep the level
     // the stream was opened with.
-    if vm.get_instance_field_by_name(this, "setParams").unwrap_or(0) != 0 {
+    if vm
+        .get_instance_field_by_name(this, "setParams")
+        .unwrap_or(0)
+        != 0
+    {
         vm.set_instance_field_by_name(this, "setParams", 0);
     }
 
@@ -951,10 +960,7 @@ fn deflater_deflate_bytes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         };
         let before_in = st.comp.total_in();
         let before_out = st.comp.total_out();
-        match st
-            .comp
-            .compress(&input, &mut outbuf, flush_compress(flush))
-        {
+        match st.comp.compress(&input, &mut outbuf, flush_compress(flush)) {
             Ok(status) => {
                 let consumed = (st.comp.total_in() - before_in) as usize;
                 let produced = (st.comp.total_out() - before_out) as usize;
@@ -1097,7 +1103,8 @@ mod tests {
             w.write_all(b"ELF-STORED").unwrap();
             let deflated = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated);
-            w.start_file("assets/index.android.bundle", deflated).unwrap();
+            w.start_file("assets/index.android.bundle", deflated)
+                .unwrap();
             let body = vec![b'a'; 4096];
             w.write_all(&body).unwrap();
             w.finish().unwrap();

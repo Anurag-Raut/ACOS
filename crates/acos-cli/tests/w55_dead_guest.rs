@@ -86,7 +86,11 @@ fn fake_art(dir: &Path) -> PathBuf {
     ));
     body.push_str("      ;;\n");
     body.push_str("    *'\"cmd\":\"tap\"'*|*'\"cmd\":\"key\"'*)\n");
-    body.push_str(&format!("      if [ -f '{}' ]; then rm -f '{}'; kill -9 $$; fi\n", die.display(), die.display()));
+    body.push_str(&format!(
+        "      if [ -f '{}' ]; then rm -f '{}'; kill -9 $$; fi\n",
+        die.display(),
+        die.display()
+    ));
     body.push_str(&format!(
         "      if [ -f '{}' ]; then rm -f '{}'; printf '{{\"outcome\":\"crash\",\"code\":\"GUEST_EXITED\",\"stage\":\"interactive\",\"guest_exit\":1}}' > \"$out/session-exit.json\"; exit 1; fi\n",
         record.display(),
@@ -101,7 +105,9 @@ fn fake_art(dir: &Path) -> PathBuf {
     body.push_str("      echo '{\"ok\":true,\"cmd\":\"close\"}'\n");
     body.push_str("      exit 0\n");
     body.push_str("      ;;\n");
-    body.push_str("    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"unsupported\"}' ;;\n");
+    body.push_str(
+        "    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"unsupported\"}' ;;\n",
+    );
     body.push_str("  esac\n");
     body.push_str("done\n");
     std::fs::write(&script, body).unwrap();
@@ -261,14 +267,23 @@ fn a_dead_guest_never_serves_a_cached_frame() {
     assert_eq!(tap["result"], Value::Null, "no cached result on death");
 
     // Every verb now refuses: no stale tree, no stale status frame.
-    for tool in ["acos_observe_tree", "acos_status", "acos_logs", "acos_assert"] {
+    for tool in [
+        "acos_observe_tree",
+        "acos_status",
+        "acos_logs",
+        "acos_assert",
+    ] {
         let args = if tool == "acos_assert" {
             json!({"base": b, "id": "count", "expect": first})
         } else {
             json!({"base": b})
         };
         let reply = conn.call(tool, args);
-        assert_eq!(reply["ok"], json!(false), "{tool} served a dead session: {reply:#?}");
+        assert_eq!(
+            reply["ok"],
+            json!(false),
+            "{tool} served a dead session: {reply:#?}"
+        );
         assert_eq!(
             reply["error"]["code"],
             json!("GUEST_EXITED"),
@@ -289,15 +304,25 @@ fn a_dead_guest_never_serves_a_cached_frame() {
                 "{tool}: {details:#?}"
             );
         }
-        assert!(reply.pointer("/result/frame").is_none(), "{tool}: {reply:#?}");
+        assert!(
+            reply.pointer("/result/frame").is_none(),
+            "{tool}: {reply:#?}"
+        );
         // The child's SIGKILL is the evidence (there is no exit record).
-        assert_eq!(details["guest_exit"]["signal"], json!(9), "{tool}: {details:#?}");
+        assert_eq!(
+            details["guest_exit"]["signal"],
+            json!(9),
+            "{tool}: {details:#?}"
+        );
     }
 
     // `session_list` reports the session as dead, with its exit facts, and no
     // live frame sequence (the cached one was discarded).
     let listed = conn.call("session_list", json!({}));
-    let sessions = listed["result"]["sessions"].as_array().cloned().unwrap_or_default();
+    let sessions = listed["result"]["sessions"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     let entry = sessions
         .iter()
         .find(|s| s["session_id"] == json!("s_dead"))
@@ -312,7 +337,10 @@ fn a_dead_guest_never_serves_a_cached_frame() {
     let relaunch = conn.call("acos_launch", json!({"base": b, "apk": daemon.apk()}));
     assert_eq!(relaunch["ok"], json!(true), "{relaunch:#?}");
     let replaced = relaunch["result"]["replaced_guest"].clone();
-    assert!(!replaced.is_null(), "the reply must say a guest was replaced: {relaunch:#?}");
+    assert!(
+        !replaced.is_null(),
+        "the reply must say a guest was replaced: {relaunch:#?}"
+    );
     assert_eq!(replaced["guest_exit"]["signal"], json!(9), "{replaced:#?}");
     if !replaced["discarded_frame"].is_null() {
         assert_eq!(replaced["discarded_frame"]["served"], json!(false));
@@ -396,7 +424,10 @@ fn untrusted_serve_applies_the_trust_guard() {
             "acos_observe",
             json!({"base": b, "tree": true, "png": false}),
         ),
-        ("acos_assert", json!({"base": b, "id": "count", "expect": "gen"})),
+        (
+            "acos_assert",
+            json!({"base": b, "id": "count", "expect": "gen"}),
+        ),
     ] {
         let reply = conn.call(tool, args);
         assert_eq!(reply["ok"], json!(false), "{tool}: {reply:#?}");
@@ -414,8 +445,15 @@ fn untrusted_serve_applies_the_trust_guard() {
 
     // `logs_since` is refused too (a forged line cannot justify a pass).
     let logs = conn.call("acos_logs", json!({"base": b}));
-    assert_eq!(logs["error"]["code"], json!("INSUFFICIENT_HOST_EVIDENCE"), "{logs:#?}");
-    assert_eq!(details(&logs)["assertion"], json!("UNTRUSTED_LOG_ASSERTION"));
+    assert_eq!(
+        logs["error"]["code"],
+        json!("INSUFFICIENT_HOST_EVIDENCE"),
+        "{logs:#?}"
+    );
+    assert_eq!(
+        details(&logs)["assertion"],
+        json!("UNTRUSTED_LOG_ASSERTION")
+    );
 
     // `capture` (host pixels) and `input` stay allowed, exactly like TrustGuard.
     let frame = conn.call(
@@ -427,7 +465,11 @@ fn untrusted_serve_applies_the_trust_guard() {
     assert_eq!(frame["result"]["trust"], json!("untrusted"));
 
     let tap = conn.call("acos_tap", json!({"base": b, "id": "count"}));
-    assert_eq!(tap["ok"], json!(true), "input is host-injected and allowed: {tap:#?}");
+    assert_eq!(
+        tap["ok"],
+        json!(true),
+        "input is host-injected and allowed: {tap:#?}"
+    );
 
     // The same verbs succeed on a trusted session: the guard is the trust
     // level, not the verb.

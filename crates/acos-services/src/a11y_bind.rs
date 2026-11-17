@@ -109,6 +109,7 @@ fn service_config_from_apk(
         Some(pms) => pms
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .primary()
             .apk_path
             .clone(),
         None => {
@@ -241,18 +242,26 @@ pub fn plan_bind(state: &mut A11yState) -> Result<Vec<PendingDelivery>> {
         let pms = pms
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let service = pms
-            .services
+        // A11Y2/MERGEMPROC: the service may live in **any** installed package
+        // (the launched one or an extra APK), so the record is looked up across
+        // the session's package table.
+        let (service, app) = pms
+            .packages
             .iter()
-            .find(|s| s.name == class && s.package_name == package)
-            .cloned()
+            .find_map(|installed| {
+                installed
+                    .services
+                    .iter()
+                    .find(|s| s.name == class && s.package_name == package)
+                    .cloned()
+                    .map(|service| (service, installed.app.clone()))
+            })
             .ok_or_else(|| {
                 rejected(format!(
-                    "the installed package {} declares no service {class}",
-                    pms.app.package_name
+                    "no installed package declares the service {component}"
                 ))
             })?;
-        (service, pms.app.clone())
+        (service, app)
     };
     if service_info.permission != "android.permission.BIND_ACCESSIBILITY_SERVICE" {
         return Err(rejected(format!(

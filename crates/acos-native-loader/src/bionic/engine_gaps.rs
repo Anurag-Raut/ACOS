@@ -77,12 +77,42 @@ pub fn forwarded_table() -> Vec<(&'static str, *const c_void)> {
         };
     }
     addrs!(
-        __cmsg_nxthdr, __poll_chk, __pread_chk, __read_chk, __readlink_chk, close_range,
-        epoll_create1, epoll_ctl, epoll_wait, fma, freeaddrinfo, freeifaddrs, ftruncate64,
-        gai_strerror, getaddrinfo, getifaddrs, getnameinfo, if_nametoindex, inet_aton,
-        inet_ntop, inet_pton, inotify_add_watch, inotify_init1, inotify_rm_watch, llround,
-        llroundf, mkdirat, posix_madvise, pthread_condattr_setclock, readlinkat, renameat,
-        rewinddir, scalbnf, sendfile64, symlinkat, wait,
+        __cmsg_nxthdr,
+        __poll_chk,
+        __pread_chk,
+        __read_chk,
+        __readlink_chk,
+        close_range,
+        epoll_create1,
+        epoll_ctl,
+        epoll_wait,
+        fma,
+        freeaddrinfo,
+        freeifaddrs,
+        ftruncate64,
+        gai_strerror,
+        getaddrinfo,
+        getifaddrs,
+        getnameinfo,
+        if_nametoindex,
+        inet_aton,
+        inet_ntop,
+        inet_pton,
+        inotify_add_watch,
+        inotify_init1,
+        inotify_rm_watch,
+        llround,
+        llroundf,
+        mkdirat,
+        posix_madvise,
+        pthread_condattr_setclock,
+        readlinkat,
+        renameat,
+        rewinddir,
+        scalbnf,
+        sendfile64,
+        symlinkat,
+        wait,
     )
 }
 
@@ -157,11 +187,7 @@ pub unsafe extern "C" fn acos_timerfd_settime(
 ///
 /// # Safety
 /// `path` must be a NUL-terminated guest string.
-pub unsafe extern "C" fn __openat_2(
-    dirfd: c_int,
-    path: *const c_char,
-    flags: c_int,
-) -> c_int {
+pub unsafe extern "C" fn __openat_2(dirfd: c_int, path: *const c_char, flags: c_int) -> c_int {
     libc::openat(dirfd, path, flags)
 }
 
@@ -202,11 +228,7 @@ pub unsafe extern "C" fn setbuf_shim(stream: *mut c_void, buf: *mut c_char) {
 ///
 /// # Safety
 /// `set`/`old` must point to 8-byte bionic `sigset_t` objects (or be NULL).
-pub unsafe extern "C" fn sigprocmask(
-    how: c_int,
-    set: *const u64,
-    old: *mut u64,
-) -> c_int {
+pub unsafe extern "C" fn sigprocmask(how: c_int, set: *const u64, old: *mut u64) -> c_int {
     let mut gset: libc::sigset_t = std::mem::zeroed();
     let mut gold: libc::sigset_t = std::mem::zeroed();
     let set_ptr = if set.is_null() {
@@ -469,13 +491,13 @@ pub fn table() -> std::collections::HashMap<&'static str, super::Shim> {
     for (name, ptr) in forwarded_table() {
         m.insert(name, super::Shim::forwarded(name, ptr));
     }
-    m.insert(
-        "environ",
-        super::Shim::forwarded("environ", environ_addr()),
-    );
+    m.insert("environ", super::Shim::forwarded("environ", environ_addr()));
     m.insert(
         "malloc_usable_size",
-        super::Shim::forwarded("malloc_usable_size", malloc_usable_size as *const () as *const c_void),
+        super::Shim::forwarded(
+            "malloc_usable_size",
+            malloc_usable_size as *const () as *const c_void,
+        ),
     );
     let mut shim = |name: &'static str, ptr: *const c_void| {
         m.insert(name, super::Shim::shimmed(name, ptr));
@@ -683,7 +705,12 @@ mod tests {
 
     #[test]
     fn system_path_suffix_cannot_escape_the_boot_tree() {
-        for rest in ["../etc/passwd", "fonts/../../etc/passwd", "/etc/passwd", "a/../../b"] {
+        for rest in [
+            "../etc/passwd",
+            "fonts/../../etc/passwd",
+            "/etc/passwd",
+            "a/../../b",
+        ] {
             assert!(has_escaping_component(rest), "must reject {rest:?}");
         }
         for rest in ["fonts/Roboto-Regular.ttf", "etc/fonts.xml", "a/b/c"] {
@@ -697,7 +724,12 @@ mod tests {
         // nonsense `new_value` must not fault the host (W121-A).
         // SAFETY: the shim only forwards the pointer to the kernel.
         let rc = unsafe {
-            acos_timerfd_settime(-1, 0, 0xdead_beef_usize as *const libc::itimerspec, std::ptr::null_mut())
+            acos_timerfd_settime(
+                -1,
+                0,
+                0xdead_beef_usize as *const libc::itimerspec,
+                std::ptr::null_mut(),
+            )
         };
         assert_eq!(rc, -1);
     }
@@ -713,4 +745,3 @@ mod tests {
         }
     }
 }
-

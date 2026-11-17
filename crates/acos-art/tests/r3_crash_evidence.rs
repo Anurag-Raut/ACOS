@@ -61,7 +61,10 @@ fn warm_data() -> PathBuf {
 
 fn require_art() -> Option<()> {
     if !sysroot().join("system/apex").is_dir() {
-        eprintln!("SKIP R3 crash evidence: no ART sysroot at {}", sysroot().display());
+        eprintln!(
+            "SKIP R3 crash evidence: no ART sysroot at {}",
+            sysroot().display()
+        );
         return None;
     }
     if !warm_data().join("app/guest/classes.dex").is_file() {
@@ -99,7 +102,11 @@ fn seed_data(tag: &str) -> PathBuf {
         .arg(&data)
         .status()
         .expect("cp is available");
-    assert!(st.success(), "could not seed /data from {}", warm_data().display());
+    assert!(
+        st.success(),
+        "could not seed /data from {}",
+        warm_data().display()
+    );
     let runs = data.join("runs");
     let _ = std::fs::remove_dir_all(&runs);
     std::fs::create_dir_all(&runs).expect("create runs dir");
@@ -180,14 +187,21 @@ fn a_guest_killed_by_a_signal_leaves_fault_addr_code_thread_and_a_native_frame()
     let _ = std::fs::remove_dir_all(&out);
     let t0 = Instant::now();
     let (stdout, stderr, timed_out) = run_crash_launch(&data, &out);
-    eprintln!("R3: launch wall={:?} out={} timed_out={timed_out}", t0.elapsed(), out.display());
+    eprintln!(
+        "R3: launch wall={:?} out={} timed_out={timed_out}",
+        t0.elapsed(),
+        out.display()
+    );
     assert!(
         !timed_out,
         "the crash launch never returned.\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
 
     let record = std::fs::read_to_string(out.join("session-exit.json")).unwrap_or_else(|e| {
-        panic!("no session-exit.json in {}: {e}\nstderr:\n{stderr}", out.display())
+        panic!(
+            "no session-exit.json in {}: {e}\nstderr:\n{stderr}",
+            out.display()
+        )
     });
     let doc: serde_json::Value = serde_json::from_str(&record).expect("session-exit.json is JSON");
 
@@ -246,11 +260,7 @@ fn a_guest_killed_by_a_signal_leaves_fault_addr_code_thread_and_a_native_frame()
         .as_str()
         .map(PathBuf::from)
         .expect("a kept crash tree must be recorded in session-exit.json");
-    assert!(
-        kept.is_dir(),
-        "kept_run_dir must exist: {}",
-        kept.display()
-    );
+    assert!(kept.is_dir(), "kept_run_dir must exist: {}", kept.display());
     assert!(
         kept.join("kept-for-crash.json").is_file(),
         "the kept tree carries the retention marker: {}",

@@ -20,7 +20,7 @@ use acos_aidl::MethodInfo;
 use acos_parcel::{Parcel, ParcelFd};
 
 use crate::cursor::{CursorResult, Field, QueryRequest};
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, ServiceObject};
 use crate::value::{Bundle, DynamicValue, Parcelable, RawFdValue, Value};
 
@@ -255,7 +255,10 @@ impl SettingsDefaults {
             ("touch_exploration_enabled", "0"),
             ("bluetooth_name", "ACOS"),
             ("bluetooth_address", "02:00:00:00:00:00"),
-            ("default_input_method", "com.android.inputmethod.latin/.LatinIME"),
+            (
+                "default_input_method",
+                "com.android.inputmethod.latin/.LatinIME",
+            ),
             (
                 "enabled_input_methods",
                 "com.android.inputmethod.latin/.LatinIME",
@@ -284,8 +287,14 @@ impl SettingsDefaults {
         // `DeviceConfig` as a stock emulator has it: the IME namespace exists
         // (the framework asks for it), the textclassifier one does not.
         for (key, value) in [
-            ("ime/enabled_input_methods", "com.android.inputmethod.latin/.LatinIME"),
-            ("ime/default_input_method", "com.android.inputmethod.latin/.LatinIME"),
+            (
+                "ime/enabled_input_methods",
+                "com.android.inputmethod.latin/.LatinIME",
+            ),
+            (
+                "ime/default_input_method",
+                "com.android.inputmethod.latin/.LatinIME",
+            ),
             ("ime/show_ime_with_hard_keyboard", "false"),
         ] {
             defaults.config.insert(key.into(), value.into());
@@ -714,12 +723,7 @@ impl ProviderService {
     }
 }
 impl ServiceObject for ProviderService {
-    fn call(
-        &mut self,
-        interface: &str,
-        method: &MethodInfo,
-        args: &[Value],
-    ) -> Result<CallResult> {
+    fn call(&mut self, interface: &str, method: &MethodInfo, args: &[Value]) -> Result<CallResult> {
         if interface != "android.content.IContentProvider" {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: interface.to_string(),
@@ -775,9 +779,10 @@ impl ServiceObject for ProviderService {
             return Ok(None);
         }
         let request = QueryRequest::read(data)?;
-        let state = self.state.lock().map_err(|_| ServiceError::Internal(
-            "settings state poisoned".into(),
-        ))?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| ServiceError::Internal("settings state poisoned".into()))?;
         Ok(Some(state.query(
             &request.uri,
             request.projection.as_deref(),
@@ -951,9 +956,10 @@ impl ProviderRegistry {
         let resolved = authority
             .map(str::to_string)
             .or_else(|| self.connections.get(&connection).cloned());
-        let (hit, binder, refcount) = match resolved.as_deref().and_then(|a| {
-            self.entries.get(a).map(|e| (a, e.binder))
-        }) {
+        let (hit, binder, refcount) = match resolved
+            .as_deref()
+            .and_then(|a| self.entries.get(a).map(|e| (a, e.binder)))
+        {
             Some((authority, binder)) => {
                 let count = self.refcounts.entry(authority.to_string()).or_insert(0);
                 *count = (*count - 1).max(0);
@@ -979,9 +985,10 @@ impl ProviderRegistry {
     /// `stable + unstable`.
     pub fn ref_content_provider(&mut self, connection: u64, stable: i32, unstable: i32) -> bool {
         let authority = self.connections.get(&connection).cloned();
-        let (hit, binder, refcount) = match authority.as_deref().and_then(|a| {
-            self.entries.get(a).map(|e| (a, e.binder))
-        }) {
+        let (hit, binder, refcount) = match authority
+            .as_deref()
+            .and_then(|a| self.entries.get(a).map(|e| (a, e.binder)))
+        {
             Some((authority, binder)) => {
                 let count = self.refcounts.entry(authority.to_string()).or_insert(0);
                 *count = (*count + stable + unstable).max(0);
@@ -1054,12 +1061,7 @@ impl ContentServiceService {
 }
 
 impl ServiceObject for ContentServiceService {
-    fn call(
-        &mut self,
-        interface: &str,
-        method: &MethodInfo,
-        args: &[Value],
-    ) -> Result<CallResult> {
+    fn call(&mut self, interface: &str, method: &MethodInfo, args: &[Value]) -> Result<CallResult> {
         if interface != "android.content.IContentService" {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: interface.to_string(),
@@ -1162,10 +1164,22 @@ mod tests {
     #[test]
     fn seeded_keys_match_settings_keys_tsv() {
         let state = SettingsState::new();
-        assert_eq!(state.get(Namespace::System, "auto_caps").as_deref(), Some("1"));
-        assert_eq!(state.get(Namespace::System, "show_password").as_deref(), Some("1"));
-        assert_eq!(state.get(Namespace::Global, "force_resizable_activities"), None);
-        assert_eq!(state.get(Namespace::Global, "render_shadows_in_compositor"), None);
+        assert_eq!(
+            state.get(Namespace::System, "auto_caps").as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            state.get(Namespace::System, "show_password").as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            state.get(Namespace::Global, "force_resizable_activities"),
+            None
+        );
+        assert_eq!(
+            state.get(Namespace::Global, "render_shadows_in_compositor"),
+            None
+        );
     }
 
     #[test]
@@ -1190,7 +1204,10 @@ mod tests {
         let mut extras = Bundle::new();
         extras.put("value", Value::Str(Some("42".into())));
         state.call("PUT_global", "answer", Some(&extras)).unwrap();
-        assert_eq!(state.get(Namespace::Global, "answer").as_deref(), Some("42"));
+        assert_eq!(
+            state.get(Namespace::Global, "answer").as_deref(),
+            Some("42")
+        );
         assert_eq!(state.generation(Namespace::Global), before + 1);
         // A real change resets the generation-fd hand-out.
         let bundle = state.call("GET_global", "answer", None).unwrap();
@@ -1205,7 +1222,9 @@ mod tests {
         // one, and a failed/unknown method records none.
         let mut state = SettingsState::new();
         assert!(state.changes.is_empty());
-        state.call("GET_global", "animator_duration_scale", None).unwrap();
+        state
+            .call("GET_global", "animator_duration_scale", None)
+            .unwrap();
         assert!(state.changes.is_empty(), "a read is not a change");
         let mut extras = Bundle::new();
         extras.put("value", Value::Str(Some("1".into())));

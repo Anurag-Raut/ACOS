@@ -106,7 +106,11 @@ impl std::error::Error for HeapConfigError {}
 
 impl HeapConfigError {
     fn new(var: &'static str, value: &str, problem: impl Into<String>) -> Self {
-        Self { var, value: value.to_string(), problem: problem.into() }
+        Self {
+            var,
+            value: value.to_string(),
+            problem: problem.into(),
+        }
     }
 }
 
@@ -141,7 +145,10 @@ impl HeapSize {
         let bytes = n
             .checked_mul(mult)
             .ok_or_else(|| HeapConfigError::new(var, text, "size does not fit in 64 bits"))?;
-        Ok(Self { text: text.to_string(), bytes })
+        Ok(Self {
+            text: text.to_string(),
+            bytes,
+        })
     }
 
     /// MiB, for the metadata record.
@@ -161,10 +168,7 @@ pub struct HeapUtilization {
 
 impl HeapUtilization {
     /// Parse a decimal in (0,1).
-    pub fn parse(
-        var: &'static str,
-        text: &str,
-    ) -> std::result::Result<Self, HeapConfigError> {
+    pub fn parse(var: &'static str, text: &str) -> std::result::Result<Self, HeapConfigError> {
         let expected = "expected a decimal strictly between 0 and 1, e.g. 0.75";
         if text.is_empty()
             || !text.bytes().all(|b| b.is_ascii_digit() || b == b'.')
@@ -184,7 +188,10 @@ impl HeapUtilization {
                 format!("{expected}; {value} is outside (0,1)"),
             ));
         }
-        Ok(Self { text: text.to_string(), value })
+        Ok(Self {
+            text: text.to_string(),
+            value,
+        })
     }
 }
 
@@ -211,8 +218,7 @@ impl HeapConfig {
                 .expect("stock default"),
             heapgrowthlimit: HeapSize::parse(ENV_HEAPGROWTHLIMIT, DEFAULT_HEAPGROWTHLIMIT)
                 .expect("stock default"),
-            heapsize: HeapSize::parse(ENV_HEAPSIZE, DEFAULT_HEAPSIZE)
-                .expect("stock default"),
+            heapsize: HeapSize::parse(ENV_HEAPSIZE, DEFAULT_HEAPSIZE).expect("stock default"),
             heapminfree: HeapSize::parse(ENV_HEAPMINFREE, DEFAULT_HEAPMINFREE)
                 .expect("stock default"),
             heapmaxfree: HeapSize::parse(ENV_HEAPMAXFREE, DEFAULT_HEAPMAXFREE)
@@ -340,7 +346,10 @@ impl HeapConfig {
             ("dalvik.vm.heapsize", &self.heapsize.text),
             ("dalvik.vm.heapminfree", &self.heapminfree.text),
             ("dalvik.vm.heapmaxfree", &self.heapmaxfree.text),
-            ("dalvik.vm.heaptargetutilization", &self.heaptargetutilization.text),
+            (
+                "dalvik.vm.heaptargetutilization",
+                &self.heaptargetutilization.text,
+            ),
         ]
     }
 
@@ -444,10 +453,16 @@ impl Props {
             ("ro.config.low_ram", "false"),
             ("ro.sf.lcd_density", "420"),
             ("persist.sys.dalvik.vm.lib.2", "libart.so"),
-            ("persist.device_config.runtime_native_boot.enable_uffd_gc", "false"),
+            (
+                "persist.device_config.runtime_native_boot.enable_uffd_gc",
+                "false",
+            ),
             ("dalvik.vm.isa.x86_64.variant", "x86_64"),
             ("dalvik.vm.isa.x86_64.features", "default"),
-            ("dalvik.vm.heaptargetutilization", DEFAULT_HEAPTARGETUTILIZATION),
+            (
+                "dalvik.vm.heaptargetutilization",
+                DEFAULT_HEAPTARGETUTILIZATION,
+            ),
             ("dalvik.vm.heapstartsize", DEFAULT_HEAPSTARTSIZE),
             ("dalvik.vm.heapgrowthlimit", DEFAULT_HEAPGROWTHLIMIT),
             ("dalvik.vm.heapsize", DEFAULT_HEAPSIZE),
@@ -563,8 +578,10 @@ mod tests {
 
     fn with_env(vars: &[(&'static str, &str)], f: impl FnOnce()) {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let saved: Vec<(&str, Option<String>)> =
-            ALL_HEAP_ENV.iter().map(|k| (*k, std::env::var(k).ok())).collect();
+        let saved: Vec<(&str, Option<String>)> = ALL_HEAP_ENV
+            .iter()
+            .map(|k| (*k, std::env::var(k).ok()))
+            .collect();
         for k in ALL_HEAP_ENV {
             std::env::remove_var(k);
         }
@@ -638,7 +655,11 @@ mod tests {
             (ENV_HEAPSIZE, "256m", "dalvik.vm.heapsize"),
             (ENV_HEAPMINFREE, "1m", "dalvik.vm.heapminfree"),
             (ENV_HEAPMAXFREE, "16m", "dalvik.vm.heapmaxfree"),
-            (ENV_HEAPTARGETUTILIZATION, "0.5", "dalvik.vm.heaptargetutilization"),
+            (
+                ENV_HEAPTARGETUTILIZATION,
+                "0.5",
+                "dalvik.vm.heaptargetutilization",
+            ),
         ];
         for (var, value, prop) in cases {
             with_env(&[(var, value)], || {
@@ -682,8 +703,18 @@ mod tests {
     #[test]
     fn heap_invalid_format_rejected() {
         let bad = [
-            "8x", "8M", "8 m", "", "m", "8.5m", "-8m", "+8m", "0x10m",
-            "99999999999999999999m", "8mm", "8g ",
+            "8x",
+            "8M",
+            "8 m",
+            "",
+            "m",
+            "8.5m",
+            "-8m",
+            "+8m",
+            "0x10m",
+            "99999999999999999999m",
+            "8mm",
+            "8g ",
         ];
         for value in bad {
             let err = HeapSize::parse(ENV_HEAPSIZE, value)
@@ -697,7 +728,10 @@ mod tests {
                     msg.starts_with("INVALID_HEAP_CONFIG:"),
                     "unexpected error: {msg}"
                 );
-                assert!(msg.contains(ENV_HEAPSIZE), "error must name the variable: {msg}");
+                assert!(
+                    msg.contains(ENV_HEAPSIZE),
+                    "error must name the variable: {msg}"
+                );
             });
         }
         for value in ["0", "1", "1.5", ".5", "0.0", "abc", "0.75.1", ""] {
@@ -720,13 +754,17 @@ mod tests {
             let err = HeapConfig::from_env().expect_err("256m start > 192m growth limit");
             assert_eq!(err.var, ENV_HEAPSTARTSIZE);
             assert!(err.to_string().contains("heapgrowthlimit"), "{err}");
-            let msg = Props::for_launch().expect_err("must not launch").to_string();
+            let msg = Props::for_launch()
+                .expect_err("must not launch")
+                .to_string();
             assert!(msg.starts_with("INVALID_HEAP_CONFIG:"), "{msg}");
         });
         with_env(&[(ENV_HEAPGROWTHLIMIT, "1g")], || {
             let err = HeapConfig::from_env().expect_err("growth limit > heap size");
             assert_eq!(err.var, ENV_HEAPGROWTHLIMIT);
-            let msg = Props::for_launch().expect_err("must not launch").to_string();
+            let msg = Props::for_launch()
+                .expect_err("must not launch")
+                .to_string();
             assert!(msg.starts_with("INVALID_HEAP_CONFIG:"), "{msg}");
         });
         with_env(

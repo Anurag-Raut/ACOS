@@ -52,7 +52,7 @@ use std::collections::HashMap;
 
 use acos_parcel::binder::BinderId;
 use acos_parcel::registry::{
-    clear_calling_identity, calling_pid, calling_uid, restore_calling_identity,
+    calling_pid, calling_uid, clear_calling_identity, restore_calling_identity,
     set_thread_strict_mode_policy, set_thread_work_source_uid, thread_strict_mode_policy,
     thread_work_source_uid, IdentityToken,
 };
@@ -325,15 +325,17 @@ fn write_strong_binder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let obj = vm.arg_ref(ctx, 1);
     let id = binder_id_of(vm, obj);
     let r = super::parcel::with_store(|s| {
-        s.table.with_parcel(handle, |p| p.write_strong_binder_opt(id))
+        s.table
+            .with_parcel(handle, |p| p.write_strong_binder_opt(id))
     });
     r.map_err(|e| parcel_err_at("writeStrongBinder", e))
 }
 
 fn read_strong_binder(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 0) as u64;
-    let id = match super::parcel::with_store(|s| s.table.with_parcel(handle, Parcel::read_strong_binder))
-    {
+    let id = match super::parcel::with_store(|s| {
+        s.table.with_parcel(handle, Parcel::read_strong_binder)
+    }) {
         Ok(Ok(id)) => id,
         Ok(Err(e)) | Err(e) => return Err(parcel_err_at("readStrongBinder", e)),
     };
@@ -456,13 +458,13 @@ fn deliver(vm: &mut Vm, mut d: BinderDelivery) -> VmResult<()> {
         let cid = vm
             .class_of_object(target)
             .ok_or_else(|| VmError::Internal("Binder.execTransact on a dead target".into()))?;
-        let mid = vm.find_method(cid, "execTransact", "(IJJI)Z", crate::vm::InvokeKind::Direct)?;
-        let words = [
-            d.code as u64,
-            data_handle,
-            reply_handle,
-            d.flags as u64,
-        ];
+        let mid = vm.find_method(
+            cid,
+            "execTransact",
+            "(IJJI)Z",
+            crate::vm::InvokeKind::Direct,
+        )?;
+        let words = [d.code as u64, data_handle, reply_handle, d.flags as u64];
         enter_transaction();
         let result = crate::interp::call_method(vm, mid, target, &words);
         exit_transaction();
@@ -510,7 +512,12 @@ pub fn dispatch_local_binder(
         let cid = vm
             .class_of_object(target)
             .ok_or_else(|| VmError::Internal("Binder.execTransact on a dead target".into()))?;
-        let mid = vm.find_method(cid, "execTransact", "(IJJI)Z", crate::vm::InvokeKind::Direct)?;
+        let mid = vm.find_method(
+            cid,
+            "execTransact",
+            "(IJJI)Z",
+            crate::vm::InvokeKind::Direct,
+        )?;
         let words = [code as u64, data_handle, reply_handle, flags as u64];
         enter_transaction();
         let result = crate::interp::call_method(vm, mid, target, &words);
@@ -733,7 +740,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     );
 
     let binder = "Landroid/os/Binder;";
-    vm.register_native(binder, "getNativeBBinderHolder", "()J", get_native_bbinder_holder);
+    vm.register_native(
+        binder,
+        "getNativeBBinderHolder",
+        "()J",
+        get_native_bbinder_holder,
+    );
     vm.register_native(binder, "getNativeFinalizer", "()J", get_native_finalizer);
     vm.register_native(binder, "getCallingUid", "()I", get_calling_uid);
     vm.register_native(binder, "getCallingPid", "()I", get_calling_pid);
@@ -749,7 +761,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(I)J",
         set_calling_work_source_uid,
     );
-    vm.register_native(binder, "clearCallingWorkSource", "()J", clear_calling_work_source);
+    vm.register_native(
+        binder,
+        "clearCallingWorkSource",
+        "()J",
+        clear_calling_work_source,
+    );
     vm.register_native(
         binder,
         "restoreCallingWorkSource",
@@ -791,18 +808,8 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(binder, "blockUntilThreadAvailable", "()V", noop);
     vm.register_native(binder, "forceDowngradeToSystemStability", "()V", noop);
     vm.register_native(binder, "markVintfStability", "()V", noop);
-    vm.register_native(
-        binder,
-        "getExtension",
-        "()Landroid/os/IBinder;",
-        ret_null,
-    );
-    vm.register_native(
-        binder,
-        "setExtension",
-        "(Landroid/os/IBinder;)V",
-        noop,
-    );
+    vm.register_native(binder, "getExtension", "()Landroid/os/IBinder;", ret_null);
+    vm.register_native(binder, "setExtension", "(Landroid/os/IBinder;)V", noop);
 
     let proxy = "Landroid/os/BinderProxy;";
     vm.register_native(
@@ -832,12 +839,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(Landroid/os/IBinder$DeathRecipient;I)Z",
         proxy_unlink_to_death,
     );
-    vm.register_native(
-        proxy,
-        "getExtension",
-        "()Landroid/os/IBinder;",
-        ret_null,
-    );
+    vm.register_native(proxy, "getExtension", "()Landroid/os/IBinder;", ret_null);
 
     let internal = "Lcom/android/internal/os/BinderInternal;";
     vm.register_native(
@@ -850,7 +852,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(internal, "handleGc", "()V", noop);
     vm.register_native(internal, "joinThreadPool", "()V", noop);
     vm.register_native(internal, "setMaxThreads", "(I)V", noop);
-    vm.register_native(internal, "nGetBinderProxyCount", "(I)I", binder_proxy_counts);
+    vm.register_native(
+        internal,
+        "nGetBinderProxyCount",
+        "(I)I",
+        binder_proxy_counts,
+    );
     vm.register_native(
         internal,
         "nGetBinderProxyPerUidCounts",

@@ -50,8 +50,9 @@ fn installed_pms() -> PmsState {
 /// The resource id the given service declares for `android.accessibilityservice`.
 fn declared_resource(pms: &PmsState, service: &str) -> u32 {
     let record = pms
-        .services
+        .packages
         .iter()
+        .flat_map(|installed| installed.services.iter())
         .find(|s| s.name == service)
         .unwrap_or_else(|| panic!("{service} is declared"));
     record
@@ -176,7 +177,7 @@ fn host_with_bound(config: A11yServiceConfig) -> ServiceHost {
     let wms = state.windows.clone().expect("the LAYER1 stack is wired");
     drop(state);
     let mut wms = wms.lock().expect("wms");
-    let session = wms.session;
+    let session = wms.allocate_session();
     wms.wm
         .add_to_display_as_user(
             session,

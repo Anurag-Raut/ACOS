@@ -5,7 +5,7 @@
 //! cargo run -p acos-wm --example replay_report
 //! ```
 
-use acos_wm::replay::{run_default_replays, ReplayStatus, workspace_root};
+use acos_wm::replay::{run_default_replays, workspace_root, ReplayStatus};
 
 fn main() {
     let report = run_default_replays().expect("replay");

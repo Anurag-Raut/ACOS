@@ -95,20 +95,38 @@ fn counter_flags_follow_the_parser_defaults() {
             (FLAG_ALLOW_CLEAR_USER_DATA, "FLAG_ALLOW_CLEAR_USER_DATA"),
             (FLAG_EXTRACT_NATIVE_LIBS, "FLAG_EXTRACT_NATIVE_LIBS"),
             (FLAG_HARDWARE_ACCELERATED, "FLAG_HARDWARE_ACCELERATED"),
-            (FLAG_SUPPORTS_SMALL_SCREENS, "FLAG_SUPPORTS_SMALL_SCREENS (absent group)"),
-            (FLAG_SUPPORTS_NORMAL_SCREENS, "FLAG_SUPPORTS_NORMAL_SCREENS (absent group)"),
-            (FLAG_SUPPORTS_LARGE_SCREENS, "FLAG_SUPPORTS_LARGE_SCREENS (absent group)"),
-            (FLAG_RESIZEABLE_FOR_SCREENS, "FLAG_RESIZEABLE_FOR_SCREENS (absent group)"),
+            (
+                FLAG_SUPPORTS_SMALL_SCREENS,
+                "FLAG_SUPPORTS_SMALL_SCREENS (absent group)",
+            ),
+            (
+                FLAG_SUPPORTS_NORMAL_SCREENS,
+                "FLAG_SUPPORTS_NORMAL_SCREENS (absent group)",
+            ),
+            (
+                FLAG_SUPPORTS_LARGE_SCREENS,
+                "FLAG_SUPPORTS_LARGE_SCREENS (absent group)",
+            ),
+            (
+                FLAG_RESIZEABLE_FOR_SCREENS,
+                "FLAG_RESIZEABLE_FOR_SCREENS (absent group)",
+            ),
             (
                 FLAG_SUPPORTS_SCREEN_DENSITIES,
                 "FLAG_SUPPORTS_SCREEN_DENSITIES (absent group)",
             ),
-            (FLAG_SUPPORTS_XLARGE_SCREENS, "FLAG_SUPPORTS_XLARGE_SCREENS (absent group)"),
+            (
+                FLAG_SUPPORTS_XLARGE_SCREENS,
+                "FLAG_SUPPORTS_XLARGE_SCREENS (absent group)",
+            ),
             (FLAG_INSTALLED, "FLAG_INSTALLED"),
         ],
         &[
             (FLAG_ALLOW_BACKUP, "FLAG_ALLOW_BACKUP (declared false)"),
-            (FLAG_USES_CLEARTEXT_TRAFFIC, "FLAG_USES_CLEARTEXT_TRAFFIC (target 34, absent)"),
+            (
+                FLAG_USES_CLEARTEXT_TRAFFIC,
+                "FLAG_USES_CLEARTEXT_TRAFFIC (target 34, absent)",
+            ),
             (FLAG_LARGE_HEAP, "FLAG_LARGE_HEAP"),
             (FLAG_VM_SAFE_MODE, "FLAG_VM_SAFE_MODE"),
             (FLAG_IS_GAME, "FLAG_IS_GAME"),
@@ -147,7 +165,10 @@ fn gaten_debug_declares_cleartext_debuggable_rtl_and_backup() {
             (FLAG_SUPPORTS_NORMAL_SCREENS, "FLAG_SUPPORTS_NORMAL_SCREENS"),
             (FLAG_SUPPORTS_LARGE_SCREENS, "FLAG_SUPPORTS_LARGE_SCREENS"),
             (FLAG_RESIZEABLE_FOR_SCREENS, "FLAG_RESIZEABLE_FOR_SCREENS"),
-            (FLAG_SUPPORTS_SCREEN_DENSITIES, "FLAG_SUPPORTS_SCREEN_DENSITIES"),
+            (
+                FLAG_SUPPORTS_SCREEN_DENSITIES,
+                "FLAG_SUPPORTS_SCREEN_DENSITIES",
+            ),
             (FLAG_SUPPORTS_XLARGE_SCREENS, "FLAG_SUPPORTS_XLARGE_SCREENS"),
             (FLAG_INSTALLED, "FLAG_INSTALLED"),
         ],
@@ -183,7 +204,10 @@ fn gaten_release_does_not_claim_cleartext_or_debuggable() {
             // The Gaten runtime marker lacked this bit (0x10c08044, the
             // density-compat symptom); the parser must supply it for an
             // absent `<supports-screens>` group on a modern targetSdk.
-            (FLAG_SUPPORTS_SCREEN_DENSITIES, "FLAG_SUPPORTS_SCREEN_DENSITIES"),
+            (
+                FLAG_SUPPORTS_SCREEN_DENSITIES,
+                "FLAG_SUPPORTS_SCREEN_DENSITIES",
+            ),
             (FLAG_SUPPORTS_XLARGE_SCREENS, "FLAG_SUPPORTS_XLARGE_SCREENS"),
         ],
         &[

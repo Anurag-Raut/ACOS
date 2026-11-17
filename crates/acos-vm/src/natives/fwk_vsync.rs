@@ -83,7 +83,7 @@ impl VsyncEventData {
 
 #[derive(Debug)]
 #[allow(dead_code)] // vsync_source/event_registration/layer_handle are kept for the
-                   // nativeInit contract and future VRR/event-registration work.
+                    // nativeInit contract and future VRR/event-registration work.
 struct ReceiverState {
     eventfd: OwnedFd,
     looper: u64,
@@ -268,12 +268,11 @@ fn native_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let looper = handle_for_ptr(looper_ptr).ok_or_else(|| {
         VmError::unsupported_api("DisplayEventReceiver.nativeInit", "dead MessageQueue")
     })?;
-    let fd = eventfd(0, EventfdFlags::NONBLOCK | EventfdFlags::CLOEXEC).map_err(|e| {
-        VmError::Internal(format!("DisplayEventReceiver.nativeInit: eventfd: {e}"))
-    })?;
-    looper.add_fd(&fd, EventFlags::IN, 0).map_err(|e| {
-        VmError::Internal(format!("DisplayEventReceiver.nativeInit: add_fd: {e}"))
-    })?;
+    let fd = eventfd(0, EventfdFlags::NONBLOCK | EventfdFlags::CLOEXEC)
+        .map_err(|e| VmError::Internal(format!("DisplayEventReceiver.nativeInit: eventfd: {e}")))?;
+    looper
+        .add_fd(&fd, EventFlags::IN, 0)
+        .map_err(|e| VmError::Internal(format!("DisplayEventReceiver.nativeInit: add_fd: {e}")))?;
 
     vm.root_handle(weak_ref);
     vm.root_handle(event_data_weak);
@@ -438,12 +437,8 @@ fn set_vsync_event_data(vm: &mut Vm, obj: Handle, event: VsyncEventData) -> VmRe
             JavaValue::Long(event.timestamp_nanos),
         )
         .map_err(bridge_err)?;
-        vm.set_field(
-            timeline,
-            "deadline",
-            JavaValue::Long(event.timestamp_nanos),
-        )
-        .map_err(bridge_err)?;
+        vm.set_field(timeline, "deadline", JavaValue::Long(event.timestamp_nanos))
+            .map_err(bridge_err)?;
     }
     Ok(())
 }

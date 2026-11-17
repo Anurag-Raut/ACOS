@@ -26,7 +26,11 @@ fn java_binder(wire: u64) -> u64 {
 }
 
 /// `IServiceManager.<method>(name, …)` on the host's own servicemanager binder.
-fn service_manager(host: &mut acos_services::ServiceHost, code: u32, body: impl FnOnce(&mut Parcel)) -> Result<Parcel, ServiceError> {
+fn service_manager(
+    host: &mut acos_services::ServiceHost,
+    code: u32,
+    body: impl FnOnce(&mut Parcel),
+) -> Result<Parcel, ServiceError> {
     let binder = host
         .binder_for_descriptor("android.os.IServiceManager")
         .expect("the host answers IServiceManager");
@@ -52,10 +56,7 @@ fn session() -> SessionModules {
 fn a_registered_module_name_resolves_without_a_notification() {
     let mut modules = SessionModules::new();
     modules
-        .attach(&[ModuleSpec::new(
-            "hw.bluetooth",
-            Profile::Scripted,
-        )])
+        .attach(&[ModuleSpec::new("hw.bluetooth", Profile::Scripted)])
         .expect("attach");
     let host = modules.host_mut();
     let mut reply = service_manager(host, 1, |data| {
@@ -94,10 +95,7 @@ fn a_declared_module_name_is_declared_but_not_resolved() {
 fn a_registration_for_a_registered_name_answers_at_once() {
     let mut modules = SessionModules::new();
     modules
-        .attach(&[ModuleSpec::new(
-            "hw.bluetooth",
-            Profile::Scripted,
-        )])
+        .attach(&[ModuleSpec::new("hw.bluetooth", Profile::Scripted)])
         .expect("attach");
     let host = modules.host_mut();
     let callback = java_binder(61);
@@ -124,7 +122,10 @@ fn a_registration_for_a_registered_name_answers_at_once() {
         Some("bluetooth_manager")
     );
     let binder = data.read_strong_binder().expect("binder word");
-    assert!(binder.is_some(), "onRegistration carries the service binder");
+    assert!(
+        binder.is_some(),
+        "onRegistration carries the service binder"
+    );
     assert_eq!(host.pending_notifications(), 0);
 }
 
@@ -145,14 +146,15 @@ fn a_declared_name_fires_the_callback_when_the_module_attaches() {
 
     // The live attach is the event the client is waiting for.
     modules
-        .attach(&[ModuleSpec::new(
-            "hw.bluetooth",
-            Profile::Scripted,
-        )])
+        .attach(&[ModuleSpec::new("hw.bluetooth", Profile::Scripted)])
         .expect("live attach");
     let host = modules.host_mut();
     let deliveries = host.take_deliveries();
-    assert_eq!(deliveries.len(), 1, "one onRegistration once the name exists");
+    assert_eq!(
+        deliveries.len(),
+        1,
+        "one onRegistration once the name exists"
+    );
     assert_eq!(deliveries[0].target, BinderId(callback));
     assert_eq!(deliveries[0].interface, "android.os.IServiceCallback");
     assert_eq!(host.pending_notifications(), 0, "fired exactly once");
@@ -202,7 +204,10 @@ fn unregistering_a_pending_callback_answers_ok_and_an_unknown_one_is_an_error() 
         data.write_strong_binder(BinderId(callback));
     })
     .expect_err("nothing left to unregister");
-    assert!(matches!(error, ServiceError::IllegalState { .. }), "{error:?}");
+    assert!(
+        matches!(error, ServiceError::IllegalState { .. }),
+        "{error:?}"
+    );
 }
 
 /// The registry half: the names a session declares are exactly the names its
@@ -211,13 +216,26 @@ fn unregistering_a_pending_callback_answers_ok_and_an_unknown_one_is_an_error() 
 fn the_declared_set_is_the_module_set() {
     let registry = ModuleRegistry::standard();
     let provided = registry.provided_names();
-    for name in ["phone", "isms", "bluetooth_manager", "bluetooth", "auth", "vibrator_manager"] {
-        assert!(provided.contains(&name), "{name} must be declared: {provided:?}");
+    for name in [
+        "phone",
+        "isms",
+        "bluetooth_manager",
+        "bluetooth",
+        "auth",
+        "vibrator_manager",
+    ] {
+        assert!(
+            provided.contains(&name),
+            "{name} must be declared: {provided:?}"
+        );
     }
     let modules = session();
     let host = modules.host();
     for name in &provided {
-        assert!(host.is_declared(name), "{name} must be declared on the host");
+        assert!(
+            host.is_declared(name),
+            "{name} must be declared on the host"
+        );
     }
     assert!(
         !host.is_declared("no_such_service"),

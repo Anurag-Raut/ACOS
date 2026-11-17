@@ -64,7 +64,8 @@ fn create_connection_request(mode: i32) -> Parcel {
         .expect("token");
     data.write_string8("com.acos.sensorprobe").expect("string8");
     data.write_int32(mode);
-    data.write_string16("com.acos.sensorprobe").expect("package");
+    data.write_string16("com.acos.sensorprobe")
+        .expect("package");
     data.write_string16("").expect("attribution");
     data.set_data_position(0);
     data
@@ -170,7 +171,11 @@ fn decode_sensor(bytes: &[u8]) -> DecodedSensor {
     uuid.copy_from_slice(&r.bytes[r.pos..r.pos + 16]);
     r.pos += 16;
     let id = r.i32();
-    assert_eq!(r.pos, bytes.len(), "the flattened Sensor is exactly one payload");
+    assert_eq!(
+        r.pos,
+        bytes.len(),
+        "the flattened Sensor is exactly one payload"
+    );
     DecodedSensor {
         name,
         vendor,
@@ -215,8 +220,13 @@ fn read_sensor_list(reply: &mut Parcel) -> Vec<DecodedSensor> {
 
 fn open_connection(host: &mut ServiceHost, server: BinderId) -> BinderId {
     let mut data = create_connection_request(0);
-    let mut reply = transact(host, server, sensors::server_codes::CREATE_SENSOR_EVENT_CONNECTION, &mut data)
-        .expect("createSensorEventConnection");
+    let mut reply = transact(
+        host,
+        server,
+        sensors::server_codes::CREATE_SENSOR_EVENT_CONNECTION,
+        &mut data,
+    )
+    .expect("createSensorEventConnection");
     reply
         .read_strong_binder()
         .expect("binder")
@@ -226,10 +236,21 @@ fn open_connection(host: &mut ServiceHost, server: BinderId) -> BinderId {
 /// `getSensorChannel`: the two descriptors, and nothing else in front of them.
 fn take_channel(host: &mut ServiceHost, connection: BinderId) -> (OwnedFd, OwnedFd) {
     let mut data = connection_request(sensors::connection_codes::GET_SENSOR_CHANNEL, |_| {});
-    let mut reply = transact(host, connection, sensors::connection_codes::GET_SENSOR_CHANNEL, &mut data)
-        .expect("getSensorChannel");
-    let receive = reply.read_file_descriptor().expect("receive fd").expect("non-null");
-    let send = reply.read_file_descriptor().expect("send fd").expect("non-null");
+    let mut reply = transact(
+        host,
+        connection,
+        sensors::connection_codes::GET_SENSOR_CHANNEL,
+        &mut data,
+    )
+    .expect("getSensorChannel");
+    let receive = reply
+        .read_file_descriptor()
+        .expect("receive fd")
+        .expect("non-null");
+    let send = reply
+        .read_file_descriptor()
+        .expect("send fd")
+        .expect("non-null");
     assert_eq!(
         reply.data_avail(),
         0,
@@ -237,7 +258,8 @@ fn take_channel(host: &mut ServiceHost, connection: BinderId) -> (OwnedFd, Owned
     );
     // The numbers are owned by the parcel, which is dropped here; duplicate them
     // so the test can read from the receive end.
-    let receive = rustix::io::dup(reply.borrowed_file_descriptor(receive).expect("borrow")).expect("dup");
+    let receive =
+        rustix::io::dup(reply.borrowed_file_descriptor(receive).expect("borrow")).expect("dup");
     let send = rustix::io::dup(reply.borrowed_file_descriptor(send).expect("borrow")).expect("dup");
     (receive, send)
 }
@@ -256,8 +278,13 @@ fn enable(
         data.write_int64(0);
         data.write_int32(0);
     });
-    let mut reply = transact(host, connection, sensors::connection_codes::ENABLE_DISABLE, &mut data)
-        .expect("enableDisable");
+    let mut reply = transact(
+        host,
+        connection,
+        sensors::connection_codes::ENABLE_DISABLE,
+        &mut data,
+    )
+    .expect("enableDisable");
     let status = reply.read_int32().expect("status_t");
     assert_eq!(reply.data_avail(), 0);
     status
@@ -284,11 +311,19 @@ fn recv_event(fd: BorrowedFd<'_>, timeout: Duration) -> Option<[u8; EVENT_SIZE]>
 }
 
 fn event_handle(event: &[u8; EVENT_SIZE]) -> i32 {
-    i32::from_le_bytes(event[EVENT_OFFSET_HANDLE..EVENT_OFFSET_HANDLE + 4].try_into().unwrap())
+    i32::from_le_bytes(
+        event[EVENT_OFFSET_HANDLE..EVENT_OFFSET_HANDLE + 4]
+            .try_into()
+            .unwrap(),
+    )
 }
 
 fn event_type(event: &[u8; EVENT_SIZE]) -> i32 {
-    i32::from_le_bytes(event[EVENT_OFFSET_TYPE..EVENT_OFFSET_TYPE + 4].try_into().unwrap())
+    i32::from_le_bytes(
+        event[EVENT_OFFSET_TYPE..EVENT_OFFSET_TYPE + 4]
+            .try_into()
+            .unwrap(),
+    )
 }
 
 fn event_timestamp(event: &[u8; EVENT_SIZE]) -> i64 {
@@ -353,7 +388,11 @@ fn a_step_counter_event_carries_a_u64_not_a_float() {
     values[0] = 1_234_567.0;
     let bytes = sensors::SensorEvent::sample(&step, 1, values).encode();
     assert_eq!(
-        u64::from_le_bytes(bytes[EVENT_OFFSET_DATA..EVENT_OFFSET_DATA + 8].try_into().unwrap()),
+        u64::from_le_bytes(
+            bytes[EVENT_OFFSET_DATA..EVENT_OFFSET_DATA + 8]
+                .try_into()
+                .unwrap()
+        ),
         1_234_567
     );
 }
@@ -374,8 +413,13 @@ fn the_off_state_is_the_stock_device_without_sensors() {
         .expect("published");
 
     let mut data = sensor_list_request("com.acos.sensorprobe");
-    let mut reply = transact(&mut host, server, sensors::server_codes::GET_SENSOR_LIST, &mut data)
-        .expect("getSensorList");
+    let mut reply = transact(
+        &mut host,
+        server,
+        sensors::server_codes::GET_SENSOR_LIST,
+        &mut data,
+    )
+    .expect("getSensorList");
     assert_eq!(reply.read_int32().expect("count"), 0);
     assert_eq!(reply.data_avail(), 0);
 
@@ -391,7 +435,8 @@ fn the_off_state_is_the_stock_device_without_sensors() {
 
     // `isDataInjectionEnabled()` answers 0, not a named gap: the code is known.
     let mut data = Parcel::new();
-    data.write_interface_token(sensors::SENSOR_SERVER_DESCRIPTOR).expect("token");
+    data.write_interface_token(sensors::SENSOR_SERVER_DESCRIPTOR)
+        .expect("token");
     data.set_data_position(0);
     let mut reply = transact(
         &mut host,
@@ -426,8 +471,13 @@ fn the_scripted_list_is_the_framework_sensor_table() {
         .expect("lookup")
         .expect("published");
     let mut data = sensor_list_request("com.acos.sensorprobe");
-    let mut reply = transact(&mut host, server, sensors::server_codes::GET_SENSOR_LIST, &mut data)
-        .expect("getSensorList");
+    let mut reply = transact(
+        &mut host,
+        server,
+        sensors::server_codes::GET_SENSOR_LIST,
+        &mut data,
+    )
+    .expect("getSensorList");
     let list = read_sensor_list(&mut reply);
 
     let types: Vec<i32> = list.iter().map(|sensor| sensor.sensor_type).collect();
@@ -450,19 +500,32 @@ fn the_scripted_list_is_the_framework_sensor_table() {
     assert!(accelerometer.max_value >= 19.6, "range must fit 2 g");
     assert!(accelerometer.resolution > 0.0);
     assert_eq!(accelerometer.min_delay, 5_000);
-    assert_eq!(accelerometer.flags & sensors::FLAG_ON_CHANGE_MODE, 0, "continuous");
+    assert_eq!(
+        accelerometer.flags & sensors::FLAG_ON_CHANGE_MODE,
+        0,
+        "continuous"
+    );
     assert_eq!(accelerometer.uuid, [0u8; 16]);
     assert_eq!(accelerometer.required_permission_runtime, false);
     assert_eq!(accelerometer.required_app_op, -1);
 
-    let light = list.iter().find(|s| s.sensor_type == TYPE_LIGHT).expect("light");
+    let light = list
+        .iter()
+        .find(|s| s.sensor_type == TYPE_LIGHT)
+        .expect("light");
     assert_eq!(
         light.flags & sensors::FLAG_ON_CHANGE_MODE,
         sensors::FLAG_ON_CHANGE_MODE,
         "light reports on change, as a phone does"
     );
-    let step = list.iter().find(|s| s.sensor_type == sensors::TYPE_STEP_COUNTER).expect("step");
-    assert_eq!(step.required_permission, "android.permission.ACTIVITY_RECOGNITION");
+    let step = list
+        .iter()
+        .find(|s| s.sensor_type == sensors::TYPE_STEP_COUNTER)
+        .expect("step");
+    assert_eq!(
+        step.required_permission,
+        "android.permission.ACTIVITY_RECOGNITION"
+    );
     let handles: Vec<i32> = list.iter().map(|sensor| sensor.handle).collect();
     let mut sorted = handles.clone();
     sorted.sort_unstable();
@@ -483,7 +546,10 @@ fn a_scripted_value_arrives_over_the_real_event_channel_at_the_requested_rate() 
             &ModuleConfig::default(),
         )
         .expect("attach");
-    let server = host.check_service("sensorservice").expect("lookup").expect("binder");
+    let server = host
+        .check_service("sensorservice")
+        .expect("lookup")
+        .expect("binder");
     let connection = open_connection(&mut host, server);
     let (receive, _send) = take_channel(&mut host, connection);
 
@@ -529,9 +595,17 @@ fn a_scripted_value_arrives_over_the_real_event_channel_at_the_requested_rate() 
 fn an_on_change_sensor_reports_on_change_only() {
     let (mut host, mut registry) = session();
     registry
-        .attach(&mut host, "sensors", Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "sensors",
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .expect("attach");
-    let server = host.check_service("sensorservice").expect("lookup").expect("binder");
+    let server = host
+        .check_service("sensorservice")
+        .expect("lookup")
+        .expect("binder");
     let connection = open_connection(&mut host, server);
     let (receive, _send) = take_channel(&mut host, connection);
     // The light's handle is 4 in the default table.
@@ -579,9 +653,17 @@ fn an_on_change_sensor_reports_on_change_only() {
 fn play_delivers_the_timeline_and_shake_alternates() {
     let (mut host, mut registry) = session();
     registry
-        .attach(&mut host, "sensors", Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "sensors",
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .expect("attach");
-    let server = host.check_service("sensorservice").expect("lookup").expect("binder");
+    let server = host
+        .check_service("sensorservice")
+        .expect("lookup")
+        .expect("binder");
     let connection = open_connection(&mut host, server);
     let (receive, _send) = take_channel(&mut host, connection);
     assert_eq!(enable(&mut host, connection, 1, true, 100_000_000), 0);
@@ -614,7 +696,12 @@ fn play_delivers_the_timeline_and_shake_alternates() {
 
     // The `shake` helper is a 12-sample alternating accelerometer timeline.
     let reply = registry
-        .control(&mut host, "sensors", "shake", &serde_json::json!({"period_ms": 10, "count": 12}))
+        .control(
+            &mut host,
+            "sensors",
+            "shake",
+            &serde_json::json!({"period_ms": 10, "count": 12}),
+        )
         .expect("shake");
     assert_eq!(reply["scheduled"], 12);
     let mut signs = Vec::new();
@@ -635,16 +722,29 @@ fn play_delivers_the_timeline_and_shake_alternates() {
 fn flush_delivers_the_flush_complete_meta_event() {
     let (mut host, mut registry) = session();
     registry
-        .attach(&mut host, "sensors", Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "sensors",
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .expect("attach");
-    let server = host.check_service("sensorservice").expect("lookup").expect("binder");
+    let server = host
+        .check_service("sensorservice")
+        .expect("lookup")
+        .expect("binder");
     let connection = open_connection(&mut host, server);
     let (receive, _send) = take_channel(&mut host, connection);
     assert_eq!(enable(&mut host, connection, 1, true, 1_000_000_000), 0);
 
     let mut data = connection_request(sensors::connection_codes::FLUSH_SENSOR, |_| {});
-    let mut reply = transact(&mut host, connection, sensors::connection_codes::FLUSH_SENSOR, &mut data)
-        .expect("flush");
+    let mut reply = transact(
+        &mut host,
+        connection,
+        sensors::connection_codes::FLUSH_SENSOR,
+        &mut data,
+    )
+    .expect("flush");
     assert_eq!(reply.read_int32().expect("status"), sensors::NO_ERROR);
 
     let receive = receive.as_fd();
@@ -664,7 +764,12 @@ fn flush_delivers_the_flush_complete_meta_event() {
     assert_eq!(values[1], 1.0, "meta_data.sensor is the handle");
 
     let events = registry
-        .control(&mut host, "sensors", "events", &serde_json::json!({"limit": 8}))
+        .control(
+            &mut host,
+            "sensors",
+            "events",
+            &serde_json::json!({"limit": 8}),
+        )
         .expect("events");
     assert!(
         events["events"]
@@ -681,9 +786,17 @@ fn flush_delivers_the_flush_complete_meta_event() {
 fn disabling_stops_the_stream_and_destroy_ends_the_connection() {
     let (mut host, mut registry) = session();
     registry
-        .attach(&mut host, "sensors", Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "sensors",
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .expect("attach");
-    let server = host.check_service("sensorservice").expect("lookup").expect("binder");
+    let server = host
+        .check_service("sensorservice")
+        .expect("lookup")
+        .expect("binder");
     let connection = open_connection(&mut host, server);
     let (receive, _send) = take_channel(&mut host, connection);
     assert_eq!(enable(&mut host, connection, 1, true, 5_000_000), 0);
@@ -700,7 +813,13 @@ fn disabling_stops_the_stream_and_destroy_ends_the_connection() {
     );
 
     let mut data = connection_request(sensors::connection_codes::DESTROY, |_| {});
-    transact(&mut host, connection, sensors::connection_codes::DESTROY, &mut data).expect("destroy");
+    transact(
+        &mut host,
+        connection,
+        sensors::connection_codes::DESTROY,
+        &mut data,
+    )
+    .expect("destroy");
     // A request after destroy is still a structured answer, never a panic.
     let mut data = connection_request(sensors::connection_codes::SET_EVENT_RATE, |data| {
         data.write_int32(1);
@@ -729,24 +848,49 @@ fn disabling_stops_the_stream_and_destroy_ends_the_connection() {
 #[test]
 fn detach_returns_the_honest_empty_sensor_list() {
     let (mut host, mut registry) = session();
-    let server = host.check_service("sensorservice").expect("lookup").expect("binder");
+    let server = host
+        .check_service("sensorservice")
+        .expect("lookup")
+        .expect("binder");
     registry
-        .attach(&mut host, "sensors", Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "sensors",
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .expect("attach");
     let mut data = sensor_list_request("com.acos.sensorprobe");
-    let mut reply = transact(&mut host, server, sensors::server_codes::GET_SENSOR_LIST, &mut data)
-        .expect("list");
+    let mut reply = transact(
+        &mut host,
+        server,
+        sensors::server_codes::GET_SENSOR_LIST,
+        &mut data,
+    )
+    .expect("list");
     assert_eq!(read_sensor_list(&mut reply).len(), 7);
 
     registry.detach(&mut host, "sensors").expect("detach");
 
     // Same binder id: the app's proxy was never invalidated.
-    let still = host.check_service("sensorservice").expect("lookup").expect("binder");
+    let still = host
+        .check_service("sensorservice")
+        .expect("lookup")
+        .expect("binder");
     assert_eq!(still, server);
     let mut data = sensor_list_request("com.acos.sensorprobe");
-    let mut reply = transact(&mut host, server, sensors::server_codes::GET_SENSOR_LIST, &mut data)
-        .expect("list");
-    assert_eq!(reply.read_int32().expect("count"), 0, "empty list after detach");
+    let mut reply = transact(
+        &mut host,
+        server,
+        sensors::server_codes::GET_SENSOR_LIST,
+        &mut data,
+    )
+    .expect("list");
+    assert_eq!(
+        reply.read_int32().expect("count"),
+        0,
+        "empty list after detach"
+    );
     assert_eq!(reply.data_avail(), 0);
 
     // A new connection is refused again.
@@ -763,9 +907,17 @@ fn detach_returns_the_honest_empty_sensor_list() {
     // The feed is gone, so a scripted op is refused (`ModuleRegistry::control`
     // refuses a detached module) and the report says `off` again.
     let error = registry
-        .control(&mut host, "sensors", "set_value", &serde_json::json!({"sensor": "accelerometer", "values": [0.0]}))
+        .control(
+            &mut host,
+            "sensors",
+            "set_value",
+            &serde_json::json!({"sensor": "accelerometer", "values": [0.0]}),
+        )
         .expect_err("a detached module has no feed");
-    assert!(matches!(error, ServiceError::ModuleRejected { .. }), "{error}");
+    assert!(
+        matches!(error, ServiceError::ModuleRejected { .. }),
+        "{error}"
+    );
     let report = registry
         .reports()
         .into_iter()
@@ -797,12 +949,31 @@ fn there_is_no_real_profile_and_the_report_is_honest() {
     assert!(manifest.validate().is_ok());
 
     let error = registry
-        .attach(&mut host, "sensors", Profile::Real, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "sensors",
+            Profile::Real,
+            &ModuleConfig::default(),
+        )
         .expect_err("real is refused");
-    assert!(matches!(error, ServiceError::ModuleRejected { module: "sensors", .. }), "{error}");
+    assert!(
+        matches!(
+            error,
+            ServiceError::ModuleRejected {
+                module: "sensors",
+                ..
+            }
+        ),
+        "{error}"
+    );
 
     registry
-        .attach(&mut host, "sensors", Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "sensors",
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .expect("attach scripted");
     let report = registry
         .reports()
@@ -831,23 +1002,47 @@ fn there_is_no_real_profile_and_the_report_is_honest() {
 fn stub_refuses_every_scripted_control() {
     let (mut host, mut registry) = session();
     registry
-        .attach(&mut host, "sensors", Profile::Stub, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "sensors",
+            Profile::Stub,
+            &ModuleConfig::default(),
+        )
         .expect("attach stub");
     for op in ["set_value", "play", "shake", "tilt", "enable", "disable"] {
         let error = registry
-            .control(&mut host, "sensors", op, &serde_json::json!({"sensor": "accelerometer", "values": [1.0]}))
+            .control(
+                &mut host,
+                "sensors",
+                op,
+                &serde_json::json!({"sensor": "accelerometer", "values": [1.0]}),
+            )
             .expect_err("stub must refuse a scripted op");
         assert!(
-            matches!(error, ServiceError::ModuleRejected { module: "sensors", .. }),
+            matches!(
+                error,
+                ServiceError::ModuleRejected {
+                    module: "sensors",
+                    ..
+                }
+            ),
             "{op}: {error}"
         );
     }
     // A stub still serves a list (that is its fixed answer) and streams its
     // fixed values to a listener.
-    let server = host.check_service("sensorservice").expect("lookup").expect("binder");
+    let server = host
+        .check_service("sensorservice")
+        .expect("lookup")
+        .expect("binder");
     let mut data = sensor_list_request("com.acos.sensorprobe");
-    let mut reply = transact(&mut host, server, sensors::server_codes::GET_SENSOR_LIST, &mut data)
-        .expect("list");
+    let mut reply = transact(
+        &mut host,
+        server,
+        sensors::server_codes::GET_SENSOR_LIST,
+        &mut data,
+    )
+    .expect("list");
     assert_eq!(read_sensor_list(&mut reply).len(), 7);
 }
 
@@ -867,10 +1062,18 @@ fn the_launch_config_selects_sensors_and_values() {
     registry
         .attach(&mut host, "sensors", Profile::Scripted, &config)
         .expect("attach with config");
-    let server = host.check_service("sensorservice").expect("lookup").expect("binder");
+    let server = host
+        .check_service("sensorservice")
+        .expect("lookup")
+        .expect("binder");
     let mut data = sensor_list_request("com.acos.sensorprobe");
-    let mut reply = transact(&mut host, server, sensors::server_codes::GET_SENSOR_LIST, &mut data)
-        .expect("list");
+    let mut reply = transact(
+        &mut host,
+        server,
+        sensors::server_codes::GET_SENSOR_LIST,
+        &mut data,
+    )
+    .expect("list");
     let list = read_sensor_list(&mut reply);
     assert_eq!(list.len(), 2, "only the selected sensors are served");
     assert_eq!(list[0].sensor_type, TYPE_ACCELEROMETER);
@@ -893,7 +1096,16 @@ fn the_launch_config_selects_sensors_and_values() {
                 .expect("config"),
         )
         .expect_err("pressure is not served");
-    assert!(matches!(error, ServiceError::ModuleRejected { module: "sensors", .. }), "{error}");
+    assert!(
+        matches!(
+            error,
+            ServiceError::ModuleRejected {
+                module: "sensors",
+                ..
+            }
+        ),
+        "{error}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -907,7 +1119,12 @@ fn the_launch_config_selects_sensors_and_values() {
 fn the_sensors_module_passes_the_conformance_kit() {
     let exe = std::env::current_exe().expect("test executable");
     let output = std::process::Command::new(exe)
-        .args(["--exact", "quiet_kit_child", "--nocapture", "--test-threads=1"])
+        .args([
+            "--exact",
+            "quiet_kit_child",
+            "--nocapture",
+            "--test-threads=1",
+        ])
         .env("ACOS_KIT_CHILD", "sensors")
         .output()
         .expect("spawn the kit child");
@@ -937,5 +1154,10 @@ fn quiet_kit_child() {
             check.detail
         );
     }
-    assert!(report.pass(), "{} failed the kit: {}", report.module, report.failures());
+    assert!(
+        report.pass(),
+        "{} failed the kit: {}",
+        report.module,
+        report.failures()
+    );
 }

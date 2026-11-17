@@ -108,7 +108,9 @@ fn compile_case() -> Option<PathBuf> {
 #[test]
 fn surface_control_natives_on_the_real_framework() {
     let Some(dex) = compile_case() else {
-        eprintln!("SKIP surface_control_natives_on_the_real_framework: javac/d8/android.jar unavailable");
+        eprintln!(
+            "SKIP surface_control_natives_on_the_real_framework: javac/d8/android.jar unavailable"
+        );
         return;
     };
     // Isolated native state: a fresh VM run must start from generation 0.
@@ -148,8 +150,16 @@ fn surface_control_natives_on_the_real_framework() {
             .as_str()
     };
 
-    assert_eq!(get("valid"), "true", "SurfaceControl.Builder produced a live layer");
-    assert_eq!(get("applied"), "2", "both transactions reached nativeApplyTransaction");
+    assert_eq!(
+        get("valid"),
+        "true",
+        "SurfaceControl.Builder produced a live layer"
+    );
+    assert_eq!(
+        get("applied"),
+        "2",
+        "both transactions reached nativeApplyTransaction"
+    );
     assert_eq!(
         get("parcel_stable"),
         "true",
@@ -166,7 +176,11 @@ fn surface_control_natives_on_the_real_framework() {
     // apply is the third; the released original's refcount drop does not
     // disconnect the layer). No buffer was submitted, so no frame was
     // published.
-    assert_eq!(fwk_surface::generation(), 3, "apply must bump the generation");
+    assert_eq!(
+        fwk_surface::generation(),
+        3,
+        "apply must bump the generation"
+    );
     assert_eq!(
         fwk_surface::presented_frames(),
         0,

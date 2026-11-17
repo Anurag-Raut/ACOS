@@ -47,7 +47,10 @@ fn throw_new_then_clear_is_root_balanced() {
     assert_eq!(after_throw, base + 1, "ThrowNew must push exactly one root");
     unsafe { jni::jni_ExceptionClear(env) };
     let after_clear = vm.native_roots.len();
-    assert_eq!(after_clear, base, "ExceptionClear must release the pending root");
+    assert_eq!(
+        after_clear, base,
+        "ExceptionClear must release the pending root"
+    );
     drop(rt);
     drop(vm);
 }
@@ -68,7 +71,11 @@ fn throw_then_delete_local_then_clear_releases_each_root() {
     let base = vm.native_roots.len();
     unsafe { jni::jni_DeleteLocalRef(env, thrown) };
     let after_delete = vm.native_roots.len();
-    assert_eq!(after_delete, base - 1, "DeleteLocalRef must release the local root");
+    assert_eq!(
+        after_delete,
+        base - 1,
+        "DeleteLocalRef must release the local root"
+    );
     unsafe { jni::jni_ExceptionClear(env) };
     let after_clear = vm.native_roots.len();
     assert_eq!(

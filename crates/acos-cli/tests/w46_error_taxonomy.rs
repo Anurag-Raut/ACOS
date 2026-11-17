@@ -26,10 +26,7 @@ fn workspace() -> PathBuf {
 fn scratch(name: &str) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!(
-        "acos-w46-{}-{n}-{name}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("acos-w46-{}-{n}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch dir");
     dir
@@ -174,13 +171,7 @@ struct Run {
     artifacts: PathBuf,
 }
 
-fn run(
-    name: &str,
-    mode: &str,
-    code: &str,
-    facts: &str,
-    extra_env: &[(&str, &str)],
-) -> Run {
+fn run(name: &str, mode: &str, code: &str, facts: &str, extra_env: &[(&str, &str)]) -> Run {
     let dir = scratch(name);
     let script = session_script(&dir);
     let artifacts = dir.join("artifacts");
@@ -246,7 +237,9 @@ fn assert_code(run: &Run, code: &str, class: &str, retryable: bool, status: &str
     assert_eq!(envelope["error"]["class"], class, "{code}: {envelope}");
     assert_eq!(envelope["error"]["retryable"], retryable, "{code}");
     assert!(
-        envelope["error"]["hint"].as_str().is_some_and(|h| !h.is_empty()),
+        envelope["error"]["hint"]
+            .as_str()
+            .is_some_and(|h| !h.is_empty()),
         "{code} needs a hint: {envelope}"
     );
     assert!(
@@ -259,10 +252,28 @@ fn assert_code(run: &Run, code: &str, class: &str, retryable: bool, status: &str
 fn every_host_and_harness_launch_code_maps_to_its_registered_envelope() {
     // (art code, protocol code, class, retryable, envelope status)
     for (code, expected, class, retryable, status) in [
-        ("HOST_DISK_FULL", "HOST_DISK_FULL", "host_guard", true, "blocked"),
+        (
+            "HOST_DISK_FULL",
+            "HOST_DISK_FULL",
+            "host_guard",
+            true,
+            "blocked",
+        ),
         ("HOST_PANIC", "HOST_PANIC", "harness", false, "error"),
-        ("HOST_MEMORY_LIMIT", "HOST_MEMORY_LIMIT", "host_guard", true, "blocked"),
-        ("SECCOMP_UNAVAILABLE", "SECCOMP_UNAVAILABLE", "unsupported", false, "blocked"),
+        (
+            "HOST_MEMORY_LIMIT",
+            "HOST_MEMORY_LIMIT",
+            "host_guard",
+            true,
+            "blocked",
+        ),
+        (
+            "SECCOMP_UNAVAILABLE",
+            "SECCOMP_UNAVAILABLE",
+            "unsupported",
+            false,
+            "blocked",
+        ),
         ("GUEST_EXITED", "GUEST_EXITED", "harness", false, "error"),
     ] {
         let run = run(&format!("ready-{code}"), "ready_code", code, "", &[]);
@@ -284,8 +295,20 @@ fn a_mid_session_reply_code_is_mapped_not_folded_into_internal() {
     for (code, expected, class, retryable, status) in [
         ("GUEST_EXITED", "GUEST_EXITED", "harness", false, "error"),
         ("TIMEOUT", "TIMEOUT", "infra_timeout", true, "timeout"),
-        ("NO_FRESH_FRAME", "NO_FRESH_FRAME", "infra_timeout", true, "error"),
-        ("SECCOMP_UNAVAILABLE", "SECCOMP_UNAVAILABLE", "unsupported", false, "blocked"),
+        (
+            "NO_FRESH_FRAME",
+            "NO_FRESH_FRAME",
+            "infra_timeout",
+            true,
+            "error",
+        ),
+        (
+            "SECCOMP_UNAVAILABLE",
+            "SECCOMP_UNAVAILABLE",
+            "unsupported",
+            false,
+            "blocked",
+        ),
     ] {
         let run = run(&format!("reply-{code}"), "reply_code", code, "", &[]);
         assert_code(&run, expected, class, retryable, status);
@@ -328,10 +351,12 @@ fn a_bare_eof_is_classified_from_session_exit_json() {
     );
     assert_eq!(sigsys_envelope["error"]["class"], "unsupported");
     assert_eq!(
-        sigsys_envelope["error"]["details"]["session_exit"]["guest_signal"], 31
+        sigsys_envelope["error"]["details"]["session_exit"]["guest_signal"],
+        31
     );
     assert_eq!(
-        sigsys_envelope["error"]["details"]["session_exit"]["stage"], "guest-exec"
+        sigsys_envelope["error"]["details"]["session_exit"]["stage"],
+        "guest-exec"
     );
 
     // SIGSEGV with an INTERNAL code is refined to APP_CRASHED: never INTERNAL
@@ -392,7 +417,10 @@ fn an_injected_enospc_write_is_a_retryable_host_disk_full_envelope() {
     let envelope = envelope(&run);
     let stderr = String::from_utf8_lossy(&run.output.stderr);
     assert!(run.artifacts.exists(), "the artifacts root must exist");
-    assert!(!run.output.status.success(), "a failed write must fail the run");
+    assert!(
+        !run.output.status.success(),
+        "a failed write must fail the run"
+    );
     assert_ne!(run.output.status.code(), Some(101), "never a bare panic");
     assert_eq!(envelope["error"]["code"], "HOST_DISK_FULL", "{envelope}");
     assert_eq!(envelope["error"]["class"], "host_guard");

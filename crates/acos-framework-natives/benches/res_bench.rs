@@ -32,7 +32,10 @@ fn report(name: &str, mut samples: Vec<u128>) -> (u128, u128) {
     samples.sort_unstable();
     let p50 = percentile(&samples, 0.50);
     let p95 = percentile(&samples, 0.95);
-    println!("{name:<44} p50={p50:>10} ns  p95={p95:>10} ns  n={}", samples.len());
+    println!(
+        "{name:<44} p50={p50:>10} ns  p95={p95:>10} ns  n={}",
+        samples.len()
+    );
     (p50, p95)
 }
 
@@ -128,17 +131,35 @@ fn main() {
     let mut out_values = vec![0i32; attrs.len() * STYLE_NUM_ENTRIES];
     let mut out_indices = vec![-1i32; attrs.len()];
     // Warm the theme + bag caches.
-    mgr.apply_style(theme, 0, 0x0103_0046, 0, &attrs, &mut out_values, &mut out_indices);
+    mgr.apply_style(
+        theme,
+        0,
+        0x0103_0046,
+        0,
+        &attrs,
+        &mut out_values,
+        &mut out_indices,
+    );
     let mut apply_samples = Vec::new();
     for _ in 0..20_000u32 {
         let t = Instant::now();
-        mgr.apply_style(theme, 0, 0x0103_0046, 0, &attrs, &mut out_values, &mut out_indices);
+        mgr.apply_style(
+            theme,
+            0,
+            0x0103_0046,
+            0,
+            &attrs,
+            &mut out_values,
+            &mut out_indices,
+        );
         apply_samples.push(t.elapsed().as_nanos());
     }
     let (apply_p50, apply_p95) = report("applyStyle_textview", apply_samples);
 
     // --- XmlBlock parse + walk of screen_simple.xml ----------------------
-    let xml_bytes = apk.read_entry("res/layout/screen_simple.xml").unwrap_or_default();
+    let xml_bytes = apk
+        .read_entry("res/layout/screen_simple.xml")
+        .unwrap_or_default();
     let mut parse_samples = Vec::new();
     let mut walk_samples = Vec::new();
     if !xml_bytes.is_empty() {

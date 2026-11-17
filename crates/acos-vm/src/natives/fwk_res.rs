@@ -339,13 +339,7 @@ fn with_parse<T>(pref: u64, f: impl FnOnce(&XmlParserState, &XmlDocument) -> T) 
 
 fn alloc_block(reg: &mut Registry, manager: u64, block: u64) -> u64 {
     let r = reg.alloc();
-    reg.block_refs.insert(
-        r,
-        BlockRef {
-            manager,
-            block,
-        },
-    );
+    reg.block_refs.insert(r, BlockRef { manager, block });
     r
 }
 
@@ -548,7 +542,13 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     // `NativeAllocationRegistry.createMalloced(..., nativeGetThemeFreeFunction())`.
     // ACOS themes are Rust handles owned by the engine's table; a null free
     // function is the honest "no native allocation to free" answer.
-    reg(vm, am, "nativeGetThemeFreeFunction", "()J", am_theme_free_function);
+    reg(
+        vm,
+        am,
+        "nativeGetThemeFreeFunction",
+        "()J",
+        am_theme_free_function,
+    );
     reg(vm, am, "nativeThemeCreate", "(J)J", am_theme_create);
     reg(
         vm,
@@ -557,13 +557,7 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(JJIZ)V",
         am_theme_apply_style,
     );
-    reg(
-        vm,
-        am,
-        "nativeThemeRebase",
-        "(JJ[I[ZI)V",
-        am_theme_rebase,
-    );
+    reg(vm, am, "nativeThemeRebase", "(JJ[I[ZI)V", am_theme_rebase);
     reg(vm, am, "nativeThemeCopy", "(JJJJ)V", am_theme_copy);
     reg(
         vm,
@@ -628,7 +622,13 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         "(J)Ljava/lang/String;",
         apk_get_debug_name,
     );
-    reg(vm, apk, "nativeGetStringBlock", "(J)J", apk_get_string_block);
+    reg(
+        vm,
+        apk,
+        "nativeGetStringBlock",
+        "(J)J",
+        apk_get_string_block,
+    );
     reg(vm, apk, "nativeIsUpToDate", "(J)Z", apk_is_up_to_date);
     reg(
         vm,
@@ -660,7 +660,13 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     reg(vm, xb, "nativeCreate", "([BII)J", xb_create);
     reg(vm, xb, "nativeDestroy", "(J)V", xb_destroy);
     reg(vm, xb, "nativeGetStringBlock", "(J)J", xb_get_string_block);
-    reg(vm, xb, "nativeCreateParseState", "(JI)J", xb_create_parse_state);
+    reg(
+        vm,
+        xb,
+        "nativeCreateParseState",
+        "(JI)J",
+        xb_create_parse_state,
+    );
     reg(
         vm,
         xb,
@@ -845,9 +851,7 @@ fn load_boot_overlays(boot: &Path) -> Vec<ApkAssets> {
 
 fn am_set_configuration(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mgr = vm.arg_i64(ctx, 0) as u64;
-    let locale = vm
-        .string_to_rust(vm.arg_ref(ctx, 3))
-        .unwrap_or_default();
+    let locale = vm.string_to_rust(vm.arg_ref(ctx, 3)).unwrap_or_default();
     let args = ConfigurationNative {
         mcc: vm.arg_i32(ctx, 1),
         mnc: vm.arg_i32(ctx, 2),
@@ -947,9 +951,7 @@ fn am_contains_allocated_table(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn am_list(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mgr = vm.arg_i64(ctx, 0) as u64;
-    let dir = vm
-        .string_to_rust(vm.arg_ref(ctx, 1))
-        .unwrap_or_default();
+    let dir = vm.string_to_rust(vm.arg_ref(ctx, 1)).unwrap_or_default();
     let mut names: Vec<String> = Vec::new();
     REG.with(|r| {
         let reg = r.borrow();
@@ -973,9 +975,7 @@ fn am_list(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn am_open_asset(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mgr = vm.arg_i64(ctx, 0) as u64;
-    let name = vm
-        .string_to_rust(vm.arg_ref(ctx, 1))
-        .unwrap_or_default();
+    let name = vm.string_to_rust(vm.arg_ref(ctx, 1)).unwrap_or_default();
     let mode = vm.arg_i32(ctx, 2);
     let h = REG.with(|r| {
         r.borrow_mut()
@@ -991,9 +991,7 @@ fn am_open_asset(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn am_open_non_asset(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mgr = vm.arg_i64(ctx, 0) as u64;
     let cookie = vm.arg_i32(ctx, 1);
-    let name = vm
-        .string_to_rust(vm.arg_ref(ctx, 2))
-        .unwrap_or_default();
+    let name = vm.string_to_rust(vm.arg_ref(ctx, 2)).unwrap_or_default();
     let mode = vm.arg_i32(ctx, 3);
     let h = REG.with(|r| {
         r.borrow_mut()
@@ -1009,9 +1007,7 @@ fn am_open_non_asset(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn am_open_xml_asset(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mgr = vm.arg_i64(ctx, 0) as u64;
     let cookie = vm.arg_i32(ctx, 1);
-    let name = vm
-        .string_to_rust(vm.arg_ref(ctx, 2))
-        .unwrap_or_default();
+    let name = vm.string_to_rust(vm.arg_ref(ctx, 2)).unwrap_or_default();
     let r = REG.with(|r| {
         let mut reg = r.borrow_mut();
         let block = match reg
@@ -1180,9 +1176,7 @@ fn am_get_resource_array(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn am_get_resource_identifier(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mgr = vm.arg_i64(ctx, 0) as u64;
-    let name = vm
-        .string_to_rust(vm.arg_ref(ctx, 1))
-        .unwrap_or_default();
+    let name = vm.string_to_rust(vm.arg_ref(ctx, 1)).unwrap_or_default();
     let def_type = vm.string_to_rust(vm.arg_ref(ctx, 2));
     let def_pkg = vm.string_to_rust(vm.arg_ref(ctx, 3));
     let id = REG.with(|r| {
@@ -1210,7 +1204,12 @@ fn am_string_result(vm: &mut Vm, ctx: NativeCtx, val: Option<String>) -> VmResul
 fn am_get_resource_name(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mgr = vm.arg_i64(ctx, 0) as u64;
     let id = vm.arg_i32(ctx, 1) as u32;
-    let v = REG.with(|r| r.borrow().managers.get(&mgr).and_then(|m| m.get_resource_name(id)));
+    let v = REG.with(|r| {
+        r.borrow()
+            .managers
+            .get(&mgr)
+            .and_then(|m| m.get_resource_name(id))
+    });
     am_string_result(vm, ctx, v)
 }
 
@@ -1341,18 +1340,21 @@ fn am_resolve_attrs(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mut ov = read_ints(vm, ov_h).unwrap_or_default();
     let mut oi = read_ints(vm, oi_h).unwrap_or_default();
     let ok = REG.with(|r| {
-        r.borrow().managers.get(&mgr).map(|m| {
-            m.resolve_attrs(
-                theme,
-                def_attr,
-                def_res,
-                in_values.as_deref(),
-                &attrs,
-                &mut ov,
-                &mut oi,
-            )
-        })
-        .unwrap_or(false)
+        r.borrow()
+            .managers
+            .get(&mgr)
+            .map(|m| {
+                m.resolve_attrs(
+                    theme,
+                    def_attr,
+                    def_res,
+                    in_values.as_deref(),
+                    &attrs,
+                    &mut ov,
+                    &mut oi,
+                )
+            })
+            .unwrap_or(false)
     });
     write_ints(vm, ov_h, &ov);
     write_ints(vm, oi_h, &oi);
@@ -1593,9 +1595,7 @@ fn am_asset_get_remaining_length(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 // ---------------------------------------------------------------------------
 
 fn apk_load(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let path = vm
-        .string_to_rust(vm.arg_ref(ctx, 1))
-        .unwrap_or_default();
+    let path = vm.string_to_rust(vm.arg_ref(ctx, 1)).unwrap_or_default();
     let host = map_path_roots(vm.vfs.boot_root(), vm.vfs.root(), &path);
     let handle = match ApkAssets::open(&host) {
         Ok(a) => REG.with(|r| {
@@ -1700,9 +1700,7 @@ fn apk_is_up_to_date(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn apk_open_xml(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let h = vm.arg_i64(ctx, 0) as u64;
-    let name = vm
-        .string_to_rust(vm.arg_ref(ctx, 1))
-        .unwrap_or_default();
+    let name = vm.string_to_rust(vm.arg_ref(ctx, 1)).unwrap_or_default();
     let r = REG.with(|r| {
         let mut reg = r.borrow_mut();
         let bytes = match reg
@@ -1718,7 +1716,11 @@ fn apk_open_xml(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             Err(_) => return 0,
         };
         let mgr = reg.orphan_manager();
-        let engine_block = match reg.managers.get_mut(&mgr).map(|m| m.create_xml_block(block)) {
+        let engine_block = match reg
+            .managers
+            .get_mut(&mgr)
+            .map(|m| m.create_xml_block(block))
+        {
             Some(b) => b,
             None => return 0,
         };
@@ -1832,7 +1834,11 @@ fn xb_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             Err(_) => return 0,
         };
         let mgr = reg.orphan_manager();
-        let engine_block = match reg.managers.get_mut(&mgr).map(|m| m.create_xml_block(block)) {
+        let engine_block = match reg
+            .managers
+            .get_mut(&mgr)
+            .map(|m| m.create_xml_block(block))
+        {
             Some(b) => b,
             None => return 0,
         };
@@ -2039,9 +2045,7 @@ fn xb_get_attribute_string_value(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 fn xb_get_attribute_index(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let pref = vm.arg_i64(ctx, 0) as u64;
     let ns = vm.string_to_rust(vm.arg_ref(ctx, 1));
-    let name = vm
-        .string_to_rust(vm.arg_ref(ctx, 2))
-        .unwrap_or_default();
+    let name = vm.string_to_rust(vm.arg_ref(ctx, 2)).unwrap_or_default();
     let ns_opt = ns.as_deref().filter(|s| !s.is_empty());
     let v = with_parse(pref, |s, d| s.get_attribute_index(d, ns_opt, &name)).unwrap_or(-1);
     vm.ret_i32(ctx, v);
@@ -2077,10 +2081,7 @@ pub(crate) fn ndk_manager_config(manager: u64) -> Option<ResConfig> {
     })
 }
 
-fn ndk_lookup_manager(
-    reg: &mut Registry,
-    manager: u64,
-) -> Result<&mut AssetManager, String> {
+fn ndk_lookup_manager(reg: &mut Registry, manager: u64) -> Result<&mut AssetManager, String> {
     reg.managers
         .get_mut(&manager)
         .ok_or_else(|| format!("unknown AAssetManager handle {manager:#x}"))

@@ -108,7 +108,11 @@ pub enum NetAction {
     /// Drop (`true`) or restore (`false`) this session's traffic.
     Offline(bool),
     /// Shape this session's veth; `0/0/0` clears it.
-    Delay { ms: u32, jitter_ms: u32, loss_pct: u32 },
+    Delay {
+        ms: u32,
+        jitter_ms: u32,
+        loss_pct: u32,
+    },
     /// The explicit host-port opt-in.
     HostPort { port: u16, on: bool },
 }
@@ -184,7 +188,10 @@ impl NetAction {
                     Some(Value::Bool(on)) => *on,
                     Some(_) => return Err(invalid("`acos_net`: `on` must be a boolean")),
                 };
-                Ok(Self::HostPort { port: port as u16, on })
+                Ok(Self::HostPort {
+                    port: port as u16,
+                    on,
+                })
             }
             other => Err(invalid(format!(
                 "acos_net: unknown action `{other}` (status|offline|online|delay|hostport)"
@@ -206,7 +213,10 @@ impl NetAction {
 }
 
 fn invalid(message: impl Into<String>) -> ProtoError {
-    ProtoError { code: ErrorCode::Invalid, message: message.into() }
+    ProtoError {
+        code: ErrorCode::Invalid,
+        message: message.into(),
+    }
 }
 
 #[cfg(test)]
@@ -238,7 +248,11 @@ mod tests {
                 if keys.contains(&"port") {
                     args["port"] = json!(8081);
                 }
-                args[key.to_string()] = if *key == "port" { json!(8081) } else { json!(null) };
+                args[key.to_string()] = if *key == "port" {
+                    json!(8081)
+                } else {
+                    json!(null)
+                };
                 assert!(
                     NetAction::from_args(&args).is_ok(),
                     "schema allows `{key}` for `{action}` but the parser rejects it"
@@ -250,14 +264,21 @@ mod tests {
             assert!(NetAction::from_args(&args).is_ok(), "identity key `{key}`");
         }
         // And every key of the verb is owned by at least one action.
-        let owned: Vec<&str> =
-            action_keys("delay").iter().chain(action_keys("hostport")).copied().collect();
+        let owned: Vec<&str> = action_keys("delay")
+            .iter()
+            .chain(action_keys("hostport"))
+            .copied()
+            .collect();
         for key in ARG_KEYS.iter().filter(|k| **k != "action") {
             assert!(owned.contains(key), "`{key}` belongs to no action");
         }
         let err = NetAction::from_args(&json!({"offline": true})).expect_err("closed schema");
         assert_eq!(err.code, ErrorCode::Invalid);
-        assert!(err.message.contains("unknown argument `offline`"), "{}", err.message);
+        assert!(
+            err.message.contains("unknown argument `offline`"),
+            "{}",
+            err.message
+        );
     }
 
     #[test]
@@ -272,22 +293,39 @@ mod tests {
             NetAction::Offline(false)
         );
         assert_eq!(
-            NetAction::from_args(&json!({"action": "delay", "ms": 400, "jitter_ms": 20, "loss_pct": 5}))
-                .unwrap(),
-            NetAction::Delay { ms: 400, jitter_ms: 20, loss_pct: 5 }
+            NetAction::from_args(
+                &json!({"action": "delay", "ms": 400, "jitter_ms": 20, "loss_pct": 5})
+            )
+            .unwrap(),
+            NetAction::Delay {
+                ms: 400,
+                jitter_ms: 20,
+                loss_pct: 5
+            }
         );
         assert_eq!(
             NetAction::from_args(&json!({"action": "delay"})).unwrap(),
-            NetAction::Delay { ms: 0, jitter_ms: 0, loss_pct: 0 },
+            NetAction::Delay {
+                ms: 0,
+                jitter_ms: 0,
+                loss_pct: 0
+            },
             "delay with no numbers clears the shaping"
         );
         assert_eq!(
             NetAction::from_args(&json!({"action": "hostport", "port": 8081})).unwrap(),
-            NetAction::HostPort { port: 8081, on: true }
+            NetAction::HostPort {
+                port: 8081,
+                on: true
+            }
         );
         assert_eq!(
-            NetAction::from_args(&json!({"action": "hostport", "port": 8081, "on": false})).unwrap(),
-            NetAction::HostPort { port: 8081, on: false }
+            NetAction::from_args(&json!({"action": "hostport", "port": 8081, "on": false}))
+                .unwrap(),
+            NetAction::HostPort {
+                port: 8081,
+                on: false
+            }
         );
         // Failures are structured, never a silent default.
         for (args, needle) in [
@@ -296,11 +334,23 @@ mod tests {
             (json!({"action": "hostport", "port": 70000}), "0..=65535"),
             (json!({"action": "delay", "loss_pct": 101}), "0..=100"),
             (json!({"action": "nope"}), "unknown action `nope`"),
-            (json!({"action": "hostport", "port": 1, "on": "yes"}), "`on` must be a boolean"),
+            (
+                json!({"action": "hostport", "port": 1, "on": "yes"}),
+                "`on` must be a boolean",
+            ),
             // A key that means nothing for this action is refused, not ignored.
-            (json!({"action": "offline", "port": 8081}), "means nothing for action `offline`"),
-            (json!({"action": "status", "ms": 10}), "means nothing for action `status`"),
-            (json!({"action": "delay", "port": 9}), "means nothing for action `delay`"),
+            (
+                json!({"action": "offline", "port": 8081}),
+                "means nothing for action `offline`",
+            ),
+            (
+                json!({"action": "status", "ms": 10}),
+                "means nothing for action `status`",
+            ),
+            (
+                json!({"action": "delay", "port": 9}),
+                "means nothing for action `delay`",
+            ),
         ] {
             let err = NetAction::from_args(&args).expect_err(&format!("must fail: {args}"));
             assert_eq!(err.code, ErrorCode::Invalid, "{args}: {}", err.message);
@@ -324,7 +374,18 @@ mod tests {
         assert_eq!(NetAction::Status.name(), "status");
         assert_eq!(NetAction::Offline(true).name(), "offline");
         assert_eq!(NetAction::Offline(false).name(), "online");
-        assert_eq!(NetAction::Delay { ms: 1, jitter_ms: 0, loss_pct: 0 }.name(), "delay");
-        assert_eq!(NetAction::HostPort { port: 1, on: false }.name(), "hostport");
+        assert_eq!(
+            NetAction::Delay {
+                ms: 1,
+                jitter_ms: 0,
+                loss_pct: 0
+            }
+            .name(),
+            "delay"
+        );
+        assert_eq!(
+            NetAction::HostPort { port: 1, on: false }.name(),
+            "hostport"
+        );
     }
 }

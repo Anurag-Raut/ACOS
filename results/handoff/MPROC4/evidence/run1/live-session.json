@@ -1,0 +1,75 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.proca.ProcAActivity",
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "built",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-5e28076a599648c9",
+        "input_hash": "5e28076a599648c9",
+        "mode": "shared-fixed",
+        "prep_ms": 3714,
+        "reason": "no usable manifest at /home/Qui/.cache/acos/art/boot-images/fixed-5e28076a599648c9/manifest.json: No such file or directory (os error 2)"
+      },
+      "buffer_generation": 2,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "guest_process_group": 2057739,
+      "height": 2400,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "ok": true,
+      "package": "dev.acos.fixtures.proca",
+      "probe_seq": 1,
+      "stream_socket": "/run/user/1000/acos-view-2056871-1/view.sock",
+      "width": 1080
+    },
+    {
+      "cmd": "ctl",
+      "failures": [],
+      "module": "processes",
+      "ok": true,
+      "op": "list",
+      "processes": [],
+      "requests": [],
+      "uninstalled": []
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 1,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 1
+    }
+  ]
+}

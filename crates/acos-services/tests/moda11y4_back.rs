@@ -100,7 +100,9 @@ fn back_is_a_real_key_on_the_focused_window_without_a_tracking_flag() {
         .expect("the host wires the session's input channels");
     let fd = {
         let mut dispatch = input.state().lock().unwrap();
-        dispatch.register_window(WINDOW, "activity").expect("register");
+        dispatch
+            .register_window(WINDOW, "activity")
+            .expect("register");
         dispatch.set_focus(Some(WINDOW)).expect("focus");
         dispatch.duplicate_client_fd(WINDOW).expect("client fd")
     };
@@ -170,8 +172,12 @@ fn back_goes_to_the_focused_window_not_the_newest_one() {
         .expect("the host wires the session's input channels");
     let (activity_fd, overlay_fd) = {
         let mut dispatch = input.state().lock().unwrap();
-        dispatch.register_window(ACTIVITY, "activity").expect("register");
-        dispatch.register_window(OVERLAY, "a11y overlay").expect("register");
+        dispatch
+            .register_window(ACTIVITY, "activity")
+            .expect("register");
+        dispatch
+            .register_window(OVERLAY, "a11y overlay")
+            .expect("register");
         // The WMS layer stack: the activity keeps focus, the overlay is
         // FLAG_NOT_FOCUSABLE (`layer_stack().focus_target()`).
         dispatch.set_focus(Some(ACTIVITY)).expect("focus");

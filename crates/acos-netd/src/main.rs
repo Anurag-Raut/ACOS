@@ -56,7 +56,9 @@ fn run(args: &[String]) -> Result<i32, ProtoError> {
         "forward" => {
             let listen = flag_value(rest, "--listen").ok_or_else(|| invalid("--listen"))?;
             let target = flag_value(rest, "--target").ok_or_else(|| invalid("--target"))?;
-            acos_netd::forward::serve(&listen, &target).map(|()| 0).map_err(io)
+            acos_netd::forward::serve(&listen, &target)
+                .map(|()| 0)
+                .map_err(io)
         }
         "up" => {
             let pasta = flag_value(rest, "--pasta");
@@ -170,7 +172,9 @@ fn run(args: &[String]) -> Result<i32, ProtoError> {
             let hold = rest.iter().any(|a| a == "--hold");
             let mut c = Client::connect()?;
             c.kill_pasta(hold)?;
-            eprintln!("acos-netd: pasta killed; the relay is down until the supervisor restarts it");
+            eprintln!(
+                "acos-netd: pasta killed; the relay is down until the supervisor restarts it"
+            );
             Ok(0)
         }
         "shutdown" => {
@@ -241,15 +245,24 @@ fn wait_exit(name: &str, c: &mut Client) -> i32 {
 }
 
 fn pretty<T: serde::Serialize>(v: &T) -> Result<String, ProtoError> {
-    serde_json::to_string_pretty(v).map_err(|e| ProtoError { code: ErrorCode::Io, message: e.to_string() })
+    serde_json::to_string_pretty(v).map_err(|e| ProtoError {
+        code: ErrorCode::Io,
+        message: e.to_string(),
+    })
 }
 
 fn io(e: std::io::Error) -> ProtoError {
-    ProtoError { code: ErrorCode::Io, message: e.to_string() }
+    ProtoError {
+        code: ErrorCode::Io,
+        message: e.to_string(),
+    }
 }
 
 fn invalid(msg: &str) -> ProtoError {
-    ProtoError { code: ErrorCode::Invalid, message: msg.to_string() }
+    ProtoError {
+        code: ErrorCode::Invalid,
+        message: msg.to_string(),
+    }
 }
 
 fn usage() {
@@ -267,7 +280,10 @@ fn positional(args: &[String], n: usize) -> Result<String, ProtoError> {
 }
 
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
-    args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned()
+    args.iter()
+        .position(|a| a == flag)
+        .and_then(|i| args.get(i + 1))
+        .cloned()
 }
 
 fn int_value(args: &[String], flag: &str) -> Option<u32> {
@@ -276,7 +292,10 @@ fn int_value(args: &[String], flag: &str) -> Option<u32> {
 
 /// `NAME -- CMD...`
 fn name_and_argv(args: &[String]) -> Result<(String, Vec<String>), ProtoError> {
-    let sep = args.iter().position(|a| a == "--").ok_or_else(|| invalid("expected `NAME -- CMD...`"))?;
+    let sep = args
+        .iter()
+        .position(|a| a == "--")
+        .ok_or_else(|| invalid("expected `NAME -- CMD...`"))?;
     let name = args
         .first()
         .filter(|n| !n.starts_with("--"))

@@ -47,15 +47,15 @@ pub fn read_args(
                     let len = parcel.data_size().saturating_sub(start);
                     parcel.set_data_position(start);
                     let bytes = parcel.read_raw_bytes(len).unwrap_or_default();
-                    let path = std::path::PathBuf::from(dir)
-                        .join(format!("{method}-arg{index}.bin"));
+                    let path =
+                        std::path::PathBuf::from(dir).join(format!("{method}-arg{index}.bin"));
                     let _ = std::fs::write(path, &bytes);
                 }
                 return Err(ServiceError::BadRequest {
                     interface: interface.to_string(),
                     method: method.to_string(),
                     detail: format!("arg {index} ({}): {e}", op.render()),
-                })
+                });
             }
         }
     }

@@ -15,8 +15,7 @@ use std::collections::HashMap;
 use crate::error::{consts as c, diagnostic, unsupported};
 use crate::glsl::{self, Stage, TextureLookup, Ty, Unit, Value, VertexOut};
 use crate::raster::{
-    project, Blend, BlendFactor, Cull, DepthFunc, Framebuffer, RasterState, StencilFace,
-    StencilOp,
+    project, Blend, BlendFactor, Cull, DepthFunc, Framebuffer, RasterState, StencilFace, StencilOp,
 };
 
 /// Highest mip level the substrate will allocate. GLES2's maximum texture size
@@ -73,7 +72,10 @@ impl Program {
         if let Some(bound) = self.attrib_bindings.get(name) {
             return Some(*bound);
         }
-        self.attrib_order.iter().position(|n| n == name).map(|i| i as u32)
+        self.attrib_order
+            .iter()
+            .position(|n| n == name)
+            .map(|i| i as u32)
     }
 
     /// Uniform slot for `name`.
@@ -148,7 +150,9 @@ impl Texture {
     }
 
     fn allocated(&self) -> bool {
-        self.width > 0 && self.height > 0 && self.rgba.len() >= self.width as usize * self.height as usize * 4
+        self.width > 0
+            && self.height > 0
+            && self.rgba.len() >= self.width as usize * self.height as usize * 4
     }
 
     /// The RGBA level `l` (`0` is the base level).
@@ -367,11 +371,13 @@ impl Gl {
 
     /// `glGenBuffers`.
     pub fn gen_buffers(&mut self, n: i32) -> Vec<u32> {
-        (0..n.max(0)).map(|_| {
-            let id = self.id();
-            self.buffers.insert(id, Vec::new());
-            id
-        }).collect()
+        (0..n.max(0))
+            .map(|_| {
+                let id = self.id();
+                self.buffers.insert(id, Vec::new());
+                id
+            })
+            .collect()
     }
 
     /// `glDeleteBuffers`.
@@ -560,7 +566,10 @@ impl Gl {
     /// `glGetShaderInfoLog`.
     #[must_use]
     pub fn shader_info_log(&self, id: u32) -> String {
-        self.shaders.get(&id).map(|s| s.log.clone()).unwrap_or_default()
+        self.shaders
+            .get(&id)
+            .map(|s| s.log.clone())
+            .unwrap_or_default()
     }
 
     /// `glCreateProgram`.
@@ -752,7 +761,10 @@ impl Gl {
     /// `glGetProgramInfoLog`.
     #[must_use]
     pub fn program_info_log(&self, program: u32) -> String {
-        self.programs.get(&program).map(|p| p.log.clone()).unwrap_or_default()
+        self.programs
+            .get(&program)
+            .map(|p| p.log.clone())
+            .unwrap_or_default()
     }
 
     /// `glUseProgram`.
@@ -894,7 +906,11 @@ impl Gl {
         let mut out = Vec::new();
         for (slot, array) in &self.attrib_arrays {
             if array.client_ptr == 0
-                || !self.attrib_enabled.get(*slot as usize).copied().unwrap_or(false)
+                || !self
+                    .attrib_enabled
+                    .get(*slot as usize)
+                    .copied()
+                    .unwrap_or(false)
             {
                 continue;
             }
@@ -1119,8 +1135,13 @@ impl Gl {
         if level == 0 && !self.charge_gpu("glTexImage2D", old, new) {
             return;
         }
-        let Some(rgba) = convert_pixels(format, width as u32, height as u32, pixels, self.unpack_alignment)
-        else {
+        let Some(rgba) = convert_pixels(
+            format,
+            width as u32,
+            height as u32,
+            pixels,
+            self.unpack_alignment,
+        ) else {
             // Undo the provisional charge; the call is rejected below.
             if level == 0 {
                 self.gpu_bytes = self.gpu_bytes.saturating_sub(new).saturating_add(old);
@@ -1193,8 +1214,13 @@ impl Gl {
             self.set_error(c::INVALID_VALUE);
             return;
         }
-        let Some(src) = convert_pixels(format, width as u32, height as u32, pixels, self.unpack_alignment)
-        else {
+        let Some(src) = convert_pixels(
+            format,
+            width as u32,
+            height as u32,
+            pixels,
+            self.unpack_alignment,
+        ) else {
             unsupported("glTexSubImage2D", format!("pixel format {format:#x}"));
             self.set_error(c::INVALID_ENUM);
             return;
@@ -1382,8 +1408,7 @@ impl Gl {
         for row in 0..height as usize {
             let dst = ((yoffset as usize + row) * tw as usize + xoffset as usize) * 4;
             let s = row * width as usize * 4;
-            dst_buf[dst..dst + width as usize * 4]
-                .copy_from_slice(&src[s..s + width as usize * 4]);
+            dst_buf[dst..dst + width as usize * 4].copy_from_slice(&src[s..s + width as usize * 4]);
         }
     }
 
@@ -1657,7 +1682,11 @@ impl Gl {
             return;
         };
         let old = Self::level_bytes(rb.width, rb.height);
-        if !self.charge_gpu("glRenderbufferStorage", old, Self::level_bytes(width as u32, height as u32)) {
+        if !self.charge_gpu(
+            "glRenderbufferStorage",
+            old,
+            Self::level_bytes(width as u32, height as u32),
+        ) {
             return;
         }
         if let Some(rb) = self.renderbuffers.get_mut(&id) {
@@ -1995,9 +2024,10 @@ impl Gl {
             self.set_error(c::INVALID_FRAMEBUFFER_OPERATION);
             return;
         }
-        let rect = scissor.map_or((0, 0, target.width as i32, target.height as i32), |(x, y, w, h)| {
-            (x, y, x + w as i32, y + h as i32)
-        });
+        let rect = scissor.map_or(
+            (0, 0, target.width as i32, target.height as i32),
+            |(x, y, w, h)| (x, y, x + w as i32, y + h as i32),
+        );
         if mask & c::COLOR_BUFFER_BIT != 0 {
             if color_mask.iter().all(|m| *m) {
                 target.fill_rect(rect, px);
@@ -2271,7 +2301,12 @@ impl Gl {
             let mut attrs: Vec<(String, Value)> = Vec::with_capacity(attrib_names.len());
             for (name, loc) in attrib_names.iter().zip(attrib_locations.iter()) {
                 let Some(loc) = *loc else { continue };
-                let value = if self.attrib_enabled.get(loc as usize).copied().unwrap_or(false) {
+                let value = if self
+                    .attrib_enabled
+                    .get(loc as usize)
+                    .copied()
+                    .unwrap_or(false)
+                {
                     match self.attrib_arrays.get(&loc) {
                         Some(array) => {
                             let buf = if array.buffer == 0 {
@@ -2387,21 +2422,19 @@ impl Gl {
                 target,
                 &state,
                 [&screen[0], &screen[1], &screen[2]],
-                |varyings, coord| {
-                    match glsl::run_fragment_lod(
-                        &program.fs_unit,
-                        &uniforms,
-                        &fs_varyings,
-                        varyings,
-                        coord,
-                        sampler.lod(),
-                        &sampler,
-                    ) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            errors.push(format!("fragment shader: {e}"));
-                            None
-                        }
+                |varyings, coord| match glsl::run_fragment_lod(
+                    &program.fs_unit,
+                    &uniforms,
+                    &fs_varyings,
+                    varyings,
+                    coord,
+                    sampler.lod(),
+                    &sampler,
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        errors.push(format!("fragment shader: {e}"));
+                        None
                     }
                 },
             );
@@ -2516,7 +2549,12 @@ impl Sampler<'_> {
             let y = (v * h as f32) as i32;
             return fetch(x, y);
         }
-        if level > 0 && matches!(tex.min_filter, c::NEAREST_MIPMAP_NEAREST | c::NEAREST_MIPMAP_LINEAR) {
+        if level > 0
+            && matches!(
+                tex.min_filter,
+                c::NEAREST_MIPMAP_NEAREST | c::NEAREST_MIPMAP_LINEAR
+            )
+        {
             let x = (u * w as f32) as i32;
             let y = (v * h as f32) as i32;
             return fetch(x, y);
@@ -2577,16 +2615,14 @@ impl TextureLookup for Sampler<'_> {
         };
         let u = wrap(u, tex.wrap_s);
         let v = wrap(v, tex.wrap_t);
-        let linear = matches!(
-            tex.mag_filter,
-            c::LINEAR
-        ) || matches!(
-            tex.min_filter,
-            c::LINEAR
-                | c::LINEAR_MIPMAP_NEAREST
-                | c::LINEAR_MIPMAP_LINEAR
-                | c::NEAREST_MIPMAP_LINEAR
-        );
+        let linear = matches!(tex.mag_filter, c::LINEAR)
+            || matches!(
+                tex.min_filter,
+                c::LINEAR
+                    | c::LINEAR_MIPMAP_NEAREST
+                    | c::LINEAR_MIPMAP_LINEAR
+                    | c::NEAREST_MIPMAP_LINEAR
+            );
         let fetch = |x: i32, y: i32| -> [f32; 4] {
             let x = x.clamp(0, tex.width as i32 - 1) as usize;
             let y = y.clamp(0, tex.height as i32 - 1) as usize;
@@ -2777,9 +2813,10 @@ fn read_attribute(buf: &[u8], index: u32, array: &AttribArray) -> Option<Value> 
                     f32::from(v)
                 }
             }
-            c::FIXED => i32::from_le_bytes([buf[at], buf[at + 1], buf[at + 2], buf[at + 3]])
-                as f32
-                / 65536.0,
+            c::FIXED => {
+                i32::from_le_bytes([buf[at], buf[at + 1], buf[at + 2], buf[at + 3]]) as f32
+                    / 65536.0
+            }
             _ => f32::from_le_bytes([buf[at], buf[at + 1], buf[at + 2], buf[at + 3]]),
         };
     }
@@ -2951,7 +2988,17 @@ mod tests {
     fn copy_tex_image_rejects_out_of_range_mip_level() {
         let (mut gl, _) = gl_with_texture();
         let surface = Framebuffer::new(8, 8);
-        gl.copy_tex_image_2d(&surface, c::TEXTURE_2D, i32::MAX, c::RGBA as i32, 0, 0, 4, 4, 0);
+        gl.copy_tex_image_2d(
+            &surface,
+            c::TEXTURE_2D,
+            i32::MAX,
+            c::RGBA as i32,
+            0,
+            0,
+            4,
+            4,
+            0,
+        );
         assert_eq!(gl.take_error(), c::INVALID_ENUM);
         assert_eq!(gl.gpu_bytes, 0);
     }

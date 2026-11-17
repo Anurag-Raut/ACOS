@@ -6,8 +6,8 @@ use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 
 use crate::error::{
-    ApkError, Result, APK_ENTRY, APK_SIGNING_MALFORMED, APK_IO, APK_NOT_ZIP, APK_NO_MANIFEST, NATIVE_LIB_NOT_FOUND,
-    UNSUPPORTED_ABI, ZIP_SLIP,
+    ApkError, Result, APK_ENTRY, APK_IO, APK_NOT_ZIP, APK_NO_MANIFEST, APK_SIGNING_MALFORMED,
+    NATIVE_LIB_NOT_FOUND, UNSUPPORTED_ABI, ZIP_SLIP,
 };
 use crate::manifest::Manifest;
 use crate::signing::{self, SigningInfo};
@@ -191,7 +191,8 @@ impl Apk {
                 let size = file.size();
                 let compressed_size = file.compressed_size();
                 let data_offset = file.data_start();
-                let uncompressed_in_apk = matches!(file.compression(), zip::CompressionMethod::Stored);
+                let uncompressed_in_apk =
+                    matches!(file.compression(), zip::CompressionMethod::Stored);
                 let method = method_name(file.compression());
                 let entry = native_libs.entry(abi.clone()).or_default();
                 entry.push(NativeLib {
@@ -407,7 +408,9 @@ impl Apk {
         }
         for host in SUPPORTED_ABIS {
             if abis.iter().any(|a| a == host) {
-                return AbiGate::Supported { abi: host.to_string() };
+                return AbiGate::Supported {
+                    abi: host.to_string(),
+                };
             }
         }
         AbiGate::Unsupported {
@@ -476,10 +479,17 @@ impl Apk {
         dest_dir: impl AsRef<Path>,
     ) -> Result<PathBuf> {
         let abi = safe_component(abi).ok_or_else(|| {
-            ApkError::new(ZIP_SLIP, format!("ABI directory {abi:?} is not a plain name"))
+            ApkError::new(
+                ZIP_SLIP,
+                format!("ABI directory {abi:?} is not a plain name"),
+            )
         })?;
-        let file = safe_component(name)
-            .ok_or_else(|| ApkError::new(ZIP_SLIP, format!("library name {name:?} is not a plain name")))?;
+        let file = safe_component(name).ok_or_else(|| {
+            ApkError::new(
+                ZIP_SLIP,
+                format!("library name {name:?} is not a plain name"),
+            )
+        })?;
         if self.find_native_lib(abi, file).is_none() {
             return Err(ApkError::new(
                 NATIVE_LIB_NOT_FOUND,
@@ -515,9 +525,8 @@ impl Apk {
         }
 
         let dest_dir = dest_dir.as_ref();
-        std::fs::create_dir_all(dest_dir).map_err(|e| {
-            ApkError::new(APK_IO, format!("create {}: {e}", dest_dir.display()))
-        })?;
+        std::fs::create_dir_all(dest_dir)
+            .map_err(|e| ApkError::new(APK_IO, format!("create {}: {e}", dest_dir.display())))?;
         let target = dest_dir.join(file);
         // Belt and braces: the joined path must still be a direct child of the
         // destination directory. `file` is a single component, so this can only
@@ -665,9 +674,7 @@ fn read_signature_block(
             ),
         ));
     }
-    if compressed > 0
-        && declared > compressed.saturating_mul(signing::MAX_SIGNATURE_BLOCK_RATIO)
-    {
+    if compressed > 0 && declared > compressed.saturating_mul(signing::MAX_SIGNATURE_BLOCK_RATIO) {
         return Err(ApkError::new(
             APK_SIGNING_MALFORMED,
             format!("{name}: signature block compression ratio exceeds cap"),

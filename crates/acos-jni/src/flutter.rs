@@ -342,7 +342,10 @@ impl std::fmt::Display for SemanticsError {
                 write!(f, "semantics string index {index} is out of range")
             }
             SemanticsError::BadAttributeIndex { index } => {
-                write!(f, "semantics string-attribute index {index} is out of range")
+                write!(
+                    f,
+                    "semantics string-attribute index {index} is out of range"
+                )
             }
             SemanticsError::NegativeCount { count } => {
                 write!(f, "semantics count {count} is negative")
@@ -369,10 +372,7 @@ impl<'a> Reader<'a> {
 
     fn take(&mut self, need: usize) -> Result<&'a [u8], SemanticsError> {
         if self.remaining() < need {
-            return Err(SemanticsError::Truncated {
-                at: self.pos,
-                need,
-            });
+            return Err(SemanticsError::Truncated { at: self.pos, need });
         }
         let slice = &self.bytes[self.pos..self.pos + need];
         self.pos += need;
@@ -402,10 +402,7 @@ impl<'a> Reader<'a> {
 
 /// `AccessibilityBridge.getStringFromBuffer`: an int index into `strings`;
 /// `-1` means "no string".
-fn read_string(
-    r: &mut Reader<'_>,
-    strings: &[String],
-) -> Result<Option<String>, SemanticsError> {
+fn read_string(r: &mut Reader<'_>, strings: &[String]) -> Result<Option<String>, SemanticsError> {
     let index = r.i32()?;
     if index == -1 {
         return Ok(None);
@@ -636,7 +633,9 @@ pub fn tap_packet(x: f64, y: f64, timestamp_micros: i64) -> Vec<u8> {
 /// launch gate.
 #[must_use]
 pub fn engine_cache_dir(repo_root: &Path, abi: &str) -> std::path::PathBuf {
-    repo_root.join(".cache/flutter-1").join(format!("lib-{abi}"))
+    repo_root
+        .join(".cache/flutter-1")
+        .join(format!("lib-{abi}"))
 }
 
 /// Read a `flutter_assets` manifest entry (or any zip entry) into memory.
@@ -787,7 +786,9 @@ mod tests {
             std::io::Write::write_all(&mut writer, b"[]").unwrap();
             writer.finish().unwrap();
         }
-        let info = detect_bytes(cursor.get_ref()).expect("detect").expect("flutter");
+        let info = detect_bytes(cursor.get_ref())
+            .expect("detect")
+            .expect("flutter");
         assert_eq!(info.engine_abis, vec!["x86_64"]);
         assert_eq!(info.snapshot_abis, vec!["x86_64"]);
         assert!(info.has_flutter_assets);

@@ -282,13 +282,15 @@ pub fn porter_duff_reference(mode: PorterDuffMode, src: [f32; 4], dst: [f32; 4])
         PorterDuffMode::SrcOver => {
             ra = sa + da * (1.0 - sa);
             let f = |s: f32, d: f32| s * sa + d * da * (1.0 - sa);
-            return [f(sr, dr), f(sg, dg), f(sb, db), ra].map(|v| {
-                if ra > 0.0 {
-                    v / ra
-                } else {
-                    0.0
-                }
-            });
+            return [f(sr, dr), f(sg, dg), f(sb, db), ra].map(
+                |v| {
+                    if ra > 0.0 {
+                        v / ra
+                    } else {
+                        0.0
+                    }
+                },
+            );
         }
         PorterDuffMode::DstOver => {
             return porter_duff_reference(PorterDuffMode::SrcOver, dst, src);

@@ -217,7 +217,10 @@ pub const fn policy_layer(type_: i32, can_add_internal_system_window: bool) -> i
         // :534 wallpaper is at the bottom.
         TYPE_WALLPAPER => 1,
         // :537-542 presentation/private-presentation/dock-divider/qs-dialog/phone.
-        TYPE_PRESENTATION | TYPE_PRIVATE_PRESENTATION | TYPE_DOCK_DIVIDER | TYPE_QS_DIALOG
+        TYPE_PRESENTATION
+        | TYPE_PRIVATE_PRESENTATION
+        | TYPE_DOCK_DIVIDER
+        | TYPE_QS_DIALOG
         | TYPE_PHONE => 3,
         // :543 search bar.
         TYPE_SEARCH_BAR => 4,
@@ -445,16 +448,27 @@ impl WindowKind {
             }
             TYPE_SYSTEM_ALERT => WindowKind::SystemAlert,
             TYPE_SYSTEM_DIALOG | TYPE_KEYGUARD_DIALOG | TYPE_QS_DIALOG => WindowKind::SystemDialog,
-            TYPE_SYSTEM_OVERLAY | TYPE_SYSTEM_ERROR | TYPE_VOLUME_OVERLAY | TYPE_SCREENSHOT
-            | TYPE_TOAST | TYPE_PRESENTATION | TYPE_PRIVATE_PRESENTATION | TYPE_DISPLAY_OVERLAY
-            | TYPE_MAGNIFICATION_OVERLAY | TYPE_SECURE_SYSTEM_OVERLAY | TYPE_BOOT_PROGRESS
-            | TYPE_POINTER | TYPE_DRAG => WindowKind::SystemOverlay,
+            TYPE_SYSTEM_OVERLAY
+            | TYPE_SYSTEM_ERROR
+            | TYPE_VOLUME_OVERLAY
+            | TYPE_SCREENSHOT
+            | TYPE_TOAST
+            | TYPE_PRESENTATION
+            | TYPE_PRIVATE_PRESENTATION
+            | TYPE_DISPLAY_OVERLAY
+            | TYPE_MAGNIFICATION_OVERLAY
+            | TYPE_SECURE_SYSTEM_OVERLAY
+            | TYPE_BOOT_PROGRESS
+            | TYPE_POINTER
+            | TYPE_DRAG => WindowKind::SystemOverlay,
             TYPE_NOTIFICATION_SHADE => WindowKind::NotificationShade,
             TYPE_INPUT_METHOD | TYPE_INPUT_METHOD_DIALOG => WindowKind::InputMethod,
-            TYPE_STATUS_BAR | TYPE_STATUS_BAR_ADDITIONAL | TYPE_NAVIGATION_BAR
-            | TYPE_STATUS_BAR_PANEL | TYPE_STATUS_BAR_SUB_PANEL | TYPE_NAVIGATION_BAR_PANEL => {
-                WindowKind::SystemBar
-            }
+            TYPE_STATUS_BAR
+            | TYPE_STATUS_BAR_ADDITIONAL
+            | TYPE_NAVIGATION_BAR
+            | TYPE_STATUS_BAR_PANEL
+            | TYPE_STATUS_BAR_SUB_PANEL
+            | TYPE_NAVIGATION_BAR_PANEL => WindowKind::SystemBar,
             FIRST_SYSTEM_WINDOW..=LAST_SYSTEM_WINDOW => WindowKind::System,
             _ => WindowKind::Unknown,
         }
@@ -948,7 +962,9 @@ mod tests {
         assert!(policy_layer(TYPE_SYSTEM_ALERT, false) < overlay);
         assert!(policy_layer(TYPE_SYSTEM_ALERT, true) > overlay);
         // The status bar is *below* the notification shade in this image.
-        assert!(policy_layer(TYPE_STATUS_BAR, false) < policy_layer(TYPE_NOTIFICATION_SHADE, false));
+        assert!(
+            policy_layer(TYPE_STATUS_BAR, false) < policy_layer(TYPE_NOTIFICATION_SHADE, false)
+        );
     }
 
     #[test]
@@ -1050,7 +1066,13 @@ mod tests {
         s.upsert(entry(10, TYPE_APPLICATION, 0, full(), 1));
         s.upsert(entry(11, TYPE_APPLICATION, 0, full(), 2));
         // Relayout of the lower window must keep it below.
-        s.upsert(entry(10, TYPE_APPLICATION, 0, RectI::new(0, 0, 500, 500), 99));
+        s.upsert(entry(
+            10,
+            TYPE_APPLICATION,
+            0,
+            RectI::new(0, 0, 500, 500),
+            99,
+        ));
         assert_eq!(s.ordered()[0].window, 10);
         assert_eq!(s.get(10).unwrap().frame, RectI::new(0, 0, 500, 500));
     }
@@ -1104,13 +1126,7 @@ mod tests {
         s.upsert(entry(30, TYPE_APPLICATION_OVERLAY, 0, full(), 3));
         assert_eq!(s.focus_target(), Some(30));
         // The IME is above the app but never focusable in practice.
-        s.upsert(entry(
-            40,
-            TYPE_INPUT_METHOD,
-            FLAG_NOT_FOCUSABLE,
-            full(),
-            4,
-        ));
+        s.upsert(entry(40, TYPE_INPUT_METHOD, FLAG_NOT_FOCUSABLE, full(), 4));
         assert_eq!(s.focus_target(), Some(30));
     }
 
@@ -1124,7 +1140,12 @@ mod tests {
             rows,
             vec![
                 (10, TYPE_APPLICATION, 0, WindowKind::Application),
-                (30, TYPE_APPLICATION_OVERLAY, 1, WindowKind::ApplicationOverlay),
+                (
+                    30,
+                    TYPE_APPLICATION_OVERLAY,
+                    1,
+                    WindowKind::ApplicationOverlay
+                ),
             ]
         );
         assert_eq!(rows[1].3.name(), "application_overlay");

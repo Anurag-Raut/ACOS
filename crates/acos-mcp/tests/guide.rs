@@ -102,7 +102,10 @@ fn the_default_help_reply_is_a_bounded_skeleton() {
         "doctor -> inspect -> launch -> observe_tree",
         "acos_help {\"topic\": \"workflow\"}",
     ] {
-        assert!(skeleton.contains(expected), "the skeleton lost {expected:?}");
+        assert!(
+            skeleton.contains(expected),
+            "the skeleton lost {expected:?}"
+        );
     }
     // Every topic it advertises is described in one line, so an agent knows
     // which one to ask for.
@@ -136,8 +139,7 @@ fn the_guide_covers_the_contract() {
         "UNSUPPORTED_ABI",
         // Honesty rules.
         "never a pass",
-    ]
-    {
+    ] {
         assert!(text.contains(expected), "the guide lost {expected:?}");
     }
     // What it must never mention: internal development/lock tooling.
@@ -164,7 +166,10 @@ fn help_tool_serves_the_guide_and_its_topics() {
     client.initialize("2025-03-26");
 
     let default = client.call_tool("acos_help", json!({}));
-    assert!(!common::is_error(&default), "acos_help must not error: {default}");
+    assert!(
+        !common::is_error(&default),
+        "acos_help must not error: {default}"
+    );
     let envelope = common::envelope_of(&default);
     let guide = envelope
         .pointer("/result/guide")
@@ -187,7 +192,9 @@ fn help_tool_serves_the_guide_and_its_topics() {
     let all = client.call_tool("acos_help", json!({"topic": "all"}));
     let envelope = common::envelope_of(&all);
     assert_eq!(
-        envelope.pointer("/result/guide_topic").and_then(Value::as_str),
+        envelope
+            .pointer("/result/guide_topic")
+            .and_then(Value::as_str),
         Some("all")
     );
     assert_eq!(
@@ -195,7 +202,9 @@ fn help_tool_serves_the_guide_and_its_topics() {
         Some(acos_mcp::help::full_guide().as_str())
     );
     assert_eq!(
-        envelope.pointer("/result/guide_source").and_then(Value::as_str),
+        envelope
+            .pointer("/result/guide_source")
+            .and_then(Value::as_str),
         Some("docs/AGENT_GUIDE.md")
     );
     assert!(envelope
@@ -212,7 +221,9 @@ fn help_tool_serves_the_guide_and_its_topics() {
         Some(&json!(false))
     );
     assert_eq!(
-        envelope.pointer("/result/guide_topic").and_then(Value::as_str),
+        envelope
+            .pointer("/result/guide_topic")
+            .and_then(Value::as_str),
         Some("scenarios")
     );
     let section = envelope
@@ -261,10 +272,16 @@ fn resources_serve_the_same_guide_text() {
         "acos://guide/errors",
         "acos://guide/limits",
     ] {
-        assert!(uris.contains(&expected), "missing resource {expected}: {uris:?}");
+        assert!(
+            uris.contains(&expected),
+            "missing resource {expected}: {uris:?}"
+        );
     }
     for resource in resources {
-        assert_eq!(resource.get("mimeType").and_then(Value::as_str), Some("text/markdown"));
+        assert_eq!(
+            resource.get("mimeType").and_then(Value::as_str),
+            Some("text/markdown")
+        );
         assert!(resource.get("title").and_then(Value::as_str).is_some());
     }
 
@@ -276,7 +293,8 @@ fn resources_serve_the_same_guide_text() {
     // A resource read is deliberate: `acos://guide` is the complete guide.
     assert_eq!(text, acos_mcp::help::full_guide());
     assert_eq!(
-        full.pointer("/result/contents/0/mimeType").and_then(Value::as_str),
+        full.pointer("/result/contents/0/mimeType")
+            .and_then(Value::as_str),
         Some("text/markdown")
     );
 
@@ -342,7 +360,10 @@ fn verify_android_flow_prompt_is_usable() {
         .and_then(Value::as_str)
         .expect("prompt text");
     assert!(text.contains("fixtures/build/apps/counter.apk"), "{text}");
-    assert!(text.contains("tap Increment and the count reads 1"), "{text}");
+    assert!(
+        text.contains("tap Increment and the count reads 1"),
+        "{text}"
+    );
     assert!(text.contains("acos_verify"));
     assert!(text.contains("expect_change: true"));
     assert!(text.contains("HOST_MEMORY_LOW"));
@@ -354,7 +375,10 @@ fn verify_android_flow_prompt_is_usable() {
         "a prompt without its arguments must be an error: {missing}"
     );
     let unknown = client.request("prompts/get", json!({"name": "nope"}));
-    assert_eq!(unknown.pointer("/error/code").and_then(Value::as_i64), Some(-32602));
+    assert_eq!(
+        unknown.pointer("/error/code").and_then(Value::as_i64),
+        Some(-32602)
+    );
 }
 
 /// **FB6 (1): the `mcp` topic is generated from the live tool list.**
@@ -392,10 +416,15 @@ fn the_mcp_topic_is_generated_from_the_advertised_tools() {
     );
 
     let reply = client.call_tool("acos_help", json!({"topic": "mcp"}));
-    assert!(!common::is_error(&reply), "acos_help mcp must not error: {reply}");
+    assert!(
+        !common::is_error(&reply),
+        "acos_help mcp must not error: {reply}"
+    );
     let envelope = common::envelope_of(&reply);
     assert_eq!(
-        envelope.pointer("/result/guide_topic").and_then(Value::as_str),
+        envelope
+            .pointer("/result/guide_topic")
+            .and_then(Value::as_str),
         Some("mcp")
     );
     assert_eq!(
@@ -422,9 +451,15 @@ fn the_mcp_topic_is_generated_from_the_advertised_tools() {
         let row = topic
             .lines()
             .find(|line| line.starts_with(&format!("| `{name}` |")))
-            .unwrap_or_else(|| panic!("the mcp topic has no row for advertised tool {name}:\n{topic}"));
+            .unwrap_or_else(|| {
+                panic!("the mcp topic has no row for advertised tool {name}:\n{topic}")
+            });
         let cells: Vec<&str> = row.trim_matches('|').split('|').map(str::trim).collect();
-        assert_eq!(cells.len(), 5, "a row must be tool|required|optional|example|returns: {row}");
+        assert_eq!(
+            cells.len(),
+            5,
+            "a row must be tool|required|optional|example|returns: {row}"
+        );
         assert!(
             cells[3].starts_with(&format!("`{name} ")),
             "the example call for {name} must be paste-able: {row}"
@@ -467,7 +502,10 @@ fn the_mcp_topic_is_generated_from_the_advertised_tools() {
         "capture: {name: shot, format: png, fresh: true}",
         "Coming:",
     ] {
-        assert!(workflow.contains(expected), "the workflow recipes lost {expected:?}");
+        assert!(
+            workflow.contains(expected),
+            "the workflow recipes lost {expected:?}"
+        );
     }
     assert!(
         workflow.find("## Recipes").unwrap() < workflow.find("## The loop").unwrap(),
@@ -484,7 +522,16 @@ fn the_mcp_topic_is_generated_from_the_advertised_tools() {
 fn no_help_topic_mentions_internal_tooling() {
     let mut client = McpClient::with_real_acos();
     client.initialize("2025-03-26");
-    for topic in ["mcp", "workflow", "cli", "overview", "limits", "scenarios", "errors", "all"] {
+    for topic in [
+        "mcp",
+        "workflow",
+        "cli",
+        "overview",
+        "limits",
+        "scenarios",
+        "errors",
+        "all",
+    ] {
         let reply = client.call_tool("acos_help", json!({"topic": topic}));
         let envelope = common::envelope_of(&reply);
         let text = envelope
@@ -548,7 +595,8 @@ fn meta_tools_report_fidelity_not_applicable() {
             .find(|tool| tool.get("name").and_then(Value::as_str) == Some(name))
             .unwrap_or_else(|| panic!("{name} must be advertised"));
         assert_eq!(
-            tool.pointer("/annotations/fidelity").and_then(Value::as_str),
+            tool.pointer("/annotations/fidelity")
+                .and_then(Value::as_str),
             Some("n/a"),
             "{name} must report fidelity n/a: {tool}"
         );
@@ -563,7 +611,9 @@ fn meta_tools_report_fidelity_not_applicable() {
         .find(|tool| tool.get("name").and_then(Value::as_str) == Some("acos_launch"))
         .expect("acos_launch");
     assert_eq!(
-        launch.pointer("/annotations/fidelity").and_then(Value::as_str),
+        launch
+            .pointer("/annotations/fidelity")
+            .and_then(Value::as_str),
         Some("native-runtime")
     );
 }

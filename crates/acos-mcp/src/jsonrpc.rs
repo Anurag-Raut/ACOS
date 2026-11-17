@@ -203,7 +203,10 @@ mod tests {
             parse(r#"{"jsonrpc":"2.0","id":1,"method":"ping","params":3}"#),
             Parsed::Invalid { .. }
         ));
-        assert!(matches!(parse(r#"[{"jsonrpc":"2.0","id":1,"method":"ping"}]"#), Parsed::Invalid { .. }));
+        assert!(matches!(
+            parse(r#"[{"jsonrpc":"2.0","id":1,"method":"ping"}]"#),
+            Parsed::Invalid { .. }
+        ));
     }
 
     #[test]

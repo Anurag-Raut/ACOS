@@ -37,9 +37,8 @@ struct Coverage {
 
 fn default_libs() -> Vec<PathBuf> {
     let home = std::env::var("HOME").unwrap_or_default();
-    let ndk = std::env::var("ANDROID_NDK_HOME").unwrap_or_else(|_| {
-        format!("{home}/Android/Sdk/ndk/27.1.12297006")
-    });
+    let ndk = std::env::var("ANDROID_NDK_HOME")
+        .unwrap_or_else(|_| format!("{home}/Android/Sdk/ndk/27.1.12297006"));
     let bt = format!("{home}/Android/Sdk/build-tools/35.0.0/renderscript/lib");
     vec![
         PathBuf::from(format!(
@@ -118,7 +117,10 @@ fn main() {
                 );
                 libraries.push(c);
             }
-            None => eprintln!("skipped (not an ELF64 x86_64 shared object): {}", lib.display()),
+            None => eprintln!(
+                "skipped (not an ELF64 x86_64 shared object): {}",
+                lib.display()
+            ),
         }
     }
 

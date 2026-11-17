@@ -1691,10 +1691,9 @@ impl ModuleRegistry {
                 continue;
             }
             for initializer in entry.module.manifest().process_initializers {
-                if !out
-                    .iter()
-                    .any(|seen| seen.class == initializer.class && seen.method == initializer.method)
-                {
+                if !out.iter().any(|seen| {
+                    seen.class == initializer.class && seen.method == initializer.method
+                }) {
                     out.push(*initializer);
                 }
             }
@@ -2351,12 +2350,9 @@ pub mod conformance {
         // detach must restore that exact answer.
         let mut host = ServiceHost::new();
         if module_id != "core" {
-            if let Err(error) = registry.attach(
-                &mut host,
-                "core",
-                Profile::Real,
-                &ModuleConfig::default(),
-            ) {
+            if let Err(error) =
+                registry.attach(&mut host, "core", Profile::Real, &ModuleConfig::default())
+            {
                 return Report {
                     module: manifest.id,
                     checks: vec![Check {
@@ -2576,7 +2572,9 @@ pub mod conformance {
             Ok(None) => "null".to_string(),
             Ok(Some(binder)) => match transact_once(host, binder) {
                 Ok(_) => "reply".to_string(),
-                Err(ServiceError::ModuleUnavailable { module, .. }) => format!("tombstone:{module}"),
+                Err(ServiceError::ModuleUnavailable { module, .. }) => {
+                    format!("tombstone:{module}")
+                }
                 Err(error) => format!("error:{}", error.code()),
             },
             Err(error) => format!("error:{}", error.code()),

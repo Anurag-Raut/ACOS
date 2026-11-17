@@ -52,9 +52,7 @@ fn call(
             assert_eq!(exception, 0, "{interface}::{method_name} replied ok");
             let mut values = Vec::new();
             for op in &m.reply {
-                values.push(
-                    acos_services::codec::read_op(&mut reply, op).expect("reply decodes"),
-                );
+                values.push(acos_services::codec::read_op(&mut reply, op).expect("reply decodes"));
             }
             Ok(values)
         }
@@ -71,7 +69,10 @@ fn a_module_that_takes_over_a_core_name_restores_core_on_detach() {
     let mut registry = ModuleRegistry::standard();
     let mut host = ServiceHost::new();
     registry
-        .attach_session(&mut host, &[ModuleSpec::parse("system.permissions").expect("spec")])
+        .attach_session(
+            &mut host,
+            &[ModuleSpec::parse("system.permissions").expect("spec")],
+        )
         .expect("core + system.permissions attach");
 
     // `grantRuntimePermission(packageName, permissionName, userId)`.
@@ -89,10 +90,7 @@ fn a_module_that_takes_over_a_core_name_restores_core_on_detach() {
     )
     .expect("the module grants through the real table");
     assert_eq!(
-        store_of(&host)
-            .lock()
-            .unwrap()
-            .check(CAMERA),
+        store_of(&host).lock().unwrap().check(CAMERA),
         acos_services::permissions::PERMISSION_GRANTED
     );
 
@@ -116,10 +114,7 @@ fn a_module_that_takes_over_a_core_name_restores_core_on_detach() {
     // The store is session state, not the module's: `core` still reads it, so a
     // grant survives the detach and `checkPermission` keeps answering it.
     assert_eq!(
-        store_of(&host)
-            .lock()
-            .unwrap()
-            .check(CAMERA),
+        store_of(&host).lock().unwrap().check(CAMERA),
         acos_services::permissions::PERMISSION_GRANTED
     );
     // The alias core published for the same descriptor follows too.
@@ -131,7 +126,10 @@ fn both_check_permission_paths_read_the_one_store() {
     let mut registry = ModuleRegistry::standard();
     let mut host = ServiceHost::new();
     registry
-        .attach_session(&mut host, &[ModuleSpec::parse("system.permissions").expect("spec")])
+        .attach_session(
+            &mut host,
+            &[ModuleSpec::parse("system.permissions").expect("spec")],
+        )
         .expect("attach");
 
     let denied = |host: &mut ServiceHost| {
@@ -140,7 +138,11 @@ fn both_check_permission_paths_read_the_one_store() {
             "activity",
             "android.app.IActivityManager",
             "checkPermission",
-            &[Value::Str(Some(CAMERA.into())), Value::Int(0), Value::Int(0)],
+            &[
+                Value::Str(Some(CAMERA.into())),
+                Value::Int(0),
+                Value::Int(0),
+            ],
         )
         .expect("IActivityManager.checkPermission answers");
         let package = call(
@@ -160,10 +162,7 @@ fn both_check_permission_paths_read_the_one_store() {
 
     assert_eq!(
         denied(&mut host),
-        (
-            vec![Value::Int(-1)],
-            vec![Value::Int(-1)],
-        ),
+        (vec![Value::Int(-1)], vec![Value::Int(-1)],),
         "an ungranted runtime permission is denied by both paths"
     );
 
@@ -197,7 +196,11 @@ fn both_check_permission_paths_read_the_one_store() {
         )
         .expect("rationale answers")
     };
-    assert_eq!(rationale(&mut host), vec![Value::Bool(false)], "granted: no rationale");
+    assert_eq!(
+        rationale(&mut host),
+        vec![Value::Bool(false)],
+        "granted: no rationale"
+    );
     registry
         .control(
             &mut host,
@@ -234,9 +237,7 @@ fn request_permissions_intent(permissions: &[&str]) -> acos_services::value::Par
     facts.package = Some("com.android.permissioncontroller".into());
     facts.extras.insert(
         acos_services::permissions::EXTRA_REQUEST_PERMISSIONS_NAMES.to_string(),
-        acos_services::ams::Extra::Strings(
-            permissions.iter().map(|p| (*p).to_string()).collect(),
-        ),
+        acos_services::ams::Extra::Strings(permissions.iter().map(|p| (*p).to_string()).collect()),
     );
     facts.to_parcelable()
 }
@@ -280,12 +281,18 @@ fn request_permissions_resolves_to_a_structured_permission_ui_unavailable() {
     let mut registry = ModuleRegistry::standard();
     let mut host = ServiceHost::new();
     registry
-        .attach_session(&mut host, &[ModuleSpec::parse("system.permissions").expect("spec")])
+        .attach_session(
+            &mut host,
+            &[ModuleSpec::parse("system.permissions").expect("spec")],
+        )
         .expect("attach");
 
     let interface = "android.app.IActivityTaskManager";
     let m = method(interface, "startActivity");
-    let binder = host.check_service("activity_task").expect("resolves").unwrap();
+    let binder = host
+        .check_service("activity_task")
+        .expect("resolves")
+        .unwrap();
     let args = start_activity_args(request_permissions_intent(&[CAMERA]), 7);
     let mut data = acos_services::codec::build_request(interface, m, &args).expect("request");
     data.set_data_position(0);
@@ -312,7 +319,10 @@ fn request_permissions_resolves_to_a_structured_permission_ui_unavailable() {
     // Never a silent grant, and the refusal is evidence in the store.
     let store = store_of(&host);
     let store = store.lock().unwrap();
-    assert_eq!(store.check(CAMERA), acos_services::permissions::PERMISSION_DENIED);
+    assert_eq!(
+        store.check(CAMERA),
+        acos_services::permissions::PERMISSION_DENIED
+    );
     assert_eq!(store.refused.len(), 1);
     drop(store);
 
@@ -363,7 +373,10 @@ fn the_launch_config_pre_grants_and_pre_denies() {
         .expect("attach with launch config");
     let store = store_of(&host);
     let store = store.lock().unwrap();
-    assert_eq!(store.check(CAMERA), acos_services::permissions::PERMISSION_GRANTED);
+    assert_eq!(
+        store.check(CAMERA),
+        acos_services::permissions::PERMISSION_GRANTED
+    );
     assert_eq!(
         store.check("android.permission.POST_NOTIFICATIONS"),
         acos_services::permissions::PERMISSION_DENIED

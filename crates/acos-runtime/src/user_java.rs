@@ -13,7 +13,7 @@
 //! `writeTypedList` shape (`int` count then one `writeTypedObject` per entry).
 
 use acos_parcel::{binder::BinderId, Parcel};
-use acos_services::declared::{USER_SYSTEM};
+use acos_services::declared::USER_SYSTEM;
 use acos_vm::heap::Handle;
 use acos_vm::javabridge::JavaValue;
 use acos_vm::natives::binder::BinderDelivery;

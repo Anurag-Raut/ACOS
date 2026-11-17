@@ -44,7 +44,10 @@ fn compile_java(names: &[&str]) -> Option<PathBuf> {
     let root = repo_root();
     // Key the output on the source set so two tests compiling different
     // classes do not collide on one cached `classes.dex`.
-    let out = root.join(format!("target/tmp/acos-java-cases/looper-{}", names.join("-")));
+    let out = root.join(format!(
+        "target/tmp/acos-java-cases/looper-{}",
+        names.join("-")
+    ));
     let dex = out.join("classes.dex");
     if dex.is_file() {
         return Some(dex);
@@ -60,7 +63,10 @@ fn compile_java(names: &[&str]) -> Option<PathBuf> {
     std::fs::create_dir_all(&classes).ok()?;
     let sources: Vec<PathBuf> = names
         .iter()
-        .map(|n| root.join("crates/acos-vm/tests/java").join(format!("{n}.java")))
+        .map(|n| {
+            root.join("crates/acos-vm/tests/java")
+                .join(format!("{n}.java"))
+        })
         .collect();
     let status = Command::new(javac)
         .args(["--release", "11", "-encoding", "UTF-8", "-cp"])

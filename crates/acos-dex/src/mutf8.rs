@@ -74,9 +74,8 @@ pub fn decode(bytes: &[u8], base_offset: u64) -> DexResult<(String, usize)> {
                     reason: "bad continuation byte in 3-byte sequence",
                 });
             }
-            let unit = (((b & 0x0F) as u16) << 12)
-                | (((b1 & 0x3F) as u16) << 6)
-                | ((b2 & 0x3F) as u16);
+            let unit =
+                (((b & 0x0F) as u16) << 12) | (((b1 & 0x3F) as u16) << 6) | ((b2 & 0x3F) as u16);
             if unit < 0x800 {
                 return Err(DexError::BadMutf8 {
                     offset: base_offset + i as u64,

@@ -51,7 +51,8 @@ fn rig() -> Rig {
         .expect("SurfaceFlinger resolves");
 
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.set_data_position(0);
     let mut reply = Parcel::new();
     host.transact(sf, CREATE_CONNECTION, &mut data, &mut reply, 0)
@@ -476,7 +477,10 @@ fn a_visible_flag_secure_window_is_reported_so_the_live_view_can_blank_frames() 
     assert!(state.set_layer_placement(handle, placement(true)));
     assert!(state.has_secure_window(), "a visible FLAG_SECURE window");
     assert!(state.set_layer_hidden(handle, true));
-    assert!(!state.has_secure_window(), "a hidden secure window shows nothing");
+    assert!(
+        !state.has_secure_window(),
+        "a hidden secure window shows nothing"
+    );
     assert!(state.set_layer_hidden(handle, false));
     assert!(state.has_secure_window());
     assert!(state.set_layer_placement(handle, placement(false)));
@@ -544,7 +548,11 @@ fn a_single_full_window_layer_passes_through_with_its_own_stride() {
     r.transact(&mut parcel).expect("transaction decodes");
     let frame = r.capture().expect("a capture");
     assert_eq!((frame.width, frame.height, frame.stride), (8, 4, 12));
-    assert_eq!(frame.rgba.len(), 12 * 4 * 4, "the buffer's own stride is kept");
+    assert_eq!(
+        frame.rgba.len(),
+        12 * 4 * 4,
+        "the buffer's own stride is kept"
+    );
     assert_eq!(frame.layers, 1);
     assert!(!frame.composite, "a one-layer capture is a pass-through");
     // The row padding is part of the pass-through, not the app's pixels.
@@ -623,7 +631,10 @@ fn layers_far_apart_are_clipped_to_the_display_not_a_huge_canvas() {
         (8, 8),
         "the canvas is the on-display layer, not the union with an off-display one"
     );
-    assert_eq!(frame.layers, 2, "both layers are considered, one draws nothing");
+    assert_eq!(
+        frame.layers, 2,
+        "both layers are considered, one draws nothing"
+    );
     assert_eq!(&frame.rgba[..4], &RED);
 }
 

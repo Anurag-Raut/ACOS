@@ -124,10 +124,7 @@ fn parse_aapt(output: &str) -> HashMap<u32, AaptResource> {
         if let Some(rest) = trimmed.strip_prefix("Parent=0x") {
             if let Some((_, value)) = &mut pending {
                 if let Some(bag) = &mut value.bag {
-                    let hex: String = rest
-                        .chars()
-                        .take_while(|c| c.is_ascii_hexdigit())
-                        .collect();
+                    let hex: String = rest.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
                     if let Ok(p) = u32::from_str_radix(&hex, 16) {
                         bag.0 = p;
                     }
@@ -152,10 +149,7 @@ fn parse_aapt(output: &str) -> HashMap<u32, AaptResource> {
 fn find_hex_after(s: &str, needle: &str) -> Option<u32> {
     let idx = s.find(needle)? + needle.len();
     let rest = &s[idx..];
-    let hex: String = rest
-        .chars()
-        .take_while(|c| c.is_ascii_hexdigit())
-        .collect();
+    let hex: String = rest.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
     u32::from_str_radix(&hex, 16).ok()
 }
 
@@ -175,7 +169,10 @@ fn differential_framework_res_values() {
         "DIFFERENTIAL framework-res: checked={} value_mismatches={} label_mismatches={} bag_mismatches={}",
         checked, v, l, b
     );
-    assert!(checked >= 500, "expected at least 500 sampled ids, got {checked}");
+    assert!(
+        checked >= 500,
+        "expected at least 500 sampled ids, got {checked}"
+    );
     assert_eq!(v, 0, "value mismatches");
     assert_eq!(l, 0, "config label mismatches");
     assert_eq!(b, 0, "bag structural mismatches");
@@ -197,7 +194,10 @@ fn differential_app_values() {
         "DIFFERENTIAL hello-views: checked={} value_mismatches={} label_mismatches={} bag_mismatches={}",
         checked, v, l, b
     );
-    assert!(checked >= 1, "expected at least one resource, got {checked}");
+    assert!(
+        checked >= 1,
+        "expected at least one resource, got {checked}"
+    );
     assert_eq!(v, 0, "value mismatches");
     assert_eq!(l, 0, "config label mismatches");
     assert_eq!(b, 0, "bag structural mismatches");
@@ -226,7 +226,10 @@ fn differential_apk(
 
     let mut by_type: BTreeMap<u8, Vec<u32>> = BTreeMap::new();
     for &id in aapt.keys() {
-        by_type.entry(((id >> 16) & 0xff) as u8).or_default().push(id);
+        by_type
+            .entry(((id >> 16) & 0xff) as u8)
+            .or_default()
+            .push(id);
     }
     let mut sample: Vec<u32> = Vec::new();
     for ids in by_type.values_mut() {
@@ -234,7 +237,11 @@ fn differential_apk(
         if per_type == usize::MAX {
             sample.extend(ids.iter().copied());
         } else {
-            sample.extend(ids.iter().step_by((ids.len() / per_type).max(1)).take(per_type));
+            sample.extend(
+                ids.iter()
+                    .step_by((ids.len() / per_type).max(1))
+                    .take(per_type),
+            );
         }
     }
     sample.sort_unstable();
@@ -277,8 +284,7 @@ fn differential_apk(
         }
 
         // (b) label set
-        let aapt_labels_owned: BTreeSet<String> =
-            aapt_res.by_label.keys().cloned().collect();
+        let aapt_labels_owned: BTreeSet<String> = aapt_res.by_label.keys().cloned().collect();
         let my_labels: BTreeSet<String> = mine.iter().map(|c| c.config_label.clone()).collect();
         if aapt_labels_owned != my_labels {
             label_mismatches += 1;
@@ -363,7 +369,12 @@ fn differential_device_config_selection() {
 
     let mut ids: Vec<u32> = aapt.keys().copied().collect();
     ids.sort_unstable();
-    let sample: Vec<u32> = ids.iter().step_by((ids.len() / 800).max(1)).take(800).copied().collect();
+    let sample: Vec<u32> = ids
+        .iter()
+        .step_by((ids.len() / 800).max(1))
+        .take(800)
+        .copied()
+        .collect();
     let mut checked = 0usize;
     let mut mismatches = 0usize;
     for id in sample {
@@ -388,9 +399,7 @@ fn differential_device_config_selection() {
             }
         }
     }
-    eprintln!(
-        "DIFFERENTIAL device selection: checked={checked} mismatches={mismatches}"
-    );
+    eprintln!("DIFFERENTIAL device selection: checked={checked} mismatches={mismatches}");
     assert!(checked >= 100, "expected at least 100 resolutions");
     assert_eq!(mismatches, 0, "device-config selection mismatches");
 }

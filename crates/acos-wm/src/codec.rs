@@ -1022,7 +1022,11 @@ impl InsetsState {
     pub fn visible_insets_for(&self, type_: i32) -> InsetsI {
         let d = self.display_frame;
         let mut out = InsetsI::default();
-        for s in self.sources.iter().filter(|s| s.type_ == type_ && s.visible) {
+        for s in self
+            .sources
+            .iter()
+            .filter(|s| s.type_ == type_ && s.visible)
+        {
             let f = s.frame;
             if f.top <= d.top && f.bottom < d.bottom {
                 out.top = out.top.max(f.bottom - d.top);

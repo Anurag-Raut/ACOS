@@ -115,6 +115,14 @@ pub enum FieldOp {
     /// field as `writeByte(0|1)` and only then the payload. Same body rule as
     /// [`FieldOp::Cond`].
     ByteCond(&'static [FieldOp]),
+    /// A conditional group whose presence marker is `writeBoolean` — the same
+    /// four-byte `0`/`1` int on the wire as [`FieldOp::Cond`], but a distinct
+    /// dex call, so the image scan tells them apart. The image's
+    /// `ClientTransaction.writeToParcel` guards its binder and its callback
+    /// list this way (MPROC6); a `false` marker writes **no** payload at all,
+    /// which MPROC5b measured on real ART (`proc-a-paused-or-stopped-under-b`
+    /// failed while the encoder wrote a binder and a `-1` list behind `false`).
+    BoolCond(&'static [FieldOp]),
     /// `Parcel.writePersistableBundle`: the same wire shape as [`FieldOp::Bundle`]
     /// (an int length, `-1` for null, then the `BaseBundle` map).
     PersistableBundle,
@@ -1032,20 +1040,33 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int, FieldOp::Str16],
         verification: Verification::Curated,
     },
-    // `android.app.servertransaction.ClientTransaction.writeToParcel`:
-    //   writeBoolean(mIsGlobal)
-    //   writeStrongBinder(mActivityToken)
-    //   writeParcelable(mLifecycleStateRequest)
-    //   writeBoolean(mIsReady)
-    //   writeParcelableList(mCallbacks)
+    // `android.app.servertransaction.ClientTransaction.writeToParcel`, from the
+    // **image's** bytecode (MPROC6, `dexdump -d` of
+    // `.cache/boot/android-34/dex/framework/classes.dex`):
+    //
+    // ```text
+    //   0x0000 iget-object v0, mActivityToken
+    //   0x0009 writeBoolean(v0 != null)              // writeActivityToken
+    //   0x000c if (v0 != null) writeStrongBinder(mActivityToken)
+    //   0x0015 writeParcelable(mLifecycleStateRequest, flags)
+    //   0x0018 iget-object v3, mActivityCallbacks
+    //   0x001e writeBoolean(v3 != null)              // writeActivityCallbacks
+    //   0x0021 if (v3 != null) writeParcelableList(mActivityCallbacks, flags)
+    // ```
+    //
+    // Both booleans are **presence flags**: this build has no `mIsGlobal` and no
+    // `mIsReady` field at all, and a null `mActivityCallbacks` (what the
+    // framework's own `obtain` leaves, and what ATMS sends for a
+    // lifecycle-only transaction) writes the `false` and then *nothing* — not a
+    // null list and not an empty one.
     ParcelableSpec {
         class: "android.app.servertransaction.ClientTransaction",
         fields: &[
-            FieldOp::Bool,
-            FieldOp::Binder,
+            FieldOp::BoolCond(&[FieldOp::Binder]), // mActivityToken != null
             FieldOp::Named("android.app.servertransaction.ActivityLifecycleItem"),
-            FieldOp::Bool,
-            FieldOp::ParcelableList("android.app.servertransaction.ClientTransactionItem"),
+            FieldOp::BoolCond(&[FieldOp::ParcelableList(
+                "android.app.servertransaction.ClientTransactionItem",
+            )]), // mActivityCallbacks != null
         ],
         verification: Verification::Full,
     },
@@ -1222,6 +1243,30 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // `PauseActivityItem.writeToParcel` (scanned from the **image's** framework
+    // dex, `.cache/boot/android-34/dex/framework`): mFinished, mUserLeaving,
+    // mConfigChanges, mDontReport, mAutoEnteringPip. `super.writeToParcel`
+    // (`ActivityLifecycleItem`/`ClientTransactionItem`) writes nothing.
+    ParcelableSpec {
+        class: "android.app.servertransaction.PauseActivityItem",
+        fields: &[
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Bool,
+            FieldOp::Bool,
+        ],
+        verification: Verification::Full,
+    },
+    // `StopActivityItem.writeToParcel`: one `writeInt(mConfigChanges)`. Textual
+    // the android-14.0.0_r75 source is identical, and the image scan agrees: the
+    // item has no `showWindow` on the wire (it is not a field of this image's
+    // build), so the host must not write one.
+    ParcelableSpec {
+        class: "android.app.servertransaction.StopActivityItem",
+        fields: &[FieldOp::Int],
+        verification: Verification::Full,
+    },
     // `ResumeActivityItem.writeToParcel`: mProcState, mUpdateProcState,
     // mIsForward, mShouldSendCompatFakeFocus.
     ParcelableSpec {
@@ -1235,12 +1280,52 @@ pub static SPECS: &[ParcelableSpec] = &[
         class: "android.app.servertransaction.ActivityRelaunchItem",
         fields: &[
             FieldOp::TypedList("android.app.ResultInfo"),
-            FieldOp::TypedList("android.content.Intent"),
+            FieldOp::TypedList("com.android.internal.content.ReferrerIntent"),
             FieldOp::Int, // mConfigChanges
             FieldOp::Typed("android.util.MergedConfiguration"),
             FieldOp::Bool, // mPreserveWindow
         ],
         verification: Verification::Full,
+    },
+    // MPROC6: the rest of the `ClientTransactionItem` / `ActivityLifecycleItem`
+    // family, in the image's `writeToParcel` order (the scanner's call list for
+    // each class is in `results/handoff/MPROC6/`). `PauseActivityItem` and
+    // `StopActivityItem` are above (MPROC5 added them; one spec per class).
+    //   DestroyActivityItem: mFinished, mConfigChanges.
+    ParcelableSpec {
+        class: "android.app.servertransaction.DestroyActivityItem",
+        fields: &[FieldOp::Bool, FieldOp::Int],
+        verification: Verification::Full,
+    },
+    //   ActivityResultItem: writeTypedList(mResultInfoList).
+    ParcelableSpec {
+        class: "android.app.servertransaction.ActivityResultItem",
+        fields: &[FieldOp::TypedList("android.app.ResultInfo")],
+        verification: Verification::Full,
+    },
+    //   NewIntentItem: mResume, writeTypedList(mIntents) — the elements are
+    //   `ReferrerIntent`s, not plain `Intent`s.
+    ParcelableSpec {
+        class: "android.app.servertransaction.NewIntentItem",
+        fields: &[
+            FieldOp::Bool,
+            FieldOp::TypedList("com.android.internal.content.ReferrerIntent"),
+        ],
+        verification: Verification::Full,
+    },
+    // `com.android.internal.content.ReferrerIntent.writeToParcel`: the
+    // `Splice`/`Intent` payload (no presence marker), then the referrer
+    // string. Curated rather than Full: the scanner's linear walk of a
+    // subclass that calls `Intent.writeToParcel` on itself records only the
+    // trailing `writeString`, so the order is pinned by the real-Java
+    // differential (`tests/client_transaction_java.rs`) instead.
+    ParcelableSpec {
+        class: "com.android.internal.content.ReferrerIntent",
+        fields: &[
+            FieldOp::Nested("android.content.Intent"),
+            FieldOp::Str16, // mReferrer
+        ],
+        verification: Verification::Curated,
     },
     // `android.window.ClientWindowFrames.writeToParcel`.
     ParcelableSpec {
@@ -1605,24 +1690,24 @@ pub static SPECS: &[ParcelableSpec] = &[
     ParcelableSpec {
         class: "android.net.LinkProperties",
         fields: &[
-            FieldOp::Str16,    // interface name
+            FieldOp::Str16,                                     // interface name
             FieldOp::ParcelableList("android.net.LinkAddress"), // link addresses
-            FieldOp::AddressList, // DNS servers
-            FieldOp::AddressList, // validated private DNS servers
-            FieldOp::Bool,     // usePrivateDns
-            FieldOp::Str16,    // privateDnsServerName
-            FieldOp::AddressList, // PCSCF servers
-            FieldOp::Str16,    // domains
-            FieldOp::ByteArray, // dhcp server address (null)
-            FieldOp::Int,      // mtu
-            FieldOp::Str16,    // tcpBufferSizes
-            FieldOp::ParcelableList("android.net.RouteInfo"), // routes
-            FieldOp::Byte,     // httpProxy presence marker
-            FieldOp::Str16,    // nat64Prefix (writeParcelable)
-            FieldOp::Int,      // stacked links (`writeList` count)
-            FieldOp::Bool,     // wakeOnLanSupported
-            FieldOp::Str16,    // captivePortalApiUrl (writeParcelable)
-            FieldOp::Str16,    // captivePortalData (writeParcelable)
+            FieldOp::AddressList,                               // DNS servers
+            FieldOp::AddressList,                               // validated private DNS servers
+            FieldOp::Bool,                                      // usePrivateDns
+            FieldOp::Str16,                                     // privateDnsServerName
+            FieldOp::AddressList,                               // PCSCF servers
+            FieldOp::Str16,                                     // domains
+            FieldOp::ByteArray,                                 // dhcp server address (null)
+            FieldOp::Int,                                       // mtu
+            FieldOp::Str16,                                     // tcpBufferSizes
+            FieldOp::ParcelableList("android.net.RouteInfo"),   // routes
+            FieldOp::Byte,                                      // httpProxy presence marker
+            FieldOp::Str16,                                     // nat64Prefix (writeParcelable)
+            FieldOp::Int,                                       // stacked links (`writeList` count)
+            FieldOp::Bool,                                      // wakeOnLanSupported
+            FieldOp::Str16, // captivePortalApiUrl (writeParcelable)
+            FieldOp::Str16, // captivePortalData (writeParcelable)
         ],
         verification: Verification::Full,
     },
@@ -1646,10 +1731,10 @@ pub static SPECS: &[ParcelableSpec] = &[
         class: "android.net.RouteInfo",
         fields: &[
             FieldOp::Named("android.net.IpPrefix"), // destination
-            FieldOp::ByteArray, // gateway (null for an on-link route)
-            FieldOp::Str16,     // mInterface
-            FieldOp::Int,       // mType (RTN_UNICAST = 1)
-            FieldOp::Int,       // mMtu
+            FieldOp::ByteArray,                     // gateway (null for an on-link route)
+            FieldOp::Str16,                         // mInterface
+            FieldOp::Int,                           // mType (RTN_UNICAST = 1)
+            FieldOp::Int,                           // mMtu
         ],
         verification: Verification::Full,
     },
@@ -1744,52 +1829,50 @@ pub static SPECS: &[ParcelableSpec] = &[
     ParcelableSpec {
         class: "android.app.Notification",
         fields: &[
-            FieldOp::Int,    // version (1)
-            FieldOp::Binder, // mAllowlistToken
-            FieldOp::Long,   // when
-            FieldOp::Long,   // creationTime
-            FieldOp::Cond(&[FieldOp::Icon]), // mSmallIcon
-            FieldOp::Int,    // number
-            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // contentIntent
-            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // deleteIntent
-            FieldOp::Cond(&[FieldOp::CharSequence]), // tickerText
-            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // tickerView
-            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // contentView
-            FieldOp::Cond(&[FieldOp::Icon]), // mLargeIcon
-            FieldOp::Int,    // defaults
-            FieldOp::Int,    // flags
-            FieldOp::Cond(&[FieldOp::Nested("android.net.Uri")]), // sound
-            FieldOp::Int,    // audioStreamType
+            FieldOp::Int,                                                       // version (1)
+            FieldOp::Binder,                                                    // mAllowlistToken
+            FieldOp::Long,                                                      // when
+            FieldOp::Long,                                                      // creationTime
+            FieldOp::Cond(&[FieldOp::Icon]),                                    // mSmallIcon
+            FieldOp::Int,                                                       // number
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]),     // contentIntent
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]),     // deleteIntent
+            FieldOp::Cond(&[FieldOp::CharSequence]),                            // tickerText
+            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]),    // tickerView
+            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]),    // contentView
+            FieldOp::Cond(&[FieldOp::Icon]),                                    // mLargeIcon
+            FieldOp::Int,                                                       // defaults
+            FieldOp::Int,                                                       // flags
+            FieldOp::Cond(&[FieldOp::Nested("android.net.Uri")]),               // sound
+            FieldOp::Int,                                                       // audioStreamType
             FieldOp::Cond(&[FieldOp::Nested("android.media.AudioAttributes")]), // audioAttributes
-            FieldOp::LongArray, // vibrate
-            FieldOp::Int,       // ledARGB
-            FieldOp::Int,       // ledOnMS
-            FieldOp::Int,       // ledOffMS
-            FieldOp::Int,       // iconLevel
-            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // fullScreenIntent
-            FieldOp::Int,       // priority
-            FieldOp::Str8,      // category
-            FieldOp::Str8,      // mGroupKey
-            FieldOp::Str8,      // mSortKey
-            FieldOp::Bundle,    // extras (android.title / android.text / ...)
+            FieldOp::LongArray,                                                 // vibrate
+            FieldOp::Int,                                                       // ledARGB
+            FieldOp::Int,                                                       // ledOnMS
+            FieldOp::Int,                                                       // ledOffMS
+            FieldOp::Int,                                                       // iconLevel
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]),     // fullScreenIntent
+            FieldOp::Int,                                                       // priority
+            FieldOp::Str8,                                                      // category
+            FieldOp::Str8,                                                      // mGroupKey
+            FieldOp::Str8,                                                      // mSortKey
+            FieldOp::Bundle, // extras (android.title / android.text / ...)
             FieldOp::TypedArray("android.app.Notification$Action"), // actions
             FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // bigContentView
             FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // headsUpContentView
-            FieldOp::Int, // visibility
+            FieldOp::Int,    // visibility
             FieldOp::Cond(&[FieldOp::Nested("android.app.Notification")]), // publicVersion
-            FieldOp::Int, // color
+            FieldOp::Int,    // color
             FieldOp::Cond(&[FieldOp::Str8]), // mChannelId
-            FieldOp::Long, // mTimeout
+            FieldOp::Long,   // mTimeout
             FieldOp::Cond(&[FieldOp::Str8]), // mShortcutId
             FieldOp::Cond(&[FieldOp::Nested("android.os.LocusId")]), // mLocusId
-            FieldOp::Int, // mBadgeIcon
+            FieldOp::Int,    // mBadgeIcon
             FieldOp::Cond(&[FieldOp::CharSequence]), // mSettingsText
-            FieldOp::Int, // mGroupAlertBehavior
-            FieldOp::Cond(&[FieldOp::Nested(
-                "android.app.Notification$BubbleMetadata",
-            )]), // mBubbleMetadata
-            FieldOp::Bool, // mAllowSystemGeneratedContextualActions
-            FieldOp::Int,  // mFgsDeferBehavior
+            FieldOp::Int,    // mGroupAlertBehavior
+            FieldOp::Cond(&[FieldOp::Nested("android.app.Notification$BubbleMetadata")]), // mBubbleMetadata
+            FieldOp::Bool,     // mAllowSystemGeneratedContextualActions
+            FieldOp::Int,      // mFgsDeferBehavior
             FieldOp::ArraySet, // allPendingIntents (ArraySet<PendingIntent>)
         ],
         verification: Verification::Full,
@@ -1915,7 +1998,7 @@ pub static SPECS: &[ParcelableSpec] = &[
     ParcelableSpec {
         class: "android.view.accessibility.AccessibilityWindowAttributes",
         fields: &[
-            FieldOp::CharSequence,              // mWindowTitle
+            FieldOp::CharSequence,                   // mWindowTitle
             FieldOp::Named("android.os.LocaleList"), // mLocales
         ],
         verification: Verification::Full,
@@ -2024,7 +2107,10 @@ fn write_audio_attributes(parcel: &mut Parcel, value: &Parcelable) -> Result<()>
     } else {
         let tags = expect_string_array(&values[5])?;
         let tags: Option<Vec<&str>> = tags.map(|items| {
-            items.iter().map(|item| item.as_deref().unwrap_or_default()).collect()
+            items
+                .iter()
+                .map(|item| item.as_deref().unwrap_or_default())
+                .collect()
         });
         parcel.write_string16_array(tags.as_deref())?;
     }
@@ -2033,9 +2119,14 @@ fn write_audio_attributes(parcel: &mut Parcel, value: &Parcelable) -> Result<()>
             parcel.write_int32(AUDIO_ATTR_NULL_BUNDLE);
             Ok(())
         }
-        Value::Cond { present: true, values } => {
+        Value::Cond {
+            present: true,
+            values,
+        } => {
             parcel.write_int32(AUDIO_ATTR_VALID_BUNDLE);
-            let Value::Bundle(bundle) = values.first().ok_or_else(|| bad("AudioAttributes bundle"))?
+            let Value::Bundle(bundle) = values
+                .first()
+                .ok_or_else(|| bad("AudioAttributes bundle"))?
             else {
                 return Err(bad("AudioAttributes bundle field is not a Bundle"));
             };
@@ -2290,8 +2381,28 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
             }
             Value::Cond { present, values }
         }
+        FieldOp::BoolCond(fields) => {
+            let present = parcel.read_bool()?;
+            let mut values = Vec::new();
+            if present {
+                for field in fields {
+                    values.push(read_field(*field, parcel)?);
+                }
+            }
+            Value::Cond { present, values }
+        }
         FieldOp::ByteCond(fields) => {
             let present = parcel.read_byte()? != 0;
+            let mut values = Vec::new();
+            if present {
+                for field in fields {
+                    values.push(read_field(*field, parcel)?);
+                }
+            }
+            Value::Cond { present, values }
+        }
+        FieldOp::BoolCond(fields) => {
+            let present = parcel.read_bool()?;
             let mut values = Vec::new();
             if present {
                 for field in fields {
@@ -2616,6 +2727,25 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             _ => return Err(bad(format!("expected parcelable list, got {value:?}"))),
         },
         FieldOp::Dynamic => write_dynamic(parcel, expect_dynamic(value)?)?,
+        FieldOp::BoolCond(fields) => {
+            let Value::Cond { present, values } = value else {
+                return Err(bad(format!("expected boolean conditional, got {value:?}")));
+            };
+            parcel.write_bool(*present);
+            if *present {
+                if values.len() != fields.len() {
+                    return Err(bad(format!(
+                        "boolean conditional expects {} fields, got {}",
+                        fields.len(),
+                        values.len()
+                    )));
+                }
+                for (field, value) in fields.iter().zip(values) {
+                    write_field(*field, parcel, value)?;
+                }
+            }
+            return Ok(());
+        }
         FieldOp::ByteCond(fields) => {
             let Value::Cond { present, values } = value else {
                 return Err(bad(format!("expected byte conditional, got {value:?}")));
@@ -2644,6 +2774,24 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
                 if values.len() != fields.len() {
                     return Err(bad(format!(
                         "conditional expects {} fields, got {}",
+                        fields.len(),
+                        values.len()
+                    )));
+                }
+                for (field, value) in fields.iter().zip(values) {
+                    write_field(*field, parcel, value)?;
+                }
+            }
+        }
+        FieldOp::BoolCond(fields) => {
+            let Value::Cond { present, values } = value else {
+                return Err(bad(format!("expected boolean conditional, got {value:?}")));
+            };
+            parcel.write_bool(*present);
+            if *present {
+                if values.len() != fields.len() {
+                    return Err(bad(format!(
+                        "boolean conditional expects {} fields, got {}",
                         fields.len(),
                         values.len()
                     )));
@@ -2710,10 +2858,7 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
                 );
                 for item in items {
                     let p = expect_parcelable(item)?;
-                    write_dynamic(
-                        parcel,
-                        &crate::value::DynamicValue::Parcelable(p.clone()),
-                    )?;
+                    write_dynamic(parcel, &crate::value::DynamicValue::Parcelable(p.clone()))?;
                 }
             }
             _ => return Err(bad(format!("expected an ArraySet value, got {value:?}"))),
@@ -2738,9 +2883,7 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
                 );
                 for item in items {
                     let Value::ByteArray(Some(addr)) = item else {
-                        return Err(bad(format!(
-                            "expected a byte-array address, got {item:?}"
-                        )));
+                        return Err(bad(format!("expected a byte-array address, got {item:?}")));
                     };
                     match addr.len() {
                         // `writeAddress`: the bytes, then (IPv6 only) whether a
@@ -2933,10 +3076,22 @@ pub mod val {
     pub const IBINDER: i32 = 15;
     /// `VAL_PARCELABLE`.
     pub const PARCELABLE: i32 = 4;
+
     /// `VAL_OBJECTARRAY` (`Parcel.writeArray(Object[])`).
     pub const OBJECTARRAY: i32 = 17;
     /// `VAL_LIST` (`Parcel.writeList`).
     pub const LIST: i32 = 11;
+
+    /// `VAL_SPARSEARRAY` (`writeValue` of a `SparseArray`).
+    ///
+    /// The image's build numbers this tag **12**, like the
+    /// `android-14.0.0_r75` source (`VAL_LIST` is 11 there; MPROC7's brief
+    /// called 12 "VAL_LIST", but the guest's `activityStopped` bundle shows the
+    /// sparse-array body: after the size the first word is an `int` key —
+    /// measured `0x1020012`, `android:id/content` — which is not a `writeValue`
+    /// type tag). The length word still validates the decode, so a body read
+    /// with the wrong shape fails structurally instead of desynchronising.
+    pub const SPARSEARRAY: i32 = 12;
 }
 
 /// Read a `writeBundle` payload.
@@ -3306,9 +3461,19 @@ fn read_intent_at(parcel: &mut Parcel, depth: usize) -> Result<Parcelable> {
         Value::StringList(Some(items))
     };
     let selector = read_nested_intent(parcel, depth)?;
-    if parcel.read_int32()? != 0 {
-        return Err(unsupported(CLIP_DATA_CLASS));
-    }
+    // MPROC1: a `writeTypedObject` ClipData marker may legitimately be present.
+    // `Instrumentation.execStartActivity` calls `Intent.migrateExtraStreamToClipData`,
+    // so the framework itself puts a ClipData on any `ACTION_SEND` text/image
+    // intent before the binder call — refusing it made every share unsupported.
+    // The payload is consumed field by field (the wire stays aligned for the
+    // fields after it) and not retained: no ACOS consumer reads `clipData`, and
+    // the SEND text is also in `EXTRA_TEXT`, which the capture records.
+    let clip_data = if parcel.read_int32()? != 0 {
+        read_clip_data(parcel)?;
+        Value::Parcelable(Parcelable::Null)
+    } else {
+        Value::Parcelable(Parcelable::Null)
+    };
     let content_user_hint = parcel.read_int32()?;
     let extras = Value::Bundle(read_bundle(parcel)?);
     let original = read_nested_intent(parcel, depth)?;
@@ -3325,12 +3490,102 @@ fn read_intent_at(parcel: &mut Parcel, depth: usize) -> Result<Parcelable> {
             source_bounds,
             categories,
             selector,
-            Value::Parcelable(Parcelable::Null),
+            clip_data,
             Value::Int(content_user_hint),
             extras,
             original,
         ],
     ))
+}
+
+/// Largest accepted `ClipData` item count (a bounded reader, never a guess).
+pub const MAX_CLIP_ITEMS: i32 = 256;
+
+/// Consume an `android.content.ClipData` payload (`writeToParcel` order, no
+/// marker: the `writeTypedObject` presence word is read by the caller).
+///
+/// The wire is:
+///
+/// ```text
+/// ClipDescription: CharSequence label, String16[] mimeTypes,
+///                  PersistableBundle extras, long timeStamp,
+///                  boolean isStyledText, int classificationStatus,
+///                  Bundle confidences
+/// int iconPresent   (1 = Bitmap follows — never produced for a text/URI clip)
+/// int itemCount
+///   per item: CharSequence text, String8 htmlText,
+///             TypedObject Intent, TypedObject IntentSender,
+///             TypedObject Uri, TypedObject ActivityInfo, TypedObject TextLinks
+/// ```
+///
+/// Everything a share/pick actually produces is decoded; the two shapes ACOS
+/// cannot decode (an icon `Bitmap`, a non-null `TextLinks`/`ActivityInfo`) are a
+/// structured `UNSUPPORTED_PARCELABLE` instead of a misaligned parcel.
+pub fn skip_clip_data(parcel: &mut Parcel) -> Result<()> {
+    read_clip_data(parcel)
+}
+
+fn read_clip_data(parcel: &mut Parcel) -> Result<()> {
+    // The shape is part of the structured error: "which ClipData field is not
+    // modelled" is what tells a caller whether their share can be captured.
+    let unsupported_shape = |what: &str| ServiceError::UnsupportedParcelable {
+        class: format!("{CLIP_DATA_CLASS} ({what})"),
+    };
+    // ClipDescription.writeToParcel: written inline (a direct call, no marker).
+    let _label = read_field(FieldOp::CharSequence, parcel)?;
+    let mime_count = parcel.read_int32()?;
+    if mime_count < 0 {
+        return Err(unsupported_shape("null mimeTypes"));
+    }
+    if mime_count > MAX_CLIP_ITEMS {
+        return Err(ServiceError::BadRequest {
+            interface: INTENT_CLASS.into(),
+            method: "readFromParcel".into(),
+            detail: format!("ClipData mime type count {mime_count} exceeds {MAX_CLIP_ITEMS}"),
+        });
+    }
+    for _ in 0..mime_count {
+        let _ = parcel.read_string16()?;
+    }
+    // `PersistableBundle mExtras`: the `writeBundle` shape (`-1` null, `0` the
+    // framework's empty fast path, else `[length][magic][count][entries]`).
+    let _ = read_bundle(parcel)?;
+    let _time_stamp = parcel.read_int64()?;
+    let _is_styled = parcel.read_bool()?;
+    let _classification_status = parcel.read_int32()?;
+    // `confidencesToBundle()`: a real Bundle (`writeBundle` shape).
+    let _ = read_bundle(parcel)?;
+    if parcel.read_int32()? != 0 {
+        return Err(unsupported_shape("icon (a Bitmap payload)"));
+    }
+    let items = parcel.read_int32()?;
+    if items < 0 {
+        return Err(unsupported_shape("null item list"));
+    }
+    if items > MAX_CLIP_ITEMS {
+        return Err(ServiceError::BadRequest {
+            interface: INTENT_CLASS.into(),
+            method: "readFromParcel".into(),
+            detail: format!("ClipData item count {items} exceeds {MAX_CLIP_ITEMS}"),
+        });
+    }
+    for _ in 0..items {
+        // `TextUtils.writeToParcel(item.mText, dest, flags)`: the same
+        // `CharSequence` shape the parcelable codec already decodes.
+        let _text = read_field(FieldOp::CharSequence, parcel)?;
+        let _html = parcel.read_string8()?;
+        // The item's four `writeTypedObject` slots on this image (the share
+        // sheet's own shape for `ACTION_SEND` text is "all null"). A non-null
+        // payload is a structured refusal, never a guessed skip: the slots are
+        // `Uri`/`Intent`/`IntentSender`/`ActivityInfo` for an item that carries
+        // a stream, and the capture target records the *text* SEND case.
+        for _ in 0..4 {
+            if parcel.read_int32()? != 0 {
+                return Err(unsupported_shape("non-null item payload"));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn read_nested_intent(parcel: &mut Parcel, depth: usize) -> Result<Value> {
@@ -3390,9 +3645,7 @@ pub fn write_parcelable_bundle(parcel: &mut Parcel, entries: &[(&str, &Parcelabl
         // `NetworkCallback` receives is made of.
         let dynamic = match value {
             Parcelable::Null => crate::value::DynamicValue::Null,
-            Parcelable::Ordered { .. } => {
-                crate::value::DynamicValue::Parcelable((*value).clone())
-            }
+            Parcelable::Ordered { .. } => crate::value::DynamicValue::Parcelable((*value).clone()),
             Parcelable::Fd(_) => {
                 return Err(bad("a bundle value cannot be a bare file descriptor"));
             }
@@ -3467,14 +3720,20 @@ fn dynamic_to_value(v: crate::value::DynamicValue) -> Value {
         D::IntArray(a) => Value::IntArray(a),
         D::LongArray(a) => Value::LongArray(a),
         D::StringArray(a) => Value::StringArray(a),
-        D::ObjectArray(items) => Value::ObjectArray(
-            items.map(|items| items.into_iter().map(dynamic_to_value).collect()),
-        ),
-        D::List(items) => Value::List(
-            items.map(|items| items.into_iter().map(dynamic_to_value).collect()),
-        ),
+        D::ObjectArray(items) => {
+            Value::ObjectArray(items.map(|items| items.into_iter().map(dynamic_to_value).collect()))
+        }
+        D::List(items) => {
+            Value::List(items.map(|items| items.into_iter().map(dynamic_to_value).collect()))
+        }
         D::Binder(b) => Value::Binder(b),
         D::Map(m) => Value::Map(Some(m)),
+        D::SparseArray(_) => {
+            // `Value` has no sparse-array variant: a decoded
+            // `VAL_SPARSEARRAY` is represented honestly as skipped when it has
+            // to become a `Value` (the `Bundle` reader above keeps the entries).
+            Value::Skipped
+        }
         D::Parcelable(p) => Value::Parcelable(p),
         D::Skipped { .. } => Value::Skipped,
     }
@@ -3497,14 +3756,26 @@ fn value_to_dynamic(v: &Value) -> Result<crate::value::DynamicValue> {
         Value::LongArray(a) => D::LongArray(a.clone()),
         Value::StringArray(a) => D::StringArray(a.clone()),
         Value::ObjectArray(items) => D::ObjectArray(
-            items.as_ref().map(|items| {
-                items.iter().map(value_to_dynamic).collect::<Result<Vec<_>>>()
-            }).transpose()?,
+            items
+                .as_ref()
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(value_to_dynamic)
+                        .collect::<Result<Vec<_>>>()
+                })
+                .transpose()?,
         ),
         Value::List(items) => D::List(
-            items.as_ref().map(|items| {
-                items.iter().map(value_to_dynamic).collect::<Result<Vec<_>>>()
-            }).transpose()?,
+            items
+                .as_ref()
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(value_to_dynamic)
+                        .collect::<Result<Vec<_>>>()
+                })
+                .transpose()?,
         ),
         Value::Binder(b) => D::Binder(*b),
         Value::Parcelable(p) | Value::TypedObject(p) | Value::NamedParcelable(p) => {
@@ -3628,9 +3899,7 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
         val::BYTE => D::Byte(parcel.read_byte()?),
         val::BYTEARRAY => D::ByteArray(parcel.read_byte_array()?),
         val::INTARRAY => D::IntArray(parcel.read_int32_array()?),
-        val::STRINGARRAY => {
-            D::StringArray(parcel.read_string16_array()?)
-        }
+        val::STRINGARRAY => D::StringArray(parcel.read_string16_array()?),
         // `VAL_LIST` is length-prefixed too (`isLengthPrefixed`, Parcel.java
         // 4914-4924): the length word precedes `writeList`'s size + element
         // `writeValue` payloads. The Bluetooth bonded-device result is one.
@@ -3720,6 +3989,26 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
             };
             check_value_length(parcel, declared, start, val::MAP)?;
             value
+        }
+        val::SPARSEARRAY => {
+            // `Parcel.writeSparseArray`: `writeInt(size)`, then for each entry
+            // `writeInt(key)` + `writeValue(value)`; the whole body is
+            // length-prefixed by `writeValue`.
+            let (declared, start) = read_value_length(parcel, val::SPARSEARRAY)?;
+            let size = parcel.read_int32()?;
+            let mut entries = Vec::new();
+            if size >= 0 {
+                // Guest-controlled count: an entry is at least 8 bytes (key +
+                // one value type tag), so never reserve more than the parcel
+                // can hold.
+                entries.reserve((size as usize).min(parcel.remaining() / 8));
+                for _ in 0..size {
+                    let key = parcel.read_int32()?;
+                    entries.push((key, read_dynamic(parcel)?));
+                }
+            }
+            check_value_length(parcel, declared, start, val::SPARSEARRAY)?;
+            D::SparseArray(entries)
         }
         val::BUNDLE => {
             let b = read_bundle(parcel)?;
@@ -3875,6 +4164,18 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
                 for (k, v) in entries {
                     write_dynamic(parcel, k)?;
                     write_dynamic(parcel, v)?;
+                }
+                Ok(())
+            })?;
+        }
+        D::SparseArray(entries) => {
+            write_value_length_prefixed(parcel, val::SPARSEARRAY, |parcel| {
+                parcel.write_int32(
+                    i32::try_from(entries.len()).map_err(|_| bad("VAL_SPARSEARRAY too large"))?,
+                );
+                for (key, value) in entries {
+                    parcel.write_int32(*key);
+                    write_dynamic(parcel, value)?;
                 }
                 Ok(())
             })?;
@@ -4225,6 +4526,7 @@ pub fn verify_prefix(spec: &ParcelableSpec, scanned: &ScannedWrite) -> (usize, u
 
 fn field_matches(field: FieldOp, call: &str) -> bool {
     match field {
+        FieldOp::BoolCond(_) => call == "writeBoolean",
         FieldOp::Int => call == "writeInt",
         FieldOp::Long => call == "writeLong",
         FieldOp::Float => call == "writeFloat",
@@ -4271,6 +4573,7 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         // linear scanner, so only the marker can be verified.
         FieldOp::Cond(_) => call == "writeInt",
         FieldOp::ByteCond(_) => call == "writeByte",
+        FieldOp::BoolCond(_) => call == "writeBoolean",
         FieldOp::CountedTyped(_) => call == "writeInt",
         // `DisplayCutout$ParcelableWrapper.writeCutoutToParcel` is a static
         // helper, which the scanner records as a nested `writeToParcel` call.
@@ -4311,6 +4614,20 @@ fn field_consumes(field: FieldOp, calls: &[String]) -> usize {
         return 0;
     };
     match field {
+        FieldOp::BoolCond(inner) => {
+            if first != "writeBoolean" {
+                return 0;
+            }
+            let mut n = 1;
+            for f in inner {
+                let c = field_consumes(*f, &calls[n..]);
+                if c == 0 {
+                    return n;
+                }
+                n += c;
+            }
+            n
+        }
         FieldOp::Cond(inner) => {
             if first != "writeInt" {
                 return 0;
@@ -4327,6 +4644,20 @@ fn field_consumes(field: FieldOp, calls: &[String]) -> usize {
         }
         FieldOp::ByteCond(inner) => {
             if first != "writeByte" {
+                return 0;
+            }
+            let mut n = 1;
+            for f in inner {
+                let c = field_consumes(*f, &calls[n..]);
+                if c == 0 {
+                    return n;
+                }
+                n += c;
+            }
+            n
+        }
+        FieldOp::BoolCond(inner) => {
+            if first != "writeBoolean" {
                 return 0;
             }
             let mut n = 1;

@@ -365,7 +365,9 @@ fn rejected(detail: impl Into<String>) -> ServiceError {
 }
 
 fn state_of(state: &Arc<Mutex<BluetoothState>>) -> std::sync::MutexGuard<'_, BluetoothState> {
-    state.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// `Parcel.writeString(address)` + `Parcel.writeInt(addressType)` in a
@@ -445,7 +447,8 @@ fn result_receiver(data: &acos_parcel::Parcel) -> Option<u64> {
 /// name).
 fn result_delivery(target: u64, value: DynamicValue) -> Option<PendingDelivery> {
     let mut data = acos_parcel::Parcel::new();
-    data.write_interface_token(RESULT_RECEIVER_DESCRIPTOR).ok()?;
+    data.write_interface_token(RESULT_RECEIVER_DESCRIPTOR)
+        .ok()?;
     data.write_int32(1); // `Result` is a present typed object
     parcelable::write_dynamic(&mut data, &value).ok()?;
     parcelable::write_dynamic(&mut data, &DynamicValue::Null).ok()?;
@@ -666,9 +669,7 @@ impl ServiceObject for AdapterService {
                 match code {
                     ADAPTER_GET_STATE => {
                         let answer = if state.on { STATE_ON } else { STATE_OFF };
-                        if let Some(delivery) =
-                            result_delivery(target, DynamicValue::Int(answer))
-                        {
+                        if let Some(delivery) = result_delivery(target, DynamicValue::Int(answer)) {
                             self.queued.push(delivery);
                         }
                     }
@@ -773,7 +774,9 @@ fn parse_address(text: &str) -> Result<String> {
 
 fn parse_devices(value: &Value) -> Result<Vec<ScriptedDevice>> {
     let Some(items) = value.as_array() else {
-        return Err(rejected("devices must be an array of {address, name, rssi?}"));
+        return Err(rejected(
+            "devices must be an array of {address, name, rssi?}",
+        ));
     };
     items
         .iter()
@@ -897,7 +900,9 @@ impl Module for BluetoothModule {
 
     fn control(&mut self, host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         let Some(shared) = self.state.as_ref().cloned() else {
-            return Err(rejected(format!("module is off, so {op:?} was not applied")));
+            return Err(rejected(format!(
+                "module is off, so {op:?} was not applied"
+            )));
         };
         match op {
             "state" => Ok(state_of(&shared).to_json()),
@@ -910,10 +915,9 @@ impl Module for BluetoothModule {
                 };
                 if let Some((now_state, previous_state)) = state_changed(previous, now) {
                     let mut intent = IntentFacts::action(ACTION_STATE_CHANGED);
-                    intent.extras.insert(
-                        EXTRA_STATE.to_string(),
-                        crate::ams::Extra::Int(now_state),
-                    );
+                    intent
+                        .extras
+                        .insert(EXTRA_STATE.to_string(), crate::ams::Extra::Int(now_state));
                     intent.extras.insert(
                         EXTRA_PREVIOUS_STATE.to_string(),
                         crate::ams::Extra::Int(previous_state),
@@ -924,8 +928,7 @@ impl Module for BluetoothModule {
                     let mut delivered = 0;
                     for callback in callbacks {
                         let mut data = acos_parcel::Parcel::new();
-                        data.write_interface_token(MANAGER_CALLBACK_DESCRIPTOR)
-                            .ok();
+                        data.write_interface_token(MANAGER_CALLBACK_DESCRIPTOR).ok();
                         let code = if now {
                             CALLBACK_SERVICE_UP
                         } else {
@@ -1010,13 +1013,12 @@ impl Module for BluetoothModule {
                     // `ClassCastException` warning.
                     intent.extras.insert(
                         EXTRA_RSSI.to_string(),
-                        crate::ams::Extra::Short(
-                            i16::try_from(device.rssi).unwrap_or(i16::MAX),
-                        ),
+                        crate::ams::Extra::Short(i16::try_from(device.rssi).unwrap_or(i16::MAX)),
                     );
                     matched += host.broadcast_intent(&intent)?;
                 }
-                matched += host.broadcast_intent(&IntentFacts::action(ACTION_DISCOVERY_FINISHED))?;
+                matched +=
+                    host.broadcast_intent(&IntentFacts::action(ACTION_DISCOVERY_FINISHED))?;
                 state_of(&shared).discovering = false;
                 Ok(json!({
                     "devices": devices.iter().map(device_json).collect::<Vec<_>>(),

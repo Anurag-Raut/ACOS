@@ -183,10 +183,7 @@ fn an_arm64_only_apk_is_structured_unsupported_abi() {
             assert_eq!(available, vec!["arm64-v8a", "armeabi-v7a"]);
             assert_eq!(
                 sample,
-                vec![
-                    "lib/arm64-v8a/libfoo.so",
-                    "lib/armeabi-v7a/libfoo.so"
-                ]
+                vec!["lib/arm64-v8a/libfoo.so", "lib/armeabi-v7a/libfoo.so"]
             );
             // The message names the host ABI and every ABI the APK does ship; the
             // `UNSUPPORTED_ABI` code itself is the variant (and the launcher's

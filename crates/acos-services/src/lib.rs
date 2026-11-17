@@ -43,14 +43,15 @@ pub mod a11y_bind; // MODA11Y2: system -> app AccessibilityService bind
 pub mod a11y_config; // MODA11Y6: <accessibility-service> meta-data -> capabilities
 pub mod a11y_native; // MODA11YNATIVE: gesture steps + HardwareBuffer payloads
 pub mod ams;
-pub mod apk_facts; // PERF-REL3b: one APK open per launch facts set (manifest, budget)
 pub mod animation;
+pub mod apk_facts; // PERF-REL3b: one APK open per launch facts set (manifest, budget)
 pub mod atms;
+pub mod client_transaction; // MPROC6: host-built launch transactions (ADR-0029)
 pub mod clipboard;
 pub mod codec;
+pub mod compositor_client;
 pub mod connectivity; // NET1: IConnectivityManager default network + callbacks
 pub mod core_module; // ADR-0029: today's registrations as the always-attached `core` module
-pub mod compositor_client;
 pub mod cursor;
 pub mod declared;
 pub mod display;
@@ -64,14 +65,15 @@ pub mod ime;
 pub mod ime_wire;
 pub mod input;
 pub mod input_channel;
+pub mod intents;
 pub mod keychars; // W16: stock KeyCharacterMap (KCM) -> native parcel
 pub mod manifest_resolve; // W27: MAIN/LAUNCHER resolution incl. <activity-alias>
 pub mod misc;
 pub mod module;
-pub mod netd; // the relay's control surface: protocol, client, `acos_net`'s schema
 pub mod modules; // ADR-0029: the shipped non-core modules
-pub mod network; // ADR-0029/NET5: which network profile this session attached
 pub mod native_libs; // W17: APK x86_64 libs -> per-run nativeLibraryDir
+pub mod netd; // the relay's control surface: protocol, client, `acos_net`'s schema
+pub mod network; // ADR-0029/NET5: which network profile this session attached
 pub mod parcelable;
 pub mod pending_intent; // MODNOTIF4: PendingIntent sender records + the IIntentSender nodes
 pub mod permissions; // MODNOTIF2: the one runtime-permission table
@@ -87,10 +89,10 @@ pub mod window_session;
 pub mod wms;
 
 pub use error::{codes, Result, ServiceError};
+pub use host::{CallResult, PendingDelivery, ServiceHost, ServiceObject, Wiring};
 pub use module::{
     Module, ModuleConfig, ModuleManifest, ModuleRegistry, ModuleReport, ModuleSpec, Profile,
 };
-pub use host::{CallResult, PendingDelivery, ServiceHost, ServiceObject, Wiring};
 pub use parcelable::{FieldOp, ParcelableSpec, Verification};
 pub use value::{Bundle, Parcelable, Value};
 

@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 
 use acos_parcel::binder::BinderId;
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, ServiceObject};
 use crate::value::Value;
 
@@ -176,7 +176,12 @@ impl ClipboardService {
 }
 
 impl ServiceObject for ClipboardService {
-    fn call(&mut self, interface: &str, method: &acos_aidl::MethodInfo, args: &[Value]) -> Result<CallResult> {
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &acos_aidl::MethodInfo,
+        args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "android.content.IClipboard" {
             return Err(unsupported(interface, method));
         }
@@ -225,10 +230,13 @@ impl ServiceObject for ClipboardService {
                 vec![Value::Bool(state.access_notifications)]
             }
             "setClipboardAccessNotificationsEnabledForUser" => {
-                state.access_notifications = args.first().and_then(|v| match v {
-                    Value::Bool(b) => Some(*b),
-                    _ => None,
-                }).unwrap_or(false);
+                state.access_notifications = args
+                    .first()
+                    .and_then(|v| match v {
+                        Value::Bool(b) => Some(*b),
+                        _ => None,
+                    })
+                    .unwrap_or(false);
                 Vec::new()
             }
             // Needs the real `ClipData` reader; handled on the wire path.

@@ -114,9 +114,9 @@ fn next_nonce() -> u64 {
 /// disabled cache, not a launch error.
 #[must_use]
 pub fn from_env() -> Option<BootImageCache> {
-    if std::env::var("ACOS_NO_BOOT_CACHE").is_ok_and(|v| {
-        v == "1" || v.eq_ignore_ascii_case("on") || v.eq_ignore_ascii_case("true")
-    }) {
+    if std::env::var("ACOS_NO_BOOT_CACHE")
+        .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("on") || v.eq_ignore_ascii_case("true"))
+    {
         return None;
     }
     if std::env::var("ACOS_BOOT_CACHE").is_ok_and(|v| v == "0" || v.eq_ignore_ascii_case("off")) {
@@ -468,10 +468,11 @@ fn decode(expected_key: u64, mut buf: Vec<u8>) -> LoadResult {
     if payload_len > MAX_IMAGE_BYTES {
         return LoadResult::Invalid(format!("payload length {payload_len} exceeds cap"));
     }
-    let Some(total) = HEADER_LEN
-        .checked_add(version_len)
-        .and_then(|n| usize::try_from(payload_len).ok().and_then(|p| n.checked_add(p)))
-    else {
+    let Some(total) = HEADER_LEN.checked_add(version_len).and_then(|n| {
+        usize::try_from(payload_len)
+            .ok()
+            .and_then(|p| n.checked_add(p))
+    }) else {
         return LoadResult::Invalid("length overflow".to_string());
     };
     if buf.len() != total {

@@ -32,7 +32,10 @@ struct ThreadStart {
 
 extern "C" {
     #[link_name = "pthread_attr_getdetachstate"]
-    fn host_pthread_attr_getdetachstate(attr: *const libc::pthread_attr_t, state: *mut c_int) -> c_int;
+    fn host_pthread_attr_getdetachstate(
+        attr: *const libc::pthread_attr_t,
+        state: *mut c_int,
+    ) -> c_int;
     #[link_name = "pthread_getattr_np"]
     fn host_pthread_getattr_np(thread: libc::pthread_t, attr: *mut libc::pthread_attr_t) -> c_int;
 }
@@ -188,11 +191,7 @@ table!(cond_attrs, CondAttrMap, libc::pthread_condattr_t);
 const MAX_TABLE_ENTRIES: usize = 1 << 16;
 
 /// Insert-or-get for a boxed pthread object, bounded by [`MAX_TABLE_ENTRIES`].
-fn bounded_boxed<T, M>(
-    map: &Mutex<M>,
-    guest: usize,
-    make: impl FnOnce() -> Box<T>,
-) -> *mut T
+fn bounded_boxed<T, M>(map: &Mutex<M>, guest: usize, make: impl FnOnce() -> Box<T>) -> *mut T
 where
     M: BoxMap<T>,
 {
@@ -211,11 +210,7 @@ where
 
 /// Insert for a `Copy` pthread attribute state, bounded by
 /// [`MAX_TABLE_ENTRIES`].
-fn bounded_copy<T: Copy>(
-    map: &Mutex<HashMap<usize, T>>,
-    guest: usize,
-    value: T,
-) {
+fn bounded_copy<T: Copy>(map: &Mutex<HashMap<usize, T>>, guest: usize, value: T) {
     let mut m = map.lock().unwrap_or_else(|e| e.into_inner());
     if !m.contains_key(&guest) && m.len() >= MAX_TABLE_ENTRIES {
         if let Some(&old) = m.keys().next() {
@@ -267,7 +262,9 @@ fn bionic_static_mutex_type(guest: usize) -> c_int {
 }
 
 fn mutex_ptr(guest: usize) -> *mut libc::pthread_mutex_t {
-    bounded_boxed(mutexes(), guest, || host_mutex(bionic_static_mutex_type(guest)))
+    bounded_boxed(mutexes(), guest, || {
+        host_mutex(bionic_static_mutex_type(guest))
+    })
 }
 
 fn cond_ptr(guest: usize) -> *mut libc::pthread_cond_t {
@@ -758,7 +755,8 @@ pub unsafe extern "C" fn pthread_once(
 ) -> c_int {
     match init {
         Some(f) => {
-            let safe: extern "C" fn() = std::mem::transmute::<unsafe extern "C" fn(), extern "C" fn()>(f);
+            let safe: extern "C" fn() =
+                std::mem::transmute::<unsafe extern "C" fn(), extern "C" fn()>(f);
             #[cfg(target_os = "android")]
             let rc = libc::pthread_once(once, Some(safe));
             #[cfg(not(target_os = "android"))]
@@ -814,8 +812,16 @@ pub fn install(m: &mut HashMap<&'static str, Shim>) {
     shim!(m, "pthread_rwlock_unlock", pthread_rwlock_unlock);
     shim!(m, "pthread_attr_init", pthread_attr_init);
     shim!(m, "pthread_attr_destroy", pthread_attr_destroy);
-    shim!(m, "pthread_attr_setdetachstate", pthread_attr_setdetachstate);
-    shim!(m, "pthread_attr_getdetachstate", pthread_attr_getdetachstate);
+    shim!(
+        m,
+        "pthread_attr_setdetachstate",
+        pthread_attr_setdetachstate
+    );
+    shim!(
+        m,
+        "pthread_attr_getdetachstate",
+        pthread_attr_getdetachstate
+    );
     shim!(m, "pthread_attr_setstacksize", pthread_attr_setstacksize);
     shim!(m, "pthread_attr_getstacksize", pthread_attr_getstacksize);
     shim!(m, "pthread_attr_setguardsize", pthread_attr_setguardsize);
@@ -1016,10 +1022,7 @@ mod tests {
             let mut size: usize = 0;
             assert_eq!(pthread_attr_getstack(ap, &mut base, &mut size), 0);
             assert!(!base.is_null(), "stack base must be set");
-            assert!(
-                size >= 16 * 1024,
-                "stack size must be usable, got {size}"
-            );
+            assert!(size >= 16 * 1024, "stack size must be usable, got {size}");
             // The reported region must contain this function's own frame.
             let marker = 0u8;
             let sp = std::ptr::addr_of!(marker) as usize;
@@ -1038,7 +1041,11 @@ mod tests {
         let marker = 0u8;
         let sp = std::ptr::addr_of!(marker) as usize;
         let lo = base as usize;
-        assert!(sp >= lo && sp < lo + len, "sp {sp:#x} outside [{lo:#x},{:#x})", lo + len);
+        assert!(
+            sp >= lo && sp < lo + len,
+            "sp {sp:#x} outside [{lo:#x},{:#x})",
+            lo + len
+        );
         assert!(len > 16 * 1024, "stack region too small: {len}");
     }
 
