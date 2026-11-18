@@ -350,6 +350,7 @@ dependencies = [
  "acos-apk",
  "acos-protocol",
  "acos-runtime",
+ "acos-test-support",
  "acos-vm",
  "png 0.17.16",
  "regex",
