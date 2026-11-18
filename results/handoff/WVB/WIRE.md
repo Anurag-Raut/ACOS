@@ -184,7 +184,7 @@ DevTools taps `density` times too far right and down).
 |---|---|---|
 | `hello` | `{proto:1, client:"acos-webview/<ver>", session?:string}` | `{proto:1, session:"<opaque>", broker:{build,pid}, engine:{product, version, revision, protocolVersion, userAgent}, limits:{maxViews, maxFrameBytes}}` |
 | `ping` | `{}` | `{pong:true, engineMs:number}` |
-| `engineStatus` | `{}` | `{state:"up"\|"restarting"\|"down", restarts:int, build:string, engine:{…}, idleShutdownInMs:int\|null}` |
+| `engineStatus` | `{}` | `{state:"up"\|"restarting"\|"down", restarts:int, build:string, engine:{pid:int, product, version, …}, idleShutdownInMs:int\|null}` |
 | `memory` | `{detail?:bool}` | `{engine:{pssMiB,rssMiB,processes:n}, contexts:n, targets:n, blobBytes:n}` |
 
 ### 4.2 Views
