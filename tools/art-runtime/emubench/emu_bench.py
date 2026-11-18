@@ -691,6 +691,9 @@ class Bench:
             time.sleep(0.4)
             inst.force_stop(COUNTER_PKG)
             inst.pm_clear(COUNTER_PKG)
+            pre = self.launcher.get(inst.serial)
+            if pre is None:
+                pre = self.capture_launcher(inst)
             r = launch_to_frame(inst, COUNTER_ACT, pre)
             t = inst.adb.tree()
             cnt = p6.count_text(t["nodes"])
@@ -786,6 +789,9 @@ class Bench:
         try:
             inst.force_stop(COUNTER_PKG)
             inst.pm_clear(COUNTER_PKG)
+            pre = self.launcher.get(inst.serial)
+            if pre is None:
+                pre = self.capture_launcher(inst)
             r = launch_to_frame(inst, COUNTER_ACT, pre)
             detail["am_start_ms"] = r["am_start_ms"]
             detail["launch_ms"] = r["frame_ms"]
