@@ -1,0 +1,92 @@
+# MERGE040H: `network:real` + `net.wifi:scripted` together (the combined arm).
+# Feature and service agree: FEATURE_WIFI comes from net.wifi, WifiManager is present,
+# and the default network is the relay's validated one. Derived from MODFILL: `net.wifi` at `scripted` — a real WifiManager/ConnectivityManager app.
+#
+# Honest expectations (each line is a value the framework returned):
+#   * the SSID/BSSID/RSSI/frequency/link speed are what the launch config
+#     scripted; nothing is measured (the module's report says so);
+#   * `setWifiEnabled(false)` is refused (`false`) for a target-34 app exactly as
+#     on a phone, state unchanged;
+#   * the default network is consistent with the radio: `disconnect` -> NetworkCallback
+#     `onLost`, `getActiveNetwork()` null; `connect` -> `onAvailable`; Wi-Fi off ->
+#     lost; and the network is never VALIDATED and DhcpInfo is zero because the
+#     `network` module is not attached (no fake connectivity).
+version: 1
+name: modfill-wifi-network-real
+description: >-
+  net.wifi scripted: WifiInfo/ScanResult parcels read by WifiManager, WIFI_STATE_CHANGED /
+  STATE_CHANGE / RSSI_CHANGED / SCAN_RESULTS broadcasts, ScanResultsCallback, and the
+  default-network NetworkCallback loss/availability driven by control ops.
+app: ../fixtures/build/apps/wifi-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+needs_env: [pasta]
+expectation_reason: >-
+  network:real needs the pinned host pasta binary (ADR-0030).
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+services:
+  - id: network
+    profile: real
+  - id: net.wifi
+    profile: scripted
+    config:
+      ssid: Office
+      bssid: "aa:bb:cc:dd:ee:01"
+      rssi: -48
+      frequency: 2437
+      link_speed: 72
+      networks:
+        - {ssid: Office, bssid: "aa:bb:cc:dd:ee:01", rssi: -48, frequency: 2437}
+        - {ssid: Guest, bssid: "aa:bb:cc:dd:ee:02", rssi: -81, frequency: 2462, capabilities: "[ESS]"}
+steps:
+  - launch:
+      activity: dev.acos.fixtures.wifiprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY wifi=present"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Info"}}
+  - wait_for:
+      selector: {text: {contains: "INFO enabled=true state=3 ssid=\"Office\" bssid=aa:bb:cc:dd:ee:01 rssi=-48 freq=2437 speed=72 netid=0 supp=COMPLETED level=4 5ghz=false"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Listen"}}
+  - wait_for:
+      selector: {text: {contains: "LISTEN registered"}}
+      timeout_ms: 20000
+  # The default-network callback registered on the associated network.
+  - wait_for:
+      selector: {text: {contains: "NETCB available"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "NETCB caps wifi=true validated=true"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Toggle"}}
+  - wait_for:
+      selector: {text: {contains: "TOGGLE accepted=false enabled=true"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Net"}}
+  - wait_for:
+      selector: {text: {contains: "NET active=true wifi=true validated=true"}}
+      timeout_ms: 20000
+  # network:real is attached -> the lease is the session's own (non-zero), not invented.
+  - tap:
+      selector: {text: {exact: "Dhcp"}}
+  - wait_for:
+      selector: {text: {regex: "DHCP ip=[1-9][0-9]* gateway=[1-9][0-9]* dns1=[1-9][0-9]* lease=[1-9][0-9]*"}}
+      timeout_ms: 20000

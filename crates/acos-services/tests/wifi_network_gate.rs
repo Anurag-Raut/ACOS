@@ -103,3 +103,18 @@ fn wifi_never_contradicts_the_network_module() {
         network::clear();
     }
 }
+
+/// MERGE040H: a declared feature implies its service. `android.hardware.wifi`
+/// is published by `net.wifi` only (the service owner); `network` publishes no
+/// Wi-Fi feature, so `network` alone never yields a null `WifiManager`.
+#[test]
+fn the_wifi_feature_is_published_only_by_the_module_that_serves_wifi() {
+    let registry = ModuleRegistry::standard();
+    let owners: Vec<&str> = registry
+        .manifests()
+        .into_iter()
+        .filter(|m| m.features.contains(&"android.hardware.wifi"))
+        .map(|m| m.id)
+        .collect();
+    assert_eq!(owners, vec!["net.wifi"], "only net.wifi declares FEATURE_WIFI");
+}

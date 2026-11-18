@@ -126,7 +126,10 @@ fn manifest_ref() -> &'static ModuleManifest {
         }],
         replaces: &["connectivity"],
         process_initializers: &[],
-        features: &["android.hardware.wifi"],
+        // No features: `android.hardware.wifi` implies the `wifi` service, which
+        // only `net.wifi` serves. A phone that declares the feature has the
+        // service, so the feature belongs to `net.wifi` alone.
+        features: &[],
         providers: &[],
         broadcasts: &[],
         windows: &[],

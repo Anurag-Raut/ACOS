@@ -1,0 +1,66 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 18235392,
+    "wall_ms": 8566
+  },
+  "ok": true,
+  "request_id": "req_131b13_18e91b81c2390fe0",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-bcbcf8cf-75ebebb6d75992a3/results/handoff/MERGE040H/evidence/modfill-clipboard",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794995538752211045,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-bcbcf8cf-75ebebb6d75992a3/fixtures/build/apps/clip-probe.apk",
+        "sha256": "c3229a084bd8d18dd20bc3812b6e75abbd06060a78784d8a7d107f5a2a0ba0cb",
+        "sha256_12": "c3229a084bd8",
+        "size_bytes": 16787
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794995465266858624,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-bcbcf8cf-75ebebb6d75992a3/scenarios/modfill-clipboard.yaml",
+        "sha256": "e52076b3300baadc7d5119984052a9473ad94ccc70d04737370b972f30d9b268",
+        "sha256_12": "e52076b3300b",
+        "size_bytes": 4425
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-bcbcf8cf-75ebebb6d75992a3/results/handoff/MERGE040H/evidence/modfill-clipboard/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_clip-probe",
+  "status": "pass"
+}
