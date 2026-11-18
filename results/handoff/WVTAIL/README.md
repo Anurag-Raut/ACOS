@@ -286,16 +286,18 @@ re-create its views) recovers.
 
 ## 5. `cargo test -p acos-art -p acos-webview -p acos-services`
 
-`.cache/logs/test-art-services.log`, `-p acos-webview` run separately:
+`evidence/cargo-test-webview-art-services.log` — **941 passed, 0 failed** (105
+test targets, one `#[ignore]` that was already there):
 
 ```
-acos-webview: lib 25 passed (incl. 4 gate + 4 session tests); every integration
-              target green; the engine-dependent ones skip without ACOS_WEBVIEW_TEST=1
-acos-art:     all targets green
+acos-webview:  lib 25 passed (incl. the 4 gate and 4 session tests); every
+               integration target green; the engine-dependent ones skip without
+               ACOS_WEBVIEW_TEST=1 (fair_pulls was run separately with it, see 3.4)
+acos-art:      all targets green
 acos-services: all targets green; `--test apk_facts_cache` needs the dogfood APKs
-              (`tools/build-dogfood-apps.sh`) and passes after building them —
-              measured, and the same caveat WVTAP recorded
-fair_pulls:   4 arms pass against the real engine (with ACOS_WEBVIEW_TEST=1)
+               (`tools/build-dogfood-apps.sh`) — without them it fails with
+               `dialogs-menus.apk: No such file or directory`, as WVTAP recorded;
+               with them it passes (this run is after both fixture scripts)
 ```
 
 No test was weakened, ignored or removed. The one assertion that changed,
@@ -356,6 +358,8 @@ results/handoff/WVTAIL/
   evidence/probe20/          webview-probe 20/20
   evidence/regress/          a11y-probe 2/2
   evidence/host-fair/        fair_pulls.json (4 arms, inputMaxWaitMs 37-79 ms)
+  evidence/cargo-test-webview-art-services.log
+                             941 passed / 0 failed for the three crates
 ```
 
 Frame PNGs and the per-run `frames/` trees were pruned after the fact (as
