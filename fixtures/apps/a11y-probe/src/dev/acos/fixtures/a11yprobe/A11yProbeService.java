@@ -389,8 +389,9 @@ public class A11yProbeService extends AccessibilityService {
                 // gralloc-less guest. Either outcome is a *defined* one now —
                 // a bitmap with its geometry, or a Java exception — and the
                 // run must never crash here.
+                Bitmap wrapped = null;
                 try {
-                    Bitmap wrapped = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
+                    wrapped = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
                     if (wrapped == null) {
                         Log.i(TAG, "wrap_hardware_buffer result=null");
                     } else {
@@ -399,7 +400,6 @@ public class A11yProbeService extends AccessibilityService {
                                 + " config=" + wrapped.getConfig());
                         Log.i(TAG, "wrap_hardware_buffer allocation="
                                 + wrapped.getAllocationByteCount());
-                        wrapped.recycle();
                     }
                 } catch (Throwable failure) {
                     Log.i(TAG, "wrap_hardware_buffer error="
@@ -412,6 +412,19 @@ public class A11yProbeService extends AccessibilityService {
                 // here, and the compositor frame it points at is asserted
                 // host-side. Logged, not silently skipped.
                 Log.i(TAG, "screenshot_pixel unavailable=hardware_bitmap_needs_egl");
+                // GLSPIKE: with a software GLES provider staged
+                // (`ACOS_GUEST_GLES=<tag>`, see crates/acos-art/src/gles.rs)
+                // the guest's own libEGL can find a driver, so the two GL-only
+                // paths become reachable: drawing a wrapped HARDWARE bitmap and
+                // decoding a PNG straight into `Bitmap.Config.HARDWARE`. Both
+                // are reported per draw (a HARDWARE bitmap with no driver
+                // aborts in libEGL, which no `catch` can see). Gated on the
+                // property the launcher sets with the flag, so the default arm
+                // is byte-for-byte the old behaviour: one skip line.
+                probeHardwareDraws(wrapped);
+                if (wrapped != null) {
+                    wrapped.recycle();
+                }
                 buffer.close();
             }
 
@@ -577,5 +590,228 @@ public class A11yProbeService extends AccessibilityService {
     @Override
     public void onInterrupt() {
         Log.i(TAG, "onInterrupt");
+    }
+
+    // ---------------------------------------------------------------- GLSPIKE
+    //
+    // Two app-side GL paths, each measured by a pixel read of a *software*
+    // target bitmap. They exist because the guest used to have no OpenGL ES
+    // driver at all: `Bitmap.wrapHardwareBuffer` returned a HARDWARE bitmap
+    // (A11YPACE §3) but drawing it reached libEGL's
+    // `couldn't find an OpenGL ES implementation` fatal (§4). With a provider
+    // staged (`ACOS_GUEST_GLES=angle|mesa|…`) libEGL's own loader finds a
+    // driver in `/vendor/lib64/egl`, so these run instead of aborting.
+
+    private static String systemProperty(String key) {
+        try {
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            Object v = sp.getMethod("get", String.class, String.class).invoke(null, key, "");
+            return v == null ? "" : (String) v;
+        } catch (Throwable failure) {
+            return "";
+        }
+    }
+
+    /** `acos.guest.gles` from the per-run property table, or "" when unset. */
+    private static String glesTag() {
+        try {
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            Object v = sp.getMethod("get", String.class, String.class)
+                    .invoke(null, "acos.guest.gles", "");
+            return v == null ? "" : (String) v;
+        } catch (Throwable failure) {
+            Log.i(TAG, "gles_probe unavailable=" + failure);
+            return "";
+        }
+    }
+
+    private void probeHardwareDraws(Bitmap wrapped) {
+        final String tag = glesTag();
+        if (tag.isEmpty()) {
+            Log.i(TAG, "gles_draw skipped=no_software_gles");
+            return;
+        }
+        Log.i(TAG, "gles_draw start=1 provider=" + tag);
+        // (i) the wrapped a11y screenshot HardwareBuffer, drawn into a software
+        //     bitmap: this is the call that used to abort the RenderThread.
+        drawAndSample("hwbuffer_screenshot", wrapped);
+        // (ii) a PNG decoded straight to HARDWARE, drawn the same way: what
+        //     Glide/Coil do by default on a device.
+        Bitmap hardware = pngToHardware();
+        if (hardware != null) {
+            Log.i(TAG, "gles_png_hardware ok=true config=" + hardware.getConfig()
+                    + " width=" + hardware.getWidth() + " height=" + hardware.getHeight());
+            drawAndSample("png_hardware", hardware);
+            hardware.recycle();
+        } else {
+            Log.i(TAG, "gles_png_hardware ok=false");
+        }
+        // (iii) the same HARDWARE bitmap inside a real View, so the window
+        //       path (ImageView -> draw) is covered as well as the Canvas path.
+        //
+        // GLSPIKE4 (measured, results/handoff/GLSPIKE4/gles-sw*): with a working
+        // EGL this step still kills the app, because ACOS windows are drawn by
+        // `ViewRootImpl.drawSoftware` on a software Canvas and the framework
+        // throws `IllegalArgumentException: Software rendering doesn't support
+        // hardware bitmaps` from `BaseCanvas.throwIfHwBitmapInSwMode` in the
+        // looper (LOOPER_THREW). It is a window-renderer wall, not a GL wall, so
+        // it is opt-in (`acos.probe.gles_view=1`) rather than a default arm.
+        if ("1".equals(systemProperty("acos.probe.gles_view"))) {
+            viewWithHardwareBitmap(hardwareBitmapForView());
+        } else {
+            Log.i(TAG, "gles_view skipped=software_window_cannot_draw_hardware_bitmap"
+                    + " (opt-in acos.probe.gles_view=1)");
+        }
+    }
+
+    /** Draw {@code src} into a software bitmap and report a sampled pixel. */
+    private void drawAndSample(String kind, Bitmap src) {
+        if (src == null) {
+            Log.i(TAG, "gles_draw kind=" + kind + " ok=false reason=null_bitmap");
+            return;
+        }
+        try {
+            int w = Math.min(src.getWidth(), 64);
+            int h = Math.min(src.getHeight(), 64);
+            final Bitmap.Config srcConfig = src.getConfig();
+            // GLSPIKE4: a software Canvas can never draw a HARDWARE bitmap (the
+            // framework throws "Software rendering doesn't support hardware
+            // bitmaps", on a device too). What an app does is read the pixels
+            // back through hwui's GPU path, `Bitmap.copy(ARGB_8888)`; that is
+            // the call that needs a working EGL context.
+            Bitmap readable = srcConfig == Bitmap.Config.HARDWARE
+                    ? src.copy(Bitmap.Config.ARGB_8888, false) : src;
+            if (readable == null) {
+                Log.i(TAG, "gles_draw kind=" + kind + " ok=false reason=copy_returned_null");
+                return;
+            }
+            Bitmap target = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas canvas = new android.graphics.Canvas(target);
+            canvas.drawColor(0xFF101010);
+            canvas.drawBitmap(readable, null, new Rect(0, 0, w, h), null);
+            // Sample four interior points plus the whole-tile mean, so the
+            // claim is "the drawing landed", not "a buffer was allocated".
+            StringBuilder samples = new StringBuilder();
+            long sum = 0;
+            for (int[] p : new int[][] {{w / 4, h / 4}, {3 * w / 4, h / 4},
+                                        {w / 4, 3 * h / 4}, {3 * w / 4, 3 * h / 4}}) {
+                int px = target.getPixel(p[0], p[1]);
+                sum += (px & 0xFF) + ((px >> 8) & 0xFF) + ((px >> 16) & 0xFF);
+                samples.append(' ').append(p[0]).append(',').append(p[1])
+                        .append("=#").append(String.format("%08X", px));
+            }
+            Log.i(TAG, "gles_draw kind=" + kind + " ok=true src=" + src.getWidth() + "x"
+                    + src.getHeight() + " config=" + srcConfig + " dst=" + w + "x" + h
+                    + " mean=" + (sum / 12) + " samples" + samples);
+            target.recycle();
+        } catch (Throwable failure) {
+            Log.i(TAG, "gles_draw kind=" + kind + " ok=false error="
+                    + failure.getClass().getName() + " msg=" + failure.getMessage());
+        }
+    }
+
+    /**
+     * A 64x64 PNG (left half red, right half blue, generated here so the
+     * fixture needs no asset) decoded with `inPreferredConfig = HARDWARE`.
+     */
+    private Bitmap pngToHardware() {
+        try {
+            Bitmap source = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
+            for (int y = 0; y < 64; y++) {
+                for (int x = 0; x < 64; x++) {
+                    source.setPixel(x, y, x < 32 ? 0xFFFF0000 : 0xFF0000FF);
+                }
+            }
+            java.io.ByteArrayOutputStream png = new java.io.ByteArrayOutputStream();
+            source.compress(Bitmap.CompressFormat.PNG, 100, png);
+            source.recycle();
+            byte[] bytes = png.toByteArray();
+            Log.i(TAG, "gles_png_encoded bytes=" + bytes.length);
+            android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
+            options.inPreferredConfig = Bitmap.Config.HARDWARE;
+            Bitmap decoded = android.graphics.BitmapFactory.decodeByteArray(
+                    bytes, 0, bytes.length, options);
+            if (decoded == null) {
+                Log.i(TAG, "gles_png_decode result=null");
+                return null;
+            }
+            return decoded;
+        } catch (Throwable failure) {
+            Log.i(TAG, "gles_png_decode error=" + failure.getClass().getName()
+                    + " msg=" + failure.getMessage());
+            return null;
+        }
+    }
+
+    private Bitmap hardwareBitmapForView() {
+        try {
+            Bitmap source = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888);
+            for (int y = 0; y < 32; y++) {
+                for (int x = 0; x < 32; x++) {
+                    source.setPixel(x, y, 0xFF00FF00);
+                }
+            }
+            java.io.ByteArrayOutputStream png = new java.io.ByteArrayOutputStream();
+            source.compress(Bitmap.CompressFormat.PNG, 100, png);
+            source.recycle();
+            byte[] bytes = png.toByteArray();
+            android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
+            options.inPreferredConfig = Bitmap.Config.HARDWARE;
+            return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+        } catch (Throwable failure) {
+            Log.i(TAG, "gles_view_bitmap error=" + failure.getClass().getName()
+                    + " msg=" + failure.getMessage());
+            return null;
+        }
+    }
+
+    /** Put a HARDWARE bitmap in an overlay {@link android.widget.ImageView}. */
+    private void viewWithHardwareBitmap(Bitmap hardware) {
+        if (hardware == null) {
+            Log.i(TAG, "gles_view ok=false reason=null_bitmap");
+            return;
+        }
+        final A11yProbeService service = this;
+        final java.util.concurrent.CountDownLatch done =
+                new java.util.concurrent.CountDownLatch(1);
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                WindowManager wm = (WindowManager) service.getSystemService(WINDOW_SERVICE);
+                android.widget.ImageView view = new android.widget.ImageView(service);
+                view.setImageBitmap(hardware);
+                WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                        96, 96,
+                        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                        PixelFormat.TRANSLUCENT);
+                params.gravity = Gravity.TOP | Gravity.START;
+                params.x = 700;
+                params.y = 900;
+                wm.addView(view, params);
+                // One draw pass, then remove again so the window stack other
+                // steps assert on is unchanged.
+                view.post(() -> {
+                    Log.i(TAG, "gles_view ok=true drawable="
+                            + (view.getDrawable() == null ? "null" : "set"));
+                    try {
+                        wm.removeView(view);
+                    } catch (Throwable removed) {
+                        Log.i(TAG, "gles_view remove error=" + removed);
+                    } finally {
+                        done.countDown();
+                    }
+                });
+            } catch (Throwable failure) {
+                Log.i(TAG, "gles_view ok=false error=" + failure.getClass().getName()
+                        + " msg=" + failure.getMessage());
+                done.countDown();
+            }
+        });
+        try {
+            done.await(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

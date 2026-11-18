@@ -1,0 +1,428 @@
+{
+  "acos": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/rel-target/release/acos",
+  "binary_sha256": "e2ec7ab6683422b4cb76bef6cd6abb0f804539f4db1efa476d89009f31112783",
+  "checks": {
+    "apk_ready_n": 5,
+    "failed_steps": 0
+  },
+  "env": {
+    "ACOS_ART_STAGE_TIMING": "1",
+    "animations": "on"
+  },
+  "errors": [],
+  "failures": {
+    "failed_by_code": {},
+    "failed_steps": 0,
+    "rows": []
+  },
+  "host_after": {
+    "loadavg1": 16.5,
+    "loadavg15": 4.56,
+    "loadavg5": 8.49,
+    "mem_available_gib": 40.97,
+    "mem_available_mib": 41952.4,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7 && python3 - <<'PYEOF'\np='tools/bench/acos_bench.py'\ns=open(p).read()\nold = '''    \"m9",
+        "comm": "bash",
+        "pid": 2248725
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-39828322-c5ee374b3b387cf5 && CARGO_TARGET_DIR=$PWD/.cache/parity1-target CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREME",
+        "comm": "bash",
+        "pid": 2250114
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 12G --time 2400 -- cargo build --release --offline -p acos-art",
+        "comm": "bash",
+        "pid": 2250115
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 2400 cargo build --release --offline -p acos-art",
+        "comm": "timeout",
+        "pid": 2250125
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-art",
+        "comm": "cargo",
+        "pid": 2250126
+      }
+    ],
+    "runnable": "10/3233",
+    "used_mib": 19956.4,
+    "used_pct": 32.24,
+    "utc": "2026-11-18T07:09:31+00:00"
+  },
+  "host_before": {
+    "loadavg1": 16.5,
+    "loadavg15": 4.56,
+    "loadavg5": 8.49,
+    "mem_available_gib": 40.98,
+    "mem_available_mib": 41960.2,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7 && python3 - <<'PYEOF'\np='tools/bench/acos_bench.py'\ns=open(p).read()\nold = '''    \"m9",
+        "comm": "bash",
+        "pid": 2248725
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-39828322-c5ee374b3b387cf5 && CARGO_TARGET_DIR=$PWD/.cache/parity1-target CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREME",
+        "comm": "bash",
+        "pid": 2250114
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 12G --time 2400 -- cargo build --release --offline -p acos-art",
+        "comm": "bash",
+        "pid": 2250115
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 2400 cargo build --release --offline -p acos-art",
+        "comm": "timeout",
+        "pid": 2250125
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-art",
+        "comm": "cargo",
+        "pid": 2250126
+      }
+    ],
+    "runnable": "5/3232",
+    "used_mib": 19948.5,
+    "used_pct": 32.22,
+    "utc": "2026-11-18T07:09:31+00:00"
+  },
+  "ok": true,
+  "phase": "install",
+  "samples": {
+    "m9_apk_ready_cold_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/fixtures/build/apps/counter.apk",
+          "log": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/bench-install-scratch/sessions/s_h6_m9_cold_0/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "classpath-hit": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 10,
+            "guest-exec": 20720,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "linkerconfig-hit": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        }
+      ],
+      "median": 20730.0,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 20730.0,
+        "mean": 20730.0,
+        "median": 20730.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 20730.0,
+        "n": 1,
+        "p5": 20730.0,
+        "p50": 20730.0,
+        "p95": 20730.0,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "ms",
+      "values": [
+        20730.0
+      ]
+    },
+    "m9_apk_ready_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/fixtures/build/apps/counter.apk",
+          "launch_ok": true,
+          "log": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/bench-install-scratch/sessions/s_h6_m9_apk_ready_0/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 10,
+            "classpath": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 10,
+            "guest-exec": 10,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 10,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 10,
+            "run-dir": 0
+          }
+        },
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/fixtures/build/apps/counter.apk",
+          "launch_ok": true,
+          "log": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/bench-install-scratch/sessions/s_h6_m9_apk_ready_1/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 0,
+            "guest-exec": 0,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 10,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        },
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/fixtures/build/apps/counter.apk",
+          "launch_ok": true,
+          "log": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/bench-install-scratch/sessions/s_h6_m9_apk_ready_2/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 0,
+            "guest-exec": 10,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        },
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/fixtures/build/apps/counter.apk",
+          "launch_ok": true,
+          "log": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/bench-install-scratch/sessions/s_h6_m9_apk_ready_3/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "ensure-data": 10,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 0,
+            "guest-exec": 0,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        },
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/fixtures/build/apps/counter.apk",
+          "launch_ok": true,
+          "log": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/bench-install-scratch/sessions/s_h6_m9_apk_ready_4/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 0,
+            "guest-exec": 0,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        }
+      ],
+      "median": 10.0,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 50.0,
+        "ci95_low": 0.0,
+        "cv": 1.2183492931011204,
+        "max": 50.0,
+        "mean": 16.0,
+        "median": 10.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.0,
+        "n": 5,
+        "p5": 2.0,
+        "p50": 10.0,
+        "p95": 41.99999999999999,
+        "resamples": 2000,
+        "spread": 3.999999999999999,
+        "spread_pct": 399.9999999999999,
+        "stdev": 19.493588689617926
+      },
+      "unit": "ms",
+      "values": [
+        50.0,
+        10.0,
+        10.0,
+        10.0,
+        0.0
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "survivors": [
+    {
+      "cmd": "timeout 700 tools/art-runtime/run-exclusive.sh --task MERGE040D-M9 --exclusive -- tools/guarded.sh --mem 12G --time 600 -- python3 -I tools/bench/acos_bench.py --phase install --acos /home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7",
+      "comm": "timeout",
+      "pid": 2248818
+    },
+    {
+      "cmd": "bash tools/art-runtime/run-exclusive.sh --task MERGE040D-M9 --exclusive -- tools/guarded.sh --mem 12G --time 600 -- python3 -I tools/bench/acos_bench.py --phase install --acos /home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache",
+      "comm": "bash",
+      "pid": 2248820
+    },
+    {
+      "cmd": "bash tools/guarded.sh --mem 12G --time 600 -- python3 -I tools/bench/acos_bench.py --phase install --acos /home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/rel-target/release/acos --scratch /home/Qui/.t3/worktrees/acos/t3-731",
+      "comm": "bash",
+      "pid": 2249391
+    },
+    {
+      "cmd": "/usr/bin/timeout -k 5 600 python3 -I tools/bench/acos_bench.py --phase install --acos /home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/rel-target/release/acos --scratch /home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbf",
+      "comm": "timeout",
+      "pid": 2249401
+    },
+    {
+      "cmd": "/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/rel-target/release/acos serve --socket /home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/.cache/bench-install-scratch/serve.sock --engine art --idle-timeout 900 --max-",
+      "comm": "acos",
+      "pid": 2249434
+    }
+  ],
+  "teardowns": [
+    {
+      "code": null,
+      "label": "m9-cold",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 50,
+      "verified": true,
+      "wall_ms": 51.625
+    },
+    {
+      "code": null,
+      "label": "m9-apk-ready",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 73,
+      "verified": true,
+      "wall_ms": 74.312
+    },
+    {
+      "code": null,
+      "label": "m9-apk-ready",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 32,
+      "verified": true,
+      "wall_ms": 33.258
+    },
+    {
+      "code": null,
+      "label": "m9-apk-ready",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 27,
+      "verified": true,
+      "wall_ms": 28.078
+    },
+    {
+      "code": null,
+      "label": "m9-apk-ready",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 27,
+      "verified": true,
+      "wall_ms": 28.328
+    },
+    {
+      "code": null,
+      "label": "m9-apk-ready",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 32,
+      "verified": true,
+      "wall_ms": 32.953
+    }
+  ],
+  "utc": "2026-11-18T07:09:31+00:00"
+}

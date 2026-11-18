@@ -13,6 +13,9 @@ path = "src/main.rs"
 [dependencies]
 acos-apk = { path = "../acos-apk" }
 acos-art = { path = "../acos-art" }
+# GLSHIP: the doctor reports the guest GL provider from the shared contract
+# (`acos-gles-provider`), not from a second copy of the selection rule.
+acos-gles-provider = { path = "../acos-gles-provider" }
 acos-jni = { path = "../acos-jni" }
 acos-dex = { path = "../acos-dex" }
 acos-mcp = { path = "../acos-mcp" }

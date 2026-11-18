@@ -1,0 +1,64 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "lifecycle",
+    "logs",
+    "static-manifest"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 15970304,
+    "wall_ms": 946
+  },
+  "ok": true,
+  "request_id": "req_1fcc07_18e90fde7db21333",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-494c6621-431117b030d42b5b/results/handoff/GLSHIP/gate-a11y-wrap",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794980348818887579,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-494c6621-431117b030d42b5b/fixtures/build/apps/a11y-probe.apk",
+        "sha256": "ba0be1ad05f5cbee85e4a5738de803ab90f9420f857d00044627ba184538352a",
+        "sha256_12": "ba0be1ad05f5",
+        "size_bytes": 29310
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794981520497193830,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-494c6621-431117b030d42b5b/scenarios/a11y-screenshot-wrap.yaml",
+        "sha256": "313b9c8f634d968cf05fc9b4d925186d51f8aacdda7b9c8f355f35fb77b84475",
+        "sha256_12": "313b9c8f634d",
+        "size_bytes": 4262
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-494c6621-431117b030d42b5b/results/handoff/GLSHIP/gate-a11y-wrap/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_a11y-probe",
+  "status": "pass"
+}

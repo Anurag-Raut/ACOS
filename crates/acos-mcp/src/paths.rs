@@ -60,6 +60,34 @@ pub fn runtime_path(rel: &str) -> PathBuf {
     runtime_path_with(acos_home().as_deref(), rel)
 }
 
+/// The guest sysroot that holds `<sysroot>/gles/<provider>`:
+/// `$ACOS_ART_SYSROOT`, else `<runtime root>/.cache/art/sysroot`, then
+/// `.cache/art-exp/sysroot` (the same order `acos_art::ArtRoot::resolve` uses;
+/// this crate does not link the launcher).
+#[must_use]
+pub fn sysroot() -> Option<PathBuf> {
+    sysroot_with(acos_home().as_deref())
+}
+
+/// [`sysroot`] with the install root passed in (testable): the two lookups
+/// under `home`, else under the checkout.
+#[must_use]
+pub fn sysroot_with(home: Option<&Path>) -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os("ACOS_ART_SYSROOT") {
+        return Some(PathBuf::from(dir));
+    }
+    for candidate in [".cache/art/sysroot", ".cache/art-exp/sysroot"] {
+        let dir = match home {
+            Some(home) => home.join(candidate),
+            None => dev_root()?.join(candidate),
+        };
+        if dir.join("system/apex").is_dir() {
+            return Some(dir);
+        }
+    }
+    None
+}
+
 /// [`runtime_path`] with the install root passed in, so tests can prove both
 /// arms without mutating the process environment.
 #[must_use]
@@ -100,6 +128,21 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).expect("temp dir");
         dir
+    }
+
+    #[test]
+    fn the_guest_sysroot_is_resolved_like_the_launcher_does() {
+        // MERGE040D(a): `acos_capabilities` reports the GL provider from the
+        // launcher's own sysroot rule (`.cache/art/sysroot` under the runtime
+        // root, else the feasibility scratch) without linking `acos-art`.
+        let home = unique_dir("sysroot");
+        assert_eq!(sysroot_with(Some(&home)), None, "no sysroot installed");
+        std::fs::create_dir_all(home.join(".cache/art/sysroot/system/apex")).expect("dirs");
+        assert_eq!(
+            sysroot_with(Some(&home)),
+            Some(home.join(".cache/art/sysroot"))
+        );
+        std::fs::remove_dir_all(&home).ok();
     }
 
     #[test]

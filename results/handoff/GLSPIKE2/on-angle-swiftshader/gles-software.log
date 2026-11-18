@@ -1,0 +1,114 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest"
+  ],
+  "error": {
+    "class": "harness",
+    "code": "GUEST_EXITED",
+    "details": {
+      "art_code": "GUEST_EXITED",
+      "backend": "acos-art-session",
+      "context": "launch",
+      "reply": {
+        "animations": "on",
+        "cmd": "tree",
+        "code": "GUEST_EXITED",
+        "error": "the guest ended while binding the tree (status exit status: 134)",
+        "ok": false
+      },
+      "session_exit_path": "/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/results/handoff/GLSPIKE2/on-angle-swiftshader/gles-software/art-frames/session-exit.json"
+    },
+    "hint": "The guest process ended before the requested stage. Read error.details.session_exit for guest_exit, guest_signal, stage and the guest's own ACOSLAUNCH crash line: exit 12… [ACOS: result.error.hint bounded for size — 336 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] … or a fatal ART log is an app crash. Do not retry unchanged until the cause is named.",
+    "message": "acos-art: GUEST_EXITED: the guest ended while binding the tree (status exit status: 134)",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16289792,
+    "wall_ms": 336
+  },
+  "ok": false,
+  "request_id": "req_3ecd8_18e909eeb4637048",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/results/handoff/GLSPIKE2/on-angle-swiftshader/gles-software",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 0,
+      "index": 0,
+      "kind": "launch",
+      "message": "acos-art: GUEST_EXITED: the guest ended while binding the tree (status exit status: 134)",
+      "status": "error"
+    },
+    "failure": {
+      "code": "GUEST_EXITED",
+      "error": {
+        "class": "harness",
+        "code": "GUEST_EXITED",
+        "details": {
+          "art_code": "GUEST_EXITED",
+          "backend": "acos-art-session",
+          "context": "launch",
+          "reply": {
+            "animations": "on",
+            "cmd": "tree",
+            "code": "GUEST_EXITED",
+            "error": "the guest ended while binding the tree (status exit status: 134)",
+            "ok": false
+          },
+          "session_exit_path": "/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/results/handoff/GLSPIKE2/on-angle-swiftshader/gles-software/art-frames/session-exit.json"
+        },
+        "hint": "… [ACOS: identical to result.error.hint (336 bytes), not repeated; it begins: The guest process ended before the requested stage. Read error.details.session_exit for guest_exit, guest_signal, stage and the guest's own ACOSLAUNCH crash line: exit 126/signal 31 with a guard ERR is a host isolation condition; a guest SIGSEGV/abort or a fatal ART log is an app crash. Do not retry unchanged until the cause is named.] …",
+        "message": "acos-art: GUEST_EXITED: the guest ended while binding the tree (status exit status: 134)",
+        "retryable": false
+      },
+      "step_index": 0,
+      "summary": "step 0 (launch) error"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794975662650776325,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/fixtures/build/apps/a11y-probe.apk",
+        "sha256": "c16a3ff20f6b07f269df78718e70593528a49f26133b7c7d75b447d1ffdc01aa",
+        "sha256_12": "c16a3ff20f6b",
+        "size_bytes": 29310
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794975532082423750,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/scenarios/gles-software.yaml",
+        "sha256": "a64666e2d4d1242128f2eedd459d56d3fe1ad499ba5b92f5e8beab92d5c43af4",
+        "sha256_12": "a64666e2d4d1",
+        "size_bytes": 2829
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/results/handoff/GLSPIKE2/on-angle-swiftshader/gles-software/verdict.json",
+    "verdict_status": "error"
+  },
+  "status": "error"
+}
+verify: GUEST_EXITED (harness): acos-art: GUEST_EXITED: the guest ended while binding the tree (status exit status: 134) [class=harness, retryable=false]

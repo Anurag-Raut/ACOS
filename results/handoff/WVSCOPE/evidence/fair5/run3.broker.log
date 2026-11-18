@@ -1,0 +1,9 @@
+acos-webview: slow op view.evaluateJavascript view=2 id=g35 took 3838ms
+acos-webview: slow op view.evaluateJavascript view=2 id=g36 took 3838ms
+acos-webview: slow op ax view=2 id=g34 took 5779ms
+acos-webview: input touch touchStart on view 16 acked after 3837ms
+acos-webview: slow op input.touch view=2 id=g40 took 5369ms
+acos-webview: slow op ax view=2 id=g42 took 3836ms
+acos-webview: input touch touchEnd on view 16 acked after 1918ms
+acos-webview: slow op input.touch view=2 id=g41 took 3837ms
+acos-webview: slow op render view=2 id=g48 took 1919ms

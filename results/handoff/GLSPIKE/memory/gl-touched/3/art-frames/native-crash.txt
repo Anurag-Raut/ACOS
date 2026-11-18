@@ -1,0 +1,16 @@
+ACOSCRASH {"code":-6,"fault_addr":"0x0","pid":2,"signal":6,"source":"acos-shim","thread":"GrallocUploadTh","tid":26}
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Fatal signal 6 (SIGABRT), code -6 (SI_TKILL)
+OS: Linux 7.2.11-arch1-1 (x86_64)
+Cmdline: <unset>
+Thread: 26 "GrallocUploadTh"
+Registers:
+    rax: 0x0000000000000000    rbx: 0x00007eff11c23fa5    rcx: 0x00007f01c334c3f4    rdx: 0x0000000000000006
+    rdi: 0x0000000000000002    rsi: 0x000000000000001a    rbp: 0x00007f019ee230e0    rsp: 0x00007efeec6d5170
+    r8 : 0x00007efeec6d5248    r9 : 0x00007eff11c23fa5    r10: 0x000000000000000e    r11: 0x0000000000000206
+    r12: 0x0000000000000040    r13: 0x000011be7c65be17    r14: 0x00007f01aee3d0c0    r15: 0x00007effcee69920
+    rip: 0x00007f01c334c3f4    eflags: 0x00000206 [ PF IF ]
+     cs: 0x00000033     gs: 0x00000000     fs: 0x00000000
+
+Backtrace:
+	#00 pc 000013f4  /data/shim/libartshim.so (__android_log_assert+452) (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d)
