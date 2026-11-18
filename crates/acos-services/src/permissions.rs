@@ -436,6 +436,17 @@ impl PermissionStore {
         self.install_time.iter().any(|p| p == permission)
     }
 
+    /// True when the permission is a **runtime (dangerous)** one.
+    ///
+    /// `permission_catalog::PERMISSIONS` is the platform's dangerous set
+    /// (`protectionLevel` `0x1`), i.e. exactly the permissions the user has to
+    /// grant: they are not install-time grants, so a manifest declaration alone
+    /// must not answer `PERMISSION_GRANTED`.
+    #[must_use]
+    pub fn is_dangerous(permission: &str) -> bool {
+        permission_catalog::permission(permission).is_some()
+    }
+
     /// Publish the installed package's own `<permission>` declarations
     /// (SYSUI3B). The PMS calls this with the same state change that publishes
     /// the install-time grants, so `getPermissionInfo` for a custom permission
@@ -727,6 +738,17 @@ impl PermissionStore {
                 PERMISSION_DENIED
             };
         }
+        // A **dangerous** permission is never granted at install, whatever the
+        // manifest declares: `install_time` is the package's `<uses-permission>`
+        // list (a request), not a grant. Stock
+        // `PermissionManagerService.checkUidPermission` answers `DENIED` for a
+        // dangerous permission with no per-uid state, and only a grant (the
+        // dialog, a pre-grant config) flips it — which is the entry branch
+        // above. `permission_catalog::PERMISSIONS` is exactly the dangerous set
+        // (`protectionLevel` 0x1) the image's core manifest declares.
+        if Self::is_dangerous(permission) {
+            return PERMISSION_DENIED;
+        }
         if self.is_declared(permission) {
             PERMISSION_GRANTED
         } else {
@@ -849,6 +871,42 @@ mod tests {
         assert_eq!(
             store.check("android.permission.POST_NOTIFICATIONS"),
             PERMISSION_DENIED
+        );
+    }
+
+    /// A *declared* dangerous permission is still denied until someone grants
+    /// it: `install_time` is the manifest's request list, not a grant. This is
+    /// the answer `sysui1-permission-allow` asserts ("state before:
+    /// CAMERA=-1") and the one `PermissionManagerService` gives.
+    #[test]
+    fn a_declared_dangerous_permission_is_not_an_install_time_grant() {
+        let store = PermissionStore::for_package(
+            "com.acos.probe",
+            &[
+                "android.permission.CAMERA".to_string(),
+                "android.permission.INTERNET".to_string(),
+            ],
+        );
+        assert!(
+            store.is_declared("android.permission.CAMERA"),
+            "the manifest did declare it"
+        );
+        assert_eq!(
+            store.check("android.permission.CAMERA"),
+            PERMISSION_DENIED,
+            "a dangerous permission is a request, never an install-time grant"
+        );
+        assert_eq!(
+            store.check("android.permission.INTERNET"),
+            PERMISSION_GRANTED,
+            "a normal permission keeps its install-time grant"
+        );
+        // The grant path is the entry, and it still wins.
+        let mut store = store;
+        store.grant("android.permission.CAMERA");
+        assert_eq!(
+            store.check("android.permission.CAMERA"),
+            PERMISSION_GRANTED
         );
     }
 
