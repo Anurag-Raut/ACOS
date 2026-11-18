@@ -1855,8 +1855,10 @@ impl<'a> Sandbox<'a> {
         //
         // A provider whose bytes do not match its manifest is a structured
         // error here, never a different library reaching the loader
-        // (A11YPACE's stale-shim lesson).
+        // (A11YPACE's stale-shim lesson). One selection rule (`gles::status`)
+        // and one verify cache for every provider (GLSHIP's `.verified`).
         let gles_status = gles::status(r)?;
+        let mut gpu_landlock_plan: Option<PathBuf> = None;
         if let Some(provider) = &gles_status.provider {
             if !gles::lib_dir_ready(provider, r) {
                 return Err(Error::Layout(format!(
@@ -1885,6 +1887,24 @@ impl<'a> Sandbox<'a> {
             a.push("--ro-bind".into());
             a.push(provider.lib_dir(r).into());
             a.push("/vendor/lib64".into());
+            // GPUSPIKE: a host-GPU provider (`mesa-host`) also names the one
+            // DRM *render* node it draws on. It is bound read-write at the same
+            // path (`--dev-bind` keeps the device node usable), only here, only
+            // for the selected provider, and only `/dev/dri/renderD<N>` passes
+            // validation: no card node (modesetting/master), no other device.
+            // Waydroid's own `gralloc.gbm.device` prop names the same path.
+            if let Some(node) = provider.render_node()? {
+                // The guest's Landlock plan handles WRITE_FILE and IOCTL_DEV, so
+                // the node is also granted in a plan that is bound over the
+                // default one for this run only (below, after /data/seccomp).
+                if self.seccomp_guest {
+                    gpu_landlock_plan =
+                        landlock::write_gpu_plan(&r.data.join("seccomp"), &node)?;
+                }
+                a.push("--dev-bind".into());
+                a.push(node.clone().into());
+                a.push(node.into());
+            }
         }
         a.push("--ro-bind".into());
         a.push("/etc/passwd".into());
@@ -1916,6 +1936,11 @@ impl<'a> Sandbox<'a> {
             a.push("--ro-bind".into());
             a.push(dir.into());
             a.push("/data/seccomp".into());
+            if let Some(plan) = gpu_landlock_plan.take() {
+                a.push("--ro-bind".into());
+                a.push(plan.into());
+                a.push(landlock::GUEST_PLAN.into());
+            }
             // The program is installed by the preloaded stub's constructor, so
             // it lands after bionic finished loading and before ART's main.
         }

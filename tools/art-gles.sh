@@ -42,17 +42,31 @@
 # turns into ro.hardware.vulkan. `--egl-tag` lets the provider directory be a
 # label (`angle-swiftshader`) while the EGL library names stay `..._angle.so`.
 # It verifies every file against the manifest (once per staged inode set: the
-# launcher caches the digest under <sysroot>/../gles-verify/).
+# launcher caches the digest as <provider>/.verified, next to the provider).
 #
 # GLSHIP: `angle-swiftshader` is the **default** provider when it is installed
 # (`ACOS_GUEST_GLES=off` disables software GL, `=mesa-host` is reserved for the
-# GPU track). This script runs as part of the sysroot build
-# (`tools/art-sysroot.sh`, step 5c) and again from `tools/release/install.sh`
+# GPU track and is only ever selected explicitly). This script runs as part of
+# the sysroot build (`tools/art-sysroot.sh`, step 5c); `tools/release/install.sh`
 # is unnecessary: the install copies the whole sysroot, provider included.
 #
 # Provenance: the manifest carries a `provenance` block (the ICD's own sha256 +
 # ELF build id, the EGL source, the upstream projects and their licences) so an
 # installed provider can always be traced back to the bytes it was cut from.
+#
+# GPUSPIKE (host GPU, `mesa-host`): a provider may also carry
+#
+#   --extra-lib FILE     staged at lib64/<name> (the driver's DT_NEEDED closure:
+#                        libgallium_dri.so, libLLVM, libdrm*, libgbm_mesa, ...)
+#   --extra-hw FILE      staged at lib64/hw/<name> (HAL modules: gralloc.<tag>.so,
+#                        the passthrough mapper impl libhidl globs by prefix)
+#   --prop KEY=VALUE     manifest `props`, written into the guest property table
+#                        (ro.hardware.gralloc=gbm, gralloc.gbm.device=...)
+#   --render-node PATH   manifest `render_node` (/dev/dri/renderD<N>): the
+#                        launcher binds that one node read-write into the
+#                        sandbox, only when this provider is selected
+#
+# Its bytes go through the same verify cache as the default provider's.
 # lib64/ is bound at /vendor/lib64, so `lib64/egl/libEGL_<tag>.so` (what the
 # loader opens) and `lib64/libGLESv2_<tag>.so` (what the driver NEEDs) both
 # resolve with one mount.
@@ -88,6 +102,10 @@ EGL_TAG=""
 VULKAN_ICD=""
 VULKAN_TAG="pastel"
 FROM_DIR=""
+EXTRA_LIBS=()
+EXTRA_HW=()
+PROPS=()
+RENDER_NODE=""
 FROM_EMULATOR_VENDOR=""
 PROVIDER=""
 VERSION=""
@@ -105,6 +123,10 @@ while [ $# -gt 0 ]; do
     --vulkan-icd) VULKAN_ICD="$2"; shift 2 ;;
     --vulkan-tag) VULKAN_TAG="$2"; shift 2 ;;
     --from-dir) FROM_DIR="$2"; shift 2 ;;
+    --extra-lib) EXTRA_LIBS+=("$2"); shift 2 ;;
+    --extra-hw) EXTRA_HW+=("$2"); shift 2 ;;
+    --prop) PROPS+=("$2"); shift 2 ;;
+    --render-node) RENDER_NODE="$2"; shift 2 ;;
     --from-emulator-vendor) FROM_EMULATOR_VENDOR="$2"; shift 2 ;;
     --provider) PROVIDER="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
@@ -223,6 +245,17 @@ if [ -n "$VULKAN_ICD" ]; then
   # EGL_NOT_INITIALIZED while libEGL still returns EGL_TRUE. One inode.
   ln "$tmp/lib64/hw/vulkan.${VULKAN_TAG}.so" "$tmp/lib64/vulkan.${VULKAN_TAG}.so"
 fi
+for f in ${EXTRA_LIBS[@]+"${EXTRA_LIBS[@]}"}; do
+  [ -f "$f" ] || die "--extra-lib is not a file: $f"
+  cp "$f" "$tmp/lib64/$(basename "$f")"
+done
+if [ ${#EXTRA_HW[@]} -gt 0 ]; then
+  mkdir -p "$tmp/lib64/hw"
+  for f in "${EXTRA_HW[@]}"; do
+    [ -f "$f" ] || die "--extra-hw is not a file: $f"
+    cp "$f" "$tmp/lib64/hw/$(basename "$f")"
+  done
+fi
 for base in "${DRIVER_FILES[@]}"; do
   cp "$SRC_DIR/${base}_${EGL_TAG}.so" "$tmp/lib64/egl/"
   # The same file again one level up, as a hardlink: the guest's generated
@@ -253,10 +286,16 @@ fi
 
 python3 - "$tmp" "$EGL_TAG" "${PROVIDER:-$TAG}" "${SOURCE:-$SRC_DIR}" \
          "${VERSION:-unknown}" "${LICENCE:-unknown}" \
-         "$VT_ARG" "$EGL_SOURCE" "$VULKAN_ICD" "$ICD_SHA" "$ICD_BUILD_ID" <<'PY'
+         "$VT_ARG" "$EGL_SOURCE" "$VULKAN_ICD" "$ICD_SHA" "$ICD_BUILD_ID" \
+         "$RENDER_NODE" "${PROPS[@]+"${PROPS[@]}"}" <<'PY'
 import hashlib, json, os, sys
 (stage, tag, provider, source, version, licence, vulkan_tag,
- egl_source, icd_source, icd_sha256, icd_build_id) = sys.argv[1:12]
+ egl_source, icd_source, icd_sha256, icd_build_id,
+ render_node) = sys.argv[1:13]
+props = {}
+for kv in sys.argv[13:]:
+    k, _, v = kv.partition('=')
+    props[k] = v
 files = []
 for root, _dirs, names in os.walk(os.path.join(stage, 'lib64')):
     for name in sorted(names):
@@ -281,6 +320,10 @@ manifest = {
 }
 if vulkan_tag:
     manifest['vulkan_tag'] = vulkan_tag
+if props:
+    manifest['props'] = props
+if render_node:
+    manifest['render_node'] = render_node
 # GLSHIP: provenance, so a staged provider is auditable after the fact. The
 # upstreams are ANGLE (BSD-3-Clause) and SwiftShader (Apache-2.0); `source`
 # above is where *these* bytes came from, which is not always a download.
