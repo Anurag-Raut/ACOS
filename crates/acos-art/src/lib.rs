@@ -32,6 +32,14 @@ pub mod build_cache;
 pub mod capture;
 pub mod cgroup;
 pub mod crash;
+// GLSPIKE: the opt-in, lazily loaded software GLES provider (`ACOS_GUEST_GLES`).
+pub mod gles;
+
+/// The process environment is global: every test that mutates it takes this
+/// lock, in any module, so one test's `ACOS_GUEST_GLES`/`ACOS_ART_*` cannot
+/// leak into another's (they run on parallel threads).
+#[cfg(test)]
+pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 pub mod host_zygote;
 pub mod jvm;
 pub mod landlock;
@@ -1826,6 +1834,57 @@ impl<'a> Sandbox<'a> {
         for d in fixed_dirs {
             a.push("--dir".into());
             a.push(d.into());
+        }
+        // GLSHIP: the software GLES provider — the image's default
+        // (`angle-swiftshader`) when it is installed, `ACOS_GUEST_GLES=off` to
+        // turn it off, `ACOS_GUEST_GLES=<name>` to pick another (an explicitly
+        // named provider that is not installed is an error, never a silent
+        // fall back to the default).
+        //
+        // The image's own EGL loader (`Loader.cpp`'s
+        // `attempt_to_load_system_driver`) looks for
+        // `/vendor/lib64/egl/libEGL_<ro.hardware.egl>.so`,
+        // `libGLESv1_CM_<tag>.so` and `libGLESv2_<tag>.so`. Binding the staged
+        // provider there is the *whole* integration: no hook, no interposer,
+        // no change to libhwui. Nothing in the bound directory is mapped until
+        // libhwui's RenderThread first asks libEGL for a context, so a process
+        // that never touches GL pays no resident memory (only the mount entry);
+        // the digest is cached per staged inode set (`gles::verify`), so a
+        // launch that never touches GL pays one `stat` walk and no read of the
+        // 32 MB provider.
+        //
+        // A provider whose bytes do not match its manifest is a structured
+        // error here, never a different library reaching the loader
+        // (A11YPACE's stale-shim lesson).
+        let gles_status = gles::status(r)?;
+        if let Some(provider) = &gles_status.provider {
+            if !gles::lib_dir_ready(provider, r) {
+                return Err(Error::Layout(format!(
+                    "ACOS_GUEST_GLES={}: {} is not a directory (install the provider with \
+                     `tools/art-gles.sh`)",
+                    provider.name,
+                    provider.lib_dir(r).display()
+                )));
+            }
+            let started = std::time::Instant::now();
+            gles::verify(provider, r)?;
+            if std::env::var_os("ACOS_GUEST_GLES_TRACE").is_some() {
+                eprintln!(
+                    "acos-art: {} [{}] (verify {}ms, staged {} bytes)",
+                    gles::describe(provider),
+                    gles_status.detail,
+                    started.elapsed().as_millis(),
+                    gles::staged_bytes(provider)
+                );
+            }
+            // One bind, three lookups: `/vendor/lib64/egl/libEGL_<tag>.so` is
+            // what `Loader::findLibrary` opens, `/vendor/lib64` is where
+            // the linker resolves that driver's own NEEDED entries, and
+            // `/vendor/lib64/hw/vulkan.<tag>.so` (GLSPIKE2) is the ICD the
+            // image's `libvulkan.so` opens when the provider carries one.
+            a.push("--ro-bind".into());
+            a.push(provider.lib_dir(r).into());
+            a.push("/vendor/lib64".into());
         }
         a.push("--ro-bind".into());
         a.push("/etc/passwd".into());

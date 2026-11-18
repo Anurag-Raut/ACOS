@@ -1,0 +1,146 @@
+--------- beginning of main
+1794978630429      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794978630429      2  I : Using CollectorTypeCC GC.
+1794978630429      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794978630429      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794978630429      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794978630429      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794978630429      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794978630429      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794978630429      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794978630429     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794978630429     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794978630429     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794978630429     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794978630429     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794978630429     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794978630429     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794978630429     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794978630429     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794978630429     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794978630429     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794978630429     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794978630429     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794978630429     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794978630429     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794978630429     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794978630429     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794978630429     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794978630429     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794978630429     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794978630429     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794978630429     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794978630429     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794978630429     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794978630429     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794978630429     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794978630429     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794978630429     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794978630429     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794978630429     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794978630429     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794978630429     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794978630429     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794978630429     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794978630429     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794978630429     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794978630429     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794978630429     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794978630429     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794978630429     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794978630429     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794978630429     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794978630429     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64:/vendor/lib64, permitted_path=/data:/mnt/expand
+1794978630429     53  D nativeloader: InitExtendedPublicLibraries: 
+1794978630429     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794978630429     55  D nativeloader: InitProductPublicLibraries: 
+1794978630429     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794978630429     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794978630429     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794978630429     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794978630429     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794978630429     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794978630429     62  W ziparchive: Unable to open '/data/app/egl-probe.dm': No such file or directory
+1794978630429     63  W ziparchive: Unable to open '/data/app/egl-probe.dm': No such file or directory
+1794978630429     64  D nativeloader: Configuring clns-2 for other apk /data/app/egl-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.eglprobe
+1794978630429     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.eglprobe/cache: chown failed: EINVAL (Invalid argument)
+1794978630429     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.eglprobe/code_cache: chown failed: EINVAL (Invalid argument)
+1794978630429     67  V GraphicsEnvironment: Currently set values for:
+1794978630429     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794978630429     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794978630429     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.eglprobe: false
+1794978630429     71  V GraphicsEnvironment: dev.acos.fixtures.eglprobe is not listed in per-application setting
+1794978630429     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794978630429     73  W SystemServiceRegistry: No service published for: netstats
+1794978630429     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794978630429     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794978630429     76  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794978630429     77  E logdw: dev.acos.fixtures.eglprobe.MainActivity
+1794978630429     78  I EglProbe: begin pid=2
+1794978630429     79  E logdw: dev.acos.fixtures.eglprobe.MainActivity
+1794978630429     80  I EglProbe: props ro.hardware.egl=angle ro.hardware.vulkan=pastel ro.board.platform=<unset> persist.graphics.egl=<unset> debug.angle.backend=<unset> ro.gfx.angle.supported=<unset> acos.guest.gles=angle
+1794978630429     81  E logdw: dev.acos.fixtures.eglprobe.MainActivity
+1794978630429     82  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794978630429     83  I EglProbe: maps[start] lines=2055 vulkan.pastel_mapped=false new_libs: /apex/com.android.tethering/lib64/libframework-connectivity-tiramisu-jni.so /apex/com.android.tethering/lib64/libframework-connectivity-jni.so /apex/com.android.os.statsd/lib64/libstats_jni.so /apex/sharedlibs/lib64/libc++.so/bdb4b81337c003ef4ed7bf093ed61675650aa8a45e36ed5ef9e6a41f9f598616e9a7644a51b37d2f939e669f75ae64032f6e8137738202f72e221c99497a5604/libc++.so /apex/sharedlibs/lib64/libcrypto.so/f66da077c8b2938f361c7f3b302052e28c435918e8c8d6629acc4cca4b682ca2879fecd9f64835b4ab53e686952b469ff5c72de00b8d580842904674fb53dae6/libcrypto.so /apex/sharedlibs/lib64/libssl.so/67f8686cf2e22860c9ce69fbc0a70e4900e2975438e9fc3ab2f93abd60adf1c2fa2044a361a7f38378f07191e06dab004151cbba6d21749f8b0b0325156f89ec/libssl.so /apex/com.android.art/lib64/libart-compiler.so /apex/com.android.conscrypt/lib64/libjavacrypto.so /apex/com.android.art/lib64/libopenjdkjvm.so /apex/com.android.art/lib64/libopenjdk.so /apex/com.android.art/lib64/libjavacore.so /apex/com.android.art/lib64/libexpat.so /apex/com.android.art/lib64/libandroidio.so /apex/com.android.i18n/lib64/libicu_jni.so /system/lib64/libwebviewchromium_plat_support.so /system/lib64/libstdc++.so /system/lib64/libutilscallstack.so /system/lib64/android.hardware.renderscript@1.0.so /system/lib64/libRS.so /system/lib64/libOpenSLES.so /system/lib64/libstagefright_http_support.so /system/lib64/libOpenMAXAL.so /system/lib64/libxml2.so /system/lib64/libwilhelm.so /system/lib64/libcamera2ndk.
+1794978630429     84  I EglProbe: so /system/lib64/libjnigraphics.so /system/lib64/libamidi.so /system/lib64/aaudio-aidl-cpp.so /system/lib64/libaaudio_internal.so /system/lib64/libaaudio.so /system/lib64/libandroid.so /system/lib64/android.hardware.power@1.1.so /system/lib64/android.hardware.power@1.2.so /system/lib64/android.hardware.power@1.0.so /system/lib64/libactivitymanager_aidl.so /system/lib64/android.hardware.power-V4-ndk.so /system/lib64/android.hardware.power-V4-cpp.so /system/lib64/libpowermanager.so /system/lib64/android.hardware.power@1.3.so /system/lib64/libartpalette-system.so /system/lib64/libtombstoned_client.so /apex/com.android.art/lib64/libprofile.so /apex/com.android.art/lib64/libdexfile.so /apex/com.android.art/lib64/libunwindstack.so /apex/com.android.art/lib64/libartbase.so /apex/com.android.art/lib64/libart.so /system/lib64/heapprofd_client_api.so /system/lib64/libcodec2_client.so /system/lib64/libmedia_jni_utils.so /system/lib64/libmediautils.so /system/lib64/libEGL.so /system/lib64/libnativeloader_lazy.so /system/lib64/android.system.suspend-V1-ndk.so /system/lib64/libmediadrm.so /system/lib64/libaudioclient.so /system/lib64/server_configurable_flags.so /system/lib64/libsfplugin_ccodec_utils.so /system/lib64/libincfs.so /system/lib64/libutils.so /system/lib64/android.hardware.graphics.mapper@4.0.so /system/lib64/libvulkan.so /system/lib64/android.hardware.configstore@1.0.so /system/lib64/libmediametrics.so /system/lib64/libgraphicsenv.so /system/lib64/effect-aidl-cpp.so /system/li
+1794978630429     85  I EglProbe: b64/libcutils.so /system/lib64/libstagefright_xmlparser.so /system/lib64/android.hardware.media.omx@1.0.so /system/lib64/android.hardware.graphics.allocator@3.0.so /system/lib64/libc++.so /system/lib64/libaudioutils.so /system/lib64/libcamera_client.so /system/lib64/libcrypto.so /system/lib64/android.hardware.graphics.mapper@2.1.so /system/lib64/libGLESv2.so /system/lib64/libion.so /system/lib64/libGLESv1_CM.so /system/lib64/libandroid_runtime_lazy.so /system/lib64/android.hardware.graphics.common@1.2.so /system/lib64/libaudiomanager.so /system/lib64/libpdfium.so /system/lib64/libstagefright_codecbase.so /system/lib64/libmedia.so /system/lib64/libnativebridge_lazy.so /system/lib64/libmemtrack.so /system/lib64/libspeexresampler.so /system/lib64/mediametricsservice-aidl-cpp.so /system/lib64/libheif.so /system/lib64/android.hidl.allocator@1.0.so /system/lib64/libbase.so /system/lib64/libshmemcompat.so /system/lib64/libprocessgroup.so /system/lib64/android.hardware.graphics.mapper@3.0.so /system/lib64/libsfplugin_ccodec.so /system/lib64/libdatasource.so /system/lib64/android.hardware.camera.common@1.0.so /system/lib64/android.hardware.graphics.common@1.0.so /system/lib64/libcodec2_hidl_client@1.0.so /system/lib64/libultrahdr.so /system/lib64/android.hardware.graphics.allocator@4.0.so /system/lib64/libdataloader.so /system/lib64/libft2.so /system/lib64/libcodec2_hidl_client@1.1.so /system/lib64/libpackagelistparser.so /system/lib64/audioflinger-aidl-cpp.so /system/lib64/libandroid
+1794978630429     86  I EglProbe: _runtime.so /system/lib64/android.hardware.media.bufferpool2-V1-ndk.so /system/lib64/libhardware.so /apex/com.android.i18n/lib64/libicu.so /system/lib64/android.hardware.graphics.allocator@2.0.so /system/lib64/libimage_io.so /system/lib64/libz.so /system/lib64/android.hardware.drm@1.1.so /system/lib64/libdng_sdk.so /system/lib64/android.hardware.graphics.common@1.1.so /system/lib64/libstagefright_aidl_bufferpool2.so /system/lib64/android.hidl.token@1.0.so /system/lib64/libmediandk_utils.so /system/lib64/libmedia_omx_client.so /system/lib64/liblzma.so /system/lib64/libbattery.so /system/lib64/android.hardware.graphics.composer3-V2-ndk.so /system/lib64/libnblog.so /system/lib64/libbpf_bcc.so /system/lib64/libbinder_ndk.so /system/lib64/android.hidl.memory.token@1.0.so /system/lib64/libvndksupport.so /system/lib64/android.hardware.common.fmq-V1-ndk.so /system/lib64/android.hardware.memtrack@1.0.so /system/lib64/libaudioclient_aidl_conversion.so /system/lib64/libstagefright_omx.so /system/lib64/android.hardware.media.c2@1.0.so /system/lib64/libstagefright.so /system/lib64/libcodec2.so /system/lib64/libhardware_legacy.so /system/lib64/android.hardware.graphics.common-V4-ndk.so /system/lib64/android.hardware.graphics.bufferqueue@2.0.so /system/lib64/android.hardware.drm@1.3.so /system/lib64/android.hardware.media@1.0.so /system/lib64/libappfuse.so /system/lib64/libusbhost.so /system/lib64/libpermission.so /system/lib64/libdebuggerd_client.so /system/lib64/android.hardware.memtrack-
+1794978630429     87  I EglProbe: V1-ndk.so /system/lib64/android.media.audio.common.types-V2-cpp.so /system/lib64/libprocinfo.so /system/lib64/libsensor.so /system/lib64/libSurfaceFlingerProp.so /apex/com.android.runtime/lib64/bionic/libdl_android.so /system/lib64/libziparchive.so /system/lib64/libbpf_minimal.so /system/lib64/libjpegdecoder.so /system/lib64/android.hardware.graphics.allocator-V2-ndk.so /system/lib64/libmediadrmmetrics_lite.so /system/lib64/audiopolicy-types-aidl-cpp.so /system/lib64/libmeminfo.so /system/lib64/libvintf.so /system/lib64/framework-permission-aidl-cpp.so /system/lib64/libstagefright_framecapture_utils.so /system/lib64/android.hardware.common-V2-ndk.so /system/lib64/libtimeinstate.so /system/lib64/android.hardware.graphics.mapper@2.0.so /system/lib64/libstagefright_surface_utils.so /system/lib64/libdmabufheap.so /system/lib64/android.hardware.graphics.bufferqueue@1.0.so /system/lib64/audioclient-types-aidl-cpp.so /system/lib64/libhwui.so /system/lib64/libaudio_aidl_conversion_common_cpp.so /system/lib64/libstagefright_omx_utils.so /system/lib64/libandroid_net.so /system/lib64/android.hardware.drm-V1-ndk.so /system/lib64/libbinder.so /system/lib64/libgralloctypes.so /system/lib64/lib-platform-compat-native-api.so /system/lib64/libnativedisplay.so /system/lib64/libGLESv3.so /system/lib64/libandroidfw.so /system/lib64/libpcre2.so /system/lib64/libjpeg.so /apex/com.android.i18n/lib64/libandroidicu.so /system/lib64/libcodec2_vndk.so /system/lib64/libfmq.so /system/lib64/libgui.so /sy
+1794978630429     88  I EglProbe: stem/lib64/libstagefright_bufferqueue_helper.so /system/lib64/libmedia_omx.so /system/lib64/libPlatformProperties.so /system/lib64/android.hardware.media.bufferpool@2.0.so /system/lib64/libETC1.so /system/lib64/libharfbuzz_ng.so /apex/com.android.i18n/lib64/libicuuc.so /system/lib64/libhidlallocatorutils.so /system/lib64/libsync.so /system/lib64/libcodec2_hidl_client@1.2.so /system/lib64/libinput.so /system/lib64/android.hardware.drm@1.4.so /system/lib64/libunwindstack.so /system/lib64/android.hardware.configstore-utils.so /system/lib64/libhidlmemory.so /system/lib64/android.hardware.camera.device@3.2.so /system/lib64/shared-file-region-aidl-cpp.so /system/lib64/android.hardware.drm@1.0.so /system/lib64/libprotobuf-cpp-lite.so /apex/com.android.i18n/lib64/libicui18n.so /system/lib64/android.hardware.media.c2@1.1.so /system/lib64/libshmemutil.so /system/lib64/spatializer-aidl-cpp.so /system/lib64/libaudiofoundation.so /system/lib64/libcgrouprc.so /system/lib64/android.hardware.media.c2@1.2.so /system/lib64/libnetdutils.so /system/lib64/android.hardware.drm@1.2.so /system/lib64/libmedia_codeclist.so /system/lib64/libui.so /system/lib64/libstagefright_bufferpool@2.0.1.so /system/lib64/libimg_utils.so /system/lib64/libhidlbase.so /system/lib64/android.hidl.memory@1.0.so /system/lib64/libcamera_metadata.so /system/lib64/android.hidl.token@1.0-utils.so /system/lib64/libjpegencoder.so /system/lib64/android.hardware.configstore@1.1.so /system/lib64/libsqlite.so /system/lib64/libmedia
+1794978630429     89  I EglProbe: _helper.so /system/lib64/libexpat.so /system/lib64/libmediandk.so /system/lib64/android.hardware.cas.native@1.0.so /system/lib64/capture_state_listener-aidl-cpp.so /system/lib64/libtinyxml2.so /system/lib64/libaudiopolicy.so /system/lib64/libpng.so /system/lib64/libmemunreachable.so /system/lib64/libnativewindow.so /system/lib64/audiopolicy-aidl-cpp.so /system/lib64/android.hidl.safe_union@1.0.so /system/lib64/av-types-aidl-cpp.so /system/lib64/android.hardware.cas@1.0.so /system/lib64/libselinux.so /system/lib64/libstagefright_foundation.so /system/lib64/libminikin.so /system/lib64/packagemanager_aidl-cpp.so /system/lib64/libpiex.so /apex/com.android.art/lib64/libartpalette.so /apex/com.android.art/lib64/libnativeloader.so /apex/com.android.art/lib64/libnativebridge.so /apex/com.android.art/lib64/liblz4.so /apex/com.android.art/lib64/liblzma.so /apex/com.android.os.statsd/lib64/libstatssocket.so /apex/sharedlibs/lib64/libbase.so/a5cce001552a532d111a59af51bbb6cc5e93475522f033f9807fa5f8ad346840deb8c6475491b3425ed7ef34094fb412761afd70b2205820f67d8a4c71c39832/libbase.so /apex/com.android.runtime/lib64/bionic/libc.so /data/libacoshw.so /data/app/libacosart.so /data/lib/libacos_binder_driver.so /apex/com.android.art/lib64/libsigchain.so /apex/com.android.art/lib64/libnativehelper.so /apex/com.android.runtime/lib64/bionic/libm.so /data/seccomp/libacos_seccomp_guest.so /system/lib64/liblog.so /apex/com.android.runtime/lib64/bionic/libdl.so /data/shim/libartshim.so /system/lib64/libn
+1794978630429     90  I EglProbe: etd_client.so
+1794978630429     91  I EglProbe: client EGL_EXTENSIONS=EGL_ANDROID_GLES_layers EGL_ANGLE_platform_angle EGL_EXT_client_extensions EGL_KHR_platform_android  err=EGL_SUCCESS
+1794978630429     92  D libEGL: loaded /vendor/lib64/egl/libEGL_angle.so
+1794978630429     93  D libEGL: loaded /vendor/lib64/egl/libGLESv1_CM_angle.so
+1794978630429     94  D libEGL: loaded /vendor/lib64/egl/libGLESv2_angle.so
+1794978630429     95  E GraphicsEnv: Failed to get gpu service
+1794978630429     96  D libEGL: dlopen (libGLESv2_angle.so) success at 8c6e11a1
+1794978630429     97  I EglProbe: default: display=android.opengl.EGLDisplay@c340b2bf noDisplay=false err=EGL_SUCCESS
+1794978630429     98  E vndksupport: Could not load vulkan.pastel.so from default namespace: dlopen failed: library "vulkan.pastel.so" not found.
+1794978630429     99  E GraphicsEnv: Failed to get gpu service
+1794978630429    100  E GraphicsEnv: Failed to get gpu service
+1794978630429    101  E GraphicsEnv: Failed to get gpu service
+1794978630429    102  E libEGL: ANGLE Error:Display.cpp:1023 (initialize): ANGLE Display::initialize error 0: Internal Vulkan error (-3): Initialization of an object could not be completed for implementation-specific reasons, in external/angle/src/libANGLE/renderer/vulkan/RendererVk.cpp, initialize:1782.
+1794978630429    103  E ANGLE: ERR: Display.cpp:1023 (initialize): ANGLE Display::initialize error 0: Internal Vulkan error (-3): Initialization of an object could not be completed for implementation-specific reasons, in external/angle/src/libANGLE/renderer/vulkan/RendererVk.cpp, initialize:1782.
+
+1794978630429    104  W libEGL: eglInitialize(c340cf40) failed (EGL_NOT_INITIALIZED)
+1794978630429    105  E HidlServiceManagement: getService: defaultServiceManager() is null
+1794978630429    106  I EglProbe: default: eglInitialize -> true -1.-1 err=EGL_SUCCESS
+1794978630429    107  I EglProbe: maps[default after eglInitialize] lines=2083 vulkan.pastel_mapped=false new_libs: /vendor/lib64/libGLESv2_angle.so /vendor/lib64/egl/libEGL_angle.so /vendor/lib64/egl/libGLESv1_CM_angle.so
+1794978630429    108  I EglProbe: default: EGL_VENDOR=Android
+1794978630429    109  I EglProbe: default: EGL_VERSION=1.4 Android META-EGL
+1794978630429    110  I EglProbe: default: EGL_CLIENT_APIS=OpenGL_ES
+1794978630429    111  I EglProbe: default: EGL_EXTENSIONS=EGL_ANDROID_front_buffer_auto_refresh EGL_ANDROID_get_native_client_buffer EGL_ANDROID_presentation_time EGL_EXT_surface_CTA861_3_metadata EGL_EXT_surface_SMPTE2086_metadata EGL_KHR_get_all_proc_addresses EGL_KHR_swap_buffers_with_damage 
+1794978630429    112  I EglProbe: default: eglChooseConfig(pbuffer,es2,rgba8888) -> false num=0 err=EGL_NOT_INITIALIZED
+1794978630429    113  I EglProbe: default: eglGetConfigs total=0 err=EGL_NOT_INITIALIZED
+1794978630429    114  E libEGL: eglGetPlatformDisplayTmpl:254 error 300c (EGL_BAD_PARAMETER)
+1794978630429    115  I EglProbe: angle-default: display=android.opengl.EGLDisplay@20f noDisplay=false err=EGL_BAD_PARAMETER
+1794978630429    116  E libEGL: eglInitializeImpl:282 error 3008 (EGL_BAD_DISPLAY)
+1794978630429    117  I EglProbe: angle-default: eglInitialize -> false 0.0 err=EGL_BAD_DISPLAY
+1794978630429    118  I EglProbe: maps[angle-default after eglInitialize] lines=2084 vulkan.pastel_mapped=false new_libs: (none)
+1794978630429    119  E libEGL: eglGetPlatformDisplayTmpl:254 error 300c (EGL_BAD_PARAMETER)
+1794978630429    120  I EglProbe: angle-vulkan: display=android.opengl.EGLDisplay@20f noDisplay=false err=EGL_BAD_PARAMETER
+1794978630429    121  E libEGL: eglInitializeImpl:282 error 3008 (EGL_BAD_DISPLAY)
+1794978630429    122  I EglProbe: angle-vulkan: eglInitialize -> false 0.0 err=EGL_BAD_DISPLAY
+1794978630429    123  I EglProbe: maps[angle-vulkan after eglInitialize] lines=2085 vulkan.pastel_mapped=false new_libs: (none)
+1794978630429    124  E libEGL: eglGetPlatformDisplayTmpl:254 error 300c (EGL_BAD_PARAMETER)
+1794978630429    125  I EglProbe: angle-vulkan-swiftshader: display=android.opengl.EGLDisplay@20f noDisplay=false err=EGL_BAD_PARAMETER
+1794978630429    126  E libEGL: eglInitializeImpl:282 error 3008 (EGL_BAD_DISPLAY)
+1794978630429    127  I EglProbe: angle-vulkan-swiftshader: eglInitialize -> false 0.0 err=EGL_BAD_DISPLAY
+1794978630429    128  I EglProbe: maps[angle-vulkan-swiftshader after eglInitialize] lines=2085 vulkan.pastel_mapped=false new_libs: (none)
+1794978630429    129  E libEGL: eglGetPlatformDisplayTmpl:254 error 300c (EGL_BAD_PARAMETER)
+1794978630429    130  I EglProbe: angle-opengles: display=android.opengl.EGLDisplay@20f noDisplay=false err=EGL_BAD_PARAMETER
+1794978630429    131  E libEGL: eglInitializeImpl:282 error 3008 (EGL_BAD_DISPLAY)
+1794978630429    132  I EglProbe: angle-opengles: eglInitialize -> false 0.0 err=EGL_BAD_DISPLAY
+1794978630429    133  I EglProbe: maps[angle-opengles after eglInitialize] lines=2085 vulkan.pastel_mapped=false new_libs: (none)
+1794978630429    134  E libEGL: eglGetPlatformDisplayTmpl:254 error 300c (EGL_BAD_PARAMETER)
+1794978630429    135  I EglProbe: angle-opengl: display=android.opengl.EGLDisplay@20f noDisplay=false err=EGL_BAD_PARAMETER
+1794978630429    136  E libEGL: eglInitializeImpl:282 error 3008 (EGL_BAD_DISPLAY)
+1794978630429    137  I EglProbe: angle-opengl: eglInitialize -> false 0.0 err=EGL_BAD_DISPLAY
+1794978630429    138  I EglProbe: maps[angle-opengl after eglInitialize] lines=2086 vulkan.pastel_mapped=false new_libs: (none)
+1794978630429    139  E libEGL: eglGetPlatformDisplayTmpl:254 error 300c (EGL_BAD_PARAMETER)
+1794978630429    140  I EglProbe: angle-null: display=android.opengl.EGLDisplay@20f noDisplay=false err=EGL_BAD_PARAMETER
+1794978630429    141  E libEGL: eglInitializeImpl:282 error 3008 (EGL_BAD_DISPLAY)
+1794978630429    142  I EglProbe: angle-null: eglInitialize -> false 0.0 err=EGL_BAD_DISPLAY
+1794978630429    143  I EglProbe: maps[angle-null after eglInitialize] lines=2087 vulkan.pastel_mapped=false new_libs: (none)
+1794978630429    144  I EglProbe: end

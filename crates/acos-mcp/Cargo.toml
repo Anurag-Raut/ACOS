@@ -20,6 +20,11 @@ acos-jni = { path = "../acos-jni" }
 # module, and advertised verbatim here (no second copy to drift from).
 acos-netd = { path = "../acos-netd" }
 acos-protocol = { path = "../acos-protocol" }
+# GLSHIP: `acos_capabilities` reports the guest's software GL provider
+# (`gles: angle-swiftshader | none`). The probe lives in `acos-art` (it owns the
+# sysroot + provider manifest contract), so this asks it instead of keeping a
+# second copy of the selection rule.
+acos-art = { path = "../acos-art" }
 acos-runtime = { path = "../acos-runtime" }
 acos-sandbox = { path = "../acos-sandbox" }
 # ADR-0029 item 6: `acos_capabilities` and the help limits section are generated

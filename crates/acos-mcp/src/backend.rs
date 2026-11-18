@@ -97,8 +97,18 @@ impl Capabilities {
             // generated from the service-module registry (the same source the
             // `acos_help` limits section renders), never hand-written here.
             "modules": acos_services::module::capabilities_json(),
+            // GLSHIP: the guest's software GL, `angle-swiftshader | none`, with
+            // the reason (not installed / `ACOS_GUEST_GLES=off` / override).
+            // One implementation: the launcher's own selection rule.
+            "gles": gles_json(),
         })
     }
+}
+
+/// GLSHIP: `{"provider": "angle-swiftshader" | "none", "detail": "..."}`.
+fn gles_json() -> Value {
+    let (provider, detail) = acos_art::gles::capability();
+    json!({ "provider": provider, "detail": detail })
 }
 
 /// Everything a backend needs for one call.
