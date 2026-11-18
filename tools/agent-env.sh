@@ -87,7 +87,13 @@ if [ -n "$_acos_sccache" ]; then
     # sources under any of them hash to one cache key. The list is part of the
     # key, so it must be identical for every agent on the host (it is: this
     # file is the only place that sets it).
-    export SCCACHE_BASEDIRS="${SCCACHE_BASEDIRS:-/home/Qui/.t3/worktrees/acos:/home/Qui/Projects/acos}"
+    # (the three layouts worktrees are actually checked out in: the t3 tree, the
+    # main checkout, and the older `Projects/acos/.cache/wt-*` worktrees)
+    export SCCACHE_BASEDIRS="${SCCACHE_BASEDIRS:-/home/Qui/.t3/worktrees/acos:/home/Qui/Projects/acos/.cache:/home/Qui/Projects/acos}"
+    # The daemon keeps the configuration it was started with: after changing any
+    # SCCACHE_* value below, run `sccache --stop-server` once so the next build
+    # starts a server with the new settings (otherwise the old basedirs keep
+    # being used and cross-worktree hits silently stop).
     # Keep the server up between builds (default is 10 min); it is a few MB.
     export SCCACHE_IDLE_TIMEOUT="${SCCACHE_IDLE_TIMEOUT:-1800}"
     ACOS_SCCACHE_STATUS="sccache=$_acos_sccache cache=$SCCACHE_DIR ($SCCACHE_CACHE_SIZE)"

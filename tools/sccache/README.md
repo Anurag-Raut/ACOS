@@ -78,5 +78,9 @@ tools/sccache/build.sh            # download (sha256-checked) → patch → buil
 KEEP_SRC=1 tools/sccache/build.sh # keep the build tree under ~/.cache
 ```
 
-Then `sccache --version`, `sccache --show-stats`. The script installs to
+Then `sccache --version`, `sccache --show-stats`. The daemon keeps the
+configuration it was started with, so after changing `SCCACHE_BASEDIRS` /
+`SCCACHE_DIR` / `SCCACHE_CACHE_SIZE` run `sccache --stop-server` once; the next
+build starts a server with the new settings (a stale server silently stops
+producing cross-worktree hits). The script installs to
 `~/.cargo/bin` (override with `SCCACHE_PREFIX`), never to `~/.local`.

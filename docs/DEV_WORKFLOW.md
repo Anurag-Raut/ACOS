@@ -471,7 +471,7 @@ What it exports:
 | `RUSTC_WRAPPER` | `~/.cargo/bin/sccache` | the cache wrapper |
 | `SCCACHE_DIR` | `/home/Qui/.cache/sccache` | one cache for the host (disk, LRU-evicted) |
 | `SCCACHE_CACHE_SIZE` | `40G` | ~2x a full workspace build |
-| `SCCACHE_BASEDIRS` | `/home/Qui/.t3/worktrees/acos:/home/Qui/Projects/acos` | these are interchangeable checkouts: the same sources under any of them hash to one key |
+| `SCCACHE_BASEDIRS` | `/home/Qui/.t3/worktrees/acos:/home/Qui/Projects/acos/.cache:/home/Qui/Projects/acos` | these are the layouts worktrees are checked out in; they are interchangeable checkouts, so the same sources under any of them hash to one key |
 | `CARGO_INCREMENTAL` | `0` | sccache cannot cache incremental compiles at all |
 | `CARGO_PROFILE_{DEV,TEST,RELEASE}_DEBUG` | `0` | target dirs several times smaller (the brief's rule) |
 | `ACOS_FONT_DIR`, `ACOS_VIEW_TEST_DIR`, `.cache/{boot/android-34,art,gaten}` symlinks | as `BRIEF_COMMON` | the ART/fixture test env |

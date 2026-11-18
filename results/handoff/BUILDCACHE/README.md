@@ -17,7 +17,7 @@ Branch: `buildcache` (from `modules` @ `aaf518bf8`).
 | release tarball | `sccache-v0.19.0-x86_64-unknown-linux-musl.tar.gz`, sha256 `aa73c7270c997894038c0d8f0d297865f57569e1687883322bc431713d4bb9dd` (verified by `tools/sccache/build.sh`) |
 | cache dir | `/home/Qui/.cache/sccache` (disk, LRU) |
 | size cap | `SCCACHE_CACHE_SIZE=40G` (current size after the runs below: **337 MB**) |
-| base dirs | `SCCACHE_BASEDIRS=/home/Qui/.t3/worktrees/acos:/home/Qui/Projects/acos` |
+| base dirs | `SCCACHE_BASEDIRS=/home/Qui/.t3/worktrees/acos:/home/Qui/Projects/acos/.cache:/home/Qui/Projects/acos` |
 | install path | user-local (`~/.cargo/bin`), **no sudo**, nothing written to `~/.local` |
 
 Nothing is set in `~/.cargo/config.toml` or any global file: another project on
