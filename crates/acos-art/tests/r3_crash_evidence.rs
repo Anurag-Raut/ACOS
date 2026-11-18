@@ -42,39 +42,14 @@ fn repo_root() -> PathBuf {
         .expect("the crate lives at <repo>/crates/acos-art")
 }
 
-fn sysroot() -> PathBuf {
-    std::env::var_os("ACOS_ART_SYSROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo_root().join(".cache/art/sysroot"))
-}
-
 fn warm_data() -> PathBuf {
-    if let Some(p) = std::env::var_os("ACOS_ART_TEST_DATA") {
-        return PathBuf::from(p);
-    }
-    let from_env = std::env::var_os("ACOS_ART_DATA").map(PathBuf::from);
-    if let Some(p) = from_env.filter(|p| p.join("app/guest/classes.dex").is_file()) {
-        return p;
-    }
-    repo_root().join(".cache/art/data")
+    acos_test_support::art_warm_data(&repo_root())
 }
 
+/// HYG2: a missing ART input fails the test by name (or is a counted skip under
+/// `ACOS_ALLOW_ART_SKIP=1`), never a silent pass.
 fn require_art() -> Option<()> {
-    if !sysroot().join("system/apex").is_dir() {
-        eprintln!(
-            "SKIP R3 crash evidence: no ART sysroot at {}",
-            sysroot().display()
-        );
-        return None;
-    }
-    if !warm_data().join("app/guest/classes.dex").is_file() {
-        eprintln!(
-            "SKIP R3 crash evidence: no cached guest dex under {}",
-            warm_data().display()
-        );
-        return None;
-    }
-    Some(())
+    acos_test_support::require_art(&repo_root(), "R3 crash evidence").map(|_| ())
 }
 
 fn apk() -> PathBuf {

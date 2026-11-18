@@ -117,9 +117,17 @@ fn manifest_parses_are_correct_and_timed_per_call() {
     for t in TARGETS {
         let path = repo_path(t.rel);
         if !path.is_file() {
-            // A missing optional APK (e.g. Gaten is not built in this checkout)
-            // must not hide the others; the message makes the skip visible.
-            eprintln!("SKIP apk={} missing: {}", t.name, path.display());
+            // HYG2: a missing APK is a missing prerequisite, not a quiet
+            // `continue` — the loop used to report `ok` having timed nothing.
+            acos_test_support::require_prereq(
+                false,
+                &format!("manifest_parses_are_correct_and_timed_per_call apk={}", t.name),
+                &format!(
+                    "{} is missing — run tools/build-apps.sh (and link .cache/gaten), or \
+                     set ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+                    path.display()
+                ),
+            );
             continue;
         }
 

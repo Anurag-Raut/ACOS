@@ -165,7 +165,12 @@ mod tests {
     #[test]
     fn plan_grants_writes_only_on_the_per_run_roots() {
         if acos_sandbox::landlock_abi().is_none() {
-            eprintln!("SKIP landlock plan test: this kernel has no Landlock");
+            acos_test_support::require_prereq(
+                false,
+                "landlock plan test",
+                "this kernel has no Landlock — run on a kernel with Landlock, or set \
+                 ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+            );
             return;
         }
         let text = plan_preview().expect("plan");

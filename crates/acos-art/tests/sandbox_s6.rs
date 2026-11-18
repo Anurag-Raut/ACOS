@@ -242,7 +242,11 @@ fn probe_root(tag: &str) -> Option<ArtRoot> {
     let root = match ArtRoot::resolve(None, Some(dir.join("data"))) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("SKIP {tag}: no ART sysroot ({e})");
+            acos_test_support::require_prereq(
+                false,
+                &format!("{tag} (sandbox S6)"),
+                &format!("no ART sysroot ({e}) — run tools/art-sysroot.sh"),
+            )?;
             return None;
         }
     };
@@ -531,7 +535,12 @@ fn escape_corpus_is_denied_in_the_real_guest() {
 fn missing_plan_fails_closed_on_a_landlock_kernel() {
     let _g = guard();
     if acos_sandbox::landlock_abi().is_none() {
-        eprintln!("SKIP: this kernel has no Landlock (the documented fallback path)");
+        acos_test_support::require_prereq(
+            false,
+            "sandbox S6 missing-plan",
+            "this kernel has no Landlock (the documented fallback path) — run on a \
+             kernel with Landlock, or set ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+        );
         return;
     }
     let Some(root) = probe_root("no-plan") else {

@@ -2878,15 +2878,19 @@ pub fn dispatch(
             // (`PendingIntentInfo.writeToParcel`: creator package, creator uid,
             // immutable, intent-sender type), i.e. what
             // `ActivityManagerService.getInfoForIntentSender` answers from the
-            // record. A session runs one app, so the creator uid is the fixture
-            // uid the manifest table was seeded with; a binder that is not a
-            // record answers the empty package with `immutable=false, type=0`.
+            // record (`r.key.packageName, r.uid, r.key.flags & FLAG_IMMUTABLE,
+            // r.key.type`). The creator uid is the **record's** — the process
+            // that called `getIntentSender` — not the fixture uid: a pending
+            // intent created by a second app reported the primary package's uid
+            // (PROCUID README §7 item 2), and `PendingIntent.getCreatorUid()`
+            // reads exactly this field. A binder that is not a record answers
+            // the empty package with `immutable=false, type=0, uid=0`.
             let record = state.intent_senders.record(binder);
             vec![Value::TypedObject(Parcelable::ordered(
                 "android.app.ActivityManager$PendingIntentInfo",
                 vec![
                     Value::Str(Some(record.map(|r| r.package.clone()).unwrap_or_default())),
-                    Value::Int(record.map(|_| crate::pms::FIXTURE_UID).unwrap_or(0)),
+                    Value::Int(record.map(|r| r.uid).unwrap_or(0)),
                     Value::Bool(
                         record
                             .map(|r| r.flags & crate::pending_intent::FLAG_IMMUTABLE != 0)

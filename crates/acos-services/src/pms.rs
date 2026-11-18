@@ -2523,7 +2523,15 @@ mod tests {
         let path = crate::workspace_path("fixtures/build/apps/service-provider.apk")
             .unwrap_or_else(|| PathBuf::from("fixtures/build/apps/service-provider.apk"));
         if !path.is_file() {
-            eprintln!("SKIP from_apk_reads_provider_authorities: fixture APK not built");
+            acos_test_support::require_prereq(
+                false,
+                "from_apk_reads_provider_authorities",
+                &format!(
+                    "fixture APK not built at {} — run tools/build-apps.sh, or set \
+                     ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+                    path.display()
+                ),
+            );
             return;
         }
         let state = PmsState::from_apk(&path).expect("from_apk");
