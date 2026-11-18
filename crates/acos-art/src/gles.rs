@@ -99,6 +99,18 @@ pub struct GlesManifest {
     /// sysroot's own libvulkan). `None` = no ICD, i.e. GLSPIKE's arm.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vulkan_tag: Option<String>,
+    /// Extra guest system properties the provider needs (GPUSPIKE): Waydroid's
+    /// `ro.hardware.gralloc=gbm`, `gralloc.gbm.device=/dev/dri/renderD129`.
+    /// Never `ro.hardware.egl`/`ro.hardware.vulkan` (those come from `tag` and
+    /// `vulkan_tag`, one spelling); see [`valid_prop_key`].
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub props: std::collections::BTreeMap<String, String>,
+    /// The host DRM render node a host-GPU provider needs inside the sandbox
+    /// (`/dev/dri/renderD<N>`), bound read-write **only** when this provider
+    /// is selected. `$ACOS_GUEST_GLES_RENDER_NODE` overrides it (the node
+    /// number differs per machine and boot). See [`render_node`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub render_node: Option<String>,
     /// Human name of the provider, e.g. `ANGLE on gfxstream (emulator 34.1.9)`.
     pub provider: String,
     /// Where the bytes came from (URL or local image path), for the report.
@@ -196,6 +208,63 @@ impl Provider {
     }
 }
 
+/// The environment variable that overrides the manifest's `render_node`.
+pub const RENDER_NODE_ENV: &str = "ACOS_GUEST_GLES_RENDER_NODE";
+
+/// `/dev/dri/renderD<digits>` and nothing else: the only device the flag can
+/// ever bind into the sandbox (no card nodes = no modesetting/master, no other
+/// `/dev` path), so a hand-edited manifest or env cannot widen the sandbox.
+#[must_use]
+pub fn valid_render_node(path: &str) -> bool {
+    match path.strip_prefix("/dev/dri/renderD") {
+        Some(n) => !n.is_empty() && n.len() <= 4 && n.bytes().all(|b| b.is_ascii_digit()),
+        None => false,
+    }
+}
+
+/// A property key a manifest may set: dotted ASCII, and never the two the
+/// launcher derives from `tag`/`vulkan_tag`.
+#[must_use]
+pub fn valid_prop_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() < 32
+        && key != "ro.hardware.egl"
+        && key != "ro.hardware.vulkan"
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
+impl Provider {
+    /// The host render node to bind, if this provider needs the GPU: the env
+    /// override, else the manifest's; validated either way. `Err` when the
+    /// value is not a render node or the node does not exist on this host.
+    pub fn render_node(&self) -> Result<Option<PathBuf>> {
+        let raw = match std::env::var(RENDER_NODE_ENV) {
+            Ok(v) if !v.trim().is_empty() => Some(v.trim().to_string()),
+            _ => self.manifest.render_node.clone(),
+        };
+        let Some(node) = raw else {
+            return Ok(None);
+        };
+        if !valid_render_node(&node) {
+            return Err(Error::Layout(format!(
+                "ACOS_GUEST_GLES={}: render node {node:?} is not /dev/dri/renderD<N>",
+                self.name
+            )));
+        }
+        let path = PathBuf::from(&node);
+        if !path.exists() {
+            return Err(Error::Layout(format!(
+                "ACOS_GUEST_GLES={}: render node {node} does not exist on this host \
+                 (set {RENDER_NODE_ENV}=/dev/dri/renderD<N> for this machine's GPU)",
+                self.name
+            )));
+        }
+        Ok(Some(path))
+    }
+}
+
 /// `$ACOS_GUEST_GLES_DIR` as an absolute host directory, if set.
 fn provider_dir_override() -> Option<PathBuf> {
     let raw = std::env::var(DIR_ENV).ok()?;
@@ -264,6 +333,11 @@ pub fn tag_from_env(root: &ArtRoot) -> Result<Option<String>> {
 /// with the flag on fails loudly in `Sandbox::command` (the bind source check)
 /// before any guest starts, and this is only the property table.
 pub fn selected_tags() -> Result<Option<(String, Option<String>)>> {
+    Ok(selected_props()?.map(|(egl, vulkan, _)| (egl, vulkan)))
+}
+
+/// [`selected_tags`] plus the provider's extra properties (GPUSPIKE).
+pub fn selected_props() -> Result<Option<(String, Option<String>, Vec<(String, String)>)>> {
     let Some(name) = provider_name_from_env()? else {
         return Ok(None);
     };
@@ -275,6 +349,12 @@ pub fn selected_tags() -> Result<Option<(String, Option<String>)>> {
     Ok(Some((
         provider.manifest.tag.clone(),
         provider.vulkan_tag().map(ToString::to_string),
+        provider
+            .manifest
+            .props
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
     )))
 }
 
@@ -315,6 +395,20 @@ pub fn load(root: &ArtRoot, name: &str) -> Result<Provider> {
         return Err(Error::Layout(format!(
             "ACOS_GUEST_GLES={name}: manifest lists no files"
         )));
+    }
+    for k in manifest.props.keys() {
+        if !valid_prop_key(k) {
+            return Err(Error::Layout(format!(
+                "ACOS_GUEST_GLES={name}: manifest prop key {k:?} is not allowed"
+            )));
+        }
+    }
+    if let Some(node) = manifest.render_node.as_deref() {
+        if !valid_render_node(node) {
+            return Err(Error::Layout(format!(
+                "ACOS_GUEST_GLES={name}: manifest render_node {node:?} is not /dev/dri/renderD<N>"
+            )));
+        }
     }
     // The provider directory name is a label (`angle-swiftshader`), the tag is
     // the property the loader appends. What must agree is the tag and the
@@ -531,6 +625,8 @@ mod tests {
         let manifest = GlesManifest {
             tag: tag.to_string(),
             vulkan_tag,
+            props: std::collections::BTreeMap::new(),
+            render_node: None,
             provider: "test".into(),
             source: "unit test".into(),
             version: "0".into(),
@@ -797,6 +893,99 @@ mod tests {
         fs::write(p.icd_path(&r).expect("icd"), b"ICD BYTES").expect("rewrite");
         let e = verify(&p, &r).expect_err("must fail");
         assert!(e.to_string().contains("vulkan.pastel.so"), "{e}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_a_dri_render_node_can_be_bound() {
+        assert!(valid_render_node("/dev/dri/renderD128"));
+        assert!(valid_render_node("/dev/dri/renderD129"));
+        for bad in [
+            "",
+            "/dev/dri/card0",
+            "/dev/dri/renderD",
+            "/dev/dri/renderD12a",
+            "/dev/dri/renderD129/../card0",
+            "/dev/dri/../sda",
+            "/dev/sda",
+            "dev/dri/renderD129",
+            "/dev/dri/renderD12345",
+        ] {
+            assert!(!valid_render_node(bad), "{bad:?} must be rejected");
+        }
+    }
+
+    #[test]
+    fn a_manifest_cannot_override_the_derived_properties() {
+        assert!(valid_prop_key("ro.hardware.gralloc"));
+        assert!(valid_prop_key("gralloc.gbm.device"));
+        assert!(!valid_prop_key("ro.hardware.egl"));
+        assert!(!valid_prop_key("ro.hardware.vulkan"));
+        assert!(!valid_prop_key(""));
+        assert!(!valid_prop_key("a b"));
+        let dir = scratch("prop-key");
+        let r = root(&dir);
+        let mut p = install(&dir, "mesa-host", b"driver", "mesa");
+        p.manifest
+            .props
+            .insert("ro.hardware.egl".into(), "evil".into());
+        let base = dir.join("sysroot/gles/mesa-host");
+        fs::write(
+            base.join(MANIFEST),
+            serde_json::to_string_pretty(&p.manifest).expect("json"),
+        )
+        .expect("manifest");
+        let e = load(&r, "mesa-host").expect_err("must fail");
+        assert!(e.to_string().contains("ro.hardware.egl"), "{e}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_hand_edited_render_node_is_rejected_at_load_and_a_missing_one_is_named() {
+        let dir = scratch("render-node");
+        let r = root(&dir);
+        let mut p = install(&dir, "mesa-host", b"driver", "mesa");
+        let base = dir.join("sysroot/gles/mesa-host");
+        p.manifest.render_node = Some("/dev/dri/card0".into());
+        fs::write(
+            base.join(MANIFEST),
+            serde_json::to_string_pretty(&p.manifest).expect("json"),
+        )
+        .expect("manifest");
+        let e = load(&r, "mesa-host").expect_err("card node must fail");
+        assert!(e.to_string().contains("render_node"), "{e}");
+        // A well-formed node that this host lacks is a structured error that
+        // names the override, never a silent no-GPU launch.
+        p.manifest.render_node = Some("/dev/dri/renderD9999".into());
+        let missing = p.render_node().expect_err("absent node");
+        assert!(
+            missing.to_string().contains(RENDER_NODE_ENV),
+            "{missing}"
+        );
+        // No render node declared (the ANGLE/SwiftShader providers): nothing.
+        let q = install(&dir, "angle", b"driver", "angle");
+        assert_eq!(q.render_node().expect("ok"), None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extra_props_and_render_node_round_trip_through_the_manifest() {
+        let dir = scratch("props-rt");
+        let r = root(&dir);
+        let mut p = install(&dir, "mesa-host", b"driver", "mesa");
+        p.manifest
+            .props
+            .insert("ro.hardware.gralloc".into(), "gbm".into());
+        p.manifest.render_node = Some("/dev/dri/renderD129".into());
+        let base = dir.join("sysroot/gles/mesa-host");
+        fs::write(
+            base.join(MANIFEST),
+            serde_json::to_string_pretty(&p.manifest).expect("json"),
+        )
+        .expect("manifest");
+        let q = load(&r, "mesa-host").expect("load");
+        assert_eq!(q.manifest.props.get("ro.hardware.gralloc").map(String::as_str), Some("gbm"));
+        assert_eq!(q.manifest.render_node.as_deref(), Some("/dev/dri/renderD129"));
         let _ = fs::remove_dir_all(&dir);
     }
 }
