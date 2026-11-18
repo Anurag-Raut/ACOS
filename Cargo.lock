@@ -182,6 +182,7 @@ version = "0.3.0"
 dependencies = [
  "acos-render",
  "acos-sandbox",
+ "acos-test-support",
  "cc",
  "libc",
  "serde",
