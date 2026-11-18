@@ -122,11 +122,7 @@ fn every_checked_in_scenario_parses_and_validates() {
                     scenario.app
                 );
             }
-            eprintln!(
-                "SKIP scenario {}: missing fixture {}",
-                path.display(),
-                scenario.app
-            );
+            acos_test_support::require_prereq(false, "every_checked_in_scenario_parses_and_validates", &format!("scenario {}: missing fixture {}", path.display(), scenario.app));
             continue;
         }
         // Negative scenarios live under `negative/`; the suite's deliberately
