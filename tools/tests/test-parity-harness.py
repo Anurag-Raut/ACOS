@@ -246,6 +246,124 @@ if os.path.exists(os.path.join(art, "verdict.json")):
     check("an action step uses its own bound frame",
           source == "own", (seq, source))
 
+# --- 11. PARITYFIX F1: attribute placement needs a capture that has it ------
+import tempfile  # noqa: E402
+
+
+def write_obs(directory, a11y_source, texts, descs, statuses=None):
+    steps = []
+    for i, (t, d) in enumerate(zip(texts, descs)):
+        st = (statuses or {}).get(i, "pass")
+        steps.append({"index": i, "kind": "wait_for" if i == 1 else "tap",
+                      "status": st, "selector": {"content_desc": {"exact": "X"}},
+                      "error": "TIMEOUT" if st == "fail" else None,
+                      "visible_texts": t, "visible_descs": d,
+                      "visible_labels": sorted(set(t) | set(d)), "node_count": 3,
+                      "target": None})
+    doc = {"schema_version": 1, "source": "phone", "fidelity": "physical-device",
+           "device": {"density_dpi": 400}, "steps": steps}
+    if a11y_source:
+        doc["a11y_source"] = a11y_source
+    with open(os.path.join(directory, "observations.json"), "w") as fh:
+        json.dump(doc, fh)
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    # The PHONE2-era capture: no marker, no step has any text, every name under
+    # content-desc, a content_desc selector "failed" at step 1.
+    write_obs(tmp, None, [[], [], []],
+              [["Paste your token", "Save"]] * 3, statuses={1: "fail"})
+    legacy = diff_trees.PhoneSide("recorded-observations", tmp, "com.x")
+    check("a capture without a11y_source is attribute-unverified",
+          legacy.attribute_fidelity == "unverified", legacy.attribute_fidelity)
+    check("the note names the all-content-desc signature",
+          "not a single `text` node" in (legacy.attribute_note or "")
+          or "single `text` node" in (legacy.attribute_note or ""),
+          legacy.attribute_note)
+    check("a failed selector observation on it does not invalidate later steps",
+          legacy.failed_steps() == [], legacy.failed_steps())
+    check("...but it is listed as an unverified failure, not dropped",
+          [u["step"] for u in legacy.unverified_failures()] == [1],
+          legacy.unverified_failures())
+
+    acos_nodes = [
+        pn.make_node(resource_id="", class_name="android.widget.EditText",
+                     text="Paste your token", desc="Personal access token",
+                     bounds=[0, 0, 100, 40]),
+        pn.make_node(resource_id="", class_name="android.widget.TextView",
+                     text="Save", desc="", bounds=[0, 50, 100, 90]),
+    ]
+    obs = {"visible_texts": [], "visible_descs": ["Paste your token", "Save",
+                                                  "Personal access token"],
+           "target": None, "node_count": 2}
+    res = diff_trees.compare_observations(
+        acos_nodes, obs, 420, 400, 1.5, "t", {"entries": []},
+        attributes_verified=False)
+    kinds = sorted({d["kind"] for d in res["differences"]})
+    check("unverified capture: placement is reported as unverified, not as an ACOS bug",
+          "attribute_placement_unverified" in kinds
+          and "accessibility_name_attribute" not in kinds
+          and "text_vs_desc" not in kinds, kinds)
+    obs_nolabel = dict(obs, visible_descs=["Paste your token", "Save"])
+    res_u = diff_trees.compare_observations(
+        acos_nodes, obs_nolabel, 420, 400, 1.5, "t", {"entries": []},
+        attributes_verified=False)
+    res_v = diff_trees.compare_observations(
+        acos_nodes, obs_nolabel, 420, 400, 1.5, "t", {"entries": []},
+        attributes_verified=True)
+    only_u = {d["kind"] for d in res_u["differences"]
+              if d.get("key") == "label:Personal access token"}
+    only_v = {d["kind"] for d in res_v["differences"]
+              if d.get("key") == "label:Personal access token"}
+    check("unverified capture: a content-desc absent from the capture is unverified",
+          only_u == {"attribute_placement_unverified"}, only_u)
+    check("verified capture: the same absent content-desc is label_only_in_acos",
+          only_v == {"label_only_in_acos"}, only_v)
+    res = diff_trees.compare_observations(
+        acos_nodes, obs, 420, 400, 1.5, "t", {"entries": []},
+        attributes_verified=True)
+    kinds = sorted({d["kind"] for d in res["differences"]})
+    check("verified capture: the same placement difference is still a finding",
+          "accessibility_name_attribute" in kinds
+          and "attribute_placement_unverified" not in kinds, kinds)
+
+    # A target whose text moved to content-desc: unverified capture -> unverified.
+    target = {"text": "", "content_desc": "Paste your token", "identifier": "",
+              "enabled": True, "bounds": [0, 0, 100, 40]}
+    obs_t = dict(obs, target=target)
+    resolved = {"id": "", "class": "android.widget.EditText",
+                "text": "Paste your token", "desc": "Personal access token",
+                "enabled": True, "visible": True, "bounds_px": [0, 0, 100, 40]}
+    for verified in (False, True):
+        res = diff_trees.compare_observations(
+            acos_nodes, obs_t, 420, 400, 1.5, "t", {"entries": []},
+            target_a=resolved, attributes_verified=verified)
+        tkinds = {d["kind"] for d in res["differences"]}
+        if verified:
+            check("verified capture: a moved target name is a text/desc finding",
+                  tkinds & {"text_vs_desc", "text_changed", "desc_changed"}, tkinds)
+        else:
+            check("unverified capture: a moved target name is attribute_placement_unverified",
+                  "attribute_placement_unverified" in tkinds
+                  and not tkinds & {"text_vs_desc", "text_changed", "desc_changed"},
+                  tkinds)
+
+with tempfile.TemporaryDirectory() as tmp:
+    write_obs(tmp, "uiautomator-dump", [["Save"], ["Save"], ["Save"]],
+              [[], [], []], statuses={1: "fail"})
+    live = diff_trees.PhoneSide("recorded-observations", tmp, "com.x")
+    check("a uiautomator-dump capture is attribute-verified",
+          live.attribute_fidelity == "verified", live.attribute_fidelity)
+    check("on a verified capture a failed observation still invalidates later steps",
+          live.failed_steps() == [1], live.failed_steps())
+
+with tempfile.TemporaryDirectory() as tmp:
+    write_obs(tmp, None, [[], [], []], [["Save"]] * 3, statuses={0: "action_failed"})
+    legacy = diff_trees.PhoneSide("recorded-observations", tmp, "com.x")
+    check("a failed ACTION on an unverified capture still invalidates",
+          legacy.failed_steps() == [0], legacy.failed_steps())
+
+
 print()
 print(f"{PASSES} passed, {FAILURES} failed")
 sys.exit(1 if FAILURES else 0)

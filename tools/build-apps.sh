@@ -309,6 +309,11 @@ build_apk pms-parcel
 # AccessibilityManager state (enabled + installed/enabled lists) and sends a
 # real event through IAccessibilityManager.sendAccessibilityEvent.
 build_apk a11y-probe
+# a11y-names-probe (PARITYFIX F1): one view per React Native accessibility shape
+# (hint + label EditText, text-only, text + description, labelled container,
+# delegate-composed description) so the published accessible name is pinned to
+# AccessibilityNodeInfo's.
+build_apk a11y-names-probe
 # egl-probe (GLSPIKE4): raw EGL14/EGL15 diagnostic against the guest GLES provider.
 build_apk egl-probe
 

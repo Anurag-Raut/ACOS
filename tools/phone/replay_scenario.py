@@ -709,6 +709,11 @@ def replay_phone(args, doc, steps, out_dir):
         rec["visible_texts"] = visible_texts(nodes)
         rec["visible_descs"] = visible_descs(nodes)
         rec["visible_labels"] = sorted(set(rec["visible_texts"]) | set(rec["visible_descs"]))
+        # PARITYFIX: which tool produced this tree. Only `uiautomator-dump`
+        # keeps text and content-desc as the two AccessibilityNodeInfo
+        # attributes; the agent-device fallback does not, and a parity run must
+        # know before it compares which attribute a name sits under.
+        rec["a11y_source"] = snap.get("source")
         rec["screen"] = {"activity": dev.focused_activity(), "package": pkg,
                          "app_bundle_in_snapshot": snap.get("app")}
         rec["screenshot"] = dev.screenshot(out_dir, base)
@@ -721,6 +726,7 @@ def replay_phone(args, doc, steps, out_dir):
         with open(os.path.join(tree_dir, f"tree-{idx:02d}-{safe_name(kind)}.json"),
                   "w", encoding="utf-8") as fh:
             json.dump({"schema_version": 1, "source": "phone", "step": idx,
+                       "a11y_source": snap.get("source"),
                        "kind": kind, "selector": selector,
                        "screen": rec["screen"], "nodes": nodes}, fh, indent=2)
         # A `type` step's target is re-read AFTER the text landed: ACOS records
@@ -737,6 +743,10 @@ def replay_phone(args, doc, steps, out_dir):
         log(f"phone step {idx:02d} {kind} -> {rec['status']}")
 
     observations["finished"] = NOW()
+    sources = {st.get("a11y_source") for st in observations["steps"]
+               if st.get("a11y_source")}
+    observations["a11y_source"] = (sources.pop() if len(sources) == 1
+                                  else ("mixed" if sources else None))
     observations["commands"] = dev.commands
     # restore the display setting this run changed (never written at all when
     # the caller asked for a no-device-settings replay)

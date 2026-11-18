@@ -67,8 +67,12 @@ For every pair:
   delta per edge.
 
 ACOS's tree is also checked against itself: `visible_bounds` must be the node's
-`bounds` clipped to the session display. That is how PARITY1 found the rotation
-bug in `report.md` (`acos_tree_inconsistent`).
+`bounds` clipped to the session display **of that tree** (the application
+window's bounds in the same capture). That is how PARITY1 found the rotation
+bug (`acos_tree_inconsistent`); PARITYFIX fixed it in the guest
+(`LaunchMain.displayBounds` reads the live session display, no longer a value
+cached at the first capture) and pinned it with
+`tools/tests/test-tree-display-clip.py <rot1-rotate artifacts> --need-landscape`.
 
 ## Expected differences vs findings
 
@@ -115,6 +119,42 @@ In `text-set+target` coverage the label sets are compared as **text ∪
 content-desc**, and a string present on both sides under a different attribute
 is reported once as `accessibility_name_attribute` rather than twice as a set
 difference.
+
+### Attribute fidelity (PARITYFIX F1)
+
+Whether a name is a node's **text** or its **content-desc** is only comparable
+against a tree read from `uiautomator dump` (the platform's
+`AccessibilityNodeInfo`). `replay_scenario.py` now records `a11y_source` in
+`observations.json` and every `tree-NN-*.json`; the report states the phone's
+`attribute_fidelity` (`verified` | `unverified` | `n/a`).
+
+A capture **without** `a11y_source: uiautomator-dump` is `unverified`. That
+covers every 2026-11-14 Gaten capture under `results/phone/gaten-f344272/`: they
+were taken with the agent-device snapshot whose computed `label` replaced the
+node fields (`results/handoff/TREE1.md` §1) - none of their steps has a single
+`text` node, every name sits under content-desc. Against such a capture:
+
+* `accessibility_name_attribute` and a target's `text_vs_desc` / `text_changed` /
+  `desc_changed` are reported as **`attribute_placement_unverified`**
+  (`evidence-validity/attribute-placement-unverified`), never as an ACOS
+  compatibility bug and never as a pass; the only thing that settles them is a
+  live replay;
+* a failed `wait_for` / `assert_*` / `capture` observation does not invalidate
+  the steps after it (it leaves the phone on its screen and is exactly the
+  mapping artefact), and is listed under "Phone observations that failed on a
+  capture that cannot name attributes". A failed action (`tap`, `type`, `back`,
+  ...) still invalidates every later step.
+
+A `verified` capture keeps every attribute-level finding and the conservative
+invalidation rule.
+
+ACOS's own side of the question is pinned by `scenarios/a11y-names.yaml` +
+`tools/tests/test-a11y-names-tree.py` (fixture `a11y-names-probe`, one view per
+React Native accessibility shape): the tree publishes
+`AccessibilityNodeInfo.getText()/getHintText()/getContentDescription()` of the
+node, a delegate-composed description included, and never a name under an
+attribute the platform does not use; `scenarios/negative/a11y-names-wrong.yaml`
+selects a placeholder as content-desc and must fail.
 
 ## Phone safety
 
@@ -174,7 +214,7 @@ key, both node snapshots, dp deltas, the explanation that was attached
 ## Tests
 
 ```bash
-python3 tools/tests/test-parity-harness.py     # 23 checks, no device needed
+python3 tools/tests/test-parity-harness.py     # 32 checks, no device needed
 ```
 
 Covers dp normalisation, container pairing, `text_vs_desc`, state/visibility,

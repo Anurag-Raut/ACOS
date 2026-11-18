@@ -228,6 +228,11 @@ class AcosSide:
 # phone side
 # ---------------------------------------------------------------------------
 
+OBSERVE_KINDS = frozenset((
+    "wait_for", "assert_text", "assert_visible", "assert_not_visible",
+    "assert_log", "assert_no_crash", "capture"))
+
+
 class PhoneSide:
     """One of the recorded/live phone sources, normalised to per-step nodes."""
 
@@ -240,6 +245,16 @@ class PhoneSide:
         self.coverage = None
         self.observations = None
         self._steps = {}
+        # PARITYFIX F1: can text vs content-desc be compared against this
+        # capture? Only a tree read from `uiautomator dump` (the platform's
+        # AccessibilityNodeInfo) keeps those two attributes apart. A capture
+        # without that marker came out of the agent-device snapshot, whose
+        # computed `label` replace the node's own fields (PHONE2 5.1 /
+        # results/handoff/TREE1.md): every name lands in "content-desc", no node
+        # has a text. That is not what the phone's tree says, so such a capture
+        # cannot support a "name is under the wrong attribute" finding.
+        self.attribute_fidelity = "n/a"
+        self.attribute_note = None
         if source == "recorded-snapshot":
             self._load_snapshots()
         elif source == "live":
@@ -285,6 +300,11 @@ class PhoneSide:
             self._steps[idx] = {"tree_file": path, "nodes": None}
         if not self._steps:
             raise SystemExit(f"no tree-*.json under {self.dir} (live replay)")
+        src = (self.observations or {}).get("a11y_source")
+        if not src:
+            first = self._steps[min(self._steps)]["tree_file"]
+            src = load_json(first).get("a11y_source")
+        self._set_attribute_fidelity(src)
 
     def _load_observations(self):
         path = os.path.join(self.dir, "observations.json")
@@ -296,6 +316,26 @@ class PhoneSide:
         self.dpi = self.device.get("density_dpi")
         for rec in self.observations.get("steps") or []:
             self._steps[int(rec.get("index", 0))] = {"observation": rec}
+        self._set_attribute_fidelity(self.observations.get("a11y_source"))
+
+    def _set_attribute_fidelity(self, a11y_source):
+        if a11y_source == "uiautomator-dump":
+            self.attribute_fidelity = "verified"
+            return
+        steps = (self.observations or {}).get("steps") or []
+        no_text = bool(steps) and not any(
+            rec.get("visible_texts") for rec in steps)
+        self.attribute_fidelity = "unverified"
+        self.attribute_note = (
+            "This capture does not say it was read from `uiautomator dump` "
+            f"(a11y_source={a11y_source!r})"
+            + ("; none of its steps has a single `text` node, so every name was "
+               "filed under content-desc by the agent-device mapping that "
+               "results/handoff/TREE1.md found wrong" if no_text else "")
+            + ". Whether a name is the text or the content-desc of its node is "
+            "therefore not comparable here: it is reported as "
+            "`attribute_placement_unverified` (needs a live phone replay), "
+            "never as an ACOS finding and never as a pass.")
 
     # -- per step ---------------------------------------------------------
     def step(self, index):
@@ -310,9 +350,31 @@ class PhoneSide:
         """
         if not self.observations:
             return []
-        return [int(rec.get("index", 0))
+        failed = []
+        for rec in self.observations.get("steps") or []:
+            if rec.get("status") not in ("fail", "action_failed"):
+                continue
+            # A failed selector *observation* (wait_for / assert_*) leaves the
+            # phone on the screen it was on. When the capture cannot tell text
+            # from content-desc (attribute_fidelity "unverified") such a failure
+            # is exactly the mapping artefact, not a replay that went astray, so
+            # it does not invalidate the steps after it; a failed action
+            # (tap/type/back/...) still does.
+            if (self.attribute_fidelity == "unverified"
+                    and rec.get("kind") in OBSERVE_KINDS
+                    and rec.get("status") == "fail"):
+                continue
+            failed.append(int(rec.get("index", 0)))
+        return failed
+
+    def unverified_failures(self):
+        """Observation steps that failed on a capture that cannot name attributes."""
+        if not self.observations or self.attribute_fidelity != "unverified":
+            return []
+        return [{"step": int(rec.get("index", 0)), "kind": rec.get("kind"),
+                 "selector": rec.get("selector"), "error": rec.get("error")}
                 for rec in self.observations.get("steps") or []
-                if rec.get("status") in ("fail", "action_failed")]
+                if rec.get("status") == "fail" and rec.get("kind") in OBSERVE_KINDS]
 
     def nodes(self, index):
         entry = self._steps.get(index)
@@ -410,9 +472,12 @@ def resolve_selector(nodes, selector, package):
     return None
 
 
+ATTRIBUTE_KINDS = frozenset(("text_vs_desc", "text_changed", "desc_changed"))
+
+
 def compare_observations(acos_nodes, observation, dpi_a, dpi_p, tol_dp,
                          scenario, allowlist, target_a=None,
-                         phone_source=None):
+                         phone_source=None, attributes_verified=True):
     """Label-set + resolved-target comparison against a recorded observation.
 
     The recorded phone evidence (`observations.json`) keeps the visible text
@@ -434,6 +499,18 @@ def compare_observations(acos_nodes, observation, dpi_a, dpi_p, tol_dp,
     phone_labels = phone_texts | phone_descs
 
     for label in sorted(acos_labels - phone_labels):
+        if not attributes_verified and label in acos_descs and label not in acos_texts:
+            # A content-desc the capture simply does not carry (the agent-device
+            # label stood in for it): absence from the capture is not evidence
+            # that the phone's node has no such content-desc.
+            diffs.append({"kind": "attribute_placement_unverified",
+                          "key": "label:" + label, "text": label,
+                          "field": "content_desc",
+                          "reason": ("ACOS exposes this as a node's content-desc; "
+                                     "the capture does not record content-desc "
+                                     "(not read from uiautomator dump), so its "
+                                     "absence there is not comparable")})
+            continue
         diffs.append({"kind": "label_only_in_acos", "key": "label:" + label,
                       "text": label,
                       "reason": "ACOS shows this text/content-desc; the recorded phone screen did not"})
@@ -446,7 +523,19 @@ def compare_observations(acos_nodes, observation, dpi_a, dpi_p, tol_dp,
     # accessible name in content-desc, ACOS's tree reports the visible
     # `TextView` text. One record per step, with examples.
     placement = sorted((acos_texts & phone_descs) | (acos_descs & phone_texts))
-    if placement:
+    if placement and not attributes_verified:
+        diffs.append({
+            "kind": "attribute_placement_unverified",
+            "key": "attr:accessible-name-placement",
+            "field": "text|content_desc",
+            "count": len(placement),
+            "examples": placement[:10],
+            "reason": ("the capture cannot tell a node's text from its "
+                       "content-desc (not read from uiautomator dump); these "
+                       "strings are present on both sides and their attribute "
+                       "is not comparable"),
+        })
+    elif placement:
         diffs.append({
             "kind": "accessibility_name_attribute",
             "key": "attr:accessible-name-placement",
@@ -488,7 +577,13 @@ def compare_observations(acos_nodes, observation, dpi_a, dpi_p, tol_dp,
                 bounds=target.get("bounds"),
             )
             pn.with_dp(phone_node, dpi_p)
-            diffs.extend(pn.diff_pair(pseudo, phone_node, "target", tol_dp=tol_dp))
+            target_diffs = pn.diff_pair(pseudo, phone_node, "target", tol_dp=tol_dp)
+            if not attributes_verified:
+                for d in target_diffs:
+                    if d.get("kind") in ATTRIBUTE_KINDS:
+                        d["original_kind"] = d["kind"]
+                        d["kind"] = "attribute_placement_unverified"
+            diffs.extend(target_diffs)
 
     pn.apply_allowlist(diffs, allowlist, scenario, phone_source)
     return {
@@ -523,6 +618,7 @@ CLASSIFICATION = {
     "target_missing_in_acos": "structure/target-missing-in-acos",
     "class_name_differs": "informational/class-name",
     "acos_tree_inconsistent": "acos-evidence/tree-consistency",
+    "attribute_placement_unverified": "evidence-validity/attribute-placement-unverified",
 }
 
 
@@ -638,6 +734,14 @@ def write_markdown(path, report):
                      "Past the first failure the phone is not on the screen the "
                      "scenario asked for; those differences are classified "
                      "`phone-scenario-failed` and say nothing about ACOS.")
+    if p.get("unverified_failures"):
+        lines.append("")
+        lines.append("> **Phone observations that failed on a capture that cannot name "
+                     "attributes** (not evidence about ACOS; re-run with the phone "
+                     "attached): "
+                     + "; ".join(f"step {u['step']} {u['kind']} "
+                                 f"`{json.dumps(u['selector'], ensure_ascii=False)}` "
+                                 f"({u['error']})" for u in p["unverified_failures"]))
     if p.get("caveats"):
         lines.append("")
         for caveat in p["caveats"]:
@@ -764,6 +868,8 @@ def main(argv=None):
             "allowlisted as a capture-tool scope difference "
             "(fixtures/reference-device/COMPARISON.md).")
 
+    if phone.attribute_fidelity == "unverified":
+        caveats.append(phone.attribute_note)
     fast_settle = set()
     for index, step in enumerate(steps_doc):
         if not isinstance(step, dict) or not step:
@@ -842,7 +948,8 @@ def main(argv=None):
             result = compare_observations(
                 acos_tree, observation, acos.dpi, phone.dpi, args.tolerance_dp,
                 name, allowlist, target_a=target_a,
-                phone_source=args.phone_source)
+                phone_source=args.phone_source,
+                attributes_verified=(phone.attribute_fidelity != "unverified"))
         rec.update(result)
         rec["status"] = "compared"
         rec["differences"] = result["differences"]
@@ -912,6 +1019,7 @@ def main(argv=None):
             "apk": args.phone_apk,
             "apk_sha256": args.phone_apk_sha256,
             "caveats": caveats,
+            "attribute_fidelity": phone.attribute_fidelity,
         },
         "settings": {
             "bounds_tolerance_dp": args.tolerance_dp,
@@ -924,6 +1032,7 @@ def main(argv=None):
     }
     report["findings"] = findings
     report["phone"]["failed_steps"] = phone_failures
+    report["phone"]["unverified_failures"] = phone.unverified_failures()
     report["allowed"] = allowed_summary(valid, allowlist)
 
     os.makedirs(args.out, exist_ok=True)
