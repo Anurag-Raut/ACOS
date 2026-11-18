@@ -1,0 +1,7 @@
+{
+  "request_id": "req_47a8e_18e90a5c44ffd6e9",
+  "started_at": "2026-11-18T04:48:37.894Z",
+  "scenario": "scenarios/negative/multi-wrong-after-back.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

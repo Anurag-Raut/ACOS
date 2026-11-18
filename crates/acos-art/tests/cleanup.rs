@@ -107,13 +107,40 @@ fn require_art() -> Option<()> {
     Some(())
 }
 
-/// A scratch dir under the repo `.cache/` (never `/tmp`), fresh per test.
+/// The root every test's scratch dir lives under.
+///
+/// The scratch dir holds copy of `/data`, and a run root below it binds the
+/// logd/WebView sockets (`<run>/socket/logdw`), so the checkout path decides
+/// whether `bind()` fits `sun_path` (108 bytes with the NUL). An agent worktree
+/// is ~55 bytes, which left 113 for the deepest socket and failed the suite with
+/// "path must be shorter than SUN_LEN" instead of testing cleanup. One rule for
+/// that class (the same one `acos-cli`/`live_view` use): the checkout's
+/// `.cache/h1-tests` when it fits, a short fixed root otherwise; `$ACOS_CLEANUP_TEST_DIR`
+/// overrides when it fits (see `acos_test_support::short_scratch_root`).
+fn scratch_root() -> PathBuf {
+    let candidates = vec![repo_root().join(".cache/h1-tests")];
+    acos_test_support::short_scratch_root(
+        "ACOS_CLEANUP_TEST_DIR",
+        &candidates,
+        "acos-cleanup-tests",
+    )
+}
+
+/// The deepest socket these tests make the launcher bind below the scratch
+/// root: `<root>/<tag>-<pid>/data/runs/<pid>-<seq>/socket/logdw`. The longest
+/// tag used here is `scope-foreign`, and the seq is a small counter.
+fn deepest_socket(root: &Path) -> PathBuf {
+    root.join(format!("scope-foreign-{}", std::process::id()))
+        .join("data/runs")
+        .join(format!("{}-999", std::process::id()))
+        .join("socket/logdw")
+}
+
+/// A scratch dir under [`scratch_root`], fresh per test.
 fn scratch(tag: &str) -> PathBuf {
-    let dir = repo_root()
-        .join(".cache/h1-tests")
-        .join(format!("{tag}-{}", std::process::id()));
+    let dir = scratch_root().join(format!("{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create scratch dir under .cache/");
+    std::fs::create_dir_all(&dir).expect("create the test's scratch dir");
     dir
 }
 
@@ -134,6 +161,21 @@ fn seed_data(scratch: &Path) -> PathBuf {
 
 fn apk() -> PathBuf {
     repo_root().join("fixtures/build/apps/counter.apk")
+}
+
+/// The scratch root must leave room for the deepest socket the launcher binds,
+/// or the suite fails on `SUN_LEN` for a reason that has nothing to do with
+/// cleanup (see [`scratch_root`]).
+#[test]
+fn the_scratch_root_leaves_room_for_the_run_sockets() {
+    let deepest = deepest_socket(&scratch_root());
+    let len = deepest.as_os_str().as_encoded_bytes().len();
+    assert!(
+        len <= acos_test_support::SUN_PATH_MAX,
+        "{} is {len} bytes, too long for sun_path ({} with the NUL)",
+        deepest.display(),
+        acos_test_support::SUN_PATH_MAX + 1
+    );
 }
 
 // ---------------------------------------------------------------------------

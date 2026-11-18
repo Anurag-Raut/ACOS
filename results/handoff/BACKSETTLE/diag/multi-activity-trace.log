@@ -1,0 +1,1414 @@
+    67034us pid=1384555 GUEST ACOSLAUNCH MARK resume-budget ms=12000 ready_ms=2000
+    69908us pid=1384555 GUEST ACOSLAUNCH MARK natives registered
+    70139us pid=1384555 GUEST ACOSLAUNCH MARK android-runtime ready rc=1
+    70183us pid=1384555 GUEST ACOSLAUNCH MARK crash-handler rc=1
+    70228us pid=1384555 GUEST ACOSLAUNCH MARK animations on=true scale=1.0 applied=true source=env:on
+    74808us pid=1384555 GUEST ACOSLAUNCH MARK overlays applied=1 base=1 total=2 idmaps=/data/overlay/PixelConfigOverlayCommon.idmap
+    75899us pid=1384555 GUEST ACOSLAUNCH MARK binder-looper started
+    75964us pid=1384555 GUEST ACOSLAUNCH MARK app-flags flags=0x10883e46 source=manifest
+    75981us pid=1384555 GUEST ACOSLAUNCH MARK providers count=0
+    76312us pid=1384555 GUEST ACOSLAUNCH MARK bind-request-marshalled appInfo=(dev.acos.fixtures.multiactivity sourceDir=/data/app/multi-activity.apk uid=10192) bytes=1424
+    76967us pid=1384555 GUEST ACOSLAUNCH MARK bind-request-pushed bytes=1424
+    77035us pid=1384555 GUEST ACOSLAUNCH MARK displayinfo-field refreshRate -> java.lang.NoSuchFieldException: refreshRate
+    77140us pid=1384555 GUEST ACOSLAUNCH MARK displayinfo-reply-pushed bytes=256
+    77201us pid=1384555 GUEST ACOSLAUNCH MARK instrumentationinfo-reply-pushed bytes=444
+    78577us pid=1384555 GUEST ACOSLAUNCH MARK attach-returned startSeq=1794942152444
+    78965us pid=1384555 GUEST ACOSLAUNCH MARK start-activity-guard installed call=android.app.IActivityTaskManager
+    79169us pid=1384555 GUEST ACOSLAUNCH MARK activity-result-watcher started
+    79190us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {39dbb04} null: 138
+    79207us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {39dbb04} null
+    79211us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {39dbb04} null: 110
+   101396us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {39dbb04} null
+   101400us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {39dbb04} null: 164
+   101447us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {39dbb04} null
+   105206us pid=1384555 GUEST ACOSLAUNCH MARK application-created package=dev.acos.fixtures.multiactivity application=android.app.Application base=dev.acos.fixtures.multiactivity//data/app/multi-activity.apk instrumentation=android.app.Instrumentation
+   105220us pid=1384555 GUEST ACOSLAUNCH MARK app-flags flags=0x10883e46 source=manifest
+   105541us pid=1384555 GUEST ACOSLAUNCH MARK obtain-shape LaunchActivityItem 0:Intent 1:int 2:ActivityInfo 3:Configuration 4:Configuration 5:int 6:String 7:IVoiceInteractor 8:int 9:Bundle 10:PersistableBundle 11:List 12:List 13:ActivityOptions 14:boolean 15:ProfilerInfo 16:IBinder 17:IActivityClientController 18:IBinder 19:boolean 20:IBinder
+   105570us pid=1384555 GUEST ACOSLAUNCH MARK transaction-items launch=android.app.servertransaction.LaunchActivityItem resume=android.app.servertransaction.ResumeActivityItem
+   105605us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {39dbb04} null: 159
+   105740us pid=1384555 GUEST ACOSLAUNCH MARK schedule-transaction-delivered activity=dev.acos.fixtures.multiactivity.MainActivity token=binder:7fc8cfa transport=local-iapplicationthread
+   115171us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {39dbb04} null
+   115200us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.ViewRootImpl$7@1ea8e0d: 0
+   115207us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.ViewRootImpl$7@1ea8e0d
+   129891us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   132395us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   132399us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.View$$ExternalSyntheticLambda7@317a0be: 0
+   132404us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.View$$ExternalSyntheticLambda7@317a0be
+   132407us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null: 8
+   132412us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null
+   132415us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null: 34
+   132418us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null
+   132420us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null: 6
+   132662us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null
+   132664us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {8df6970} dev.acos.art.LaunchMain$13@5e034e9: 0
+   132710us pid=1384555 GUEST ACOSLAUNCH MARK first-traversal-skipped traversal:view_not_visible traversed=true app_visible=true skip=traversal:view_not_visible
+   132715us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {8df6970} dev.acos.art.LaunchMain$13@5e034e9
+   132721us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} com.android.internal.policy.PhoneWindow$1@5cbb56e: 0
+   133075us pid=1384555 GUEST ACOSLAUNCH MARK activity-resumed activity=dev.acos.fixtures.multiactivity.MainActivity window=com.android.internal.policy.PhoneWindow@a17f40f resume_ready=first-traversal draw_skip=traversal:view_not_visible first_traversal="traversed=true app_visible=true skip=traversal:view_not_visible"
+   133159us pid=1384555 GUEST ACOSLAUNCH MARK window-views count=1
+   133514us pid=1384555 GUEST ACOSLAUNCH MARK live-probe-started
+   134323us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} com.android.internal.policy.PhoneWindow$1@5cbb56e
+   146555us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   149977us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   149983us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {39dbb04} null: 118
+   150004us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {39dbb04} null
+   150010us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null: 13
+   150015us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null
+   150020us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@184f334: 0
+   150938us pid=1384555 GUEST touch_mode true
+   150951us pid=1384555 HOST probe rx seq=1 cause=dirty lag_ms=0 settled=false draw_seq=1 gen=1
+   151030us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@184f334
+   151034us pid=1384555 GUEST ACOSLAUNCH EARLY_RELEASE start delay_ms=0 gc_count_before=3
+   151036us pid=1384555 GUEST ACOSLAUNCH EARLY_RELEASE done ms=0 gc_count_after=3
+   158110us pid=1384555 HOST settle entry floor=1 gen=1 deadline_ms=1499 await_tree=false pending=["traversal", "dirty", "frame", "queue", "window-unstable"]
+   158122us pid=1384555 HOST settle wake probe_seq=1 reason=entry written=true
+   158126us pid=1384555 HOST settle event generation 0->1
+   158171us pid=1384555 HOST settle wait reason=probe-floor probe_seq=1 age_ms=7 draw_seq=1 settled=false floor=1
+   163220us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   166274us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   166281us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@d024ba3: 0
+   166922us pid=1384555 HOST probe rx seq=2 cause=wake lag_ms=0 settled=true draw_seq=2 gen=2
+   167000us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@d024ba3
+   168276us pid=1384555 HOST settle event generation 1->2
+   179876us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   181641us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   187995us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@180ea0: 0
+   188532us pid=1384555 HOST probe rx seq=3 cause=dirty lag_ms=1 settled=true draw_seq=3 gen=3
+   188608us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@180ea0
+   188633us pid=1384555 HOST settle event generation 2->3
+   196541us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   198346us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   198816us pid=1384555 HOST settle event generation 3->4
+   198868us pid=1384555 HOST settle wait reason=newer-store probe_seq=3 age_ms=10 draw_seq=3 settled=true floor=1
+   213141us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@e732a59: 0
+   213709us pid=1384555 HOST probe rx seq=4 cause=dirty lag_ms=0 settled=true draw_seq=4 gen=4
+   213784us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@e732a59
+   213787us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   215269us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   219180us pid=1384555 HOST settle event generation 4->5
+   229872us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   231563us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   237981us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@7c6561e: 0
+   238679us pid=1384555 HOST probe rx seq=5 cause=dirty lag_ms=1 settled=true draw_seq=6 gen=6
+   238759us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@7c6561e
+   239497us pid=1384555 HOST settle event generation 5->6
+   246541us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   248199us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   249684us pid=1384555 HOST settle event generation 6->7
+   263099us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@6e3feff: 0
+   263829us pid=1384555 HOST probe rx seq=6 cause=dirty lag_ms=0 settled=true draw_seq=7 gen=7
+   263967us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@6e3feff
+   263973us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   263979us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   300605us pid=1384555 HOST settle event ready gen=7 probe_seq=6 draw_seq=7 draw_ms=1794942152614 confirm_ms=24
+   534833us pid=1384555 HOST settle entry floor=6 gen=7 deadline_ms=1499 await_tree=false pending=[]
+   534844us pid=1384555 HOST settle wake probe_seq=6 reason=entry written=true
+   534848us pid=1384555 HOST settle event generation 0->7
+   534892us pid=1384555 HOST settle wait reason=probe-floor probe_seq=6 age_ms=271 draw_seq=7 settled=true floor=6
+   535012us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@eff74cc: 0
+   535970us pid=1384555 HOST probe rx seq=7 cause=wake lag_ms=0 settled=true draw_seq=7 gen=7
+   536060us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@eff74cc
+   575572us pid=1384555 HOST settle event ready gen=7 probe_seq=7 draw_seq=7 draw_ms=1794942152614 confirm_ms=24
+   815566us pid=1384555 HOST settle entry floor=7 gen=7 deadline_ms=1499 await_tree=false pending=[]
+   815579us pid=1384555 HOST settle wake probe_seq=7 reason=entry written=true
+   815584us pid=1384555 HOST settle event generation 0->7
+   815627us pid=1384555 HOST settle wait reason=probe-floor probe_seq=7 age_ms=280 draw_seq=7 settled=true floor=7
+   815693us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a231315: 0
+   816628us pid=1384555 HOST probe rx seq=8 cause=wake lag_ms=1 settled=true draw_seq=7 gen=7
+   816705us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a231315
+   856671us pid=1384555 HOST settle event ready gen=7 probe_seq=8 draw_seq=7 draw_ms=1794942152614 confirm_ms=24
+   857963us pid=1384555 HOST tap publish_begin at (540,376) ack_wait_ms=2500
+   863153us pid=1384555 HOST tap acks_returned total_ms=5 seqs=[3, 4] acks=[(3, true, Some(5116)), (4, true, Some(5111))]
+   863260us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   863268us pid=1384555 HOST settle entry floor=8 gen=7 deadline_ms=2999 await_tree=false pending=[]
+   863274us pid=1384555 HOST settle wake probe_seq=8 reason=entry written=true
+   863319us pid=1384555 HOST settle wait reason=probe-floor probe_seq=8 age_ms=46 draw_seq=7 settled=true floor=8
+   865822us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   865831us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.View$PerformClick@51511b8: 0
+   865994us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.View$PerformClick@51511b8
+   865997us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.View$UnsetPressedState@1aecb91: 0
+   866023us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.View$UnsetPressedState@1aecb91
+   866026us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null: 31
+   866241us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null
+   866244us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null: 29
+   866276us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} null
+   866279us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@ec4cef7: 0
+   866980us pid=1384555 HOST probe rx seq=9 cause=wake lag_ms=0 settled=false draw_seq=8 gen=8
+   867061us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@ec4cef7
+   873412us pid=1384555 HOST settle event generation 7->8
+   873461us pid=1384555 HOST settle wait reason=window-same-top probe_seq=9 age_ms=7 draw_seq=8 settled=false floor=8
+   879886us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   881908us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   881921us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {39dbb04} android.os.Handler$BlockingRunnable@ae59164: 0
+   881946us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {39dbb04} android.os.Handler$BlockingRunnable@ae59164
+   882212us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda0@d638fcd: 0
+   882230us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda0@d638fcd
+   883550us pid=1384555 HOST settle event generation 8->9
+   888064us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@fed6393: 0
+   888896us pid=1384555 HOST probe rx seq=10 cause=dirty lag_ms=0 settled=false draw_seq=9 gen=9
+   888976us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@fed6393
+   896577us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+   896591us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+   930115us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda0@31c5fd0: 0
+   930151us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda0@31c5fd0
+   944554us pid=1384555 HOST settle wake probe_seq=10 reason=pacing written=true
+   944662us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@3265bc9: 0
+   945424us pid=1384555 HOST probe rx seq=11 cause=wake lag_ms=0 settled=true draw_seq=9 gen=9
+   945508us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@3265bc9
+  1005687us pid=1384555 HOST settle wake probe_seq=11 reason=pacing written=true
+  1005795us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@dc282ce: 0
+  1006588us pid=1384555 HOST probe rx seq=12 cause=wake lag_ms=1 settled=true draw_seq=9 gen=9
+  1006659us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@dc282ce
+  1067204us pid=1384555 HOST settle wake probe_seq=12 reason=pacing written=true
+  1067366us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@900a5ef: 0
+  1068461us pid=1384555 HOST probe rx seq=13 cause=wake lag_ms=1 settled=true draw_seq=9 gen=9
+  1068618us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@900a5ef
+  1080390us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda1@dafa8fc: 0
+  1080461us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {bcca0a4} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda1@dafa8fc
+  1080473us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {39dbb04} android.os.Handler$BlockingRunnable@82feb85: 0
+  1080478us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {39dbb04} android.os.Handler$BlockingRunnable@82feb85
+  1096586us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3: 0
+  1096740us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {334a1c2} android.view.Choreographer$FrameDisplayEventReceiver@4be2bd3
+  1104800us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@407fdda: 0
+  1105612us pid=1384555 HOST probe rx seq=14 cause=dirty lag_ms=1 settled=true draw_seq=10 gen=9
+  1105681us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@407fdda
+  1158964us pid=1384555 HOST settle wake probe_seq=14 reason=pacing written=true
+  1159099us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@75bb20b: 0
+  1159972us pid=1384555 HOST probe rx seq=15 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  1160043us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@75bb20b
+  1220095us pid=1384555 HOST settle wake probe_seq=15 reason=pacing written=true
+  1220203us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@1cc58e8: 0
+  1220813us pid=1384555 HOST probe rx seq=16 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  1220884us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@1cc58e8
+  1281417us pid=1384555 HOST settle wake probe_seq=16 reason=pacing written=true
+  1281566us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@288bb01: 0
+  1282672us pid=1384555 HOST probe rx seq=17 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  1282802us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@288bb01
+  1342536us pid=1384555 HOST settle wake probe_seq=17 reason=pacing written=true
+  1342602us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@f81da6: 0
+  1343252us pid=1384555 HOST probe rx seq=18 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  1343327us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@f81da6
+  1403521us pid=1384555 HOST settle wake probe_seq=18 reason=pacing written=true
+  1403656us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@71163e7: 0
+  1404548us pid=1384555 HOST probe rx seq=19 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  1404627us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@71163e7
+  1464577us pid=1384555 HOST settle wake probe_seq=19 reason=pacing written=true
+  1464680us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a821b94: 0
+  1465536us pid=1384555 HOST probe rx seq=20 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  1465680us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a821b94
+  1525917us pid=1384555 HOST settle wake probe_seq=20 reason=pacing written=true
+  1526163us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@645063d: 0
+  1527571us pid=1384555 HOST probe rx seq=21 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  1527721us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@645063d
+  1587132us pid=1384555 HOST settle wake probe_seq=21 reason=pacing written=true
+  1587250us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@3786e32: 0
+  1588257us pid=1384555 HOST probe rx seq=22 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  1588344us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@3786e32
+  1648254us pid=1384555 HOST settle wake probe_seq=22 reason=pacing written=true
+  1648379us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@8865783: 0
+  1649522us pid=1384555 HOST probe rx seq=23 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  1649667us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@8865783
+  1709366us pid=1384555 HOST settle wake probe_seq=23 reason=pacing written=true
+  1709466us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@22f5d00: 0
+  1710407us pid=1384555 HOST probe rx seq=24 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  1710563us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@22f5d00
+  1770611us pid=1384555 HOST settle wake probe_seq=24 reason=pacing written=true
+  1770723us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a80c939: 0
+  1771534us pid=1384555 HOST probe rx seq=25 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  1771642us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a80c939
+  1831839us pid=1384555 HOST settle wake probe_seq=25 reason=pacing written=true
+  1831987us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@13b3b7e: 0
+  1832996us pid=1384555 HOST probe rx seq=26 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  1833094us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@13b3b7e
+  1893094us pid=1384555 HOST settle wake probe_seq=26 reason=pacing written=true
+  1893199us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@3cce8df: 0
+  1894047us pid=1384555 HOST probe rx seq=27 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  1894147us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@3cce8df
+  1954350us pid=1384555 HOST settle wake probe_seq=27 reason=pacing written=true
+  1954447us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@8ad492c: 0
+  1955484us pid=1384555 HOST probe rx seq=28 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  1955678us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@8ad492c
+  2015450us pid=1384555 HOST settle wake probe_seq=28 reason=pacing written=true
+  2015625us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@21bbff5: 0
+  2016970us pid=1384555 HOST probe rx seq=29 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2017130us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@21bbff5
+  2076672us pid=1384555 HOST settle wake probe_seq=29 reason=pacing written=true
+  2076765us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@6cb918a: 0
+  2077953us pid=1384555 HOST probe rx seq=30 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2078144us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@6cb918a
+  2137907us pid=1384555 HOST settle wake probe_seq=30 reason=pacing written=true
+  2138099us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@5c133fb: 0
+  2139411us pid=1384555 HOST probe rx seq=31 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2139560us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@5c133fb
+  2199816us pid=1384555 HOST settle wake probe_seq=31 reason=pacing written=true
+  2199953us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@3bcc18: 0
+  2200860us pid=1384555 HOST probe rx seq=32 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2200946us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@3bcc18
+  2261683us pid=1384555 HOST settle wake probe_seq=32 reason=pacing written=true
+  2261829us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@4356671: 0
+  2262901us pid=1384555 HOST probe rx seq=33 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2263013us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@4356671
+  2323432us pid=1384555 HOST settle wake probe_seq=33 reason=pacing written=true
+  2323610us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@c593c56: 0
+  2324915us pid=1384555 HOST probe rx seq=34 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2325079us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@c593c56
+  2385195us pid=1384555 HOST settle wake probe_seq=34 reason=pacing written=true
+  2385338us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@2e514d7: 0
+  2386401us pid=1384555 HOST probe rx seq=35 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2386513us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@2e514d7
+  2446757us pid=1384555 HOST settle wake probe_seq=35 reason=pacing written=true
+  2446893us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@d2d91c4: 0
+  2447854us pid=1384555 HOST probe rx seq=36 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2447942us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@d2d91c4
+  2508413us pid=1384555 HOST settle wake probe_seq=36 reason=pacing written=true
+  2508561us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@68f8ad: 0
+  2509832us pid=1384555 HOST probe rx seq=37 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2509974us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@68f8ad
+  2570188us pid=1384555 HOST settle wake probe_seq=37 reason=pacing written=true
+  2570383us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@b44c7e2: 0
+  2571710us pid=1384555 HOST probe rx seq=38 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  2571865us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@b44c7e2
+  2631304us pid=1384555 HOST settle wake probe_seq=38 reason=pacing written=true
+  2631436us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@bfc2773: 0
+  2632646us pid=1384555 HOST probe rx seq=39 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  2632764us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@bfc2773
+  2692491us pid=1384555 HOST settle wake probe_seq=39 reason=pacing written=true
+  2692620us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@4540630: 0
+  2693687us pid=1384555 HOST probe rx seq=40 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  2693767us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@4540630
+  2753382us pid=1384555 HOST settle wake probe_seq=40 reason=pacing written=true
+  2753524us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@ac972a9: 0
+  2754402us pid=1384555 HOST probe rx seq=41 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2754510us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@ac972a9
+  2814460us pid=1384555 HOST settle wake probe_seq=41 reason=pacing written=true
+  2814555us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@6b802e: 0
+  2815524us pid=1384555 HOST probe rx seq=42 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  2815653us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@6b802e
+  2875530us pid=1384555 HOST settle wake probe_seq=42 reason=pacing written=true
+  2875638us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@67c7cf: 0
+  2876650us pid=1384555 HOST probe rx seq=43 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  2876785us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@67c7cf
+  2936768us pid=1384555 HOST settle wake probe_seq=43 reason=pacing written=true
+  2936927us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@42b555c: 0
+  2938030us pid=1384555 HOST probe rx seq=44 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2938190us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@42b555c
+  2997865us pid=1384555 HOST settle wake probe_seq=44 reason=pacing written=true
+  2997969us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@b9d9065: 0
+  2998731us pid=1384555 HOST probe rx seq=45 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  2998833us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@b9d9065
+  3058998us pid=1384555 HOST settle wake probe_seq=45 reason=pacing written=true
+  3059144us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@733713a: 0
+  3059968us pid=1384555 HOST probe rx seq=46 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  3060074us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@733713a
+  3120067us pid=1384555 HOST settle wake probe_seq=46 reason=pacing written=true
+  3120169us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a4311eb: 0
+  3121240us pid=1384555 HOST probe rx seq=47 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  3121350us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a4311eb
+  3181283us pid=1384555 HOST settle wake probe_seq=47 reason=pacing written=true
+  3181407us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@4c66b48: 0
+  3182554us pid=1384555 HOST probe rx seq=48 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  3182641us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@4c66b48
+  3242641us pid=1384555 HOST settle wake probe_seq=48 reason=pacing written=true
+  3243087us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@edbcde1: 0
+  3244115us pid=1384555 HOST probe rx seq=49 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  3244229us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@edbcde1
+  3303938us pid=1384555 HOST settle wake probe_seq=49 reason=pacing written=true
+  3304163us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@9576706: 0
+  3305511us pid=1384555 HOST probe rx seq=50 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  3305674us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@9576706
+  3365050us pid=1384555 HOST settle wake probe_seq=50 reason=pacing written=true
+  3365223us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@3ee1c7: 0
+  3366472us pid=1384555 HOST probe rx seq=51 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  3366656us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@3ee1c7
+  3426155us pid=1384555 HOST settle wake probe_seq=51 reason=pacing written=true
+  3426297us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a7af3f4: 0
+  3427212us pid=1384555 HOST probe rx seq=52 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  3427303us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a7af3f4
+  3487262us pid=1384555 HOST settle wake probe_seq=52 reason=pacing written=true
+  3487371us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@f66671d: 0
+  3488480us pid=1384555 HOST probe rx seq=53 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  3488660us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@f66671d
+  3548361us pid=1384555 HOST settle wake probe_seq=53 reason=pacing written=true
+  3548478us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@f72ed92: 0
+  3549451us pid=1384555 HOST probe rx seq=54 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  3549629us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@f72ed92
+  3609625us pid=1384555 HOST settle wake probe_seq=54 reason=pacing written=true
+  3609729us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@93dd363: 0
+  3610579us pid=1384555 HOST probe rx seq=55 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  3610756us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@93dd363
+  3670812us pid=1384555 HOST settle wake probe_seq=55 reason=pacing written=true
+  3670985us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@74d5b60: 0
+  3671989us pid=1384555 HOST probe rx seq=56 cause=wake lag_ms=0 settled=true draw_seq=10 gen=9
+  3672094us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@74d5b60
+  3732164us pid=1384555 HOST settle wake probe_seq=56 reason=pacing written=true
+  3732333us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a075819: 0
+  3733767us pid=1384555 HOST probe rx seq=57 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  3733954us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@a075819
+  3793432us pid=1384555 HOST settle wake probe_seq=57 reason=pacing written=true
+  3793587us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@e4e50de: 0
+  3794733us pid=1384555 HOST probe rx seq=58 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  3794828us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@e4e50de
+  3854547us pid=1384555 HOST settle wake probe_seq=58 reason=pacing written=true
+  3854678us pid=1384555 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@db042bf: 0
+  3855679us pid=1384555 HOST probe rx seq=59 cause=wake lag_ms=1 settled=true draw_seq=10 gen=9
+  3855779us pid=1384555 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9c05607} dev.acos.art.LaunchMain$8$1@db042bf
+  3927158us pid=1384555 HOST settle event timeout reason=window-same-top gen=9
+  3927230us pid=1384555 HOST tap settle_done after_ms=3069 settled=false mode=strict
+    74930us pid=1386736 GUEST ACOSLAUNCH MARK resume-budget ms=12000 ready_ms=2000
+    77849us pid=1386736 GUEST ACOSLAUNCH MARK natives registered
+    78096us pid=1386736 GUEST ACOSLAUNCH MARK android-runtime ready rc=1
+    78125us pid=1386736 GUEST ACOSLAUNCH MARK crash-handler rc=1
+    78174us pid=1386736 GUEST ACOSLAUNCH MARK animations on=true scale=1.0 applied=true source=env:on
+    83047us pid=1386736 GUEST ACOSLAUNCH MARK overlays applied=1 base=1 total=2 idmaps=/data/overlay/PixelConfigOverlayCommon.idmap
+    84143us pid=1386736 GUEST ACOSLAUNCH MARK binder-looper started
+    84201us pid=1386736 GUEST ACOSLAUNCH MARK app-flags flags=0x10883e46 source=manifest
+    84219us pid=1386736 GUEST ACOSLAUNCH MARK providers count=0
+    84530us pid=1386736 GUEST ACOSLAUNCH MARK bind-request-marshalled appInfo=(dev.acos.fixtures.multiactivity sourceDir=/data/app/multi-activity.apk uid=10192) bytes=1424
+    85165us pid=1386736 GUEST ACOSLAUNCH MARK bind-request-pushed bytes=1424
+    85226us pid=1386736 GUEST ACOSLAUNCH MARK displayinfo-field refreshRate -> java.lang.NoSuchFieldException: refreshRate
+    85292us pid=1386736 GUEST ACOSLAUNCH MARK displayinfo-reply-pushed bytes=256
+    85345us pid=1386736 GUEST ACOSLAUNCH MARK instrumentationinfo-reply-pushed bytes=444
+    86755us pid=1386736 GUEST ACOSLAUNCH MARK attach-returned startSeq=1794942202750
+    87148us pid=1386736 GUEST ACOSLAUNCH MARK start-activity-guard installed call=android.app.IActivityTaskManager
+    87320us pid=1386736 GUEST ACOSLAUNCH MARK activity-result-watcher started
+    87336us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 138
+    87351us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+    87357us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 110
+   111142us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+   111154us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 164
+   111249us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+   113238us pid=1386736 GUEST ACOSLAUNCH MARK application-created package=dev.acos.fixtures.multiactivity application=android.app.Application base=dev.acos.fixtures.multiactivity//data/app/multi-activity.apk instrumentation=android.app.Instrumentation
+   113261us pid=1386736 GUEST ACOSLAUNCH MARK app-flags flags=0x10883e46 source=manifest
+   113454us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape LaunchActivityItem 0:Intent 1:int 2:ActivityInfo 3:Configuration 4:Configuration 5:int 6:String 7:IVoiceInteractor 8:int 9:Bundle 10:PersistableBundle 11:List 12:List 13:ActivityOptions 14:boolean 15:ProfilerInfo 16:IBinder 17:IActivityClientController 18:IBinder 19:boolean 20:IBinder
+   113481us pid=1386736 GUEST ACOSLAUNCH MARK transaction-items launch=android.app.servertransaction.LaunchActivityItem resume=android.app.servertransaction.ResumeActivityItem
+   113514us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+   113629us pid=1386736 GUEST ACOSLAUNCH MARK schedule-transaction-delivered activity=dev.acos.fixtures.multiactivity.MainActivity token=binder:c2f5364 transport=local-iapplicationthread
+   124837us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+   124861us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {755c83e} dev.acos.art.LaunchMain$13@7d569f: 0
+   124937us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {755c83e} dev.acos.art.LaunchMain$13@7d569f
+   124950us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.ViewRootImpl$7@bfe43b5: 0
+   124956us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.ViewRootImpl$7@bfe43b5
+   132719us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   136178us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   136188us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.View$$ExternalSyntheticLambda7@f217bc6: 0
+   136191us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.View$$ExternalSyntheticLambda7@f217bc6
+   136200us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null: 8
+   136203us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null
+   136206us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null: 34
+   136209us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null
+   136212us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null: 6
+   136521us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null
+   136523us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} com.android.internal.policy.PhoneWindow$1@ad1bd38: 0
+   138811us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} com.android.internal.policy.PhoneWindow$1@ad1bd38
+   149333us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   152781us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   152789us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 118
+   152808us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+   152814us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null: 13
+   152819us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null
+   152825us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {38e3002} dev.acos.art.LaunchMain$13$1$1@9b73d13: 0
+   152841us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {38e3002} dev.acos.art.LaunchMain$13$1$1@9b73d13
+   153097us pid=1386736 GUEST ACOSLAUNCH MARK activity-resumed activity=dev.acos.fixtures.multiactivity.MainActivity window=com.android.internal.policy.PhoneWindow@752fb50 resume_ready=first-traversal draw_skip=none first_traversal="traversed=true source=onDraw skip=none"
+   153163us pid=1386736 GUEST ACOSLAUNCH MARK window-views count=1
+   153400us pid=1386736 GUEST ACOSLAUNCH MARK live-probe-started
+   165995us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   168729us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   168736us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6ef905: 0
+   169773us pid=1386736 GUEST touch_mode true
+   169785us pid=1386736 HOST probe rx seq=1 cause=dirty lag_ms=0 settled=false draw_seq=1 gen=2
+   169884us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6ef905
+   169888us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {2573b8b} dev.acos.art.LaunchMain$13$1$1@bcae468: 0
+   169891us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {2573b8b} dev.acos.art.LaunchMain$13$1$1@bcae468
+   169894us pid=1386736 GUEST ACOSLAUNCH EARLY_RELEASE start delay_ms=0 gc_count_before=3
+   169902us pid=1386736 GUEST ACOSLAUNCH EARLY_RELEASE done ms=0 gc_count_after=3
+   177375us pid=1386736 HOST settle entry floor=1 gen=2 deadline_ms=1499 await_tree=false pending=["queue", "window-unstable"]
+   177386us pid=1386736 HOST settle wake probe_seq=1 reason=entry written=true
+   177390us pid=1386736 HOST settle event generation 0->2
+   177434us pid=1386736 HOST settle wait reason=probe-floor probe_seq=1 age_ms=8 draw_seq=1 settled=false floor=1
+   177468us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@76b2081: 0
+   178029us pid=1386736 HOST probe rx seq=2 cause=wake lag_ms=0 settled=false draw_seq=1 gen=2
+   178125us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@76b2081
+   182658us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   184792us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   184796us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {14a5526} dev.acos.art.LaunchMain$13$1$1@3fc0567: 0
+   184808us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {14a5526} dev.acos.art.LaunchMain$13$1$1@3fc0567
+   187532us pid=1386736 HOST settle event generation 2->3
+   187584us pid=1386736 HOST settle wait reason=window-unstable probe_seq=2 age_ms=10 draw_seq=1 settled=false floor=1
+   199348us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   201222us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   201230us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9ddf14} dev.acos.art.LaunchMain$13$1$1@aa843bd: 0
+   201236us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9ddf14} dev.acos.art.LaunchMain$13$1$1@aa843bd
+   207455us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f769db2: 0
+   207817us pid=1386736 HOST settle event generation 3->4
+   208212us pid=1386736 HOST probe rx seq=3 cause=dirty lag_ms=0 settled=true draw_seq=3 gen=4
+   208371us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f769db2
+   216007us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   218207us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   218221us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3399103} dev.acos.art.LaunchMain$13$1$1@503d880: 0
+   218227us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3399103} dev.acos.art.LaunchMain$13$1$1@503d880
+   228118us pid=1386736 HOST settle event generation 4->5
+   228165us pid=1386736 HOST settle wait reason=newer-store probe_seq=3 age_ms=20 draw_seq=3 settled=true floor=1
+   232559us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@19a5eb9: 0
+   233199us pid=1386736 HOST probe rx seq=4 cause=dirty lag_ms=0 settled=true draw_seq=4 gen=5
+   233358us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@19a5eb9
+   233365us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   234601us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   234604us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3ace2fe} dev.acos.art.LaunchMain$13$1$1@c3a3a5f: 0
+   234609us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3ace2fe} dev.acos.art.LaunchMain$13$1$1@c3a3a5f
+   238265us pid=1386736 HOST settle event generation 5->6
+   249352us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   251009us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   251013us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {70dfcac} dev.acos.art.LaunchMain$13$1$1@cf92d75: 0
+   251026us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {70dfcac} dev.acos.art.LaunchMain$13$1$1@cf92d75
+   257439us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f70310a: 0
+   257929us pid=1386736 HOST probe rx seq=5 cause=dirty lag_ms=0 settled=true draw_seq=6 gen=7
+   258013us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f70310a
+   258590us pid=1386736 HOST settle event generation 6->7
+   265991us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   265998us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   289325us pid=1386736 HOST settle event ready gen=7 probe_seq=5 draw_seq=6 draw_ms=1794942202914 confirm_ms=24
+   527357us pid=1386736 HOST settle entry floor=5 gen=7 deadline_ms=1499 await_tree=false pending=[]
+   527369us pid=1386736 HOST settle wake probe_seq=5 reason=entry written=true
+   527373us pid=1386736 HOST settle event generation 0->7
+   527419us pid=1386736 HOST settle wait reason=probe-floor probe_seq=5 age_ms=270 draw_seq=6 settled=true floor=5
+   527472us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@9721d7b: 0
+   528292us pid=1386736 HOST probe rx seq=6 cause=wake lag_ms=1 settled=true draw_seq=6 gen=7
+   528372us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@9721d7b
+   568048us pid=1386736 HOST settle event ready gen=7 probe_seq=6 draw_seq=6 draw_ms=1794942202914 confirm_ms=24
+   811308us pid=1386736 HOST settle entry floor=6 gen=7 deadline_ms=1499 await_tree=false pending=[]
+   811319us pid=1386736 HOST settle wake probe_seq=6 reason=entry written=true
+   811323us pid=1386736 HOST settle event generation 0->7
+   811368us pid=1386736 HOST settle wait reason=probe-floor probe_seq=6 age_ms=283 draw_seq=6 settled=true floor=6
+   811431us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2b43798: 0
+   812384us pid=1386736 HOST probe rx seq=7 cause=wake lag_ms=1 settled=true draw_seq=6 gen=7
+   812548us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2b43798
+   852033us pid=1386736 HOST settle event ready gen=7 probe_seq=7 draw_seq=6 draw_ms=1794942202914 confirm_ms=24
+   853356us pid=1386736 HOST tap publish_begin at (540,376) ack_wait_ms=2500
+   858531us pid=1386736 HOST tap acks_returned total_ms=5 seqs=[3, 4] acks=[(3, true, Some(5108)), (4, true, Some(5106))]
+   858742us pid=1386736 HOST settle entry floor=7 gen=7 deadline_ms=2999 await_tree=false pending=[]
+   858750us pid=1386736 HOST settle wake probe_seq=7 reason=entry written=true
+   858847us pid=1386736 HOST settle wait reason=probe-floor probe_seq=7 age_ms=46 draw_seq=6 settled=true floor=7
+   866005us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   868505us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   868514us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.View$PerformClick@e7b1657: 0
+   868857us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.View$PerformClick@e7b1657
+   868863us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.View$UnsetPressedState@9813544: 0
+   868882us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.View$UnsetPressedState@9813544
+   868888us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null: 31
+   868980us pid=1386736 HOST settle event generation 7->8
+   869063us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null
+   869066us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null: 29
+   869098us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null
+   869102us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@edd762: 0
+   869688us pid=1386736 HOST probe rx seq=8 cause=wake lag_ms=0 settled=false draw_seq=7 gen=8
+   869766us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@edd762
+   869769us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {4b0c0f3} dev.acos.art.LaunchMain$13$1$1@8fe61b0: 0
+   869772us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {4b0c0f3} dev.acos.art.LaunchMain$13$1$1@8fe61b0
+   879294us pid=1386736 HOST settle wait reason=traversal probe_seq=8 age_ms=10 draw_seq=7 settled=false floor=7
+   882654us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   885179us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   885192us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} android.os.Handler$BlockingRunnable@4336829: 0
+   885209us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} android.os.Handler$BlockingRunnable@4336829
+   885211us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {c5607ae} dev.acos.art.LaunchMain$13$1$1@58c794f: 0
+   885221us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c5607ae} dev.acos.art.LaunchMain$13$1$1@58c794f
+   885425us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda0@bdfe8dc: 0
+   885439us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda0@bdfe8dc
+   889429us pid=1386736 HOST settle event generation 8->9
+   890810us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@7fef0ba: 0
+   891634us pid=1386736 HOST probe rx seq=9 cause=dirty lag_ms=0 settled=false draw_seq=8 gen=9
+   891704us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@7fef0ba
+   899345us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+   899355us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+   899797us pid=1386736 HOST settle wait reason=frame probe_seq=9 age_ms=8 draw_seq=8 settled=false floor=7
+   933070us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda0@ec15b6b: 0
+   933092us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda0@ec15b6b
+   950796us pid=1386736 HOST settle wake probe_seq=9 reason=pacing written=true
+   950923us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@1f0b6c8: 0
+   951950us pid=1386736 HOST probe rx seq=10 cause=wake lag_ms=0 settled=true draw_seq=8 gen=9
+   952038us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@1f0b6c8
+  1078948us pid=1386736 HOST settle event ready gen=9 probe_seq=10 draw_seq=8 draw_ms=1794942203547 confirm_ms=24
+  1079109us pid=1386736 HOST tap settle_done after_ms=225 settled=true mode=strict
+  1133270us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda1@1def361: 0
+  1133304us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.InsetsAnimationThreadControlRunner$1$$ExternalSyntheticLambda1@1def361
+  1133307us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} android.os.Handler$BlockingRunnable@81b5e86: 0
+  1133320us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} android.os.Handler$BlockingRunnable@81b5e86
+  1149449us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  1149625us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  1149633us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {c184347} dev.acos.art.LaunchMain$13$1$1@abe7774: 0
+  1149642us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c184347} dev.acos.art.LaunchMain$13$1$1@abe7774
+  1157720us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@336649d: 0
+  1159073us pid=1386736 HOST probe rx seq=11 cause=dirty lag_ms=0 settled=true draw_seq=9 gen=9
+  1159248us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@336649d
+  1317064us pid=1386736 HOST type_text publish_begin at (0,0) ack_wait_ms=2500
+  1327344us pid=1386736 HOST type_text acks_returned total_ms=10 seqs=[5, 6, 7, 8, 9, 10, 11, 12, 13, 14] acks=[(5, true, Some(10214)), (6, false, Some(10213)), (7, true, Some(10208)), (8, false, Some(10208)), (9, true, Some(10208)), (10, false, Some(10210)), (11, true, Some(10209)), (12, false, Some(10209)), (13, true, Some(10209)), (14, false, Some(10209))]
+  1327575us pid=1386736 HOST settle entry floor=11 gen=9 deadline_ms=2999 await_tree=false pending=[]
+  1327584us pid=1386736 HOST settle wake probe_seq=11 reason=entry written=true
+  1327681us pid=1386736 HOST settle wait reason=probe-floor probe_seq=11 age_ms=169 draw_seq=9 settled=true floor=11
+  1332740us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  1335600us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  1335604us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@613f55b: 0
+  1336273us pid=1386736 GUEST touch_mode false
+  1336283us pid=1386736 HOST probe rx seq=12 cause=wake lag_ms=1 settled=false draw_seq=10 gen=10
+  1336367us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@613f55b
+  1336370us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {e928c37} dev.acos.art.LaunchMain$13$1$1@4a8a5a4: 0
+  1336372us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {e928c37} dev.acos.art.LaunchMain$13$1$1@4a8a5a4
+  1337843us pid=1386736 HOST settle event generation 9->10
+  1337950us pid=1386736 HOST settle wait reason=queue probe_seq=12 age_ms=1 draw_seq=10 settled=false floor=11
+  1352434us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f1eaf0d: 0
+  1353169us pid=1386736 HOST probe rx seq=13 cause=dirty lag_ms=0 settled=true draw_seq=10 gen=10
+  1353308us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f1eaf0d
+  1475891us pid=1386736 HOST settle event ready gen=10 probe_seq=13 draw_seq=10 draw_ms=1794942203997 confirm_ms=24
+  1475999us pid=1386736 HOST type_text settle_done after_ms=158 settled=true mode=strict
+  1711308us pid=1386736 HOST settle entry floor=13 gen=10 deadline_ms=1499 await_tree=false pending=[]
+  1711319us pid=1386736 HOST settle wake probe_seq=13 reason=entry written=true
+  1711323us pid=1386736 HOST settle event generation 0->10
+  1711369us pid=1386736 HOST settle wait reason=probe-floor probe_seq=13 age_ms=359 draw_seq=10 settled=true floor=13
+  1711460us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@a74aec2: 0
+  1712701us pid=1386736 HOST probe rx seq=14 cause=wake lag_ms=0 settled=false draw_seq=10 gen=10
+  1712791us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@a74aec2
+  1721519us pid=1386736 HOST settle wait reason=queue probe_seq=14 age_ms=9 draw_seq=10 settled=false floor=13
+  1772323us pid=1386736 HOST settle wake probe_seq=14 reason=pacing written=true
+  1772430us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@cf9b4d3: 0
+  1773372us pid=1386736 HOST probe rx seq=15 cause=wake lag_ms=1 settled=false draw_seq=10 gen=10
+  1773445us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@cf9b4d3
+  1824317us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.widget.Editor$Blink@99c7810: 0
+  1824329us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.widget.Editor$Blink@99c7810
+  1832680us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  1833556us pid=1386736 HOST settle wake probe_seq=15 reason=pacing written=true
+  1835335us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  1835343us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {942f09} dev.acos.art.LaunchMain$13$1$1@f62f50e: 0
+  1835357us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {942f09} dev.acos.art.LaunchMain$13$1$1@f62f50e
+  1835360us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@aa0cb2f: 0
+  1836119us pid=1386736 HOST probe rx seq=16 cause=wake lag_ms=0 settled=true draw_seq=11 gen=11
+  1836273us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@aa0cb2f
+  1843687us pid=1386736 HOST settle event generation 10->11
+  1874574us pid=1386736 HOST settle event ready gen=11 probe_seq=16 draw_seq=11 draw_ms=1794942204497 confirm_ms=24
+  1876098us pid=1386736 HOST tap publish_begin at (157,498) ack_wait_ms=2500
+  1881283us pid=1386736 HOST tap acks_returned total_ms=5 seqs=[15, 16] acks=[(15, true, Some(5105)), (16, true, Some(5100))]
+  1881489us pid=1386736 HOST settle entry floor=16 gen=11 deadline_ms=2999 await_tree=false pending=[]
+  1881496us pid=1386736 HOST settle wake probe_seq=16 reason=entry written=true
+  1881587us pid=1386736 HOST settle wait reason=probe-floor probe_seq=16 age_ms=46 draw_seq=11 settled=true floor=16
+  1882670us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  1885487us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  1885496us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.View$PerformClick@bc7b2c5: 0
+  1885977us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape PauseActivityItem
+  1886010us pid=1386736 GUEST ACOSLAUNCH MARK activity-paused-for-launch token=binder:c2f5364 activity=dev.acos.fixtures.multiactivity.SecondActivity
+  1886016us pid=1386736 GUEST ACOSLAUNCH MARK app-flags flags=0x10883e46 source=manifest
+  1886157us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape LaunchActivityItem 0:Intent 1:int 2:ActivityInfo 3:Configuration 4:Configuration 5:int 6:String 7:IVoiceInteractor 8:int 9:Bundle 10:PersistableBundle 11:List 12:List 13:ActivityOptions 14:boolean 15:ProfilerInfo 16:IBinder 17:IActivityClientController 18:IBinder 19:boolean 20:IBinder
+  1886164us pid=1386736 GUEST ACOSLAUNCH MARK transaction-items launch=android.app.servertransaction.LaunchActivityItem resume=android.app.servertransaction.ResumeActivityItem
+  1886357us pid=1386736 GUEST ACOSLAUNCH MARK start-activity-launched component=dev.acos.fixtures.multiactivity/dev.acos.fixtures.multiactivity.SecondActivity token=binder:5dd541a previous=binder:c2f5364
+  1886363us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.View$PerformClick@bc7b2c5
+  1886369us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.View$UnsetPressedState@4f8eb4b: 0
+  1886397us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.view.View$UnsetPressedState@4f8eb4b
+  1886403us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6f5b641: 0
+  1887013us pid=1386736 GUEST touch_mode true
+  1887031us pid=1386736 HOST probe rx seq=17 cause=wake lag_ms=0 settled=false draw_seq=12 gen=12
+  1887108us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6f5b641
+  1887111us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {b6c97e6} dev.acos.art.LaunchMain$13$1$1@568f127: 0
+  1887115us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {b6c97e6} dev.acos.art.LaunchMain$13$1$1@568f127
+  1891702us pid=1386736 HOST settle event generation 11->12
+  1891776us pid=1386736 HOST settle wait reason=traversal probe_seq=17 age_ms=5 draw_seq=12 settled=false floor=16
+  1899333us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  1901341us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  1901349us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  1901373us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  1901380us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  1901858us pid=1386736 HOST settle event generation 12->13
+  1905241us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  1905255us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {5411415} dev.acos.art.LaunchMain$13$1$1@e12232a: 0
+  1905268us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {5411415} dev.acos.art.LaunchMain$13$1$1@e12232a
+  1915996us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  1918800us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  1918808us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} android.view.ViewRootImpl$7@359ec93: 0
+  1918813us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} android.view.ViewRootImpl$7@359ec93
+  1918818us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null: 8
+  1918823us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null
+  1918828us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null: 6
+  1918873us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null
+  1918880us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null: 34
+  1918885us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null
+  1918890us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null: 6
+  1919067us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null
+  1919073us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@10b4d0: 0
+  1920077us pid=1386736 HOST probe rx seq=18 cause=dirty lag_ms=0 settled=false draw_seq=14 gen=14
+  1920194us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@10b4d0
+  1920200us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {12cbeef} dev.acos.art.LaunchMain$13$1$1@e144dfc: 0
+  1920203us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {12cbeef} dev.acos.art.LaunchMain$13$1$1@e144dfc
+  1920205us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} com.android.internal.policy.PhoneWindow$1@b502c85: 0
+  1920207us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} com.android.internal.policy.PhoneWindow$1@b502c85
+  1922226us pid=1386736 HOST settle event generation 13->14
+  1932668us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  1937781us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  1937790us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null: 13
+  1937795us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null
+  1937800us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@4564de8: 0
+  1938928us pid=1386736 HOST probe rx seq=19 cause=dirty lag_ms=0 settled=false draw_seq=16 gen=16
+  1939161us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@4564de8
+  1942866us pid=1386736 HOST settle event generation 14->16
+  1949334us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  1953199us pid=1386736 HOST settle event generation 16->17
+  1954170us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  1954179us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3879ce7} dev.acos.art.LaunchMain$13$1$1@4366094: 0
+  1954184us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3879ce7} dev.acos.art.LaunchMain$13$1$1@4366094
+  1954189us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {30c673d} dev.acos.art.LaunchMain$13$1$1@9eabb32: 0
+  1954194us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {30c673d} dev.acos.art.LaunchMain$13$1$1@9eabb32
+  1960410us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@8a72083: 0
+  1961556us pid=1386736 HOST probe rx seq=20 cause=dirty lag_ms=1 settled=true draw_seq=18 gen=18
+  1961822us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@8a72083
+  1963539us pid=1386736 HOST settle event generation 17->18
+  1966025us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  1970165us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  1970174us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {362f200} dev.acos.art.LaunchMain$13$1$1@2dd3a39: 0
+  1970179us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {362f200} dev.acos.art.LaunchMain$13$1$1@2dd3a39
+  1982666us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  1988405us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  1988414us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {105587e} dev.acos.art.LaunchMain$13$1$1@fb141df: 0
+  1988419us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {105587e} dev.acos.art.LaunchMain$13$1$1@fb141df
+  1993543us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2052e2c: 0
+  2106158us pid=1386736 HOST probe rx seq=21 cause=dirty lag_ms=0 settled=true draw_seq=22 gen=22
+  2106448us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2052e2c
+  2107578us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape StopActivityItem 0:int
+  2107606us pid=1386736 GUEST ACOSLAUNCH MARK activity-stopped-after-launch token=binder:c2f5364
+  2107615us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  2108239us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  2114679us pid=1386736 HOST settle event generation 18->22
+  2116000us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  2257227us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  2257253us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} android.app.servertransaction.PendingTransactionActions$StopInfo@59a7e8a: 0
+  2257276us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} android.app.servertransaction.PendingTransactionActions$StopInfo@59a7e8a
+  2257283us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.View$VisibilityChangeForAutofillHandler) {e121cfb} null: 0
+  2257289us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.View$VisibilityChangeForAutofillHandler) {e121cfb} null
+  2257294us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  2257557us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  2262899us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@7ad0118: 0
+  2264265us pid=1386736 HOST probe rx seq=22 cause=dirty lag_ms=1 settled=true draw_seq=23 gen=23
+  2264478us pid=1386736 HOST settle event generation 22->23
+  2264554us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@7ad0118
+  2266051us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  2266113us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  2282679us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  2282712us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  2299350us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  2299379us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  2316023us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  2316047us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  2332669us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  2332687us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  2349341us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  2349370us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  2366016us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  2366022us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  2553653us pid=1386736 HOST settle event ready gen=23 probe_seq=22 draw_seq=23 draw_ms=1794942204919 confirm_ms=24
+  2553891us pid=1386736 HOST tap settle_done after_ms=677 settled=true mode=strict
+  2886136us pid=1386736 HOST settle entry floor=22 gen=23 deadline_ms=1499 await_tree=false pending=[]
+  2886148us pid=1386736 HOST settle wake probe_seq=22 reason=entry written=true
+  2886153us pid=1386736 HOST settle event generation 0->23
+  2886237us pid=1386736 HOST settle wait reason=probe-floor probe_seq=22 age_ms=621 draw_seq=23 settled=true floor=22
+  2886281us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@b8ef771: 0
+  2887876us pid=1386736 HOST probe rx seq=23 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  2888092us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@b8ef771
+  2927288us pid=1386736 HOST settle event ready gen=23 probe_seq=23 draw_seq=23 draw_ms=1794942204919 confirm_ms=24
+  3251123us pid=1386736 HOST key publish_begin at (0,0) ack_wait_ms=2500
+  3256623us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null: 32
+  3256635us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null
+  3256731us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null: 29
+  3256774us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {b57ed82} null
+  3261370us pid=1386736 HOST key acks_returned total_ms=10 seqs=[3, 4] acks=[(3, true, Some(10195)), (4, true, Some(10193))]
+  3364651us pid=1386736 HOST settle fast window expired after_ms=100 (falling back to strict quiet; no change claimed)
+  3416332us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@da9f956: 0
+  3417590us pid=1386736 HOST probe rx seq=24 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  3417764us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@da9f956
+  6262476us pid=1386736 HOST key settle_done after_ms=3011 settled=false mode=fast
+  6584143us pid=1386736 HOST fast-tree ready probe_seq=24 entry_gen=23 probe_gen=23 age_ms=3166 requested=false
+  6585634us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6585806us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@9db8dd7: 0
+  6587095us pid=1386736 HOST probe rx seq=25 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6587281us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@9db8dd7
+  6587796us pid=1386736 HOST fast-tree ready probe_seq=25 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6589193us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6589251us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2fd16c4: 0
+  6590160us pid=1386736 HOST probe rx seq=26 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6590343us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2fd16c4
+  6591331us pid=1386736 HOST fast-tree ready probe_seq=26 entry_gen=23 probe_gen=23 age_ms=2 requested=true
+  6593187us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6593250us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@24a99ad: 0
+  6594302us pid=1386736 HOST probe rx seq=27 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6594486us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@24a99ad
+  6595322us pid=1386736 HOST fast-tree ready probe_seq=27 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6596736us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6596834us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@d6454e2: 0
+  6597996us pid=1386736 HOST probe rx seq=28 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6598183us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@d6454e2
+  6598877us pid=1386736 HOST fast-tree ready probe_seq=28 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6600460us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6600538us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@e613073: 0
+  6602054us pid=1386736 HOST probe rx seq=29 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6602262us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@e613073
+  6602593us pid=1386736 HOST fast-tree ready probe_seq=29 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6604003us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6604097us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@816db30: 0
+  6605374us pid=1386736 HOST probe rx seq=30 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6605549us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@816db30
+  6606135us pid=1386736 HOST fast-tree ready probe_seq=30 entry_gen=23 probe_gen=23 age_ms=0 requested=true
+  6607605us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6607658us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@fa423a9: 0
+  6608529us pid=1386736 HOST probe rx seq=31 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6608704us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@fa423a9
+  6609737us pid=1386736 HOST fast-tree ready probe_seq=31 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6611426us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6611475us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@976dd2e: 0
+  6612342us pid=1386736 HOST probe rx seq=32 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6612511us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@976dd2e
+  6613557us pid=1386736 HOST fast-tree ready probe_seq=32 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6615413us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6615475us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@e9460cf: 0
+  6616626us pid=1386736 HOST probe rx seq=33 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6616842us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@e9460cf
+  6617551us pid=1386736 HOST fast-tree ready probe_seq=33 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6618886us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6618946us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@9c67a5c: 0
+  6620004us pid=1386736 HOST probe rx seq=34 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6620189us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@9c67a5c
+  6621021us pid=1386736 HOST fast-tree ready probe_seq=34 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6622777us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6622913us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@1f25165: 0
+  6624075us pid=1386736 HOST probe rx seq=35 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6624270us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@1f25165
+  6624912us pid=1386736 HOST fast-tree ready probe_seq=35 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6627434us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6627500us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2179e3a: 0
+  6628403us pid=1386736 HOST probe rx seq=36 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6628584us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2179e3a
+  6629625us pid=1386736 HOST fast-tree ready probe_seq=36 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6631580us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6631632us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@1203aeb: 0
+  6632639us pid=1386736 HOST probe rx seq=37 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6632824us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@1203aeb
+  6633765us pid=1386736 HOST fast-tree ready probe_seq=37 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6635613us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6635686us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@96ee048: 0
+  6636682us pid=1386736 HOST probe rx seq=38 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6636864us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@96ee048
+  6637804us pid=1386736 HOST fast-tree ready probe_seq=38 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6639619us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6639669us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@c3b9ee1: 0
+  6640480us pid=1386736 HOST probe rx seq=39 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6640665us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@c3b9ee1
+  6641811us pid=1386736 HOST fast-tree ready probe_seq=39 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6643590us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6643648us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2d16406: 0
+  6644552us pid=1386736 HOST probe rx seq=40 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6644724us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2d16406
+  6645783us pid=1386736 HOST fast-tree ready probe_seq=40 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6647301us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6647359us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2459ac7: 0
+  6648277us pid=1386736 HOST probe rx seq=41 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6648452us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2459ac7
+  6649489us pid=1386736 HOST fast-tree ready probe_seq=41 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6651518us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6651601us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@9b5b8f4: 0
+  6652504us pid=1386736 HOST probe rx seq=42 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6652688us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@9b5b8f4
+  6653703us pid=1386736 HOST fast-tree ready probe_seq=42 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6655595us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6655645us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@172481d: 0
+  6656574us pid=1386736 HOST probe rx seq=43 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6656763us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@172481d
+  6657783us pid=1386736 HOST fast-tree ready probe_seq=43 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6659611us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6659657us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@30fba92: 0
+  6660434us pid=1386736 HOST probe rx seq=44 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6660617us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@30fba92
+  6661796us pid=1386736 HOST fast-tree ready probe_seq=44 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6663613us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6663680us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@7771c63: 0
+  6664577us pid=1386736 HOST probe rx seq=45 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6664751us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@7771c63
+  6665746us pid=1386736 HOST fast-tree ready probe_seq=45 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6667523us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6667680us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@fef7060: 0
+  6669283us pid=1386736 HOST probe rx seq=46 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6669534us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@fef7060
+  6669710us pid=1386736 HOST fast-tree ready probe_seq=46 entry_gen=23 probe_gen=23 age_ms=0 requested=true
+  6671204us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6671268us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@7704919: 0
+  6672268us pid=1386736 HOST probe rx seq=47 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6672510us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@7704919
+  6673387us pid=1386736 HOST fast-tree ready probe_seq=47 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6675492us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6675538us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@36aedde: 0
+  6676411us pid=1386736 HOST probe rx seq=48 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6676639us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@36aedde
+  6677625us pid=1386736 HOST fast-tree ready probe_seq=48 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6678892us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6679004us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@b51bbf: 0
+  6680834us pid=1386736 HOST probe rx seq=49 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6681091us pid=1386736 HOST fast-tree ready probe_seq=49 entry_gen=23 probe_gen=23 age_ms=0 requested=true
+  6681144us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@b51bbf
+  6683420us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6683458us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@4b328c: 0
+  6684292us pid=1386736 HOST probe rx seq=50 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6684437us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@4b328c
+  6685579us pid=1386736 HOST fast-tree ready probe_seq=50 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6686951us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6686988us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@db35dd5: 0
+  6687717us pid=1386736 HOST probe rx seq=51 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6687870us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@db35dd5
+  6689093us pid=1386736 HOST fast-tree ready probe_seq=51 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6690457us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6690494us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@3b409ea: 0
+  6691363us pid=1386736 HOST probe rx seq=52 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6691493us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@3b409ea
+  6692595us pid=1386736 HOST fast-tree ready probe_seq=52 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6694379us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6694403us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@3a9b4db: 0
+  6695021us pid=1386736 HOST probe rx seq=53 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6695161us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@3a9b4db
+  6696565us pid=1386736 HOST fast-tree ready probe_seq=53 entry_gen=23 probe_gen=23 age_ms=2 requested=true
+  6698634us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6698664us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@beeb78: 0
+  6699359us pid=1386736 HOST probe rx seq=54 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6699499us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@beeb78
+  6700822us pid=1386736 HOST fast-tree ready probe_seq=54 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6702680us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6702704us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@3d90251: 0
+  6703328us pid=1386736 HOST probe rx seq=55 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6703468us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@3d90251
+  6704873us pid=1386736 HOST fast-tree ready probe_seq=55 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6706700us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6706733us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@dc0dab6: 0
+  6707400us pid=1386736 HOST probe rx seq=56 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6707538us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@dc0dab6
+  6708892us pid=1386736 HOST fast-tree ready probe_seq=56 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6710802us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6710894us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@c84c3b7: 0
+  6711918us pid=1386736 HOST probe rx seq=57 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6712047us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@c84c3b7
+  6712966us pid=1386736 HOST fast-tree ready probe_seq=57 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6714640us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6714672us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@eb34724: 0
+  6715365us pid=1386736 HOST probe rx seq=58 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6715501us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@eb34724
+  6716777us pid=1386736 HOST fast-tree ready probe_seq=58 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6718072us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6718096us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@bda728d: 0
+  6718885us pid=1386736 HOST probe rx seq=59 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6719143us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@bda728d
+  6720204us pid=1386736 HOST fast-tree ready probe_seq=59 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6721745us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6721767us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f7ec42: 0
+  6722315us pid=1386736 HOST probe rx seq=60 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6722450us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f7ec42
+  6723877us pid=1386736 HOST fast-tree ready probe_seq=60 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6725626us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6725652us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@97e453: 0
+  6726340us pid=1386736 HOST probe rx seq=61 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6726475us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@97e453
+  6727753us pid=1386736 HOST fast-tree ready probe_seq=61 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6729353us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6729379us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@36fb190: 0
+  6730289us pid=1386736 HOST probe rx seq=62 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6730416us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@36fb190
+  6731493us pid=1386736 HOST fast-tree ready probe_seq=62 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6732825us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6732848us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@408aa89: 0
+  6733753us pid=1386736 HOST probe rx seq=63 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6733892us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@408aa89
+  6734969us pid=1386736 HOST fast-tree ready probe_seq=63 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6736263us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6736290us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@a9c8a8e: 0
+  6737131us pid=1386736 HOST probe rx seq=64 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6737271us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@a9c8a8e
+  6738395us pid=1386736 HOST fast-tree ready probe_seq=64 entry_gen=23 probe_gen=23 age_ms=2 requested=true
+  6739655us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6739692us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@eb272af: 0
+  6740354us pid=1386736 HOST probe rx seq=65 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6740489us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@eb272af
+  6741782us pid=1386736 HOST fast-tree ready probe_seq=65 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6743105us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6743139us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@34656bc: 0
+  6743943us pid=1386736 HOST probe rx seq=66 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6744077us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@34656bc
+  6745236us pid=1386736 HOST fast-tree ready probe_seq=66 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6746619us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6746668us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@4c86645: 0
+  6747638us pid=1386736 HOST probe rx seq=67 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6747768us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@4c86645
+  6748759us pid=1386736 HOST fast-tree ready probe_seq=67 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6750129us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6750167us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6dac19a: 0
+  6751013us pid=1386736 HOST probe rx seq=68 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6751140us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6dac19a
+  6752298us pid=1386736 HOST fast-tree ready probe_seq=68 entry_gen=23 probe_gen=23 age_ms=2 requested=true
+  6753952us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6753975us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@93d8acb: 0
+  6754560us pid=1386736 HOST probe rx seq=69 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6754692us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@93d8acb
+  6756088us pid=1386736 HOST fast-tree ready probe_seq=69 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6757622us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6757652us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@38022a8: 0
+  6758351us pid=1386736 HOST probe rx seq=70 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6758477us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@38022a8
+  6759759us pid=1386736 HOST fast-tree ready probe_seq=70 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6761591us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6761621us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@e0e21c1: 0
+  6762258us pid=1386736 HOST probe rx seq=71 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6762381us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@e0e21c1
+  6763738us pid=1386736 HOST fast-tree ready probe_seq=71 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6765584us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6765610us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6935d66: 0
+  6766209us pid=1386736 HOST probe rx seq=72 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6766333us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6935d66
+  6767733us pid=1386736 HOST fast-tree ready probe_seq=72 entry_gen=23 probe_gen=23 age_ms=2 requested=true
+  6769602us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6769633us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@61808a7: 0
+  6770289us pid=1386736 HOST probe rx seq=73 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6770414us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@61808a7
+  6771749us pid=1386736 HOST fast-tree ready probe_seq=73 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6773612us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6773641us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@308c154: 0
+  6774294us pid=1386736 HOST probe rx seq=74 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6774417us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@308c154
+  6775788us pid=1386736 HOST fast-tree ready probe_seq=74 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6777176us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6777215us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@9a18fd: 0
+  6778152us pid=1386736 HOST probe rx seq=75 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6778414us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@9a18fd
+  6779330us pid=1386736 HOST fast-tree ready probe_seq=75 entry_gen=23 probe_gen=23 age_ms=2 requested=true
+  6780953us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6780986us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@5e7e9f2: 0
+  6781616us pid=1386736 HOST probe rx seq=76 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6781743us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@5e7e9f2
+  6783102us pid=1386736 HOST fast-tree ready probe_seq=76 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6784775us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6784844us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@328843: 0
+  6785718us pid=1386736 HOST probe rx seq=77 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6785857us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@328843
+  6786913us pid=1386736 HOST fast-tree ready probe_seq=77 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6788694us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6788747us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@1da9ec0: 0
+  6789669us pid=1386736 HOST probe rx seq=78 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6789807us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@1da9ec0
+  6790818us pid=1386736 HOST fast-tree ready probe_seq=78 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6792402us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6792447us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@ef447f9: 0
+  6793514us pid=1386736 HOST probe rx seq=79 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6793648us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@ef447f9
+  6794536us pid=1386736 HOST fast-tree ready probe_seq=79 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6795930us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6795975us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f86b33e: 0
+  6796795us pid=1386736 HOST probe rx seq=80 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6796924us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f86b33e
+  6798098us pid=1386736 HOST fast-tree ready probe_seq=80 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6799747us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6799820us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6eb659f: 0
+  6800721us pid=1386736 HOST probe rx seq=81 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6800854us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6eb659f
+  6801898us pid=1386736 HOST fast-tree ready probe_seq=81 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6803716us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6803742us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@32ae6ec: 0
+  6804480us pid=1386736 HOST probe rx seq=82 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6804614us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@32ae6ec
+  6805850us pid=1386736 HOST fast-tree ready probe_seq=82 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6807772us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6807798us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2286ab5: 0
+  6808555us pid=1386736 HOST probe rx seq=83 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6808683us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2286ab5
+  6809910us pid=1386736 HOST fast-tree ready probe_seq=83 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6811733us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6811767us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@8b6c54a: 0
+  6812598us pid=1386736 HOST probe rx seq=84 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6812723us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@8b6c54a
+  6813887us pid=1386736 HOST fast-tree ready probe_seq=84 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6815743us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6815769us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@72abcbb: 0
+  6816388us pid=1386736 HOST probe rx seq=85 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6816514us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@72abcbb
+  6817915us pid=1386736 HOST fast-tree ready probe_seq=85 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6819376us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6819418us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@65585d8: 0
+  6820162us pid=1386736 HOST probe rx seq=86 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6820289us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@65585d8
+  6821525us pid=1386736 HOST fast-tree ready probe_seq=86 entry_gen=23 probe_gen=23 age_ms=2 requested=true
+  6822802us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6822827us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@e41fd31: 0
+  6823486us pid=1386736 HOST probe rx seq=87 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6823611us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@e41fd31
+  6824909us pid=1386736 HOST fast-tree ready probe_seq=87 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6826244us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6826265us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@223ec16: 0
+  6826843us pid=1386736 HOST probe rx seq=88 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6826981us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@223ec16
+  6828380us pid=1386736 HOST fast-tree ready probe_seq=88 entry_gen=23 probe_gen=23 age_ms=2 requested=true
+  6829672us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6829697us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@a3e6997: 0
+  6830539us pid=1386736 HOST probe rx seq=89 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6830673us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@a3e6997
+  6831804us pid=1386736 HOST fast-tree ready probe_seq=89 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6833091us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6833117us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2892784: 0
+  6833758us pid=1386736 HOST probe rx seq=90 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6833884us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2892784
+  6835221us pid=1386736 HOST fast-tree ready probe_seq=90 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6836954us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6836976us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2883b6d: 0
+  6837753us pid=1386736 HOST probe rx seq=91 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6837895us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2883b6d
+  6839140us pid=1386736 HOST fast-tree ready probe_seq=91 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6840640us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6840673us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@96ab3a2: 0
+  6841516us pid=1386736 HOST probe rx seq=92 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6841652us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@96ab3a2
+  6842817us pid=1386736 HOST fast-tree ready probe_seq=92 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6844420us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6844445us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6760833: 0
+  6845288us pid=1386736 HOST probe rx seq=93 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6845514us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@6760833
+  6846599us pid=1386736 HOST fast-tree ready probe_seq=93 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6848363us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6848387us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@13337f0: 0
+  6849239us pid=1386736 HOST probe rx seq=94 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6849496us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@13337f0
+  6850502us pid=1386736 HOST fast-tree ready probe_seq=94 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6852355us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6852399us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@17a2169: 0
+  6853037us pid=1386736 HOST probe rx seq=95 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6853184us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@17a2169
+  6854500us pid=1386736 HOST fast-tree ready probe_seq=95 entry_gen=23 probe_gen=23 age_ms=2 requested=true
+  6856230us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6856260us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@76467ee: 0
+  6857147us pid=1386736 HOST probe rx seq=96 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6857292us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@76467ee
+  6858377us pid=1386736 HOST fast-tree ready probe_seq=96 entry_gen=23 probe_gen=23 age_ms=2 requested=true
+  6859889us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6859924us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@d7ef48f: 0
+  6860550us pid=1386736 HOST probe rx seq=97 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6860683us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@d7ef48f
+  6862043us pid=1386736 HOST fast-tree ready probe_seq=97 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6863371us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6863404us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@32be31c: 0
+  6864339us pid=1386736 HOST probe rx seq=98 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6864587us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@32be31c
+  6865495us pid=1386736 HOST fast-tree ready probe_seq=98 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6867101us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6867121us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@c8a6b25: 0
+  6867695us pid=1386736 HOST probe rx seq=99 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6867832us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@c8a6b25
+  6869221us pid=1386736 HOST fast-tree ready probe_seq=99 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6870888us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6870918us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@73314fa: 0
+  6871665us pid=1386736 HOST probe rx seq=100 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6871798us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@73314fa
+  6873012us pid=1386736 HOST fast-tree ready probe_seq=100 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6874599us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6874619us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@4804aab: 0
+  6875364us pid=1386736 HOST probe rx seq=101 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6875488us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@4804aab
+  6876766us pid=1386736 HOST fast-tree ready probe_seq=101 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6878266us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6878314us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@ca21508: 0
+  6879588us pid=1386736 HOST probe rx seq=102 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6879739us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@ca21508
+  6880407us pid=1386736 HOST fast-tree ready probe_seq=102 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6881801us pid=1386736 HOST fast-tree requested an immediate guest probe
+  6881854us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f9b94a1: 0
+  6882799us pid=1386736 HOST probe rx seq=103 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  6882937us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f9b94a1
+  6883939us pid=1386736 HOST fast-tree ready probe_seq=103 entry_gen=23 probe_gen=23 age_ms=1 requested=true
+  6885462us pid=1386736 HOST settle entry floor=103 gen=23 deadline_ms=0 await_tree=false pending=[]
+  6885469us pid=1386736 HOST settle wake probe_seq=103 reason=entry written=true
+  6885471us pid=1386736 HOST settle event generation 0->23
+  6885529us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@20d86c6: 0
+  6885559us pid=1386736 HOST settle wait reason=probe-floor probe_seq=103 age_ms=3 draw_seq=23 settled=true floor=103
+  6886447us pid=1386736 HOST probe rx seq=104 cause=wake lag_ms=1 settled=true draw_seq=23 gen=23
+  6886584us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@20d86c6
+  6895939us pid=1386736 HOST settle event timeout reason=probe-floor gen=23
+  7219655us pid=1386736 HOST key publish_begin at (0,0) ack_wait_ms=2500
+  7225305us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1f6e687} android.app.Activity$RequestFinishCallback$$ExternalSyntheticLambda0@3c779b4: 0
+  7225355us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1f6e687} android.app.Activity$RequestFinishCallback$$ExternalSyntheticLambda0@3c779b4
+  7229894us pid=1386736 HOST key acks_returned total_ms=10 seqs=[5, 6] acks=[(5, true, Some(10184)), (6, true, Some(10183))]
+  7230005us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape PauseActivityItem
+  7230013us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  7230046us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  7230289us pid=1386736 HOST settle entry floor=104 gen=23 deadline_ms=2999 await_tree=false pending=[]
+  7230295us pid=1386736 HOST settle wake probe_seq=104 reason=entry written=true
+  7230352us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@bcb4952: 0
+  7230384us pid=1386736 HOST settle wait reason=probe-floor probe_seq=104 age_ms=344 draw_seq=23 settled=true floor=104
+  7231613us pid=1386736 HOST probe rx seq=105 cause=wake lag_ms=0 settled=true draw_seq=23 gen=23
+  7231762us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@bcb4952
+  7235097us pid=1386736 GUEST ACOSLAUNCH MARK activity-resumed-after-finish token=binder:c2f5364
+  7235118us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  7235365us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  7240174us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape StopActivityItem 0:int
+  7240192us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape DestroyActivityItem 0:boolean 1:int
+  7240203us pid=1386736 GUEST ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:5dd541a order=Pause(finished)->Resume(previous)->Stop->Destroy
+  7240739us pid=1386736 HOST settle wait reason=no-draw-after-action probe_seq=105 age_ms=9 draw_seq=23 settled=true floor=104
+  7249368us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  7252859us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  7252862us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  7252967us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  7252970us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  7253202us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  7253214us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {d516423} dev.acos.art.LaunchMain$13$1$1@e3c7d20: 0
+  7253226us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {d516423} dev.acos.art.LaunchMain$13$1$1@e3c7d20
+  7253235us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} android.app.servertransaction.PendingTransactionActions$StopInfo@4a136d9: 0
+  7253238us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} android.app.servertransaction.PendingTransactionActions$StopInfo@4a136d9
+  7253241us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {c30a89e} android.window.WindowOnBackInvokedDispatcher$$ExternalSyntheticLambda0@c4c1f7f: 0
+  7253251us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c30a89e} android.window.WindowOnBackInvokedDispatcher$$ExternalSyntheticLambda0@c4c1f7f
+  7253255us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 119
+  7253258us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  7253261us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null: 6
+  7253541us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null
+  7253544us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null: 13
+  7253547us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} null
+  7261157us pid=1386736 HOST settle event generation 23->24
+  7261266us pid=1386736 HOST settle wait reason=newer-store probe_seq=105 age_ms=30 draw_seq=23 settled=true floor=104
+  7265999us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  7268978us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  7268986us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@a0d349b: 0
+  7269619us pid=1386736 HOST probe rx seq=106 cause=dirty lag_ms=0 settled=false draw_seq=25 gen=25
+  7269749us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@a0d349b
+  7269752us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {888d038} dev.acos.art.LaunchMain$13$1$1@501e811: 0
+  7269755us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {888d038} dev.acos.art.LaunchMain$13$1$1@501e811
+  7271391us pid=1386736 HOST settle event generation 24->25
+  7271463us pid=1386736 HOST settle wait reason=traversal probe_seq=106 age_ms=2 draw_seq=25 settled=false floor=104
+  7282659us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  7284387us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  7284390us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {4007f77} dev.acos.art.LaunchMain$13$1$1@816b7e4: 0
+  7284403us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {4007f77} dev.acos.art.LaunchMain$13$1$1@816b7e4
+  7290766us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@c0bf44d: 0
+  7291278us pid=1386736 HOST probe rx seq=107 cause=dirty lag_ms=1 settled=true draw_seq=26 gen=26
+  7291355us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@c0bf44d
+  7291692us pid=1386736 HOST settle event generation 25->26
+  7299356us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  7301688us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  7301696us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {614ab02} dev.acos.art.LaunchMain$13$1$1@8739c13: 0
+  7301699us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {614ab02} dev.acos.art.LaunchMain$13$1$1@8739c13
+  7315926us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@c796e50: 0
+  7432976us pid=1386736 HOST probe rx seq=108 cause=dirty lag_ms=0 settled=true draw_seq=27 gen=27
+  7433165us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@c796e50
+  7433173us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  7435038us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  7435042us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1308849} dev.acos.art.LaunchMain$13$1$1@ca6754e: 0
+  7435055us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1308849} dev.acos.art.LaunchMain$13$1$1@ca6754e
+  7440887us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2f1e66f: 0
+  7441470us pid=1386736 HOST probe rx seq=109 cause=dirty lag_ms=0 settled=true draw_seq=28 gen=28
+  7441551us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2f1e66f
+  7441932us pid=1386736 HOST settle event generation 26->28
+  7449339us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  7449348us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  7732107us pid=1386736 HOST settle event ready gen=28 probe_seq=109 draw_seq=28 draw_ms=1794942210097 confirm_ms=24
+  7732314us pid=1386736 HOST key settle_done after_ms=512 settled=true mode=strict
+  7732324us pid=1386736 HOST key delivered window 0x100000019 was removed within the step
+  7753737us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.widget.Editor$Blink@99c7810: 0
+  7753793us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {3bc83ec} android.widget.Editor$Blink@99c7810
+  7766036us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  7768412us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  7768420us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {e0f1f7c} dev.acos.art.LaunchMain$13$1$1@df06005: 0
+  7768423us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {e0f1f7c} dev.acos.art.LaunchMain$13$1$1@df06005
+  7774209us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@578985a: 0
+  7873300us pid=1386736 HOST probe rx seq=110 cause=dirty lag_ms=1 settled=true draw_seq=29 gen=29
+  7873509us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@578985a
+  8060810us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$7$1@2607a8b: 0
+  8061616us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape ActivityRelaunchItem List List int MergedConfiguration boolean
+  8061710us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$7$1@2607a8b
+  8061718us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  8066795us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  8066806us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {355e499} dev.acos.art.LaunchMain$6@e8f235e: 0
+  8066883us pid=1386736 GUEST ACOSLAUNCH MARK rotate rotation=1 relaunch=true via=ActivityRelaunchItem(ClientTransaction) handled=0x3 activity=dev.acos.fixtures.multiactivity.MainActivity panel=2400x1080
+  8066892us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {355e499} dev.acos.art.LaunchMain$6@e8f235e
+  8066896us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {c30a89e} android.window.WindowOnBackInvokedDispatcher$$ExternalSyntheticLambda0@86ce33f: 0
+  8066902us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c30a89e} android.window.WindowOnBackInvokedDispatcher$$ExternalSyntheticLambda0@86ce33f
+  8066905us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.View$VisibilityChangeForAutofillHandler) {e121cfb} null: 0
+  8066908us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.View$VisibilityChangeForAutofillHandler) {e121cfb} null
+  8066911us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 119
+  8066914us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  8066917us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} android.view.ViewRootImpl$7@5173155: 0
+  8066919us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} android.view.ViewRootImpl$7@5173155
+  8066922us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8068128us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8068132us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} android.view.View$$ExternalSyntheticLambda7@ead13d3: 0
+  8068136us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} android.view.View$$ExternalSyntheticLambda7@ead13d3
+  8068139us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} null: 8
+  8068144us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} null
+  8068148us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} null: 34
+  8068151us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} null
+  8068153us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} null: 6
+  8068364us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} null
+  8068371us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@d58d41: 0
+  8069000us pid=1386736 HOST probe rx seq=111 cause=wake lag_ms=0 settled=false draw_seq=29 gen=29
+  8069087us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@d58d41
+  8071231us pid=1386736 HOST settle entry floor=111 gen=29 deadline_ms=1499 await_tree=false pending=["traversal", "layout-vr", "dirty", "frame", "queue", "window-unstable"]
+  8071240us pid=1386736 HOST settle wake probe_seq=111 reason=entry written=true
+  8071244us pid=1386736 HOST settle event generation 0->29
+  8071290us pid=1386736 HOST settle wait reason=probe-floor probe_seq=111 age_ms=3 draw_seq=29 settled=false floor=111
+  8082651us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8086200us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8086207us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} null: 13
+  8086212us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {554240c} null
+  8086217us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@32cbc7d: 0
+  8086930us pid=1386736 HOST probe rx seq=112 cause=wake lag_ms=0 settled=false draw_seq=30 gen=30
+  8087017us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@32cbc7d
+  8091570us pid=1386736 HOST settle event generation 29->30
+  8091636us pid=1386736 HOST settle wait reason=traversal probe_seq=112 age_ms=5 draw_seq=30 settled=false floor=111
+  8099341us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8102560us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8102570us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@bb297c3: 0
+  8103295us pid=1386736 HOST probe rx seq=113 cause=dirty lag_ms=1 settled=true draw_seq=31 gen=31
+  8103377us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@bb297c3
+  8111978us pid=1386736 HOST settle event generation 30->31
+  8116008us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8117805us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8122307us pid=1386736 HOST settle event generation 31->32
+  8122370us pid=1386736 HOST settle wait reason=newer-store probe_seq=113 age_ms=19 draw_seq=31 settled=true floor=111
+  8124146us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@91a3840: 0
+  8125257us pid=1386736 HOST probe rx seq=114 cause=dirty lag_ms=1 settled=true draw_seq=32 gen=32
+  8125423us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@91a3840
+  8132684us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8135087us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8142741us pid=1386736 HOST settle event generation 32->33
+  8149265us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@ecda379: 0
+  8149989us pid=1386736 HOST probe rx seq=115 cause=dirty lag_ms=0 settled=true draw_seq=33 gen=33
+  8150082us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@ecda379
+  8150087us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8151542us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8152872us pid=1386736 HOST settle event generation 33->34
+  8166011us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8167895us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8173189us pid=1386736 HOST settle event generation 34->35
+  8174120us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@df3a8be: 0
+  8174878us pid=1386736 HOST probe rx seq=116 cause=dirty lag_ms=0 settled=true draw_seq=35 gen=35
+  8175031us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@df3a8be
+  8182667us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8184498us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8193591us pid=1386736 HOST settle event generation 35->36
+  8199215us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f1ced1f: 0
+  8199971us pid=1386736 HOST probe rx seq=117 cause=dirty lag_ms=0 settled=true draw_seq=36 gen=36
+  8200144us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@f1ced1f
+  8200148us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8200152us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8234687us pid=1386736 HOST settle event ready gen=36 probe_seq=117 draw_seq=36 draw_ms=1794942210847 confirm_ms=24
+  8476967us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$7$1@48a986c: 0
+  8477491us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape ActivityRelaunchItem List List int MergedConfiguration boolean
+  8477512us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$7$1@48a986c
+  8477518us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  8482333us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  8482342us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {51212f6} dev.acos.art.LaunchMain$6@abd36f7: 0
+  8482394us pid=1386736 GUEST ACOSLAUNCH MARK rotate rotation=0 relaunch=true via=ActivityRelaunchItem(ClientTransaction) handled=0x3 activity=dev.acos.fixtures.multiactivity.MainActivity panel=1080x2400
+  8482408us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {51212f6} dev.acos.art.LaunchMain$6@abd36f7
+  8482413us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {c30a89e} android.window.WindowOnBackInvokedDispatcher$$ExternalSyntheticLambda0@359d964: 0
+  8482419us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c30a89e} android.window.WindowOnBackInvokedDispatcher$$ExternalSyntheticLambda0@359d964
+  8482424us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.View$VisibilityChangeForAutofillHandler) {4d637cd} null: 0
+  8482429us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.View$VisibilityChangeForAutofillHandler) {4d637cd} null
+  8482435us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 119
+  8482440us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  8482446us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} android.view.ViewRootImpl$7@7044b93: 0
+  8482455us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} android.view.ViewRootImpl$7@7044b93
+  8482659us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8483591us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8483600us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} android.view.View$$ExternalSyntheticLambda7@58e20e8: 0
+  8483603us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} android.view.View$$ExternalSyntheticLambda7@58e20e8
+  8483606us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} null: 8
+  8483609us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} null
+  8483611us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} null: 34
+  8483614us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} null
+  8483616us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} null: 6
+  8483836us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} null
+  8483840us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@b5f437e: 0
+  8484486us pid=1386736 HOST probe rx seq=118 cause=wake lag_ms=0 settled=false draw_seq=36 gen=36
+  8484575us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@b5f437e
+  8487492us pid=1386736 HOST settle entry floor=118 gen=36 deadline_ms=1499 await_tree=false pending=["traversal", "dirty", "frame", "queue", "window-unstable"]
+  8487501us pid=1386736 HOST settle wake probe_seq=118 reason=entry written=true
+  8487505us pid=1386736 HOST settle event generation 0->36
+  8487551us pid=1386736 HOST settle wait reason=probe-floor probe_seq=118 age_ms=3 draw_seq=36 settled=false floor=118
+  8499332us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8502936us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8502956us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} null: 13
+  8502961us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {9c46882} null
+  8502966us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@328198a: 0
+  8503663us pid=1386736 HOST probe rx seq=119 cause=wake lag_ms=0 settled=false draw_seq=37 gen=37
+  8503758us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@328198a
+  8507794us pid=1386736 HOST settle event generation 36->37
+  8507862us pid=1386736 HOST settle wait reason=traversal probe_seq=119 age_ms=4 draw_seq=37 settled=false floor=118
+  8516002us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8518985us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8518998us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@bff9418: 0
+  8519769us pid=1386736 HOST probe rx seq=120 cause=dirty lag_ms=0 settled=true draw_seq=38 gen=38
+  8519934us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@bff9418
+  8528174us pid=1386736 HOST settle event generation 37->38
+  8532673us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8534520us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8538385us pid=1386736 HOST settle event generation 38->39
+  8538442us pid=1386736 HOST settle wait reason=newer-store probe_seq=120 age_ms=19 draw_seq=38 settled=true floor=118
+  8540797us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@d818e71: 0
+  8541322us pid=1386736 HOST probe rx seq=121 cause=dirty lag_ms=1 settled=true draw_seq=39 gen=39
+  8541404us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@d818e71
+  8549347us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8551330us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8558756us pid=1386736 HOST settle event generation 39->40
+  8565875us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@5f64456: 0
+  8566386us pid=1386736 HOST probe rx seq=122 cause=dirty lag_ms=1 settled=true draw_seq=40 gen=40
+  8566459us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@5f64456
+  8566462us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8567989us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8568914us pid=1386736 HOST settle event generation 40->41
+  8582655us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8584337us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8589224us pid=1386736 HOST settle event generation 41->42
+  8590757us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@3317cd7: 0
+  8591209us pid=1386736 HOST probe rx seq=123 cause=dirty lag_ms=0 settled=true draw_seq=42 gen=42
+  8591278us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@3317cd7
+  8599335us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8601267us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8609681us pid=1386736 HOST settle event generation 42->43
+  8615919us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@565d9c4: 0
+  8616530us pid=1386736 HOST probe rx seq=124 cause=dirty lag_ms=1 settled=true draw_seq=43 gen=43
+  8616666us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@565d9c4
+  8616671us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8616676us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8650579us pid=1386736 HOST settle event ready gen=43 probe_seq=124 draw_seq=43 draw_ms=1794942211264 confirm_ms=24
+  8894955us pid=1386736 HOST key publish_begin at (0,0) ack_wait_ms=2500
+  8900500us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {64fa0ad} android.app.Activity$RequestFinishCallback$$ExternalSyntheticLambda0@5aa4fe2: 0
+  8900556us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {64fa0ad} android.app.Activity$RequestFinishCallback$$ExternalSyntheticLambda0@5aa4fe2
+  8903833us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape PauseActivityItem
+  8903894us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape StopActivityItem 0:int
+  8903900us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  8903915us pid=1386736 GUEST ACOSLAUNCH MARK obtain-shape DestroyActivityItem 0:boolean 1:int
+  8903944us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  8903951us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  8904123us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  8904131us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 159
+  8904515us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  8904521us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.View$VisibilityChangeForAutofillHandler) {bc8ce30} null: 0
+  8904524us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.View$VisibilityChangeForAutofillHandler) {bc8ce30} null
+  8904527us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} android.app.servertransaction.PendingTransactionActions$StopInfo@c729aa9: 0
+  8904530us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} android.app.servertransaction.PendingTransactionActions$StopInfo@c729aa9
+  8904533us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {c30a89e} android.window.WindowOnBackInvokedDispatcher$$ExternalSyntheticLambda0@fa1882e: 0
+  8904541us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c30a89e} android.window.WindowOnBackInvokedDispatcher$$ExternalSyntheticLambda0@fa1882e
+  8904543us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {1cd679e} null: 119
+  8904547us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {1cd679e} null
+  8912307us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@d92fcf: 0
+  8912422us pid=1386736 GUEST touch_mode false
+  8912437us pid=1386736 HOST probe rx seq=125 cause=dirty lag_ms=0 settled=true draw_seq=43 gen=43
+  8912542us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@d92fcf
+  8915987us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8915999us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  8932659us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  8932667us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+  9062872us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} null: 2
+  9062897us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} null
+  9478387us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} null: 2
+  9478403us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} null
+  9904915us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} null: 2
+  9904942us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} null
+  9916107us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb: 0
+  9916126us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {6e22a4a} android.view.Choreographer$FrameDisplayEventReceiver@66abdbb
+ 11395858us pid=1386736 HOST key acks_returned total_ms=2500 seqs=[3, 4] acks=[]
+ 11395925us pid=1386736 HOST settle entry floor=124 gen=43 deadline_ms=2999 await_tree=false pending=[]
+ 11395932us pid=1386736 HOST settle wake probe_seq=124 reason=entry written=true
+ 11395945us pid=1386736 HOST settle window-gone ready gen=43 probe_seq=125
+ 11396000us pid=1386736 HOST key settle_done after_ms=2501 settled=true mode=strict
+ 11396003us pid=1386736 HOST key delivered window 0x100000028 was removed within the step
+ 11396109us pid=1386736 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2249d5c: 0
+ 11396258us pid=1386736 HOST probe rx seq=126 cause=wake lag_ms=1 settled=true draw_seq=43 gen=43
+ 11396291us pid=1386736 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1747c7c} dev.acos.art.LaunchMain$8$1@2249d5c

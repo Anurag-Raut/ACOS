@@ -5372,6 +5372,10 @@ struct SettleTiming {
     pixels_changed: Option<bool>,
     /// ROT8: the step ended with the app's task finished (`window-gone`).
     task_finished: bool,
+    /// BACKSETTLE: `(window token, its stored frame number)` when the step bound
+    /// on a host-recorded window-forest change (the top window became an
+    /// existing window whose composited frame is complete) instead of a draw.
+    window_reshown: Option<(u64, u64)>,
 }
 
 /// REL3H: the settle `reason` of an input whose every published event the app
@@ -5505,6 +5509,218 @@ impl UnhandledSettleGate {
     }
 }
 
+/// BACKSETTLE: the LAYER1 window forest as the host observed it, plus the frame
+/// the compositor holds for the top window.
+///
+/// `order` is the `acos-wm` layer stack (bottom first, the same order
+/// composition, input and `assert_windows` read), `top_frame` is the newest
+/// buffer the C1 compositor stored for the top window's surface (the frame the
+/// host composites), and `generation` is C1's own store counter at that
+/// observation.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct WindowForest {
+    order: Vec<u64>,
+    top_frame: Option<u64>,
+    generation: u64,
+}
+
+impl WindowForest {
+    fn top(&self) -> Option<u64> {
+        self.order.last().copied()
+    }
+}
+
+/// Read the host's window forest: the LAYER1 stack plus the top window's stored
+/// frame.
+fn window_forest(live: &acos_services::registry::LiveHandles) -> WindowForest {
+    let order: Vec<u64> = {
+        let wms = live.wms.lock().unwrap_or_else(|e| e.into_inner());
+        wms.wm
+            .layer_stack()
+            .ordered()
+            .iter()
+            .map(|entry| entry.window)
+            .collect()
+    };
+    let (top_frame, generation) = {
+        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+        let top_z = order.len().checked_sub(1).map(|index| index as i32);
+        let frame = top_z.and_then(|z| top_window_frame(&state, z));
+        (frame, state.latest_generation())
+    };
+    WindowForest {
+        order,
+        top_frame,
+        generation,
+    }
+}
+
+/// BACKSETTLE: the newest **complete** buffer stored for the top window's layer
+/// subtree - the frame the host composites on top of the display.
+///
+/// The window's own `SurfaceControl` layer carries the WMS placement
+/// (`placement.z` is the LAYER1 stack index) but the pixels arrive on its BLAST
+/// child layers, so the frame is looked up in the subtree rather than on the
+/// root record alone. A hidden layer is not composited and a layer without a
+/// stored buffer has no frame, so `None` here means "no frame the host could
+/// have composited" - the placeholder this rule must never bind.
+fn top_window_frame(state: &acos_services::surface_client::SurfaceState, top_z: i32) -> Option<u64> {
+    let root = state
+        .layers()
+        .find(|layer| !layer.hidden && layer.placement.map(|placement| placement.z) == Some(top_z))?;
+    let mut subtree = vec![root.handle.0];
+    // Walk the parent links until no new child appears (BLAST children are
+    // direct, a deeper buffer chain is followed too).
+    loop {
+        let mut grew = false;
+        for layer in state.layers() {
+            let handle = layer.handle.0;
+            if subtree.contains(&handle) {
+                continue;
+            }
+            if layer.parent.is_some_and(|parent| subtree.contains(&parent.0)) {
+                subtree.push(handle);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    state
+        .layers()
+        .filter(|layer| !layer.hidden && subtree.contains(&layer.handle.0))
+        .filter_map(|layer| {
+            layer.latest.as_ref().and_then(|buffer| {
+                (buffer.frame_number > 0 && buffer.width > 0 && buffer.height > 0)
+                    .then_some((layer.latest_generation, buffer.frame_number))
+            })
+        })
+        .max_by_key(|(generation, _)| *generation)
+        .map(|(_, frame)| frame)
+}
+
+/// BACKSETTLE: settle on a host-recorded window-forest change.
+///
+/// Back can end in a screen transition the app does not draw: the framework
+/// finishes the top Activity and the window below - which is still alive, its
+/// surface still holding its last drawn frame - becomes the top window again.
+/// Nothing in the guest traverses or draws, so the strict rule's
+/// "a draw after the action" requirement could only time out
+/// (`no-draw-after-action`) on an honest, fully composited screen.
+///
+/// The observable effect of that action **is** the window-forest change, and it
+/// is a host fact the settle can require:
+///
+/// * the top window changed to a window that **already existed** when the
+///   gesture's acks had all arrived (the baseline is taken at the ack, so a
+///   change that landed before it can never bind: it is not this action's),
+/// * that window's frame is the one the host composites - its surface stored a
+///   complete buffer and the layer is visible (no placeholder binds; the
+///   ADR-0032 amendment 1 rule still applies unchanged, the guest tree of the
+///   now-top window is part of the bind),
+/// * the change stays the newest fact for one confirmation window
+///   (`ACOS_STRICT_SETTLE_CONFIRM_MS`, the strict rule's own window) **and no
+///   newer C1 store landed**: if the app does draw afterwards within the
+///   settle window, that newer frame wins and the normal rule binds it,
+/// * the guest sample that supplies the tree is newer than the change and is
+///   not the empty `window_gone` forest.
+///
+/// A window this action *created* becoming top is not a re-show: it has no
+/// frame yet, and its draw is what the normal strict rule waits for.
+#[derive(Debug)]
+struct WindowReshownGate {
+    baseline: WindowForest,
+    confirm: Duration,
+    /// `(top window, its frame, when it was first seen)` of the candidate.
+    candidate: Option<(u64, u64, Instant)>,
+    /// The first host time the changed top window was observed.
+    changed_at_ms: Option<u64>,
+}
+
+/// What [`WindowReshownGate`] decided about one observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReshownOutcome {
+    /// Bind `(window token, its stored frame number)`.
+    Bind(u64, u64),
+    /// Keep waiting; the string is the settle trace's `last_reason`.
+    Wait(&'static str),
+}
+
+impl WindowReshownGate {
+    fn new(baseline: WindowForest, confirm: Duration) -> Self {
+        WindowReshownGate {
+            baseline,
+            confirm,
+            candidate: None,
+            changed_at_ms: None,
+        }
+    }
+
+    /// Judge the forest now. `None` means the caller must not bind on this
+    /// observation and should let the shipped rule decide.
+    fn observe(&mut self, forest: &WindowForest, now: Instant, now_ms: u64) -> ReshownOutcome {
+        let Some(top) = forest.top() else {
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_GONE_REASON);
+        };
+        if forest == &self.baseline {
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_UNCHANGED_REASON);
+        }
+        if Some(top) == self.baseline.top() {
+            // The forest changed below the top (a window was added below, or a
+            // sibling went away): the top window did not change, so this is not
+            // a re-show.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_SAME_TOP_REASON);
+        }
+        if !self.baseline.order.contains(&top) {
+            // A window that did not exist at the ack became top: a new window,
+            // whose draw the normal rule waits for.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_NEW_TOP_REASON);
+        }
+        let Some(frame) = forest.top_frame else {
+            // The re-shown window has no complete stored frame: binding its
+            // "frame" would be a placeholder claim.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_NO_FRAME_REASON);
+        };
+        if forest.generation != self.baseline.generation {
+            // The app drew after the action: that newer frame is the settle's
+            // frame (the shipped rule binds it), never the re-shown one.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_SUPERSEDED_REASON);
+        }
+        match self.candidate {
+            Some((window, seen_frame, since)) if window == top && seen_frame == frame => {
+                if now.saturating_duration_since(since) >= self.confirm {
+                    ReshownOutcome::Bind(top, frame)
+                } else {
+                    ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+                }
+            }
+            _ => {
+                self.candidate = Some((top, frame, now));
+                if self.changed_at_ms.is_none() {
+                    self.changed_at_ms = Some(now_ms);
+                }
+                ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+            }
+        }
+    }
+}
+
+/// BACKSETTLE: settle trace reasons (never user-visible on their own).
+const WINDOW_UNCHANGED_REASON: &str = "window-unchanged";
+const WINDOW_SAME_TOP_REASON: &str = "window-same-top";
+const WINDOW_NEW_TOP_REASON: &str = "window-new-top";
+const WINDOW_NO_FRAME_REASON: &str = "window-frame-missing";
+const WINDOW_SUPERSEDED_REASON: &str = "window-reshown-superseded";
+const WINDOW_CONFIRM_REASON: &str = "window-reshown-confirm";
+const WINDOW_GONE_REASON: &str = "window-forest-empty";
+
 /// REL3H2: settle trace reason - the sample predates the gesture's last ack.
 const UNHANDLED_ACK_FLOOR_REASON: &str = "unhandled-ack-floor";
 /// REL3H2: settle trace reason - the confirmation window has not elapsed.
@@ -5527,6 +5743,17 @@ impl SettleTiming {
             if let Some(map) = value.as_object_mut() {
                 map.insert("task_finished".into(), serde_json::json!(true));
                 map.insert("window_gone".into(), serde_json::json!(true));
+            }
+        }
+        if let Some((token, frame)) = self.window_reshown {
+            if let Some(map) = value.as_object_mut() {
+                // The token names the window that is on top now; the frame is
+                // the one C1 holds for it (the frame the host composites).
+                map.insert("window_reshown".into(), serde_json::json!(format!("{token:#x}")));
+                map.insert(
+                    "window_reshown_frame".into(),
+                    serde_json::json!(frame),
+                );
             }
         }
         if let Some(rule) = self.rule {
@@ -5651,6 +5878,11 @@ fn wait_for_event_settled(
     // ack of the same gesture said `finishInputEvent(handled) = false`; the
     // window it acted on is gone, so it is never reported `INPUT_UNHANDLED`.
     window_removal: Option<(acos_parcel::BinderId, u64)>,
+    // BACKSETTLE: the host's window forest at the moment this gesture's acks had
+    // all arrived. `Some` only for a strict input action; a top-window change
+    // away from that baseline may settle the step as `window_reshown` (see
+    // [`WindowReshownGate`]). `None` keeps every other caller byte-identical.
+    window_reshown: Option<WindowForest>,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
     // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
@@ -5719,6 +5951,9 @@ fn wait_for_event_settled(
     // entry, so the ack floor is a fixed point: samples older than it are never
     // eligible, however long the wait runs.
     let mut unhandled_gate = unhandled_ack_floor.map(|floor| UnhandledSettleGate::new(floor, confirm));
+    // BACKSETTLE: the baseline is the forest at the ack, so a change that landed
+    // before the action's input ack can never bind (it is not this action's).
+    let mut reshown_gate = window_reshown.map(|baseline| WindowReshownGate::new(baseline, confirm));
     let mut first_change_ms: Option<u64> = None;
     let mut last_reason = String::from("no-probe");
     let mut last_pixels_changed: Option<bool> = None;
@@ -5728,6 +5963,10 @@ fn wait_for_event_settled(
     // a sample the host ignored. Trace-only (`ACOS_ART_INPUT_TRACE`); no reply
     // changes.
     let mut traced_reason = String::new();
+    // BACKSETTLE: the window-forest observation's own trace line follows the same
+    // rule (only when its decision changes), so a `window-reshown` bind and the
+    // draw that superseded it are both readable in the session trace.
+    let mut traced_forest_reason = String::new();
     trace_host(
         probe_state,
         &format!(
@@ -5771,6 +6010,53 @@ fn wait_for_event_settled(
         // not because the app drew.
         let removal_binds = window_removal
             .is_some_and(|(token, mark)| live.input.window_removed_since(token, mark));
+        // BACKSETTLE: judge the host's window forest once per observation. The
+        // gate is only built for an input action whose acks had all arrived
+        // before the wait began (`window_reshown`), so a tree/launch wait keeps
+        // its shipped semantics exactly.
+        let forest = match reshown_gate {
+            Some(_) => window_forest(live),
+            None => WindowForest::default(),
+        };
+        let reshown = reshown_gate
+            .as_mut()
+            .map(|gate| gate.observe(&forest, Instant::now(), host_ms()));
+        let reshown_changed_at = reshown_gate
+            .as_ref()
+            .and_then(|gate| gate.changed_at_ms)
+            .unwrap_or(u64::MAX);
+        if let Some(outcome) = reshown {
+            let reason = match outcome {
+                ReshownOutcome::Bind(token, frame) => format!("bind {token:#x}/{frame}"),
+                ReshownOutcome::Wait(reason) => reason.to_string(),
+            };
+            if reason != traced_forest_reason {
+                traced_forest_reason = reason.clone();
+                trace_host(
+                    probe_state,
+                    &format!(
+                        "settle forest reason={reason} top={} frame={:?} gen={} base_top={} \
+                         base_gen={} changed_at={}",
+                        forest
+                            .top()
+                            .map(|token| format!("{token:#x}"))
+                            .unwrap_or_else(|| "none".into()),
+                        forest.top_frame,
+                        forest.generation,
+                        reshown_gate
+                            .as_ref()
+                            .and_then(|gate| gate.baseline.top())
+                            .map(|token| format!("{token:#x}"))
+                            .unwrap_or_else(|| "none".into()),
+                        reshown_gate
+                            .as_ref()
+                            .map(|gate| gate.baseline.generation)
+                            .unwrap_or(0),
+                        reshown_changed_at,
+                    ),
+                );
+            }
+        }
         let mut valid: Option<ProbeSample> = None;
         match &probe {
             None => last_reason = "no-probe".to_string(),
@@ -5803,6 +6089,7 @@ fn wait_for_event_settled(
                         reason: None,
                         pixels_changed: Some(false),
                         task_finished: true,
+                        window_reshown: None,
                     };
                     trace_host(
                         probe_state,
@@ -5851,6 +6138,7 @@ fn wait_for_event_settled(
                             reason: None,
                             pixels_changed: None,
                             task_finished: false,
+                            window_reshown: None,
                         };
                         trace_host(
                             probe_state,
@@ -5873,6 +6161,57 @@ fn wait_for_event_settled(
                         .first()
                         .cloned()
                         .unwrap_or_else(|| "unsettled".to_string());
+                } else if let Some((token, frame)) =
+                    reshown_bind(reshown, sample, reshown_changed_at)
+                {
+                    // BACKSETTLE: this action's observable effect is the host's
+                    // own window-forest fact (the top window became an existing
+                    // window whose frame is complete), and the app has not drawn
+                    // since. Bind that state, with the guest tree of the now-top
+                    // window, instead of charging the action a draw it never
+                    // owed. When the gate does not bind, the shipped arms below
+                    // decide exactly as before.
+                    //
+                    // `pixels_changed` is measured against the caller's
+                    // pre-action capture exactly like the shipped rule measures
+                    // it, so `expect_change: true` still has to earn its pass on
+                    // this bind (`false` fails it).
+                    let pixels_changed = match previous_fnv {
+                        None => true,
+                        Some(previous) => {
+                            let current = {
+                                let state =
+                                    live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                                state.capture_latest().map(|c| c.fnv1a)
+                            };
+                            current != Some(previous) && current.is_some()
+                        }
+                    };
+                    let timing = SettleTiming {
+                        mode: SettleMode::Strict,
+                        first_change_ms: Some(sample.at_ms.saturating_sub(publish_epoch_ms)),
+                        frame_ms: None,
+                        state_changed: None,
+                        bound: "window-reshown",
+                        rule: Some("event"),
+                        reason: None,
+                        pixels_changed: Some(pixels_changed),
+                        task_finished: false,
+                        window_reshown: Some((token, frame)),
+                    };
+                    trace_host(
+                        probe_state,
+                        &format!(
+                            "settle window-reshown ready gen={generation} probe_seq={} \
+                             window={token:#x} frame={frame}",
+                            sample.seq
+                        ),
+                    );
+                    return SettleEnd::Settled(Settled {
+                        probe: sample.clone(),
+                        generation,
+                        timing,
+                    });
                 } else if publish_epoch_ms != 0
                     && sample.draw_ms < publish_epoch_ms
                     && !removal_binds
@@ -5936,6 +6275,7 @@ fn wait_for_event_settled(
                             reason: Some(SETTLE_UNHANDLED_INPUT.to_string()),
                             pixels_changed: Some(pixels_changed),
                             task_finished: false,
+                            window_reshown: None,
                         };
                         trace_host(
                             probe_state,
@@ -6028,6 +6368,7 @@ fn wait_for_event_settled(
                         reason: None,
                         pixels_changed: last_pixels_changed,
                         task_finished: false,
+                        window_reshown: None,
                     };
                     trace_host(
                         probe_state,
@@ -6142,6 +6483,7 @@ fn wait_for_event_settled(
                     reason: Some(last_reason),
                     pixels_changed: Some(pixels_changed),
                     task_finished: false,
+                    window_reshown: None,
                 },
             };
         }
@@ -6192,6 +6534,8 @@ fn wait_for_settled_observation(
     // it; `None` keeps the strict draw requirement for every other caller.
     // Precedence over the unhandled shortcut: see [`wait_for_event_settled`].
     window_removal: Option<(acos_parcel::BinderId, u64)>,
+    // BACKSETTLE: see [`wait_for_event_settled`].
+    window_reshown: Option<WindowForest>,
 ) -> SettleEnd {
     if mode == SettleMode::Strict {
         return wait_for_event_settled(
@@ -6209,6 +6553,7 @@ fn wait_for_settled_observation(
             unhandled_ack_floor,
             entry_fnv,
             window_removal,
+            window_reshown,
         );
     }
     // ---- fast (P1): first probe tree that differs from the pre-action baseline.
@@ -6335,6 +6680,7 @@ fn wait_for_settled_observation(
                 reason: None,
                 pixels_changed: None,
                 task_finished: false,
+                window_reshown: None,
             };
             trace_host(
                 probe_state,
@@ -6397,6 +6743,7 @@ fn wait_for_settled_observation(
                         reason: None,
                         pixels_changed: None,
                         task_finished: false,
+                        window_reshown: None,
                     };
                     trace_host(
                         probe_state,
@@ -6431,6 +6778,7 @@ fn wait_for_settled_observation(
                     reason: None,
                     pixels_changed: None,
                     task_finished: false,
+                    window_reshown: None,
                 },
             };
         }
@@ -6496,6 +6844,43 @@ fn sample_own_draw_is_stored(
 /// involved: that is the strict rule, unchanged.
 /// ROT8: a sample proves the task finished only when the guest says so AND it
 /// is internally consistent: settled, with an empty window forest.
+/// BACKSETTLE: `true` when the sample's tree has no node at all (an empty
+/// window forest). A `window_reshown` bind needs the tree of the now-top window,
+/// so an empty forest is never its evidence.
+fn tree_is_empty(tree: &serde_json::Value) -> bool {
+    tree.get("nodes")
+        .and_then(|nodes| nodes.as_array())
+        .map(|nodes| nodes.is_empty())
+        .unwrap_or(true)
+}
+
+/// BACKSETTLE: may this observation bind as `window-reshown`?
+///
+/// The gate decides the forest fact (a stable change to an existing top window
+/// with a complete composited frame); this adds the observation half: the sample
+/// must be **settled** (the guest has no pending traversal, so its tree is the
+/// state the screen is in), newer than the change, and its tree must be the one
+/// of the now-top window (non-empty, not a finished task). Anything less keeps
+/// the shipped rule in charge: an unsettled sample is a screen in motion, never
+/// evidence that this action's effect is complete.
+fn reshown_bind(
+    outcome: Option<ReshownOutcome>,
+    sample: &ProbeSample,
+    changed_at_ms: u64,
+) -> Option<(u64, u64)> {
+    match outcome {
+        Some(ReshownOutcome::Bind(token, frame))
+            if sample.settled
+                && sample.at_ms >= changed_at_ms
+                && !sample.window_gone
+                && !tree_is_empty(&sample.tree) =>
+        {
+            Some((token, frame))
+        }
+        _ => None,
+    }
+}
+
 fn window_gone_shape(sample: &ProbeSample) -> bool {
     sample.window_gone
         && sample.settled
@@ -7429,6 +7814,7 @@ fn interactive_serve(
                         None,
                         None,
                         None,
+                        None,
                     );
                     match settled {
                         SettleEnd::Settled(settled) => {
@@ -8121,6 +8507,12 @@ fn interactive_serve(
                     }
                     _ => None,
                 };
+                // BACKSETTLE: the window forest as it is **now** - every ack of
+                // this gesture has arrived (the collect above returned), so a
+                // top-window change observed later is this gesture's, and one
+                // that already happened is not. Strict inputs only: `fast` is a
+                // navigation rule that never binds a frame.
+                let window_reshown = (mode == SettleMode::Strict).then(|| window_forest(live));
                 let settled = wait_for_settled_observation(
                     child,
                     cgroup,
@@ -8138,6 +8530,7 @@ fn interactive_serve(
                     unhandled_ack_floor,
                     entry_fnv,
                     Some((injected.token, removal_mark)),
+                    window_reshown,
                 );
                 let (settled_probe, g1, p1, settle_timing) = match settled {
                     SettleEnd::Settled(settled) => (
@@ -9991,6 +10384,7 @@ mod probe_line_tests {
             reason: None,
             pixels_changed: Some(false),
             task_finished: true,
+            window_reshown: None,
         };
         let json = timing.to_json(true, 5);
         assert_eq!(json["bound"], "window-gone");
@@ -10755,6 +11149,7 @@ mod rel3h_unhandled_input_tests {
             reason: Some(SETTLE_UNHANDLED_INPUT.to_string()),
             pixels_changed: Some(false),
             task_finished: false,
+            window_reshown: None,
         };
         let json = timing.to_json(true, 7);
         assert_eq!(json["mode"], serde_json::json!("strict"));
@@ -10764,5 +11159,339 @@ mod rel3h_unhandled_input_tests {
         assert_eq!(json["strict_rule"], serde_json::json!("event"));
         assert_eq!(json["pixels_changed"], serde_json::json!(false));
         assert_eq!(json["ack_ms"], serde_json::json!(7));
+    }
+}
+
+/// BACKSETTLE: the `window_reshown` settle rule, on its own.
+///
+/// Every test states one of the guards the rule must not be able to skip, so a
+/// future change that widens it fails here instead of turning a timeout into a
+/// false pass:
+///
+/// * the change is measured against the forest at the gesture's **ack**, so a
+///   change that already happened before the action can never bind;
+/// * the re-shown window's frame must be a complete stored buffer (no
+///   placeholder), and the tree that is bound must be newer than the change and
+///   non-empty;
+/// * if the app draws after the action within the settle window, that newer
+///   frame wins and the re-show never binds;
+/// * a window the action *created* becoming top is not a re-show;
+/// * `bound: "window-reshown"` carries the token and the frame the host
+///   composites, and still reports the measured `pixels_changed`, so an
+///   `expect_change: true` claim fails on an unchanged screen.
+#[cfg(test)]
+mod backsettle_tests {
+    use super::*;
+
+    const CONFIRM_MS: u64 = 24;
+
+    /// The forest at the ack: two windows, the upper one (0x20) on top with
+    /// frame 7 stored, C1 at generation 5.
+    fn baseline_two_windows() -> WindowForest {
+        WindowForest {
+            order: vec![0x10, 0x20],
+            top_frame: Some(7),
+            generation: 5,
+        }
+    }
+
+    fn gate() -> WindowReshownGate {
+        WindowReshownGate::new(baseline_two_windows(), Duration::from_millis(CONFIRM_MS))
+    }
+
+    /// The upper window went away; the existing one below is the top window now
+    /// and its last drawn frame (3) is what the host composites.
+    fn after_removal_top_is_below() -> WindowForest {
+        WindowForest {
+            order: vec![0x10],
+            top_frame: Some(3),
+            generation: 5,
+        }
+    }
+
+    #[test]
+    fn a_host_window_change_binds_the_existing_top_window_and_its_frame() {
+        let mut gate = gate();
+        let now = Instant::now();
+        assert_eq!(
+            gate.observe(&after_removal_top_is_below(), now, 1_000),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON),
+            "the change must be the newest fact for one confirmation window"
+        );
+        assert_eq!(
+            gate.observe(
+                &after_removal_top_is_below(),
+                now + Duration::from_millis(CONFIRM_MS),
+                1_000 + CONFIRM_MS
+            ),
+            ReshownOutcome::Bind(0x10, 3),
+            "the token and the frame the host composites are the bind"
+        );
+        // The bound frame/token are reported as settle evidence, not inferred by
+        // the reader.
+        let timing = SettleTiming {
+            mode: SettleMode::Strict,
+            first_change_ms: Some(250),
+            frame_ms: None,
+            state_changed: None,
+            bound: "window-reshown",
+            rule: Some("event"),
+            reason: None,
+            pixels_changed: Some(false),
+            task_finished: false,
+            window_reshown: Some((0x10, 3)),
+        };
+        let json = timing.to_json(true, 9);
+        assert_eq!(json["bound"], serde_json::json!("window-reshown"));
+        assert_eq!(json["window_reshown"], serde_json::json!("0x10"));
+        assert_eq!(json["window_reshown_frame"], serde_json::json!(3));
+        assert_eq!(json["pixels_changed"], serde_json::json!(false));
+        assert!(
+            json.get("task_finished").is_none(),
+            "a re-show is not a finished task"
+        );
+    }
+
+    /// Guard: the baseline is the forest at the **ack**. A top window that is
+    /// already the top window then is not a change of this action, however the
+    /// forest changes elsewhere.
+    #[test]
+    fn a_top_window_that_was_already_top_at_the_ack_never_binds() {
+        let mut gate = gate();
+        let now = Instant::now();
+        // The same top window, a different window below it: the forest differs,
+        // but the top window did not change.
+        let below_changed = WindowForest {
+            order: vec![0x11, 0x20],
+            top_frame: Some(7),
+            generation: 5,
+        };
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &below_changed,
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_SAME_TOP_REASON)
+            );
+        }
+    }
+
+    /// Guard: the re-shown window's frame must be the one the host composites.
+    /// A window with no complete stored buffer (never drew, or the layer is
+    /// hidden) is a placeholder, never a bind - the ADR-0032 amendment 1 rule.
+    #[test]
+    fn a_re_shown_window_without_a_complete_frame_never_binds() {
+        let mut gate = gate();
+        let now = Instant::now();
+        let no_frame = WindowForest {
+            order: vec![0x10],
+            top_frame: None,
+            generation: 5,
+        };
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &no_frame,
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_NO_FRAME_REASON)
+            );
+        }
+    }
+
+    /// Guard: a window this action created is not a re-show. It was not in the
+    /// forest at the ack, and its first draw is what the normal rule waits for.
+    #[test]
+    fn a_window_created_by_the_action_never_binds_as_reshown() {
+        let mut gate = gate();
+        let now = Instant::now();
+        let new_top = WindowForest {
+            order: vec![0x10, 0x99],
+            top_frame: Some(1),
+            generation: 6,
+        };
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &new_top,
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_NEW_TOP_REASON)
+            );
+        }
+    }
+
+    /// Guard: if the app draws afterwards within the settle window, the newer
+    /// frame wins. A C1 store after the ack supersedes the re-show for good.
+    #[test]
+    fn a_draw_after_the_action_supersedes_the_re_shown_frame() {
+        let mut gate = gate();
+        let now = Instant::now();
+        assert_eq!(
+            gate.observe(&after_removal_top_is_below(), now, 1_000),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+        );
+        let drawn = WindowForest {
+            order: vec![0x10],
+            top_frame: Some(9),
+            generation: 6,
+        };
+        assert_eq!(
+            gate.observe(
+                &drawn,
+                now + Duration::from_millis(CONFIRM_MS),
+                1_000 + CONFIRM_MS
+            ),
+            ReshownOutcome::Wait(WINDOW_SUPERSEDED_REASON),
+            "the re-shown frame is not the newest state once the app drew"
+        );
+        // Even after the newer store is no longer the newest one (a later store
+        // on the same draw keeps the generation above the baseline), the re-show
+        // never comes back.
+        for step in 1..10u64 {
+            assert_eq!(
+                gate.observe(
+                    &drawn,
+                    now + Duration::from_millis(CONFIRM_MS * 2 + step * 10),
+                    2_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_SUPERSEDED_REASON)
+            );
+        }
+    }
+
+    /// Negative: no window change at all keeps today's semantics - the rule
+    /// never binds, so Back's `INPUT_UNHANDLED` / `no-draw-after-action`
+    /// outcomes are unchanged.
+    #[test]
+    fn an_unchanged_window_forest_keeps_the_shipped_semantics() {
+        let mut gate = gate();
+        let now = Instant::now();
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &baseline_two_windows(),
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_UNCHANGED_REASON)
+            );
+        }
+    }
+
+    /// Negative: an empty forest is the `window-gone` shape, never a re-show.
+    #[test]
+    fn an_empty_forest_is_not_a_re_show() {
+        let mut gate = gate();
+        let now = Instant::now();
+        for step in 0..10u64 {
+            assert_eq!(
+                gate.observe(
+                    &WindowForest::default(),
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_GONE_REASON)
+            );
+        }
+    }
+
+    /// A second change restarts the confirmation window: the rule binds the
+    /// state that is still there after the window, not the first one it saw.
+    #[test]
+    fn a_second_window_change_restarts_the_confirmation_window() {
+        // Three windows at the ack: 0x10 (bottom), 0x11, 0x20 (top). Both lower
+        // windows therefore already existed when the action's acks arrived.
+        let mut gate = WindowReshownGate::new(
+            WindowForest {
+                order: vec![0x10, 0x11, 0x20],
+                top_frame: Some(7),
+                generation: 5,
+            },
+            Duration::from_millis(CONFIRM_MS),
+        );
+        let now = Instant::now();
+        assert_eq!(
+            gate.observe(&after_removal_top_is_below(), now, 1_000),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+        );
+        // 0x10 went away too; 0x11 (also present at the ack) is top now with a
+        // different frame.
+        let next = WindowForest {
+            order: vec![0x11],
+            top_frame: Some(2),
+            generation: 5,
+        };
+        assert_eq!(
+            gate.observe(&next, now + Duration::from_millis(10), 1_010),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+        );
+        assert_eq!(
+            gate.observe(
+                &next,
+                now + Duration::from_millis(10 + CONFIRM_MS),
+                1_010 + CONFIRM_MS
+            ),
+            ReshownOutcome::Bind(0x11, 2)
+        );
+    }
+
+    /// The tree half of the contract: a re-show binds the tree of the now-top
+    /// window, so an empty forest or a sample taken before the change cannot
+    /// satisfy it.
+    #[test]
+    fn an_empty_tree_is_not_a_bindable_observation() {
+        assert!(tree_is_empty(&serde_json::json!({"nodes": []})));
+        assert!(tree_is_empty(&serde_json::json!({})));
+        assert!(!tree_is_empty(&serde_json::json!({"nodes": [{"id": "title"}]})));
+    }
+
+    /// The observation half, on a real sample: only a **settled** sample taken
+    /// after the change, with the now-top window's non-empty tree, converts the
+    /// gate's bind into a settle. An unsettled sample is a screen in motion and
+    /// must fall through to the shipped rule (which keeps waiting for it).
+    #[test]
+    fn only_a_settled_post_change_sample_binds_the_re_shown_window() {
+        fn probe(settled: bool, at_ms: u64, nodes: serde_json::Value) -> ProbeSample {
+            ProbeSample {
+                seq: 9,
+                tree: serde_json::json!({"nodes": nodes}),
+                at_ms,
+                generation: 5,
+                draw_ms: 0,
+                draw_seq: 0,
+                settled,
+                pending: if settled { Vec::new() } else { vec!["traversal".into()] },
+                window_gone: false,
+                animations_on: None,
+            }
+        }
+        let bind = Some(ReshownOutcome::Bind(0x10, 3));
+        let node = serde_json::json!([{"id": "title"}]);
+        assert_eq!(
+            reshown_bind(bind, &probe(true, 1_000, node.clone()), 1_000),
+            Some((0x10, 3)),
+            "a settled post-change sample with the now-top tree is the bind"
+        );
+        assert_eq!(
+            reshown_bind(bind, &probe(false, 1_000, node.clone()), 1_000),
+            None,
+            "an unsettled sample is a screen in motion, never a settle"
+        );
+        assert_eq!(
+            reshown_bind(bind, &probe(true, 999, node.clone()), 1_000),
+            None,
+            "a sample taken before the change cannot describe it"
+        );
+        assert_eq!(
+            reshown_bind(bind, &probe(true, 1_000, serde_json::json!([])), 1_000),
+            None,
+            "an empty forest is the window-gone shape, not a re-show"
+        );
+        assert_eq!(reshown_bind(None, &probe(true, 1_000, node), 1_000), None);
     }
 }

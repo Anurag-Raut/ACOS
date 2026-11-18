@@ -1,0 +1,7 @@
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/negative/multi-wrong-after-back.yaml (sha c30aebd43552), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/multi-activity.apk (sha 986dbb18f339), engine art, fidelity art-reference, warnings: 2 [SCENARIO_ENGINE_MISMATCH, INPUT_UNHANDLED]
+  error: ASSERTION_FAILED: expected text exactly "Goodbye", got text "Hello" / hint "Message"
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/multi-wrong-after-back
+  steps: 9

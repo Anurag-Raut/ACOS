@@ -1,0 +1,90 @@
+{
+  "host_after": {
+    "loadavg1": 10.69,
+    "loadavg15": 5.65,
+    "loadavg5": 6.87,
+    "mem_available_gib": 42.4,
+    "mem_available_mib": 43414.0,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/usr/bin/bash -c source /home/Qui/.claude/shell-snapshots/snapshot-bash-1794978391084-yfckjd.sh 2>/dev/null || true && \\builtin shopt -u extglob 2>/dev/null || ",
+        "comm": "bash",
+        "pid": 480407
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 12G --time 900 -- cargo build --release --offline -p acos-art -p acos-cli",
+        "comm": "bash",
+        "pid": 480418
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 900 cargo build --release --offline -p acos-art -p acos-cli",
+        "comm": "timeout",
+        "pid": 480441
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-art -p acos-cli",
+        "comm": "cargo",
+        "pid": 480449
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d/.cache/wvtail-target/release/acos-art launch --apk fixtures/build/apps/webview-probe.apk --until activ",
+        "comm": "acos-art",
+        "pid": 492209
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 492225
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 492231
+      }
+    ],
+    "runnable": "5/2626",
+    "used_mib": 18494.7,
+    "used_pct": 29.87,
+    "utc": "2026-11-18T05:10:10+00:00"
+  },
+  "host_before": {
+    "loadavg1": 3.26,
+    "loadavg15": 4.62,
+    "loadavg5": 3.75,
+    "mem_available_gib": 48.37,
+    "mem_available_mib": 49533.7,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d && (tools/build-apps.sh > .cache/logs/build-apps2.log 2>&1; echo apps=$?) && tools/gua",
+        "comm": "bash",
+        "pid": 446831
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d && (tools/build-apps.sh > .cache/logs/build-apps2.log 2>&1; echo apps=$?) && tools/gua",
+        "comm": "bash",
+        "pid": 446832
+      }
+    ],
+    "runnable": "5/2282",
+    "used_mib": 12375.0,
+    "used_pct": 19.99,
+    "utc": "2026-11-18T05:06:50+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "latency": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 200.85
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-18T05:06:50+00:00",
+  "wall_s": 200.85
+}

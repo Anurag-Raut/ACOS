@@ -1,0 +1,91 @@
+=== 2026-11-18T04:48:21Z hello-views (scenarios/hello-views.yaml)
+=== hello-views rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/hello-views.yaml (sha ec8952ad0068), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/hello-views.apk (sha 25d0615792c4), engine art, fidelity art-reference, warnings: 2 [SCENARIO_ENGINE_MISMATCH, INPUT_UNHANDLED]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/hello-views
+  steps: 28
+   hello-views                      declared=pass      got=pass      steps=28/28 code=None reason=None MATCH 
+=== 2026-11-18T04:48:29Z multi-activity (scenarios/multi-activity.yaml)
+=== multi-activity rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/multi-activity.yaml (sha e214dd80e703), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/multi-activity.apk (sha 986dbb18f339), engine art, fidelity art-reference, warnings: 2 [SCENARIO_ENGINE_MISMATCH, INPUT_UNHANDLED]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/multi-activity
+  steps: 23
+   multi-activity                   declared=pass      got=pass      steps=23/23 code=None reason=None MATCH 
+=== 2026-11-18T04:48:37Z multi-wrong-after-back (scenarios/negative/multi-wrong-after-back.yaml)
+=== multi-wrong-after-back rc=1
+  error: ASSERTION_FAILED: expected text exactly "Goodbye", got text "Hello" / hint "Message"
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/multi-wrong-after-back
+  steps: 9
+   multi-wrong-after-back           declared=fail      got=fail      steps=8/9 code=None reason=None MATCH non-pass=[(8, None, 'fail', 'ASSERTION_FAILED')]
+=== 2026-11-18T04:48:43Z back-layers (scenarios/back-layers.yaml)
+=== back-layers rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/back-layers.yaml (sha 6b9ddd57c7fa), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/back-layers.apk (sha f4e94e5dc117), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/back-layers
+  steps: 22
+   back-layers                      declared=pass      got=pass      steps=22/22 code=None reason=None MATCH 
+=== 2026-11-18T04:48:50Z back-layers-ime (scenarios/back-layers-ime.yaml)
+=== back-layers-ime rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/back-layers-ime.yaml (sha 8bab53ca28e8), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/back-layers.apk (sha f4e94e5dc117), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/back-layers-ime
+  steps: 22
+   back-layers-ime                  declared=pass      got=pass      steps=22/22 code=None reason=None MATCH 
+=== 2026-11-18T04:48:58Z gaten-backstack (scenarios/gaten-backstack.yaml)
+=== gaten-backstack rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/gaten-backstack.yaml (sha a3389de15c41), apk /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk (sha e04c7ffcf012), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/gaten-backstack
+  steps: 25
+   gaten-backstack                  declared=pass      got=pass      steps=25/25 code=None reason=None MATCH 
+=== 2026-11-18T04:49:11Z rel3h-unhandled-input (scenarios/rel3h-unhandled-input.yaml)
+=== rel3h-unhandled-input rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/rel3h-unhandled-input.yaml (sha 0a5336b14623), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/tap-targets.apk (sha 6c8c34bc36e2), engine art, fidelity art-reference, warnings: 1 [INPUT_UNHANDLED]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/rel3h-unhandled-input
+  steps: 4
+   rel3h-unhandled-input            declared=pass      got=pass      steps=4/4 code=None reason=None MATCH 
+=== 2026-11-18T04:49:11Z rel3h-unhandled-input-expect-change (scenarios/rel3h-unhandled-input-expect-change.yaml)
+=== rel3h-unhandled-input-expect-change rc=1
+  error: ASSERTION_FAILED: tap: the settled frame is pixel-identical to the pre-action frame (`settle.pixels_changed:false`); the step proved no visual change
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/rel3h-unhandled-input-expect-change
+  steps: 2
+   rel3h-unhandled-input-expect-change declared=fail      got=fail      steps=1/2 code=None reason=None MATCH non-pass=[(1, None, 'fail', 'ASSERTION_FAILED')]
+=== 2026-11-18T04:49:12Z rel3h2-expect-handled-false (scenarios/rel3h2-expect-handled-false.yaml)
+=== rel3h2-expect-handled-false rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/rel3h2-expect-handled-false.yaml (sha 36c57eb492e0), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/tap-targets.apk (sha 6c8c34bc36e2), engine art, fidelity art-reference
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/rel3h2-expect-handled-false
+  steps: 4
+   rel3h2-expect-handled-false      declared=pass      got=pass      steps=4/4 code=None reason=None MATCH 
+=== 2026-11-18T04:49:13Z rel3h2-expect-handled-true (scenarios/rel3h2-expect-handled-true.yaml)
+=== rel3h2-expect-handled-true rc=1
+  error: INPUT_NOT_HANDLED: tap: `expect_handled: true` and the app window acknowledged the gesture `finishInputEvent(handled) = false` (2/2 event(s) acked, every one unhandled) - the input was delivered and nothing consumed it
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/rel3h2-expect-handled-true
+  steps: 2
+   rel3h2-expect-handled-true       declared=fail      got=fail      steps=1/2 code=None reason=None MATCH non-pass=[(1, None, 'fail', 'INPUT_NOT_HANDLED')]
+=== 2026-11-18T04:49:14Z touchdisp-dispatch-probe (scenarios/touchdisp-dispatch-probe.yaml)
+=== touchdisp-dispatch-probe rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/touchdisp-dispatch-probe.yaml (sha db64daaa7d3a), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/touch-probe.apk (sha 0e34bc1d5575), engine art, fidelity art-reference, warnings: 2 [INPUT_UNHANDLED, INPUT_UNHANDLED]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/touchdisp-dispatch-probe
+  steps: 4
+   touchdisp-dispatch-probe         declared=pass      got=pass      steps=4/4 code=None reason=None MATCH 
+=== 2026-11-18T04:49:15Z touchdisp-gesture (scenarios/touchdisp-gesture.yaml)
+=== touchdisp-gesture rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/touchdisp-gesture.yaml (sha a0cfe6059f6d), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/touch-probe.apk (sha 0e34bc1d5575), engine art, fidelity art-reference, warnings: 1 [INPUT_UNHANDLED]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/touchdisp-gesture
+  steps: 3
+   touchdisp-gesture                declared=pass      got=pass      steps=3/3 code=None reason=None MATCH 
+=== 2026-11-18T04:49:16Z touchdisp-posted-side-effect (scenarios/touchdisp-posted-side-effect.yaml)
+=== touchdisp-posted-side-effect rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/touchdisp-posted-side-effect.yaml (sha e2da25d06512), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/touch-probe.apk (sha 0e34bc1d5575), engine art, fidelity art-reference, warnings: 1 [INPUT_UNHANDLED]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/touchdisp-posted-side-effect
+  steps: 5
+   touchdisp-posted-side-effect     declared=pass      got=pass      steps=5/5 code=None reason=None MATCH 
+=== 2026-11-18T04:49:17Z form-validation (scenarios/form-validation.yaml)
+=== form-validation rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/form-validation.yaml (sha a74b24cfd898), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/form-validation.apk (sha d8c277d7476a), engine art, fidelity art-reference, warnings: 4 [SCENARIO_ENGINE_MISMATCH, INPUT_UNHANDLED, INPUT_UNHANDLED, INPUT_UNHANDLED]
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/form-validation
+  steps: 28
+   form-validation                  declared=pass      got=pass      steps=28/28 code=None reason=None MATCH 
+=== 2026-11-18T04:49:25Z mproc3-two-process (scenarios/mproc3-two-process.yaml)
+=== mproc3-two-process rc=0
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/mproc3-two-process.yaml (sha cfd53ea0e260), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/proc-a.apk (sha 3caac827c550), engine art, fidelity art-reference
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/mproc3-two-process
+  steps: 16
+   mproc3-two-process               declared=pass      got=pass      steps=16/16 code=None reason=None MATCH 
+=== SCENARIOS DONE 2026-11-18T04:49:31Z

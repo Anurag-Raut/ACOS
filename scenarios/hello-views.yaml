@@ -26,17 +26,18 @@ capabilities:
   - ui.text
   - input
   - storage
-# SCENHYG: declared honestly. The 24 steps before the final Back pass; the Back
-# step's strict settle binds on TIMEOUT (`no-draw-after-action`) because the
-# finish path draws no new frame for the rule to bind. That is the open
-# REL3A/PERF4 settle seam (same as multi-activity and the multi-activity
-# negative), not a claim this scenario can assert green. Re-point to `pass` when
-# Back binds on the settled window forest instead of demanding a draw.
-expectation: non_pass
-expectation_reason: >-
-  Back's strict settle needs a new frame; the finish path draws none, so the step
-  is a truthful TIMEOUT (no-draw-after-action) - open REL3A/PERF4 settle seam.
-expect_error: {code: TIMEOUT, reason: no-draw-after-action}
+# BACKSETTLE: green. Two Backs, because AOSP routes a Back to three layers and
+# the soft input comes before the Activity (REL3K2, `back-layers-ime`): typing
+# into `input` leaves the IME up, so the first Back hides the keyboard (the
+# Activity stays resumed, no lifecycle runs) and the second Back reaches the
+# Activity's window and finishes the task. The reference capture never had a
+# keyboard up - it typed with `adb shell input text`, which bypasses the IME -
+# so its single `input keyevent KEYCODE_BACK` reached the Activity directly.
+#
+# The finish step is the strict settle claim: it binds on the host's window
+# forest (the delivered window is removed and, for a single-Activity task, the
+# forest is empty) with the guest's own `window-gone` proof, never on a frame.
+expectation: pass
 budgets:
   memory_mib: 512
   wall_ms: 60000
@@ -171,6 +172,16 @@ steps:
       selector: {id: result}
       text: {exact: "clicks: 2"}
       bounds: [42, 612, 175, 663]
+
+  # ---- Back hides the soft input (AOSP layer order) -----------------------
+  # The IME is up (the field above was typed into). The framework's
+  # `ImeInputStage` consumes this press: the keyboard goes away, the Activity is
+  # not paused and no frame is owed. `settle: content` is the tree rule for that
+  # claim (the same setting `back-layers-ime` uses for the same layer): the
+  # window forest and the app's tree settle, the pixels are unchanged by design.
+  - key:
+      key: back
+      settle: content
 
   # ---- back destroys the activity ---------------------------------------
   # The framework's own finish path (IActivityClientController.onBackPressed ->

@@ -1,0 +1,27 @@
+version: 1
+name: diag-hv-two-back
+description: diag
+app: fixtures/build/apps/hello-views.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+capabilities: [lifecycle, ui.offscreen, ui.text, input, storage]
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 90000}
+steps:
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+  - wait_for: {selector: {id: result}, timeout_ms: 5000}
+  - tap: {selector: {id: input}}
+  - type: {selector: {id: input}, text: World}
+  - tap: {selector: {id: btn}}
+  - back: {}
+  - back: {}
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: false
+      ordered: true
+      patterns: ['^onPause$', '^onStop$', '^onDestroy$']
