@@ -1472,3 +1472,34 @@ Two rules this track had to settle, both applied in one place each:
    where stock AMS's `startProcessLocked` would, and `Peer::package_of` never answers an empty name.
    Without it a `startActivity` into the already-running primary (a notification's content sender) was
    recorded and never encoded.
+
+## ADR-0031 settlement note (WVTAIL, 2026-11-18): input latency is a *frame* rule, and a restart is a restart
+
+Three rules the WebView track had to settle, each measured first
+(`results/handoff/WVTAIL/`):
+
+1. **An input ack is not a deadline.** Under `--enable-begin-frame-control` the engine
+   acknowledges a dispatched touch event at the end of the compositor frame that
+   **follows** the event's own. The broker produces that frame itself (input
+   priority, so it is granted ahead of guest pulls) and then reads the ack;
+   waiting a fixed timeout instead was 2 s of blocked guest input per event
+   (2004-2604 ms per tap), because the guest cannot draw the frame it is waiting
+   for while it is inside its own touch dispatch. `ack: false` is reported and
+   logged, never turned into a lost tap or a fabricated `true`.
+2. **A queued input frame preempts a non-input attempt.** An attempt never holds
+   the engine for its whole fairness budget when an input pull is waiting: it
+   waits in slices and abandons (`Yield`, which spends no attempt of its pull's
+   budget). Input frames keep their own budget in full — cutting *that* is what
+   drops gestures (WVFAIR §7.1). An abandoned `beginFrame` is not overlapped by
+   the next one for the same view; its reply is drained and kept, because two
+   outstanding frames for one page is an engine-side fault
+   (`Got overlapping IssueExternalBeginFrame`).
+3. **A restart is a restart.** When the engine is replaced every target of every
+   session dies with it; the broker keeps saying so (`engine.restarted`) and
+   answers the old view ids `ENGINE_RESTARTED`, never `NO_VIEW` — a `NO_VIEW`
+   means the id was never the session's, and conflating the two made an engine
+   restart read as a broker bookkeeping bug (MERGE040A §5.2). The restart is
+   logged with the engine's exit status, its stderr tail and the number of views
+   dropped. The known cause of a *cross-session* restart is the WebView daemon
+   living in its spawner's cgroup (a session's scope ending kills the host's
+   engine); moving it out is a process-model decision for the owner.
