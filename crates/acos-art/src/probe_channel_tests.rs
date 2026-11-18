@@ -29,7 +29,7 @@ use std::time::Duration;
 /// (`research/zygote-proto/z3/build.sh`); read as text so the two halves of
 /// the contract cannot drift silently.
 const ZYGOTE_GUEST_SRC: &str =
-    include_str!("../../../research/zygote-proto/z3/java/dev/acos/art/ZygoteApp.java");
+    include_str!("../zygote/java/dev/acos/art/ZygoteApp.java");
 
 fn scratch_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(

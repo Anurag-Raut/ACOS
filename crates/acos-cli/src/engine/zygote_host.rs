@@ -31,12 +31,29 @@ use acos_art::zygote_prod::{
 use acos_protocol::ErrorCode;
 use acos_verify::BackendError;
 
-/// The single product knob (design §7). `on` selects the persistent zygote;
-/// anything else (including unset) is the unchanged exec path.
+/// The single product knob (design §7). ZDEFAULT1 (owner decision 2026-11-18,
+/// ADR-0026): the persistent zygote warm-fork is the **default**. Unset, `on`,
+/// `1`, `true` and `yes` select it; `off`, `0`, `false`, `no`, `exec` and
+/// `disabled` select the plain exec path (one fresh ART per session), which stays
+/// fully supported.
 pub const ENV_ZYGOTE: &str = "ACOS_ART_ZYGOTE";
-/// The guest dex + shims (built by `research/zygote-proto/z3/build.sh`). A flag-on
-/// serve without it fails closed; it never falls back to the exec path.
+/// Optional override of the guest dex + shims directory. Unset, the host builds
+/// (and caches) them itself (`acos_art::zygote_build`); a set value must be a
+/// directory (`research/zygote-proto/z3/build.sh` layout) and a bad one fails
+/// the launch, never falling back to the exec path.
 pub const ENV_ZYGOTE_BUILD: &str = "ACOS_ART_ZYGOTE_BUILD";
+
+/// Does `value` (the `ACOS_ART_ZYGOTE` environment, `None` when unset) select the
+/// persistent zygote? Unset is **on** (ZDEFAULT1).
+pub fn zygote_selected(value: Option<&str>) -> bool {
+    match value.map(|v| v.trim().to_ascii_lowercase()) {
+        None => true,
+        Some(v) => !matches!(
+            v.as_str(),
+            "off" | "0" | "false" | "no" | "exec" | "disabled" | "none"
+        ),
+    }
+}
 /// ZPROD5: where the keeper plan trees live. Host-side only (the plan dir is
 /// bound into the zygote as `/sessions`), so an operator may place it anywhere.
 pub const ENV_ZYGOTE_ROOT: &str = "ACOS_ART_ZYGOTE_ROOT";
@@ -87,6 +104,9 @@ pub struct ZygoteHost {
     /// [`ZygoteHost::for_artifacts`]); [`ZygoteHost::shutdown_all`] removes it.
     owned_root: bool,
     build: Option<PathBuf>,
+    /// ZDEFAULT1: the guest build this host produced itself (no
+    /// `ACOS_ART_ZYGOTE_BUILD`), resolved once, on the first keeper.
+    built: Mutex<Option<PathBuf>>,
     keepers: Mutex<ZygoteRegistry>,
 }
 
@@ -94,15 +114,14 @@ impl ZygoteHost {
     /// Build the host from the environment. `root` is inside the daemon's
     /// private runtime directory (`<artifacts>/zygote`), never `/tmp`.
     pub fn from_env(root: PathBuf) -> Self {
-        let enabled = std::env::var(ENV_ZYGOTE)
-            .map(|value| value.trim().eq_ignore_ascii_case("on"))
-            .unwrap_or(false);
+        let enabled = zygote_selected(std::env::var(ENV_ZYGOTE).ok().as_deref());
         let build = std::env::var_os(ENV_ZYGOTE_BUILD).map(PathBuf::from);
         ZygoteHost {
             enabled,
             root,
             owned_root: false,
             build,
+            built: Mutex::new(None),
             keepers: Mutex::new(ZygoteRegistry::new()),
         }
     }
@@ -167,12 +186,42 @@ impl ZygoteHost {
             root: PathBuf::new(),
             owned_root: false,
             build: None,
+            built: Mutex::new(None),
             keepers: Mutex::new(ZygoteRegistry::new()),
         }
     }
 
     pub fn enabled(&self) -> bool {
         self.enabled
+    }
+
+    /// The zygote guest build directory: the operator's `ACOS_ART_ZYGOTE_BUILD`
+    /// when set (must be a directory), else the host's own cached build
+    /// (`acos_art::zygote_build::ensure_guest_build`, compiled once per source
+    /// and toolchain). Every failure is a named [`ZygoteError`]; there is no
+    /// fallback to the exec path.
+    fn guest_build(&self) -> Result<PathBuf, ZygoteError> {
+        if let Some(build) = &self.build {
+            if !build.is_dir() {
+                return Err(ZygoteError::Io(format!(
+                    "{ENV_ZYGOTE_BUILD}={} is not a directory (fail closed, no exec fallback)",
+                    build.display()
+                )));
+            }
+            return Ok(build.clone());
+        }
+        let mut built = self.built.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(dir) = built.as_ref() {
+            return Ok(dir.clone());
+        }
+        let guest = acos_art::zygote_build::ensure_guest_build().map_err(|error| {
+            ZygoteError::Io(format!(
+                "cannot build the zygote guest: {error} (fail closed, no exec fallback; set \
+                 {ENV_ZYGOTE}=off to use the plain exec path)"
+            ))
+        })?;
+        *built = Some(guest.dir.clone());
+        Ok(guest.dir)
     }
 
     /// How many keepers this daemon owns (0 with the flag off, by construction).
@@ -212,18 +261,7 @@ impl ZygoteHost {
         apk: &Path,
         reuse_tag: Option<u32>,
     ) -> Result<u32, ZygoteError> {
-        let build = self.build.clone().ok_or_else(|| {
-            ZygoteError::Io(format!(
-                "{ENV_ZYGOTE}=on but {ENV_ZYGOTE_BUILD} is unset: the zygote guest dex is \
-                 required (fail closed, no exec fallback)"
-            ))
-        })?;
-        if !build.is_dir() {
-            return Err(ZygoteError::Io(format!(
-                "{ENV_ZYGOTE_BUILD}={} is not a directory (fail closed, no exec fallback)",
-                build.display()
-            )));
-        }
+        let build = self.guest_build()?;
         // ZPROD5: the session directory also carries the sockets, and `bind()`
         // refuses a `sun_path` over 108 bytes. Check the real path *before* a
         // keeper boots, with the widest tag this host can hand out, so a root
@@ -635,12 +673,42 @@ done < "$plan/cmd"
         script
     }
 
+    #[test]
+    fn the_zygote_is_the_default_and_exec_stays_one_documented_switch_away() {
+        // ZDEFAULT1: unset = on; every documented off spelling = the exec path.
+        assert!(zygote_selected(None), "unset must select the zygote");
+        for on in ["on", "ON", "1", "true", "yes", " on "] {
+            assert!(zygote_selected(Some(on)), "{on:?} selects the zygote");
+        }
+        for off in ["off", "OFF", "0", "false", "no", "exec", "disabled", "none", " off "] {
+            assert!(!zygote_selected(Some(off)), "{off:?} selects the exec path");
+        }
+    }
+
+    #[test]
+    fn a_bad_override_directory_fails_closed_and_never_builds() {
+        let host = ZygoteHost {
+            enabled: true,
+            root: PathBuf::new(),
+            owned_root: false,
+            build: Some(PathBuf::from("/nonexistent-zygote-build")),
+            built: Mutex::new(None),
+            keepers: Mutex::new(ZygoteRegistry::new()),
+        };
+        let error = host.guest_build().expect_err("a bad override must fail");
+        assert!(
+            error.to_string().contains("is not a directory"),
+            "{error}"
+        );
+    }
+
     fn host_with(root: &Path, build: &Path) -> ZygoteHost {
         ZygoteHost {
             enabled: true,
             root: root.to_path_buf(),
             owned_root: false,
             build: Some(build.to_path_buf()),
+            built: Mutex::new(None),
             keepers: Mutex::new(ZygoteRegistry::new()),
         }
     }

@@ -67,6 +67,7 @@ pub mod session;
 pub mod spike_net;
 pub mod watchdog;
 pub mod webview_socket;
+pub mod zygote_build;
 pub mod zygote_prod;
 
 use std::ffi::OsString;
