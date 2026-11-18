@@ -27,6 +27,8 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.util.Set;
 
 /**
@@ -62,16 +64,57 @@ public final class MainActivity extends Activity {
     private final java.util.List<java.lang.ref.WeakReference<PhoneStateListener>> weakListeners =
             new java.util.ArrayList<>();
 
-    /** How many registered listeners a GC left reachable (the §2a counter). */
-    private int aliveListeners() {
+    /**
+     * BINDERREF4: the callback *stub* (the Java `Binder` the registration is
+     * addressed to) of every weakened listener. `PhoneStateListener.callback`
+     * is the `IPhoneStateListener.Stub` the framework writes into the
+     * registration parcel; on Android it is the object libbinder's
+     * `JavaBBinder` holds a JNI global reference to, so it outlives the
+     * `PhoneStateListener` (whose stub only keeps a `WeakReference` to the
+     * listener). Measuring the stub separately from the listener is what tells
+     * "the framework's weak listener wrapper collected it" (AOSP-correct) from
+     * "the rooted node's Java object was collected" (an ACOS divergence).
+     */
+    private final java.util.List<java.lang.ref.WeakReference<Object>> weakStubs =
+            new java.util.ArrayList<>();
+    /** The strong arm of the BINDERREF4 probe: listeners the app keeps. */
+    private final java.util.List<PhoneStateListener> probeStrong = new java.util.ArrayList<>();
+    /** The detached arm: stub weak refs, listener held by nothing in the app. */
+    private final java.util.List<java.lang.ref.WeakReference<Object>> probeDetachedStubs =
+            new java.util.ArrayList<>();
+    private final java.util.List<java.lang.ref.WeakReference<PhoneStateListener>>
+            probeDetachedListeners = new java.util.ArrayList<>();
+    private int probeStrongRegistered;
+    private int probeDetachedRegistered;
+    private int probeStrongCalls;
+    private int probeDetachedCalls;
+    private int probeStrongRinging;
+    private int probeDetachedRinging;
+
+    /** `PhoneStateListener.callback` — the `IPhoneStateListener` stub, via reflection. */
+    private static Object callbackOf(PhoneStateListener listener) {
+        try {
+            Field field = PhoneStateListener.class.getField("callback");
+            return field.get(listener);
+        } catch (Throwable missing) {
+            return null;
+        }
+    }
+
+    private static int aliveOf(java.util.List<? extends java.lang.ref.WeakReference<?>> refs) {
         int alive = 0;
-        for (java.lang.ref.WeakReference<PhoneStateListener> weak : weakListeners) {
+        for (java.lang.ref.WeakReference<?> weak : refs) {
             if (weak.get() != null) {
                 alive++;
             }
         }
+        return alive;
+    }
+
+    /** How many registered listeners a GC left reachable (the §2a counter). */
+    private int aliveListeners() {
         // A listener the app still holds strongly (the normal pattern) counts.
-        return alive + listeners.size();
+        return aliveOf(weakListeners) + listeners.size();
     }
 
     @Override
@@ -203,8 +246,76 @@ public final class MainActivity extends Activity {
         report.setOnClickListener(view -> log("CALLTOTAL state_lines=" + callStateLines
                 + " ringing=" + callRingingLines + " listeners=" + listenerCount
                 + " held=" + listeners.size()
-                + " alive=" + aliveListeners()));
+                + " alive=" + aliveListeners()
+                + " stubs=" + aliveOf(weakStubs)
+                + " probe_strong=" + probeStrong.size()
+                + " probe_strong_calls=" + probeStrongCalls
+                + " probe_strong_ringing=" + probeStrongRinging
+                + " probe_detached=" + probeDetachedRegistered
+                + " probe_detached_calls=" + probeDetachedCalls
+                + " probe_detached_listeners=" + aliveOf(probeDetachedListeners)
+                + " probe_detached_stubs=" + aliveOf(probeDetachedStubs)
+                + " probe_detached_ringing=" + probeDetachedRinging));
         appendToRoot(report);
+
+        // BINDERREF4 arm 1: a callback stub the app keeps in a static field.
+        Button probeStrongButton = new Button(this);
+        probeStrongButton.setText("Probe strong stub");
+        probeStrongButton.setTag("probe-strong-stub");
+        probeStrongButton.setOnClickListener(view -> {
+            probeStrong.add(registerProbeListener(true, "strong"));
+            probeStrongRegistered++;
+            log("PROBEREG arm=strong registered=" + probeStrongRegistered);
+        });
+        appendToRoot(probeStrongButton);
+
+        // BINDERREF4 arm 2: the same registration, and the app keeps nothing:
+        // the host's reference on the node (and, on Android, the JavaBBinder
+        // global reference behind it) is the only thing left after the local
+        // goes out of scope.
+        Button probeDetachedButton = new Button(this);
+        probeDetachedButton.setText("Probe detached stub");
+        probeDetachedButton.setTag("probe-detached-stub");
+        probeDetachedButton.setOnClickListener(view -> {
+            PhoneStateListener listener = registerProbeListener(false, "detached");
+            probeDetachedListeners.add(new WeakReference<>(listener));
+            probeDetachedStubs.add(new WeakReference<>(callbackOf(listener)));
+            probeDetachedRegistered++;
+            log("PROBEREG arm=detached registered=" + probeDetachedRegistered);
+        });
+        appendToRoot(probeDetachedButton);
+
+        Button probeGcButton = new Button(this);
+        probeGcButton.setText("Probe GC");
+        probeGcButton.setTag("probe-gc");
+        probeGcButton.setOnClickListener(view -> {
+            collectTwice();
+            log("PROBEGC strong=" + probeStrong.size()
+                    + " strong_stubs=" + aliveOf(probeStrongStubs)
+                    + " detached=" + probeDetachedRegistered
+                    + " detached_listeners=" + aliveOf(probeDetachedListeners)
+                    + " detached_stubs=" + aliveOf(probeDetachedStubs));
+        });
+        appendToRoot(probeGcButton);
+
+        // BINDERREF4 regression: a registration whose Java object the app does
+        // not keep either — here the framework's `ReceiverDispatcher` holds the
+        // receiver, and the registration is what keeps the node alive. The
+        // action registers without storing anything; a later injected SMS must
+        // still reach it after a forced collection.
+        Button probeReceiverButton = new Button(this);
+        probeReceiverButton.setText("Probe detached receiver");
+        probeReceiverButton.setTag("probe-detached-receiver");
+        probeReceiverButton.setOnClickListener(view -> {
+            registerReceiver(new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    log("PROBESMS detached receiver ran after GC");
+                }
+            }, new IntentFilter(Telephony.Sms.Intents.SMS_RECEIVED_ACTION));
+            log("PROBEREG arm=receiver registered");
+        });
+        appendToRoot(probeReceiverButton);
 
         // BINDERREF2 §2a probe: move every registered listener into a
         // `WeakReference` list (so the *app* no longer references it) and force
@@ -218,16 +329,21 @@ public final class MainActivity extends Activity {
         weaken.setTag("weaken-listeners");
         weaken.setOnClickListener(view -> {
             weakListeners.clear();
+            weakStubs.clear();
             for (PhoneStateListener listener : listeners) {
                 weakListeners.add(new java.lang.ref.WeakReference<>(listener));
+                weakStubs.add(new java.lang.ref.WeakReference<>(callbackOf(listener)));
             }
             listeners.clear();
             callListener = null;
-            System.gc();
-            System.runFinalization();
-            System.gc();
+            collectTwice();
+            // `alive` counts the listeners the GC left (the framework's stub
+            // only weakly references them: on AOSP that is 0 for a listener the
+            // app dropped); `stubs` counts their callback binders, which the
+            // rooted node must keep alive exactly like libbinder's JavaBBinder.
             log("CALLWEAK listeners=" + listenerCount
                     + " alive=" + aliveListeners()
+                    + " stubs=" + aliveOf(weakStubs)
                     + " refs=" + weakListeners.size());
         });
         appendToRoot(weaken);
@@ -271,6 +387,63 @@ public final class MainActivity extends Activity {
     }
 
     private PhoneStateListener callListener;
+
+    /** BINDERREF4: the strong arm's stub weak refs (for the PROBEGC line). */
+    private final java.util.List<java.lang.ref.WeakReference<Object>> probeStrongStubs =
+            new java.util.ArrayList<>();
+
+    /** Two `System.gc()` calls with finalization in between, as the probe asks. */
+    private static void collectTwice() {
+        System.gc();
+        System.runFinalization();
+        System.gc();
+    }
+
+    /**
+     * Register a `PhoneStateListener` for the BINDERREF4 probe and return it.
+     * The caller decides whether the app keeps it: `arm=strong` stores it in a
+     * static list (the normal app pattern), `arm=detached` drops it so only the
+     * registration references the callback binder.
+     */
+    private PhoneStateListener registerProbeListener(boolean strong, String arm) {
+        final String probeArm = arm;
+        PhoneStateListener listener = new PhoneStateListener() {
+            @Override
+            public void onCallStateChanged(int state, String phoneNumber) {
+                try {
+                    if ("strong".equals(probeArm)) {
+                        probeStrongCalls++;
+                        if (state == TelephonyManager.CALL_STATE_RINGING) {
+                            probeStrongRinging++;
+                        }
+                    } else {
+                        probeDetachedCalls++;
+                        if (state == TelephonyManager.CALL_STATE_RINGING) {
+                            probeDetachedRinging++;
+                        }
+                    }
+                    log("PROBECALL arm=" + probeArm + " state=" + callName(state));
+                } catch (Throwable error) {
+                    log("PROBECALL-ERR arm=" + probeArm
+                            + " error=" + error.getClass().getSimpleName());
+                }
+                // Keep the legacy counters out of this arm: it is about the
+                // binder object, not the listener wrapper.
+            }
+        };
+        if (strong) {
+            probeStrongStubs.add(new WeakReference<>(callbackOf(listener)));
+        }
+        try {
+            telephony.listen(listener, PhoneStateListener.LISTEN_CALL_STATE);
+            if (strong) {
+                probeStrongRegistered++;
+            }
+        } catch (Throwable missing) {
+            log("PROBEREG-ERR arm=" + arm + " error=" + missing.getClass().getSimpleName());
+        }
+        return listener;
+    }
 
     private void registerCallStateListener() {
         if (telephony == null) {

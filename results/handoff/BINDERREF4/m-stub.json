@@ -1,0 +1,2469 @@
+{
+  "app_alive": 1,
+  "app_held": 1,
+  "app_listeners": 1,
+  "app_log": {
+    "backend": "acos-native",
+    "capabilities_used": [
+      "logs"
+    ],
+    "fidelity": "art-reference",
+    "metrics": {
+      "wall_ms": 0
+    },
+    "ok": true,
+    "request_id": "req_mcp",
+    "result": {
+      "animations": "on",
+      "collapsed": 0,
+      "count": 18,
+      "crash": null,
+      "engine": "art",
+      "engine_frozen": false,
+      "evidence": {
+        "frame": "host-observed",
+        "input_acks": "guest-asserted",
+        "logs": "guest-asserted",
+        "state_change": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "evidence_label": "host-pixel",
+      "extra_apks": [],
+      "filter": {
+        "default_view": false,
+        "dropped": 1326,
+        "min_priority": "I",
+        "note": "explicit filter applied; the guest buffer and logs/logcat.txt keep every record",
+        "package": null
+      },
+      "frame": {
+        "buffer_generation": 375,
+        "captured_at": "2026-11-17T17:50:05.304Z",
+        "frame_number": 375,
+        "frame_seq": 13,
+        "identity": "C1 buffer metadata (no pixel copy)",
+        "md5": "",
+        "pixels": false
+      },
+      "insets": "report",
+      "last_frame_seq": 13,
+      "launched": true,
+      "log_path": "/run/user/1000/binderref4/art-sessions/bindercb-stub/logs/logcat.txt",
+      "logs": [
+        {
+          "line": "I tailprobe READY",
+          "message": "READY",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 127,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe TELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"",
+          "message": "TELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 128,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe CALL state=IDLE number=null listener=1",
+          "message": "CALL state=IDLE number=null listener=1",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 151,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBEREG arm=strong registered=2",
+          "message": "PROBEREG arm=strong registered=2",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 197,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBECALL arm=strong state=IDLE",
+          "message": "PROBECALL arm=strong state=IDLE",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 201,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBEREG arm=detached registered=1",
+          "message": "PROBEREG arm=detached registered=1",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 361,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBECALL arm=detached state=IDLE",
+          "message": "PROBECALL arm=detached state=IDLE",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 364,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBEREG arm=detached registered=2",
+          "message": "PROBEREG arm=detached registered=2",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 524,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBECALL arm=detached state=IDLE",
+          "message": "PROBECALL arm=detached state=IDLE",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 527,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBEREG arm=detached registered=3",
+          "message": "PROBEREG arm=detached registered=3",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 687,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBECALL arm=detached state=IDLE",
+          "message": "PROBECALL arm=detached state=IDLE",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 690,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBEREG arm=receiver registered",
+          "message": "PROBEREG arm=receiver registered",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 849,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBEGC strong=1 strong_stubs=1 detached=3 detached_listeners=0 detached_stubs=3",
+          "message": "PROBEGC strong=1 strong_stubs=1 detached=3 detached_listeners=0 detached_stubs=3",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1007,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe SMS from=+15550003333 body=binderref4 probe",
+          "message": "SMS from=+15550003333 body=binderref4 probe",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1167,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBESMS detached receiver ran after GC",
+          "message": "PROBESMS detached receiver ran after GC",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1168,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe CALL state=RINGING number=+15550002222 listener=1",
+          "message": "CALL state=RINGING number=+15550002222 listener=1",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1177,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe PROBECALL arm=strong state=RINGING",
+          "message": "PROBECALL arm=strong state=RINGING",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1184,
+          "tag": "tailprobe"
+        },
+        {
+          "line": "I tailprobe CALLTOTAL state_lines=2 ringing=1 listeners=1 held=1 alive=1 stubs=0 probe_strong=1 probe_strong_calls=2 probe_strong_ringing=1 probe_detached=3 probe_detached_calls=3 probe_detached_listeners=0 probe_detached_stubs=3 probe_detached_ringing=0",
+          "message": "CALLTOTAL state_lines=2 ringing=1 listeners=1 held=1 alive=1 stubs=0 probe_strong=1 probe_strong_calls=2 probe_strong_ringing=1 probe_detached=3 probe_detached_calls=3 probe_detached_listeners=0 probe_detached_stubs=3 probe_detached_ringing=0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1190,
+          "tag": "tailprobe"
+        }
+      ],
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "accessibility",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "scripted",
+          "id": "net.telephony",
+          "profile": "scripted",
+          "reason": "scripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 1 injected incoming SMS, 5 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)",
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "note": "",
+      "session_id": "bindercb-stub",
+      "stage_reached": "first_frame",
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "total_ms": 2
+      },
+      "total": 1344,
+      "trust": "trusted"
+    },
+    "session_id": "bindercb-stub",
+    "status": "pass"
+  },
+  "app_log_lines": [
+    "READY",
+    "TELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"",
+    "CALL state=IDLE number=null listener=1",
+    "PROBEREG arm=strong registered=2",
+    "PROBECALL arm=strong state=IDLE",
+    "PROBEREG arm=detached registered=1",
+    "PROBECALL arm=detached state=IDLE",
+    "PROBEREG arm=detached registered=2",
+    "PROBECALL arm=detached state=IDLE",
+    "PROBEREG arm=detached registered=3",
+    "PROBECALL arm=detached state=IDLE",
+    "PROBEREG arm=receiver registered",
+    "PROBEGC strong=1 strong_stubs=1 detached=3 detached_listeners=0 detached_stubs=3",
+    "SMS from=+15550003333 body=binderref4 probe",
+    "PROBESMS detached receiver ran after GC",
+    "CALL state=RINGING number=+15550002222 listener=1",
+    "PROBECALL arm=strong state=RINGING",
+    "CALLTOTAL state_lines=2 ringing=1 listeners=1 held=1 alive=1 stubs=0 probe_strong=1 probe_strong_calls=2 probe_strong_ringing=1 probe_detached=3 probe_detached_calls=3 probe_detached_listeners=0 probe_detached_stubs=3 probe_detached_ringing=0"
+  ],
+  "app_probe_detached": 3,
+  "app_probe_detached_calls": 3,
+  "app_probe_detached_listeners": 0,
+  "app_probe_detached_ringing": 0,
+  "app_probe_detached_stubs": 3,
+  "app_probe_strong": 1,
+  "app_probe_strong_calls": 2,
+  "app_probe_strong_ringing": 1,
+  "app_ringing": 1,
+  "app_state_lines": 2,
+  "app_stubs": 0,
+  "binder_log_at_probe": [
+    "I acos-binder tid=22 REPLY seq=303 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=304 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=304 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=305 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=305 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=306 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=306 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=307 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=307 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=308 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=308 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=309 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=309 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=310 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=310 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=311 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=311 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=312 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=312 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=313 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=313 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=314 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=314 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=315 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=315 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=316 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=316 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=317 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=317 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=318 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=318 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=319 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=319 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=320 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=320 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=321 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=321 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=322 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=322 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=323 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=323 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=324 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=324 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=325 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=325 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=326 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=326 flags=0x0 size=0/0"
+  ],
+  "binder_log_lines": [
+    "I acos-binder tid=13 REPLY seq=362 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=363 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=363 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=364 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=364 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=365 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=365 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=366 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=366 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=367 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=367 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=368 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=368 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=369 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=369 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=370 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=370 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=371 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=371 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=372 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=372 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=373 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=373 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=374 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=374 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=375 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=375 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=376 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=376 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=377 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=377 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=378 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=378 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=379 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=379 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=380 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=380 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=381 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=381 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=382 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=382 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=383 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=383 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=384 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=384 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=385 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=385 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=386 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=386 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=387 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=387 flags=0x0 size=0/0",
+    "I acos-binder tid=13 deliver seq=388 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=13 REPLY seq=388 flags=0x0 size=0/0",
+    "I acos-binder tid=22 deliver seq=389 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+    "I acos-binder tid=22 REPLY seq=389 flags=0x0 size=0/0"
+  ],
+  "binder_logs": {
+    "backend": "acos-native",
+    "capabilities_used": [
+      "logs"
+    ],
+    "fidelity": "art-reference",
+    "metrics": {
+      "wall_ms": 0
+    },
+    "ok": true,
+    "request_id": "req_mcp",
+    "result": {
+      "animations": "on",
+      "collapsed": 0,
+      "count": 883,
+      "crash": null,
+      "engine": "art",
+      "engine_frozen": false,
+      "evidence": {
+        "frame": "host-observed",
+        "input_acks": "guest-asserted",
+        "logs": "guest-asserted",
+        "state_change": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "evidence_label": "host-pixel",
+      "extra_apks": [],
+      "filter": {
+        "default_view": false,
+        "dropped": 461,
+        "min_priority": "I",
+        "note": "explicit filter applied; the guest buffer and logs/logcat.txt keep every record",
+        "package": null
+      },
+      "frame": {
+        "buffer_generation": 375,
+        "captured_at": "2026-11-17T17:50:05.304Z",
+        "frame_number": 375,
+        "frame_seq": 13,
+        "identity": "C1 buffer metadata (no pixel copy)",
+        "md5": "",
+        "pixels": false
+      },
+      "insets": "report",
+      "last_frame_seq": 13,
+      "launched": true,
+      "log_path": "/run/user/1000/binderref4/art-sessions/bindercb-stub/logs/logcat.txt",
+      "logs": [
+        {
+          "line": "I acos-binder tid=13 REPLY seq=362 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=362 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1264,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=363 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=363 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1266,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=363 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=363 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1267,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 deliver seq=364 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=13 deliver seq=364 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1269,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 REPLY seq=364 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=364 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1270,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 deliver seq=365 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=13 deliver seq=365 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1272,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 REPLY seq=365 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=365 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1273,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 deliver seq=366 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=13 deliver seq=366 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1275,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 REPLY seq=366 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=366 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1276,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 deliver seq=367 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=13 deliver seq=367 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1278,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 REPLY seq=367 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=367 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1279,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=368 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=368 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1281,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=368 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=368 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1282,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=369 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=369 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1284,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=369 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=369 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1285,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=370 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=370 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1287,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=370 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=370 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1288,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=371 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=371 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1290,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=371 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=371 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1291,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=372 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=372 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1293,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=372 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=372 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1294,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 deliver seq=373 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=13 deliver seq=373 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1296,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 REPLY seq=373 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=373 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1297,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=374 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=374 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1299,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=374 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=374 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1300,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=375 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=375 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1302,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=375 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=375 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1303,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=376 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=376 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1305,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=376 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=376 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1306,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=377 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=377 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1308,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=377 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=377 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1309,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 deliver seq=378 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=13 deliver seq=378 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1311,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 REPLY seq=378 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=378 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1312,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=379 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=379 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1314,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=379 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=379 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1315,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 deliver seq=380 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=13 deliver seq=380 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1317,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 REPLY seq=380 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=380 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1318,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=381 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=381 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1320,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=381 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=381 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1321,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=382 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=382 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1323,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=382 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=382 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1324,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=383 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=383 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1326,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=383 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=383 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1327,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 deliver seq=384 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=13 deliver seq=384 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1329,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 REPLY seq=384 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=384 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1330,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 deliver seq=385 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=13 deliver seq=385 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1332,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 REPLY seq=385 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=385 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1333,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=386 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=386 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1335,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=386 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=386 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1336,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=387 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=387 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1338,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=387 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=387 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1339,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 deliver seq=388 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=13 deliver seq=388 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1341,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=13 REPLY seq=388 flags=0x0 size=0/0",
+          "message": "tid=13 REPLY seq=388 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1342,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 deliver seq=389 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "message": "tid=22 deliver seq=389 wire=21 code=1 weakref=7f20a1a68af0 cookie=7f2031a3ce98",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1343,
+          "tag": "acos-binder"
+        },
+        {
+          "line": "I acos-binder tid=22 REPLY seq=389 flags=0x0 size=0/0",
+          "message": "tid=22 REPLY seq=389 flags=0x0 size=0/0",
+          "priority": "I",
+          "repeat_count": 1,
+          "seq": 1344,
+          "tag": "acos-binder"
+        }
+      ],
+      "logs_returned": 55,
+      "logs_truncated": true,
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "accessibility",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "scripted",
+          "id": "net.telephony",
+          "profile": "scripted",
+          "reason": "scripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 1 injected incoming SMS, 5 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)",
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "note": "",
+      "session_id": "bindercb-stub",
+      "stage_reached": "first_frame",
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "total_ms": 3
+      },
+      "total": 1344,
+      "trust": "trusted"
+    },
+    "session_id": "bindercb-stub",
+    "status": "pass"
+  },
+  "ctl_reply": {
+    "backend": "acos-native",
+    "capabilities_used": [],
+    "fidelity": "art-reference",
+    "metrics": {
+      "wall_ms": 0
+    },
+    "ok": true,
+    "request_id": "req_mcp",
+    "result": {
+      "animations": "on",
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        },
+        {
+          "id": "net.telephony",
+          "profile": "scripted"
+        }
+      ],
+      "cmd": "services",
+      "engine": "art",
+      "engine_frozen": false,
+      "evidence": {
+        "frame": "host-observed",
+        "input_acks": "guest-asserted",
+        "logs": "guest-asserted",
+        "state_change": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "evidence_label": "host-pixel",
+      "extra_apks": [],
+      "frame": {
+        "buffer_generation": 321,
+        "captured_at": "2026-11-17T17:50:02.279Z",
+        "frame_number": 321,
+        "frame_seq": 10,
+        "identity": "C1 buffer metadata (no pixel copy)",
+        "md5": "",
+        "pixels": false
+      },
+      "id": "net.telephony",
+      "insets": "report",
+      "last_frame_seq": 10,
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "accessibility",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "scripted",
+          "id": "net.telephony",
+          "profile": "scripted",
+          "reason": "scripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 1 injected incoming SMS, 5 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)",
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "op": "call_state",
+      "session_id": "bindercb-stub",
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "total_ms": 0
+      },
+      "trust": "trusted",
+      "value": {
+        "call_state": 1,
+        "delivered": 5,
+        "incoming_number": "+15550002222"
+      }
+    },
+    "session_id": "bindercb-stub",
+    "status": "pass"
+  },
+  "dispatched_idle": 1,
+  "dispatched_ringing": 1,
+  "failures": [],
+  "gc_detached": 3,
+  "gc_detached_listeners": 0,
+  "gc_detached_stubs": 3,
+  "gc_strong": 1,
+  "gc_strong_stubs": 1,
+  "guest_log_lines": [
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E RippleDrawable The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation."
+  ],
+  "host_delivered": null,
+  "idle_s": 5.0,
+  "mode": "stub",
+  "probe": {
+    "detached_listeners": 0,
+    "detached_registered": 3,
+    "detached_ringing": 0,
+    "detached_stubs": 3,
+    "gc": "PROBEGC strong=1 strong_stubs=1 detached=3 detached_listeners=0 detached_stubs=3",
+    "strong_ringing": 1
+  },
+  "probe_calls": [
+    "PROBECALL arm=strong state=IDLE",
+    "PROBECALL arm=detached state=IDLE",
+    "PROBECALL arm=detached state=IDLE",
+    "PROBECALL arm=detached state=IDLE",
+    "PROBECALL arm=strong state=RINGING"
+  ],
+  "probe_gc_line": "PROBEGC strong=1 strong_stubs=1 detached=3 detached_listeners=0 detached_stubs=3",
+  "ringing_after": 1,
+  "ringing_before": 0,
+  "root_trace_captured": false,
+  "root_trace_lines": [],
+  "sms_reply": {
+    "backend": "acos-native",
+    "capabilities_used": [],
+    "fidelity": "art-reference",
+    "metrics": {
+      "wall_ms": 0
+    },
+    "ok": true,
+    "request_id": "req_mcp",
+    "result": {
+      "animations": "on",
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        },
+        {
+          "id": "net.telephony",
+          "profile": "scripted"
+        }
+      ],
+      "cmd": "services",
+      "engine": "art",
+      "engine_frozen": false,
+      "evidence": {
+        "frame": "host-observed",
+        "input_acks": "guest-asserted",
+        "logs": "guest-asserted",
+        "state_change": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "evidence_label": "host-pixel",
+      "extra_apks": [],
+      "frame": {
+        "buffer_generation": 319,
+        "captured_at": "2026-11-17T17:49:55.225Z",
+        "frame_number": 319,
+        "frame_seq": 9,
+        "identity": "C1 buffer metadata (no pixel copy)",
+        "md5": "",
+        "pixels": false
+      },
+      "id": "net.telephony",
+      "insets": "report",
+      "last_frame_seq": 9,
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "accessibility",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "scripted",
+          "id": "net.telephony",
+          "profile": "scripted",
+          "reason": "scripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 1 injected incoming SMS, 5 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)",
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "op": "sms",
+      "session_id": "bindercb-stub",
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "total_ms": 0
+      },
+      "trust": "trusted",
+      "value": {
+        "action": "android.provider.Telephony.SMS_RECEIVED",
+        "body": "binderref4 probe",
+        "from": "+15550003333",
+        "matched": 2,
+        "pdu": "00040b915155003033f300006211717194550010e2b49b5c96cbcb661a082e7f8bcb",
+        "pdu_bytes": 34
+      }
+    },
+    "session_id": "bindercb-stub",
+    "status": "pass"
+  },
+  "steps": [
+    {
+      "error": null,
+      "launch": true,
+      "reached_stage": null,
+      "session_id": "bindercb-stub"
+    },
+    {
+      "observe": "tree",
+      "ok": true,
+      "text": "acos-native\nui.tree\nart-reference\nreq_mcp\non\nart\nhost-observed\nguest-asserted\nguest-asserted\nhost-observed\nguest-asserted\nguest-asserted\n2026-11-17T17:49:46.491Z\nC1 buffer metadata (no pixel copy)\n\nreport\nat-launch\nreal\ncore\nreal\nattached\nhot\noff\naccessibility\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.permissions\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.notifications\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}\noff\nhot\noff\nsensors\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nfeedback.vibrator\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nlocation\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}\noff\nat-launch\nscripted\nnet.telephony\nscripted\nscripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 0 injected incoming SMS, 0 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)\nattached\nhot\noff\nhw.bluetooth\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nhw.biometric\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}\noff\nat-launch\noff\nnetwork\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}\noff\nat-launch\noff\nwebview\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}\noff\nhot\noff\nhw.usb\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}\noff\nhot\noff\nsystem.dropbox\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}\noff\nhot\noff\nhw.nfc\noff\noff: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)\noff\nhot\noff\nsystem.wallpaper\noff\noff: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)\noff\nhot\noff\nsystem.print\noff\noff: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent\noff\nhot\noff\nsystem.search\noff\noff: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider\noff\nhot\noff\nsystem.usage\noff\noff: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'\noff\nhot\noff\nsystem.dpm\noff\noff: no managed device or profile; every device-policy answer would be invented policy state\noff\nhot\noff\nsystem.role\noff\noff: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes\noff\nhot\noff\ngeo.country\noff\noff: a detected country is a location claim ACOS cannot back\noff\ndev.acos.fixtures.tailprobe\nbindercb-stub\nstrict-event\nmode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply\nstrict\nevent\nfirst_frame\ntotal_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb\n[24,299][1056,370]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/title\n\ndev.acos.fixtures.tailprobe:id/title\nTELEPHONY\nmain\n[24,370][1056,496]\nandroid.widget.Button\n\nn4_\n\n\nTelephony\nmain\n[24,496][1056,622]\nandroid.widget.Button\n\nn4_\n\n\nBiometric\nmain\n[24,622][1056,748]\nandroid.widget.Button\n\nn4_\n\n\nBluetooth\nmain\n[24,748][1056,874]\nandroid.widget.Button\n\nn4_\n\n\nVibrator\nmain\n[24,874][1056,1000]\nandroid.widget.Button\n\nn4_\n\n\nListen for calls\nmain\n[24,1000][1056,1126]\nandroid.widget.Button\n\nn4_\n\n\nStop listening\nmain\n[24,1126][1056,1252]\nandroid.widget.Button\n\nn4_\n\n\nReport callbacks\nmain\n[24,1252][1056,1378]\nandroid.widget.Button\n\nn4_\n\n\nProbe strong stub\nmain\n[24,1378][1056,1504]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached stub\nmain\n[24,1504][1056,1630]\nandroid.widget.Button\n\nn4_\n\n\nProbe GC\nmain\n[24,1630][1056,1756]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached receiver\nmain\n[24,1756][1056,1882]\nandroid.widget.Button\n\nn4_\n\n\nWeaken listeners\nmain\n[24,1882][1056,2008]\nandroid.widget.Button\n\nn4_\n\n\nSend SMS\nmain\n[24,2008][1056,2231]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/status\n\ndev.acos.fixtures.tailprobe:id/status\nREADY\nTELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"\nCALL state=IDLE number=null listener=1\n\nmain\n[42,166][281,237]\nandroid.widget.TextView\n\nn4_\n\n\nTail Probe\nmain\ncompact view: visible text/content_desc nodes in reading order; full tree: /run/user/1000/binderref4/art-sessions/bindercb-stub/tree/1.json\n7d00abf\napplication\nmain\nTYPE_BASE_APPLICATION\n/run/user/1000/binderref4/art-sessions/bindercb-stub/tree/1.json\ntrusted\nbindercb-stub\npass"
+    },
+    {
+      "ok": true,
+      "tap": "Probe strong stub"
+    },
+    {
+      "ok": true,
+      "tap": "Probe detached stub"
+    },
+    {
+      "ok": true,
+      "tap": "Probe detached stub"
+    },
+    {
+      "ok": true,
+      "tap": "Probe detached stub"
+    },
+    {
+      "ok": true,
+      "tap": "Probe detached receiver"
+    },
+    {
+      "ok": true,
+      "tap": "Probe GC"
+    },
+    {
+      "observe": "tree",
+      "ok": true,
+      "text": "acos-native\nui.tree\nart-reference\nreq_mcp\non\nart\nhost-observed\nguest-asserted\nguest-asserted\nhost-observed\nguest-asserted\nguest-asserted\n2026-11-17T17:49:55.225Z\nC1 buffer metadata (no pixel copy)\n\nreport\nat-launch\nreal\ncore\nreal\nattached\nhot\noff\naccessibility\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.permissions\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.notifications\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}\noff\nhot\noff\nsensors\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nfeedback.vibrator\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nlocation\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}\noff\nat-launch\nscripted\nnet.telephony\nscripted\nscripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 0 injected incoming SMS, 0 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)\nattached\nhot\noff\nhw.bluetooth\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nhw.biometric\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}\noff\nat-launch\noff\nnetwork\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}\noff\nat-launch\noff\nwebview\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}\noff\nhot\noff\nhw.usb\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}\noff\nhot\noff\nsystem.dropbox\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}\noff\nhot\noff\nhw.nfc\noff\noff: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)\noff\nhot\noff\nsystem.wallpaper\noff\noff: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)\noff\nhot\noff\nsystem.print\noff\noff: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent\noff\nhot\noff\nsystem.search\noff\noff: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider\noff\nhot\noff\nsystem.usage\noff\noff: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'\noff\nhot\noff\nsystem.dpm\noff\noff: no managed device or profile; every device-policy answer would be invented policy state\noff\nhot\noff\nsystem.role\noff\noff: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes\noff\nhot\noff\ngeo.country\noff\noff: a detected country is a location claim ACOS cannot back\noff\ndev.acos.fixtures.tailprobe\nbindercb-stub\nstrict-event\nmode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply\nstrict\nevent\nfirst_frame\ntotal_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb\n[24,299][1056,370]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/title\n\ndev.acos.fixtures.tailprobe:id/title\nTELEPHONY\nmain\n[24,370][1056,496]\nandroid.widget.Button\n\nn4_\n\n\nTelephony\nmain\n[24,496][1056,622]\nandroid.widget.Button\n\nn4_\n\n\nBiometric\nmain\n[24,622][1056,748]\nandroid.widget.Button\n\nn4_\n\n\nBluetooth\nmain\n[24,748][1056,874]\nandroid.widget.Button\n\nn4_\n\n\nVibrator\nmain\n[24,874][1056,1000]\nandroid.widget.Button\n\nn4_\n\n\nListen for calls\nmain\n[24,1000][1056,1126]\nandroid.widget.Button\n\nn4_\n\n\nStop listening\nmain\n[24,1126][1056,1252]\nandroid.widget.Button\n\nn4_\n\n\nReport callbacks\nmain\n[24,1252][1056,1378]\nandroid.widget.Button\n\nn4_\n\n\nProbe strong stub\nmain\n[24,1378][1056,1504]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached stub\nmain\n[24,1504][1056,1630]\nandroid.widget.Button\n\nn4_\n\n\nProbe GC\nmain\n[24,1630][1056,1756]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached receiver\nmain\n[24,1756][1056,1882]\nandroid.widget.Button\n\nn4_\n\n\nWeaken listeners\nmain\n[24,1882][1056,2008]\nandroid.widget.Button\n\nn4_\n\n\nSend SMS\nmain\n[24,2008][1056,2313]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/status\n\ndev.acos.fixtures.tailprobe:id/status\nREADY\nTELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"\nCALL state=IDLE number=null listener=1\nPROBEREG arm=strong registered=2\nPROBECALL arm=strong state=IDLE\nPROBEREG arm=detached registered=1\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=detached registered=2\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=detached registered=3\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=receiver registered\nPROBEGC strong=1 strong_stubs=1 detached=3 detached_listeners=0 detached_stubs=3\n\nmain\n[42,166][281,237]\nandroid.widget.TextView\n\nn4_\n\n\nTail Probe\nmain\ncompact view: visible text/content_desc nodes in reading order; full tree: /run/user/1000/binderref4/art-sessions/bindercb-stub/tree/9.json\n7d00abf\napplication\nmain\nTYPE_BASE_APPLICATION\n/run/user/1000/binderref4/art-sessions/bindercb-stub/tree/9.json\ntrusted\nbindercb-stub\npass"
+    },
+    {
+      "reply": {
+        "backend": "acos-native",
+        "capabilities_used": [],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "req_mcp",
+        "result": {
+          "animations": "on",
+          "attached": [
+            {
+              "id": "core",
+              "profile": "real"
+            },
+            {
+              "id": "net.telephony",
+              "profile": "scripted"
+            }
+          ],
+          "cmd": "services",
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "extra_apks": [],
+          "frame": {
+            "buffer_generation": 319,
+            "captured_at": "2026-11-17T17:49:55.225Z",
+            "frame_number": 319,
+            "frame_seq": 9,
+            "identity": "C1 buffer metadata (no pixel copy)",
+            "md5": "",
+            "pixels": false
+          },
+          "id": "net.telephony",
+          "insets": "report",
+          "last_frame_seq": 9,
+          "modules": [
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "real",
+              "id": "core",
+              "profile": "real",
+              "reason": null,
+              "state": "attached"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "accessibility",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.permissions",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.notifications",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "sensors",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "feedback.vibrator",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "location",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "scripted",
+              "id": "net.telephony",
+              "profile": "scripted",
+              "reason": "scripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 1 injected incoming SMS, 5 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)",
+              "state": "attached"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.bluetooth",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.biometric",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "off",
+              "id": "network",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "off",
+              "id": "webview",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.usb",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.dropbox",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.nfc",
+              "profile": "off",
+              "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.wallpaper",
+              "profile": "off",
+              "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.print",
+              "profile": "off",
+              "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.search",
+              "profile": "off",
+              "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.usage",
+              "profile": "off",
+              "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.dpm",
+              "profile": "off",
+              "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.role",
+              "profile": "off",
+              "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "geo.country",
+              "profile": "off",
+              "reason": "off: a detected country is a location claim ACOS cannot back",
+              "state": "off"
+            }
+          ],
+          "ok": true,
+          "op": "sms",
+          "session_id": "bindercb-stub",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "total_ms": 0
+          },
+          "trust": "trusted",
+          "value": {
+            "action": "android.provider.Telephony.SMS_RECEIVED",
+            "body": "binderref4 probe",
+            "from": "+15550003333",
+            "matched": 2,
+            "pdu": "00040b915155003033f300006211717194550010e2b49b5c96cbcb661a082e7f8bcb",
+            "pdu_bytes": 34
+          }
+        },
+        "session_id": "bindercb-stub",
+        "status": "pass"
+      },
+      "service_ctl": "sms"
+    },
+    {
+      "observe": "tree",
+      "ok": true,
+      "text": "acos-native\nui.tree\nart-reference\nreq_mcp\non\nart\nhost-observed\nguest-asserted\nguest-asserted\nhost-observed\nguest-asserted\nguest-asserted\n2026-11-17T17:50:02.279Z\nC1 buffer metadata (no pixel copy)\n\nreport\nat-launch\nreal\ncore\nreal\nattached\nhot\noff\naccessibility\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.permissions\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.notifications\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}\noff\nhot\noff\nsensors\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nfeedback.vibrator\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nlocation\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}\noff\nat-launch\nscripted\nnet.telephony\nscripted\nscripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 1 injected incoming SMS, 5 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)\nattached\nhot\noff\nhw.bluetooth\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nhw.biometric\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}\noff\nat-launch\noff\nnetwork\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}\noff\nat-launch\noff\nwebview\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}\noff\nhot\noff\nhw.usb\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}\noff\nhot\noff\nsystem.dropbox\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}\noff\nhot\noff\nhw.nfc\noff\noff: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)\noff\nhot\noff\nsystem.wallpaper\noff\noff: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)\noff\nhot\noff\nsystem.print\noff\noff: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent\noff\nhot\noff\nsystem.search\noff\noff: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider\noff\nhot\noff\nsystem.usage\noff\noff: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'\noff\nhot\noff\nsystem.dpm\noff\noff: no managed device or profile; every device-policy answer would be invented policy state\noff\nhot\noff\nsystem.role\noff\noff: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes\noff\nhot\noff\ngeo.country\noff\noff: a detected country is a location claim ACOS cannot back\noff\ndev.acos.fixtures.tailprobe\nbindercb-stub\nstrict-event\nmode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply\nstrict\nevent\nfirst_frame\ntotal_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb\n[24,299][1056,370]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/title\n\ndev.acos.fixtures.tailprobe:id/title\nTELEPHONY\nmain\n[24,370][1056,496]\nandroid.widget.Button\n\nn4_\n\n\nTelephony\nmain\n[24,496][1056,622]\nandroid.widget.Button\n\nn4_\n\n\nBiometric\nmain\n[24,622][1056,748]\nandroid.widget.Button\n\nn4_\n\n\nBluetooth\nmain\n[24,748][1056,874]\nandroid.widget.Button\n\nn4_\n\n\nVibrator\nmain\n[24,874][1056,1000]\nandroid.widget.Button\n\nn4_\n\n\nListen for calls\nmain\n[24,1000][1056,1126]\nandroid.widget.Button\n\nn4_\n\n\nStop listening\nmain\n[24,1126][1056,1252]\nandroid.widget.Button\n\nn4_\n\n\nReport callbacks\nmain\n[24,1252][1056,1378]\nandroid.widget.Button\n\nn4_\n\n\nProbe strong stub\nmain\n[24,1378][1056,1504]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached stub\nmain\n[24,1504][1056,1630]\nandroid.widget.Button\n\nn4_\n\n\nProbe GC\nmain\n[24,1630][1056,1756]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached receiver\nmain\n[24,1756][1056,1882]\nandroid.widget.Button\n\nn4_\n\n\nWeaken listeners\nmain\n[24,1882][1056,2008]\nandroid.widget.Button\n\nn4_\n\n\nSend SMS\nmain\n[24,2008][1056,2313]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/status\n\ndev.acos.fixtures.tailprobe:id/status\nREADY\nTELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"\nCALL state=IDLE number=null listener=1\nPROBEREG arm=strong registered=2\nPROBECALL arm=strong state=IDLE\nPROBEREG arm=detached registered=1\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=detached registered=2\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=detached registered=3\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=receiver registered\nPROBEGC strong=1 strong_stubs=1 detached=3 detached_listeners=0 detached_stubs=3\nSMS from=+15550003333 body=binderref4 probe\nPROBESMS detached receiver ran after GC\n\nmain\n[42,166][281,237]\nandroid.widget.TextView\n\nn4_\n\n\nTail Probe\nmain\ncompact view: visible text/content_desc nodes in reading order; full tree: /run/user/1000/binderref4/art-sessions/bindercb-stub/tree/10.json\n7d00abf\napplication\nmain\nTYPE_BASE_APPLICATION\n/run/user/1000/binderref4/art-sessions/bindercb-stub/tree/10.json\ntrusted\nbindercb-stub\npass"
+    },
+    {
+      "services_status": {
+        "backend": "acos-native",
+        "capabilities_used": [],
+        "error": {
+          "class": "harness",
+          "code": "INVALID_ARGUMENT",
+          "details": {
+            "field": "arguments",
+            "tool": "acos_services",
+            "unknown": [
+              "session_id"
+            ],
+            "valid": [
+              "args",
+              "base",
+              "config",
+              "ctl_op",
+              "id",
+              "op",
+              "profile"
+            ]
+          },
+          "hint": "Valid arguments for `acos_services`: `args`, `base`, `config`, `ctl_op`, `id`, `op`, `profile`. An unknown argument is rejected instead of ignored: a call that silently drops an argument looks like a success for work that never happened.",
+          "message": "unknown argument for `acos_services`: `session_id`",
+          "retryable": false
+        },
+        "fidelity": "static-analysis",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": false,
+        "request_id": "req_invalid_argument",
+        "status": "error"
+      }
+    },
+    {
+      "reply": {
+        "backend": "acos-native",
+        "capabilities_used": [],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "req_mcp",
+        "result": {
+          "animations": "on",
+          "attached": [
+            {
+              "id": "core",
+              "profile": "real"
+            },
+            {
+              "id": "net.telephony",
+              "profile": "scripted"
+            }
+          ],
+          "cmd": "services",
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "extra_apks": [],
+          "frame": {
+            "buffer_generation": 321,
+            "captured_at": "2026-11-17T17:50:02.279Z",
+            "frame_number": 321,
+            "frame_seq": 10,
+            "identity": "C1 buffer metadata (no pixel copy)",
+            "md5": "",
+            "pixels": false
+          },
+          "id": "net.telephony",
+          "insets": "report",
+          "last_frame_seq": 10,
+          "modules": [
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "real",
+              "id": "core",
+              "profile": "real",
+              "reason": null,
+              "state": "attached"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "accessibility",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.permissions",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.notifications",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "sensors",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "feedback.vibrator",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "location",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "scripted",
+              "id": "net.telephony",
+              "profile": "scripted",
+              "reason": "scripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 1 injected incoming SMS, 5 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)",
+              "state": "attached"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.bluetooth",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.biometric",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "off",
+              "id": "network",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "off",
+              "id": "webview",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.usb",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.dropbox",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.nfc",
+              "profile": "off",
+              "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.wallpaper",
+              "profile": "off",
+              "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.print",
+              "profile": "off",
+              "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.search",
+              "profile": "off",
+              "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.usage",
+              "profile": "off",
+              "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.dpm",
+              "profile": "off",
+              "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.role",
+              "profile": "off",
+              "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "geo.country",
+              "profile": "off",
+              "reason": "off: a detected country is a location claim ACOS cannot back",
+              "state": "off"
+            }
+          ],
+          "ok": true,
+          "op": "call_state",
+          "session_id": "bindercb-stub",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "total_ms": 0
+          },
+          "trust": "trusted",
+          "value": {
+            "call_state": 1,
+            "delivered": 5,
+            "incoming_number": "+15550002222"
+          }
+        },
+        "session_id": "bindercb-stub",
+        "status": "pass"
+      },
+      "service_ctl": true
+    },
+    {
+      "observe": "tree",
+      "ok": true,
+      "text": "acos-native\nui.tree\nart-reference\nreq_mcp\non\nart\nhost-observed\nguest-asserted\nguest-asserted\nhost-observed\nguest-asserted\nguest-asserted\n2026-11-17T17:50:03.324Z\nC1 buffer metadata (no pixel copy)\n\nreport\nat-launch\nreal\ncore\nreal\nattached\nhot\noff\naccessibility\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.permissions\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.notifications\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}\noff\nhot\noff\nsensors\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nfeedback.vibrator\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nlocation\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}\noff\nat-launch\nscripted\nnet.telephony\nscripted\nscripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 1 injected incoming SMS, 5 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)\nattached\nhot\noff\nhw.bluetooth\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nhw.biometric\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}\noff\nat-launch\noff\nnetwork\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}\noff\nat-launch\noff\nwebview\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}\noff\nhot\noff\nhw.usb\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}\noff\nhot\noff\nsystem.dropbox\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}\noff\nhot\noff\nhw.nfc\noff\noff: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)\noff\nhot\noff\nsystem.wallpaper\noff\noff: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)\noff\nhot\noff\nsystem.print\noff\noff: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent\noff\nhot\noff\nsystem.search\noff\noff: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider\noff\nhot\noff\nsystem.usage\noff\noff: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'\noff\nhot\noff\nsystem.dpm\noff\noff: no managed device or profile; every device-policy answer would be invented policy state\noff\nhot\noff\nsystem.role\noff\noff: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes\noff\nhot\noff\ngeo.country\noff\noff: a detected country is a location claim ACOS cannot back\noff\ndev.acos.fixtures.tailprobe\nbindercb-stub\nstrict-event\nmode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply\nstrict\nevent\nfirst_frame\ntotal_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb\n[24,299][1056,370]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/title\n\ndev.acos.fixtures.tailprobe:id/title\nTELEPHONY\nmain\n[24,370][1056,496]\nandroid.widget.Button\n\nn4_\n\n\nTelephony\nmain\n[24,496][1056,622]\nandroid.widget.Button\n\nn4_\n\n\nBiometric\nmain\n[24,622][1056,748]\nandroid.widget.Button\n\nn4_\n\n\nBluetooth\nmain\n[24,748][1056,874]\nandroid.widget.Button\n\nn4_\n\n\nVibrator\nmain\n[24,874][1056,1000]\nandroid.widget.Button\n\nn4_\n\n\nListen for calls\nmain\n[24,1000][1056,1126]\nandroid.widget.Button\n\nn4_\n\n\nStop listening\nmain\n[24,1126][1056,1252]\nandroid.widget.Button\n\nn4_\n\n\nReport callbacks\nmain\n[24,1252][1056,1378]\nandroid.widget.Button\n\nn4_\n\n\nProbe strong stub\nmain\n[24,1378][1056,1504]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached stub\nmain\n[24,1504][1056,1630]\nandroid.widget.Button\n\nn4_\n\n\nProbe GC\nmain\n[24,1630][1056,1756]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached receiver\nmain\n[24,1756][1056,1882]\nandroid.widget.Button\n\nn4_\n\n\nWeaken listeners\nmain\n[24,1882][1056,2008]\nandroid.widget.Button\n\nn4_\n\n\nSend SMS\nmain\n[24,2008][1056,2313]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/status\n\ndev.acos.fixtures.tailprobe:id/status\nREADY\nTELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"\nCALL state=IDLE number=null listener=1\nPROBEREG arm=strong registered=2\nPROBECALL arm=strong state=IDLE\nPROBEREG arm=detached registered=1\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=detached registered=2\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=detached registered=3\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=receiver registered\nPROBEGC strong=1 strong_stubs=1 detached=3 detached_listeners=0 detached_stubs=3\nSMS from=+15550003333 body=binderref4 probe\nPROBESMS detached receiver ran after GC\nCALL state=RINGING number=+15550002222 listener=1\nPROBECALL arm=strong state=RINGING\n\nmain\n[42,166][281,237]\nandroid.widget.TextView\n\nn4_\n\n\nTail Probe\nmain\ncompact view: visible text/content_desc nodes in reading order; full tree: /run/user/1000/binderref4/art-sessions/bindercb-stub/tree/11.json\n7d00abf\napplication\nmain\nTYPE_BASE_APPLICATION\n/run/user/1000/binderref4/art-sessions/bindercb-stub/tree/11.json\ntrusted\nbindercb-stub\npass"
+    },
+    {
+      "ok": true,
+      "tap": "Report callbacks"
+    },
+    {
+      "observe": "tree",
+      "ok": true,
+      "text": "acos-native\nui.tree\nart-reference\nreq_mcp\non\nart\nhost-observed\nguest-asserted\nguest-asserted\nhost-observed\nguest-asserted\nguest-asserted\n2026-11-17T17:50:05.304Z\nC1 buffer metadata (no pixel copy)\n\nreport\nat-launch\nreal\ncore\nreal\nattached\nhot\noff\naccessibility\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.permissions\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.notifications\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}\noff\nhot\noff\nsensors\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nfeedback.vibrator\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nlocation\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}\noff\nat-launch\nscripted\nnet.telephony\nscripted\nscripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 1 injected incoming SMS, 5 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)\nattached\nhot\noff\nhw.bluetooth\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nhw.biometric\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}\noff\nat-launch\noff\nnetwork\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}\noff\nat-launch\noff\nwebview\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}\noff\nhot\noff\nhw.usb\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}\noff\nhot\noff\nsystem.dropbox\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}\noff\nhot\noff\nhw.nfc\noff\noff: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)\noff\nhot\noff\nsystem.wallpaper\noff\noff: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)\noff\nhot\noff\nsystem.print\noff\noff: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent\noff\nhot\noff\nsystem.search\noff\noff: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider\noff\nhot\noff\nsystem.usage\noff\noff: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'\noff\nhot\noff\nsystem.dpm\noff\noff: no managed device or profile; every device-policy answer would be invented policy state\noff\nhot\noff\nsystem.role\noff\noff: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes\noff\nhot\noff\ngeo.country\noff\noff: a detected country is a location claim ACOS cannot back\noff\ndev.acos.fixtures.tailprobe\nbindercb-stub\nstrict-event\nmode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply\nstrict\nevent\nfirst_frame\ntotal_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb\n[24,299][1056,370]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/title\n\ndev.acos.fixtures.tailprobe:id/title\nTELEPHONY\nmain\n[24,370][1056,496]\nandroid.widget.Button\n\nn4_\n\n\nTelephony\nmain\n[24,496][1056,622]\nandroid.widget.Button\n\nn4_\n\n\nBiometric\nmain\n[24,622][1056,748]\nandroid.widget.Button\n\nn4_\n\n\nBluetooth\nmain\n[24,748][1056,874]\nandroid.widget.Button\n\nn4_\n\n\nVibrator\nmain\n[24,874][1056,1000]\nandroid.widget.Button\n\nn4_\n\n\nListen for calls\nmain\n[24,1000][1056,1126]\nandroid.widget.Button\n\nn4_\n\n\nStop listening\nmain\n[24,1126][1056,1252]\nandroid.widget.Button\n\nn4_\n\n\nReport callbacks\nmain\n[24,1252][1056,1378]\nandroid.widget.Button\n\nn4_\n\n\nProbe strong stub\nmain\n[24,1378][1056,1504]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached stub\nmain\n[24,1504][1056,1630]\nandroid.widget.Button\n\nn4_\n\n\nProbe GC\nmain\n[24,1630][1056,1756]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached receiver\nmain\n[24,1756][1056,1882]\nandroid.widget.Button\n\nn4_\n\n\nWeaken listeners\nmain\n[24,1882][1056,2008]\nandroid.widget.Button\n\nn4_\n\n\nSend SMS\nmain\n[24,2008][1056,2313]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/status\n\ndev.acos.fixtures.tailprobe:id/status\nREADY\nTELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"\nCALL state=IDLE number=null listener=1\nPROBEREG arm=strong registered=2\nPROBECALL arm=strong state=IDLE\nPROBEREG arm=detached registered=1\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=detached registered=2\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=detached registered=3\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=receiver registered\nPROBEGC strong=1 strong_stubs=1 detached=3 detached_listeners=0 detached_stubs=3\nSMS from=+15550003333 body=binderref4 probe\nPROBESMS detached receiver ran after GC\nCALL state=RINGING number=+15550002222 listener=1\nPROBECALL arm=strong state=RINGING\nCALLTOTAL state_lines=2 ringing=1 listeners=1 held=1 alive=1 stubs=0 probe_strong=1 probe_strong_calls=2 probe_strong_ringing=1 probe_detached=3 probe_detached_calls=3 probe_detached_listeners=0 probe_detached_stubs=3 probe_detached_ringing=0\n\nmain\n[42,166][281,237]\nandroid.widget.TextView\n\nn4_\n\n\nTail Probe\nmain\ncompact view: visible text/content_desc nodes in reading order; full tree: /run/user/1000/binderref4/art-sessions/bindercb-stub/tree/13.json\n7d00abf\napplication\nmain\nTYPE_BASE_APPLICATION\n/run/user/1000/binderref4/art-sessions/bindercb-stub/tree/13.json\ntrusted\nbindercb-stub\npass"
+    }
+  ],
+  "tree_text_after": "acos-native\nui.tree\nart-reference\nreq_mcp\non\nart\nhost-observed\nguest-asserted\nguest-asserted\nhost-observed\nguest-asserted\nguest-asserted\n2026-11-17T17:50:05.304Z\nC1 buffer metadata (no pixel copy)\n\nreport\nat-launch\nreal\ncore\nreal\nattached\nhot\noff\naccessibility\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.permissions\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.notifications\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}\noff\nhot\noff\nsensors\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nfeedback.vibrator\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nlocation\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}\noff\nat-launch\nscripted\nnet.telephony\nscripted\nscripted profile: scripted SIM/network/line-1 answers, 0 recorded outgoing SMS, 1 injected incoming SMS, 5 call-state listener(s); no radio, no real SMS transport; `getSimOperator*`/`getSimCountryIso` read guest system properties a module cannot set and stay \"\"; no `isub`, so binder calls arrive with subId=-1 and are answered by slot 0; at-launch only (the framework telephony initializer is installed before the app boots, as the phone process does); sent/delivery PendingIntents are recorded but never fired (no PendingIntent scheduler)\nattached\nhot\noff\nhw.bluetooth\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nhw.biometric\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}\noff\nat-launch\noff\nnetwork\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}\noff\nat-launch\noff\nwebview\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}\noff\nhot\noff\nhw.usb\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}\noff\nhot\noff\nsystem.dropbox\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}\noff\nhot\noff\nhw.nfc\noff\noff: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)\noff\nhot\noff\nsystem.wallpaper\noff\noff: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)\noff\nhot\noff\nsystem.print\noff\noff: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent\noff\nhot\noff\nsystem.search\noff\noff: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider\noff\nhot\noff\nsystem.usage\noff\noff: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'\noff\nhot\noff\nsystem.dpm\noff\noff: no managed device or profile; every device-policy answer would be invented policy state\noff\nhot\noff\nsystem.role\noff\noff: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes\noff\nhot\noff\ngeo.country\noff\noff: a detected country is a location claim ACOS cannot back\noff\ndev.acos.fixtures.tailprobe\nbindercb-stub\nstrict-event\nmode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply\nstrict\nevent\nfirst_frame\ntotal_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb\n[24,299][1056,370]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/title\n\ndev.acos.fixtures.tailprobe:id/title\nTELEPHONY\nmain\n[24,370][1056,496]\nandroid.widget.Button\n\nn4_\n\n\nTelephony\nmain\n[24,496][1056,622]\nandroid.widget.Button\n\nn4_\n\n\nBiometric\nmain\n[24,622][1056,748]\nandroid.widget.Button\n\nn4_\n\n\nBluetooth\nmain\n[24,748][1056,874]\nandroid.widget.Button\n\nn4_\n\n\nVibrator\nmain\n[24,874][1056,1000]\nandroid.widget.Button\n\nn4_\n\n\nListen for calls\nmain\n[24,1000][1056,1126]\nandroid.widget.Button\n\nn4_\n\n\nStop listening\nmain\n[24,1126][1056,1252]\nandroid.widget.Button\n\nn4_\n\n\nReport callbacks\nmain\n[24,1252][1056,1378]\nandroid.widget.Button\n\nn4_\n\n\nProbe strong stub\nmain\n[24,1378][1056,1504]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached stub\nmain\n[24,1504][1056,1630]\nandroid.widget.Button\n\nn4_\n\n\nProbe GC\nmain\n[24,1630][1056,1756]\nandroid.widget.Button\n\nn4_\n\n\nProbe detached receiver\nmain\n[24,1756][1056,1882]\nandroid.widget.Button\n\nn4_\n\n\nWeaken listeners\nmain\n[24,1882][1056,2008]\nandroid.widget.Button\n\nn4_\n\n\nSend SMS\nmain\n[24,2008][1056,2313]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/status\n\ndev.acos.fixtures.tailprobe:id/status\nREADY\nTELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\"\"\nCALL state=IDLE number=null listener=1\nPROBEREG arm=strong registered=2\nPROBECALL arm=strong state=IDLE\nPROBEREG arm=detached registered=1\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=detached registered=2\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=detached registered=3\nPROBECALL arm=detached state=IDLE\nPROBEREG arm=receiver registered\nPROBEGC strong=1 strong_stubs=1 detached=3 detached_listeners=0 detached_stubs=3\nSMS from=+15550003333 body=binderref4 probe\nPROBESMS detached receiver ran after GC\nCALL state=RINGING number=+15550002222 listener=1\nPROBECALL arm=strong state=RINGING\nCALLTOTAL state_lines=2 ringing=1 listeners=1 held=1 alive=1 stubs=0 probe_strong=1 probe_strong_calls=2 probe_strong_ringing=1 probe_detached=3 probe_detached_calls=3 probe_detached_listeners=0 probe_detached_stubs=3 probe_detached_ringing=0\n\nmain\n[42,166][281,237]\nandroid.widget.TextView\n\nn4_\n\n\nTail Probe\nmain\ncompact view: visible text/content_desc nodes in reading order; full tree: /run/user/1000/binderref4/art-sessions/bindercb-stub/tree/13.json\n7d00abf\napplication\nmain\nTYPE_BASE_APPLICATION\n/run/user/1000/binderref4/art-sessions/bindercb-stub/tree/13.json\ntrusted\nbindercb-stub\npass",
+  "verdict": "pass"
+}

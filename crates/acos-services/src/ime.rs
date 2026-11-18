@@ -181,6 +181,13 @@ pub struct ImeState {
     wms: Option<Arc<Mutex<crate::wms::WmsState>>>,
     /// The next synthetic session binder (never handed out by the null IME).
     next_session: u64,
+    /// The strong references the host holds on the registered clients: every
+    /// `addClient` stores an `IInputMethodClient` (and its
+    /// `IRemoteInputConnection`), which on Android is an `sp<IBinder>` each.
+    /// AOSP drops them when the client process dies; ACOS has no
+    /// `removeClient` in `IInputMethodManager`, so the peer's
+    /// process-teardown `release_all_refs` is the release path (`crate::refs`).
+    pub refs: crate::refs::GuestRefs,
     /// The registry the per-pair `InputChannel` token is allocated from. The
     /// ART transport attaches the session's own registry
     /// ([`ImeState::attach_binder_registry`]); a unit-test state allocates from
@@ -212,6 +219,7 @@ impl ImeState {
             session_bound: false,
             back_tracking: false,
             wms: None,
+            refs: crate::refs::GuestRefs::new(),
             next_session: 0x1_3e00,
             tokens: Arc::new(BinderRegistry::new()),
         }
@@ -292,9 +300,28 @@ impl ImeState {
             .iter_mut()
             .find(|c| c.binder.is_some() && c.binder == client)
         {
+            // Re-registering the same client updates it (AOSP's `ClientState`
+            // is keyed by the client binder); it is not a second reference.
+            if let Some(remote) = remote_connection {
+                if existing.remote_connection != remote_connection {
+                    if let Some(previous) = existing.remote_connection {
+                        self.refs.release(previous);
+                    }
+                    self.refs.hold(remote);
+                }
+            }
             existing.remote_connection = remote_connection;
             existing.user_id = user_id;
             return;
+        }
+        // The manager stores the client and its remote connection: one strong
+        // reference each, so the guest's nodes stay rooted while the client is
+        // registered.
+        if let Some(client) = client.filter(|id| !id.is_null()) {
+            self.refs.hold(client);
+        }
+        if let Some(remote) = remote_connection.filter(|id| !id.is_null()) {
+            self.refs.hold(remote);
         }
         self.clients.push(ImeClient {
             binder: client,
@@ -711,6 +738,18 @@ impl ServiceObject for ImeService {
             reply,
             deliveries: Vec::new(),
         })
+    }
+
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).refs.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).refs.release_all()
     }
 }
 

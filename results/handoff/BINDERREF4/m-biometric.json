@@ -1,0 +1,563 @@
+{
+  "ctl_reply": {
+    "backend": "acos-native",
+    "capabilities_used": [],
+    "fidelity": "art-reference",
+    "metrics": {
+      "wall_ms": 0
+    },
+    "ok": true,
+    "request_id": "req_mcp",
+    "result": {
+      "animations": "on",
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        },
+        {
+          "id": "hw.biometric",
+          "profile": "scripted"
+        }
+      ],
+      "cmd": "services",
+      "engine": "art",
+      "engine_frozen": false,
+      "evidence": {
+        "frame": "host-observed",
+        "input_acks": "guest-asserted",
+        "logs": "guest-asserted",
+        "state_change": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "evidence_label": "host-pixel",
+      "extra_apks": [],
+      "frame": {
+        "buffer_generation": 111,
+        "captured_at": "2026-11-17T17:51:04.490Z",
+        "frame_number": 111,
+        "frame_seq": 4,
+        "md5": "9ac7a3f129a2a3c894a3a72bfdc082bf"
+      },
+      "id": "hw.biometric",
+      "insets": "report",
+      "last_frame_seq": 4,
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "accessibility",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "scripted",
+          "id": "hw.biometric",
+          "profile": "scripted",
+          "reason": "scripted profile: scripted canAuthenticate and BiometricPrompt result (1 answered); no biometric hardware, no enrolment store, no `fingerprint` HAL binder; no prompt UI is shown (the window layer stack is not built), so a visible dialog is never claimed; CryptoObject operation ids are recorded, never unlocked",
+          "state": "attached"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "webview",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "op": "auth",
+      "session_id": "bindercb-biometric",
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "total_ms": 0
+      },
+      "trust": "trusted",
+      "value": {
+        "auth_id": 1,
+        "operation_id": 0,
+        "package": "dev.acos.fixtures.tailprobe",
+        "prompt_ui": "none \u2014 ACOS shows no biometric dialog (window layer stack gap)",
+        "result": "success"
+      }
+    },
+    "session_id": "bindercb-biometric",
+    "status": "pass"
+  },
+  "failures": [],
+  "idle_s": 3.0,
+  "mode": "biometric",
+  "steps": [
+    {
+      "error": null,
+      "launch": true,
+      "reached_stage": null,
+      "session_id": "bindercb-biometric"
+    },
+    {
+      "observe": "tree",
+      "ok": true,
+      "text": "acos-native\nui.tree\nart-reference\nreq_mcp\non\nart\nhost-observed\nguest-asserted\nguest-asserted\nhost-observed\nguest-asserted\nguest-asserted\n2026-11-17T17:51:02.122Z\nC1 buffer metadata (no pixel copy)\n\nreport\nat-launch\nreal\ncore\nreal\nattached\nhot\noff\naccessibility\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.permissions\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.notifications\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}\noff\nhot\noff\nsensors\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nfeedback.vibrator\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nlocation\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}\noff\nat-launch\noff\nnet.telephony\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nhw.bluetooth\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}\noff\nhot\nscripted\nhw.biometric\nscripted\nscripted profile: scripted canAuthenticate and BiometricPrompt result (0 answered); no biometric hardware, no enrolment store, no `fingerprint` HAL binder; no prompt UI is shown (the window layer stack is not built), so a visible dialog is never claimed; CryptoObject operation ids are recorded, never unlocked\nattached\nat-launch\noff\nnetwork\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}\noff\nat-launch\noff\nwebview\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}\noff\nhot\noff\nhw.usb\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}\noff\nhot\noff\nsystem.dropbox\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}\noff\nhot\noff\nhw.nfc\noff\noff: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)\noff\nhot\noff\nsystem.wallpaper\noff\noff: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)\noff\nhot\noff\nsystem.print\noff\noff: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent\noff\nhot\noff\nsystem.search\noff\noff: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider\noff\nhot\noff\nsystem.usage\noff\noff: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'\noff\nhot\noff\nsystem.dpm\noff\noff: no managed device or profile; every device-policy answer would be invented policy state\noff\nhot\noff\nsystem.role\noff\noff: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes\noff\nhot\noff\ngeo.country\noff\noff: a detected country is a location claim ACOS cannot back\noff\ndev.acos.fixtures.tailprobe\nbindercb-biometric\nstrict-event\nmode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply\nstrict\nevent\nfirst_frame\ntotal_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb\n[24,299][1056,370]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/title\n\ndev.acos.fixtures.tailprobe:id/title\nTELEPHONY\nmain\n[24,370][1056,496]\nandroid.widget.Button\n\nn4_\n\n\nTelephony\nmain\n[24,496][1056,622]\nandroid.widget.Button\n\nn4_\n\n\nBiometric\nmain\n[24,622][1056,748]\nandroid.widget.Button\n\nn4_\n\n\nBluetooth\nmain\n[24,748][1056,874]\nandroid.widget.Button\n\nn4_\n\n\nVibrator\nmain\n[24,874][1056,1054]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/status\n\ndev.acos.fixtures.tailprobe:id/status\nCALL unavailable=NullPointerException\nREADY\nTELEPHONY unavailable=NullPointerException\n\nmain\n[42,166][281,237]\nandroid.widget.TextView\n\nn4_\n\n\nTail Probe\nmain\ncompact view: visible text/content_desc nodes in reading order; full tree: /run/user/1000/binderref4/art-sessions/bindercb-biometric/tree/1.json\n7793ec6\napplication\nmain\nTYPE_BASE_APPLICATION\n/run/user/1000/binderref4/art-sessions/bindercb-biometric/tree/1.json\ntrusted\nbindercb-biometric\npass"
+    },
+    {
+      "ok": true,
+      "tap": "Biometric"
+    },
+    {
+      "ok": true,
+      "tap": "Authenticate"
+    },
+    {
+      "ok": true,
+      "tap": "Authenticate"
+    },
+    {
+      "reply": {
+        "backend": "acos-native",
+        "capabilities_used": [],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "req_mcp",
+        "result": {
+          "animations": "on",
+          "attached": [
+            {
+              "id": "core",
+              "profile": "real"
+            },
+            {
+              "id": "hw.biometric",
+              "profile": "scripted"
+            }
+          ],
+          "cmd": "services",
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "extra_apks": [],
+          "frame": {
+            "buffer_generation": 111,
+            "captured_at": "2026-11-17T17:51:04.490Z",
+            "frame_number": 111,
+            "frame_seq": 4,
+            "md5": "9ac7a3f129a2a3c894a3a72bfdc082bf"
+          },
+          "id": "hw.biometric",
+          "insets": "report",
+          "last_frame_seq": 4,
+          "modules": [
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "real",
+              "id": "core",
+              "profile": "real",
+              "reason": null,
+              "state": "attached"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "accessibility",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.permissions",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.notifications",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "sensors",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "feedback.vibrator",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "location",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "off",
+              "id": "net.telephony",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.bluetooth",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "scripted",
+              "id": "hw.biometric",
+              "profile": "scripted",
+              "reason": "scripted profile: scripted canAuthenticate and BiometricPrompt result (1 answered); no biometric hardware, no enrolment store, no `fingerprint` HAL binder; no prompt UI is shown (the window layer stack is not built), so a visible dialog is never claimed; CryptoObject operation ids are recorded, never unlocked",
+              "state": "attached"
+            },
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "off",
+              "id": "network",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "at-launch",
+              "details": null,
+              "fidelity": "off",
+              "id": "webview",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.usb",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.dropbox",
+              "profile": "off",
+              "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "hw.nfc",
+              "profile": "off",
+              "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.wallpaper",
+              "profile": "off",
+              "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.print",
+              "profile": "off",
+              "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.search",
+              "profile": "off",
+              "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.usage",
+              "profile": "off",
+              "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.dpm",
+              "profile": "off",
+              "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "system.role",
+              "profile": "off",
+              "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+              "state": "off"
+            },
+            {
+              "attach": "hot",
+              "details": null,
+              "fidelity": "off",
+              "id": "geo.country",
+              "profile": "off",
+              "reason": "off: a detected country is a location claim ACOS cannot back",
+              "state": "off"
+            }
+          ],
+          "ok": true,
+          "op": "auth",
+          "session_id": "bindercb-biometric",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "total_ms": 0
+          },
+          "trust": "trusted",
+          "value": {
+            "auth_id": 1,
+            "operation_id": 0,
+            "package": "dev.acos.fixtures.tailprobe",
+            "prompt_ui": "none \u2014 ACOS shows no biometric dialog (window layer stack gap)",
+            "result": "success"
+          }
+        },
+        "session_id": "bindercb-biometric",
+        "status": "pass"
+      },
+      "service_ctl": "auth"
+    },
+    {
+      "observe": "tree",
+      "ok": true,
+      "text": "acos-native\nui.tree\nart-reference\nreq_mcp\non\nart\nhost-observed\nguest-asserted\nguest-asserted\nhost-observed\nguest-asserted\nguest-asserted\n2026-11-17T17:51:09.034Z\nC1 buffer metadata (no pixel copy)\n\nreport\nat-launch\nreal\ncore\nreal\nattached\nhot\noff\naccessibility\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.permissions\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}\noff\nhot\noff\nsystem.notifications\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}\noff\nhot\noff\nsensors\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nfeedback.vibrator\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nlocation\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}\noff\nat-launch\noff\nnet.telephony\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}\noff\nhot\noff\nhw.bluetooth\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}\noff\nhot\nscripted\nhw.biometric\nscripted\nscripted profile: scripted canAuthenticate and BiometricPrompt result (1 answered); no biometric hardware, no enrolment store, no `fingerprint` HAL binder; no prompt UI is shown (the window layer stack is not built), so a visible dialog is never claimed; CryptoObject operation ids are recorded, never unlocked\nattached\nat-launch\noff\nnetwork\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}\noff\nat-launch\noff\nwebview\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}\noff\nhot\noff\nhw.usb\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}\noff\nhot\noff\nsystem.dropbox\noff\nmodule is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}\noff\nhot\noff\nhw.nfc\noff\noff: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)\noff\nhot\noff\nsystem.wallpaper\noff\noff: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)\noff\nhot\noff\nsystem.print\noff\noff: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent\noff\nhot\noff\nsystem.search\noff\noff: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider\noff\nhot\noff\nsystem.usage\noff\noff: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'\noff\nhot\noff\nsystem.dpm\noff\noff: no managed device or profile; every device-policy answer would be invented policy state\noff\nhot\noff\nsystem.role\noff\noff: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes\noff\nhot\noff\ngeo.country\noff\noff: a detected country is a location claim ACOS cannot back\noff\ndev.acos.fixtures.tailprobe\nbindercb-biometric\nstrict-event\nmode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply\nstrict\nevent\nfirst_frame\ntotal_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb\n[24,299][1056,370]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/title\n\ndev.acos.fixtures.tailprobe:id/title\nBIOMETRIC\nmain\n[24,370][1056,496]\nandroid.widget.Button\n\nn4_\n\n\nTelephony\nmain\n[24,496][1056,622]\nandroid.widget.Button\n\nn4_\n\n\nBiometric\nmain\n[24,622][1056,748]\nandroid.widget.Button\n\nn4_\n\n\nBluetooth\nmain\n[24,748][1056,874]\nandroid.widget.Button\n\nn4_\n\n\nVibrator\nmain\n[24,874][1056,1000]\nandroid.widget.Button\n\nn4_\n\n\nAuthenticate\nmain\n[24,1000][1056,1309]\nandroid.widget.TextView\n\nn4_dev.acos.fixtures.tailprobe:id/status\n\ndev.acos.fixtures.tailprobe:id/status\nCALL unavailable=NullPointerException\nREADY\nTELEPHONY unavailable=NullPointerException\nBIOMETRIC canAuthenticate=SUCCESS\nAUTH:REQUESTED\nAUTH:SUCCESS type=2\n\nmain\n[42,166][281,237]\nandroid.widget.TextView\n\nn4_\n\n\nTail Probe\nmain\ncompact view: visible text/content_desc nodes in reading order; full tree: /run/user/1000/binderref4/art-sessions/bindercb-biometric/tree/5.json\n7793ec6\napplication\nmain\nTYPE_BASE_APPLICATION\n/run/user/1000/binderref4/art-sessions/bindercb-biometric/tree/5.json\ntrusted\nbindercb-biometric\npass"
+    }
+  ],
+  "verdict": "pass"
+}
