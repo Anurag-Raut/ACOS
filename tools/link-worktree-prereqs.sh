@@ -11,7 +11,7 @@
 #
 #   boot/android-34  art  gaten  qemu-user  bionic-arm64  flutter-1  corpus
 #
-# and builds the seccomp guard (`.cache/arm64-guard/libacos_seccomp_guard.so`)
+# plus libexec/pasta (the pinned transport), and builds the seccomp guard (`.cache/arm64-guard/libacos_seccomp_guard.so`)
 # with tools/build-arm64-guard.sh when it is missing. The guard is built per
 # worktree because it is not in the shared cache.
 #
@@ -46,6 +46,21 @@ for name in boot/android-34 art gaten qemu-user bionic-arm64 flutter-1 corpus; d
     status=1
   fi
 done
+
+# The pinned pasta (ADR-0030) is part of the product: acos_netd_ctl::pasta looks
+# at `<checkout>/libexec/pasta` (docs/INSTALL.md). `/libexec/` is git-ignored, so
+# a worktree gets it as a link to the shared pinned build, with nothing set by
+# hand (spike_net_boundary then finds it through the product's own lookup).
+pasta_src="$SHARED/pasta-pinned/pasta"
+pasta_dst="$ROOT/libexec/pasta"
+if [ ! -e "$pasta_dst" ]; then
+  if [ -x "$pasta_src" ]; then
+    mkdir -p "$ROOT/libexec" && ln -sfn "$pasta_src" "$pasta_dst"
+  else
+    echo "link-worktree-prereqs: shared $pasta_src is missing (spike_net_boundary will fail with its remedy)" >&2
+    status=1
+  fi
+fi
 
 guard="$ROOT/.cache/arm64-guard/libacos_seccomp_guard.so"
 if [ ! -s "$guard" ]; then
