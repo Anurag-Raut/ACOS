@@ -1,0 +1,35 @@
+pasta pasta 2026_10_02.cba3570
+metro up pid=413972 port=8081 project=/home/Qui/.t3/worktrees/acos/t3-ea71880d-458fe2ef5a654efb/.cache/metro2b/app2
+host_bundle http=200 bytes=4937720
+netd_up rc=0 pasta="pasta_version": "2026_10_02.cba3570"
+hostport_add rc=0 {  "up": true,  "supervisor": {    "pid": 415572,    "exe": "/home/Qui/.t3/worktrees/acos/t3-ea71880d-458fe2ef5a654efb/.cache/metro2b-target/release/acos-netd",    "build_id": "df73214a1d975aac",    "
+launch rc=0 stage=pass
+session=s_cli
+text_found 'Hello ACOS' after 0s (observe-before.json)
+26:    React.createElement(Text, { style: styles.title, testID: 'hello-text' }, 'Hello Metro (reloaded)'),
+reload http=200
+reload_body=OK
+TIMEOUT 'Hello Metro' after 90s
+host_bundle_after_edit served=NEW_TEXT (the server is right; the guest did not re-render it)
+metro_bundle_requests=7 packager_connects=1 packager_closes=0
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager", "message": "Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager", "priority": "W", "repeat_co
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewShadowNode", "message": "Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewShadowNode", "priority": "W", "rep
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager", "message": "Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager", "priority": "W", "repeat_
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageViewManager", "message": "Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInli
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageShadowNode", "message": "Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlin
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.image.ReactImageManager", "message": "Could not find generated setter for class com.facebook.react.views.image.ReactImageManager", "priority": "W", "repeat_count": 1, "seq": 195, "tag": 
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager", "message": "Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager", "priority": "W", "repeat_count": 1, "seq": 196,
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager", "message": "Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager", "priority": "W", "repeat_count": 1, "seq": 197, "tag"
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.text.ReactRawTextShadowNode", "message": "Could not find generated setter for class com.facebook.react.views.text.ReactRawTextShadowNode", "priority": "W", "repeat_count": 1, "seq": 198,
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager", "message": "Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager", "priority": "W", "repeat_count": 1, "se
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputShadowNode", "message": "Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputShadowNode", "priority": "W", "repeat_count": 
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager", "message": "Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager", "priority": "W", "repeat_count": 1, "seq": 201, "ta
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.text.ReactTextShadowNode", "message": "Could not find generated setter for class com.facebook.react.views.text.ReactTextShadowNode", "priority": "W", "repeat_count": 1, "seq": 202, "tag"
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.view.ReactViewManager", "message": "Could not find generated setter for class com.facebook.react.views.view.ReactViewManager", "priority": "W", "repeat_count": 1, "seq": 203, "tag": "unk
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager", "message": "Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager", "priority": "W", "repeat_count": 1, "
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextShadowNode", "message": "Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextShadowNode", "priority": "W", "repeat_count": 1, "se
+{"line": "W unknown:ViewManagerPropertyUpdater Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager", "message": "Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager", "priori
+{"line": "W unknown:ReactNative CatalystInstanceImpl.destroy() end", "message": "CatalystInstanceImpl.destroy() end", "priority": "W", "repeat_count": 1, "seq": 207, "tag": "unknown:ReactNative"}
+{"line": "W unknown:ReactNative Tried to enqueue runnable on already finished thread: 'js... dropping Runnable.", "message": "Tried to enqueue runnable on already finished thread: 'js... dropping Runnable.", "priority": "W", "repeat_count": 1, "seq": 208, "tag": "unknown:ReactNative"}
+{"line": "W ReactNativeJS The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For more information, please see https://reactnative.dev/blog/2024/10/23/the-n
+RESULT metro1=FAIL stage=reload

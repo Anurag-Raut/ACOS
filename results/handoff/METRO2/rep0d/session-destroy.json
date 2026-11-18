@@ -1,0 +1,37 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [],
+  "fidelity": "art-reference",
+  "metrics": {
+    "wall_ms": 0
+  },
+  "ok": true,
+  "request_id": "req_87843_18e91847db546c2f",
+  "result": {
+    "already_absent": false,
+    "destroyed": true,
+    "engine": "art",
+    "engine_frozen": false,
+    "evidence": {
+      "frame": "host-observed",
+      "input_acks": "guest-asserted",
+      "logs": "guest-asserted",
+      "state_change": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "evidence_label": "none",
+    "session_id": "s_cli",
+    "teardown": {
+      "lifecycle": "lifecycle",
+      "process_group": 536517,
+      "session_leftovers": [],
+      "session_leftovers_reaped": true,
+      "survivors": [],
+      "teardown_ms": 267,
+      "verified": true
+    },
+    "trust": "trusted"
+  },
+  "session_id": "s_cli",
+  "status": "pass"
+}

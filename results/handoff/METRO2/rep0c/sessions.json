@@ -1,0 +1,44 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [],
+  "fidelity": "native-runtime",
+  "metrics": {
+    "wall_ms": 0
+  },
+  "ok": true,
+  "request_id": "req_7dab0_18e91816a52b8107",
+  "result": {
+    "count": 1,
+    "engine": "art",
+    "sessions": [
+      {
+        "activity": "dev.acos.fixtures.rnhello.MainActivity",
+        "age_s": 0,
+        "apk": "/home/Qui/.t3/worktrees/acos/t3-ea71880d-458fe2ef5a654efb/fixtures/build/apps/rn-debug.apk",
+        "boot_image": {
+          "base": "0x70000000",
+          "cache": "hit",
+          "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff",
+          "input_hash": "ff39b037f1d6b9ff",
+          "mode": "shared-fixed"
+        },
+        "engine": "art",
+        "frame_seq": 1,
+        "guest_exit": null,
+        "guest_pid": 513375,
+        "guest_rss_kb": 3160,
+        "label": "metro1",
+        "launched": true,
+        "live": true,
+        "mode": "live",
+        "native": true,
+        "package": "dev.acos.fixtures.rnhello",
+        "session_id": "s_cli",
+        "session_token": "5ae95ee5183efc98",
+        "stage_reached": "first_frame",
+        "trust": "trusted"
+      }
+    ]
+  },
+  "status": "pass"
+}

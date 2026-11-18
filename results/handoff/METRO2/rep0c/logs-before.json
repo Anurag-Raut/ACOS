@@ -1,0 +1,328 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "logs"
+  ],
+  "fidelity": "art-reference",
+  "metrics": {
+    "wall_ms": 0
+  },
+  "ok": true,
+  "request_id": "req_813e1_18e9182be1e9e552",
+  "result": {
+    "animations": "on",
+    "collapsed": 0,
+    "count": 128,
+    "crash": null,
+    "engine": "art",
+    "engine_frozen": false,
+    "evidence": {
+      "frame": "host-observed",
+      "input_acks": "guest-asserted",
+      "logs": "guest-asserted",
+      "state_change": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "evidence_label": "host-pixel",
+    "extra_apks": [],
+    "filter": {
+      "default_view": true,
+      "dropped": 66,
+      "min_priority": "W",
+      "note": "default view: priority >= W plus records naming the app package; pass \"all\": true (or min_priority \"V\") for the whole buffer",
+      "package": "dev.acos.fixtures.rnhello"
+    },
+    "frame": {
+      "buffer_generation": 11,
+      "captured_at": "2026-11-18T09:01:43.227Z",
+      "frame_number": 2,
+      "frame_seq": 76,
+      "identity": "C1 buffer metadata (no pixel copy)",
+      "md5": "",
+      "pixels": false
+    },
+    "insets": "report",
+    "last_frame_seq": 76,
+    "launched": true,
+    "log_path": "/home/Qui/.t3/worktrees/acos/t3-ea71880d-458fe2ef5a654efb/.cache/metro2b/rt/art-sessions/s_cli/logs/logcat.txt",
+    "logs": [
+      {
+        "line": "E SoLoader No libraries missing from /data/app-lib/x86_64",
+        "message": "No libraries missing from /data/app-lib/x86_64",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 187,
+        "tag": "SoLoader"
+      },
+      {
+        "line": "E SoLoader Checking /data/data missing libraries.",
+        "message": "Checking /data/data missing libraries.",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 188,
+        "tag": "SoLoader"
+      },
+      {
+        "line": "E SoLoader No libraries missing from unpacking so paths while recovering /data/data failure",
+        "message": "No libraries missing from unpacking so paths while recovering /data/data failure",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 189,
+        "tag": "SoLoader"
+      },
+      {
+        "line": "E SoLoader Waiting on SoSource BackupSoSource",
+        "message": "Waiting on SoSource BackupSoSource",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 190,
+        "tag": "SoLoader"
+      },
+      {
+        "line": "W SysUtil  error removing /data/app-data/dev.acos.fixtures.rnhello/lib-main write permission",
+        "message": "error removing /data/app-data/dev.acos.fixtures.rnhello/lib-main write permission",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 191,
+        "tag": "SysUtil"
+      },
+      {
+        "line": "E fb-UnpackingSoSource Encountered exception during wait for unpacking trying to acquire file lock for com.facebook.soloader.BackupSoSource (/data/app-data/dev.acos.fixtures.rnhello/lib-main): \njava.io.FileNotFoundException: /data/app-data/dev.acos.fixtures.rnhello/lib-main/dso_lock: open failed: ENOENT (No such file or directory)\n\tat libcore.io.IoBridge.open(IoBridge.java:574)\n\tat java.io.FileOutputStream.<init>(FileOutputStream.java:236)\n\tat java.io.FileOutputStream.<init>(FileOutputStream.java:186)\n\tat com.facebook.soloader.FileLocker.<init>(FileLocker.java:36)\n\tat com.facebook.soloader.FileLocker.lock(FileLocker.java:32)\n\tat com.facebook.soloader.SysUtil.getFileLocker(SysUtil.java:462)\n\tat com.facebook.soloader.SysUtil.getOrCreateLockOnDir(SysUtil.java:447)\n\tat com.facebook.soloader.UnpackingSoSource.waitUntilInitCompleted(UnpackingSoSource.java:401)\n\tat com.facebook.soloader.recovery.WaitForAsyncInit.recover(WaitForAsyncInit.java:31)\n\tat com.facebook.soloader.recovery.CompositeRecoveryStrategy.recover(CompositeRecoveryStrategy.java:34)\n\tat com.facebook.soloader.SoLoader.recoverLocked(SoLoader.java:993)\n\tat com.facebook.soloader.SoLoader.recover(SoLoader.java:963)\n\tat com.facebook.soloader.SoLoader.loadLibraryBySoName(SoLoader.java:945)\n\tat com.facebook.soloader.SoLoader.loadLibraryOnAndroid(SoLoader.java:859)\n\tat com.facebook.soloader.SoLoader.loadLibrary(SoLoader.java:842)\n\tat com.facebook.soloader.NativeLoaderToSoLoaderDelegate.loadLibrary(NativeLoaderToSoLoaderDelegate.java:29)\n\tat com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:52)\n\tat com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:30)\n\tat com.facebook.imagepipeline.memory.NativeMemoryChunk.<clinit>(NativeMemoryChunk.java:33)\n\tat com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:31)\n\tat com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:16)\n\tat com.facebook.imagepipeline.memory.BasePool.get(BasePool.java:256)\n\tat com.facebook.imagepipeline.memory.MemoryPooledByteBufferOutputStream.<init>(MemoryPooledByteBufferOutputStream.kt:39)\n\tat com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:98)\n\tat com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:23)\n\tat com.facebook.imagepipeline.producers.NetworkFetchProducer.onResponse(NetworkFetchProducer.java:98)\n\tat com.facebook.imagepipeline.producers.NetworkFetchProd",
+        "message": "Encountered exception during wait for unpacking trying to acquire file lock for com.facebook.soloader.BackupSoSource (/data/app-data/dev.acos.fixtures.rnhello/lib-main): \njava.io.FileNotFoundException: /data/app-data/dev.acos.fixtures.rnhello/lib-main/dso_lock: open failed: ENOENT (No such file or directory)\n\tat libcore.io.IoBridge.open(IoBridge.java:574)\n\tat java.io.FileOutputStream.<init>(FileOutputStream.java:236)\n\tat java.io.FileOutputStream.<init>(FileOutputStream.java:186)\n\tat com.facebook.soloader.FileLocker.<init>(FileLocker.java:36)\n\tat com.facebook.soloader.FileLocker.lock(FileLocker.java:32)\n\tat com.facebook.soloader.SysUtil.getFileLocker(SysUtil.java:462)\n\tat com.facebook.soloader.SysUtil.getOrCreateLockOnDir(SysUtil.java:447)\n\tat com.facebook.soloader.UnpackingSoSource.waitUntilInitCompleted(UnpackingSoSource.java:401)\n\tat com.facebook.soloader.recovery.WaitForAsyncInit.recover(WaitForAsyncInit.java:31)\n\tat com.facebook.soloader.recovery.CompositeRecoveryStrategy.recover(CompositeRecoveryStrategy.java:34)\n\tat com.facebook.soloader.SoLoader.recoverLocked(SoLoader.java:993)\n\tat com.facebook.soloader.SoLoader.recover(SoLoader.java:963)\n\tat com.facebook.soloader.SoLoader.loadLibraryBySoName(SoLoader.java:945)\n\tat com.facebook.soloader.SoLoader.loadLibraryOnAndroid(SoLoader.java:859)\n\tat com.facebook.soloader.SoLoader.loadLibrary(SoLoader.java:842)\n\tat com.facebook.soloader.NativeLoaderToSoLoaderDelegate.loadLibrary(NativeLoaderToSoLoaderDelegate.java:29)\n\tat com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:52)\n\tat com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:30)\n\tat com.facebook.imagepipeline.memory.NativeMemoryChunk.<clinit>(NativeMemoryChunk.java:33)\n\tat com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:31)\n\tat com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:16)\n\tat com.facebook.imagepipeline.memory.BasePool.get(BasePool.java:256)\n\tat com.facebook.imagepipeline.memory.MemoryPooledByteBufferOutputStream.<init>(MemoryPooledByteBufferOutputStream.kt:39)\n\tat com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:98)\n\tat com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:23)\n\tat com.facebook.imagepipeline.producers.NetworkFetchProducer.onResponse(NetworkFetchProducer.java:98)\n\tat com.facebook.imagepipeline.producers.NetworkFetchProd",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 192,
+        "tag": "fb-UnpackingSoSource"
+      },
+      {
+        "line": "W SoLoader Running a recovery step for libimagepipeline.so due to com.facebook.soloader.SoLoaderDSONotFoundError: couldn't find DSO to load: libimagepipeline.so\n\texisting SO sources: \n\t\tSoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]\n\t\tSoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]\n\t\tSoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]\n\t\tSoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]\n\tNative lib dir: /data/app-lib/x86_64\n",
+        "message": "Running a recovery step for libimagepipeline.so due to com.facebook.soloader.SoLoaderDSONotFoundError: couldn't find DSO to load: libimagepipeline.so\n\texisting SO sources: \n\t\tSoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]\n\t\tSoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]\n\t\tSoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]\n\t\tSoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]\n\tNative lib dir: /data/app-lib/x86_64\n",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 193,
+        "tag": "SoLoader"
+      },
+      {
+        "line": "W SoLoader Failed to recover",
+        "message": "Failed to recover",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 194,
+        "tag": "SoLoader"
+      }
+    ],
+    "logs_returned": 8,
+    "logs_truncated": true,
+    "modules": [
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "accessibility",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.permissions",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.notifications",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "sensors",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "feedback.vibrator",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "location",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "net.telephony",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.bluetooth",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.biometric",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "real",
+        "id": "network",
+        "profile": "real",
+        "reason": "real internet through the acos-netd relay; relay session acos-s_cli",
+        "state": "attached"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "webview",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.usb",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.dropbox",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.nfc",
+        "profile": "off",
+        "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.wallpaper",
+        "profile": "off",
+        "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.print",
+        "profile": "off",
+        "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.search",
+        "profile": "off",
+        "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.usage",
+        "profile": "off",
+        "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.dpm",
+        "profile": "off",
+        "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.role",
+        "profile": "off",
+        "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "geo.country",
+        "profile": "off",
+        "reason": "off: a detected country is a location claim ACOS cannot back",
+        "state": "off"
+      }
+    ],
+    "note": "",
+    "session_id": "s_cli",
+    "stage_reached": "first_frame",
+    "timing": {
+      "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+      "total_ms": 0
+    },
+    "total": 194,
+    "trust": "trusted"
+  },
+  "session_id": "s_cli",
+  "status": "pass"
+}

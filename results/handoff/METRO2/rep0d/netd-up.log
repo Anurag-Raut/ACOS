@@ -1,0 +1,19 @@
+{
+  "up": true,
+  "supervisor": {
+    "pid": 535973,
+    "exe": "/home/Qui/.t3/worktrees/acos/t3-ea71880d-458fe2ef5a654efb/.cache/metro2b-target/release/acos-netd",
+    "build_id": "df73214a1d975aac",
+    "version": "0.3.0",
+    "started_ms": 1794992530193
+  },
+  "fabric_pid": 536050,
+  "pasta_pid": 536097,
+  "pasta_version": "2026_10_02.cba3570",
+  "pasta_tag_expected": "2026_10_02.cba3570",
+  "host_ports": [],
+  "sessions": [],
+  "relay_veths": [],
+  "session_rules": 0,
+  "attach_ms_last": null
+}
