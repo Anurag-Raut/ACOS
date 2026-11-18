@@ -221,6 +221,36 @@ fn fixture_scenarios_contain_the_art_reference_strings() {
     }
 }
 
+/// LAUNCHEXTRAS: `activity` (the component) and `intent_action` (the Intent's
+/// action) are independent — a scenario declares both to assert what the app's
+/// `getIntent()` received — and every supported extra type parses.
+#[test]
+fn a_launch_with_an_action_data_and_typed_extras_is_valid() {
+    let yaml = VALID.replace(
+        "  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity, clear_state: true}",
+        "  - launch:\n      activity: .MainActivity\n      intent_action: dev.acos.test.ACTION\n      data: acos://x/y\n      extras:\n        s: hello\n        i: 42\n        l: 5000000000\n        b: true\n        d: 0.25\n        f: {type: float, value: 1.5}\n        a: [x, y]\n        p: {type: parcelable, value: android.os.Bundle}",
+    );
+    let scenario = Scenario::from_yaml_str(&yaml).expect("a launch with an Intent parses");
+    assert!(scenario.validate().is_ok(), "{:?}", scenario.validate().errors);
+    let launch = scenario.steps[0].launch.as_ref().expect("launch step");
+    assert_eq!(launch.intent_action.as_deref(), Some("dev.acos.test.ACTION"));
+    assert_eq!(launch.data.as_deref(), Some("acos://x/y"));
+    assert_eq!(
+        launch.extras.get("l"),
+        Some(&acos_protocol::ExtraValue::Long(5_000_000_000))
+    );
+    assert_eq!(
+        launch.extras.get("f"),
+        Some(&acos_protocol::ExtraValue::Float(1.5))
+    );
+    assert_eq!(
+        launch.extras.get("p"),
+        Some(&acos_protocol::ExtraValue::Parcelable(
+            "android.os.Bundle".to_string()
+        ))
+    );
+}
+
 #[test]
 fn valid_scenario_has_no_errors_and_warns_on_optional_step() {
     assert!(valid().validate().is_ok());
@@ -310,11 +340,11 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
         }),
     ));
     cases.push(step_error(
-        "launch-both",
+        "launch-idle-kill-range",
         one(Step {
             launch: Some(LaunchStep {
                 activity: Some(".A".to_string()),
-                intent_action: Some("android.intent.action.MAIN".to_string()),
+                idle_kill_seconds: Some(86_401),
                 ..LaunchStep::default()
             }),
             ..Step::default()

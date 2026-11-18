@@ -281,7 +281,8 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # permissioncontroller + perm-probe (SYSUI1), systemui (SYSUI2).
 for app in counter todo-list multi-activity finish-start form-validation settle-lab \
            thread-heavy svg-viewbox offscreen-pager looper-wake sensor-probe \
-           notif-perm-probe permissioncontroller perm-probe systemui; do
+           notif-perm-probe permissioncontroller perm-probe systemui \
+           launch-extras-probe; do
     build_apk "$app"
 done
 

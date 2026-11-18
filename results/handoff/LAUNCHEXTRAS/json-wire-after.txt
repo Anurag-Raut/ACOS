@@ -1,0 +1,4 @@
+# AFTER the fix (explicit {type, value} for long/float):
+test launch::tests::the_cli_extra_spelling_is_json_first_then_a_bare_string ... ok
+test launch::tests::the_json_wire_keeps_the_two_types_inference_cannot_recover ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 94 filtered out; finished in 0.00s

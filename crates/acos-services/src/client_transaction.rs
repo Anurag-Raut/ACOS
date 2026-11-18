@@ -80,6 +80,9 @@ pub const CONFIGURATION: &str = "android.content.res.Configuration";
 pub const PROCESS_STATE_TOP: i32 = 2;
 /// `Intent.mContentUserHint` default (`UserHandle.USER_CURRENT`).
 const USER_CURRENT: i32 = -2;
+/// `Intent.FLAG_ACTIVITY_NEW_TASK` — the flag the ACOS launcher's own
+/// `ACTION_MAIN` launch carries (and therefore every host-built launch Intent).
+pub const FLAG_ACTIVITY_NEW_TASK: i32 = 0x1000_0000;
 /// `ActivityInfo.FLAG_HARDWARE_ACCELERATED` — the API default for an app with
 /// `targetSdk >= 14`.
 pub const FLAG_HARDWARE_ACCELERATED: i32 = 0x0000_0200;
@@ -179,11 +182,10 @@ pub fn intent(facts: &IntentFacts) -> Result<Parcelable> {
 
 /// A bare `android.content.Intent` payload in `Intent.writeToParcel` order.
 ///
-/// `data` (`mData`) is a `Uri`: the image declares its writer only as the
-/// **static** `Uri.writeToParcel(Parcel, Uri)`, whose body its dex does not
-/// pin, so a non-null data Uri is refused rather than guessed. `mSelector`,
-/// `mClipData` and `mOriginalIntent` are null on the launch path (ATMS sends a
-/// plain intent) and are written as the null encodings.
+/// `mData` is null here (the AMS-recorded intents this builds carry none);
+/// [`intent_payload_with_data`] is the same encoder for a launch Intent that
+/// does. `mSelector`, `mClipData` and `mOriginalIntent` are null on the launch
+/// path (ATMS sends a plain intent) and are written as the null encodings.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
 pub fn intent_payload(
@@ -195,11 +197,35 @@ pub fn intent_payload(
     categories: &[String],
     extras: Option<Bundle>,
 ) -> Parcelable {
+    intent_payload_with_data(
+        action, None, mime_type, flags, package, component, categories, extras,
+    )
+}
+
+/// The same `Intent` payload with a data URI (`mData`).
+///
+/// The image's `Uri` wire form is pinned by the framework dex: `Uri.parse`
+/// always builds a `StringUri`, whose `writeToParcel` writes the type tag `1`
+/// and `writeString8(uriString)` (see [`crate::parcelable::write_intent`]); a
+/// null Uri is `writeInt(0)`. The bytes are compared against real Java by
+/// `crates/acos-runtime/tests/client_transaction_java.rs`.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn intent_payload_with_data(
+    action: Option<&str>,
+    data: Option<&str>,
+    mime_type: Option<&str>,
+    flags: i32,
+    package: Option<&str>,
+    component: Option<(&str, &str)>,
+    categories: &[String],
+    extras: Option<Bundle>,
+) -> Parcelable {
     Parcelable::ordered(
         INTENT,
         vec![
             Value::Str8(action.map(str::to_string)),
-            Value::Str(None), // mData (Uri): null on the launch path
+            Value::Str(data.map(str::to_string)), // mData (Uri)
             Value::Str8(mime_type.map(str::to_string)),
             Value::Str8(None), // mIdentifier
             Value::Int(flags),
@@ -223,6 +249,94 @@ pub fn intent_payload(
             Value::Parcelable(Parcelable::Null), // mOriginalIntent
         ],
     )
+}
+
+/// The `Intent` a host-built `LaunchActivityItem` carries at session start.
+///
+/// ADR-0029 amendment (the host builds launch transactions): the launcher
+/// resolves the manifest's launcher component and the host writes the Intent,
+/// so a caller's `intent_action`, `data` and typed `extras` reach the activity's
+/// real `getIntent()` unchanged. The shape is the launcher's stock one:
+///
+/// * action: the caller's, else `android.intent.action.MAIN`;
+/// * category `android.intent.category.LAUNCHER` only for the stock launch
+///   (an explicit action is the caller's own Intent, so ACOS adds no category);
+/// * component = the launched package + the manifest launcher class;
+/// * flags = `FLAG_ACTIVITY_NEW_TASK` (the launcher's own behaviour);
+/// * data = `Uri.parse(value)` (a `StringUri`, the image's parse result);
+/// * extras = `Bundle` in ArrayMap (java-hash) order, one typed value each.
+///
+/// A `Parcelable` extra is a structured [`ServiceError::UnsupportedParcelable`]:
+/// it needs the app's class loader and a payload a caller cannot send.
+///
+/// # Errors
+/// A `Parcelable` extra (by name), or a value the codec cannot represent.
+pub fn launch_intent(
+    package: &str,
+    activity: &str,
+    intent: &acos_protocol::LaunchIntent,
+) -> Result<Parcelable> {
+    let mut bundle = Bundle::new();
+    for (key, extra) in &intent.extras {
+        let value = match extra {
+            acos_protocol::ExtraValue::String(value) => Value::Str(Some(value.clone())),
+            acos_protocol::ExtraValue::Int(value) => Value::Int(*value),
+            acos_protocol::ExtraValue::Long(value) => Value::Long(*value),
+            acos_protocol::ExtraValue::Float(value) => Value::Float(*value),
+            acos_protocol::ExtraValue::Double(value) => Value::Double(*value),
+            acos_protocol::ExtraValue::Boolean(value) => Value::Bool(*value),
+            acos_protocol::ExtraValue::StringArray(values) => {
+                Value::StringArray(Some(values.iter().cloned().map(Some).collect()))
+            }
+            acos_protocol::ExtraValue::Parcelable(class) => {
+                return Err(ServiceError::UnsupportedParcelable {
+                    class: format!("intent extra `{key}`: Parcelable {class}"),
+                })
+            }
+        };
+        bundle.put(key.clone(), value);
+    }
+    let stock = intent.action.is_none();
+    let action = intent
+        .action
+        .as_deref()
+        .unwrap_or("android.intent.action.MAIN");
+    let categories = if stock {
+        vec!["android.intent.category.LAUNCHER".to_string()]
+    } else {
+        Vec::new()
+    };
+    Ok(intent_payload_with_data(
+        Some(action),
+        intent.data.as_deref(),
+        None,
+        FLAG_ACTIVITY_NEW_TASK,
+        None,
+        Some((package, activity)),
+        &categories,
+        if bundle.is_empty() {
+            None
+        } else {
+            Some(bundle)
+        },
+    ))
+}
+
+/// Encode the launch `Intent` to the exact bytes `Intent.writeToParcel` writes.
+///
+/// This is the payload the guest unmarshals through the framework's own
+/// `Intent.CREATOR`: the bytes ARE the guest's `getIntent()`, so the real-Java
+/// differential in `crates/acos-runtime/tests/client_transaction_java.rs` is
+/// what makes the round trip trustworthy.
+///
+/// # Errors
+/// [`launch_intent`]'s errors, plus a codec refusal.
+pub fn encode_launch_intent(
+    package: &str,
+    activity: &str,
+    intent: &acos_protocol::LaunchIntent,
+) -> Result<Vec<u8>> {
+    encode(&launch_intent(package, activity, intent)?)
 }
 
 // ---------------------------------------------------------------------------

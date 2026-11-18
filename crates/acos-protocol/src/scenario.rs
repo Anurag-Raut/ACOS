@@ -21,6 +21,7 @@ use crate::assertion::{
 use crate::commands::{CaptureFormat, KeyName, Orientation, Point, ResetScope};
 use crate::error::ErrorCode;
 use crate::identity::{DisplaySpec, IsolationLevel, ResourceBudget};
+use crate::launch::ExtraValue;
 use crate::ui::{Bounds, Selector};
 
 /// The only scenario format version this crate accepts.
@@ -502,7 +503,7 @@ pub struct BackStep {
 }
 
 /// `launch`.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct LaunchStep {
     /// Explicit component (`pkg/.Activity` or `.Activity`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -513,9 +514,11 @@ pub struct LaunchStep {
     /// Intent data URI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
-    /// String extras.
+    /// Typed extras (`String`, `int`, `long`, `float`, `double`, `boolean`,
+    /// `String[]`; see [`ExtraValue`] for the YAML spelling). A `parcelable`
+    /// extra is a legal declaration that the ART launcher refuses by name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub extras: BTreeMap<String, String>,
+    pub extras: BTreeMap<String, ExtraValue>,
     /// Clear app data before launching.
     #[serde(default)]
     pub clear_state: bool,
@@ -1826,12 +1829,10 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                         "launch needs `activity` or `intent_action` (both may be omitted only if the APK has a single launcher activity)",
                     );
                 }
-                if launch.activity.is_some() && launch.intent_action.is_some() {
-                    v.push(
-                        &path,
-                        "launch accepts `activity` or `intent_action`, not both",
-                    );
-                }
+                // LAUNCHEXTRAS: `activity` names the component and
+                // `intent_action` is the Intent's action; they are independent
+                // fields now (a scenario launching `X/.A` with an explicit
+                // action is exactly what a host-built launch Intent carries).
                 if let Some(secs) = launch.idle_kill_seconds {
                     if secs > 86_400 {
                         v.push(

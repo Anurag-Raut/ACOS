@@ -648,6 +648,31 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     return finish_run(&envelope, &args, &artifacts, Some(trust));
                 }
             };
+            // LAUNCHEXTRAS: the launch Intent is resolved before the guest, for
+            // the same reason as the idle kill: the launcher owns the first
+            // launch, so a scenario's `intent_action`/`data`/`extras` must be
+            // known before it starts. A `Parcelable` extra starts no guest with
+            // an incomplete Intent; the launch step refuses it by name (its
+            // status stays `unsupported`, which is what the scenario declares).
+            let launch_intent = match resolve_launch_intent(&scenario) {
+                Ok(intent) => {
+                    if intent.unsupported_extra().is_some() {
+                        acos_protocol::LaunchIntent::default()
+                    } else {
+                        intent
+                    }
+                }
+                Err(error) => {
+                    let envelope = Envelope::failure(
+                        request_id,
+                        ProtocolBackend::AcosNative,
+                        Fidelity::StaticAnalysis,
+                        error,
+                        Metrics::wall_ms(0),
+                    );
+                    return finish_run(&envelope, &args, &artifacts, Some(trust));
+                }
+            };
             // ZPROD3: a `verify` run uses the same engine path as `acos serve`.
             // With `ACOS_ART_ZYGOTE=on` that means a persistent-zygote child
             // (`start_with_zygote`); with the flag off the host is disabled and
@@ -670,6 +695,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                 // session's, and the id is reported in `engine.json`.
                 None,
                 &validated_services,
+                &launch_intent,
             ) {
                 Ok(session) => {
                     session_id = Some(session.session_id().to_string());
@@ -1352,6 +1378,57 @@ pub fn resolve_extra_apks(scenario: &Path) -> Result<Vec<PathBuf>, ProtocolError
 /// starts (the launcher owns the idle timer), so the scenario is read before the
 /// session is created. A scenario with several launch steps that disagree is a
 /// scenario error: one launcher has one idle rule.
+/// LAUNCHEXTRAS: the launch `Intent` the scenario's first `launch` step
+/// declares (action, data URI, typed extras), resolved before the session
+/// starts because the launcher owns the first launch.
+///
+/// One rule: every `launch` step that declares Intent fields must declare the
+/// same Intent. A session is one guest process whose first launch already
+/// received an Intent; a step that asked for a different one would be the
+/// WVFAIR silent drop again, so it is an `INVALID_SCENARIO` before any guest
+/// exists.
+pub fn resolve_launch_intent(
+    scenario: &Path,
+) -> Result<acos_protocol::LaunchIntent, ProtocolError> {
+    let parsed = acos_protocol::scenario::Scenario::load(scenario).map_err(|validation| {
+        let detail = validation
+            .errors
+            .first()
+            .map(|error| format!("{}: {}", error.path, error.message))
+            .unwrap_or_else(|| "invalid scenario".to_string());
+        ProtocolError::new(
+            ErrorCode::InvalidScenario,
+            format!("cannot read scenario {}: {detail}", scenario.display()),
+        )
+    })?;
+    let mut value = acos_protocol::LaunchIntent::default();
+    for step in &parsed.steps {
+        let Some(launch) = &step.launch else { continue };
+        let declared = acos_protocol::LaunchIntent {
+            action: launch.intent_action.clone(),
+            data: launch.data.clone(),
+            extras: launch.extras.clone(),
+        };
+        if declared.is_empty() {
+            continue;
+        }
+        if value.is_empty() {
+            value = declared;
+        } else if value != declared {
+            return Err(ProtocolError::new(
+                ErrorCode::InvalidScenario,
+                format!(
+                    "scenario {} declares two different launch Intents ({} vs {}); one session is                      one guest whose first launch already received its Intent",
+                    scenario.display(),
+                    serde_json::to_string(&value).unwrap_or_default(),
+                    serde_json::to_string(&declared).unwrap_or_default()
+                ),
+            ));
+        }
+    }
+    Ok(value)
+}
+
 pub fn resolve_idle_kill_seconds(scenario: &Path) -> Result<Option<u64>, ProtocolError> {
     let parsed = acos_protocol::scenario::Scenario::load(scenario).map_err(|validation| {
         let detail = validation

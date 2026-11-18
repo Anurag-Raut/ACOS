@@ -4837,6 +4837,42 @@ public final class LaunchMain {
     }
 
     /**
+     * LAUNCHEXTRAS: the host-built launch `Intent`, unmarshalled through the
+     * framework's own `Intent.CREATOR`.
+     *
+     * <p>ADR-0029 amendment: the host builds launch transactions. The caller's
+     * `intent_action`, `data` and typed extras are written by the host's
+     * `Intent.writeToParcel` encoder (byte-compared with real Java) and delivered
+     * here as hex; this method only unmarshals them. `null` when the caller
+     * declared nothing, in which case the guest builds the stock
+     * ACTION_MAIN/CATEGORY_LAUNCHER Intent exactly as before.
+     */
+    static android.content.Intent hostLaunchIntent() throws Throwable {
+        String hex = System.getenv("ACOSLAUNCH_INTENT_BYTES");
+        if (hex == null || hex.isEmpty()) return null;
+        int n = hex.length() / 2;
+        byte[] bytes = new byte[n];
+        for (int i = 0; i < n; i++) {
+            bytes[i] = (byte) Integer.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+        }
+        Parcel p = Parcel.obtain();
+        try {
+            p.unmarshall(bytes, 0, bytes.length);
+            p.setDataPosition(0);
+            android.content.Intent intent =
+                    android.content.Intent.CREATOR.createFromParcel(p);
+            System.out.println("ACOSLAUNCH MARK launch-intent-unmarshalled action="
+                    + intent.getAction() + " data=" + intent.getDataString()
+                    + " component=" + intent.getComponent()
+                    + " extras=" + intent.getExtras() + " bytes=" + bytes.length);
+            System.out.flush();
+            return intent;
+        } finally {
+            p.recycle();
+        }
+    }
+
+    /**
      * The `ClientTransaction` a launch carries: the framework's
      * `LaunchActivityItem` callback plus the `ResumeActivityItem` lifecycle
      * request, keyed on `token` — the same shape `LaunchMain.watch` delivered
@@ -4848,10 +4884,13 @@ public final class LaunchMain {
         Object activityInfo = buildActivityInfoNamed(appInfo, activity);
         Configuration[] cfg = currentAndOverrideConfig(app);
 
-        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_MAIN);
-        intent.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
-        intent.setComponent(new ComponentName(sPkg, activity));
-        intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        android.content.Intent intent = hostLaunchIntent();
+        if (intent == null) {
+            intent = new android.content.Intent(android.content.Intent.ACTION_MAIN);
+            intent.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
+            intent.setComponent(new ComponentName(sPkg, activity));
+            intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
         return buildLaunchTransactionForIntent(client, token, app, intent, activityInfo, cfg);
     }
 

@@ -1,0 +1,3 @@
+apk=/home/Qui/.t3/worktrees/acos/t3-2d2bb735-60949492e8cb8af5/fixtures/build/apps/launch-extras-probe.apk
+apk_sha256=0b25991607ca27885971489c3e03e0ca83704287b04ae689e0bb2ac3209d0ca8
+engine=art

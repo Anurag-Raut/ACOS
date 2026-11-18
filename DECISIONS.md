@@ -1359,6 +1359,32 @@ so the last two open questions get a recorded answer instead of an implementer's
    `module::system_apks`) **at launch** and binds the session's gate socket; the one host Chromium is
    still started by the first guest connect. There is no `stub`/`scripted` profile: a scripted page
    would be a fake success.
+**ADR-0029 note (LAUNCHEXTRAS, 2026-11-18): the launch `Intent` is host-built, like the launch
+transaction.** ADR-0029's decision 8 and its "the host builds launch transactions" amendment (MPROC6)
+left a seam: a scenario's `intent_action:`, `data:` and `extras:` were accepted and then dropped by the
+live launcher, which built its own `ACTION_MAIN`/`CATEGORY_LAUNCHER` Intent (SCENHYG's WVFAIR
+finding, refused by name until this track). The Intent is now part of the same host-built
+`LaunchActivityItem`:
+
+1. **The host encodes the real `Intent` bytes; the guest only unmarshals them.**
+   `acos_services::client_transaction::encode_launch_intent` writes `Intent.writeToParcel` exactly as
+   this image does (including a data URI as the image's `Uri.parse` StringUri: type tag 1 + String8),
+   and the guest's `LaunchMain` calls the framework's own `Intent.CREATOR` before building the
+   transaction. It is never rebuilt guest-side from loose fields, so `getIntent()` cannot differ from
+   what the caller declared. The bytes are proven by the real-Java differential
+   (`crates/acos-runtime/tests/client_transaction_java.rs`) and pinned as a golden
+   (`crates/acos-services/tests/fixtures/intent-launch-extras.bin`).
+2. **An extra's Java type is part of the value, and survives the JSON hop.** Every surface
+   (scenario → engine → `ACOSLAUNCH_INTENT`; `acos launch`/`acos_launch` → daemon) carries
+   `ExtraValue` over JSON, so the writer emits the explicit `{type, value}` form for `long` and
+   `float`: a plain JSON `7` is inferred an `int` (4-byte `VAL_INTEGER`) and a plain `1.5` a `double`
+   (`java.lang.Double`), which is a different `Bundle` entry than the caller asked for. Measured:
+   `getFloat` returned its default with a `ClassCastException` in logcat until the tag was carried.
+3. **Refused, by name, before any guest: a `Parcelable` extra.** It needs the app's own class loader
+   and a payload a scenario cannot express; dropping it would be the same WVFAIR bug. The one other
+   refusal is a launch step that asks for a different Intent than the live session already delivered
+   (`INVALID_ARGUMENT`; one guest has one first Intent).
+
 **ADR-0030 amendment 3 (owner, 2026-11-16, after NETSHARE).** Owner chose design **B2**: one relay
 netns per host served by one pasta (26 MiB once), each session keeps its own netns joined to it by a
 veth pair (~0 MiB per session, 2 ms attach floor); per-session online/offline and latency/loss are
