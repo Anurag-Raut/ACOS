@@ -1,0 +1,7 @@
+{
+  "request_id": "req_86816_18e90bff0c927904",
+  "started_at": "2026-11-18T05:18:36.539Z",
+  "scenario": "scenarios/looperwake-bg-post.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

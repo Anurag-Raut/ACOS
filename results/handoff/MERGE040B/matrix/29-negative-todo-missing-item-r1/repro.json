@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/todo-list.apk",
+  "apk_sha256": "692fcc2f6de87ea0afd5d66ebc16dc85880f4a7463adcb46eda8a92f444833dc",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/negative/todo-missing-item.yaml",
+  "scenario_sha256": "6cd724b7beb6a6f833a9c56307097c80640ca67b040f9727ec7180c52b952bc2",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

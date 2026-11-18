@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/location-probe.apk",
+  "apk_sha256": "aad1047f5e9aeec3a62371d57ef0fb30283e5940c5f8f5094af663ddcf7934e1",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MODLOC2/location-geocoder.yaml",
+  "scenario_sha256": "e7dbee16904b9d7a280b8700070f8ddc086877064a076efbf89bcf21ac7f8a42",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

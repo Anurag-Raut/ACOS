@@ -1,0 +1,96 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ELEMENT_OFFSCREEN",
+    "hint": "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the… [ACOS: result.error.hint bounded for size — 295 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …ect. Scroll it into view first (or use a visible element); do not treat it as a pass.",
+    "message": "selector id==\"error\" matched no visible node, but it matches a node that is not visible to the user (text \"\" content_desc \"\" class android.widget.TextView bounds [42,679]… [ACOS: result.error.message bounded for size — 330 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …pass class — scroll it into view or target a visible node, never treat it as a pass",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 14594048,
+    "wall_ms": 176
+  },
+  "ok": false,
+  "request_id": "req_ac3ed_18e90d4fb127cd23",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MERGE040B/matrix/04-negative-form-wrong-error-r1",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 2,
+      "index": 2,
+      "kind": "assert_text",
+      "message": "… [ACOS: identical to result.error.message (330 bytes), not repeated; it begins: selector id==\"error\" matched no visible node, but it matches a node that is not visible to the user (text \"\" content_desc \"\" class android.widget.TextView bounds [42,679][42,730] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass] …",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ELEMENT_OFFSCREEN",
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_OFFSCREEN",
+        "hint": "… [ACOS: identical to result.error.hint (295 bytes), not repeated; it begins: The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass.] …",
+        "message": "… [ACOS: identical to result.error.message (330 bytes), not repeated; it begins: selector id==\"error\" matched no visible node, but it matches a node that is not visible to the user (text \"\" content_desc \"\" class android.widget.TextView bounds [42,679][42,730] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass] …",
+        "retryable": false
+      },
+      "step_index": 2,
+      "summary": "step 2 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794978164283721432,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/form-validation.apk",
+        "sha256": "08e869bea9ca8d25963b7a1dc85a99c197fead9ae0efe7c44666433a493e3aaa",
+        "sha256_12": "08e869bea9ca",
+        "size_bytes": 12756
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794977545423811441,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/negative/form-wrong-error.yaml",
+        "sha256": "a0d3b8c5342118e218927417758e67a2b60511dfe6c564ec2a3f56129f58cdce",
+        "sha256_12": "a0d3b8c53421",
+        "size_bytes": 701
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art… [ACOS: result.result.provenance.warnings[0].message bounded for size — 302 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        }
+      ]
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MERGE040B/matrix/04-negative-form-wrong-error-r1/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_form-validation",
+  "status": "fail"
+}

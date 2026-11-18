@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/looper-wake.apk",
+  "apk_sha256": "ca3ede3f153cb28487bf8ca9aaafc8b581dc0424dd604d3ab90400b419a5424d",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/looperwake-bg-post.yaml",
+  "scenario_sha256": "f248b127ae3a9f9294e798e0b810f47c703d144afbede65b90d43aac18fba0da",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/sensor-probe.apk",
+  "apk_sha256": "0c4b58fae4f03720afa12d78e0607cde7988e042998414a4a4c932c5fdf3020e",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/sensors-off.yaml",
+  "scenario_sha256": "83d853752cae39e248b41cc13ee6ec5fa41b9cebc6ff00a267e4c2d2d7bc617e",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

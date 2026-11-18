@@ -1,0 +1,66 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16900096,
+    "wall_ms": 2388
+  },
+  "ok": true,
+  "request_id": "req_86816_18e90bff0c927904",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MERGE040B/art/looperwake-bg-post/art",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794978170023849134,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/looper-wake.apk",
+        "sha256": "ca3ede3f153cb28487bf8ca9aaafc8b581dc0424dd604d3ab90400b419a5424d",
+        "sha256_12": "ca3ede3f153c",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794977545422811422,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/looperwake-bg-post.yaml",
+        "sha256": "f248b127ae3a9f9294e798e0b810f47c703d144afbede65b90d43aac18fba0da",
+        "sha256_12": "f248b127ae3a",
+        "size_bytes": 4307
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MERGE040B/art/looperwake-bg-post/art/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_looper-wake",
+  "status": "pass"
+}

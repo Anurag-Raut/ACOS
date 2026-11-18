@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/launch-extras-probe.apk",
+  "apk_sha256": "9d3eef051349155d5dce3820fcffc7fa13f9b7071d27561f7dbf39f039929c2b",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/launch-extras.yaml",
+  "scenario_sha256": "b216b600af493c47231c6878ac27ff79e21bef905b7bb94e5e4454b1680ca17a",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}
