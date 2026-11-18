@@ -475,6 +475,64 @@ def launch_to_frame(inst, act, pre, timeout=60.0):
             "am_start_ms": st.get("ms"), "total_time_ms": st.get("total_time_ms")}
 
 
+def settled_tree(prev, nodes, expect):
+    """The observation boundary, as a predicate (see `launch_to_tree`).
+
+    A tree is *settled* when it can be read, it says what the caller expects, and
+    it is identical to the previous read (content stable, not mid-animation). One
+    read alone never settles: that is the rule that makes the boundary the same
+    one ACOS's strict settle uses.
+    """
+    return prev is not None and nodes == prev and bool(expect(nodes))
+
+
+def launch_to_tree(inst, act, pre, expect, timeout=90.0):
+    """am start (async) -> first frame change -> a readable, **settled** UI tree.
+
+    This is the observation boundary MERGE040D(b)/BENCHMARKS §13 defines for BOTH
+    sides, so the warm-launch row compares like with like instead of ACOS's
+    strict settle against a bare launcher-frame change:
+
+    * the launch is issued once, asynchronously, and `t0` is taken before it;
+    * `frame_ms` is the first screencap whose app region differs from `pre` (the
+      idle launcher frame) — the same number the old row reported;
+    * then `uiautomator dump` is polled until two **consecutive** dumps agree and
+      `expect(nodes)` is True: a tree that can be read and has stopped changing,
+      which is what ACOS's strict settle means (`m4_launch_strict_ms`).
+
+    Returns frame_ms, settle_ms (frame change -> settled tree) and tree_ms (the
+    whole boundary, `t0` -> settled tree).
+    """
+    box = {}
+
+    def _go():
+        box["st"] = inst.am_start(act)
+
+    th = threading.Thread(target=_go)
+    t0 = now()
+    th.start()
+    ms, nf, frac = wait_change(inst, pre, timeout=timeout)
+    th.join(timeout=120)
+    settle = None
+    prev = None
+    reads = 0
+    while ms is not None and now() - t0 < timeout:
+        t = inst.adb.tree()
+        reads += 1
+        nodes = t["nodes"]
+        if settled_tree(prev, nodes, expect):
+            settle = (now() - t0) * 1000.0
+            break
+        prev = nodes
+    st = box.get("st", {})
+    return {"frame_ms": ms, "frames": nf, "frac": frac,
+            "tree_ms": settle, "tree_reads": reads,
+            "settle_ms": None if settle is None else settle - (ms or 0.0),
+            "wall_ms": (now() - t0) * 1000.0,
+            "am_start_ms": st.get("ms"), "total_time_ms": st.get("total_time_ms"),
+            "count": None if not prev else p6.count_text(prev)}
+
+
 # --------------------------------------------------------------------------- phases
 class Bench:
     def __init__(self, args):
@@ -594,6 +652,45 @@ class Bench:
         self.log("cold rep: boot %.0f ms + launch %.0f ms (frames %d, frac %s, tree count %s)"
                  % (boot_ms, r["frame_ms"] or -1, r["frames"], r["frac"], cnt))
 
+    def n1_warm_tree(self):
+        """Only the warm-launch row at the settled-tree boundary (MEASUREMENT).
+
+        The rest of `n1_warm` is unchanged and already recorded; this phase exists
+        so re-measuring one row does not re-pay the whole 20-minute baseline. Same
+        limits as every phase: one instance, ≤2048 MiB guest, RAM-guarded, and
+        `stop_all()` in `run()`'s `finally`.
+        """
+        inst = self.inst(1)
+        self.host.require_ram(1, "n1-warm-tree: before emulator start")
+        inst.start(snapshot=False, tag="warm-tree")
+        inst.wait_boot()
+        inst.prep()
+        self.host.step("n1-warm-tree: booted")
+        self.install(inst, APPS["counter"], "install_ms")
+        pre = self.capture_launcher(inst)
+        inst.force_stop(COUNTER_PKG)
+        inst.am_start(COUNTER_ACT)
+        if p6.count_text(inst.adb.tree()["nodes"]) != "0":
+            raise RuntimeError("counter did not start at count 0")
+        inst.force_stop(COUNTER_PKG)
+        for _ in range(self.args.warm_reps):
+            inst.force_stop(COUNTER_PKG)
+            time.sleep(0.3)
+            r = launch_to_tree(inst, COUNTER_ACT, pre,
+                               lambda nodes: p6.count_text(nodes) == "0")
+            cnt = r["count"]
+            ok = r["frame_ms"] is not None and cnt == "0"
+            settled = r["tree_ms"] is not None and ok
+            self.add("warm_launch_ms", r["frame_ms"], ok, frames=r["frames"],
+                     frac=r["frac"], count=cnt, wall_ms=r["wall_ms"],
+                     am_start_ms=r["am_start_ms"], total_time_ms=r["total_time_ms"])
+            self.add("warm_launch_tree_ms", r["tree_ms"], settled,
+                     frame_ms=r["frame_ms"], settle_ms=r["settle_ms"],
+                     tree_reads=r["tree_reads"], count=cnt,
+                     am_start_ms=r["am_start_ms"], total_time_ms=r["total_time_ms"])
+            inst.force_stop(COUNTER_PKG)
+        self.host.step("n1-warm-tree: after warm launches")
+
     def n1_warm(self):
         inst = self.inst(1)
         self.host.require_ram(1, "n1-warm: before emulator start")
@@ -613,16 +710,27 @@ class Bench:
             raise RuntimeError("counter did not start at count 0")
         inst.force_stop(COUNTER_PKG)
 
-        # --- M4 warm launch -------------------------------------------------
+        # --- M4 warm launch, at the SAME observation boundary as ACOS --------
+        # ACOS's warm launch is its strict settle: a readable tree that stopped
+        # changing. The emulator row used to stop at the launcher-frame change,
+        # so it paid no tree read the ACOS row pays — BENCHMARKS §13.6(2). One
+        # launch now yields both numbers: `warm_launch_ms` (frame change, the old
+        # row, kept for the record) and `warm_launch_tree_ms` (am start -> a
+        # settled tree with count 0), which is what the gate compares.
         for _ in range(self.args.warm_reps):
             inst.force_stop(COUNTER_PKG)
             time.sleep(0.3)
-            r = launch_to_frame(inst, COUNTER_ACT, pre)
-            t = inst.adb.tree()
-            cnt = p6.count_text(t["nodes"])
+            r = launch_to_tree(inst, COUNTER_ACT, pre,
+                               lambda nodes: p6.count_text(nodes) == "0")
+            cnt = r["count"]
             ok = r["frame_ms"] is not None and cnt == "0"
+            settled = r["tree_ms"] is not None and ok
             self.add("warm_launch_ms", r["frame_ms"], ok, frames=r["frames"],
                      frac=r["frac"], count=cnt, wall_ms=r["wall_ms"],
+                     am_start_ms=r["am_start_ms"], total_time_ms=r["total_time_ms"])
+            self.add("warm_launch_tree_ms", r["tree_ms"], settled,
+                     frame_ms=r["frame_ms"], settle_ms=r["settle_ms"],
+                     tree_reads=r["tree_reads"], count=cnt,
                      am_start_ms=r["am_start_ms"], total_time_ms=r["total_time_ms"])
             inst.force_stop(COUNTER_PKG)
         self.host.step("n1-warm: after warm launches")
@@ -959,6 +1067,14 @@ class Bench:
                 finally:
                     self.stop_all()
                     self.host.step("n1-cold rep%d: after shutdown" % rep)
+        elif phase == "n1-warm-tree":
+            try:
+                self.n1_warm_tree()
+            except Exception as e:
+                self.errors.append({"phase": phase, "error": str(e)})
+                self.log("ERROR: %s" % e)
+            finally:
+                self.stop_all()
         elif phase == "n1-warm":
             try:
                 self.n1_warm()
@@ -1089,6 +1205,14 @@ def self_test():
     ck("no qemu for a free port", qemu_pid_for_port(5998) is None)
     ck("form error string", FORM_ERROR == "Name is required")
     ck("ram guard floor math", abs((1 - HOST_CEILING) * 100 - 15.0) < 1e-9)
+    tree = [{"text": "0", "resource-id": "id/count"}]
+    want = lambda nodes: p6.count_text(nodes) == "0"
+    ck("a first tree read never settles", not settled_tree(None, tree, want))
+    ck("two equal expected reads settle", settled_tree(tree, list(tree), want))
+    ck("an unexpected tree does not settle", not settled_tree(tree, list(tree),
+                                                             lambda n: p6.count_text(n) == "1"))
+    ck("a changing tree does not settle",
+       not settled_tree(tree, tree + [{"text": "1"}], lambda n: True))
     for name, ok in checks:
         print("  %-46s %s" % (name, "ok" if ok else "FAIL"))
     print("self-test: %d checks, %d failed" % (len(checks), failed))
@@ -1098,7 +1222,7 @@ def self_test():
 # --------------------------------------------------------------------------- main
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--phase", choices=["n1-cold", "n1-warm", "n2", "n4"])
+    ap.add_argument("--phase", choices=["n1-cold", "n1-warm", "n1-warm-tree", "n2", "n4"])
     ap.add_argument("--out", default=str(ROOT / ".cache/emubench/run"))
     ap.add_argument("--json", default=None)
     ap.add_argument("--setup-avds", action="store_true")

@@ -15,6 +15,7 @@
 #
 #   tools/art-runtime/emubench/run-emubench.sh                 # all four phases
 #   tools/art-runtime/emubench/run-emubench.sh n1-warm n2      # selected phases
+#   tools/art-runtime/emubench/run-emubench.sh n1-warm-tree     # re-measure one row
 #   tools/art-runtime/emubench/run-emubench.sh --smoke         # wiring check, NOT a claim
 #   tools/art-runtime/emubench/run-emubench.sh --self-test     # harness unit checks
 set -uo pipefail
@@ -35,7 +36,7 @@ for a in "$@"; do
         --smoke) SMOKE=1 ;;
         --self-test) exec python3 -I "$PY" --self-test ;;
         -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        n1-cold|n1-warm|n2|n4) PHASES+=("$a") ;;
+        n1-cold|n1-warm|n1-warm-tree|n2|n4) PHASES+=("$a") ;;
         *) echo "run-emubench.sh: unknown argument $a" >&2; exit 2 ;;
     esac
 done
@@ -106,7 +107,9 @@ run_phase() {
 
 preflight
 RC=0
-declare -A TMO=([n1-cold]=900 [n1-warm]=900 [n2]=900 [n4]=1200)
+# n1-warm-tree is the one-row re-measure (MEASUREMENT: the warm-launch row at
+# the settled-tree boundary both sides now share).
+declare -A TMO=([n1-cold]=900 [n1-warm]=900 [n1-warm-tree]=600 [n2]=900 [n4]=1200)
 for ph in "${PHASES[@]}"; do
     run_phase "$ph" "${TMO[$ph]}" || RC=1
 done

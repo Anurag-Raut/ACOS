@@ -9,7 +9,9 @@ EMUBENCH emulator document and prints the side-by-side table plus a verdict.
 Exit status: 0 when every comparable metric is better in ACOS, 1 when at least
 one metric is worse (strictly, or beyond the 5 % noise floor with --noise), 2 on
 a usage error.  A metric that only one side measured is reported as
-NOT_MEASURED -- never as a pass.
+NOT_MEASURED -- never as a pass.  A row listed in REFERENCE_ONLY is printed for
+the record and never gated (today: the frame-change-only warm launch, whose
+boundary is not the one ACOS publishes).
 
   emu_gate.py --acos results/release/v0.3.0-gate/timing/02-ab/v030.json \
               --emu results/bench/emubench-2026-11-18.json \
@@ -29,9 +31,15 @@ METRICS = [
      "ACOS: process start -> first correct frame. Emulator: process start -> "
      "sys.boot_completed -> first frame whose app region differs from the idle "
      "launcher (tree-confirmed count 0)."),
-    ("warm_launch", "Warm launch -> app frame", "ms", "lower",
-     "m4_launch_strict_ms", "warm_launch_ms",
-     "ACOS strict settle vs emulator launcher-frame change + tree-confirmed count 0."),
+    ("warm_launch", "Warm launch -> readable settled UI tree", "ms", "lower",
+     "m4_launch_strict_ms", "warm_launch_tree_ms",
+     "The SAME observation boundary on both sides (MERGE040D(b), BENCHMARKS §13.3): "
+     "`am start` -> a UI tree that can be read, reports the expected content and is "
+     "identical to the previous read. ACOS: strict settle (its own content-stability "
+     "rule + one tree read). Emulator: launcher-frame change, then `uiautomator dump` "
+     "until two consecutive dumps agree with count 0. The old frame-change-only row "
+     "(`warm_launch_ms`) is still in the baseline for the record but is NOT gated: it "
+     "pays no tree read the ACOS number pays."),
     ("tap_counter", "Tap -> settled UI result (counter)", "ms", "lower",
      "m8_tap_counter_strict_ms", "tap_counter_ms",
      "ACOS strict settle vs `adb input tap` + `uiautomator dump` polling."),
@@ -62,6 +70,18 @@ METRICS = [
      "N=4 (its maximum under the owner's limit; the per-GiB rate is flat in N, so "
      "N=1/2/4 are 2.5-2.6 - the N=2 and N=1-equivalent rows are in the baseline)."),
 ]
+
+# Rows that are recorded but deliberately not gated, with the reason the gate
+# prints next to them (a number is never silently dropped: it becomes a row).
+REFERENCE_ONLY = {
+    "warm_launch_frame": (
+        "Warm launch -> launcher-frame change (frame only, not gated)", "ms",
+        "m4_launch_strict_ms", "warm_launch_ms",
+        "The frame-change-only row. ACOS has no frame-change-only number to pair it "
+        "with (its publishable number is the strict settle), so pairing it would "
+        "compare two different boundaries — the defect MERGE040D(b) removed. "
+        "Reported for the record, never a pass/fail."),
+}
 
 # ACOS M11 is published in BENCHMARKS.md section 12, not in the bench JSON.
 ACOS_FALLBACK = {"m11_tasks_per_gib_min_n10": 62.84, "m11_tasks_per_gib_min_n1": 67.81}
@@ -148,6 +168,17 @@ def main(argv=None):
                      % (label, fmt(av, unit), fmt(ev, unit), unit,
                         rec["better"], delta_pct, verdict.upper() if verdict == "WORSE" else verdict))
         rows.append(rec)
+    for rid, (label, unit, akey, ekey, note) in REFERENCE_ONLY.items():
+        av, ev = acos.get(akey), emu.get(ekey)
+        rec = {"id": rid, "label": label, "unit": unit,
+               "acos_key": akey, "emu_key": ekey, "acos": av, "emulator": ev,
+               "note": note, "reference_only": True,
+               "verdict": "REFERENCE" if (av is not None and ev is not None) else "NOT_MEASURED"}
+        if rec["verdict"] == "REFERENCE":
+            rec["delta_pct"] = (av - ev) / ev * 100.0 if ev else 0.0
+        rows.append(rec)
+        lines.append("| %s | %s | %s | %s | -- | -- | %s (not gated) |"
+                     % (label, fmt(av, unit), fmt(ev, unit), unit, rec["verdict"]))
     lines.append("")
     lines.append("ACOS side: `%s` (%s, commit %s, %s). Emulator side: `%s` (%s, phases %s)."
                  % (a.acos, acos.get("_branch"), (acos.get("_commit") or "?")[:8],
