@@ -16,7 +16,9 @@
 #      page's JS reached the Java bridge — a lost click fails here);
 #   2. the probe's end-to-end input measurement, "fair: tap -> page click N ms",
 #      is a *bounded number* (`[0-9]{1,3}` = under 1 s; the pre-gate broker
-#      measured ~2000 ms and a lost click);
+#      measured ~2000 ms and a lost click, and before WVTAIL the same path
+#      measured 2004-2604 ms because every input event waited out a 2 s ack
+#      timeout — see results/handoff/WVTAIL/);
 #   3. B really was pulling frames through the same broker (`frame decoded
 #      view=1` = the second WebView), so the tap was not measured against an idle
 #      engine;
@@ -118,8 +120,22 @@ steps:
   - assert_log:
       tag: WVProbe
       patterns:
-        - 'fair: tap -> page click ([0-9]{1,3}|[12][0-9]{3}) ms'
+        - 'fair: tap -> page click ([0-9]{1,3}) ms'
       timeout_ms: 8000
+  # WVTAIL: the *slow* page still gets frames through the tap. The probe touches
+  # B once after measuring (`fair: slow view touched for a frame`), which makes
+  # the guest dispatch input to B and the provider pull B's next frame; this step
+  # wants a `frame decoded view=2` line produced **after the previous step
+  # started** (`since_previous_step`), so a frame from B's load cannot satisfy it.
+  # A broker that starves the slow page for input frames fails here: it abandons a
+  # non-input frame attempt for a queued input frame, so production has to keep
+  # happening.
+  - assert_log:
+      tag: ACOSWvProvider
+      patterns:
+        - 'frame decoded view=2 [0-9]+x[0-9]+ seq=[2-9][0-9]* bytes=[0-9]+'
+      since_previous_step: true
+      timeout_ms: 30000
   # A's page is still a live page: its viewport arm answers after the tap.
   - assert_text:
       selector: {id: status}

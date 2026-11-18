@@ -31,6 +31,12 @@ use crate::wire::{
 
 /// How many requests one connection handles concurrently.
 const WORKERS: usize = 4;
+
+/// An op that took at least this long is reported in the broker's log (the
+/// normal `ax`/`render`/`input.*` op is milliseconds; the measured pathologies
+/// are 1-30 s, and an unattributed 30 s wait was exactly what the merge's
+/// `NO_VIEW` investigation could not explain).
+const SLOW_OP_MS: u128 = 1500;
 /// Cap on concurrent `Fetch.requestPaused` round trips per connection.
 const MAX_INTERCEPTS: usize = 16;
 
@@ -507,15 +513,19 @@ impl Conn {
 
     fn on_engine_restart(&self) {
         if let Some(session) = self.session.lock().expect("session").clone() {
-            let views: Vec<Arc<crate::view::View>> = session
-                .views
-                .lock()
-                .map(|v| v.values().cloned().collect())
-                .unwrap_or_default();
-            for v in views {
-                v.closed.store(true, Ordering::SeqCst);
-            }
-            session.views.lock().map(|mut v| v.clear()).ok();
+            let views = session.drop_views();
+            // Every target died with the engine, so the session's map is empty
+            // from here on: the guest must re-create its views (it is told with
+            // `engine.restarted`). Say so in the log, with the count: a
+            // `NO_VIEW: no view <id>` in a guest log is this line or nothing.
+            eprintln!(
+                "acos-webview: session {}: engine restarted (restart {}, generation {}), \
+                 dropped {} view(s): every target died with the engine",
+                session.id,
+                self.broker.restarts(),
+                session.generation,
+                views.len()
+            );
         }
         self.send_event(
             "engine.restarted",
@@ -672,6 +682,7 @@ impl Conn {
     fn dispatch(self: &Arc<Self>, req: Value) {
         let id = req["id"].as_str().unwrap_or("g?").to_string();
         let op = req["op"].as_str().unwrap_or("").to_string();
+        let started = Instant::now();
         if op != "hello" && !self.hello.load(Ordering::SeqCst) {
             self.send_value(&err_response(
                 &id,
@@ -682,7 +693,20 @@ impl Conn {
             ));
             return;
         }
-        match self.handle(&op, &req) {
+        let outcome = self.handle(&op, &req);
+        // Honest instrumentation, not a trace switch: an op that took longer
+        // than any op should names itself in the broker's log, so "the engine
+        // answered nothing for 30 s" has a line pointing at what was waiting
+        // (measured: `ax`/`view.evaluateJavascript` on a page whose main thread
+        // is busy in 1.9 s slices, blocked behind a `beginFrame`).
+        let ms = started.elapsed().as_millis();
+        if ms >= SLOW_OP_MS {
+            eprintln!(
+                "acos-webview: slow op {op} view={} id={id} took {ms}ms",
+                req["view"].as_i64().unwrap_or(-1)
+            );
+        }
+        match outcome {
             Ok(Outcome::Value(v)) => {
                 self.send_response(&ok_response(&id, v), None);
             }
@@ -988,18 +1012,34 @@ impl Conn {
                         let x = req["x"].as_f64().unwrap_or(0.0);
                         let y = req["y"].as_f64().unwrap_or(0.0);
                         let hold = Duration::from_millis(req["holdMs"].as_u64().unwrap_or(40));
-                        view.tap(x, y, hold)?;
+                        let acks = view.tap(x, y, hold)?;
                         self.emit_focus_event(&view);
                         self.nudge_render(&view, "damage");
-                        Ok(Outcome::Value(json!({"view": view_id, "delivered": true})))
+                        Ok(Outcome::Value(json!({
+                            "view": view_id,
+                            "delivered": true,
+                            "acked": acks.all_acked(),
+                            "events": acks.events,
+                            "acks": acks.acked,
+                            "frameMs": acks.frame_ms,
+                            "ackMs": acks.ack_ms,
+                        })))
                     }
                     "input.touch" => {
                         let action = req["action"].as_str().unwrap_or("down");
-                        view.touch(action, req["points"].clone())?;
+                        let acks = view.touch(action, req["points"].clone())?;
                         if action == "up" || action == "cancel" {
                             self.nudge_render(&view, "damage");
                         }
-                        Ok(Outcome::Value(json!({"view": view_id, "delivered": true})))
+                        Ok(Outcome::Value(json!({
+                            "view": view_id,
+                            "delivered": true,
+                            "acked": acks.all_acked(),
+                            "events": acks.events,
+                            "acks": acks.acked,
+                            "frameMs": acks.frame_ms,
+                            "ackMs": acks.ack_ms,
+                        })))
                     }
                     "input.scroll" => {
                         view.scroll(
@@ -1057,9 +1097,18 @@ impl Conn {
     }
 
     fn view(&self, session: &Arc<Session>, id: i64) -> Result<Arc<crate::view::View>> {
-        let view = session
-            .view(id)
-            .ok_or_else(|| Error::proto(crate::wire::code::NO_VIEW, format!("no view {id}")))?;
+        let view = session.view(id).ok_or_else(|| match session.miss(id) {
+            crate::broker::ViewMiss::Unknown => {
+                Error::proto(crate::wire::code::NO_VIEW, format!("no view {id}"))
+            }
+            crate::broker::ViewMiss::EngineRestarted { generation } => Error::proto(
+                crate::wire::code::ENGINE_RESTARTED,
+                format!(
+                    "view {id} is gone: the engine restarted (generation {generation}) and every \
+                     target died with it; re-create the view (the broker sent engine.restarted)"
+                ),
+            ),
+        })?;
         if view.closed.load(Ordering::SeqCst) || view.browser.generation != self.broker.generation()
         {
             return Err(Error::proto(

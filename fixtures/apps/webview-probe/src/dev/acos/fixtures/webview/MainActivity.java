@@ -139,6 +139,14 @@ public class MainActivity extends Activity {
                 long down = activity.mTapDownNanos;
                 long ms = down == 0 ? -1 : (System.nanoTime() - down) / 1_000_000L;
                 activity.append("fair: tap -> page click " + ms + " ms");
+                // WVTAIL: the tap is measured; now prove the *slow* page still
+                // gets frames through it. A touch on B makes the guest dispatch
+                // input to B, and the provider's own invalidate pulls B's next
+                // frame (`frame decoded view=2 seq=N`), which the scenario
+                // asserts with `since_previous_step: true`. The broker abandons
+                // a non-input frame attempt for a queued input frame, so a slow
+                // page that stopped producing frames would fail there.
+                activity.touchSlowView();
                 return;
             }
             if ("tapped".equals(what)) {
@@ -220,6 +228,34 @@ public class MainActivity extends Activity {
                 }
             } catch (Throwable t) {
                 append("viewport arm " + arm + " FAILED: " + t);
+            }
+        });
+    }
+
+    /**
+     * WVTAIL: touch the slow view once, on the UI thread, at a corner of its
+     * canvas (no page handler there — the point is the frame pull the guest's
+     * own input dispatch and the provider's invalidate set off, not a click).
+     */
+    private void touchSlowView() {
+        final ProbeWebView view = mSlowView;
+        if (view == null) {
+            return;
+        }
+        view.post(() -> {
+            try {
+                long now = android.os.SystemClock.uptimeMillis();
+                android.view.MotionEvent down = android.view.MotionEvent.obtain(
+                        now, now, android.view.MotionEvent.ACTION_DOWN, 8, 8, 0);
+                android.view.MotionEvent up = android.view.MotionEvent.obtain(
+                        now, now + 40, android.view.MotionEvent.ACTION_UP, 8, 8, 0);
+                view.dispatchTouchEvent(down);
+                view.dispatchTouchEvent(up);
+                down.recycle();
+                up.recycle();
+                append("fair: slow view touched for a frame");
+            } catch (Throwable t) {
+                append("fair: slow view touch FAILED: " + t);
             }
         });
     }
