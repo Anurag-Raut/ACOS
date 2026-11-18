@@ -53,10 +53,7 @@ fn reference_lines() -> Vec<String> {
 #[test]
 fn hello_jni_runs_through_the_vm() {
     if !boot_available() {
-        eprintln!(
-            "SKIP hello_jni_runs_through_the_vm: .cache/boot/android-34 is absent \
-             (run tools/extract-bootclasspath.sh)"
-        );
+        acos_test_support::require_prereq(false, "hello_jni_runs_through_the_vm", "hello_jni_runs_through_the_vm: .cache/boot/android-34 is absent (run tools/extract-bootclasspath.sh)");
         return;
     }
 
@@ -74,9 +71,7 @@ fn hello_jni_runs_through_the_vm() {
     vm.add_dex(dex);
 
     if !acos_test_support::have_fixture("fixtures/build/apps/hello-jni.apk") {
-        eprintln!(
-            "SKIP hello_jni_runs_through_the_vm: fixtures/build/apps/hello-jni.apk is absent"
-        );
+        acos_test_support::require_prereq(false, "hello_jni_runs_through_the_vm", "hello_jni_runs_through_the_vm: fixtures/build/apps/hello-jni.apk is absent");
         return;
     }
     let apk = repo_root().join("fixtures/build/apps/hello-jni.apk");

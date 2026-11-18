@@ -1025,10 +1025,7 @@ fn flutter_child_worker() {
 #[test]
 fn flutter_hello_under_confinement() {
     if !acos_test_support::have_fixture("fixtures/build/apps/flutter-hello.apk") {
-        eprintln!(
-            "SKIP flutter_hello_under_confinement: fixtures/build/apps/flutter-hello.apk is \
-             absent (build with tools/build-flutter-hello.sh x86_64)"
-        );
+        acos_test_support::require_prereq(false, "flutter_hello_under_confinement", "flutter_hello_under_confinement: fixtures/build/apps/flutter-hello.apk is absent (build with tools/build-flutter-hello.sh x86_64)");
         return;
     }
     let apk = repo_root().join("fixtures/build/apps/flutter-hello.apk");
