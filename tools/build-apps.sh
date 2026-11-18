@@ -315,6 +315,12 @@ build_apk a11y-probe
 # clients answered. Built at targetSdk 34 like the module scenario corpus.
 build_apk tail-probe
 
+# clip-probe is the MODFILL fixture for the two `core` services that had no
+# proof scenario: `ClipboardManager` (set/get plus the primary-clip-changed
+# listener) and `AutofillManager` (isEnabled/hasEnabledAutofillServices, the
+# explicit requestAutofill, and the field text afterwards).
+build_apk clip-probe
+
 # location-probe is the MODLOC fixture: it shows `getLastKnownLocation`, live
 # updates from a scripted track and the geocoder state on screen, so a scenario
 # can assert what the app really received (fixtures/apps/location-probe).

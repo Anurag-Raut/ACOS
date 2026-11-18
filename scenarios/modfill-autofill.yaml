@@ -1,0 +1,98 @@
+# MODFILL: the autofill proof — what `core`'s `IAutoFillManager` really answers.
+#
+# `autofill` is `core` (`crates/acos-services/src/misc.rs`, `AutofillService`) and
+# had no proof scenario (CONFKIT §4). Its design decision is on the record
+# (`research/service-layer/services.tsv`, `svc.autofill`): **ACOS has no autofill
+# provider, and the service says so** — it never fabricates a session.
+#
+# The honest chain, measured against the image's framework dex
+# (`framework/classes3.dex`, `framework/classes4.dex`):
+#
+#   1. `PackageManager.FEATURE_AUTOFILL` (`"android.software.autofill"`) is not
+#      reported by ACOS, and on a real platform that is precisely the "the
+#      platform has no autofill support" answer. `AutofillManager.hasAutofillFeature()`
+#      therefore short-circuits: `isEnabled()`, `notifyViewEntered()` and
+#      `requestAutofill()` return without a transaction, which is *why* the app's
+#      `enabled` answer costs ~0 ms (a 15000 ms `SyncResultReceiver` timeout would
+#      mean the client asked and nobody answered).
+#   2. `hasEnabledAutofillServices()` still asks the service
+#      (`IAutoFillManager.isServiceEnabled` → `SyncResultReceiver`) and reads
+#      `false`: no provider is enabled.
+#   3. `requestAutofill(field)` is the user's "Autofill" menu entry; with no
+#      provider nothing fills, so the field keeps the app's own text. That is the
+#      expected outcome, not a missing feature: a fill would need an autofill
+#      service, which is the `media.session`-class module work, not this service.
+#
+# The service-side wire shape (the `IResultReceiver.send(resultCode, Bundle)`
+# answer every `oneway` method here carries, with `SyncResultReceiver.bundleFor`'s
+# `EXTRA` key) is pinned by `crates/acos-services/tests/autofill_wire.rs`, because
+# the app cannot reach it while the platform feature is off.
+version: 1
+name: modfill-autofill
+description: >-
+  AutofillManager on ART with core's disabled IAutoFillManager: no
+  android.software.autofill feature, isEnabled() false without a stall,
+  hasEnabledAutofillServices() false, and requestAutofill() leaves the field as
+  the app typed it (no provider, no fabricated fill).
+app: ../fixtures/build/apps/clip-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.clipprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY clipboard=present"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Request"}}
+  - wait_for:
+      selector: {text: {contains: "AUTOFILL feature=false"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "AUTOFILL manager=present"}}
+      timeout_ms: 20000
+  # `enabled=false` *and* `took_ms` small: the client answered itself (no
+  # autofill feature), it did not wait on a service that never replied.
+  - wait_for:
+      selector: {text: {regex: "AUTOFILL enabled=false took_ms=[0-9]{1,4}"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "AUTOFILL services=false"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "AUTOFILL request=ok"}}
+      timeout_ms: 20000
+  # No provider is enabled, so nothing fills: the app's own text survives the
+  # request. A filled field here would be a fabricated success.
+  - tap:
+      selector: {text: {exact: "ReadField"}}
+  - wait_for:
+      selector: {text: {contains: "FIELD text=typed-by-app"}}
+      timeout_ms: 20000
+  - assert_log:
+      tag: clipprobe
+      # The whole run's log, not just the last step's: the lines this asserts
+      # were produced by earlier steps.
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - "AUTOFILL feature=false"
+        - "AUTOFILL enabled=false"
+        - "AUTOFILL services=false"
+        - "AUTOFILL request=ok"
+        - "FIELD text=typed-by-app"
+  - assert_no_crash: {}

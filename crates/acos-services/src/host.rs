@@ -267,6 +267,16 @@ pub trait ServiceObject: Send {
         Vec::new()
     }
 
+    /// Whether a **decoded-table** service (one reached through `entries`, not a
+    /// dynamic node) serves `method` of `interface` itself through
+    /// [`Self::raw_transact`] because the generic codec cannot express the
+    /// argument or reply (`IClipboard.setPrimaryClip` carries a `ClipData`, whose
+    /// bytes the service keeps verbatim). `false` keeps the decoded `call` path.
+    fn serves_raw(&self, interface: &str, method: &str) -> bool {
+        let _ = (interface, method);
+        false
+    }
+
     /// The next instant at which this object's **own schedule** will have a
     /// `system -> app` delivery ready (`None` = it has no timed feed).
     ///
@@ -2672,6 +2682,38 @@ impl ServiceHost {
                     method: method.name.clone(),
                     args: summary.clone(),
                     reply: summary,
+                });
+            }
+        }
+
+        // MODFILL: a decoded-table service may serve a method raw (a `ClipData`
+        // argument/reply the codec has no model for). It writes its own reply.
+        {
+            let object = self.ensure_for_binder(binder, &descriptor)?;
+            if object.serves_raw(&descriptor, &method.name) {
+                let handled = object.raw_transact(&descriptor, code, data, reply)?;
+                let mut raw_deliveries = object.drain_raw_deliveries();
+                let mut raw_retained = object.drain_retained();
+                let mut raw_released = object.drain_released();
+                self.deliveries.append(&mut raw_deliveries);
+                for id in raw_retained.drain(..) {
+                    self.retain_binder(id);
+                }
+                for id in raw_released.drain(..) {
+                    self.release_binder(id);
+                }
+                if !handled {
+                    return Err(ServiceError::UnsupportedAndroidApi {
+                        interface: descriptor,
+                        code,
+                        method: method.name.clone(),
+                    });
+                }
+                return Ok(CallInfo {
+                    interface: descriptor,
+                    method: method.name.clone(),
+                    args: "<raw>".into(),
+                    reply: "<raw>".into(),
                 });
             }
         }
