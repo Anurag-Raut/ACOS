@@ -225,6 +225,7 @@ dependencies = [
 name = "acos-protocol"
 version = "0.3.0"
 dependencies = [
+ "acos-test-support",
  "regex",
  "schemars",
  "serde",

@@ -19,3 +19,7 @@ sha2 = "0.10"
 # format. JSON remains the wire format for every response.
 serde_yaml_ng = "0.10"
 thiserror = { workspace = true }
+
+[dev-dependencies]
+# HYG3: a missing test prerequisite fails loudly instead of printing SKIP.
+acos-test-support = { path = "../acos-test-support" }
