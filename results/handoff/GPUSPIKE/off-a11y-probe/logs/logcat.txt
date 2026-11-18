@@ -1,0 +1,356 @@
+--------- beginning of main
+1794980998783      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794980998783      2  I : Using CollectorTypeCC GC.
+1794980998783      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794980998783      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794980998783      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794980998783      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794980998783      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794980998783      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794980998783      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794980998783     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794980998783     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794980998783     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794980998783     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794980998783     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794980998783     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794980998783     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794980998783     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794980998783     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794980998783     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794980998783     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794980998783     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794980998783     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794980998783     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794980998783     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794980998783     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794980998783     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794980998783     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794980998783     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794980998783     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794980998783     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794980998783     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794980998783     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794980998783     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794980998783     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794980998783     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794980998783     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794980998783     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794980998783     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794980998783     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794980998783     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794980998783     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794980998783     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794980998783     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794980998783     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794980998783     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794980998783     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794980998783     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794980998783     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794980998783     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794980998783     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794980998783     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794980998783     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794980998783     53  D nativeloader: InitExtendedPublicLibraries: 
+1794980998783     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794980998783     55  D nativeloader: InitProductPublicLibraries: 
+1794980998783     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794980998783     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794980998783     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794980998783     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794980998783     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794980998783     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794980998783     62  W ziparchive: Unable to open '/data/app/a11y-probe.dm': No such file or directory
+1794980998783     63  W ziparchive: Unable to open '/data/app/a11y-probe.dm': No such file or directory
+1794980998783     64  D nativeloader: Configuring clns-2 for other apk /data/app/a11y-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.a11yprobe
+1794980998783     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.a11yprobe/cache: chown failed: EINVAL (Invalid argument)
+1794980998783     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.a11yprobe/code_cache: chown failed: EINVAL (Invalid argument)
+1794980998783     67  V GraphicsEnvironment: Currently set values for:
+1794980998783     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794980998783     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794980998783     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.a11yprobe: false
+1794980998783     71  V GraphicsEnvironment: dev.acos.fixtures.a11yprobe is not listed in per-application setting
+1794980998783     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794980998783     73  W SystemServiceRegistry: No service published for: netstats
+1794980998783     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794980998783     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794980998783     76  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794980998783     77  D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED
+1794980998783     78  I AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=0 gesture_taps=0 swipe_y=0
+1794980998783     79  I AcosA11yProbe: button_text a11y=Click target drawn=Click target
+1794980998783     80  E logdw: dev.acos.fixtures.a11yprobe.MainActivity
+1794980998783     81  E logdw: dev.acos.fixtures.a11yprobe.MainActivity
+1794980998783     82  E logdw: dev.acos.fixtures.a11yprobe.MainActivity
+1794980998783     83  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794980998783     84  I AcosA11yProbe: service_connected id=dev.acos.fixtures.a11yprobe/.A11yProbeService capabilities=161
+1794980998783     85  I AcosA11yProbe: probe_start pid=2 tid=14
+1794980998783     86  I AcosA11yProbe: display id=0 refresh_rate=60.000004 mode_id=1 mode_rate=60.000004 modes=1
+1794980998783     87  I AcosA11yProbe: windows count=1 attempts=1
+1794980998783     88  I AcosA11yProbe: window[0] id=1 type=1 layer=0 active=true focused=true title=null
+1794980998783     89  I AcosA11yProbe: root class=android.widget.FrameLayout text=null view_id=null clickable=false
+1794980999720     90  I AcosA11yProbe: swatch bounds=[277,736][802,946]
+1794980999720     91  I AcosA11yProbe: by_view_id count=1
+1794980999720     92  I AcosA11yProbe: node class=android.widget.Button text=Click target view_id=null clickable=true
+1794980999720     93  I AcosA11yProbe: click_target_pressed count=1
+1794980999720     94  I AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=0 swipe_y=0
+1794980999720     95  I AcosA11yProbe: click handled=true
+1794980999720     96  I AcosA11yProbe: probe_done
+1794980999720     97  I AcosA11yProbe: gesture_sent kind=tap accepted=true strokes=1
+1794980999720     98  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720     99  I AcosA11yProbe: overlay_added type=2032 token=set
+1794980999720    100  I AcosA11yProbe: windows2_start
+1794980999720    101  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    102  I AcosA11yProbe: onAccessibilityEvent type=4194304
+1794980999720    103  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    104  I AcosA11yProbe: gesture_target_pressed count=1
+1794980999720    105  I AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=0 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=1 swipe_y=0
+1794980999720    106  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    107  I AcosA11yProbe: gesture_result kind=tap completed=true
+1794980999720    108  I AcosA11yProbe: gesture_sent kind=swipe accepted=true strokes=1
+1794980999720    109  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    110  I AcosA11yProbe: list_scrolled y=11
+1794980999720    111  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    112  I AcosA11yProbe: list_scrolled y=43
+1794980999720    113  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    114  I AcosA11yProbe: list_scrolled y=75
+1794980999720    115  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    116  I AcosA11yProbe: list_scrolled y=107
+1794980999720    117  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    118  I AcosA11yProbe: list_scrolled y=139
+1794980999720    119  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    120  I AcosA11yProbe: list_scrolled y=171
+1794980999720    121  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    122  I AcosA11yProbe: list_scrolled y=203
+1794980999720    123  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    124  I AcosA11yProbe: list_scrolled y=235
+1794980999720    125  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    126  I AcosA11yProbe: windows2 count=2 attempts=2
+1794980999720    127  I AcosA11yProbe: window2[0] id=2 type=4 layer=1 active=false focused=false
+1794980999720    128  I AcosA11yProbe: window2[1] id=1 type=1 layer=0 active=true focused=true
+1794980999720    129  I AcosA11yProbe: windows2 overlay=true
+1794980999720    130  I AcosA11yProbe: overlay_probe_done
+1794980999720    131  I AcosA11yProbe: list_scrolled y=267
+1794980999720    132  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    133  I AcosA11yProbe: screenshot_result kind=interval status=3
+1794980999720    134  I AcosA11yProbe: screenshot_expect kind=interval success=false
+1794980999720    135  I AcosA11yProbe: screenshot_result kind=capture status=0 width=1080 height=2400 format=1 usage=257 color_space=sRGB IEC61966-2.1 (Linear) timestamp=5860187
+1794980999720    136  I AcosA11yProbe: screenshot_expect kind=capture success=true
+1794980999720    137  I AcosA11yProbe: wrap_hardware_buffer ok=true width=1080 height=2400 config=HARDWARE
+1794980999720    138  I AcosA11yProbe: wrap_hardware_buffer allocation=10368000
+1794980999720    139  I AcosA11yProbe: screenshot_pixel unavailable=hardware_bitmap_needs_egl
+1794980999720    140  I AcosA11yProbe: gles_draw skipped=no_software_gles
+1794980999720    141  I AcosA11yProbe: list_scrolled y=299
+1794980999720    142  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    143  I AcosA11yProbe: list_scrolled y=363
+1794980999720    144  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    145  I AcosA11yProbe: gesture_result kind=swipe completed=true
+1794980999720    146  I AcosA11yProbe: gesture_sent kind=drag accepted=true strokes=1
+1794980999720    147  I AcosA11yProbe: list_scrolled y=391
+1794980999720    148  I AcosA11yProbe: list_scrolled y=391
+1794980999720    149  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    150  I AcosA11yProbe: list_scrolled y=422
+1794980999720    151  I AcosA11yProbe: list_scrolled y=422
+1794980999720    152  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    153  I AcosA11yProbe: list_scrolled y=453
+1794980999720    154  I AcosA11yProbe: list_scrolled y=453
+1794980999720    155  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    156  I AcosA11yProbe: list_scrolled y=481
+1794980999720    157  I AcosA11yProbe: list_scrolled y=481
+1794980999720    158  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    159  I AcosA11yProbe: list_scrolled y=506
+1794980999720    160  I AcosA11yProbe: list_scrolled y=506
+1794980999720    161  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    162  I AcosA11yProbe: list_scrolled y=529
+1794980999720    163  I AcosA11yProbe: list_scrolled y=529
+1794980999720    164  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    165  I AcosA11yProbe: list_scrolled y=549
+1794980999720    166  I AcosA11yProbe: list_scrolled y=549
+1794980999720    167  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    168  I AcosA11yProbe: list_scrolled y=566
+1794980999720    169  I AcosA11yProbe: list_scrolled y=566
+1794980999720    170  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    171  I AcosA11yProbe: list_scrolled y=582
+1794980999720    172  I AcosA11yProbe: list_scrolled y=582
+1794980999720    173  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    174  I AcosA11yProbe: list_scrolled y=597
+1794980999720    175  I AcosA11yProbe: list_scrolled y=597
+1794980999720    176  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    177  I AcosA11yProbe: list_scrolled y=608
+1794980999720    178  I AcosA11yProbe: list_scrolled y=608
+1794980999720    179  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    180  I AcosA11yProbe: list_scrolled y=620
+1794980999720    181  I AcosA11yProbe: list_scrolled y=620
+1794980999720    182  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    183  I AcosA11yProbe: list_scrolled y=629
+1794980999720    184  I AcosA11yProbe: list_scrolled y=629
+1794980999720    185  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    186  I AcosA11yProbe: list_scrolled y=637
+1794980999720    187  I AcosA11yProbe: list_scrolled y=637
+1794980999720    188  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    189  I AcosA11yProbe: list_scrolled y=645
+1794980999720    190  I AcosA11yProbe: list_scrolled y=645
+1794980999720    191  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    192  I AcosA11yProbe: list_scrolled y=652
+1794980999720    193  I AcosA11yProbe: list_scrolled y=652
+1794980999720    194  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    195  I AcosA11yProbe: list_scrolled y=657
+1794980999720    196  I AcosA11yProbe: list_scrolled y=657
+1794980999720    197  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    198  I AcosA11yProbe: list_scrolled y=662
+1794980999720    199  I AcosA11yProbe: list_scrolled y=662
+1794980999720    200  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    201  I AcosA11yProbe: list_scrolled y=666
+1794980999720    202  I AcosA11yProbe: list_scrolled y=666
+1794980999720    203  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    204  I AcosA11yProbe: list_scrolled y=670
+1794980999720    205  I AcosA11yProbe: list_scrolled y=670
+1794980999720    206  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    207  I AcosA11yProbe: list_scrolled y=673
+1794980999720    208  I AcosA11yProbe: list_scrolled y=673
+1794980999720    209  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    210  I AcosA11yProbe: list_scrolled y=675
+1794980999720    211  I AcosA11yProbe: list_scrolled y=675
+1794980999720    212  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    213  I AcosA11yProbe: screenshot_result kind=display status=4
+1794980999720    214  I AcosA11yProbe: screenshot_expect kind=display success=false
+1794980999720    215  I AcosA11yProbe: list_scrolled y=677
+1794980999720    216  I AcosA11yProbe: list_scrolled y=677
+1794980999720    217  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    218  I AcosA11yProbe: list_scrolled y=679
+1794980999720    219  I AcosA11yProbe: list_scrolled y=679
+1794980999720    220  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    221  I AcosA11yProbe: drag_end dx=-300 dy=0 steps=23
+1794980999720    222  I AcosA11yProbe: gesture_result kind=drag completed=true
+1794980999720    223  I AcosA11yProbe: list_scrolled y=680
+1794980999720    224  I AcosA11yProbe: list_scrolled y=680
+1794980999720    225  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    226  I AcosA11yProbe: list_scrolled y=681
+1794980999720    227  I AcosA11yProbe: list_scrolled y=681
+1794980999720    228  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    229  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    230  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    231  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    232  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    233  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    234  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    235  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    236  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794980999720    237  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    238  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    239  I AcosA11yProbe: event_sent type=1 count=1
+1794981000777    240  I AcosA11yProbe: status a11y enabled=true installed=1 enabled_list=1 sent=1 first=dev.acos.fixtures.a11yprobe/.A11yProbeService a11y_click=1 gesture_taps=1 swipe_y=681
+1794981000777    241  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    242  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    243  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    244  I AcosA11yProbe: secure_overlay added=true flags=8216
+1794981000777    245  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    246  I AcosA11yProbe: onAccessibilityEvent type=4194304
+1794981000777    247  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    248  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    249  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    250  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    251  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    252  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    253  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    254  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    255  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    256  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    257  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    258  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    259  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    260  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    261  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    262  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    263  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    264  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    265  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    266  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    267  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    268  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    269  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    270  I AcosA11yProbe: screenshot_result kind=secure status=6
+1794981000777    271  I AcosA11yProbe: screenshot_expect kind=secure success=false
+1794981000777    272  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    273  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    274  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    275  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    276  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    277  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    278  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    279  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    280  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    281  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    282  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    283  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    284  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    285  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    286  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    287  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    288  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    289  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    290  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    291  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    292  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    293  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    294  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000777    295  I AcosA11yProbe: secure_overlay added=false removed=true
+1794981000777    296  W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@cc011ab
+1794981000777    297  I AcosA11yProbe: onAccessibilityEvent type=4194304
+1794981000879    298  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000879    299  I AcosA11yProbe: back_requested
+1794981000879    300  I AcosA11yProbe: global_action back=true
+1794981000879    301  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000879    302  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000909    303  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000950    304  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000950    305  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981000950    306  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001031    307  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001031    308  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001031    309  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001031    310  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001031    311  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001131    312  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001131    313  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001131    314  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001131    315  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001131    316  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001131    317  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001232    318  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001232    319  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001232    320  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001232    321  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001232    322  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001232    323  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001332    324  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001332    325  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001332    326  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001332    327  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001332    328  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001332    329  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001433    330  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001433    331  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001433    332  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001433    333  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001433    334  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001433    335  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001534    336  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001534    337  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001534    338  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001534    339  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001534    340  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001534    341  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001635    342  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001635    343  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001635    344  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001635    345  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001635    346  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001635    347  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001735    348  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001735    349  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981001735    350  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794981003348    351  W InputMethodManager: Timeout waiting for IME to handle input event after 2500 ms: acos-ime-1
+1794981003348    352  I AcosA11yProbe: key_down code=4 tracking=false repeat=0 flags=0
+1794981003348    353  W InputMethodManager: Timeout waiting for IME to handle input event after 2500 ms: acos-ime-1
+1794981003348    354  I AcosA11yProbe: key_up code=4 tracking=true
+1794981003348    355  I AcosA11yProbe: back_pressed

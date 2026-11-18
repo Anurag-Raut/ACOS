@@ -1,0 +1,24 @@
+acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000
+acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/.t3/worktrees/acos/t3-8c04f655-c7948af7d2b7cf6d/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
+acos-art: build-cache STORE 17d872ae18f8 -> /home/Qui/.t3/worktrees/acos/t3-8c04f655-c7948af7d2b7cf6d/.cache/art/build-cache/17d872ae18f8362d87f122ddaf7a3177f5befc1608c6a406975819ae3aeebc78 (tree)
+acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/.t3/worktrees/acos/t3-8c04f655-c7948af7d2b7cf6d/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
+acos-art: build-cache STORE 880f7ee16c55 -> /home/Qui/.t3/worktrees/acos/t3-8c04f655-c7948af7d2b7cf6d/.cache/art/build-cache/880f7ee16c55166ae036177002db6250847da1044ab85f06b5f02fbcca6d307e
+acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/.t3/worktrees/acos/t3-8c04f655-c7948af7d2b7cf6d/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
+acos-art: build-cache HIT e402a71a3dd5 /home/Qui/.t3/worktrees/acos/t3-8c04f655-c7948af7d2b7cf6d/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
+EglProbe: begin pid=2
+EglProbe: prop ro.hardware.egl=<reflection failed: java.lang.reflect.InvocationTargetException> ro.hardware.vulkan=<reflection failed: java.lang.reflect.InvocationTargetException> ro.board.platform=<reflection failed: java.lang.reflect.InvocationTargetException> persist.graphics.egl=<reflection failed: java.lang.reflect.InvocationTargetException>
+EglProbe: dir /vendor/lib64 exists=true names=libGLESv2_angle.so,libEGL_angle.so,libGLESv1_CM_angle.so,hw,egl
+EglProbe: dir /vendor/lib64/hw exists=true names=vulkan.pastel.so
+EglProbe: dir /vendor/lib64/egl exists=true names=libGLESv2_angle.so,libEGL_angle.so,libGLESv1_CM_angle.so
+EglProbe: maps start lines=1477 libs=/system/lib64/libsync.so /system/lib64/libnativewindow.so /system/lib64/android.hardware.graphics.mapper@4.0.so /system/lib64/libvulkan.so /system/lib64/android.hardware.graphics.mapper@2.1.so /system/lib64/libhidlbase.so /system/lib64/libGLESv3.so /system/lib64/libhidlmemory.so /system/lib64/android.hardware.graphics.mapper@3.0.so /system/lib64/android.hardware.graphics.mapper@2.0.so /system/lib64/libGLESv1_CM.so /system/lib64/libhardware.so /system/lib64/libhidlallocatorutils.so /system/lib64/libGLESv2.so /system/lib64/libhardware_legacy.so /system/lib64/libEGL.so /system/lib64/libcutils.so
+Exception in thread "main" java.lang.UnsatisfiedLinkError: No implementation found for void android.opengl.EGL14._nativeClassInit() (tried Java_android_opengl_EGL14__1nativeClassInit and Java_android_opengl_EGL14__1nativeClassInit__) - is the library loaded, e.g. System.loadLibrary?
+	at android.opengl.EGL14._nativeClassInit(Native Method)
+	at android.opengl.EGL14.<clinit>(EGL14.java:152)
+	at EglProbe.main(EglProbe.java:76)
+acos-art: outcome=ok code=- exit=Some(1) signal=None wall=60ms
+acos-art: uncaught exception in main (expected for a failing program)
+acos-art: cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=1MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p334695-i386458.scope)
+acos-art: seccomp: landlock=active abi=10 rules=15 skipped=0
+acos-art: seccomp: guard=active insns=83
+acos-art: shim: /home/Qui/Projects/acos/.cache/art-locks/data-GLSPIKE3-334594/shim/libartshim.so
+acos-art: logd: 54 entries

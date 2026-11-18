@@ -366,7 +366,7 @@ search flow no longer has to become a scenario. In four calls:
 acos guide                                    # the agent guide (same text as MCP acos_help)
 acos guide workflow                           # one topic: workflow|cli|scenarios|errors|limits|mcp
 acos guide all                                # the whole guide
-acos doctor --json
+acos doctor --json                            # includes `gles`: angle-swiftshader | none
 acos inspect fixtures/build/apps/counter.apk --json
 acos launch fixtures/build/apps/counter.apk --engine art --json
 acos launch fixtures/build/apps/counter.apk --engine art --keep --json   # session survives in the daemon
@@ -962,6 +962,34 @@ Two session-specific hints worth memorising:
   that directory is installed, and a library that exists solely under another
   ABI fails later at its own `dlopen` (`UnsatisfiedLinkError`) — an app
   packaging bug, not an ABI gate. A pure-Java APK (no `lib/` at all) launches.
+* **Software GL (GL ES 3.1) is on, and a HARDWARE bitmap in a `View` is still
+  not supported.** The guest ships **ANGLE on SwiftShader's CPU Vulkan ICD**,
+  ON by default (`gles: angle-swiftshader` in `acos doctor` and in
+  `acos_capabilities`; `gles: none` when the image did not install it, in which
+  case every app still launches exactly as before). What that buys you: a real
+  EGL context at `OpenGL ES 3.1` inside the guest, so
+  `Bitmap.wrapHardwareBuffer` + `Bitmap.copy(ARGB_8888)`,
+  `Bitmap.Config.HARDWARE` decodes and GPU readbacks run on the CPU rasteriser
+  (SwiftShader), including the 1080×2400 `AccessibilityService.takeScreenshot`
+  buffer. What it does **not** buy you: drawing a HARDWARE bitmap into an
+  ordinary `View`. ACOS paints windows on a **software** `Surface.lockCanvas`,
+  and the framework refuses that draw exactly as a device with software
+  rendering does —
+  `IllegalArgumentException: Software rendering doesn't support hardware
+  bitmaps` (`BaseCanvas.throwIfHwBitmapInSwMode`) inside the looper →
+  `LOOPER_THREW`, the process dies. That is the window renderer, not the GL
+  provider, and it is unchanged by this build. Workaround that works today:
+  read the bitmap back to `ARGB_8888` before handing it to a `View` (and
+  `disallowHardwareConfig()` on Glide/Coil, whose default is a HARDWARE
+  bitmap). `ACOS_GUEST_GLES=off` disables software GL; `ACOS_GUEST_GLES=<tag>`
+  selects another staged provider (`mesa-host` is reserved for the GPU track's
+  host-Mesa provider — it is not part of this image, and asking for it when it
+  is not staged is a structured error, never a silent fallback). Software GL
+  costs a process that never touches EGL **nothing**: the provider is a
+  read-only bind and two properties, the driver pages are mapped only when
+  libhwui asks for a context, and its file digests are cached per host next to
+  the provider (`<sysroot>/gles/<tag>/.verified`), re-hashed only when a file's
+  size/mtime/inode moves.
 * **Watching a session is view-only and costs nothing when unused.** A live
   session publishes a registry entry (`$XDG_RUNTIME_DIR/acos/live/`) and a
   `stream_socket` for local viewers (half-resolution frames + an action feed,
