@@ -413,3 +413,98 @@ fn the_standard_install_attaches_core_and_tombstones_the_gaps() {
         .expect("lookup is infallible")
         .is_some());
 }
+
+/// The kit runs over **every registered module**, not a hand-kept list.
+///
+/// ADR-0029 item 7 says every module passes the kit; before this test a module
+/// added to `ModuleRegistry::standard()` could ship with no kit row at all
+/// (the tail modules had only their own crate-level tests). The list is the
+/// registry's, so a new module cannot be missed.
+#[test]
+fn every_registered_module_passes_the_conformance_kit() {
+    let registry = ModuleRegistry::standard();
+    let ids = registry.ids();
+    assert!(
+        ids.len() >= 12,
+        "the standard registry lost modules: {ids:?}"
+    );
+    for id in ids {
+        run_in_quiet_process(id);
+    }
+}
+
+/// The kit's two sides that are a *registry* property rather than a single
+/// module's: every module is a verdict row with the profile it is attached
+/// with, and every `hot` module really attaches and detaches on a live host.
+#[test]
+fn every_registered_module_is_a_verdict_row_and_honours_its_attach_mode() {
+    use acos_services::module::AttachMode;
+
+    let mut registry = ModuleRegistry::standard();
+    let rows = registry.verdict_modules();
+    for manifest in registry.manifests() {
+        let row = rows
+            .iter()
+            .find(|row| row["id"] == manifest.id)
+            .unwrap_or_else(|| panic!("{} is missing from the verdict rows", manifest.id));
+        assert_eq!(row["state"], "off", "{} starts off", manifest.id);
+        assert_eq!(row["attach"], manifest.attach.as_str(), "{}", manifest.id);
+        assert_eq!(
+            row["fidelity"], "off",
+            "{} starts at the off profile",
+            manifest.id
+        );
+    }
+
+    // A live attach is the `acos_services` path: `hot` modules succeed, an
+    // `at-launch` module refuses with the launch call. Modules whose attach
+    // needs a host tool (`webview`'s gate socket, `network`'s relay session)
+    // prove their live path in their own ART scenarios and the kit's quiet
+    // process; this test owns the in-process rule.
+    let mut host = ServiceHost::new();
+    registry
+        .attach(&mut host, "core", Profile::Real, &ModuleConfig::default())
+        .expect("core attaches");
+    registry.install_tombstones(&mut host);
+    for manifest in registry.manifests() {
+        if manifest.id == "core" {
+            continue;
+        }
+        let Some(profile) = manifest.profiles.iter().copied().min() else {
+            // `off`-only: nothing to attach, and `attach` refuses (the kit's
+            // `attach` check proves it per module).
+            continue;
+        };
+        if !manifest.requires_host_tools.is_empty() {
+            continue;
+        }
+        match manifest.attach {
+            AttachMode::Hot => {
+                registry
+                    .attach_live(&mut host, manifest.id, profile, &ModuleConfig::default())
+                    .unwrap_or_else(|error| {
+                        panic!("{} is hot but refused a live attach: {error}", manifest.id)
+                    });
+                let row = registry
+                    .verdict_modules()
+                    .into_iter()
+                    .find(|row| row["id"] == manifest.id)
+                    .expect("row");
+                assert_eq!(row["state"], "attached", "{}", manifest.id);
+                assert_eq!(row["fidelity"], profile.as_str(), "{}", manifest.id);
+                registry
+                    .detach_live(&mut host, manifest.id)
+                    .unwrap_or_else(|error| panic!("{} detach: {error}", manifest.id));
+            }
+            AttachMode::AtLaunch => {
+                assert!(
+                    registry
+                        .attach_live(&mut host, manifest.id, profile, &ModuleConfig::default())
+                        .is_err(),
+                    "at-launch module {} must refuse a live attach",
+                    manifest.id
+                );
+            }
+        }
+    }
+}

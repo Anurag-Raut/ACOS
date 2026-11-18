@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/fixtures/build/apps/multi-package-probe.apk",
+  "apk_sha256": "62692e684a8761e00239c383e64401990b76cfaf83dfe78754300441cb36bb8a",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/scenarios/mproc1-multi-package.yaml",
+  "scenario_sha256": "7e4b627526066bf1f0aaf9cae8151bb1640c844d97934795f4d37aa3d602e15e",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/fixtures/build/apps/intent-probe.apk",
+  "apk_sha256": "49084a83fec3c0413b02c734d4c23c926fb8f169bdf238cf3c2eaa5a3e16c247",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/scenarios/mproc1-intents.yaml",
+  "scenario_sha256": "6a7f43a46364cc0f313b3c014f5660f406cd3c686918089a6f739ff44d62217b",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}
