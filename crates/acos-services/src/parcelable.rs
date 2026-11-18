@@ -2002,6 +2002,174 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // ---- MODFILL: `net.wifi` (framework-wifi / framework-connectivity) --------
+    //
+    // These classes live in jars the codec audit's `dex/framework` directory
+    // does not contain, so `codec_field_orders_match_the_framework_dex` never
+    // sees them; `tests/wifi_module.rs` scans them across every boot-classpath
+    // jar (`Scanner::write_to_parcel_boot`) and pins the call sequence.
+    //
+    // `WifiSsid.writeToParcel`: `writeByteArray(mBytes)`.
+    ParcelableSpec {
+        class: "android.net.wifi.WifiSsid",
+        fields: &[FieldOp::ByteArray],
+        verification: Verification::Full,
+    },
+    // `SupplicantState.writeToParcel` of the image: `writeString(name())` (not
+    // the ordinal — the reader is `valueOf(in.readString())`; the first draft
+    // of this row wrote an int and the dex scan caught it).
+    ParcelableSpec {
+        class: "android.net.wifi.SupplicantState",
+        fields: &[FieldOp::Str16],
+        verification: Verification::Full,
+    },
+    // `DhcpInfo.writeToParcel`: seven ints.
+    ParcelableSpec {
+        class: "android.net.DhcpInfo",
+        fields: &[
+            FieldOp::Int, // ipAddress
+            FieldOp::Int, // gateway
+            FieldOp::Int, // netmask
+            FieldOp::Int, // dns1
+            FieldOp::Int, // dns2
+            FieldOp::Int, // serverAddress
+            FieldOp::Int, // leaseDuration
+        ],
+        verification: Verification::Full,
+    },
+    // `WifiInfo.writeToParcel` of the **image** (API 34). The AOSP `main`
+    // source in the reference cache also writes `mVendorData` (`writeList`) as
+    // the last field; the image's own dex does not, and the image is
+    // authoritative (BRIEF_COMMON wire-format rule).
+    ParcelableSpec {
+        class: "android.net.wifi.WifiInfo",
+        fields: &[
+            FieldOp::Int,                               // mNetworkId
+            FieldOp::Int,                               // mRssi
+            FieldOp::Int,                               // mLinkSpeed
+            FieldOp::Int,                               // mTxLinkSpeed
+            FieldOp::Int,                               // mRxLinkSpeed
+            FieldOp::Int,                               // mFrequency
+            FieldOp::ByteCond(&[FieldOp::ByteArray]),   // mIpAddress
+            FieldOp::Cond(&[FieldOp::Nested("android.net.wifi.WifiSsid")]), // mWifiSsid
+            FieldOp::Str16,                             // mBSSID
+            FieldOp::Str16,                             // mMacAddress
+            FieldOp::Int,                               // mMeteredHint
+            FieldOp::Int,                               // mEphemeral
+            FieldOp::Int,                               // mTrusted
+            FieldOp::Int,                               // mOemPaid
+            FieldOp::Int,                               // mOemPrivate
+            FieldOp::Int,                               // mCarrierMerged
+            FieldOp::Int,                               // score
+            FieldOp::Bool,                              // mIsUsable
+            FieldOp::Long,                              // txSuccess
+            FieldOp::Double,                            // mSuccessfulTxPacketsPerSecond
+            FieldOp::Long,                              // txRetries
+            FieldOp::Double,                            // mTxRetriedTxPacketsPerSecond
+            FieldOp::Long,                              // txBad
+            FieldOp::Double,                            // mLostTxPacketsPerSecond
+            FieldOp::Long,                              // rxSuccess
+            FieldOp::Double,                            // mSuccessfulRxPacketsPerSecond
+            FieldOp::Nested("android.net.wifi.SupplicantState"), // mSupplicantState
+            FieldOp::Int,                               // mOsuAp
+            FieldOp::Str16,                             // mRequestingPackageName
+            FieldOp::Str16,                             // mFqdn
+            FieldOp::Str16,                             // mProviderFriendlyName
+            FieldOp::Int,                               // mWifiStandard
+            FieldOp::Int,                               // mMaxSupportedTxLinkSpeed
+            FieldOp::Int,                               // mMaxSupportedRxLinkSpeed
+            FieldOp::Str16,                             // mPasspointUniqueId
+            FieldOp::Int,                               // mSubscriptionId
+            FieldOp::TypedList("android.net.wifi.ScanResult$InformationElement"), // mInformationElements
+            FieldOp::Int,                               // mIsPrimary (SdkLevel.isAtLeastS)
+            FieldOp::Int,                               // mSecurityType
+            FieldOp::Int,                               // mRestricted
+            FieldOp::Str16,                             // mNetworkKey
+            FieldOp::Named("android.net.MacAddress"),   // mApMldMacAddress
+            FieldOp::Int,                               // mApMloLinkId
+            FieldOp::TypedList("android.net.wifi.MloLink"), // mAffiliatedMloLinks
+            FieldOp::Bool,                              // mApTidToLinkMappingNegotiationSupported
+        ],
+        verification: Verification::Full,
+    },
+    // `ScanResult.writeToParcel` of the image (the anqp/radio-chain loops write
+    // only their count here: ACOS carries none).
+    ParcelableSpec {
+        class: "android.net.wifi.ScanResult",
+        fields: &[
+            FieldOp::Cond(&[FieldOp::Nested("android.net.wifi.WifiSsid")]), // wifiSsid
+            FieldOp::Str16, // SSID
+            FieldOp::Str16, // BSSID
+            FieldOp::Long,  // hessid
+            FieldOp::Int,   // anqpDomainId
+            FieldOp::Str16, // capabilities
+            FieldOp::Int,   // level
+            FieldOp::Int,   // frequency
+            FieldOp::Long,  // timestamp
+            FieldOp::Int,   // distanceCm
+            FieldOp::Int,   // distanceSdCm
+            FieldOp::Int,   // channelWidth
+            FieldOp::Int,   // centerFreq0
+            FieldOp::Int,   // centerFreq1
+            FieldOp::Int,   // mWifiStandard
+            FieldOp::Long,  // seen
+            FieldOp::Int,   // untrusted
+            FieldOp::Int,   // numUsage
+            FieldOp::Str16, // venueName
+            FieldOp::Str16, // operatorFriendlyName
+            FieldOp::Long,  // flags
+            FieldOp::TypedArray("android.net.wifi.ScanResult$InformationElement"), // informationElements
+            FieldOp::Counted(&[FieldOp::Str16]), // anqpLines
+            FieldOp::Counted(&[
+                FieldOp::Int,
+                FieldOp::Int,
+                FieldOp::Int,
+                FieldOp::ByteArray,
+            ]), // anqpElements (vendor id, element id, payload length, payload)
+            FieldOp::Counted(&[FieldOp::Int, FieldOp::Int]), // radioChainInfos
+            FieldOp::Str16, // ifaceName
+            FieldOp::Named("android.net.MacAddress"), // mApMldMacAddress
+            FieldOp::Int,   // mApMloLinkId
+            FieldOp::TypedList("android.net.wifi.MloLink"), // mAffiliatedMloLinks
+        ],
+        verification: Verification::Full,
+    },
+    // ---- MODFILL: `media.session` (framework `android.media`) ------------------
+    // `MediaMetadata.writeToParcel`: `writeBundle(mBundle)`, `writeInt(limit)`.
+    ParcelableSpec {
+        class: "android.media.MediaMetadata",
+        fields: &[FieldOp::Bundle, FieldOp::Int],
+        verification: Verification::Full,
+    },
+    // `PlaybackState.writeToParcel` (image order: state, position, speed,
+    // updateTime, bufferedPosition, actions, customActions, activeItemId,
+    // errorMessage, extras).
+    ParcelableSpec {
+        class: "android.media.session.PlaybackState",
+        fields: &[
+            FieldOp::Int,    // mState
+            FieldOp::Long,   // mPosition
+            FieldOp::Float,  // mSpeed
+            FieldOp::Long,   // mUpdateTime
+            FieldOp::Long,   // mBufferedPosition
+            FieldOp::Long,   // mActions
+            FieldOp::TypedList("android.media.session.PlaybackState$CustomAction"),
+            FieldOp::Long,   // mActiveItemId
+            FieldOp::CharSequence, // mErrorMessage
+            FieldOp::Bundle, // mExtras
+        ],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.media.session.PlaybackState$CustomAction",
+        fields: &[
+            FieldOp::Str16,        // mAction
+            FieldOp::CharSequence, // mName
+            FieldOp::Int,          // mIcon
+            FieldOp::Bundle,       // mExtras
+        ],
+        verification: Verification::Full,
+    },
     // `NetworkInfo.writeToParcel` (the deprecated query replies).
     ParcelableSpec {
         class: "android.net.NetworkInfo",
@@ -3486,6 +3654,9 @@ pub mod val {
     pub const IBINDER: i32 = 15;
     /// `VAL_PARCELABLE`.
     pub const PARCELABLE: i32 = 4;
+    /// `VAL_CHARSEQUENCE` (`Bundle.putCharSequence`, `MediaMetadata.Builder.putText`):
+    /// `TextUtils.writeToParcel` — an `int` kind (`1` = plain) and a `String8`.
+    pub const CHARSEQUENCE: i32 = 10;
 
     /// `VAL_OBJECTARRAY` (`Parcel.writeArray(Object[])`).
     pub const OBJECTARRAY: i32 = 17;
@@ -4395,6 +4566,12 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
     Ok(match tag {
         val::NULL => D::Null,
         val::STRING => D::String(parcel.read_string16()?),
+        val::CHARSEQUENCE => {
+            if parcel.read_int32()? != 1 {
+                return Err(unsupported("android.text.Spanned"));
+            }
+            D::String(parcel.read_string8()?)
+        }
         val::INTEGER => D::Int(parcel.read_int32()?),
         val::SHORT => D::Short(
             i16::try_from(parcel.read_int32()?).map_err(|_| bad("VAL_SHORT out of range"))?,

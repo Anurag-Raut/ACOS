@@ -267,6 +267,19 @@ pub trait ServiceObject: Send {
         Vec::new()
     }
 
+    /// Broadcasts this object wants the **host** to originate after the current
+    /// transaction (a module reacting to an app's call: `net.wifi`'s
+    /// `startScan` ends in `SCAN_RESULTS_AVAILABLE`).
+    ///
+    /// A `ServiceObject` has no host handle, so it parks the intents here and
+    /// the dispatcher delivers them through the session's own
+    /// `IActivityManager` once the reply is written, exactly as a control op's
+    /// [`ServiceHost::broadcast_intent`] would. Drained after a **dynamic**
+    /// node's transaction (the path every module node takes).
+    fn drain_broadcasts(&mut self) -> Vec<crate::ams::IntentFacts> {
+        Vec::new()
+    }
+
     /// Whether a **decoded-table** service (one reached through `entries`, not a
     /// dynamic node) serves `method` of `interface` itself through
     /// [`Self::raw_transact`] because the generic codec cannot express the
@@ -636,6 +649,11 @@ pub struct ServiceHost {
     /// would keep the settings provider's generation memfd alive after detach
     /// (the conformance kit's `detach-restores` baseline).
     a11y: Option<std::sync::Weak<std::sync::Mutex<crate::misc::A11yState>>>,
+    /// The default-network state the session's `connectivity` service answers
+    /// from (`core`'s, or the `network` module's while it is attached). A module
+    /// whose own state changes the default network (`net.wifi`) moves it through
+    /// this handle instead of reaching around the service.
+    connectivity: Option<std::sync::Arc<std::sync::Mutex<crate::connectivity::ConnectivityState>>>,
     /// The `IAccessibilityServiceConnection` node handed to a bound service.
     a11y_connection: Option<BinderId>,
     /// The display's accessibility-overlay window token (`init`'s third
@@ -745,6 +763,7 @@ impl ServiceHost {
             constructions: 0,
             notification: None,
             a11y: None,
+            connectivity: None,
             a11y_connection: None,
             a11y_window_token: None,
             permission_store: None,
@@ -1734,6 +1753,27 @@ impl ServiceHost {
         self.a11y = Some(std::sync::Arc::downgrade(&state));
     }
 
+    /// Publish the default-network state the `connectivity` service answers
+    /// from. Called by [`crate::registry::install`] for `core`'s service and by
+    /// the `network` module while it replaces it (and again, with `core`'s
+    /// handle, when it detaches).
+    pub fn set_connectivity_state(
+        &mut self,
+        state: Option<
+            std::sync::Arc<std::sync::Mutex<crate::connectivity::ConnectivityState>>,
+        >,
+    ) {
+        self.connectivity = state;
+    }
+
+    /// The state behind the `connectivity` service that is answering right now.
+    #[must_use]
+    pub fn connectivity_state(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<crate::connectivity::ConnectivityState>>> {
+        self.connectivity.clone()
+    }
+
     /// The accessibility state, when the session installed it.
     #[must_use]
     pub fn accessibility_state(
@@ -2500,6 +2540,7 @@ impl ServiceHost {
             let handled = object.raw_transact(&descriptor, code, data, reply)?;
             let finished = object.finished();
             let mut raw_deliveries = object.drain_raw_deliveries();
+            let raw_broadcasts = object.drain_broadcasts();
             let mut raw_retained = object.drain_retained();
             let mut raw_released = object.drain_released();
             let mut finished_refs = if finished {
@@ -2516,6 +2557,12 @@ impl ServiceHost {
             }
             for id in raw_released.drain(..).chain(finished_refs.drain(..)) {
                 self.release_binder(id);
+            }
+            // A broadcast nobody registered for is `Ok(0)` (Android's own rule);
+            // an `Err` means this host has no activity manager at all, which a
+            // reply that is already written cannot report, so it is dropped.
+            for intent in raw_broadcasts {
+                let _ = self.broadcast_intent(&intent);
             }
             if !handled {
                 return Err(ServiceError::UnsupportedAndroidApi {

@@ -1296,6 +1296,8 @@ impl ModuleRegistry {
             Box::new(crate::modules::biometric::BiometricModule::new()),
             Box::new(crate::modules::network::NetworkModule::new()),
             Box::new(crate::modules::webview::WebviewModule::new()),
+            Box::new(crate::modules::wifi::WifiModule::new()),
+            Box::new(crate::modules::media_session::MediaSessionModule::new()),
         ]
         .into_iter()
         .chain(crate::modules::tail_stubs::modules())

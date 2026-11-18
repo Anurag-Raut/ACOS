@@ -1,0 +1,18 @@
+package=dev.acos.fixtures.wifiprobe
+application=android.app.Application
+application_classloader_is_apk=true
+application_base=dev.acos.fixtures.wifiprobe//data/app/wifi-probe.apk
+instrumentation=android.app.Instrumentation
+instrumentation_source=framework (bind request instrumentationName=null)
+app_flags=0x10883e46
+app_flags_source=manifest
+sourceDir=/data/app/wifi-probe.apk
+guest_uid=10192
+pms_uid=10192
+uid_map=10192          0          1
+status_Uid:	10192	10192	10192	10192
+status_Gid:	10192	10192	10192	10192
+status_Groups:	65534 65534 65534 65534 65534 10192 65534 65534 65534 65534 65534 65534
+status_CapEff:	0000000000000000
+files_dir=/data/app-data/dev.acos.fixtures.wifiprobe/files writable=true
+app_data_entries=[dev.acos.fixtures.wifiprobe]
