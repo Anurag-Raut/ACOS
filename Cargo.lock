@@ -286,6 +286,7 @@ dependencies = [
 name = "acos-sandbox"
 version = "0.3.0"
 dependencies = [
+ "acos-test-support",
  "libc",
  "serde",
  "serde_json",
