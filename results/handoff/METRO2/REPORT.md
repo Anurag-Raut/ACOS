@@ -53,7 +53,7 @@ stalled by ACOS in that window (40 markers 2 ms apart, only 5–7 ms latency twi
 
 | extra delay before the new context's executor is created (TEMP probe, removed) | reloads | clean (8 nodes, no `explicit id`) |
 |---|---|---|
-| 0 ms (stock) | `run3`,`run6`,`run9`,`run10` | **~2 of 21** (e.g. `run10`: 16,24,32,40,48,8,16) |
+| 0 ms (stock) | `run3`,`run6`,`run9`,`run10` (14 reloads) | **3 of 14 ended at 8 nodes**, 11 grew the tree (`run10`: 16,24,32,40,48,8,16 — the lone 8 is the late old-root removal wiping the stack, not a clean replace) |
 | 40 / 80 / 120 ms (stepped) | `run8` | **3 / 3** |
 | 400 ms | `run7` | **3 / 3** (4th reload hit the pool bug, §3) |
 
@@ -131,7 +131,7 @@ fail the run, never pass it.
 | root-cause the stale/doubled root | **PASS** | §1–§3; RN source + measurements |
 | fix the ACOS-side root cause | **PASS** for the ACOS bug found (pool leak); the doubling itself is RN's, documented | `surface_client.rs`, test, `run10` |
 | use RN's recommended path, no fixture hack | **PASS** — Fast Refresh | `hmr1..5`, no fixture/app code changed (TEMP probe removed; `MainApplication.java` restored to its METRO1 form) |
-| one process, `assert_text` new string, no stale copy, tree not grown, 5/5 | **PASS for Fast Refresh** (`hmr1..5`); **NOT achievable for a full `/reload`** (race, ~10 % clean) | `hmr*/verdict.json`, `run10` |
+| one process, `assert_text` new string, no stale copy, tree not grown, 5/5 | **PASS for Fast Refresh** (`hmr1..5`); **NOT achievable for a full `/reload`** (race: ~20 % end at one tree) | `hmr*/verdict.json`, `run10` |
 | `scenarios/metro-reload.yaml`, `needs_env: [pasta, metro]` | **NOT DONE** (blocked) | below |
 | cargo test, touched crates | **PASS** `acos-services` (all targets, after building the app fixtures); `w42_layer_lifetime` 5/5 | session log |
 | evidence < 10 MB | **PASS** 0.9 MB | |
