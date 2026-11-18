@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/fixtures/build/apps/proc-a.apk",
+  "apk_sha256": "2dc9398905524a92f638005cf1252d1c2759508d8a8b92d7ae990a4ffe93bb72",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/binderpid.yaml",
+  "scenario_sha256": "570d8cfea45a9723ccd3485c1da8b5ba104f5aeef9c81559ad2af44cca73a597",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

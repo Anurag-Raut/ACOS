@@ -48,6 +48,10 @@ use serde_json::{json, Value};
 use crate::permission_catalog;
 use crate::value::{Parcelable, Value as WireValue};
 
+/// `Process.SYSTEM_UID`: `system_server`, the uid every host-originated binder
+/// transaction runs as (BINDERPID).
+pub const SYSTEM_UID: u32 = 1000;
+
 /// `PackageManager.PERMISSION_GRANTED`.
 pub const PERMISSION_GRANTED: i32 = 0;
 /// `PackageManager.PERMISSION_DENIED`.
@@ -363,6 +367,13 @@ pub struct PermissionStore {
     /// permission-controller system app; `false` keeps MODNOTIF2's structured
     /// `PERMISSION_UI_UNAVAILABLE`.
     dialogs: bool,
+    /// Every installed package's `(uid, package, manifest grants)`, published
+    /// by the PMS (`PmsState::uid_grants`). This is the table
+    /// `IPermissionManager.checkUidPermission` answers from: the framework asks
+    /// that question with a **uid** (`ActivityManager.checkComponentPermission`
+    /// -> `Context.checkCallingPermission`), and only the package manager knows
+    /// which package (and which install-time grants) a uid names.
+    pub uid_grants: Vec<(i32, String, Vec<String>)>,
 }
 
 impl PermissionStore {
@@ -384,6 +395,7 @@ impl PermissionStore {
             refused: Vec::new(),
             mutations: Vec::new(),
             dialogs: false,
+            uid_grants: Vec::new(),
         }
     }
 
@@ -643,6 +655,66 @@ impl PermissionStore {
                 None => continue,
             }
         }
+    }
+
+    /// Publish the installed `(uid, package, grants)` table (called by the PMS
+    /// whenever the installed set changes).
+    pub fn set_uid_grants(&mut self, grants: Vec<(i32, String, Vec<String>)>) {
+        self.uid_grants = grants;
+    }
+
+    /// `IPermissionManager.checkUidPermission(int uid, String permission, int
+    /// deviceId)`: the grant **for a uid**, which is the question
+    /// `Context.checkCallingPermission`/`Context.checkPermission` ask through
+    /// `ActivityManager.checkComponentPermission`.
+    ///
+    /// AOSP answers from the per-uid permission state
+    /// (`PermissionManagerService.checkUidPermission`): system/root are granted
+    /// everything, an isolated app gets nothing, and every other uid is granted
+    /// when one of its packages holds the permission. The runtime table
+    /// describes exactly one package, so it applies to that package; a second
+    /// package answers from its own install-time grants. A uid no package owns
+    /// gets the historical single-package answer when the table describes no
+    /// package at all (a bare host), otherwise `DENIED` — never a fabricated
+    /// grant.
+    #[must_use]
+    pub fn check_uid_permission(&self, uid: u32, permission: &str) -> i32 {
+        const AID_SYSTEM: u32 = SYSTEM_UID;
+        const AID_ROOT: u32 = 0;
+        // `UserHandle.getAppId`: the app id is the uid modulo the per-user
+        // range (`PER_USER_RANGE` = 100000).
+        let app_id = uid % 100_000;
+        if app_id == AID_ROOT || app_id == AID_SYSTEM {
+            return PERMISSION_GRANTED;
+        }
+        // Isolated processes (`AID_ISOLATED_START`..`AID_ISOLATED_END`) get no
+        // permissions.
+        if (99000..100000).contains(&app_id) {
+            return PERMISSION_DENIED;
+        }
+        let owned: Vec<&(i32, String, Vec<String>)> = self
+            .uid_grants
+            .iter()
+            .filter(|(owner, _, _)| *owner == uid as i32)
+            .collect();
+        if owned.is_empty() {
+            if self.uid_grants.is_empty() && !self.package.is_empty() {
+                // The PMS never published a uid table (a host built without a
+                // package manager): the one package's table is all there is.
+                return self.check(permission);
+            }
+            return PERMISSION_DENIED;
+        }
+        for (_, package, grants) in owned {
+            if package == &self.package {
+                if self.check(permission) == PERMISSION_GRANTED {
+                    return PERMISSION_GRANTED;
+                }
+            } else if grants.iter().any(|p| p == permission) {
+                return PERMISSION_GRANTED;
+            }
+        }
+        PERMISSION_DENIED
     }
 
     /// `checkPermission`: the runtime table wins over the manifest.

@@ -34,8 +34,8 @@ fn token(tag: u32, wire: u64) -> u64 {
 
 fn state() -> AtmsState {
     let mut atms = AtmsState::new();
-    atms.process_started(0, "dev.acos.fixtures.proca", 10_100);
-    atms.process_started(1, "dev.acos.fixtures.procb", 10_193);
+    atms.process_started(0, "dev.acos.fixtures.proca", 10_100, 0);
+    atms.process_started(1, "dev.acos.fixtures.procb", 10_193, 0);
     atms.attach_application_for(0, token(0, 0x10), 1, "dev.acos.fixtures.proca");
     atms.attach_application_for(1, token(1, 0x10), 2, "dev.acos.fixtures.procb");
     atms
@@ -225,7 +225,7 @@ fn a_same_process_resume_queues_nothing() {
 #[test]
 fn the_status_is_data_not_a_guess() {
     let mut atms = AtmsState::new();
-    atms.process_started(0, "pkg", 1);
+    atms.process_started(0, "pkg", 1, 0);
     atms.attach_application_for(0, token(0, 1), 1, "pkg");
     let a = token(0, 0x105);
     create_and_start(&mut atms, a, "pkg/.A");

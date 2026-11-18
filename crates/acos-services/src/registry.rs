@@ -741,10 +741,18 @@ pub fn install_with_handles_and_insets(
     host.register(
         "permission",
         "android.permission.IPermissionManager",
-        move |_w| {
-            Box::new(crate::declared::PermissionService::new(Arc::clone(
-                &permission,
-            ))) as Box<dyn ServiceObject>
+        {
+            // BINDERPID: core's `IPermissionManager` answers
+            // `checkUidPermission` (the `Context.checkCallingPermission` path)
+            // from the session's one permission table, so it cannot disagree with
+            // the `system.permissions` module that takes the name over.
+            let core_store = Arc::clone(&permissions);
+            move |_w| {
+                Box::new(crate::declared::PermissionService::with_store(
+                    Arc::clone(&permission),
+                    Arc::clone(&core_store),
+                )) as Box<dyn ServiceObject>
+            }
         },
     );
     host.register("user", "android.os.IUserManager", move |_w| {

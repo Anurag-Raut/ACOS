@@ -3251,6 +3251,50 @@ public final class LaunchMain {
         }
     }
 
+    /**
+     * MPROC8: a process started for a component that is **not an activity**
+     * (`bindService`, `startService`, a provider publish).
+     *
+     * <p>AOSP's `ActiveServices.realStartServiceLocked` runs after
+     * `attachApplicationLocked`: the process attaches (`IApplicationThread` is
+     * known to the host), `handleBindApplication` completes, and then the host
+     * delivers `scheduleCreateService` + `scheduleBindService` onto this
+     * process's looper. There is no launch transaction to wait for — waiting for
+     * one (the old behaviour) made a bind-only process time out and exit before
+     * its caller was ever answered.
+     *
+     * <p>So: report the dispatch checkpoint, write the marker and return to the
+     * looper. The process stays resident (a bound service's process lives as long
+     * as the bind, exactly like a device); the launcher ends it at session end or
+     * when the activity manager's idle rule names it.
+     */
+    static void serviceResident() throws Exception {
+        awaitBindDispatch(5000);
+        write(new File(sOut, "service-resident.marker"),
+                "package=" + sPkg
+                        + "\nuid=" + android.os.Process.myUid()
+                        + "\npid=" + android.os.Process.myPid()
+                        + "\nuntil=" + sUntil
+                        + "\nbind_application_dispatch_finished=" + sBindFinished + "\n");
+        System.out.println("ACOSLAUNCH MARK service-resident package=" + sPkg
+                + " uid=" + android.os.Process.myUid()
+                + " pid=" + android.os.Process.myPid()
+                + " bind-application=" + sBindFinished);
+        System.out.flush();
+    }
+
+    /**
+     * Wait for the framework's own `<<<<< Finished` line for the BIND_APPLICATION
+     * message: that is the proof the real `handleBindApplication` (and therefore
+     * `Instrumentation.callApplicationOnCreate`) returned normally.
+     */
+    static boolean awaitBindDispatch(long ms) throws Exception {
+        long bindDeadline = System.currentTimeMillis() + ms;
+        while (!sBindFinished && System.currentTimeMillis() < bindDeadline) Thread.sleep(5);
+        System.out.println("ACOSLAUNCH MARK bind-application-dispatch-finished=" + sBindFinished);
+        return sBindFinished;
+    }
+
     static void watch(Object thread, Class<?> at, IBinder appThread) throws Exception {
         long deadline = System.currentTimeMillis() + 20000;
         Object app = get(thread, "mInitialApplication");
@@ -3290,14 +3334,20 @@ public final class LaunchMain {
                 + " instrumentation=" + (instr == null ? "null" : instr.getClass().getName()));
         System.out.flush();
 
+        // MPROC8: a bind-only / service-only process (see `serviceResident`).
+        // Checked before the activity paths: it has no activity to launch and
+        // must never run one, and it must not quit while the host's service
+        // deliveries (which arrive right after `attach`) are still in flight.
+        if ("service-resident".equals(sUntil)) {
+            serviceResident();
+            return;
+        }
         if (!"activity-resumed".equals(sUntil) || sActivity == null) {
             // Wait for the framework's own `<<<<< Finished` line for the
             // BIND_APPLICATION message: that is the proof the real
             // `handleBindApplication` (and therefore
             // `Instrumentation.callApplicationOnCreate`) returned normally.
-            long bindDeadline = System.currentTimeMillis() + 5000;
-            while (!sBindFinished && System.currentTimeMillis() < bindDeadline) Thread.sleep(5);
-            System.out.println("ACOSLAUNCH MARK bind-application-dispatch-finished=" + sBindFinished);
+            awaitBindDispatch(5000);
             awaitFrameProbe();
             quit();
             return;

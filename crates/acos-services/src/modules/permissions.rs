@@ -315,6 +315,17 @@ impl ServiceObject for PermissionsService {
                     crate::parcelable::parceled_list_of(items),
                 )]
             }
+            // `checkUidPermission(int uid, String permissionName, int deviceId)`:
+            // the framework's `Context.checkCallingPermission` path — the caller
+            // is a **uid** (`Binder.getCallingUid()`), and BINDERPID is what
+            // makes that uid the calling app's real one instead of 0.
+            "checkUidPermission" => {
+                let uid = int(0);
+                let permission = string(1);
+                vec![WireValue::Int(
+                    self.store().check_uid_permission(uid as u32, &permission),
+                )]
+            }
             // `isPermissionRevokedByPolicy(...)`: no device policy on ACOS.
             "isPermissionRevokedByPolicy" => vec![WireValue::Bool(false)],
             "getAllowlistedRestrictedPermissions"

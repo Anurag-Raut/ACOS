@@ -35,11 +35,11 @@ fn resumed(atms: &mut AtmsState, token: u64, class: &str) {
 /// both app threads attached (what `attachApplication` records).
 fn state() -> AtmsState {
     let mut atms = AtmsState::new();
-    atms.process_started(0, "dev.acos.fixtures.permprobe", 10_192);
+    atms.process_started(0, "dev.acos.fixtures.permprobe", 10_192, 0);
     atms.attach_application_for(0, 0x1000_0001, 1, "dev.acos.fixtures.permprobe");
     atms.finish_attach_application_for(0, 1)
         .expect("the primary app thread attached");
-    atms.process_started(1, "com.android.permissioncontroller", 10_193);
+    atms.process_started(1, "com.android.permissioncontroller", 10_193, 0);
     atms.attach_application_for(1, 0x1000_0002, 2, "com.android.permissioncontroller");
     atms.finish_attach_application_for(1, 2)
         .expect("the controller app thread attached");

@@ -292,13 +292,34 @@ impl PermissionState {
 /// `IPermissionManager` handler.
 pub struct PermissionService {
     state: Arc<Mutex<PermissionState>>,
+    /// The session's one permission table. `checkUidPermission` (the
+    /// `Context.checkCallingPermission` path) is a *uid* question, and the grant
+    /// table is where its answer lives (BINDERPID).
+    store: Option<Arc<Mutex<crate::permissions::PermissionStore>>>,
 }
 
 impl PermissionService {
     /// Wrap shared state.
     #[must_use]
     pub fn new(state: Arc<Mutex<PermissionState>>) -> Self {
-        Self { state }
+        Self {
+            state,
+            store: None,
+        }
+    }
+
+    /// [`Self::new`] with the session's shared permission table, so the
+    /// per-uid check (`checkUidPermission`) answers from the same grants the
+    /// package manager and the `system.permissions` module read.
+    #[must_use]
+    pub fn with_store(
+        state: Arc<Mutex<PermissionState>>,
+        store: Arc<Mutex<crate::permissions::PermissionStore>>,
+    ) -> Self {
+        Self {
+            state,
+            store: Some(store),
+        }
     }
 }
 
@@ -310,6 +331,23 @@ impl ServiceObject for PermissionService {
         let reply = match method.name.as_str() {
             "getPermissionFlags" => vec![Value::Int(0)],
             "shouldShowRequestPermissionRationale" => vec![Value::Bool(false)],
+            // `checkUidPermission(int uid, String permission, int deviceId)`:
+            // `Context.checkCallingPermission`/`checkPermission` reach it via
+            // `ActivityManager.checkComponentPermission`. Without the shared
+            // table this host cannot answer a per-uid question at all, so it
+            // says so instead of fabricating a grant.
+            "checkUidPermission" => {
+                let Some(store) = self.store.as_ref() else {
+                    return Err(unsupported(interface, method));
+                };
+                let uid = int_arg(args, 0);
+                let permission = str_arg(args, 1);
+                let answer = store
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .check_uid_permission(uid as u32, &permission);
+                vec![Value::Int(answer)]
+            }
             "isPermissionRevokedByPolicy" => vec![Value::Bool(false)],
             "getAllowlistedRestrictedPermissions" => vec![Value::List(Some(Vec::new()))],
             "getAutoRevokeExemptionRequestedPackages"

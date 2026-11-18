@@ -5,9 +5,11 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcel;
+import android.os.Process;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -111,7 +113,75 @@ public class ProcAActivity extends Activity {
         });
         Log.i(TAG, "ACOSPROBE a ready pkg=" + getPackageName()
                 + " pid=" + android.os.Process.myPid());
+        probeIdentity();
         status.setText("A ready");
+    }
+
+    /**
+     * BINDERPID: what this process's own binder identity is, and what the host
+     * answers for it.
+     *
+     * <p>On a device a process's own thread answers `Binder.getCallingUid()` with
+     * its own uid (`IPCThreadState`'s calling identity outside a transaction) and
+     * `Context.checkCallingPermission` asks the permission service for it by uid.
+     * The two apps in this session have different uids, so the permission answer
+     * must differ per app: {@code granted_to} is only one of them.
+     */
+    private void probeIdentity() {
+        int uid = Process.myUid();
+        int pid = Process.myPid();
+        int callingUid = Binder.getCallingUid();
+        int callingPid = Binder.getCallingPid();
+        // Both host answers are reported by their real result: a value, or the
+        // framework's exception class when the service could not answer. Never a
+        // fabricated grant.
+        String owner;
+        try {
+            owner = String.valueOf(getPackageManager().getNameForUid(uid));
+        } catch (Throwable t) {
+            owner = "EX:" + t.getClass().getSimpleName();
+        }
+        String perm;
+        try {
+            perm = String.valueOf(checkCallingPermission("android.permission.INTERNET"));
+        } catch (Throwable t) {
+            perm = "EX:" + t.getClass().getSimpleName();
+        }
+        String self;
+        try {
+            self = String.valueOf(checkSelfPermission("android.permission.INTERNET"));
+        } catch (Throwable t) {
+            self = "EX:" + t.getClass().getSimpleName();
+        }
+        String byName;
+        try {
+            byName = String.valueOf(getPackageManager()
+                    .checkPermission("android.permission.INTERNET", getPackageName()));
+        } catch (Throwable t) {
+            byName = "EX:" + t.getClass().getSimpleName();
+        }
+        // PROCUID: the data directory this process can write is its own, and the
+        // kernel says it belongs to the uid the process runs as — `dataDir` is
+        // what PMS answered for this package (`/data/user/0/<pkg>`), which is
+        // also what `/data/data/<pkg>` names.
+        String dataPath = "?";
+        String dataExists = "?";
+        String dataOwner = "?";
+        try {
+            java.io.File dir = getDataDir();
+            dataPath = dir.getAbsolutePath();
+            dataExists = dir.isDirectory() ? "1" : "0";
+            dataOwner = String.valueOf(android.system.Os.stat(dataPath).st_uid);
+        } catch (Throwable t) {
+            dataOwner = "EX:" + t.getClass().getSimpleName();
+        }
+        Log.i(TAG, "ACOSPROBE a identity pkg=" + getPackageName()
+                + " uid=" + uid + " pid=" + pid
+                + " calling-uid=" + callingUid + " calling-pid=" + callingPid
+                + " uid-pkg=" + owner
+                + " internet=" + perm + " self=" + self + " by-name=" + byName
+                + " data=" + dataPath + " data-exists=" + dataExists
+                + " data-owner=" + dataOwner);
     }
 
     @Override

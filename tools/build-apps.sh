@@ -262,23 +262,25 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
-# ONE list, the union of both sides (MERGE040A, re-checked by MERGE040B). The
-# pre-merge tree carried two `for app in` headers here (a MERGE030 artifact):
-# the second one (with looper-wake) shadowed the first, so sensor-probe and
-# notif-perm-probe were silently never built; SCENHYG found the other half of
-# the same artifact — the pair of `done`-less headers also stopped *every*
-# fixture below this point from being built (a11y-probe, tail-probe,
-# location-probe, proc-a/b, scroll-list, back-layers, tap-targets, touch-probe,
-# net-check, keystore-probe, webview-probe, insets-probe, …). sysui3a's side
-# added the SYSUI system apps. Deleting either list loses fixtures, so the
-# merged list is the union and there is exactly one loop.
+# ONE list, the union of every side (MERGE040A, MERGE040B). The pre-merge tree
+# carried two `for app in` headers here (a MERGE030 artifact): the second one
+# (with looper-wake) shadowed the first, so sensor-probe and notif-perm-probe
+# were silently never built; SCENHYG and PROCUID each found the other half of
+# the same artifact — the pair of `done`-less headers left this loop
+# unterminated, so the whole script died before *any* fixture of the tree could
+# be built (nothing below this point: a11y-probe, tail-probe, location-probe,
+# proc-a/b, scroll-list, back-layers, tap-targets, touch-probe, net-check,
+# keystore-probe, webview-probe, insets-probe, …). sysui3a's side added the
+# SYSUI system apps, launchextras its launch-extras-probe. Deleting any list
+# loses fixtures, so the merged list is the union and there is exactly one loop.
 #
 # looper-wake is the LOOPERWAKE fixture: an idle Activity changed from a
 # non-main thread (plain Thread + runOnUiThread, HandlerThread + main Handler,
 # and View.postInvalidate from a plain thread). Nothing here needs input, so a
 # scenario can prove the main looper is woken by the post itself.
 # sensor-probe (MODSENS), notif-perm-probe (MODNOTIF5),
-# permissioncontroller + perm-probe (SYSUI1), systemui (SYSUI2).
+# permissioncontroller + perm-probe (SYSUI1), systemui (SYSUI2),
+# launch-extras-probe (LAUNCHEXTRAS).
 for app in counter todo-list multi-activity finish-start form-validation settle-lab \
            thread-heavy svg-viewbox offscreen-pager looper-wake sensor-probe \
            notif-perm-probe permissioncontroller perm-probe systemui \

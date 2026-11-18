@@ -316,7 +316,11 @@ enum {
     F_DEATH = 7
 };
 enum { REF_ACQUIRE = 1, REF_RELEASE = 2 };
-#define ACOS_WIRE_VERSION 3
+// v4: the header's last 8 bytes carry the sender's pid and euid instead of
+// being `reserved`. A v3 peer wrote zeros there, so a v4 driver reads them as
+// the "unknown sender" a v3 build reported (`Binder.getCallingPid()` = 0) —
+// nothing a v3 peer sends is misread.
+#define ACOS_WIRE_VERSION 4
 
 // `F_RSP` flag (MPROC5b): the peer refused because the target process is dead.
 // The caller must see `BR_DEAD_REPLY` (DeadObjectException), not the generic
@@ -331,7 +335,14 @@ struct fhdr {
     uint64_t target;       // REQ: target handle (u32); TXN: node id
     uint64_t data_size;
     uint64_t offsets_size;
-    uint64_t reserved;
+    // v4 (BINDERPID): the sender's identity — the 8 bytes v3 called `reserved`.
+    // TXN/RSP: what `binder_transaction_data.sender_pid/sender_euid` must say in
+    // the guest (the peer fills them: `system_server` for a host delivery, the
+    // calling app for a relayed guest -> guest transaction). REQ/REP: this
+    // process's own pid/uid, evidence the peer never has to trust (it reads the
+    // caller from SO_PEERCRED and the activity manager instead).
+    uint32_t sender_pid;
+    uint32_t sender_euid;
 };
 
 struct slot {
@@ -343,6 +354,10 @@ struct slot {
     uint8_t* offs;
     size_t offs_size;
     uint32_t status;
+    // v4: the sender identity carried by the F_RSP header, reported as
+    // BR_REPLY's `binder_transaction_data.sender_pid/sender_euid` (BINDERPID).
+    uint32_t sender_pid;
+    uint32_t sender_euid;
     int dead;              // F_RSP with E3G_RSP_DEAD -> BR_DEAD_REPLY
     // Descriptors the peer sent with this reply (SCM_RIGHTS). They are owned by
     // this process until `build_reply` substitutes them into the reply
@@ -363,6 +378,9 @@ struct inq {
     uint32_t seq;
     uint32_t code;
     uint32_t flags;
+    // v4: the sender identity carried by the F_TXN header (BINDERPID).
+    uint32_t sender_pid;
+    uint32_t sender_euid;
     uint64_t data_size, offs_size;
     uint8_t* data;
 };
@@ -993,6 +1011,12 @@ static int send_frame(uint32_t type, uint32_t seq, uint32_t code, uint32_t flags
     h.target = target;
     h.data_size = dsize;
     h.offsets_size = osize;
+    // v4: this driver's own identity. The guest's `getpid()` is namespace-local
+    // (`--unshare-pid`) and its euid is the sandbox uid, so the peer derives the
+    // caller from the accepted socket and the activity manager instead; these
+    // fields are evidence/diagnostics, never the peer's source of truth.
+    h.sender_pid = (uint32_t)getpid();
+    h.sender_euid = (uint32_t)geteuid();
     struct iovec iov[3];
     int niov = 0;
     iov[niov].iov_base = &h;
@@ -1129,6 +1153,8 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
             s->data_size = (size_t)h->data_size;
             s->offs_size = (size_t)h->offsets_size;
             s->status = h->code;
+            s->sender_pid = h->sender_pid;
+            s->sender_euid = h->sender_euid;
             s->dead = (h->flags & E3G_RSP_DEAD) != 0;
             if (nfds > E3G_MAX_FD) nfds = E3G_MAX_FD;
             if (nfds > 0) memcpy(s->fds, fds, sizeof(int) * (size_t)nfds);
@@ -1156,6 +1182,8 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
             q->seq = h->seq;
             q->code = h->code;
             q->flags = h->flags;
+            q->sender_pid = h->sender_pid;
+            q->sender_euid = h->sender_euid;
             q->data_size = h->data_size;
             q->offs_size = h->offsets_size;
             q->data = malloc((size_t)h->data_size + 8);
@@ -1412,8 +1440,13 @@ static int deliver_incoming(void) {
     tr.cookie = local.cookie;
     tr.code = q->code;
     tr.flags = q->flags;
-    tr.sender_pid = 0;
-    tr.sender_euid = 0;
+    // v4: `Binder.getCallingPid()`/`getCallingUid()` inside the app's
+    // `onTransact` read exactly these two fields (`IPCThreadState::
+    // executeCommand(BR_TRANSACTION)` -> `setCallingWorkSourceUid`). The peer
+    // filled them from the F_TXN header: `system_server` for a host delivery,
+    // the calling app's real uid/pid for a relayed guest -> guest transaction.
+    tr.sender_pid = (int32_t)q->sender_pid;
+    tr.sender_euid = q->sender_euid;
     tr.data_size = dsize;
     tr.offsets_size = osize;
     tr.data.ptr.buffer = (uintptr_t)buf;
@@ -1525,8 +1558,10 @@ static int build_reply(struct slot* s) {
     tr.cookie = 0;
     tr.code = 0;
     tr.flags = 0;
-    tr.sender_pid = 0;
-    tr.sender_euid = 0;
+    // v4: the reply's sender is the process that sent it (the host), the same
+    // thing the kernel reports for BR_REPLY.
+    tr.sender_pid = (int32_t)s->sender_pid;
+    tr.sender_euid = s->sender_euid;
     tr.data_size = dsize;
     tr.offsets_size = osize;
     tr.data.ptr.buffer = (uintptr_t)buf;

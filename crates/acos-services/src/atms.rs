@@ -402,7 +402,12 @@ pub struct ProcessRecord {
     /// MPROC4 step 3b: the app process's tag (`0` = the launched/primary
     /// process). One record per tag; a tag is what names a process here.
     pub tag: u32,
-    /// Synthetic pid (the reference app pid is not stable across runs).
+    /// The process's pid **in the host's pid namespace** — the number `ps`
+    /// shows and the one the kernel reports through `SO_PEERCRED` on the guest's
+    /// driver socket (BINDERPID). `0` means the pid is not known yet (a host
+    /// test that never connects a guest); it is never a placeholder, because a
+    /// placeholder is indistinguishable from a real pid to every caller of
+    /// `Binder.getCallingPid()`.
     pub pid: i32,
     /// uid.
     pub uid: i32,
@@ -780,29 +785,37 @@ impl AtmsState {
     /// MPROC4 step 3b: a process exists because its guest connected with `tag`.
     ///
     /// `ActivityManagerService.startProcessLocked` creates the record when the
-    /// zygote forks; the peer's handshake names the tag and the package, so this
-    /// is the same event at the same point (before any attach). A record that
-    /// already exists keeps its pid/uid (a re-attach is not a new process).
-    pub fn process_started(&mut self, tag: u32, package: &str, uid: i32) {
+    /// zygote forks; the peer's handshake names the tag, the package and the pid
+    /// the kernel reported, so this is the same event at the same point (before
+    /// any attach). A record that already exists keeps its identity (a re-attach
+    /// is not a new process), except that a pid/uid/package learned later fills
+    /// in what the record did not know: `0`/empty always means "unknown here",
+    /// never a value to keep over a real one.
+    ///
+    /// SYSUI2: the record can exist before the handshake that names the package
+    /// (`attachApplication` carries no package argument, so the attach path
+    /// creates the record with an empty name). The peer's connection handshake
+    /// is the event that knows it, and a record with an empty package cannot
+    /// answer "does this package already run?" (`Peer::package_of` -> the
+    /// pending launch of an Activity started in the running process). A name
+    /// the record already carries is the record's: a second seed never
+    /// contradicts it.
+    pub fn process_started(&mut self, tag: u32, package: &str, uid: i32, pid: i32) {
         if let Some(existing) = self.process_mut(tag) {
-            // SYSUI2: the record can exist before the handshake that names the
-            // package (`attachApplication` carries no package argument, so the
-            // attach path creates the record with an empty name). The peer's
-            // connection handshake is the event that knows it, and a record with
-            // an empty package cannot answer "does this package already run?"
-            // (`Peer::package_of` -> the pending launch of an Activity started in
-            // the running process).
+            if pid != 0 {
+                existing.pid = pid;
+            }
+            if uid != 0 && existing.uid == 0 {
+                existing.uid = uid;
+            }
             if existing.package_name.is_empty() && !package.is_empty() {
                 existing.package_name = package.to_string();
-            }
-            if existing.uid == 0 {
-                existing.uid = uid;
             }
             return;
         }
         self.processes.push(ProcessRecord {
             tag,
-            pid: 4242,
+            pid,
             uid,
             package_name: package.to_string(),
             app_thread: None,
@@ -968,8 +981,17 @@ impl AtmsState {
         }
         self.processes.push(ProcessRecord {
             tag,
-            pid: 4242,
-            uid: crate::pms::FIXTURE_UID,
+            // No `ProcessRecord` for this tag existed (the branch above), so
+            // no pid was ever reported for it: unknown, never a placeholder.
+            // `process_started` fills it in when the guest's connection names
+            // its credential.
+            pid: 0,
+            // UID: likewise unknown, never another app's uid. AOSP's
+            // `ProcessRecord.uid` is the package's; the peer's handshake
+            // (`Peer::record_process_started` -> `process_started`) is what
+            // names it from the package manager, and `process_started` fills
+            // an unknown (`0`) uid in place.
+            uid: 0,
             package_name: package,
             app_thread: Some(app_thread),
             attach_seq: seq,
@@ -2015,6 +2037,32 @@ impl AtmsState {
 
     /// `checkPermission`: the shared runtime table first, then install-time.
     #[must_use]
+    /// `IActivityManager.checkPermission`'s answer for one **uid**
+    /// (BINDERPID): AOSP asks the permission state for the calling uid, so two
+    /// apps in one session with different uids get different answers.
+    ///
+    /// A uid the published table cannot resolve (and a caller that passed no
+    /// uid, `-1`) keeps the package-level answer below — the single-package
+    /// policy this state has always had — rather than reporting a grant or a
+    /// denial for a process nobody named.
+    #[must_use]
+    pub fn check_permission_for_uid(&self, permission: &str, uid: i32) -> i32 {
+        if uid >= 0 {
+            if let Some(store) = self.runtime_permissions.as_ref() {
+                let store = store
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if !store.uid_grants.is_empty() {
+                    return store.check_uid_permission(uid as u32, permission);
+                }
+                if store.entry(permission).is_some() {
+                    return store.check(permission);
+                }
+            }
+        }
+        self.check_permission(permission)
+    }
+
     pub fn check_permission(&self, permission: &str) -> i32 {
         if let Some(store) = self.runtime_permissions.as_ref() {
             let store = store
@@ -2188,17 +2236,11 @@ impl AtmsService {
     ///
     /// The uid is the uid already recorded for that package, else `0` (never a
     /// guessed uid).
-    pub fn note_process_started(&mut self, tag: u32, package: &str) {
+    pub fn note_process_started(&mut self, tag: u32, package: &str, uid: i32, pid: i32) {
         let Ok(mut state) = self.state.lock() else {
             return;
         };
-        let uid = state
-            .processes
-            .iter()
-            .find(|p| p.package_name == package)
-            .map(|p| p.uid)
-            .unwrap_or(0);
-        state.process_started(tag, package, uid);
+        state.process_started(tag, package, uid, pid);
     }
 
     /// MPROC7: the launch recorded for `package` that the host still owes,
@@ -2489,8 +2531,16 @@ impl ServiceObject for AtmsService {
         let mut deliveries = Vec::new();
         let reply = match (self.interface, method.name.as_str()) {
             (AtmsInterface::ActivityManager, "checkPermission") => {
+                // `IActivityManager.checkPermission(String permission, int pid,
+                // int uid)`: AOSP's `ActivityManagerService.checkPermission`
+                // delegates to `checkComponentPermission(permission, pid, uid,
+                // -1, true)`, i.e. the answer is the **uid's**, not one package's
+                // (BINDERPID). `Context.checkCallingPermission` reaches this on
+                // the image, so an app's own uid decides the answer.
                 let permission = args.first().and_then(Value::as_str).unwrap_or_default();
-                vec![Value::Int(state.check_permission(permission))]
+                let uid = args.get(2).and_then(Value::as_int).unwrap_or(-1);
+                let answer = state.check_permission_for_uid(permission, uid);
+                vec![Value::Int(answer)]
             }
             (AtmsInterface::ActivityManager, "attachApplication") => {
                 let app_thread = args.first().and_then(Value::as_binder).map(|b| b.0);

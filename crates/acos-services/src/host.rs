@@ -1481,9 +1481,13 @@ impl ServiceHost {
                 let Some(state) = self.ams_state() else {
                     return;
                 };
-                // The target process, when it is already attached: the same
-                // `ProcessRecord` the activity launch path uses. `None` means
-                // the launcher must spawn it first, exactly like a launch.
+                // The target process, when its `IApplicationThread` is known: the
+                // same `ProcessRecord` the activity launch path uses. `None` means
+                // the launcher must spawn it first, exactly like a launch. It does
+                // not have to have *finished* attaching (AOSP records the service
+                // in `mServices` and starts it at the process's attach — a bind
+                // that lands while the process is attaching is queued behind its
+                // `bindApplication`).
                 let target = {
                     let state = state
                         .lock()
@@ -1501,7 +1505,7 @@ impl ServiceHost {
                     state
                         .processes
                         .iter()
-                        .find(|p| p.package_name == package && p.attached)
+                        .find(|p| p.package_name == package && p.app_thread.is_some())
                         .and_then(|p| p.app_thread.map(|thread| (p.tag, thread)))
                 };
                 let resolved = crate::ams::DeclaredComponent {
@@ -1579,51 +1583,71 @@ impl ServiceHost {
                     .and_then(crate::value::Value::as_binder)
                     .map(|b| b.0)
                     .unwrap_or(0);
-                let Some(state) = self.ams_state() else {
-                    return;
-                };
-                let record = {
+                // AOSP `ActivityManagerService.attachApplicationLocked`: the
+                // process is addressable from the moment it names its
+                // `IApplicationThread`, and `mServices.attachApplicationLocked`
+                // (which is what `realStartServiceLocked` runs from) is in the
+                // **same** method — before the app's `bindApplication` returns.
+                // So the record is found by its app thread, not by "already
+                // finished attaching": a process that exists only because a
+                // `bindService` needed it has no other attach, and waiting for
+                // `finishAttachApplication` there would strand the bind for
+                // ever (measured: a bind-only spawn never received
+                // `scheduleCreateService`, the caller waited out its timeout).
+                let record = self.ams_state().and_then(|state| {
                     let state = state
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
                     state
                         .processes
                         .iter()
-                        .find(|p| p.app_thread == Some(thread) && p.attached)
+                        .find(|p| p.app_thread == Some(thread))
                         .map(|p| (p.tag, p.package_name.clone()))
-                };
-                let Some((tag, package)) = record else {
-                    return;
-                };
-                let waiting = {
-                    let state = state
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    state.ams.host_services.waiting_for_process(&package)
-                };
-                for (package, class) in waiting {
-                    let Some((info, app)) = self.service_record(&package, &class) else {
-                        continue;
-                    };
-                    let assigned = {
-                        let mut state = state
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner);
-                        state
-                            .ams
-                            .host_services
-                            .assign_process(tag, thread, &package, &class, &info, &app)
-                    };
-                    match assigned {
-                        Ok(deliveries) => self.deliveries.extend(deliveries),
-                        Err(error) => eprintln!(
-                            "acos-services: cannot bring up {package}/{class} for process {tag}: \
-                             {error}"
-                        ),
-                    }
+                });
+                if let Some((tag, package)) = record {
+                    self.start_waiting_services(tag, thread, &package);
                 }
             }
             _ => {}
+        }
+    }
+
+    /// AOSP `ActiveServices.realStartServiceLocked` for process `tag`: deliver
+    /// `scheduleCreateService` + `scheduleBindService` for every bound service
+    /// of `package` that still waits for its process.
+    ///
+    /// The service table and the package manager are two hosts' state, so the
+    /// records are read (lock released), resolved through the package manager and
+    /// then assigned (lock taken again) — never both under one lock.
+    fn start_waiting_services(&mut self, tag: u32, thread: u64, package: &str) {
+        let Some(state) = self.ams_state() else {
+            return;
+        };
+        let waiting = {
+            let state = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.ams.host_services.waiting_for_process(package)
+        };
+        for (package, class) in waiting {
+            let Some((info, app)) = self.service_record(&package, &class) else {
+                continue;
+            };
+            let assigned = {
+                let mut state = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                state
+                    .ams
+                    .host_services
+                    .assign_process(tag, thread, &package, &class, &info, &app)
+            };
+            match assigned {
+                Ok(deliveries) => self.deliveries.extend(deliveries),
+                Err(error) => eprintln!(
+                    "acos-services: cannot bring up {package}/{class} for process {tag}: {error}"
+                ),
+            }
         }
     }
 
@@ -2301,6 +2325,28 @@ impl ServiceHost {
     ) -> Result<i32> {
         let service = self.pms_mut()?;
         service.install_extra_package_from_apk_as(apk_path, guest_source_dir, guest_native_lib_dir)
+    }
+
+    /// The uid the package manager allocated for `package` in this session.
+    ///
+    /// `None` when the package manager is not registered or the package is not
+    /// installed — never a guessed uid. BINDERPID uses it to record the caller
+    /// identity of a guest process: the socket's uid is the sandbox's mapped
+    /// 1000 and says nothing about the app, while this is the uid
+    /// `PackageManager.getPackageUid` and the permission checks answer with.
+    pub fn package_uid(&mut self, package: &str) -> Option<i32> {
+        if package.is_empty() {
+            return None;
+        }
+        let object = self.ensure("android.content.pm.IPackageManager").ok()?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())?;
+        let state = service.shared_state();
+        let state = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.lookup(Some(package)).map(|record| record.app.uid)
     }
 
     fn pms_mut(&mut self) -> Result<&mut crate::pms::PmsService> {

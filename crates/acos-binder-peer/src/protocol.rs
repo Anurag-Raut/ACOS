@@ -12,7 +12,8 @@
 //! u64 target REQ: peer node id (0 = servicemanager); TXN: driver wire handle
 //! u64 data_size
 //! u64 offsets_size
-//! u64 reserved
+//! u32 sender_pid   (was `reserved` in v3; see [`PROTOCOL_VERSION`])
+//! u32 sender_euid
 //! ```
 use std::io;
 use std::mem;
@@ -63,8 +64,20 @@ pub const F_DEATH: u32 = 7;
 
 /// The wire protocol this build speaks. Bump it for every change to the frame
 /// meanings (v2: `F_HELLO` + `F_REF`; v3: the hello also names the process tag,
-/// `F_DEATH` exists).
-pub const PROTOCOL_VERSION: u32 = 3;
+/// `F_DEATH` exists; v4: the header's last 8 bytes carry the sender's pid and
+/// euid instead of being reserved).
+///
+/// v4 is the BINDERPID change. The 8 bytes were `reserved` (zero) through v3,
+/// so the frame is the same size and an older peer/driver still round-trips:
+/// what it reads back is a sender of `(0, 0)`, which is exactly the "unknown
+/// caller" a v3 build reported. The peer therefore **serves** a v3 driver (its
+/// per-process identity comes from `SO_PEERCRED` + the activity manager, never
+/// from the frame) and records that the host -> guest direction cannot name a
+/// sender; a v4 driver refuses nothing, because a frame with a zero sender is
+/// what an unknown sender always looked like. Peers newer than this build are
+/// recorded as unsupported (see `Peer::handle_tagged`'s `F_HELLO` arm) and are
+/// never assumed to know a frame this build does not.
+pub const PROTOCOL_VERSION: u32 = 4;
 /// The host took one more strong reference on the node.
 pub const REF_ACQUIRE: u32 = 1;
 /// The host dropped one strong reference; at zero the node is released and the
@@ -134,6 +147,13 @@ pub struct Frame {
     pub offs: Vec<u8>,
     /// File descriptors carried by this frame.
     pub fds: Vec<RawFd>,
+    /// Sender pid (v4). On `F_TXN`/`F_RSP` the driver reports it as
+    /// `binder_transaction_data.sender_pid`, which is what
+    /// `Binder.getCallingPid()` answers inside the guest's `onTransact`. `0`
+    /// means "unknown sender" (a v3 peer, or a frame no identity applies to).
+    pub sender_pid: u32,
+    /// Sender uid (v4), `Binder.getCallingUid()`'s source. `0` = unknown.
+    pub sender_euid: u32,
 }
 
 impl Frame {
@@ -148,7 +168,19 @@ impl Frame {
             data,
             offs: Vec::new(),
             fds: Vec::new(),
+            sender_pid: 0,
+            sender_euid: 0,
         }
+    }
+
+    /// A frame that names its sender (v4): the host stamps a `system -> app`
+    /// delivery with `system_server`'s pid/uid, the peer stamps a relayed
+    /// transaction with the sending app process's.
+    #[must_use]
+    pub fn sent_by(mut self, pid: u32, euid: u32) -> Self {
+        self.sender_pid = pid;
+        self.sender_euid = euid;
+        self
     }
 
     /// A connection handshake naming `tag` (see [`F_HELLO`]).
@@ -169,6 +201,8 @@ impl Frame {
             data: bytes,
             offs: Vec::new(),
             fds: Vec::new(),
+            sender_pid: 0,
+            sender_euid: 0,
         }
     }
 
@@ -210,6 +244,9 @@ pub fn encode_header(f: &Frame) -> [u8; HEADER_SIZE] {
     h[16..24].copy_from_slice(&f.target.to_le_bytes());
     h[24..32].copy_from_slice(&(f.data.len() as u64).to_le_bytes());
     h[32..40].copy_from_slice(&(f.offs.len() as u64).to_le_bytes());
+    // v4: the 8 bytes that were `reserved` (and are still zero for a v3 peer).
+    h[40..44].copy_from_slice(&f.sender_pid.to_le_bytes());
+    h[44..48].copy_from_slice(&f.sender_euid.to_le_bytes());
     h
 }
 
@@ -227,6 +264,8 @@ fn decode_header(h: &[u8; HEADER_SIZE]) -> (Frame, usize, usize) {
             data: Vec::new(),
             offs: Vec::new(),
             fds: Vec::new(),
+            sender_pid: u32at(40),
+            sender_euid: u32at(44),
         },
         u64at(24) as usize,
         u64at(32) as usize,
@@ -415,6 +454,51 @@ pub fn listen(path: &str) -> io::Result<RawFd> {
     }
 }
 
+/// Who the kernel says is on the other end of an accepted socket.
+///
+/// `pid` is the peer process's pid **in this process's pid namespace**, which
+/// is what `ps`, `SO_PEERCRED` and a `ProcessRecord.pid` all report on the
+/// host — the guest's own `getpid()` is a namespace-local number because the
+/// sandbox unshares the pid namespace (`acos-art`'s bwrap set). `uid` is the
+/// *host* uid, which a `--unshare-user` sandbox maps the app's uid onto
+/// (1000 = `SYSTEM_UID`), so it is never the app's uid; the app's uid comes
+/// from the activity manager's `ProcessRecord` (see `Peer::caller_identity`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PeerCred {
+    /// Peer pid in the host's pid namespace.
+    pub pid: i32,
+    /// Peer uid as the kernel sees it (the sandbox's mapped uid).
+    pub uid: u32,
+    /// Peer gid as the kernel sees it.
+    pub gid: u32,
+}
+
+/// `getsockopt(SOL_SOCKET, SO_PEERCRED)` on `fd`.
+pub fn peer_cred(fd: RawFd) -> io::Result<PeerCred> {
+    // SAFETY: `ucred` is the kernel's own struct for this option and the
+    // length is passed in and checked on return; `fd` is a live socket (the
+    // caller accepted it).
+    let mut cred: libc::ucred = unsafe { mem::zeroed() };
+    let mut len = mem::size_of::<libc::ucred>() as libc::socklen_t;
+    let rc = unsafe {
+        libc::getsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&mut cred as *mut libc::ucred).cast::<libc::c_void>(),
+            &mut len,
+        )
+    };
+    if rc != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(PeerCred {
+        pid: cred.pid,
+        uid: cred.uid,
+        gid: cred.gid,
+    })
+}
+
 /// Accept one connection.
 pub fn accept(fd: RawFd) -> io::Result<RawFd> {
     loop {
@@ -444,6 +528,8 @@ mod tests {
             data: vec![1, 2, 3, 4],
             offs: vec![0, 0, 0, 0, 0, 0, 0, 0],
             fds: vec![],
+            sender_pid: 0,
+            sender_euid: 0,
         };
         let h = encode_header(&f);
         assert_eq!(h.len(), 48);
@@ -453,6 +539,45 @@ mod tests {
             (F_REQ, 7, 73, 0x2_0000_0001)
         );
         assert_eq!((d, o), (4, 8));
+    }
+
+    /// BINDERPID: the sender identity lives in the header's last 8 bytes, in
+    /// exactly the place the v3 header called `reserved`. The byte offsets are
+    /// asserted literally, because the C driver reads the same struct field by
+    /// field and a reordering would be invisible to a round-trip test that
+    /// encoded and decoded with the same code.
+    #[test]
+    fn the_sender_identity_is_the_headers_last_eight_bytes() {
+        let f = Frame::plain(F_TXN, 1, 2, 0, 3, Vec::new()).sent_by(4242, 10192);
+        let h = encode_header(&f);
+        assert_eq!(&h[40..44], &4242u32.to_le_bytes());
+        assert_eq!(&h[44..48], &10192u32.to_le_bytes());
+        // The bytes before them are untouched: data/offsets sizes are zero here.
+        assert_eq!(&h[24..40], &[0u8; 16]);
+        let (g, _, _) = decode_header(&h);
+        assert_eq!((g.sender_pid, g.sender_euid), (4242, 10192));
+    }
+
+    /// A v3 header's last 8 bytes were `reserved` = zero, so it decodes as an
+    /// unknown sender rather than a fabricated identity.
+    #[test]
+    fn a_v3_header_decodes_as_an_unknown_sender() {
+        let mut h = encode_header(&Frame::plain(F_TXN, 1, 2, 0, 3, Vec::new()));
+        h[40..48].fill(0);
+        let (g, _, _) = decode_header(&h);
+        assert_eq!((g.sender_pid, g.sender_euid), (0, 0));
+    }
+
+    #[test]
+    fn the_sender_survives_the_socket() {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::net::UnixStream;
+        let (a, b) = UnixStream::pair().unwrap();
+        let f = Frame::plain(F_TXN, 9, 4, 0, 0x7, vec![1, 2]).sent_by(31337, 1000);
+        write_frame(a.as_raw_fd(), &f).unwrap();
+        let g = read_frame(b.as_raw_fd()).unwrap();
+        assert_eq!((g.sender_pid, g.sender_euid), (31337, 1000));
+        assert_eq!(g.data, vec![1, 2]);
     }
 
     #[test]

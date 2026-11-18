@@ -1401,7 +1401,8 @@ fn run_dir_is_live(path: &Path) -> bool {
 ///
 /// `--unshare-user` is made explicit for runs because it is what lets the guest
 /// carry an **application** uid instead of the host caller's uid (see
-/// [`guest_uid`]); bwrap would create the namespace implicitly anyway.
+/// [`Sandbox::app_uid`] and [`guest_uid_override`]); bwrap would create the
+/// namespace implicitly anyway.
 /// `--disable-userns` and `--new-session` remain absent (untested against ART;
 /// see S2).
 const SANDBOX_FLAGS: &[&str] = &[
@@ -1424,7 +1425,7 @@ const SANDBOX_FLAGS: &[&str] = &[
 /// `Libcore.os.getuid()`, `/proc/self/status` — is an application uid.
 ///
 /// Default: [`acos_services::pms::FIXTURE_UID`] (10192), the uid PMS/AMS already
-/// answer for the installed package, so `Process.myUid()` and
+/// answer for an installed package, so `Process.myUid()` and
 /// `getPackageUid()` agree. This is a fidelity fix, not a cosmetic one: the
 /// host caller is uid 1000, which is Android's `Process.SYSTEM_UID`. Framework
 /// code branches on it — `WebViewFactory.getProvider()` refuses for
@@ -1434,35 +1435,52 @@ const SANDBOX_FLAGS: &[&str] = &[
 /// allowed in privileged processes`, so every app that probes WebView died in a
 /// *system* branch it can never take on a device.
 ///
-/// `ACOS_ART_GUEST_UID=host` keeps the old uid for A/B work. Any other value
-/// must be exactly the PMS fixture uid: PMS/AMS answers and the writable mount
-/// ownership are keyed to it, so a different numeric uid would make
-/// `Process.myUid()` and `getPackageUid()` disagree. A malformed or unsupported
-/// value is an explicit `INVALID_GUEST_UID` error, never a silent host-uid
-/// fallback (host uid 1000 is `SYSTEM_UID`).
-fn guest_uid() -> Result<Option<u32>> {
+/// A multi-process session overrides that default per process with
+/// [`Sandbox::app_uid`]: AOSP gives every installed package its own uid
+/// (`PackageManagerService` allocates it), processes of one package share it and
+/// processes of different packages differ, so the guest that runs a package must
+/// carry **that package's** uid — otherwise `Process.myUid()`, `getPackageUid()`
+/// and the per-uid permission answers would describe one app while the code of
+/// another runs.
+///
+/// `ACOS_ART_GUEST_UID=host` keeps the old uid for A/B work, and a numeric value
+/// pins one uid for the whole run. Both are explicit overrides of the per-process
+/// uid (a seam, not a default), and a value that is neither `host` nor an
+/// application uid (`10000..=19999`, Android's `Process.FIRST_APPLICATION_UID..=`
+/// `LAST_APPLICATION_UID`) is an explicit `INVALID_GUEST_UID` error, never a
+/// silent host-uid fallback (host uid 1000 is `SYSTEM_UID`).
+fn guest_uid_override() -> Result<Option<Option<u32>>> {
     let raw = match std::env::var("ACOS_ART_GUEST_UID") {
-        Err(std::env::VarError::NotPresent) => {
-            return Ok(Some(acos_services::pms::FIXTURE_UID as u32))
-        }
+        Err(std::env::VarError::NotPresent) => return Ok(None),
         Err(e) => return Err(Error::InvalidGuestUid(e.to_string())),
         Ok(v) => v,
     };
+    parse_guest_uid_override(Some(&raw))
+}
+
+/// [`guest_uid_override`] without the environment: the seam's whole rule, so a
+/// unit test can pin it (`ACOS_ART_GUEST_UID` is process-wide and every test in
+/// this binary shares it).
+fn parse_guest_uid_override(raw: Option<&str>) -> Result<Option<Option<u32>>> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
     let value = raw.trim();
     if value.eq_ignore_ascii_case("host") {
-        return Ok(None);
+        return Ok(Some(None));
     }
     let uid = value.parse::<u32>().map_err(|_| {
         Error::InvalidGuestUid(format!("{raw:?} is neither `host` nor an application uid"))
     })?;
-    if uid != acos_services::pms::FIXTURE_UID as u32 {
+    if !acos_services::pms::is_application_uid(uid) {
         return Err(Error::InvalidGuestUid(format!(
-            "uid {uid} != PMS fixture uid {} (PMS/AMS answers and the writable \
-             mounts are keyed to the fixture uid)",
-            acos_services::pms::FIXTURE_UID
+            "uid {uid} is not an application uid ({first}..={last}): the guest must not \
+             run as a system uid",
+            first = acos_services::pms::FIRST_APPLICATION_UID,
+            last = acos_services::pms::LAST_APPLICATION_UID
         )));
     }
-    Ok(Some(uid))
+    Ok(Some(Some(uid)))
 }
 
 /// Builder for the `bwrap` command line: the mini-Android root, its
@@ -1481,6 +1499,10 @@ pub struct Sandbox<'a> {
     /// Guest-side seccomp filter (S5): preload the freestanding stub, which
     /// installs the filter and logs SIGSYS denials.
     seccomp_guest: bool,
+    /// The application uid **this** guest carries (a package's uid, per process).
+    /// `None` = the historical session-wide default ([`guest_uid_override`],
+    /// else the PMS fixture uid).
+    app_uid: Option<u32>,
     /// Host-side build step: keep today's fully-writable `<data>` (regenerating
     /// `linkerconfig`, `derive_classpath`, `dex2oat` boot image). Never an APK run.
     staging: bool,
@@ -1549,6 +1571,7 @@ impl<'a> Sandbox<'a> {
             args: Vec::new(),
             run_root: None,
             seccomp_guest: false,
+            app_uid: None,
             staging: false,
             net_session: None,
         }
@@ -1574,6 +1597,29 @@ impl<'a> Sandbox<'a> {
     pub fn run_root(&mut self, dir: impl AsRef<Path>) -> &mut Self {
         self.run_root = Some(dir.as_ref().to_path_buf());
         self
+    }
+
+    /// The application uid **this** guest process carries — the uid the package
+    /// manager allocated for the package it runs (AOSP: one uid per package,
+    /// shared by that package's processes). See [`guest_uid_override`] for the
+    /// session-wide default this replaces and for the explicit A/B seam that
+    /// still overrides it.
+    pub fn app_uid(&mut self, uid: u32) -> &mut Self {
+        self.app_uid = Some(uid);
+        self
+    }
+
+    /// The uid the guest's user namespace maps its own uid onto.
+    ///
+    /// `Ok(None)` = keep the host caller's uid (`ACOS_ART_GUEST_UID=host`).
+    fn run_uid(&self) -> Result<Option<u32>> {
+        if let Some(explicit) = guest_uid_override()? {
+            return Ok(explicit);
+        }
+        Ok(Some(
+            self.app_uid
+                .unwrap_or(acos_services::pms::FIXTURE_UID as u32),
+        ))
     }
 
     /// Staging mode (host-side build steps only): keep the shared `<data>` tree
@@ -1645,12 +1691,19 @@ impl<'a> Sandbox<'a> {
         for f in spike_net::sandbox_flags() {
             a.push(f.into());
         }
-        // Runs get an application uid (see `guest_uid`); host-side staging
+        // Runs get an application uid (see `run_uid`); host-side staging
         // steps and the argv-shape tests keep the caller's uid.
         if self.active_run_root().is_some() {
-            if let Some(uid) = guest_uid()? {
+            if let Some(uid) = self.run_uid()? {
                 a.push("--unshare-user".into());
                 a.push("--uid".into());
+                a.push(uid.to_string().into());
+                // PROCUID: an app process's primary group is its own uid
+                // (`Process.myGid()` == uid on a device; the supplementary
+                // groups are the permissions' `inet` etc.). One id per process,
+                // mapped onto the caller's inside this process's own user
+                // namespace.
+                a.push("--gid".into());
                 a.push(uid.to_string().into());
             }
         }
@@ -2722,6 +2775,128 @@ mod tests {
             "staging mode must not mount the guest socket dir: {staged:?}"
         );
         let _ = fs::remove_dir_all(&data);
+    }
+
+    /// PROCUID: every guest process carries **its package's** uid (AOSP allocates
+    /// one uid per installed package; processes of one package share it, two
+    /// packages' processes differ). The sandbox maps the guest's own uid onto the
+    /// host caller's, so two processes of one session can carry two different
+    /// application uids without any host privilege.
+    #[test]
+    fn sandbox_runs_a_process_as_the_uid_its_package_owns() {
+        let data = scratch_dir("uid");
+        fs::create_dir_all(data.join("system/environ")).unwrap();
+        fs::write(
+            data.join("system/environ/classpath"),
+            "export BOOTCLASSPATH /apex/a.jar:/system/framework/framework.jar\n\
+             export DEX2OATBOOTCLASSPATH /apex/a.jar\n",
+        )
+        .unwrap();
+        let root = ArtRoot {
+            repo_root: data.clone(),
+            sysroot: data.join("sysroot"),
+            data: data.clone(),
+            modules: Vec::new(),
+        };
+        // The session default (no `app_uid`) is the PMS fixture uid, which is
+        // what every single-process caller keeps.
+        let run = root.new_run_dir("uid-default").expect("run dir");
+        let mut sb = root.sandbox();
+        sb.run_root(run.path());
+        let argv: Vec<String> = sb
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        let sep = argv.iter().position(|a| a == "--uid").expect("--uid");
+        assert_eq!(argv[sep - 1], "--unshare-user", "a uid needs its namespace");
+        assert_eq!(
+            argv[sep + 1],
+            acos_services::pms::FIXTURE_UID.to_string(),
+            "the default is the PMS fixture uid: {argv:?}"
+        );
+        // The process's primary gid is its uid, exactly like a device app
+        // (`Process.myGid()` == `Process.myUid()`).
+        let gsep = argv.iter().position(|a| a == "--gid").expect("--gid");
+        assert_eq!(argv[gsep + 1], argv[sep + 1], "uid and gid are one id");
+        // Two processes, two packages' uids: the second package's process runs as
+        // the uid the package manager allocated for it.
+        let second = 10_193u32;
+        let run2 = root.new_run_dir("uid-second").expect("run dir");
+        let mut sb2 = root.sandbox();
+        sb2.run_root(run2.path());
+        sb2.app_uid(second);
+        let argv2: Vec<String> = sb2
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        let sep2 = argv2.iter().position(|a| a == "--uid").expect("--uid");
+        assert_eq!(argv2[sep2 + 1], second.to_string(), "argv: {argv2:?}");
+        assert_eq!(
+            argv2[sep2 + 3],
+            second.to_string(),
+            "the second process's gid is its own uid: {argv2:?}"
+        );
+        assert_ne!(argv[sep + 1], argv2[sep2 + 1], "two apps, two uids");
+        // A host-side staging step keeps the caller's uid (it is not an app).
+        let mut sb3 = root.sandbox();
+        sb3.staging(true);
+        let argv3: Vec<String> = sb3
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        assert!(
+            !argv3.iter().any(|a| a == "--uid"),
+            "staging is not an app process: {argv3:?}"
+        );
+        assert!(
+            !argv3.iter().any(|a| a == "--gid"),
+            "staging is not an app process: {argv3:?}"
+        );
+        let _ = fs::remove_dir_all(&data);
+    }
+
+    /// PROCUID: the explicit `ACOS_ART_GUEST_UID` seam takes **any** application
+    /// uid, because in a multi-process session the uid a caller wants to pin is a
+    /// package's uid (10193 for the second package), not only the PMS fixture
+    /// uid. It still refuses everything that is not an application uid: host uid
+    /// 1000 is `SYSTEM_UID`, which the framework takes privileged branches on.
+    #[test]
+    fn the_guest_uid_seam_takes_an_application_uid_and_nothing_else() {
+        assert!(
+            matches!(parse_guest_uid_override(None), Ok(None)),
+            "no override = the per-process uid"
+        );
+        assert_eq!(parse_guest_uid_override(Some("host")).unwrap(), Some(None));
+        assert_eq!(
+            parse_guest_uid_override(Some("10193")).unwrap(),
+            Some(Some(10_193)),
+            "a second package's uid is a valid pin"
+        );
+        assert_eq!(
+            parse_guest_uid_override(Some(" 10000 ")).unwrap(),
+            Some(Some(10_000)),
+            "the first application uid"
+        );
+        assert_eq!(
+            parse_guest_uid_override(Some("19999")).unwrap(),
+            Some(Some(19_999)),
+            "the last application uid"
+        );
+        for raw in ["1000", "0", "9999", "20000", "sudo", "10192.5"] {
+            assert!(
+                matches!(
+                    parse_guest_uid_override(Some(raw)),
+                    Err(Error::InvalidGuestUid(_))
+                ),
+                "{raw} must be refused (never a silent fallback)"
+            );
+        }
     }
 
     /// `flag src dst` appears as consecutive argv elements.

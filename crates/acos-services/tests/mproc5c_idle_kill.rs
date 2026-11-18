@@ -44,8 +44,8 @@ fn activity(tag: u32, token: u64, lifecycle: ActivityLifecycle) -> ActivityRecor
 #[test]
 fn a_lazily_spawned_process_with_nothing_started_is_idle_after_the_timeout() {
     let mut atms = AtmsState::new();
-    atms.process_started(0, "dev.acos.fixtures.proca", 10001);
-    atms.process_started(1, "dev.acos.fixtures.procb", 10002);
+    atms.process_started(0, "dev.acos.fixtures.proca", 10001, 0);
+    atms.process_started(1, "dev.acos.fixtures.procb", 10002, 0);
     // Nothing started yet: not idle under the timeout, idle once it expires.
     assert!(
         atms.idle_processes(Duration::from_secs(3600)).is_empty(),
@@ -63,8 +63,8 @@ fn a_lazily_spawned_process_with_nothing_started_is_idle_after_the_timeout() {
 #[test]
 fn a_started_activity_keeps_its_process_alive() {
     let mut atms = AtmsState::new();
-    atms.process_started(0, "dev.acos.fixtures.proca", 10001);
-    atms.process_started(1, "dev.acos.fixtures.procb", 10002);
+    atms.process_started(0, "dev.acos.fixtures.proca", 10001, 0);
+    atms.process_started(1, "dev.acos.fixtures.procb", 10002, 0);
     atms.activities
         .push(activity(1, token_of(1, 0x11), ActivityLifecycle::Started));
     assert!(
@@ -90,7 +90,7 @@ fn a_started_activity_keeps_its_process_alive() {
 #[test]
 fn a_bound_service_keeps_its_process_alive() {
     let mut atms = AtmsState::new();
-    atms.process_started(1, "dev.acos.fixtures.procb", 10002);
+    atms.process_started(1, "dev.acos.fixtures.procb", 10002, 0);
     atms.ams.services.insert(
         "dev.acos.fixtures.procb/dev.acos.fixtures.procb.EchoService".into(),
         ServiceRecord {
@@ -118,7 +118,7 @@ fn a_bound_service_keeps_its_process_alive() {
 #[test]
 fn the_foreground_transition_restarts_the_idle_clock() {
     let mut atms = AtmsState::new();
-    atms.process_started(1, "dev.acos.fixtures.procb", 10002);
+    atms.process_started(1, "dev.acos.fixtures.procb", 10002, 0);
     atms.activities
         .push(activity(1, token_of(1, 0x21), ActivityLifecycle::Uncreated));
     // Resuming the activity (the cross-process top-of-task path) marks the
@@ -152,7 +152,7 @@ fn the_foreground_transition_restarts_the_idle_clock() {
 #[test]
 fn process_death_drops_the_record_and_its_activities() {
     let mut atms = AtmsState::new();
-    atms.process_started(1, "dev.acos.fixtures.procb", 10002);
+    atms.process_started(1, "dev.acos.fixtures.procb", 10002, 0);
     atms.activities
         .push(activity(1, token_of(1, 0x31), ActivityLifecycle::Started));
     atms.process_died(1);
@@ -178,8 +178,8 @@ fn process_death_drops_the_record_and_its_activities() {
 fn a_dead_foreground_process_moves_the_published_top_below_it() {
     use std::sync::atomic::{AtomicU32, Ordering};
     let mut atms = AtmsState::new();
-    atms.process_started(0, "dev.acos.fixtures.proca", 10001);
-    atms.process_started(1, "dev.acos.fixtures.procb", 10002);
+    atms.process_started(0, "dev.acos.fixtures.proca", 10001, 0);
+    atms.process_started(1, "dev.acos.fixtures.procb", 10002, 0);
     let top = std::sync::Arc::new(AtomicU32::new(1));
     atms.top_process = Some(std::sync::Arc::clone(&top));
     atms.tops.insert(0, 0x1000_0000_0000_0003);
@@ -199,8 +199,8 @@ fn a_dead_foreground_process_moves_the_published_top_below_it() {
 fn a_dead_background_process_does_not_move_the_published_top() {
     use std::sync::atomic::{AtomicU32, Ordering};
     let mut atms = AtmsState::new();
-    atms.process_started(0, "dev.acos.fixtures.proca", 10001);
-    atms.process_started(1, "dev.acos.fixtures.procb", 10002);
+    atms.process_started(0, "dev.acos.fixtures.proca", 10001, 0);
+    atms.process_started(1, "dev.acos.fixtures.procb", 10002, 0);
     let top = std::sync::Arc::new(AtomicU32::new(0));
     atms.top_process = Some(std::sync::Arc::clone(&top));
     atms.process_died(1);
