@@ -149,7 +149,20 @@ impl CdpClient {
     /// pattern `acos-art` uses for its guest: two pipes, `dup2` onto 3 and 4,
     /// nothing else. It is not a sandbox entry point — the sandbox is bwrap's
     /// argv (see [`crate::sandbox`]).
-    pub fn spawn(mut cmd: Command) -> Result<Arc<Self>, CdpError> {
+    pub fn spawn(cmd: Command) -> Result<Arc<Self>, CdpError> {
+        // WVKILL: `fork` happens on the thread that calls this, and the child's
+        // parent-death signal (`PR_SET_PDEATHSIG`, which `bwrap --die-with-parent`
+        // sets on itself) is tied to that *thread*, not to the process: the
+        // kernel sends it when the creating thread exits. Called from a
+        // session's connection thread, that SIGKILLed the shared engine the
+        // moment the session ended. Every engine is therefore forked by one
+        // thread that lives as long as the process does, so the signal still
+        // fires when the broker *process* dies (the intent of
+        // `--die-with-parent`) and never when a session does.
+        spawner::run(move || Self::spawn_here(cmd))
+    }
+
+    fn spawn_here(mut cmd: Command) -> Result<Arc<Self>, CdpError> {
         // A: parent -> engine (fd 3). B: engine -> parent (fd 4).
         let (child_read, parent_write_raw) = pipe()?;
         // SAFETY: `parent_write_raw` came from `pipe()` and is owned here.
@@ -444,4 +457,44 @@ fn pipe() -> Result<(RawFd, RawFd), CdpError> {
         return Err(CdpError::Io(std::io::Error::last_os_error()));
     }
     Ok((fds[0], fds[1]))
+}
+
+/// The one thread that forks engines (see [`CdpClient::spawn`]).
+mod spawner {
+    use std::sync::mpsc::{channel, Sender};
+    use std::sync::{Mutex, OnceLock};
+
+    type Job = Box<dyn FnOnce() + Send>;
+
+    fn sender() -> &'static Mutex<Sender<Job>> {
+        static TX: OnceLock<Mutex<Sender<Job>>> = OnceLock::new();
+        TX.get_or_init(|| {
+            let (tx, rx) = channel::<Job>();
+            // Never exits while the process lives: the receiver loop ends only
+            // when every sender is dropped, and the sender is a `static`.
+            std::thread::Builder::new()
+                .name("wv-engine-spawner".into())
+                .spawn(move || {
+                    for job in rx {
+                        job();
+                    }
+                })
+                .expect("the engine spawner thread");
+            Mutex::new(tx)
+        })
+    }
+
+    /// Run `f` on the spawner thread and return its result.
+    pub fn run<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+        let (done_tx, done_rx) = channel();
+        let job: Job = Box::new(move || {
+            let _ = done_tx.send(f());
+        });
+        sender()
+            .lock()
+            .expect("spawner")
+            .send(job)
+            .expect("the engine spawner thread is gone");
+        done_rx.recv().expect("the engine spawner dropped a spawn")
+    }
 }

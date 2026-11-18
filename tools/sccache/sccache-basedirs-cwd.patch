@@ -1,0 +1,128 @@
+--- a/Cargo.toml	2026-11-18 12:41:00.096240900 +0530
++++ b/Cargo.toml	2026-11-18 12:41:00.107131581 +0530
+@@ -2,7 +2,7 @@
+ # Should match .rustfmt.toml
+ edition = "2024"
+ name = "sccache"
+-rust-version = "1.91.0"
++rust-version = "1.90.0"
+ version = "0.19.0"
+ 
+ categories = ["command-line-utilities", "development-tools::build-utils"]
+--- a/src/compiler/rust.rs	2026-11-18 12:41:00.095796824 +0530
++++ b/src/compiler/rust.rs	2026-11-18 12:42:36.016958734 +0530
+@@ -1376,6 +1376,61 @@
+     }
+ }
+ 
++/// ACOS patch (BUILDCACHE): make `SCCACHE_BASEDIRS` mean for Rust what it already
++/// means for C/C++, i.e. "these directories hold interchangeable checkouts of one
++/// tree".
++///
++/// Stock sccache hashes the compile cwd verbatim (the comment at its call site
++/// says it "will wind up in the rlib") and every `CARGO_*` variable verbatim.
++/// Cargo sets the cwd to the workspace root and `CARGO_MANIFEST_DIR` to the
++/// crate's directory, so two worktrees of the same sources never share an entry
++/// even with `SCCACHE_BASEDIRS` set -- the setting is silently a no-op for Rust.
++///
++/// A value below a base directory hashes as `<basedir>` plus its path below that
++/// base directory with one leading component removed. That component is the
++/// interchangeable part: the worktree directory (`.../acos/t3-1a2b`) or, when the
++/// base directory is itself a checkout, nothing at all.
++///
++/// Values that a compile *depends* on (the env-deps rustc records in its
++/// dep-info) are hashed verbatim before this function is reached, so a crate
++/// whose artifact bakes in an absolute path is never served another checkout's
++/// build.
++fn normalized_basedir_value(value: &[u8], basedirs: &[Vec<u8>]) -> Vec<u8> {
++    let mut best: Option<&[u8]> = None;
++    for dir in basedirs {
++        let mut dir = dir.as_slice();
++        while dir.last() == Some(&b'/') {
++            dir = &dir[..dir.len() - 1];
++        }
++        if dir.is_empty() || value.len() < dir.len() || &value[..dir.len()] != dir {
++            continue;
++        }
++        if value.len() != dir.len() && value[dir.len()] != b'/' {
++            continue;
++        }
++        if best.is_none_or(|b| b.len() < dir.len()) {
++            best = Some(dir);
++        }
++    }
++    let Some(dir) = best else {
++        return value.to_vec();
++    };
++    let rest = &value[dir.len()..];
++    // Drop the first component below the base directory (the checkout directory).
++    let rest = if rest.is_empty() {
++        rest
++    } else {
++        let after_first = &rest[1..];
++        match after_first.iter().position(|b| *b == b'/') {
++            Some(i) => &after_first[i..],
++            None => &after_first[..0],
++        }
++    };
++    let mut out = b"<basedir>".to_vec();
++    out.extend_from_slice(rest);
++    out
++}
++
+ fn parse_arguments(arguments: &[OsString], cwd: &Path) -> CompilerArguments<ParsedArguments> {
+     let mut args = vec![];
+ 
+@@ -1657,7 +1712,7 @@
+         _may_dist: bool,
+         pool: &tokio::runtime::Handle,
+         _rewrite_includes_only: bool,
+-        _storage: Arc<dyn Storage>,
++        storage: Arc<dyn Storage>,
+         _cache_control: CacheControl,
+     ) -> Result<HashResult<T>> {
+         trace!("[{}]: generate_hash_key", self.parsed_args.crate_name);
+@@ -1853,8 +1908,15 @@
+             .cloned()
+             .collect();
+         env_vars.sort();
++        // ACOS patch: the variables rustc itself recorded as dependencies were
++        // hashed verbatim above, so a crate that bakes an absolute path into its
++        // artifact (`CARGO_MANIFEST_DIR`) keeps one entry per checkout. The rest
++        // are hashed only for cacheability, and a path-valued one under a base
++        // directory is hashed with the interchangeable component removed so that
++        // checkouts of one tree share entries.
++        let env_dep_vars: HashSet<&OsString> = env_deps.iter().map(|(k, _)| k).collect();
+         for (var, val) in env_vars.iter() {
+-            if !var.starts_with("CARGO_") {
++            if !var.starts_with("CARGO_") || env_dep_vars.contains(var) {
+                 continue;
+             }
+ 
+@@ -1864,20 +1926,24 @@
+             // already uniquely identify the relevant registries.
+             // CARGO_BUILD_JOBS only affects Cargo's parallelism, not rustc output.
+             // CARGO_ENCODED_RUSTFLAGS is already cached in argument list
++            // CARGO_TARGET_DIR only says where cargo puts the artifacts (the same
++            // reason `--out-dir` is not hashed), not what rustc emits.
+             if var == "CARGO_MAKEFLAGS"
+                 || var.starts_with("CARGO_REGISTRIES_")
+                 || var == "CARGO_BUILD_JOBS"
+                 || var == "CARGO_ENCODED_RUSTFLAGS"
++                || var == "CARGO_TARGET_DIR"
+             {
+                 continue;
+             }
+ 
+             var.hash(&mut HashToDigest { digest: &mut m });
+             m.update(b"=");
+-            val.hash(&mut HashToDigest { digest: &mut m });
++            m.update(&normalized_basedir_value(val.as_encoded_bytes(), storage.basedirs()));
+         }
+         // 9. The cwd of the compile. This will wind up in the rlib.
+-        cwd.hash(&mut HashToDigest { digest: &mut m });
++        //    ACOS patch: see `normalized_basedir_value`.
++        m.update(&normalized_basedir_value(cwd.as_os_str().as_encoded_bytes(), storage.basedirs()));
+         // 10. The version of the compiler.
+         self.version.hash(&mut HashToDigest { digest: &mut m });
+ 

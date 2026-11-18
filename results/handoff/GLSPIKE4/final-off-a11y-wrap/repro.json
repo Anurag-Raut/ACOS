@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-baa027c2-92822109faf07523/fixtures/build/apps/a11y-probe.apk",
+  "apk_sha256": "dbbb94fea8977c92f717869f551948d17eb71c4479ae7c6ae492e68086ccf8a0",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-baa027c2-92822109faf07523/scenarios/a11y-screenshot-wrap.yaml",
+  "scenario_sha256": "a9cb014a61506671fa39c4b845e4060485b1d9325ea2a1b33184acdca27f89b0",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-4410a241-c6878933394baf1b/fixtures/build/apps/egl-probe.apk",
+  "apk_sha256": "92afb8101cde817f9726037db905663b6745f8d05e0126c502da8bf55929f718",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-4410a241-c6878933394baf1b/scenarios/egl-probe.yaml",
+  "scenario_sha256": "f1576a0a7cb3a70bab86664dfe7b4f149dec3588251da724e369681cdc299a6a",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}
