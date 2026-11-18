@@ -42,6 +42,14 @@ public final class Nat {
      */
     public static native int installCrashHandler();
 
+    /**
+     * ZDEFAULT1: a zygote child's guest-log sink is re-resolved through its own
+     * {@code /dev/socket} (the keeper's connection was inherited across the fork).
+     *
+     * @return 1 reset, 0 when no preload shim is in this process
+     */
+    public static native int resetLogSink();
+
     /** R3 test seam: 0 = SIGSEGV on an unmapped page, 1 = SIGABRT. */
     public static native int crashTest(int mode);
 }

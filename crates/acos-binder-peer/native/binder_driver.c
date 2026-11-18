@@ -2547,6 +2547,19 @@ static int acos_crash_handler(int sig, siginfo_t* info, void* context) {
     return 0;
 }
 
+// ZDEFAULT1: a zygote child drops the guest-log connection it inherited from the
+// keeper, so its entries reach *its* session's `/dev/socket/logdw`. The sink state
+// lives in the preload shim (`shim/artshim.c`); both are preloaded, so the symbol
+// resolves from the global scope. 1 = reset, 0 = no shim in this process.
+JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_resetLogSink(JNIEnv* env, jclass klass) {
+    (void)env;
+    (void)klass;
+    void (*reset)(void) = (void (*)(void))dlsym(RTLD_DEFAULT, "acosart_log_reset");
+    if (reset == NULL) return 0;
+    reset();
+    return 1;
+}
+
 JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_installCrashHandler(JNIEnv* env, jclass klass) {
     (void)env;
     (void)klass;

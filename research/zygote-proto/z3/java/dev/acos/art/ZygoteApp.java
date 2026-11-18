@@ -231,6 +231,10 @@ public final class ZygoteApp {
                 say("ZP1 child tag=" + tag + " sandbox_fail rc=" + rc);
                 System.exit(70);
             }
+            // ZDEFAULT1: this child now owns its mount namespace, so its
+            // `/dev/socket/logdw` is its session's; the log connection it
+            // inherited from the keeper still points at the keeper's sink.
+            z4ResetLogSink(tag);
             ZygoteHooks.postForkChild(0, false, false, null);
             say("ZP1 child tag=" + tag + " pgrp_rc=" + pgrp
                     + " pid_in_ns=" + dev.acos.z1.Nat.sandboxRc(7)
@@ -257,6 +261,15 @@ public final class ZygoteApp {
         say("ZP1 forked tag=" + tag + " child=" + pid + " threads=" + threads()
                 + " total_ms=" + (now() - t0) / 1000000L);
         return pid;
+    }
+
+    /** ZDEFAULT1: drop the keeper's guest-log connection (see {@code artshim.c}). */
+    private static void z4ResetLogSink(int tag) {
+        try {
+            say("ZP1 child tag=" + tag + " log_sink_reset=" + Nat.resetLogSink());
+        } catch (Throwable t) {
+            say("ZP1 child tag=" + tag + " log_sink_reset_fail " + t);
+        }
     }
 
     /** End exactly one session: the whole process group, then reap the warden. */
@@ -315,6 +328,10 @@ public final class ZygoteApp {
                     say("Z4 child tag=" + k + " sandbox_fail rc=" + rc);
                     System.exit(70);
                 }
+                // ZDEFAULT1: this child now owns its mount namespace, so its
+                // `/dev/socket/logdw` is its session's. The log connection it
+                // inherited from the keeper points at the keeper's sink.
+                z4ResetLogSink(k);
                 ZygoteHooks.postForkChild(0, false, false, null);
                 say("Z4 child tag=" + k + " pid=" + dev.acos.z1.Nat.getpid()
                         + " fork_to_sandbox_ms=" + (now() - f1) / 1000000L

@@ -168,20 +168,29 @@ struct sockaddr_un {
 static int log_fd = -2; /* -2 = not tried, -1 = unavailable */
 static long log_pid = -1; /* the process `log_fd` was resolved in (ZPROD7) */
 
+/* ZDEFAULT1: forget the connection (and the process it belongs to) so the next
+ * entry connects through *this* process's own `/dev/socket`. Exported for the
+ * zygote child, which calls it right after it entered its own mount namespace
+ * (`dev.acos.art.Nat.resetLogSink`, `ZygoteApp`). */
+void acosart_log_reset(void) {
+  if (log_fd >= 0) sys1(SYS_close, log_fd);
+  log_fd = -2;
+  log_pid = -1;
+}
+
 static int log_socket(void) {
-  /* ZPROD7: a fork child inherits the *descriptor*, not the path. The keeper
-   * connects to its own sink before it forks, so a forked app's entries were
-   * delivered to the keeper's buffer instead of its session's (measured: the
-   * flag-on `form-validation` gate failed at step 5 `assert_log` with an empty
-   * session log buffer while the lines were in the keeper's). A zygote child
-   * re-binds `/dev/socket` to its own session socket directory, so
-   * re-resolving the path in the new process puts every entry in exactly that
-   * session's sink, and never in a sibling's: two concurrent children have two
-   * different mounts and two different pids.
+  /* ZPROD7/ZDEFAULT1: a fork child inherits the connected *descriptor*, not the
+   * path. The keeper connects to its own sink before it forks, so a forked
+   * app's entries went to the keeper's buffer instead of its session's
+   * (measured: the flag-on `form-validation`, `w54-dialog-pixels` and
+   * `w42-back-frame` gates failed at `assert_log` with an empty session log).
    *
-   * One `getpid()` per formatted entry; the dump paths (`CHECK`, aborts) are
-   * not hot, and the alternative (hooking `fork`) is a bigger surface than the
-   * one syscall it saves. A failed connect is also no longer sticky: the next
+   * The pid comparison below catches an ordinary fork, but it is NOT enough for
+   * a zygote child: that child lives in its own pid namespace, where it is pid 2
+   * exactly like the keeper in its own (ZPROD7's check therefore never fired;
+   * proven with a `getpid` trace: one resolve, pid=2, for keeper and child).
+   * The authoritative signal is `acosart_log_reset()`, called by the child once
+   * its mount namespace is its own. A failed connect is not sticky: the next
    * entry retries, so an entry written before the session launcher bound its
    * sink is lost, not the whole stream. */
   long pid = sys0(SYS_getpid);

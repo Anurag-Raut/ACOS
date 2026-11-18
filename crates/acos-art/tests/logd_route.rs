@@ -336,6 +336,84 @@ fn an_entry_written_before_the_sink_exists_does_not_silence_the_stream() {
     );
 }
 
+/// A zygote child lives in its own pid namespace, where it is pid 2, exactly like
+/// the keeper in its own: **the pid does not change across the fork**. ZPROD7's
+/// `getpid()` rule therefore never fired and the child kept writing into the
+/// keeper's sink (ZDEFAULT1: `form-validation`, `w54-dialog-pixels` and
+/// `w42-back-frame` still failed `assert_log` with the flag on). The probe below
+/// models that exactly: one process, one pid, its "mount namespace" changes
+/// between two entries. Without the explicit `acosart_log_reset()` (what
+/// `Nat.resetLogSink` calls in the child) the entries stay in the old sink, with
+/// it they follow the new `/dev/socket`.
+#[test]
+fn a_child_whose_pid_did_not_change_re_resolves_only_after_the_explicit_reset() {
+    let root = scratch("same-pid");
+    let s = sinks(&root, 1);
+    let (session_dir, session) = (s.sessions[0].0.clone(), &s.sessions[0].1);
+    let shim = shim_with_relative_sink(&root);
+    let src = root.join("q.c");
+    let exe = root.join("q");
+    fs::write(
+        &src,
+        "#include <stdlib.h>\n#include <unistd.h>\n#include <dlfcn.h>\n\
+         typedef int (*logfn)(int, const char *, const char *);\n\
+         int main(int argc, char **argv) {\n\
+           if (argc < 4) return 2;\n\
+           logfn say = (logfn)dlsym(RTLD_DEFAULT, \"__android_log_write\");\n\
+           void (*reset)(void) = (void (*)(void))dlsym(RTLD_DEFAULT, \"acosart_log_reset\");\n\
+           if (!say) return 91;\n\
+           if (chdir(argv[1]) != 0) return 3;\n\
+           say(4, \"t\", \"before\");\n\
+           if (chdir(argv[2]) != 0) return 4; /* same pid, new `/dev/socket` */\n\
+           if (atoi(argv[3])) { if (!reset) return 92; reset(); }\n\
+           say(4, \"t\", \"after\");\n\
+           return 0;\n\
+         }\n",
+    )
+    .expect("write the same-pid probe");
+    let cc = std::env::var("CC").unwrap_or_else(|_| "clang".into());
+    let st = Command::new(&cc)
+        .args(["-x", "c", "-O0", "-ldl", "-o"])
+        .arg(&exe)
+        .arg(&src)
+        .status()
+        .expect("run cc for the same-pid probe");
+    assert!(st.success(), "{cc} failed to build the same-pid probe");
+
+    // The premise: with no reset the second entry stays in the first sink (this
+    // is the zygote-child bug, reproduced without a zygote).
+    let out = Command::new(&exe)
+        .args([s.keeper_dir.to_str().unwrap(), session_dir.to_str().unwrap(), "0"])
+        .env("LD_PRELOAD", &shim)
+        .output()
+        .expect("probe runs");
+    assert!(out.status.success(), "probe exit {:?}", out.status.code());
+    assert_eq!(
+        wait_for(&s.keeper, 2),
+        vec!["before".to_string(), "after".to_string()],
+        "premise: an unchanged pid keeps the inherited connection"
+    );
+    assert!(session.snapshot().is_empty(), "premise: the session saw nothing");
+
+    // The fix: the reset makes the next entry follow the new socket directory.
+    let out = Command::new(&exe)
+        .args([s.keeper_dir.to_str().unwrap(), session_dir.to_str().unwrap(), "1"])
+        .env("LD_PRELOAD", &shim)
+        .output()
+        .expect("probe runs");
+    assert!(out.status.success(), "probe exit {:?}", out.status.code());
+    assert_eq!(
+        wait_for(session, 1),
+        vec!["after".to_string()],
+        "after the explicit reset the entry goes to the session's own sink"
+    );
+    assert_eq!(
+        wait_for(&s.keeper, 3),
+        vec!["before".to_string(), "after".to_string(), "before".to_string()],
+        "the keeper holds only its own pre-switch entries"
+    );
+}
+
 /// Contract guard: the production build must keep the guest path, and the
 /// reconnect rule must stay. The path is the *only* per-session fact the logger
 /// relies on, so changing it changes the isolation guarantee.
@@ -348,5 +426,9 @@ fn the_default_sink_path_is_the_guest_socket() {
     assert!(
         SHIM_SOURCE.contains("SYS_getpid"),
         "the fork-child reconnect rule must stay in the shipped shim"
+    );
+    assert!(
+        SHIM_SOURCE.contains("void acosart_log_reset(void)"),
+        "the zygote child's explicit log-sink reset must stay exported"
     );
 }
