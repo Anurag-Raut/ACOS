@@ -23,11 +23,15 @@ mkdir -p "$OUT/classes" "$OUT/dex" "$OUT/lib"
 [ -f "$AJAR" ] || { echo "missing $AJAR" >&2; exit 1; }
 [ -n "$D8" ] || { echo "missing d8 in $SDK/build-tools" >&2; exit 1; }
 
+# LaunchMain installs the software keystore provider (added after this script's
+# source list was frozen); without it javac fails and the zygote prod arm cannot
+# be built at all (DENSITY20, 2026-11-18).
 mapfile -t SRC < <(
     printf '%s\n' \
         "$GUEST/crates/acos-art/guest/java/dev/acos/art/LaunchMain.java" \
         "$GUEST/crates/acos-art/guest/java/dev/acos/art/RenderNat.java" \
         "$GUEST/crates/acos-art/guest/java/dev/acos/art/Nat.java" \
+        "$GUEST/crates/acos-art/guest/java/dev/acos/art/SoftwareKeyStore.java" \
         "$HERE/java/dev/acos/art/ZygoteApp.java" \
         "$PROTO/java/dev/acos/z1/Nat.java" \
         "$PROTO/java/dalvik/system/ZygoteHooks.java"

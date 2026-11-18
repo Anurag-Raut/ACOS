@@ -1,0 +1,831 @@
+{
+  "schema": "acos-density20-summary/1",
+  "cohorts": [
+    {
+      "cohort": "1-exec",
+      "n": 1,
+      "arm": "exec",
+      "reps_ok": 3,
+      "reps_failed": [],
+      "verified_tasks": [
+        3,
+        3,
+        3
+      ],
+      "measured_tasks": [
+        3,
+        3,
+        3
+      ],
+      "failures": 0,
+      "wall_s_median": 4.353,
+      "gib_min_pss_median": 0.015,
+      "tasks_per_gib_min_median": 198.282,
+      "tasks_per_gib_min_range": [
+        195.44,
+        202.293
+      ],
+      "per_session_pss_mib_median": 233.926,
+      "per_session_pss_mib_range": [
+        232.573,
+        234.652
+      ],
+      "per_session_guest_pss_mib_median": 211.672,
+      "per_session_guest_private_mib_median": 208.918,
+      "per_session_host_pss_mib_median": 21.89,
+      "tree_pss_at_settle_mib_median": 233.926,
+      "peak_tree_pss_mib_median": 239.658,
+      "host_used_pct_peak_median": 12.2,
+      "cpu_pct_one_core_median": 3.3,
+      "cpu_core_s_median": 0.14,
+      "gib_min_uss_median": 0.015
+    },
+    {
+      "cohort": "2-exec",
+      "n": 2,
+      "arm": "exec",
+      "reps_ok": 2,
+      "reps_failed": [],
+      "verified_tasks": [
+        6,
+        6
+      ],
+      "measured_tasks": [
+        6,
+        6
+      ],
+      "failures": 0,
+      "wall_s_median": 4.316,
+      "gib_min_pss_median": 0.014,
+      "tasks_per_gib_min_median": 418.259,
+      "tasks_per_gib_min_range": [
+        407.332,
+        429.185
+      ],
+      "per_session_pss_mib_median": 109.725,
+      "per_session_pss_mib_range": [
+        108.737,
+        110.713
+      ],
+      "per_session_guest_pss_mib_median": 96.537,
+      "per_session_guest_private_mib_median": 33.616,
+      "per_session_host_pss_mib_median": 12.947,
+      "tree_pss_at_settle_mib_median": 219.45,
+      "peak_tree_pss_mib_median": 233.069,
+      "host_used_pct_peak_median": 15.5,
+      "cpu_pct_one_core_median": 7.5,
+      "cpu_core_s_median": 0.32,
+      "gib_min_uss_median": 0.006
+    },
+    {
+      "cohort": "5-exec",
+      "n": 5,
+      "arm": "exec",
+      "reps_ok": 3,
+      "reps_failed": [],
+      "verified_tasks": [
+        15,
+        15,
+        15
+      ],
+      "measured_tasks": [
+        15,
+        15,
+        15
+      ],
+      "failures": 0,
+      "wall_s_median": 5.187,
+      "gib_min_pss_median": 0.027,
+      "tasks_per_gib_min_median": 556.793,
+      "tasks_per_gib_min_range": [
+        543.478,
+        573.833
+      ],
+      "per_session_pss_mib_median": 75.391,
+      "per_session_pss_mib_range": [
+        73.355,
+        77.852
+      ],
+      "per_session_guest_pss_mib_median": 67.754,
+      "per_session_guest_private_mib_median": 31.613,
+      "per_session_host_pss_mib_median": 7.398,
+      "tree_pss_at_settle_mib_median": 376.954,
+      "peak_tree_pss_mib_median": 437.966,
+      "host_used_pct_peak_median": 14.0,
+      "cpu_pct_one_core_median": 15.3,
+      "cpu_core_s_median": 0.76,
+      "gib_min_uss_median": 0.014
+    },
+    {
+      "cohort": "10-exec",
+      "n": 10,
+      "arm": "exec",
+      "reps_ok": 3,
+      "reps_failed": [],
+      "verified_tasks": [
+        30,
+        30,
+        30
+      ],
+      "measured_tasks": [
+        30,
+        30,
+        30
+      ],
+      "failures": 0,
+      "wall_s_median": 4.542,
+      "gib_min_pss_median": 0.035,
+      "tasks_per_gib_min_median": 862.813,
+      "tasks_per_gib_min_range": [
+        700.607,
+        865.801
+      ],
+      "per_session_pss_mib_median": 56.129,
+      "per_session_pss_mib_range": [
+        54.882,
+        56.954
+      ],
+      "per_session_guest_pss_mib_median": 50.354,
+      "per_session_guest_private_mib_median": 32.137,
+      "per_session_host_pss_mib_median": 5.511,
+      "tree_pss_at_settle_mib_median": 561.289,
+      "peak_tree_pss_mib_median": 585.553,
+      "host_used_pct_peak_median": 15.1,
+      "cpu_pct_one_core_median": 36.9,
+      "cpu_core_s_median": 1.85,
+      "gib_min_uss_median": 0.023
+    },
+    {
+      "cohort": "10-zygote-on",
+      "n": 10,
+      "arm": "zygote-on",
+      "reps_ok": 3,
+      "reps_failed": [],
+      "verified_tasks": [
+        30,
+        30,
+        30
+      ],
+      "measured_tasks": [
+        30,
+        30,
+        30
+      ],
+      "failures": 0,
+      "wall_s_median": 4.481,
+      "gib_min_pss_median": 0.027,
+      "tasks_per_gib_min_median": 1094.891,
+      "tasks_per_gib_min_range": [
+        1079.914,
+        1104.159
+      ],
+      "per_session_pss_mib_median": 40.302,
+      "per_session_pss_mib_range": [
+        38.135,
+        42.186
+      ],
+      "per_session_guest_pss_mib_median": 34.649,
+      "per_session_guest_private_mib_median": 18.248,
+      "per_session_host_pss_mib_median": 5.413,
+      "tree_pss_at_settle_mib_median": 403.018,
+      "peak_tree_pss_mib_median": 456.884,
+      "host_used_pct_peak_median": 17.3,
+      "cpu_pct_one_core_median": 48.1,
+      "cpu_core_s_median": 2.06,
+      "gib_min_uss_median": 0.017
+    },
+    {
+      "cohort": "20-exec",
+      "n": 20,
+      "arm": "exec",
+      "reps_ok": 3,
+      "reps_failed": [],
+      "verified_tasks": [
+        60,
+        60,
+        60
+      ],
+      "measured_tasks": [
+        60,
+        60,
+        60
+      ],
+      "failures": 0,
+      "wall_s_median": 5.697,
+      "gib_min_pss_median": 0.068,
+      "tasks_per_gib_min_median": 881.446,
+      "tasks_per_gib_min_range": [
+        805.153,
+        903.342
+      ],
+      "per_session_pss_mib_median": 46.732,
+      "per_session_pss_mib_range": [
+        44.392,
+        47.163
+      ],
+      "per_session_guest_pss_mib_median": 41.977,
+      "per_session_guest_private_mib_median": 32.811,
+      "per_session_host_pss_mib_median": 4.534,
+      "tree_pss_at_settle_mib_median": 934.643,
+      "peak_tree_pss_mib_median": 1033.712,
+      "host_used_pct_peak_median": 15.5,
+      "cpu_pct_one_core_median": 93.9,
+      "cpu_core_s_median": 5.2,
+      "gib_min_uss_median": 0.054
+    },
+    {
+      "cohort": "20-zygote-on",
+      "n": 20,
+      "arm": "zygote-on",
+      "reps_ok": 2,
+      "reps_failed": [],
+      "verified_tasks": [
+        60,
+        60
+      ],
+      "measured_tasks": [
+        60,
+        60
+      ],
+      "failures": 0,
+      "wall_s_median": 5.66,
+      "gib_min_pss_median": 0.054,
+      "tasks_per_gib_min_median": 1116.43,
+      "tasks_per_gib_min_range": [
+        1036.448,
+        1196.411
+      ],
+      "per_session_pss_mib_median": 32.252,
+      "per_session_pss_mib_range": [
+        30.358,
+        34.147
+      ],
+      "per_session_guest_pss_mib_median": 27.59,
+      "per_session_guest_private_mib_median": 19.086,
+      "per_session_host_pss_mib_median": 4.434,
+      "tree_pss_at_settle_mib_median": 645.047,
+      "peak_tree_pss_mib_median": 745.18,
+      "host_used_pct_peak_median": 19.4,
+      "cpu_pct_one_core_median": 164.2,
+      "cpu_core_s_median": 9.105,
+      "gib_min_uss_median": 0.039
+    }
+  ],
+  "marginal": [
+    {
+      "from_n": 1,
+      "to_n": 2,
+      "marginal_mib_per_session": -14.48
+    },
+    {
+      "from_n": 2,
+      "to_n": 5,
+      "marginal_mib_per_session": 52.5
+    },
+    {
+      "from_n": 5,
+      "to_n": 10,
+      "marginal_mib_per_session": 36.87
+    },
+    {
+      "from_n": 10,
+      "to_n": 20,
+      "marginal_mib_per_session": 37.34
+    }
+  ],
+  "attribution": {
+    "1-exec": [
+      {
+        "mapping_class": "boot-image",
+        "total_pss_mib": 66.012,
+        "per_session_pss_mib": 66.01,
+        "private_mib": 66.012,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 28.22
+      },
+      {
+        "mapping_class": "shared-lib",
+        "total_pss_mib": 44.588,
+        "per_session_pss_mib": 44.59,
+        "private_mib": 42.07,
+        "shared_mib": 16.141,
+        "pct_of_tree_pss": 19.03
+      },
+      {
+        "mapping_class": "framework-dex",
+        "total_pss_mib": 25.258,
+        "per_session_pss_mib": 25.26,
+        "private_mib": 25.227,
+        "shared_mib": 0.062,
+        "pct_of_tree_pss": 10.8
+      },
+      {
+        "mapping_class": "odex-vdex-oat",
+        "total_pss_mib": 20.465,
+        "per_session_pss_mib": 20.46,
+        "private_mib": 20.465,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 8.75
+      },
+      {
+        "mapping_class": "other-file",
+        "total_pss_mib": 19.084,
+        "per_session_pss_mib": 19.08,
+        "private_mib": 18.789,
+        "shared_mib": 0.652,
+        "pct_of_tree_pss": 8.21
+      },
+      {
+        "mapping_class": "fonts",
+        "total_pss_mib": 15.387,
+        "per_session_pss_mib": 15.39,
+        "private_mib": 15.387,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 6.56
+      },
+      {
+        "mapping_class": "apk-dex",
+        "total_pss_mib": 13.805,
+        "per_session_pss_mib": 13.8,
+        "private_mib": 13.703,
+        "shared_mib": 0.203,
+        "pct_of_tree_pss": 5.93
+      },
+      {
+        "mapping_class": "anon-other",
+        "total_pss_mib": 10.105,
+        "per_session_pss_mib": 10.11,
+        "private_mib": 10.059,
+        "shared_mib": 0.145,
+        "pct_of_tree_pss": 4.35
+      },
+      {
+        "mapping_class": "hwui-skia",
+        "total_pss_mib": 8.461,
+        "per_session_pss_mib": 8.46,
+        "private_mib": 8.461,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 3.62
+      },
+      {
+        "mapping_class": "dalvik-other",
+        "total_pss_mib": 8.395,
+        "per_session_pss_mib": 8.39,
+        "private_mib": 8.395,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 3.59
+      },
+      {
+        "mapping_class": "binder",
+        "total_pss_mib": 0.93,
+        "per_session_pss_mib": 0.93,
+        "private_mib": 0.922,
+        "shared_mib": 0.016,
+        "pct_of_tree_pss": 0.4
+      },
+      {
+        "mapping_class": "dalvik-heap",
+        "total_pss_mib": 0.844,
+        "per_session_pss_mib": 0.84,
+        "private_mib": 0.844,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 0.36
+      },
+      {
+        "mapping_class": "gl",
+        "total_pss_mib": 0.48,
+        "per_session_pss_mib": 0.48,
+        "private_mib": 0.48,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 0.2
+      }
+    ],
+    "10-exec": [
+      {
+        "mapping_class": "boot-image",
+        "total_pss_mib": 158.18,
+        "per_session_pss_mib": 15.82,
+        "private_mib": 102.23,
+        "shared_mib": 552.656,
+        "pct_of_tree_pss": 28.12
+      },
+      {
+        "mapping_class": "anon-other",
+        "total_pss_mib": 98.605,
+        "per_session_pss_mib": 9.86,
+        "private_mib": 98.121,
+        "shared_mib": 1.32,
+        "pct_of_tree_pss": 17.59
+      },
+      {
+        "mapping_class": "shared-lib",
+        "total_pss_mib": 85.287,
+        "per_session_pss_mib": 8.53,
+        "private_mib": 44.973,
+        "shared_mib": 494.184,
+        "pct_of_tree_pss": 15.19
+      },
+      {
+        "mapping_class": "dalvik-other",
+        "total_pss_mib": 63.184,
+        "per_session_pss_mib": 6.32,
+        "private_mib": 63.184,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 11.26
+      },
+      {
+        "mapping_class": "odex-vdex-oat",
+        "total_pss_mib": 53.838,
+        "per_session_pss_mib": 5.38,
+        "private_mib": 37.93,
+        "shared_mib": 164.113,
+        "pct_of_tree_pss": 9.59
+      },
+      {
+        "mapping_class": "framework-dex",
+        "total_pss_mib": 25.743,
+        "per_session_pss_mib": 2.57,
+        "private_mib": 0.203,
+        "shared_mib": 247.465,
+        "pct_of_tree_pss": 4.59
+      },
+      {
+        "mapping_class": "other-file",
+        "total_pss_mib": 22.556,
+        "per_session_pss_mib": 2.26,
+        "private_mib": 12.781,
+        "shared_mib": 98.176,
+        "pct_of_tree_pss": 4.04
+      },
+      {
+        "mapping_class": "fonts",
+        "total_pss_mib": 16.163,
+        "per_session_pss_mib": 1.62,
+        "private_mib": 0.359,
+        "shared_mib": 155.488,
+        "pct_of_tree_pss": 2.88
+      },
+      {
+        "mapping_class": "apk-dex",
+        "total_pss_mib": 14.461,
+        "per_session_pss_mib": 1.45,
+        "private_mib": 0.305,
+        "shared_mib": 135.402,
+        "pct_of_tree_pss": 2.56
+      },
+      {
+        "mapping_class": "hwui-skia",
+        "total_pss_mib": 10.205,
+        "per_session_pss_mib": 1.02,
+        "private_mib": 1.918,
+        "shared_mib": 82.57,
+        "pct_of_tree_pss": 1.82
+      },
+      {
+        "mapping_class": "dalvik-heap",
+        "total_pss_mib": 5.602,
+        "per_session_pss_mib": 0.56,
+        "private_mib": 5.602,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 1.0
+      },
+      {
+        "mapping_class": "binder",
+        "total_pss_mib": 1.978,
+        "per_session_pss_mib": 0.2,
+        "private_mib": 1.133,
+        "shared_mib": 8.465,
+        "pct_of_tree_pss": 0.35
+      },
+      {
+        "mapping_class": "gl",
+        "total_pss_mib": 0.984,
+        "per_session_pss_mib": 0.1,
+        "private_mib": 0.559,
+        "shared_mib": 4.32,
+        "pct_of_tree_pss": 0.18
+      }
+    ],
+    "10-zygote-on": [
+      {
+        "mapping_class": "anon-other",
+        "total_pss_mib": 108.982,
+        "per_session_pss_mib": 10.9,
+        "private_mib": 102.238,
+        "shared_mib": 81.418,
+        "pct_of_tree_pss": 27.03
+      },
+      {
+        "mapping_class": "dalvik-other",
+        "total_pss_mib": 91.73,
+        "per_session_pss_mib": 9.17,
+        "private_mib": 54.93,
+        "shared_mib": 880.594,
+        "pct_of_tree_pss": 22.76
+      },
+      {
+        "mapping_class": "shared-lib",
+        "total_pss_mib": 71.767,
+        "per_session_pss_mib": 7.18,
+        "private_mib": 36.52,
+        "shared_mib": 777.305,
+        "pct_of_tree_pss": 18.31
+      },
+      {
+        "mapping_class": "framework-dex",
+        "total_pss_mib": 31.909,
+        "per_session_pss_mib": 3.19,
+        "private_mib": 5.547,
+        "shared_mib": 309.328,
+        "pct_of_tree_pss": 7.92
+      },
+      {
+        "mapping_class": "other-file",
+        "total_pss_mib": 23.478,
+        "per_session_pss_mib": 2.35,
+        "private_mib": 13.559,
+        "shared_mib": 121.516,
+        "pct_of_tree_pss": 5.84
+      },
+      {
+        "mapping_class": "apk-dex",
+        "total_pss_mib": 17.374,
+        "per_session_pss_mib": 1.74,
+        "private_mib": 6.031,
+        "shared_mib": 113.289,
+        "pct_of_tree_pss": 4.31
+      },
+      {
+        "mapping_class": "fonts",
+        "total_pss_mib": 12.92,
+        "per_session_pss_mib": 1.29,
+        "private_mib": 0.0,
+        "shared_mib": 153.984,
+        "pct_of_tree_pss": 3.29
+      },
+      {
+        "mapping_class": "boot-image",
+        "total_pss_mib": 12.525,
+        "per_session_pss_mib": 1.25,
+        "private_mib": 0.691,
+        "shared_mib": 140.598,
+        "pct_of_tree_pss": 3.19
+      },
+      {
+        "mapping_class": "hwui-skia",
+        "total_pss_mib": 9.875,
+        "per_session_pss_mib": 0.99,
+        "private_mib": 2.07,
+        "shared_mib": 122.59,
+        "pct_of_tree_pss": 2.45
+      },
+      {
+        "mapping_class": "dalvik-heap",
+        "total_pss_mib": 5.984,
+        "per_session_pss_mib": 0.6,
+        "private_mib": 5.984,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 1.48
+      },
+      {
+        "mapping_class": "binder",
+        "total_pss_mib": 1.967,
+        "per_session_pss_mib": 0.2,
+        "private_mib": 1.211,
+        "shared_mib": 16.934,
+        "pct_of_tree_pss": 0.49
+      },
+      {
+        "mapping_class": "odex-vdex-oat",
+        "total_pss_mib": 1.406,
+        "per_session_pss_mib": 0.14,
+        "private_mib": 0.152,
+        "shared_mib": 20.184,
+        "pct_of_tree_pss": 0.36
+      },
+      {
+        "mapping_class": "gl",
+        "total_pss_mib": 0.959,
+        "per_session_pss_mib": 0.1,
+        "private_mib": 0.59,
+        "shared_mib": 9.805,
+        "pct_of_tree_pss": 0.24
+      }
+    ],
+    "20-exec": [
+      {
+        "mapping_class": "boot-image",
+        "total_pss_mib": 259.711,
+        "per_session_pss_mib": 12.99,
+        "private_mib": 203.668,
+        "shared_mib": 1112.02,
+        "pct_of_tree_pss": 27.79
+      },
+      {
+        "mapping_class": "anon-other",
+        "total_pss_mib": 196.148,
+        "per_session_pss_mib": 9.81,
+        "private_mib": 195.203,
+        "shared_mib": 2.602,
+        "pct_of_tree_pss": 20.96
+      },
+      {
+        "mapping_class": "dalvik-other",
+        "total_pss_mib": 141.586,
+        "per_session_pss_mib": 7.08,
+        "private_mib": 141.586,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 15.15
+      },
+      {
+        "mapping_class": "shared-lib",
+        "total_pss_mib": 128.834,
+        "per_session_pss_mib": 6.44,
+        "private_mib": 89.164,
+        "shared_mib": 988.84,
+        "pct_of_tree_pss": 13.78
+      },
+      {
+        "mapping_class": "odex-vdex-oat",
+        "total_pss_mib": 91.416,
+        "per_session_pss_mib": 4.57,
+        "private_mib": 75.922,
+        "shared_mib": 331.887,
+        "pct_of_tree_pss": 9.78
+      },
+      {
+        "mapping_class": "other-file",
+        "total_pss_mib": 25.919,
+        "per_session_pss_mib": 1.3,
+        "private_mib": 16.078,
+        "shared_mib": 196.203,
+        "pct_of_tree_pss": 2.77
+      },
+      {
+        "mapping_class": "framework-dex",
+        "total_pss_mib": 25.852,
+        "per_session_pss_mib": 1.29,
+        "private_mib": 0.344,
+        "shared_mib": 501.898,
+        "pct_of_tree_pss": 2.77
+      },
+      {
+        "mapping_class": "fonts",
+        "total_pss_mib": 15.536,
+        "per_session_pss_mib": 0.78,
+        "private_mib": 0.289,
+        "shared_mib": 310.77,
+        "pct_of_tree_pss": 1.66
+      },
+      {
+        "mapping_class": "apk-dex",
+        "total_pss_mib": 14.528,
+        "per_session_pss_mib": 0.73,
+        "private_mib": 0.285,
+        "shared_mib": 275.484,
+        "pct_of_tree_pss": 1.56
+      },
+      {
+        "mapping_class": "hwui-skia",
+        "total_pss_mib": 12.095,
+        "per_session_pss_mib": 0.6,
+        "private_mib": 3.832,
+        "shared_mib": 165.531,
+        "pct_of_tree_pss": 1.29
+      },
+      {
+        "mapping_class": "dalvik-heap",
+        "total_pss_mib": 10.816,
+        "per_session_pss_mib": 0.54,
+        "private_mib": 10.816,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 1.16
+      },
+      {
+        "mapping_class": "binder",
+        "total_pss_mib": 3.081,
+        "per_session_pss_mib": 0.15,
+        "private_mib": 2.266,
+        "shared_mib": 16.996,
+        "pct_of_tree_pss": 0.33
+      },
+      {
+        "mapping_class": "gl",
+        "total_pss_mib": 1.502,
+        "per_session_pss_mib": 0.08,
+        "private_mib": 1.098,
+        "shared_mib": 8.73,
+        "pct_of_tree_pss": 0.16
+      }
+    ],
+    "20-zygote-on": [
+      {
+        "mapping_class": "anon-other",
+        "total_pss_mib": 215.095,
+        "per_session_pss_mib": 10.75,
+        "private_mib": 203.881,
+        "shared_mib": 162.115,
+        "pct_of_tree_pss": 33.455
+      },
+      {
+        "mapping_class": "dalvik-other",
+        "total_pss_mib": 163.339,
+        "per_session_pss_mib": 8.17,
+        "private_mib": 127.172,
+        "shared_mib": 1785.977,
+        "pct_of_tree_pss": 25.075
+      },
+      {
+        "mapping_class": "shared-lib",
+        "total_pss_mib": 112.666,
+        "per_session_pss_mib": 5.63,
+        "private_mib": 75.643,
+        "shared_mib": 1531.59,
+        "pct_of_tree_pss": 17.53
+      },
+      {
+        "mapping_class": "framework-dex",
+        "total_pss_mib": 34.999,
+        "per_session_pss_mib": 1.75,
+        "private_mib": 8.158,
+        "shared_mib": 591.275,
+        "pct_of_tree_pss": 5.445
+      },
+      {
+        "mapping_class": "other-file",
+        "total_pss_mib": 27.884,
+        "per_session_pss_mib": 1.39,
+        "private_mib": 17.594,
+        "shared_mib": 242.312,
+        "pct_of_tree_pss": 4.34
+      },
+      {
+        "mapping_class": "apk-dex",
+        "total_pss_mib": 20.881,
+        "per_session_pss_mib": 1.04,
+        "private_mib": 11.585,
+        "shared_mib": 209.599,
+        "pct_of_tree_pss": 3.25
+      },
+      {
+        "mapping_class": "fonts",
+        "total_pss_mib": 13.632,
+        "per_session_pss_mib": 0.68,
+        "private_mib": 0.0,
+        "shared_mib": 313.304,
+        "pct_of_tree_pss": 2.12
+      },
+      {
+        "mapping_class": "boot-image",
+        "total_pss_mib": 12.889,
+        "per_session_pss_mib": 0.64,
+        "private_mib": 0.635,
+        "shared_mib": 282.549,
+        "pct_of_tree_pss": 2.005
+      },
+      {
+        "mapping_class": "hwui-skia",
+        "total_pss_mib": 12.492,
+        "per_session_pss_mib": 0.62,
+        "private_mib": 4.145,
+        "shared_mib": 239.248,
+        "pct_of_tree_pss": 1.945
+      },
+      {
+        "mapping_class": "dalvik-heap",
+        "total_pss_mib": 11.346,
+        "per_session_pss_mib": 0.57,
+        "private_mib": 11.346,
+        "shared_mib": 0.0,
+        "pct_of_tree_pss": 1.765
+      },
+      {
+        "mapping_class": "binder",
+        "total_pss_mib": 3.178,
+        "per_session_pss_mib": 0.16,
+        "private_mib": 2.422,
+        "shared_mib": 33.224,
+        "pct_of_tree_pss": 0.495
+      },
+      {
+        "mapping_class": "gl",
+        "total_pss_mib": 1.492,
+        "per_session_pss_mib": 0.07,
+        "private_mib": 1.174,
+        "shared_mib": 19.893,
+        "pct_of_tree_pss": 0.235
+      },
+      {
+        "mapping_class": "odex-vdex-oat",
+        "total_pss_mib": 1.34,
+        "per_session_pss_mib": 0.07,
+        "private_mib": 0.137,
+        "shared_mib": 41.047,
+        "pct_of_tree_pss": 0.21
+      }
+    ]
+  },
+  "host": {
+    "cpu_count": 32
+  }
+}

@@ -1,0 +1,815 @@
+{
+  "apk": "/home/Qui/.t3/worktrees/acos/t3-5b543043-95beecc36fffd494/fixtures/build/apps/counter.apk",
+  "apk_sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
+  "arm": "exec",
+  "attribution": {
+    "by_mapping_class": [
+      {
+        "mapping_class": "boot-image",
+        "pct_of_tree_pss": 28.52,
+        "private_mib": 66.324,
+        "pss_mib": 66.324,
+        "shared_mib": 0.0
+      },
+      {
+        "mapping_class": "shared-lib",
+        "pct_of_tree_pss": 19.03,
+        "private_mib": 41.781,
+        "pss_mib": 44.252,
+        "shared_mib": 16.141
+      },
+      {
+        "mapping_class": "framework-dex",
+        "pct_of_tree_pss": 10.88,
+        "private_mib": 25.281,
+        "pss_mib": 25.312,
+        "shared_mib": 0.062
+      },
+      {
+        "mapping_class": "odex-vdex-oat",
+        "pct_of_tree_pss": 8.83,
+        "private_mib": 20.527,
+        "pss_mib": 20.527,
+        "shared_mib": 0.0
+      },
+      {
+        "mapping_class": "other-file",
+        "pct_of_tree_pss": 8.21,
+        "private_mib": 18.789,
+        "pss_mib": 19.084,
+        "shared_mib": 0.652
+      },
+      {
+        "mapping_class": "fonts",
+        "pct_of_tree_pss": 6.66,
+        "private_mib": 15.484,
+        "pss_mib": 15.484,
+        "shared_mib": 0.0
+      },
+      {
+        "mapping_class": "apk-dex",
+        "pct_of_tree_pss": 5.94,
+        "private_mib": 13.703,
+        "pss_mib": 13.805,
+        "shared_mib": 0.203
+      },
+      {
+        "mapping_class": "anon-other",
+        "pct_of_tree_pss": 4.35,
+        "private_mib": 10.059,
+        "pss_mib": 10.105,
+        "shared_mib": 0.145
+      },
+      {
+        "mapping_class": "hwui-skia",
+        "pct_of_tree_pss": 3.65,
+        "private_mib": 8.488,
+        "pss_mib": 8.488,
+        "shared_mib": 0.0
+      },
+      {
+        "mapping_class": "dalvik-other",
+        "pct_of_tree_pss": 2.97,
+        "private_mib": 6.898,
+        "pss_mib": 6.898,
+        "shared_mib": 0.0
+      },
+      {
+        "mapping_class": "binder",
+        "pct_of_tree_pss": 0.41,
+        "private_mib": 0.938,
+        "pss_mib": 0.945,
+        "shared_mib": 0.016
+      },
+      {
+        "mapping_class": "dalvik-heap",
+        "pct_of_tree_pss": 0.36,
+        "private_mib": 0.84,
+        "pss_mib": 0.84,
+        "shared_mib": 0.0
+      },
+      {
+        "mapping_class": "gl",
+        "pct_of_tree_pss": 0.21,
+        "private_mib": 0.488,
+        "pss_mib": 0.488,
+        "shared_mib": 0.0
+      }
+    ],
+    "processes": [
+      {
+        "by_mapping": {
+          "anon-other": {
+            "maps": 33,
+            "private_mib": 1.105,
+            "pss_mib": 1.105,
+            "shared_mib": 0.016
+          },
+          "dalvik-heap": {
+            "maps": 1,
+            "private_mib": 0.309,
+            "pss_mib": 0.309,
+            "shared_mib": 0.0
+          },
+          "other-file": {
+            "maps": 4,
+            "private_mib": 9.359,
+            "pss_mib": 9.363,
+            "shared_mib": 0.008
+          },
+          "shared-lib": {
+            "maps": 31,
+            "private_mib": 0.129,
+            "pss_mib": 0.169,
+            "shared_mib": 4.238
+          }
+        },
+        "class": "host",
+        "comm": "acos",
+        "pid": 250240,
+        "private_mib": 10.902,
+        "pss_mib": 10.955,
+        "shared_mib": 4.262,
+        "top_mappings": [
+          {
+            "path": "/home/Qui/.t3/worktrees/acos/t3-5b543043-95beecc36fffd494/.cache/density20-target/release/acos",
+            "pss_mib": 9.363
+          },
+          {
+            "path": "[anonymous]",
+            "pss_mib": 1.016
+          },
+          {
+            "path": "[heap]",
+            "pss_mib": 0.309
+          },
+          {
+            "path": "/usr/lib/libstdc++.so.6.0.36",
+            "pss_mib": 0.092
+          },
+          {
+            "path": "[stack]",
+            "pss_mib": 0.09
+          }
+        ]
+      },
+      {
+        "by_mapping": {
+          "anon-other": {
+            "maps": 64,
+            "private_mib": 1.961,
+            "pss_mib": 1.961,
+            "shared_mib": 0.016
+          },
+          "dalvik-heap": {
+            "maps": 1,
+            "private_mib": 0.492,
+            "pss_mib": 0.492,
+            "shared_mib": 0.0
+          },
+          "other-file": {
+            "maps": 4,
+            "private_mib": 8.145,
+            "pss_mib": 8.145,
+            "shared_mib": 0.0
+          },
+          "shared-lib": {
+            "maps": 26,
+            "private_mib": 0.121,
+            "pss_mib": 0.157,
+            "shared_mib": 3.988
+          }
+        },
+        "class": "host",
+        "comm": "acos-art",
+        "pid": 250391,
+        "private_mib": 10.719,
+        "pss_mib": 10.762,
+        "shared_mib": 4.004,
+        "top_mappings": [
+          {
+            "path": "/home/Qui/.t3/worktrees/acos/t3-5b543043-95beecc36fffd494/.cache/density20-target/release/acos-art",
+            "pss_mib": 8.145
+          },
+          {
+            "path": "[anonymous]",
+            "pss_mib": 1.918
+          },
+          {
+            "path": "[heap]",
+            "pss_mib": 0.492
+          },
+          {
+            "path": "/usr/lib/libstdc++.so.6.0.36",
+            "pss_mib": 0.092
+          }
+        ]
+      },
+      {
+        "by_mapping": {
+          "anon-other": {
+            "maps": 9,
+            "private_mib": 0.02,
+            "pss_mib": 0.043,
+            "shared_mib": 0.055
+          },
+          "dalvik-heap": {
+            "maps": 1,
+            "private_mib": 0.016,
+            "pss_mib": 0.016,
+            "shared_mib": 0.0
+          },
+          "other-file": {
+            "maps": 5,
+            "private_mib": 0.004,
+            "pss_mib": 0.027,
+            "shared_mib": 0.078
+          },
+          "shared-lib": {
+            "maps": 21,
+            "private_mib": 0.008,
+            "pss_mib": 0.05,
+            "shared_mib": 2.117
+          }
+        },
+        "class": "bwrap",
+        "comm": "bwrap",
+        "pid": 250398,
+        "private_mib": 0.047,
+        "pss_mib": 0.142,
+        "shared_mib": 2.25,
+        "top_mappings": []
+      },
+      {
+        "by_mapping": {
+          "anon-other": {
+            "maps": 9,
+            "private_mib": 0.023,
+            "pss_mib": 0.047,
+            "shared_mib": 0.047
+          },
+          "dalvik-heap": {
+            "maps": 1,
+            "private_mib": 0.023,
+            "pss_mib": 0.023,
+            "shared_mib": 0.0
+          },
+          "other-file": {
+            "maps": 5,
+            "private_mib": 0.004,
+            "pss_mib": 0.021,
+            "shared_mib": 0.066
+          },
+          "shared-lib": {
+            "maps": 21,
+            "private_mib": 0.008,
+            "pss_mib": 0.036,
+            "shared_mib": 1.148
+          }
+        },
+        "class": "bwrap",
+        "comm": "bwrap",
+        "pid": 250400,
+        "private_mib": 0.059,
+        "pss_mib": 0.128,
+        "shared_mib": 1.262,
+        "top_mappings": []
+      },
+      {
+        "by_mapping": {
+          "anon-other": {
+            "maps": 437,
+            "private_mib": 6.949,
+            "pss_mib": 6.949,
+            "shared_mib": 0.012
+          },
+          "apk-dex": {
+            "maps": 64,
+            "private_mib": 13.703,
+            "pss_mib": 13.805,
+            "shared_mib": 0.203
+          },
+          "binder": {
+            "maps": 14,
+            "private_mib": 0.938,
+            "pss_mib": 0.945,
+            "shared_mib": 0.016
+          },
+          "boot-image": {
+            "maps": 42,
+            "private_mib": 66.324,
+            "pss_mib": 66.324,
+            "shared_mib": 0.0
+          },
+          "dalvik-other": {
+            "maps": 95,
+            "private_mib": 6.898,
+            "pss_mib": 6.898,
+            "shared_mib": 0.0
+          },
+          "fonts": {
+            "maps": 204,
+            "private_mib": 15.484,
+            "pss_mib": 15.484,
+            "shared_mib": 0.0
+          },
+          "framework-dex": {
+            "maps": 21,
+            "private_mib": 25.281,
+            "pss_mib": 25.312,
+            "shared_mib": 0.062
+          },
+          "gl": {
+            "maps": 17,
+            "private_mib": 0.488,
+            "pss_mib": 0.488,
+            "shared_mib": 0.0
+          },
+          "hwui-skia": {
+            "maps": 8,
+            "private_mib": 8.488,
+            "pss_mib": 8.488,
+            "shared_mib": 0.0
+          },
+          "odex-vdex-oat": {
+            "maps": 203,
+            "private_mib": 20.527,
+            "pss_mib": 20.527,
+            "shared_mib": 0.0
+          },
+          "other-file": {
+            "maps": 13,
+            "private_mib": 1.277,
+            "pss_mib": 1.527,
+            "shared_mib": 0.5
+          },
+          "shared-lib": {
+            "maps": 951,
+            "private_mib": 41.516,
+            "pss_mib": 43.84,
+            "shared_mib": 4.648
+          }
+        },
+        "class": "guest",
+        "comm": "ixtures.counter",
+        "pid": 250404,
+        "private_mib": 207.875,
+        "pss_mib": 210.586,
+        "shared_mib": 5.441,
+        "top_mappings": [
+          {
+            "path": "/data/img/x86_64/boot-framework.art",
+            "pss_mib": 26.75
+          },
+          {
+            "path": "/data/img/x86_64/boot-framework.oat",
+            "pss_mib": 23.293
+          },
+          {
+            "path": "/system/framework/framework.jar",
+            "pss_mib": 19.711
+          },
+          {
+            "path": "/data/img/x86_64/boot.oat",
+            "pss_mib": 8.133
+          },
+          {
+            "path": "/system/lib64/libhwui.so",
+            "pss_mib": 7.879
+          },
+          {
+            "path": "/apex/com.android.art/lib64/libart.so",
+            "pss_mib": 6.602
+          },
+          {
+            "path": "/system/framework/framework-res.apk",
+            "pss_mib": 6.215
+          },
+          {
+            "path": "[anon:scudo:primary]",
+            "pss_mib": 4.996
+          },
+          {
+            "path": "/data/img/x86_64/boot.art",
+            "pss_mib": 4.438
+          },
+          {
+            "path": "/apex/com.android.art/javalib/core-oj.jar",
+            "pss_mib": 3.203
+          },
+          {
+            "path": "[anon:dalvik-main space (region space)]",
+            "pss_mib": 2.863
+          },
+          {
+            "path": "/data/img/x86_64/boot-telephony-common.art",
+            "pss_mib": 2.602
+          }
+        ]
+      }
+    ],
+    "total_pss_mib": 232.573
+  },
+  "baseline": {
+    "pids": [
+      {
+        "comm": "acos",
+        "pid": 250240,
+        "pss": 8.4287109375
+      }
+    ]
+  },
+  "binary": ".cache/density20-target/release/acos",
+  "binary_provenance": {
+    "exists": true,
+    "mtime_utc": "2026-11-18T08:28:21+00:00",
+    "not_eligible_reason": null,
+    "path": ".cache/density20-target/release/acos",
+    "profile": "release",
+    "profile_source": "path heuristic (release)",
+    "sha256": "7e2115e51c806093a2fb187bd09d4af49f6c3600125e21837e7f88a2f82b0787",
+    "sha256_16": "7e2115e51c806093",
+    "size_bytes": 36944504,
+    "verdict_eligible": true
+  },
+  "boot_image_cache": "/home/Qui/.t3/worktrees/acos/t3-5b543043-95beecc36fffd494/.cache/d20/boot-images",
+  "boot_image_cache_entries_after": 1,
+  "boot_image_cache_entries_before": 1,
+  "boot_image_reports": [
+    "{\"base\": \"0x70000000\", \"cache\": \"hit\", \"dir\": \"/home/Qui/.t3/worktrees/acos/t3-5b543043-95beecc36fffd494/.cache/d20/boot-images/fixed-ff39b037f1d6b9ff\", \"input_hash\": \"ff39b037f1d6b9ff\", \"mode\": \"shared-fixed\"}"
+  ],
+  "cpu_core_seconds": 0.17,
+  "cpu_pct_host": 0.12,
+  "cpu_pct_one_core": 4.0,
+  "failed_tasks": [],
+  "false_pass": 0,
+  "gib_min_pss": 0.01535,
+  "gib_min_uss": 0.01516,
+  "git_dirty": 3,
+  "git_head": "79a86841750f2e52ced47feae164dded5edcf869",
+  "host_after": {
+    "MemAvailable": 54591.7734375,
+    "MemFree": 13028.78125,
+    "MemTotal": 61908.71484375
+  },
+  "host_before": {
+    "MemAvailable": 54592.28515625,
+    "MemFree": 13027.7265625,
+    "MemTotal": 61908.71484375
+  },
+  "host_used_pct_mean": 11.9,
+  "host_used_pct_peak": 12.0,
+  "label": "dens20-n1-exec-r1",
+  "loadavg_after": [
+    "0.70",
+    "4.61",
+    "5.60"
+  ],
+  "loadavg_before": [
+    "0.83",
+    "4.76",
+    "5.66"
+  ],
+  "lock": "shared",
+  "loops_per_session": 3,
+  "measured_tasks": 3,
+  "n": 1,
+  "ok": true,
+  "peak_tree_pss_mib": 239.658,
+  "per_session_settled": {
+    "all_pss_mib_per_session": 232.573,
+    "all_pss_mib_total": 232.573,
+    "bwrap_pss_mib_per_session": 0.27,
+    "guest_private_mib_per_session": 207.875,
+    "guest_private_mib_total": 207.875,
+    "guest_processes": 1,
+    "guest_pss_mib_per_session": 210.586,
+    "guest_pss_mib_total": 210.586,
+    "guest_shared_mib_per_session": 5.441,
+    "guest_shared_mib_total": 5.441,
+    "host_pss_mib_per_session": 21.717,
+    "host_pss_mib_total": 21.717,
+    "serve_baseline_pss_mib": 8.429,
+    "sessions": 1,
+    "wrapper_pss_mib_per_session": 0.0
+  },
+  "sampler_errors": [],
+  "sampler_interval_s": 0.25,
+  "schema": "acos-density20/1",
+  "serve_argv": [
+    ".cache/density20-target/release/acos",
+    "serve",
+    "--socket",
+    "/home/Qui/.t3/worktrees/acos/t3-5b543043-95beecc36fffd494/.cache/d20/n1e1118084228/serve.sock",
+    "--engine",
+    "art",
+    "--idle-timeout",
+    "900",
+    "--max-sessions",
+    "8",
+    "--owner-pid",
+    "250217"
+  ],
+  "serve_boot_s": 0.05,
+  "serve_pid": 250240,
+  "serve_rc": 0,
+  "sessions_live_at_end": 1,
+  "settled_host": {
+    "MemAvailable": 54520.38671875,
+    "MemFree": 12957.3984375,
+    "MemTotal": 61908.71484375
+  },
+  "settled_snapshot": {
+    "cpu_s": 0.22,
+    "host_mem_available_mib": 54520.43359375,
+    "host_mem_total_mib": 61908.71484375,
+    "pids": [
+      {
+        "class": "host",
+        "comm": "acos",
+        "pid": 250240,
+        "private": 10.90234375,
+        "pss": 10.955078125,
+        "rss": 15.1640625,
+        "shared": 4.26171875
+      },
+      {
+        "class": "host",
+        "comm": "acos-art",
+        "pid": 250391,
+        "private": 10.71875,
+        "pss": 10.76171875,
+        "rss": 14.72265625,
+        "shared": 4.00390625
+      },
+      {
+        "class": "bwrap",
+        "comm": "bwrap",
+        "pid": 250398,
+        "private": 0.046875,
+        "pss": 0.1416015625,
+        "rss": 2.296875,
+        "shared": 2.25
+      },
+      {
+        "class": "bwrap",
+        "comm": "bwrap",
+        "pid": 250400,
+        "private": 0.05859375,
+        "pss": 0.1279296875,
+        "rss": 1.3203125,
+        "shared": 1.26171875
+      },
+      {
+        "class": "guest",
+        "comm": "ixtures.counter",
+        "pid": 250404,
+        "private": 207.87109375,
+        "pss": 210.5859375,
+        "rss": 213.3125,
+        "shared": 5.44140625
+      }
+    ],
+    "t": 1794991354.6850429,
+    "utc": "2026-11-18T08:42:34Z"
+  },
+  "tasks": [
+    {
+      "checks": {
+        "assert_ok": true,
+        "inspect_ok": true,
+        "launch_ok": true,
+        "post_text_one": true,
+        "pre_text_zero": true,
+        "reset_ok": true,
+        "tap_ok": true
+      },
+      "error_codes": {},
+      "index": 0,
+      "post_text": "1",
+      "pre_text": "0",
+      "session": "n1-a0",
+      "step_ms": {
+        "assert": 41.915,
+        "inspect": 41.378,
+        "launch": 0.668,
+        "reset": 331.065,
+        "tap": 934.907
+      },
+      "steps": {
+        "assert": {
+          "error": null,
+          "error_message": null,
+          "ms": 41.915,
+          "ok": true,
+          "status": "pass",
+          "step": "assert",
+          "tool": "acos_observe_tree",
+          "tree_nodes": 4
+        },
+        "inspect": {
+          "error": null,
+          "error_message": null,
+          "ms": 41.378,
+          "ok": true,
+          "status": "pass",
+          "step": "inspect",
+          "tool": "acos_observe_tree",
+          "tree_nodes": 4
+        },
+        "launch": {
+          "error": null,
+          "error_message": null,
+          "ms": 0.668,
+          "ok": true,
+          "status": "pass",
+          "step": "launch",
+          "tool": "acos_launch",
+          "tree_nodes": 4
+        },
+        "reset": {
+          "data_cleared": true,
+          "error": null,
+          "error_message": null,
+          "fresh_frame": true,
+          "ms": 331.065,
+          "ok": true,
+          "state_reset": true,
+          "status": "pass",
+          "step": "reset",
+          "tool": "acos_reset"
+        },
+        "tap": {
+          "error": null,
+          "error_message": null,
+          "ms": 934.907,
+          "ok": true,
+          "status": "pass",
+          "step": "tap",
+          "tool": "acos_tap"
+        }
+      },
+      "verdict": "pass"
+    },
+    {
+      "checks": {
+        "assert_ok": true,
+        "inspect_ok": true,
+        "launch_ok": true,
+        "post_text_one": true,
+        "pre_text_zero": true,
+        "reset_ok": true,
+        "tap_ok": true
+      },
+      "error_codes": {},
+      "index": 1,
+      "post_text": "1",
+      "pre_text": "0",
+      "session": "n1-a0",
+      "step_ms": {
+        "assert": 42.315,
+        "inspect": 41.451,
+        "launch": 0.516,
+        "reset": 328.207,
+        "tap": 934.902
+      },
+      "steps": {
+        "assert": {
+          "error": null,
+          "error_message": null,
+          "ms": 42.315,
+          "ok": true,
+          "status": "pass",
+          "step": "assert",
+          "tool": "acos_observe_tree",
+          "tree_nodes": 4
+        },
+        "inspect": {
+          "error": null,
+          "error_message": null,
+          "ms": 41.451,
+          "ok": true,
+          "status": "pass",
+          "step": "inspect",
+          "tool": "acos_observe_tree",
+          "tree_nodes": 4
+        },
+        "launch": {
+          "error": null,
+          "error_message": null,
+          "ms": 0.516,
+          "ok": true,
+          "status": "pass",
+          "step": "launch",
+          "tool": "acos_launch",
+          "tree_nodes": 4
+        },
+        "reset": {
+          "data_cleared": true,
+          "error": null,
+          "error_message": null,
+          "fresh_frame": true,
+          "ms": 328.207,
+          "ok": true,
+          "state_reset": true,
+          "status": "pass",
+          "step": "reset",
+          "tool": "acos_reset"
+        },
+        "tap": {
+          "error": null,
+          "error_message": null,
+          "ms": 934.902,
+          "ok": true,
+          "status": "pass",
+          "step": "tap",
+          "tool": "acos_tap"
+        }
+      },
+      "verdict": "pass"
+    },
+    {
+      "checks": {
+        "assert_ok": true,
+        "inspect_ok": true,
+        "launch_ok": true,
+        "post_text_one": true,
+        "pre_text_zero": true,
+        "reset_ok": true,
+        "tap_ok": true
+      },
+      "error_codes": {},
+      "index": 2,
+      "post_text": "1",
+      "pre_text": "0",
+      "session": "n1-a0",
+      "step_ms": {
+        "assert": 42.001,
+        "inspect": 41.641,
+        "launch": 0.769,
+        "reset": 331.536,
+        "tap": 934.635
+      },
+      "steps": {
+        "assert": {
+          "error": null,
+          "error_message": null,
+          "ms": 42.001,
+          "ok": true,
+          "status": "pass",
+          "step": "assert",
+          "tool": "acos_observe_tree",
+          "tree_nodes": 4
+        },
+        "inspect": {
+          "error": null,
+          "error_message": null,
+          "ms": 41.641,
+          "ok": true,
+          "status": "pass",
+          "step": "inspect",
+          "tool": "acos_observe_tree",
+          "tree_nodes": 4
+        },
+        "launch": {
+          "error": null,
+          "error_message": null,
+          "ms": 0.769,
+          "ok": true,
+          "status": "pass",
+          "step": "launch",
+          "tool": "acos_launch",
+          "tree_nodes": 4
+        },
+        "reset": {
+          "data_cleared": true,
+          "error": null,
+          "error_message": null,
+          "fresh_frame": true,
+          "ms": 331.536,
+          "ok": true,
+          "state_reset": true,
+          "status": "pass",
+          "step": "reset",
+          "tool": "acos_reset"
+        },
+        "tap": {
+          "error": null,
+          "error_message": null,
+          "ms": 934.635,
+          "ok": true,
+          "status": "pass",
+          "step": "tap",
+          "tool": "acos_tap"
+        }
+      },
+      "verdict": "pass"
+    }
+  ],
+  "utc": "2026-11-18T08:42:28Z",
+  "verified_per_gib_min_pss": 195.44,
+  "verified_per_min": 41.347,
+  "verified_tasks": 3,
+  "wall_s": 4.353,
+  "zygote": "off"
+}
