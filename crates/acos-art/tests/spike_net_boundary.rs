@@ -513,7 +513,7 @@ fn guest_cannot_change_the_lan_drop_rules() {
     acos_test_support::require_prereq(
         pasta_binary().is_some(),
         "spike net boundary (LAN rules)",
-        "no pasta binary (set ACOS_SPIKE_NET_PASTA or build .cache/spike-net/bin/pasta)",
+        "no pinned pasta (install it at <checkout>/libexec/pasta or $ACOS_HOME/libexec/pasta, see docs/INSTALL.md \"The network module's transport\"; `acos-netd pasta` says where ACOS looked)",
     );
     if acos_test_support::skipped_count() != skipped_before {
         return;
@@ -679,7 +679,7 @@ fn boundary_failure_never_starts_the_guest() {
     acos_test_support::require_prereq(
         pasta_binary().is_some(),
         "spike net boundary (fail-closed)",
-        "no pasta binary (set ACOS_SPIKE_NET_PASTA or build .cache/spike-net/bin/pasta)",
+        "no pinned pasta (install it at <checkout>/libexec/pasta or $ACOS_HOME/libexec/pasta, see docs/INSTALL.md \"The network module's transport\"; `acos-netd pasta` says where ACOS looked)",
     );
     if acos_test_support::skipped_count() != skipped_before {
         return;

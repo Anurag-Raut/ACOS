@@ -1,0 +1,9 @@
+{
+  "expected": "2026_10_02.cba3570",
+  "ok": true,
+  "path": "/home/Qui/.t3/worktrees/acos/t3-a2b5f6fb-3b52a9c9158c9fa8/libexec/pasta",
+  "pinned": true,
+  "searched": "/home/Qui/.t3/worktrees/acos/t3-a2b5f6fb-3b52a9c9158c9fa8/libexec/pasta",
+  "source": "runtime_root",
+  "version": "2026_10_02.cba3570"
+}
