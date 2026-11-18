@@ -105,6 +105,7 @@ dependencies = [
 name = "acos-dex"
 version = "0.3.0"
 dependencies = [
+ "acos-test-support",
  "borsh",
  "serde_json",
  "thiserror",
@@ -398,6 +399,7 @@ dependencies = [
 name = "acos-webview"
 version = "0.3.0"
 dependencies = [
+ "acos-test-support",
  "hex",
  "libc",
  "serde",

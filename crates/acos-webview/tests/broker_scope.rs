@@ -217,18 +217,22 @@ fn a_broker_in_its_own_scope_outlives_the_session_scope_that_spawned_it() {
         child_main();
         return;
     }
-    if !engine_test_enabled() {
-        println!(
-            "SKIP broker_scope: set ACOS_WEBVIEW_TEST=1 (heavy: starts a Chromium) to run it \
-             under tools/art-runtime/run-exclusive.sh"
-        );
+    if acos_test_support::require_prereq(
+        engine_test_enabled(),
+        "a_broker_in_its_own_scope_outlives_the_session_scope_that_spawned_it",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+    )
+    .is_none()
+    {
         return;
     }
-    if acos_webview::gate::spawn_scope() != SpawnScope::TransientScope {
-        println!(
-            "SKIP broker_scope: systemd --user is not usable here, so the broker has no scope of \
-             its own to survive in (that is the documented fallback, not a pass)"
-        );
+    if acos_test_support::require_prereq(
+        acos_webview::gate::spawn_scope() == SpawnScope::TransientScope,
+        "a_broker_in_its_own_scope_outlives_the_session_scope_that_spawned_it",
+        "systemd --user cannot create a transient scope here, so the broker has no scope of its own to survive in",
+    )
+    .is_none()
+    {
         return;
     }
 
