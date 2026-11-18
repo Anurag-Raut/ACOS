@@ -1,0 +1,3 @@
+run_id	scenario	variant	expected	verdict	false_pass	error.class	error.code	wall_ms	first_frame_ms	mem.cgroup_peak_mib	mem.cgroup_gib_min	mem.pss_mib	mem.anon_shmem_settled_mib	host.loadavg1	host.mem_available_mib
+01-counter-r1	scenarios/counter.yaml	good	pass	pass	false			3942.0	None	22.54	0.000785	34.34	None	6.09	53977.3
+02-a11y-screenshot-wrap-r1	scenarios/a11y-screenshot-wrap.yaml	good	pass	pass	false			1225.8	None	12.76	0.000194	24.73	None	5.84	54551.7

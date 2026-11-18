@@ -97,8 +97,23 @@ impl Capabilities {
             // generated from the service-module registry (the same source the
             // `acos_help` limits section renders), never hand-written here.
             "modules": acos_services::module::capabilities_json(),
+            // GLSHIP: the guest's software GL, `angle-swiftshader | none`, with
+            // the reason (not installed / `ACOS_GUEST_GLES=off` / override).
+            // One implementation: the launcher's own selection rule.
+            "gles": gles_json(),
         })
     }
+}
+
+/// GLSHIP: `{"provider": "angle-swiftshader" | "none", "detail": "..."}`.
+///
+/// One implementation: the provider contract the launcher itself binds
+/// (`acos-gles-provider`), asked with this server's own resolved guest sysroot.
+/// The MCP server does not link the ART launcher for this.
+fn gles_json() -> Value {
+    let sysroot = crate::paths::sysroot();
+    let (provider, detail) = acos_gles_provider::capability_for(sysroot.as_deref());
+    json!({ "provider": provider, "detail": detail })
 }
 
 /// Everything a backend needs for one call.

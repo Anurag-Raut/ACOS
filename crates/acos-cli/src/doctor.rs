@@ -630,6 +630,28 @@ fn check_session_daemon() -> Check {
     }
 }
 
+/// GLSHIP: the guest's software GL, as the capability line agents read:
+/// `gles: angle-swiftshader | none`.
+///
+/// Software GL (ANGLE on SwiftShader, GL ES 3.1) is ON by default when the
+/// image installed the provider; `ACOS_GUEST_GLES=off` turns it off and an
+/// explicit `ACOS_GUEST_GLES=<provider>` picks another staged one. Missing is a
+/// `warn`, not a `fail`: every app still launches exactly as before, only the
+/// GPU paths (a `Bitmap.Config.HARDWARE` readback) are `UNSUPPORTED_BACKEND`.
+fn check_gles() -> Check {
+    let (label, detail) = acos_gles_provider::capability_for(crate::root::sysroot().as_deref());
+    if label == "none" {
+        Check::warn(
+            "gles",
+            format!("none ({detail})"),
+            "Apps still launch; only GPU readbacks (Bitmap.Config.HARDWARE) are unsupported. \
+             Stage the provider with tools/art-gles.sh (the image build does it).",
+        )
+    } else {
+        Check::ok("gles", format!("{label} ({detail})"))
+    }
+}
+
 fn check_memory() -> Check {
     let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") else {
         return Check::warn(
@@ -679,6 +701,7 @@ pub fn diagnose(args: &DoctorArgs) -> DoctorReport {
     checks.push(check_ndk(args));
     checks.extend(check_sandbox_helpers());
     checks.extend(check_workspace(installed));
+    checks.push(check_gles());
     checks.push(check_session_daemon());
     checks.push(check_memory());
     let subject = json!({
