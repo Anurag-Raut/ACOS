@@ -563,6 +563,80 @@ fn check_ndk(args: &DoctorArgs) -> Check {
     )
 }
 
+/// ADR-0030's transport: the pinned static `pasta`.
+///
+/// One rule owns this lookup (`acos_netd_ctl::pasta`): the relay supervisor
+/// starts its NAT process from it, `tools/release/install.sh` installs the
+/// binary at `<root>/libexec/pasta`, and a scenario that declares
+/// `needs_env: [pasta]` is resolved with the same answer (`acos-netd pasta`).
+///
+/// It is **optional** at run time — the default network profile is `off` — so a
+/// missing binary is a `warn`, not an unhealthy install. What the detail must
+/// carry is the honest fact: the version the binary reports, or `missing`, plus
+/// everywhere the lookup went.
+fn pasta_check(
+    found: Option<acos_netd::pasta::Resolution>,
+    version: Option<String>,
+    searched: &str,
+) -> Check {
+    use acos_netd::pasta::{is_pinned, TAG};
+    let make_fix = || {
+        format!(
+            "Build the pinned tag and install it where the relay looks:\n \
+             git clone --depth 1 -b {TAG} https://passt.top/passt && \
+             make -C passt static VERSION={TAG} && \
+             install -m 755 passt/pasta <root>/libexec/pasta\n \
+             (`tools/release/install.sh` does this when it finds a pinned pasta; \
+             the sha256 is recorded in research/spike-net/artifacts/passt-build.txt)"
+        )
+    };
+    match found {
+        Some(resolution) => {
+            let where_ = format!(
+                "{} [{}]",
+                resolution.path.display(),
+                resolution.source.as_str()
+            );
+            match version {
+                Some(version) if is_pinned(Some(&version)) => {
+                    Check::ok("pasta", format!("{version} ({where_})"))
+                }
+                Some(version) => Check::warn(
+                    "pasta",
+                    format!("{version} ({where_}) is not the pinned tag {TAG}"),
+                    format!(
+                        "The relay reports both tags in `status`; reinstall the pinned build \
+                         (fixed tag, measured transport). {}",
+                        make_fix()
+                    ),
+                ),
+                None => Check::warn(
+                    "pasta",
+                    format!("{} exists but does not run --version", resolution.path.display()),
+                    make_fix(),
+                ),
+            }
+        }
+        None => Check::warn(
+            "pasta",
+            format!("missing (searched: {searched})"),
+            format!(
+                "The `network:real` module and its `needs_env: [pasta]` scenarios \
+                 cannot run without it. {}",
+                make_fix()
+            ),
+        ),
+    }
+}
+
+fn check_pasta() -> Check {
+    let (found, looked) = acos_netd::pasta::resolve();
+    let version = found
+        .as_ref()
+        .and_then(|resolution| acos_netd::pasta::version(&resolution.path));
+    pasta_check(found, version, &acos_netd::pasta::searched(&looked))
+}
+
 /// REL3D: the running `acos serve` daemon's build identity vs this CLI's.
 ///
 /// `acos serve` is shared across invocations of one user, so after an upgrade (or
@@ -678,6 +752,7 @@ pub fn diagnose(args: &DoctorArgs) -> DoctorReport {
     checks.extend(check_java());
     checks.push(check_ndk(args));
     checks.extend(check_sandbox_helpers());
+    checks.push(check_pasta());
     checks.extend(check_workspace(installed));
     checks.push(check_session_daemon());
     checks.push(check_memory());
@@ -725,6 +800,37 @@ mod tests {
         assert_eq!(total, 976);
         assert_eq!(avail, 244);
         assert_eq!(mem_info("garbage"), None);
+    }
+
+    /// `acos doctor`'s pasta line is the capability a scenario's
+    /// `needs_env: [pasta]` resolves: the pinned version when the binary is
+    /// there, `missing` (with every place the lookup went) when it is not.
+    #[test]
+    fn pasta_check_names_the_version_or_missing() {
+        use acos_netd::pasta::{Resolution, Source, TAG};
+        let found = Resolution {
+            path: PathBuf::from("/opt/acos/libexec/pasta"),
+            source: Source::AcosHome,
+        };
+        let ok = pasta_check(Some(found.clone()), Some(TAG.to_string()), "");
+        assert_eq!(ok.status, "ok");
+        assert!(ok.detail.starts_with(TAG), "{}", ok.detail);
+        assert!(ok.detail.contains("acos_home"), "{}", ok.detail);
+        assert!(ok.fix.is_none());
+
+        let missing = pasta_check(None, None, "/x/libexec/pasta, PATH");
+        assert_eq!(missing.status, "warn");
+        assert!(missing.detail.starts_with("missing"), "{}", missing.detail);
+        assert!(missing.detail.contains("/x/libexec/pasta"), "{}", missing.detail);
+        let fix = missing.fix.expect("a missing transport names the build recipe");
+        assert!(fix.contains(TAG), "{fix}");
+        assert!(fix.contains("libexec/pasta"), "{fix}");
+
+        // A binary that is there but is another build is never `ok`: the
+        // relay's transport is pinned (measured), not "some pasta".
+        let other = pasta_check(Some(found), Some("0.0.1".to_string()), "");
+        assert_eq!(other.status, "warn");
+        assert!(other.detail.contains("0.0.1") && other.detail.contains(TAG));
     }
 
     #[test]

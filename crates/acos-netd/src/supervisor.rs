@@ -261,6 +261,13 @@ impl Relay {
 
     // -- pasta --------------------------------------------------------------
 
+    /// The `pasta` binary this relay runs.
+    ///
+    /// Order: `--pasta`, `ACOS_NET_PASTA` (both verbatim: a named path that
+    /// does not work must fail *with that path in the error*, never silently use
+    /// another binary), then the one product rule in [`acos_netd_ctl::pasta`]
+    /// (`<root>/libexec/pasta` for an install or a checkout, `$ACOS_PREFIX`'s
+    /// `current`, then `PATH`).
     fn pasta_bin(&self) -> PathBuf {
         if let Some(p) = &self.pasta_override {
             return p.clone();
@@ -268,15 +275,7 @@ impl Relay {
         if let Some(p) = std::env::var_os(plan::PASTA_ENV) {
             return PathBuf::from(p);
         }
-        // The installer's location, then PATH: the spike's binary is a static
-        // build shipped with the install (see `acos doctor`).
-        if let Some(p) = std::env::var_os("ACOS_PREFIX") {
-            let cand = PathBuf::from(p).join("libexec/pasta");
-            if cand.exists() {
-                return cand;
-            }
-        }
-        PathBuf::from("pasta")
+        acos_netd_ctl::pasta::resolved_path().unwrap_or_else(|| PathBuf::from("pasta"))
     }
 
     fn pasta_alive(&mut self) -> bool {

@@ -18,7 +18,7 @@ pub mod supervisor;
 // whose control ops they *are*. Re-exported here so `acos_netd::client`,
 // `acos_netd::proto` and `acos_netd::net_ctl` keep working for every caller, and
 // so the transport daemon and the module cannot drift into two protocols.
-pub use acos_netd_ctl::{client, net_ctl, proto, NETD_SOCK};
+pub use acos_netd_ctl::{client, net_ctl, pasta, proto, NETD_SOCK};
 
 use std::io::Write;
 use std::os::unix::net::UnixListener;
