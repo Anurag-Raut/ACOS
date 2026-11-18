@@ -1417,7 +1417,9 @@ mod focus_target_tests {
 #[cfg(test)]
 mod touch_target_tests {
     use super::*;
-    use acos_wm::display::{InsetsMode, DEFAULT_INSETS_MODE};
+    use crate::input_channel::{InputMessage, LoopbackConsumer};
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+    use acos_wm::display::DEFAULT_INSETS_MODE;
     use acos_wm::layers::{FLAG_NOT_FOCUSABLE, FLAG_NOT_TOUCHABLE, TYPE_APPLICATION};
 
     const ACTIVITY: u64 = 0x5a01;
@@ -1594,6 +1596,88 @@ mod touch_target_tests {
         assert!(
             message.contains("layer-stack hit test"),
             "the refusal says which rule found nothing, got {message:?}"
+        );
+    }
+
+    /// The **end-to-end** pin for the routing rule: the scenario `tap` (the
+    /// public API every input path uses) delivers through the *channel of the
+    /// window under the point*, and the other two windows' channels see
+    /// nothing.
+    ///
+    /// Before this rule the same tap published on the newest live window (the
+    /// overlay), so the activity's own channel saw no `Motion` at all — that is
+    /// the shape of the measured A11YPACE regression (`webview-probe` step 11,
+    /// `ELEMENT_NOT_FOUND`: the page's click never fired). The guests are real
+    /// `InputChannel` loopbacks, so "delivered" here means the event was written
+    /// to that window's channel and acknowledged, not that a target was picked.
+    #[test]
+    fn a_scenario_tap_delivers_through_the_channel_of_the_window_under_the_point() {
+        let (host, stack) = host_with_stack();
+        let activity_frame = {
+            let wms = stack.lock().expect("wms");
+            wms.wm.windows[&ACTIVITY].frame
+        };
+        // Three real client channels, one per window.
+        let mut guests = Vec::new();
+        for token in [ACTIVITY, DIALOG, OVERLAY] {
+            let fd = lock(&host.state)
+                .duplicate_client_fd(BinderId(token))
+                .expect("client fd");
+            guests.push(Arc::new(Mutex::new(LoopbackConsumer::new(fd))));
+        }
+        let counts = [
+            Arc::new(AtomicUsize::new(0)),
+            Arc::new(AtomicUsize::new(0)),
+            Arc::new(AtomicUsize::new(0)),
+        ];
+        let stop = Arc::new(AtomicUsize::new(0));
+        let mut ackers = Vec::new();
+        for (guest, count) in guests.iter().cloned().zip(counts.iter().cloned()) {
+            let stop = Arc::clone(&stop);
+            ackers.push(thread::spawn(move || {
+                loop {
+                    {
+                        let mut guest = guest.lock().expect("guest");
+                        // Registration publishes TOUCH_MODE/FOCUS on this
+                        // channel too; only Motion carries the gesture.
+                        while let Some(message) = guest.recv().expect("recv") {
+                            if let InputMessage::Motion { seq, .. } = message {
+                                count.fetch_add(1, AtomicOrdering::SeqCst);
+                                guest.send_finished(seq, true).expect("ack");
+                            }
+                        }
+                    }
+                    if stop.load(AtomicOrdering::SeqCst) == 1 {
+                        return;
+                    }
+                    thread::sleep(Duration::from_millis(2));
+                }
+            }));
+        }
+        // A point inside the activity and outside the dialog and the overlay.
+        let x = (activity_frame.left + 40) as f32;
+        let y = (activity_frame.bottom - 100) as f32;
+        let gesture = host.tap(x, y, Duration::from_secs(2)).expect("tap");
+        stop.store(1, AtomicOrdering::SeqCst);
+        for acker in ackers {
+            acker.join().expect("acker");
+        }
+        assert_eq!(gesture.token, BinderId(ACTIVITY));
+        assert_eq!(gesture.seqs.len(), 2, "DOWN and UP");
+        assert_eq!(
+            counts[0].load(AtomicOrdering::SeqCst),
+            2,
+            "the activity's channel carries the gesture (DOWN, UP)"
+        );
+        assert_eq!(
+            counts[1].load(AtomicOrdering::SeqCst),
+            0,
+            "the focused dialog never sees a tap that was not on it"
+        );
+        assert_eq!(
+            counts[2].load(AtomicOrdering::SeqCst),
+            0,
+            "the newest window (the overlay) never sees it either"
         );
     }
 

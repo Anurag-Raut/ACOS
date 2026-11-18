@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/Projects/acos/.cache/wt-wvtap/fixtures/build/apps/touch-probe.apk",
+  "apk_sha256": "a9be8f64df146bb6d0ee6fd4bef38ff6d9f95a70c944ae89e2839378c887e1c9",
+  "scenario_path": "/home/Qui/Projects/acos/.cache/wt-wvtap/scenarios/touchdisp-gesture.yaml",
+  "scenario_sha256": "a0cfe6059f6d7688b0cdb9eb1949a95348fe40941ab30182acceb46d016a088c",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}
