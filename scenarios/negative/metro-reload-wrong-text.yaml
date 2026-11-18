@@ -1,0 +1,75 @@
+version: 1
+name: metro-reload-wrong-text
+description: >-
+  NEGATIVE CONTROL for `metro-reload`: the same Fast Refresh run, but the scenario
+  expects text the edit never produced. It must FAIL, never pass.
+app: fixtures/build/apps/rn-debug.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  - id: network
+    profile: real
+expectation: fail
+needs_env: [pasta, metro]
+expectation_reason: >-
+  Same host needs as metro-reload (node + Metro, pasta): a wrong expected string
+  must fail on the real dev loop.
+budgets:
+  memory_mib: 512
+  wall_ms: 600000
+steps:
+  # The Metro this run owns: a COPY of fixtures/apps/rn-hello-dev (the source tree
+  # is never edited), started before the guest exists, with the relay's
+  # host-loopback opt-in for its port (the `adb reverse` equivalent): the debug
+  # app fetches its bundle during Application.onCreate.
+  - dev_server:
+      op: start
+      project: fixtures/apps/rn-hello-dev
+      port: 8081
+      timeout_ms: 180000
+
+  - launch:
+      activity: dev.acos.fixtures.rnhello/.MainActivity
+      clear_state: true
+      settle_timeout_ms: 120000
+
+  # What Metro served at launch, rendered once.
+  - assert_text:
+      selector: {text: {exact: "Hello ACOS"}}
+      text: {exact: "Hello ACOS"}
+      timeout_ms: 120000
+
+  - assert_tree: {record: before, timeout_ms: 10000}
+
+  # The developer's edit, to the COPY of the project.
+  - dev_server:
+      op: edit
+      file: App.js
+      find: "'Hello ACOS'"
+      replace: "'Hello Metro'"
+
+  # Metro rebuilt: the bundle it serves has the new string and not the old one.
+  - dev_server:
+      op: wait_serves
+      contains: "Hello Metro"
+      absent: "Hello ACOS"
+      timeout_ms: 120000
+
+  - dev_server: {op: fast_refresh, timeout_ms: 120000}
+
+  # the edit produced "Hello Metro"; this string is never rendered
+  - assert_text:
+      selector: {text: {exact: "Hello Nowhere"}}
+      text: {exact: "Hello Nowhere"}
+      timeout_ms: 15000

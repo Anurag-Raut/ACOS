@@ -332,7 +332,7 @@ def read_scenario(path):
 # KNOWN_NEEDS_ENV). Present == the scenario may run.
 #
 # The answer is the *product's* rule, not a second one: `acos doctor --json`
-# reports the `pasta` check from `crates/acos-netd-ctl/src/pasta.rs` (the same
+# reports the `metro` check (node + a React Native node_modules, METRO3) and the `pasta` check from `crates/acos-netd-ctl/src/pasta.rs` (the same
 # lookup the relay supervisor and `tools/release/install.sh` use, which includes
 # `<runtime root>/libexec/pasta`). A row that is skipped therefore means "this
 # host cannot run the arm honestly", which is exactly what `needs_env` declares.
@@ -358,8 +358,8 @@ def doctor_capabilities():
 
 
 def needs_env_present(name):
-    if name == "pasta":
-        present, _ = doctor_capabilities().get("pasta", (False, ""))
+    if name in ("pasta", "metro"):
+        present, _ = doctor_capabilities().get(name, (False, ""))
         return present
     return False
 
