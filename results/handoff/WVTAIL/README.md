@@ -1,6 +1,8 @@
 # WVTAIL — the tap tail, and the `NO_VIEW` that was an engine restart
 
-Branch `wvtail`, from `wvtap` (`0faabef0`). Private `ACOS_RUNTIME_DIR` +
+Branch `wvtail`, from `wvtap` (`0faabef0`); HEAD `8e17c797` (4 commits: the fix,
+the evidence, `WIRE.md`'s `ENGINE_RESTARTED` + input-ack contract, and the
+ADR-0031 settlement note in `DECISIONS.md`). Private `ACOS_RUNTIME_DIR` +
 `ACOS_SESSION_SOCKET`, `ACOS_VIEW_TEST_DIR=$PWD/.cache/lv`, every ART run through
 `tools/art-runtime/run-exclusive.sh --task WVTAIL` + `tools/guarded.sh`, builds in
 `.cache/wvtail-target` (`*_DEBUG=0`, incremental off), fixtures built in the
