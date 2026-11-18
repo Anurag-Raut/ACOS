@@ -301,6 +301,19 @@ class PhoneSide:
     def step(self, index):
         return self._steps.get(index)
 
+    def failed_steps(self):
+        """Steps whose phone-side action or assertion failed in the replay.
+
+        Past the first failure the phone is not showing the screen the
+        scenario asked for, so a tree difference there is a phone-side replay
+        failure, not an ACOS defect.
+        """
+        if not self.observations:
+            return []
+        return [int(rec.get("index", 0))
+                for rec in self.observations.get("steps") or []
+                if rec.get("status") in ("fail", "action_failed")]
+
     def nodes(self, index):
         entry = self._steps.get(index)
         if not entry or "observation" in entry:
@@ -513,7 +526,7 @@ CLASSIFICATION = {
 }
 
 
-def findings_from_steps(steps, fast_settle=()):
+def findings_from_steps(steps, fast_settle=(), phone_failed_from=None):
     """Aggregate unexpected differences into findings (one per kind+key)."""
     findings = {}
     for step in steps:
@@ -541,6 +554,7 @@ def findings_from_steps(steps, fast_settle=()):
             finding["note"] = ("every step in this finding is a `settle: fast` "
                                "navigation step; the scenario does not claim its "
                                "frame as evidence")
+
     return sorted(findings.values(), key=lambda f: (f["classification"], f["kind"], str(f["key"])))
 
 
@@ -612,7 +626,18 @@ def write_markdown(path, report):
     lines.append(f"* matched nodes: **{s['matched_nodes']}**, exact matches: **{s['exact_matches']}**")
     lines.append(f"* differences: **{s['differences']}** "
                  f"({s['allowed']} documented platform differences, "
-                 f"**{s['unexpected']} unexpected**)")
+                 f"**{s['unexpected']} unexpected**) in "
+                 f"**{s['findings']} findings**")
+    if s.get("invalid_differences"):
+        lines.append(f"* excluded as invalid evidence: {s['invalid_differences']} "
+                     f"differences on steps {s['invalid_steps']} (phone replay "
+                     f"failed earlier)")
+    if p.get("failed_steps"):
+        lines.append("")
+        lines.append(f"> **Phone replay failed at steps {p['failed_steps']}.** "
+                     "Past the first failure the phone is not on the screen the "
+                     "scenario asked for; those differences are classified "
+                     "`phone-scenario-failed` and say nothing about ACOS.")
     if p.get("caveats"):
         lines.append("")
         for caveat in p["caveats"]:
@@ -626,6 +651,13 @@ def write_markdown(path, report):
         if step.get("status") != "compared":
             lines.append(f"| {step['index']} | `{step['step']}` | - | - | - | - | - | "
                          f"{step.get('status')} |")
+            continue
+        if step.get("invalid"):
+            lines.append(
+                f"| {step['index']} | `{step['step']}` | {step.get('acos_frame')} "
+                f"({step.get('tree_source')}) | {step['acos_nodes']}/{step['phone_nodes']} "
+                f"| {step['matched_nodes']} | {step['exact_matches']} "
+                f"| invalid | invalid |")
             continue
         lines.append(
             f"| {step['index']} | `{step['step']}` | {step.get('acos_frame')} "
@@ -819,7 +851,26 @@ def main(argv=None):
         out_steps.append(rec)
 
     compared = [s for s in out_steps if s["status"] == "compared"]
-    all_diffs = [d for s in compared for d in s["differences"]]
+    phone_failures = phone.failed_steps()
+    phone_failed_from = min(phone_failures) if phone_failures else None
+    # A difference on a step at or after the phone's first replay failure is
+    # not evidence about ACOS: the phone is not on the screen the scenario
+    # asked for. Report it, but keep it out of the findings.
+    valid, invalid = [], []
+    for step in compared:
+        if phone_failed_from is not None and step["index"] >= phone_failed_from:
+            step["invalid"] = (f"the phone replay failed at step "
+                               f"{phone_failed_from}; this step compares a "
+                               f"screen the phone never reached")
+            step["invalid_differences"] = len(step["differences"])
+            step["allowed"] = None
+            step["unexpected"] = None
+            invalid.append(step)
+        else:
+            valid.append(step)
+    all_diffs = [d for s in valid for d in s["differences"]]
+    invalid_diffs = [d for s in invalid for d in s["differences"]]
+    findings = findings_from_steps(valid, fast_settle)
     summary = {
         "steps": len(out_steps),
         "compared_steps": len(compared),
@@ -830,6 +881,10 @@ def main(argv=None):
         "allowed": sum(1 for d in all_diffs if d.get("allowed")),
         "unexpected": sum(1 for d in all_diffs if not d.get("allowed")),
         "coverage": phone.coverage,
+        "findings": len(findings),
+        "invalid_differences": len(invalid_diffs),
+        "invalid_steps": [s["index"] for s in invalid],
+        "phone_failed_steps": phone_failures,
     }
     report = {
         "schema_version": 1,
@@ -867,8 +922,9 @@ def main(argv=None):
         "steps": out_steps,
         "summary": summary,
     }
-    report["findings"] = findings_from_steps(compared, fast_settle)
-    report["allowed"] = allowed_summary(compared, allowlist)
+    report["findings"] = findings
+    report["phone"]["failed_steps"] = phone_failures
+    report["allowed"] = allowed_summary(valid, allowlist)
 
     os.makedirs(args.out, exist_ok=True)
     with open(os.path.join(args.out, "report.json"), "w", encoding="utf-8") as fh:

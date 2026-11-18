@@ -5439,3 +5439,50 @@ so a non-clickable listener runs.
   `looperwake-bg-post` plus a NET6-style `netcb` TextView assertion on `modules`
   (and WV8); if it reproduces there, diff the module delivery thread against the
   plain-thread case before touching the guest runtime.
+
+## E15.1 / PARITY1 — per-step UI-tree parity harness (ACOS ART vs the phone) — MEASURED (harness + 5 scenarios; phone detached, recorded captures used)
+
+- **Date / commit:** 2026-11-18, branch `parity1` (base `modules` = `aaf518bf8`).
+- **Question / goal:** v0.5.0 needs a harness that runs **the same ACOS scenario**
+  on ACOS ART and on the moto g35 and diffs the UI trees after every step
+  (matches / list of differences per step), with an expected-difference allowlist.
+- **Method:** `tools/parity/run-parity.sh <scenario>` in three phases: ACOS
+  `verify --engine art` under `run-exclusive.sh` + `guarded.sh` (private
+  `ACOS_RUNTIME_DIR`/`ACOS_SESSION_SOCKET`/`ACOS_VIEW_TEST_DIR`); the phone replay
+  via `tools/phone/replay_scenario.py` under the phone flock with a new
+  `--tree-dir` per-step tree dump and `--no-device-settings` (wake with
+  `KEYCODE_WAKEUP`, no `settings put`); then `tools/parity/diff_trees.py`.
+  Nodes pair by resource-id / text / content-desc / class-role+tree position,
+  bounds are compared in **dp with each side's own density** (400 vs 420 dpi),
+  and the expected-difference allowlist is applied. 23 pure checks:
+  `python3 tools/tests/test-parity-harness.py`.
+- **Inputs:** fixtures `counter.apk`, `form-validation.apk`; Gaten
+  `gaten-dev-f344272-x86_64-release-unsigned.apk` (both sides execute the same
+  JS bundle, PHONE2). Phone captures: `fixtures/reference-device/{counter,
+  form-validation}` (moto g35, API 35, 1080x2400 @400 dpi, recorded 2026-11-10)
+  and `results/phone/gaten-f344272/<scenario>/phone` (recorded 2026-11-14/15).
+- **Result:** counter 20/24 steps, 160 matched nodes, 204 differences (180
+  allowlisted, 24 = one finding class); form-validation 25/28, 225 nodes,
+  250/250 allowlisted, **0 findings**; gaten-backstack 24/25, gaten-lesson 27/29,
+  gaten-home 13/14 (labels+target coverage), 101–108 findings each, dominated by
+  the accessibility-name placement and the phone's AnkiDroid state.
+- **Finding:** (1) ACOS exposes RN accessible names under a different attribute
+  than the phone — and for the WaniKani token field exposes `content-desc
+  "Personal access token"` that the phone does not expose at all, so
+  `gaten-backstack` steps 13/15 pass only on ACOS: an ACOS **false pass**;
+  (2) after `rotate` to landscape, ACOS's `visible_bounds` is clipped to the
+  pre-rotation display width (1080 instead of 2400) on 8 nodes, 3 steps — an
+  ACOS tree/evidence bug; (3) the phone's AnkiDroid install state (no permission)
+  makes the Anki card differ from ACOS's "not installed" — environment, not a
+  defect; (4) `settle: fast` onboarding steps are timing, not evidence.
+- **Fidelity / evidence:** ACOS = art-reference; phone = physical-device
+  (recorded tier). Reports: `results/handoff/PARITY1/` (`report.md`/`report.json`
+  per scenario, `FINDINGS.md`, `runs.json`); docs `docs/PARITY.md`.
+- **Regression / false pass:** the two ACOS defects above are the false-pass
+  risk; the harness refuses an empty pass (a missing phone is exit 3, a
+  one-sided capture is `status: skipped`, and a phone replay failure excludes
+  the affected steps from findings).
+- **Conclusion / next:** fix F2 (display rect for visible clipping) and decide
+  the F1 accessibility-name model, then re-run the five scenarios with the phone
+  attached (the live path is implemented but was only smoke-tested before the
+  device detached).

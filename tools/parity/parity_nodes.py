@@ -643,10 +643,12 @@ def diff_pair(a, p, matched_by, tol_dp=1.5, strict_class=False,
     # carries it (PHONE2 §5.1's text-field finding).
     if a["text"] != p["text"]:
         if a["text"] and not p["text"] and a["text"] == p["desc"]:
-            add("text_vs_desc", acos=a["text"], phone=p["desc"],
+            add("text_vs_desc", name=a["text"],
+                acos_field="text", phone_field="content_desc",
                 field="text->desc")
         elif p["text"] and not a["text"] and p["text"] == a["desc"]:
-            add("text_vs_desc", acos=a["desc"], phone=p["text"],
+            add("text_vs_desc", name=p["text"],
+                acos_field="content_desc", phone_field="text",
                 field="desc->text")
         else:
             add("text_changed", field="text", acos=a["text"], phone=p["text"])
