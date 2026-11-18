@@ -1,0 +1,146 @@
+# gaten-word-lookup: the second half of the bubble feedback case — after the
+# bubble tap (gaten-bubble-overlay, which this scenario repeats up to the OCR
+# hand-off), Gaten reads the frozen screen, the user taps a recognised word and
+# Gaten's word sheet appears.
+#
+# The screen under the bubble is Gaten's own dictionary search ("neko" -> 猫),
+# so the frozen frame holds Japanese text Gaten's bundled ML Kit recognises. The
+# OCR pass has no log line in a release build (Log.d is stripped); its end is
+# the status rail's node: while the index is running the rail reads "Reading
+# screen…", when it finishes it reads "Circle or tap Japanese text" — awaited.
+# The tap lands on the first recognised line (the 猫 headword, a pixel position:
+# the lookup overlay draws the screenshot as an image, so there is no node to
+# select under it). The sheet is Compose: ACOS publishes its semantics through the
+# window's AccessibilityNodeProvider (GATENWORD: the guest tree walk now follows
+# `createAccessibilityNodeInfo`/child ids, which is all Compose serves).
+#
+version: 1
+name: gaten-word-lookup
+description: >-
+  Gaten's floating-bubble lookup through to the word sheet: the bubble tap
+  freezes a dictionary-search screen with known Japanese text, Gaten's OCR index
+  finishes, a tap on the first recognised word opens the word sheet, Back closes it.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+services:
+  # Attached with **nothing** enabled: the state before the user switches a
+  # service on. The service is bound by the `enable` control op below, which
+  # writes the two settings the Settings UI writes — not by the app's
+  # `AccessibilityManager.addClient` (GATENBOOT2 step 2).
+  - id: accessibility
+    profile: real
+    config:
+      enable: []
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  # Nothing is enabled, so nothing is bound.
+  - service_ctl:
+      module: accessibility
+      op: status
+      expect:
+        id: accessibility
+        op: status
+        value: {enabled: false, service_bound: false}
+  # The Settings UI's "use service" switch: a `Settings.Secure` write, which the
+  # system's settings observer reconciles (`setEnabledServices` -> `bindServices`).
+  - service_ctl:
+      module: accessibility
+      op: enable
+      args: {"services": ["com.gaten/com.gaten.app.GatenAccessibilityService"]}
+  # The guest picks the queued reverse deliveries up on its next transaction; a
+  # no-op touch in the page margin is that transaction (`settle: fast` is
+  # navigation only, so an unchanged screen is not a failed step).
+  - tap: {x: 540, y: 2380, settle: fast}
+  - service_ctl:
+      module: accessibility
+      op: status
+      expect:
+        id: accessibility
+        op: status
+        value:
+          enabled: true
+          service_bound: true
+          enabled_services:
+            - com.gaten/com.gaten.app.GatenAccessibilityService
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - tap: {selector: {content_desc: {exact: Settings}}}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - tap: {selector: {text: {exact: "Screen lookup"}}}
+  - wait_for: {selector: {text: {exact: "Floating button"}}, timeout_ms: 30000}
+  # The page before the switch, as a picture (the bubble is not up yet).
+  - capture: {name: gaten-screen-lookup, format: png}
+  # Switching the feature on: the preference is written, the app broadcasts, the
+  # manifest receiver runs in the app's process, and its service adds the bubble.
+  - tap: {selector: {content_desc: {exact: "Floating button"}}, settle: content, settle_timeout_ms: 20000}
+  # The bubble's own windows: the remove target (added hidden) and the bubble.
+  - assert_windows:
+      order: [application, accessibility_overlay, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY, TYPE_ACCESSIBILITY_OVERLAY]
+  # The bubble's visible content, in the tree that the switch left behind.
+  - assert_visible: {selector: {content_desc: {exact: "Screen lookup"}}}
+  # The remove target Gaten shows while dragging: on the stack, not visible.
+  - assert_not_visible: {selector: {content_desc: {exact: "Remove floating button"}, include_invisible: true}}
+  - tap: {selector: {content_desc: {exact: Back}}, settle: content, settle_timeout_ms: 20000}
+  - tap: {selector: {content_desc: {exact: Home}}, settle: content, settle_timeout_ms: 20000}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - tap: {selector: {content_desc: {exact: "Search Japanese dictionary"}}, settle: content, settle_timeout_ms: 20000}
+  - type: {text: "neko", settle: fast}
+  - wait_for: {selector: {text: {contains: "猫"}}, timeout_ms: 30000}
+  - assert_windows:
+      order: [application, accessibility_overlay, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY, TYPE_ACCESSIBILITY_OVERLAY]
+  - wait: {ms: 1500}
+  - tap:
+      selector: {content_desc: {exact: "Screen lookup"}}
+      settle: fast
+      expect_change: false
+  - service_ctl:
+      module: accessibility
+      op: status
+      timeout_ms: 30000
+      expect:
+        id: accessibility
+        op: status
+        value:
+          service_bound: true
+          screenshots: [{display_id: 0, status: 0}]
+  - assert_log:
+      tag: native
+      patterns: ['ImageMetadata: 1080x2400']
+      timeout_ms: 60000
+  - wait_for: {selector: {content_desc: {exact: "Circle or tap Japanese text"}}, timeout_ms: 90000}
+  - capture: {name: lookup-index-ready, format: png, settle: content}
+  # Tap the first recognised word. The overlay's own animations keep the screen
+  # changing, so the tap claims delivery only; what it did is asserted below.
+  - tap: {x: 120, y: 470, settle: fast, expect_change: false}
+  # The word sheet: its nodes, not a sample at an arbitrary moment.
+  - wait_for: {selector: {content_desc: {exact: "Close lookup"}}, timeout_ms: 60000}
+  - assert_visible: {selector: {text: {exact: "ねこ・ネコ"}}}
+  - assert_visible: {selector: {text: {exact: "Meanings"}}}
+  - assert_visible: {selector: {content_desc: {exact: "Select again"}}}
+  - assert_visible: {selector: {text: {contains: "Cat (esp. the domestic cat"}}}
+  - assert_windows:
+      order: [application, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY]
+  - capture: {name: gaten-word-sheet, format: png, settle: content}
+  # The sheet's own Close control (a Compose button with the content description
+  # "Close lookup"): the lookup overlay is removed and the bubble comes back.
+  # (GATENWORD: closing used to abort the guest — the layer-handle pool was
+  # exhausted by the windows of this session; see results/handoff/GATENWORD/README.md.)
+  - tap: {selector: {content_desc: {exact: "Close lookup"}}, settle: fast, expect_change: false}
+  - wait_for: {selector: {content_desc: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - assert_windows:
+      order: [application, accessibility_overlay, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY, TYPE_ACCESSIBILITY_OVERLAY]
+  - assert_not_visible: {selector: {content_desc: {exact: "Close lookup"}}}

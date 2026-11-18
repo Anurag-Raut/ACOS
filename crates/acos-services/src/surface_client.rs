@@ -112,7 +112,7 @@ pub mod listener_codes {
 }
 
 /// How many layer-handle binders are pre-allocated at install time.
-pub const LAYER_HANDLE_POOL: usize = 16;
+pub const LAYER_HANDLE_POOL: usize = 128;
 
 // ---------------------------------------------------------------------------
 // Bounds on guest-controlled sizes (S7 sandbox certification)

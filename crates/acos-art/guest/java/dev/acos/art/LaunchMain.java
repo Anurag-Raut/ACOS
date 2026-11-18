@@ -2857,6 +2857,14 @@ public final class LaunchMain {
                 // and the tree simply carries no virtual children this sample.
                 android.util.Log.w("ACOSVIEW", "WebView virtual nodes failed: " + t);
             }
+            if (virtual == null || virtual.isEmpty()) {
+                // GATENWORD: a provider that does not implement the text search
+                // (Jetpack Compose's `AndroidComposeView` provider only serves
+                // `createAccessibilityNodeInfo` + child ids) is enumerated the way
+                // the framework's own accessibility traversal does: the host node's
+                // child ids, depth first.
+                virtual = enumerateProviderTree(provider);
+            }
             if (virtual != null) {
                 for (AccessibilityNodeInfo info : virtual) {
                     if (budget[0] <= 0) {
@@ -2877,6 +2885,49 @@ public final class LaunchMain {
             out.append(",\"children\":[").append(kids).append(']');
         }
         out.append('}');
+    }
+
+    /**
+     * GATENWORD: every virtual descendant of a View's `AccessibilityNodeProvider`
+     * by the standard traversal (host `createAccessibilityNodeInfo(HOST_VIEW_ID)`,
+     * then each child id's node), depth first, bounded. This is what the framework's
+     * `AccessibilityInteractionController` and UiAutomator walk; Compose exposes its
+     * whole semantics tree this way and nothing else.
+     */
+    static java.util.List<AccessibilityNodeInfo> enumerateProviderTree(
+            AccessibilityNodeProvider provider) {
+        java.util.ArrayList<AccessibilityNodeInfo> out = new java.util.ArrayList<>();
+        try {
+            java.lang.reflect.Method childId =
+                    AccessibilityNodeInfo.class.getMethod("getChildId", int.class);
+            java.lang.reflect.Method childCount =
+                    AccessibilityNodeInfo.class.getMethod("getChildCount");
+            AccessibilityNodeInfo host =
+                    provider.createAccessibilityNodeInfo(AccessibilityNodeProvider.HOST_VIEW_ID);
+            if (host == null) return out;
+            java.util.ArrayDeque<AccessibilityNodeInfo> stack = new java.util.ArrayDeque<>();
+            stack.push(host);
+            java.util.HashSet<Integer> seen = new java.util.HashSet<>();
+            while (!stack.isEmpty() && out.size() < 4000) {
+                AccessibilityNodeInfo cur = stack.pop();
+                int n = (Integer) childCount.invoke(cur);
+                // push in reverse so the first child pops first (document order)
+                java.util.ArrayList<AccessibilityNodeInfo> kids = new java.util.ArrayList<>();
+                for (int i = 0; i < n; i++) {
+                    long id = (Long) childId.invoke(cur, i);
+                    int vid = (int) ((id & 0xffffffff00000000L) >> 32);
+                    if (vid == AccessibilityNodeProvider.HOST_VIEW_ID || !seen.add(vid)) continue;
+                    AccessibilityNodeInfo k = provider.createAccessibilityNodeInfo(vid);
+                    if (k != null) kids.add(k);
+                }
+                for (int i = kids.size() - 1; i >= 0; i--) stack.push(kids.get(i));
+                if (cur != host) out.add(cur);
+                // keep emitting in pre-order: children are popped next
+            }
+        } catch (Throwable t) {
+            android.util.Log.w("ACOSVIEW", "provider tree walk failed: " + t);
+        }
+        return out;
     }
 
     /**
