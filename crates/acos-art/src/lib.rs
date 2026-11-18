@@ -35,6 +35,18 @@ pub mod crash;
 // GLSPIKE: the opt-in, lazily loaded software GLES provider (`ACOS_GUEST_GLES`).
 pub mod gles;
 
+/// The provider contract's error is a layout error here: a missing provider, a
+/// manifest that disagrees with the staged bytes or a render node that is not a
+/// device are all "the tree is not what the run needs" (`acos-gles-provider`
+/// keeps the message; this launcher keeps one error type).
+impl From<acos_gles_provider::Error> for Error {
+    fn from(e: acos_gles_provider::Error) -> Self {
+        match e {
+            acos_gles_provider::Error::Layout(m) => Error::Layout(m),
+        }
+    }
+}
+
 /// The process environment is global: every test that mutates it takes this
 /// lock, in any module, so one test's `ACOS_GUEST_GLES`/`ACOS_ART_*` cannot
 /// leak into another's (they run on parallel threads).
@@ -1865,7 +1877,7 @@ impl<'a> Sandbox<'a> {
                     "ACOS_GUEST_GLES={}: {} is not a directory (install the provider with \
                      `tools/art-gles.sh`)",
                     provider.name,
-                    provider.lib_dir(r).display()
+                    gles::lib_dir(provider, r).display()
                 )));
             }
             let started = std::time::Instant::now();
@@ -1885,7 +1897,7 @@ impl<'a> Sandbox<'a> {
             // `/vendor/lib64/hw/vulkan.<tag>.so` (GLSPIKE2) is the ICD the
             // image's `libvulkan.so` opens when the provider carries one.
             a.push("--ro-bind".into());
-            a.push(provider.lib_dir(r).into());
+            a.push(gles::lib_dir(provider, r).into());
             a.push("/vendor/lib64".into());
             // GPUSPIKE: a host-GPU provider (`mesa-host`) also names the one
             // DRM *render* node it draws on. It is bound read-write at the same

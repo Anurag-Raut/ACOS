@@ -21,10 +21,10 @@ acos-jni = { path = "../acos-jni" }
 acos-netd = { path = "../acos-netd" }
 acos-protocol = { path = "../acos-protocol" }
 # GLSHIP: `acos_capabilities` reports the guest's software GL provider
-# (`gles: angle-swiftshader | none`). The probe lives in `acos-art` (it owns the
-# sysroot + provider manifest contract), so this asks it instead of keeping a
-# second copy of the selection rule.
-acos-art = { path = "../acos-art" }
+# (`gles: angle-swiftshader | none`) from the small contract crate the launcher
+# also uses (`acos-gles-provider`: selection rule, manifest, verify cache), so
+# this server does not depend on the ART launcher (`acos-art`) for one line.
+acos-gles-provider = { path = "../acos-gles-provider" }
 acos-runtime = { path = "../acos-runtime" }
 acos-sandbox = { path = "../acos-sandbox" }
 # ADR-0029 item 6: `acos_capabilities` and the help limits section are generated

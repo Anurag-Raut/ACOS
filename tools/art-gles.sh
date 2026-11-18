@@ -23,7 +23,8 @@
 #                                   (the image's ld.config has no
 #                                   /vendor/${LIB}/egl in the default namespace)
 #
-# and `acos-art` (crates/acos-art/src/gles.rs) bind-mounts lib64 at
+# and `acos-art` (through `crates/acos-gles-provider`, the provider contract it
+# shares with `acos doctor`/`acos_capabilities`) bind-mounts lib64 at
 # /vendor/lib64 and sets ro.hardware.egl=<egl-tag> when ACOS_GUEST_GLES=<tag>.
 #
 # GLSPIKE2 adds the Vulkan ICD an ANGLE build needs to *initialize* (ANGLE has
@@ -86,7 +87,7 @@
 # NOT per-run: `run-exclusive.sh` gives every run a fresh `ACOS_ART_DATA`, so a
 # provider under the data dir would vanish with the run. The default --sysroot
 # is `$ACOS_ART_SYSROOT`, else the repo's `.cache/art/sysroot`; the launcher
-# finds it there (`crates/acos-art/src/gles.rs`), or under
+# finds it there (`crates/acos-gles-provider/src/lib.rs`), or under
 # `$ACOS_GUEST_GLES_DIR` when an arm wants a private copy. A run without the
 # flag never looks, so the add-on is invisible by default.
 #
