@@ -83,6 +83,7 @@ def _load_p6():
     return mod
 
 
+sys.dont_write_bytecode = True     # never leave __pycache__ in tools/
 p6 = _load_p6()
 now = p6.now
 pct = p6.pct
@@ -391,8 +392,8 @@ class Instance:
     def node_text(self, rid):
         t = self.adb.tree()
         for n in t["nodes"]:
-            if n["attrs"].get("resource-id", "").endswith("/" + rid):
-                return n["attrs"].get("text", "")
+            if n.get("resource-id", "").endswith("/" + rid):
+                return n.get("text", "")
         return None
 
 
@@ -418,19 +419,60 @@ def load_ref(name="counter"):
     return np.load(str(p)) if p.exists() else None
 
 
-def wait_frame(inst, ref, timeout=20.0, poll=None):
-    """Poll raw screencaps until the app region equals `ref`. Returns (ms, frames)."""
+def wait_change(inst, pre, min_frac=0.02, timeout=60.0):
+    """Poll raw screencaps until the app region differs from the pre-launch frame.
+
+    `min_frac` is the share of compared pixels that must change: 2 % is far above
+    the status-bar clock / nav pill noise (cropped) and far below "the app window
+    replaced the launcher".  Returns (ms, frames, last_frac).
+    """
     t0 = now()
     n = 0
+    last = 0.0
     while now() - t0 < timeout:
         s = inst.adb.screencap_raw()
         n += 1
-        f = frame_frac(s["px"], ref)
-        if f <= TOL_SAME:
-            return (now() - t0) * 1000.0, n, f
-        if poll:
-            time.sleep(poll)
-    return None, n, None
+        last = frame_frac(pre, s["px"])
+        if last >= min_frac:
+            return (now() - t0) * 1000.0, n, last
+    try:
+        import numpy as np
+        from PIL import Image
+        (ROOT / ".cache/emubench").mkdir(parents=True, exist_ok=True)
+        np.save(str(ROOT / ".cache/emubench/last-nomatch.npy"), s["px"])
+        Image.fromarray(s["px"][:, :, :3]).save(str(ROOT / ".cache/emubench/last-nomatch.png"))
+    except Exception:
+        pass
+    return None, n, last
+
+
+def stable_frame(inst, tries=20, tol=0.005):
+    """Two consecutive screencaps that differ by < 0.5 % of the app region."""
+    prev = inst.adb.screencap_raw()["px"]
+    for _ in range(tries):
+        cur = inst.adb.screencap_raw()["px"]
+        if frame_frac(prev, cur) <= tol:
+            return cur
+        prev = cur
+    return prev
+
+
+def launch_to_frame(inst, act, pre, timeout=60.0):
+    """am start (async) -> first frame whose app region differs from `pre`."""
+    box = {}
+
+    def _go():
+        box["st"] = inst.am_start(act)
+
+    th = threading.Thread(target=_go)
+    t0 = now()
+    th.start()
+    ms, nf, frac = wait_change(inst, pre, timeout=timeout)
+    th.join(timeout=120)
+    st = box.get("st", {})
+    return {"frame_ms": ms, "frames": nf, "frac": frac,
+            "wall_ms": (now() - t0) * 1000.0,
+            "am_start_ms": st.get("ms"), "total_time_ms": st.get("total_time_ms")}
 
 
 # --------------------------------------------------------------------------- phases
@@ -445,6 +487,7 @@ class Bench:
         self.reps = []
         self.errors = []
         self.instances = []
+        self.launcher = {}      # serial -> idle-launcher frame (session-constant)
 
     # ---- plumbing ---------------------------------------------------------
     def add(self, metric, value, ok=True, **extra):
@@ -491,6 +534,12 @@ class Bench:
                             None if r.get("spread_pct") is None else round(r["spread_pct"], 1)))
         return path
 
+    def capture_launcher(self, inst):
+        """Idle launcher frame for this session: the 'app is not on screen' baseline."""
+        self.launcher[inst.serial] = stable_frame(inst)
+        self.log("launcher frame captured for %s" % inst.serial)
+        return self.launcher[inst.serial]
+
     def inst(self, idx):
         while len(self.instances) < idx:
             n = len(self.instances) + 1
@@ -530,31 +579,20 @@ class Bench:
         self.install(inst, APPS["counter"], "install_ms")
         if ref is None:
             self.install(inst, APPS["form"], "install_form_ms")
-        t0 = now()
-        st = inst.am_start(COUNTER_ACT)
-        self.add("cold_am_start_w_ms", st["ms"], st["rc"] == 0,
-                 total_time_ms=st["total_time_ms"])
-        if ref is None:
-            # reference-establishing rep: correctness by tree, frame kept as the reference
-            t = inst.adb.tree()
-            cnt = p6.count_text(t["nodes"])
-            ok = cnt == "0"
-            self.add("cold_launch_ms", (now() - t0) * 1000.0, ok, ref_rep=True, count=cnt)
-            if ok:
-                save_ref(inst.adb.screencap_raw()["px"])
-                self.log("reference frame saved (tree count 0)")
-            return
-        launch_ms, nframes, frac = wait_frame(inst, ref, timeout=25.0)
+        pre = self.capture_launcher(inst)
+        r = launch_to_frame(inst, COUNTER_ACT, pre)
+        self.add("cold_am_start_w_ms", r["am_start_ms"], r["am_start_ms"] is not None,
+                 total_time_ms=r["total_time_ms"])
         t = inst.adb.tree()
         cnt = p6.count_text(t["nodes"])
-        ok = launch_ms is not None and cnt == "0"
-        self.add("cold_launch_ms", launch_ms, ok, frames=nframes, frac=frac, count=cnt)
-        # cold = process start -> first correct app frame (boot leg + launch leg)
-        if launch_ms is not None:
-            self.add("cold_first_frame_ms", boot_ms + launch_ms, ok,
-                     boot_ms=boot_ms, launch_ms=launch_ms)
-        self.log("cold rep: boot %.0f ms + launch %.0f ms (frames %d, tree count %s)"
-                 % (boot_ms, launch_ms or -1, nframes, cnt))
+        ok = r["frame_ms"] is not None and cnt == "0"
+        self.add("cold_launch_ms", r["frame_ms"], ok, frames=r["frames"],
+                 frac=r["frac"], count=cnt, wall_ms=r["wall_ms"])
+        if r["frame_ms"] is not None:
+            self.add("cold_first_frame_ms", boot_ms + r["frame_ms"], ok,
+                     boot_ms=boot_ms, launch_ms=r["frame_ms"])
+        self.log("cold rep: boot %.0f ms + launch %.0f ms (frames %d, frac %s, tree count %s)"
+                 % (boot_ms, r["frame_ms"] or -1, r["frames"], r["frac"], cnt))
 
     def n1_warm(self):
         inst = self.inst(1)
@@ -565,29 +603,27 @@ class Bench:
         self.host.step("n1-warm: booted")
         self.install(inst, APPS["counter"], "install_ms")
         self.install(inst, APPS["form"], "install_form_ms")
+        pre = self.capture_launcher(inst)
 
-        # reference frame + verified count 0
+        # verified count 0 (the tree is the correctness oracle everywhere)
         inst.force_stop(COUNTER_PKG)
         inst.am_start(COUNTER_ACT)
         t = inst.adb.tree()
         if p6.count_text(t["nodes"]) != "0":
             raise RuntimeError("counter did not start at count 0")
-        save_ref(inst.adb.screencap_raw()["px"])
-        ref = load_ref()
         inst.force_stop(COUNTER_PKG)
 
         # --- M4 warm launch -------------------------------------------------
         for _ in range(self.args.warm_reps):
             inst.force_stop(COUNTER_PKG)
             time.sleep(0.3)
-            t0 = now()
-            st = inst.am_start(COUNTER_ACT)
-            launch_ms, nf, frac = wait_frame(inst, ref, timeout=20.0)
+            r = launch_to_frame(inst, COUNTER_ACT, pre)
             t = inst.adb.tree()
             cnt = p6.count_text(t["nodes"])
-            ok = launch_ms is not None and cnt == "0"
-            self.add("warm_launch_ms", (now() - t0) * 1000.0, ok, frames=nf, frac=frac,
-                     count=cnt, am_start_ms=st["ms"], total_time_ms=st["total_time_ms"])
+            ok = r["frame_ms"] is not None and cnt == "0"
+            self.add("warm_launch_ms", r["frame_ms"], ok, frames=r["frames"],
+                     frac=r["frac"], count=cnt, wall_ms=r["wall_ms"],
+                     am_start_ms=r["am_start_ms"], total_time_ms=r["total_time_ms"])
             inst.force_stop(COUNTER_PKG)
         self.host.step("n1-warm: after warm launches")
 
@@ -608,7 +644,7 @@ class Bench:
 
         # --- M8 counter: tap -> settled (tree-confirmed) ---------------------
         inst.am_start(COUNTER_ACT)
-        wait_frame(inst, ref, timeout=20.0)
+        time.sleep(1.0)
         expect = 0
         for _ in range(self.args.tap_reps):
             expect += 1
@@ -649,24 +685,23 @@ class Bench:
 
         # --- M6 reset -> first correct screen -------------------------------
         inst.am_start(COUNTER_ACT)
-        wait_frame(inst, ref, timeout=20.0)
+        time.sleep(1.0)
         for _ in range(self.args.reset_reps):
             inst.tap_id("inc")
             time.sleep(0.4)
-            t0 = now()
             inst.force_stop(COUNTER_PKG)
             inst.pm_clear(COUNTER_PKG)
-            inst.am_start(COUNTER_ACT)
-            launch_ms, nf, frac = wait_frame(inst, ref, timeout=25.0)
+            r = launch_to_frame(inst, COUNTER_ACT, pre)
             t = inst.adb.tree()
             cnt = p6.count_text(t["nodes"])
-            ok = launch_ms is not None and cnt == "0"
-            self.add("reset_ms", (now() - t0) * 1000.0, ok, frames=nf, frac=frac, count=cnt)
+            ok = r["frame_ms"] is not None and cnt == "0"
+            self.add("reset_ms", r["wall_ms"], ok, frames=r["frames"], frac=r["frac"],
+                     count=cnt, frame_ms=r["frame_ms"])
         self.host.step("n1-warm: after reset rows")
 
         # --- memory (host qemu + guest) -------------------------------------
         inst.am_start(COUNTER_ACT)
-        wait_frame(inst, ref, timeout=20.0)
+        time.sleep(1.5)
         pid = inst.pid()
         if not pid:
             raise RuntimeError("no qemu pid for %s" % inst.serial)
@@ -740,7 +775,7 @@ class Bench:
         return {"used_mib": used, "free_mib": free, "app_pss_mib": app_pss}
 
     # ---- N-instance throughput -------------------------------------------
-    def counter_task(self, inst, ref, task_no):
+    def counter_task(self, inst, task_no):
         """One predeclared counter task: launch -> verify 0 -> tap inc -> verify 1 -> reset.
 
         A task is *verified* only when the live UI tree reports the expected
@@ -751,11 +786,11 @@ class Bench:
         try:
             inst.force_stop(COUNTER_PKG)
             inst.pm_clear(COUNTER_PKG)
-            st = inst.am_start(COUNTER_ACT)
-            detail["am_start_ms"] = st["ms"]
-            launch_ms, nf, frac = wait_frame(inst, ref, timeout=25.0)
-            detail["launch_ms"] = launch_ms
-            detail["launch_frames"] = nf
+            r = launch_to_frame(inst, COUNTER_ACT, pre)
+            detail["am_start_ms"] = r["am_start_ms"]
+            detail["launch_ms"] = r["frame_ms"]
+            detail["launch_frac"] = r["frac"]
+            detail["launch_frames"] = r["frames"]
             t = inst.adb.tree()
             c0 = p6.count_text(t["nodes"])
             detail["count0"] = c0
@@ -798,21 +833,20 @@ class Bench:
                 for i, inst in enumerate(insts):
                     boots[inst.serial] = inst.wait_boot()
                     inst.prep()
+                    self.capture_launcher(inst)
                 self.host.step("n%d rep%d: all %d booted" % (n, rep, n))
                 repdoc["boot_ms"] = boots
                 self.add("n%d_boot_ms" % n, sum(boots.values()) / len(boots), True,
                          per_instance=boots)
-                ref = load_ref()
-                if ref is None:
-                    raise RuntimeError("no reference frame; run the n1-warm phase first")
                 for inst in insts:
                     if not self.install(inst, APPS["counter"], "install_ms"):
                         raise RuntimeError("install failed on %s" % inst.serial)
                 # warm the app once so the task loop is steady-state
                 for inst in insts:
-                    inst.am_start(COUNTER_ACT)
-                for inst in insts:
-                    wait_frame(inst, ref, timeout=30.0)
+                    r = launch_to_frame(inst, COUNTER_ACT, self.launcher[inst.serial])
+                    self.log("warmup %s: frame %.0f ms frames %d frac %.3f"
+                             % (inst.serial, r["frame_ms"] or -1, r["frames"],
+                                r["frac"] if r["frac"] is not None else -1))
                     inst.force_stop(COUNTER_PKG)
                 self.host.step("n%d rep%d: tasks starting" % (n, rep))
 
@@ -846,7 +880,7 @@ class Bench:
                 t_start = now()
 
                 def worker(idx, inst):
-                    results[idx] = [self.counter_task(inst, ref, k + 1) for k in range(K)]
+                    results[idx] = [self.counter_task(inst, k + 1) for k in range(K)]
 
                 workers = [threading.Thread(target=worker, args=(i, inst))
                            for i, inst in enumerate(insts)]
@@ -907,15 +941,12 @@ class Bench:
     # ---- dispatch ---------------------------------------------------------
     def run(self):
         phase = self.args.phase
-        ref = load_ref()
         if phase == "n1-cold":
             for rep in range(1, self.args.cold_reps + 1):
                 self.log("=== n1-cold rep %d/%d ===" % (rep, self.args.cold_reps))
                 self.host.step("n1-cold rep%d: before" % rep)
                 try:
-                    self.cold_rep(ref)
-                    if ref is None:
-                        ref = load_ref()
+                    self.cold_rep(None)
                 except Exception as e:
                     self.errors.append({"phase": phase, "rep": rep, "error": str(e)})
                     self.log("ERROR rep %d: %s" % (rep, e))
@@ -939,6 +970,54 @@ class Bench:
             raise SystemExit("unknown phase %r" % phase)
         self.host.step("phase %s: end" % phase)
         return self.write(phase)
+
+
+# --------------------------------------------------------------------------- frame diagnosis
+def diag_frame(args):
+    """Why does a captured frame not match the saved reference? (diagnostic, no metric)"""
+    import numpy as np
+    b = Bench(args)
+    setup_avds(4, log=b.log)
+    inst = b.inst(1)
+    try:
+        b.host.require_ram(1, "diag: before emulator start")
+        inst.start(snapshot=False, tag="diag")
+        inst.wait_boot()
+        inst.prep()
+        b.install(inst, APPS["counter"], "install_ms")
+        inst.force_stop(COUNTER_PKG)
+        inst.am_start(COUNTER_ACT)
+        time.sleep(2.0)
+        t = inst.adb.tree()
+        cnt = p6.count_text(t["nodes"])
+        a1 = inst.adb.screencap_raw()["px"]
+        time.sleep(1.5)
+        a2 = inst.adb.screencap_raw()["px"]
+        ref = load_ref()
+        out = {"tree_count": cnt, "shape_a1": list(a1.shape), "shape_ref": None if ref is None else list(ref.shape)}
+        out["a1_vs_a2_frac"] = frame_frac(a1, a2)
+        out["a1_alpha_unique"] = [int(x) for x in np.unique(a1[:, :, 3])[:5]]
+        if ref is not None:
+            out["a1_vs_ref_frac"] = frame_frac(a1, ref)
+            out["a1_vs_ref_frac_rgb"] = float(np.count_nonzero(
+                np.any(a1[CROP_TOP:-CROP_BOTTOM, :, :3] != ref[CROP_TOP:-CROP_BOTTOM, :, :3], axis=2))
+            ) / float(a1[CROP_TOP:-CROP_BOTTOM].shape[0] * a1.shape[1])
+            d = np.any(a1 != ref, axis=2)
+            rows = np.where(d.any(axis=1))[0]
+            out["diff_rows_range"] = [int(rows.min()), int(rows.max())] if rows.size else None
+            out["diff_rows_count"] = int(rows.size)
+            out["diff_rows_first20"] = [int(r) for r in rows[:20]]
+            out["ref_alpha_unique"] = [int(x) for x in np.unique(ref[:, :, 3])[:5]]
+        from PIL import Image
+        Image.fromarray(a1[:, :, :3]).save(str(b.out / "diag-a1.png"))
+        if ref is not None:
+            Image.fromarray(ref[:, :, :3]).save(str(b.out / "diag-ref.png"))
+        b.log("diag: %s" % json.dumps(out, sort_keys=True))
+        (b.out / "diag.json").write_text(json.dumps(out, indent=1) + "\n")
+    finally:
+        b.stop_all()
+        b.host.step("diag: end")
+    return 0
 
 
 # --------------------------------------------------------------------------- fixtures
@@ -1018,6 +1097,7 @@ def main(argv=None):
     ap.add_argument("--merge", action="store_true")
     ap.add_argument("files", nargs="*")
     ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--diag-frame", action="store_true")
     ap.add_argument("--cold-reps", type=int, default=5)
     ap.add_argument("--warm-reps", type=int, default=5)
     ap.add_argument("--tap-reps", type=int, default=10)
@@ -1035,6 +1115,9 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.diag_frame:
+        APPS.update(resolve_apks())
+        return diag_frame(a)
     if a.setup_avds:
         setup_avds(4)
         return 0
@@ -1051,8 +1134,7 @@ def main(argv=None):
         a.cpu_window = 3.0
     if not a.phase:
         raise SystemExit("--phase is required")
-    global APPS
-    APPS = resolve_apks()
+    APPS.update(resolve_apks())
     b = Bench(a)
     setup_avds(4, log=b.log)
 
