@@ -1,0 +1,10 @@
+ACOSPROBE launch-extras action=dev.acos.fixtures.launchextras.ACTION
+ACOSPROBE launch-extras boolean=true
+ACOSPROBE launch-extras data=acos://launch/extras?source=scenario
+ACOSPROBE launch-extras double=0.25
+ACOSPROBE launch-extras float=1.5
+ACOSPROBE launch-extras int=42
+ACOSPROBE launch-extras long=5000000000
+ACOSPROBE launch-extras long_small=7
+ACOSPROBE launch-extras string_array=[alpha, beta]
+ACOSPROBE launch-extras string=hello

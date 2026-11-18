@@ -3267,29 +3267,16 @@ fn idle_kill_seconds_arg(args: &Value) -> Result<Option<u64>, Value> {
     }
 }
 
-/// LAUNCHEXTRAS: parse one `--extra KEY=VALUE` (the CLI spelling).
+/// Parse one `--extra KEY=VALUE` (the CLI spelling).
 ///
-/// `VALUE` is JSON first (`42`, `true`, `0.5`, `["a","b"]`,
-/// `{"type":"long","value":7}`), then a bare string (`greeting=hello`). The same
-/// parser the MCP `extras` map uses through serde, so the two surfaces cannot
-/// disagree about what a value means.
+/// Delegates to [`acos_protocol::ExtraValue::parse_key_value`], the one parser
+/// `acos-art launch` uses too: two spellings of the same value must not
+/// disagree (a `--extra x=true` that arrived as a string on one surface and a
+/// boolean on the other would be the WVFAIR silent-drop class again).
 pub fn parse_extra_argument(
     raw: &str,
 ) -> Result<(String, acos_protocol::ExtraValue), String> {
-    let (key, value) = raw
-        .split_once('=')
-        .ok_or_else(|| format!("--extra needs KEY=VALUE (got {raw:?})"))?;
-    if key.is_empty() {
-        return Err(format!("--extra {raw:?} has an empty key"));
-    }
-    let parsed = match serde_json::from_str::<acos_protocol::ExtraValue>(value) {
-        Ok(value) => value,
-        Err(_) if !value.starts_with(['{', '[', '"']) => {
-            acos_protocol::ExtraValue::String(value.to_string())
-        }
-        Err(error) => return Err(format!("--extra {key}: {error}")),
-    };
-    Ok((key.to_string(), parsed))
+    acos_protocol::ExtraValue::parse_key_value(raw)
 }
 
 /// LAUNCHEXTRAS: read the launch `Intent` arguments (`intent_action`, `data`,
@@ -4557,7 +4544,10 @@ fn sanitize_session_id(id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{idle_kill_seconds_arg, keep_log_record, log_level_rank};
+    use super::{
+        idle_kill_seconds_arg, keep_log_record, launch_intent_arg, log_level_rank,
+        parse_extra_argument,
+    };
     use acos_protocol::LogLevel;
     use serde_json::json;
 
@@ -5679,5 +5669,89 @@ mod tests {
         assert!(
             reject_expect_change_without_pixel_evidence(&json!({"expect_change": true})).is_ok()
         );
+    }
+
+    /// LAUNCHEXTRAS: the `acos_launch`/`acos launch --keep` arguments become the
+    /// `LaunchIntent` the session-start Intent carries, so each extra's Java
+    /// type must arrive unchanged. `float` and a small `long` are the two the
+    /// untyped JSON spelling loses, so they are asserted by type here (the
+    /// protocol write/read is `acos-protocol`'s test; this is the daemon's
+    /// argument reader).
+    #[test]
+    fn launch_intent_arguments_keep_each_extras_java_type() {
+        let (intent, requested) = launch_intent_arg(&json!({
+            "intent_action": "dev.acos.test.ACTION",
+            "data": "acos://x/y",
+            "extras": {
+                "s": "hello",
+                "i": 42,
+                "l": {"type": "long", "value": 7},
+                "b": true,
+                "f": {"type": "float", "value": 1.5},
+                "d": 0.25,
+                "a": ["x", "y"]
+            }
+        }))
+        .expect("a full Intent");
+        assert!(requested);
+        assert_eq!(intent.action.as_deref(), Some("dev.acos.test.ACTION"));
+        assert_eq!(intent.data.as_deref(), Some("acos://x/y"));
+        use acos_protocol::ExtraValue as E;
+        for (key, expected) in [
+            ("s", E::String("hello".to_string())),
+            ("i", E::Int(42)),
+            ("l", E::Long(7)),
+            ("b", E::Boolean(true)),
+            ("f", E::Float(1.5)),
+            ("d", E::Double(0.25)),
+            ("a", E::StringArray(vec!["x".to_string(), "y".to_string()])),
+        ] {
+            assert_eq!(intent.extras.get(key), Some(&expected), "extra `{key}`");
+        }
+        assert!(intent.unsupported_extra().is_none());
+    }
+
+    /// The one honest refusal: a `Parcelable` is named by key and class before
+    /// any guest exists, and a mistyped argument is `INVALID_ARGUMENT`, never
+    /// silently ignored (the WVFAIR silent-drop class).
+    #[test]
+    fn a_parcelable_extra_is_named_and_a_mistyped_argument_is_refused() {
+        let (intent, requested) = launch_intent_arg(&json!({
+            "extras": {"device": {"type": "parcelable", "value": "android.os.Bundle"}}
+        }))
+        .expect("a legal declaration");
+        assert!(requested);
+        assert_eq!(
+            intent.unsupported_extra(),
+            Some(("device", "android.os.Bundle"))
+        );
+        // Nothing declared is not a request (a live session may be re-addressed).
+        assert_eq!(
+            launch_intent_arg(&json!({})).expect("empty"),
+            (Default::default(), false)
+        );
+        assert_eq!(
+            launch_intent_arg(&json!({"intent_action": null})).expect("null"),
+            (Default::default(), false)
+        );
+        let error = launch_intent_arg(&json!({"intent_action": 5})).expect_err("not a string");
+        assert_eq!(error.code(), ErrorCode::InvalidArgument);
+        assert!(error.to_string().contains("intent_action"), "{error}");
+        let error = launch_intent_arg(&json!({"extras": [1, 2]})).expect_err("not a map");
+        assert_eq!(error.code(), ErrorCode::InvalidArgument);
+        let error = launch_intent_arg(&json!({"extras": {"x": {"type": "nope", "value": 1}}}))
+            .expect_err("unknown type");
+        assert_eq!(error.code(), ErrorCode::InvalidArgument);
+        assert!(error.to_string().contains("unknown extra type"), "{error}");
+    }
+
+    /// `--extra` is the same spelling on the CLI and in the launcher.
+    #[test]
+    fn the_cli_extra_argument_is_the_protocol_parser() {
+        assert_eq!(
+            parse_extra_argument("f={\"type\":\"float\",\"value\":1.5}").expect("float"),
+            ("f".to_string(), acos_protocol::ExtraValue::Float(1.5))
+        );
+        assert!(parse_extra_argument("novalue").is_err());
     }
 }

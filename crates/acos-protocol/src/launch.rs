@@ -30,8 +30,13 @@
 //!   serial: {type: long, value: 7}
 //!   scale: {type: float, value: 1.5}
 //!   names: {type: string_array, value: [a, b]}
-//!   device: {type: parcellable, value: android.os.Bundle}
+//!   device: {type: parcelable, value: android.os.Bundle}
 //! ```
+//!
+//! The writer emits exactly that explicit form for `long`, `float` and
+//! `parcelable` — a plain JSON number is read back as an `int` (when it fits)
+//! or a `double`, so only the tagged form keeps the Java type across the JSON
+//! hop every surface has (scenario/CLI/MCP -> `ACOSLAUNCH_INTENT` -> launcher).
 //!
 //! `parcelable` is a legal declaration but not a supported extra: the ART
 //! launcher refuses it with `UNSUPPORTED_ANDROID_API` naming the key and class
@@ -121,24 +126,44 @@ impl fmt::Display for ExtraValue {
     }
 }
 
+/// The explicit `{type, value}` spelling, the one form the reader can turn back
+/// into exactly this Java type.
+fn serialize_explicit<S, T>(serializer: S, kind: &str, value: &T) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: Serialize + ?Sized,
+{
+    let mut map = serializer.serialize_map(Some(2))?;
+    map.serialize_entry("type", kind)?;
+    map.serialize_entry("value", value)?;
+    map.end()
+}
+
 impl Serialize for ExtraValue {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
+            // Unambiguous scalars stay plain: a YAML/JSON number that fits an
+            // `int` infers `int`, a JSON string a `string`, and that is what a
+            // person writing a scenario expects to see written back.
             Self::String(value) => serializer.serialize_str(value),
             Self::Int(value) => serializer.serialize_i32(*value),
-            Self::Long(value) => serializer.serialize_i64(*value),
-            Self::Float(value) => serializer.serialize_f32(*value),
             Self::Double(value) => serializer.serialize_f64(*value),
             Self::Boolean(value) => serializer.serialize_bool(*value),
             Self::StringArray(values) => values.serialize(serializer),
-            // The explicit form is the only unambiguous spelling for a class
-            // name and for the types inference cannot produce.
-            Self::Parcelable(class) => {
-                let mut map = serializer.serialize_map(Some(2))?;
-                map.serialize_entry("type", "parcelable")?;
-                map.serialize_entry("value", class)?;
-                map.end()
-            }
+            // The explicit form is the only unambiguous spelling for the types
+            // inference cannot recover, and for a class name:
+            //
+            // * `long` — a plain JSON integer is inferred as `int` when it fits
+            //   (`{type: long, value: 7}` would come back an `int`, a 4-byte
+            //   `VAL_INTEGER` instead of the 8-byte `VAL_LONG` Java wrote);
+            // * `float` — a plain JSON number is `f64` and is inferred as a
+            //   `Double`, so the extra would arrive as `java.lang.Double` (a
+            //   real imbalance: the launch Intent crossed a JSON hop from the
+            //   scenario/CLI/MCP to the launcher);
+            // * `parcelable` — a class name, never a scalar.
+            Self::Long(value) => serialize_explicit(serializer, "long", value),
+            Self::Float(value) => serialize_explicit(serializer, "float", value),
+            Self::Parcelable(class) => serialize_explicit(serializer, "parcelable", class),
         }
     }
 }
@@ -419,5 +444,117 @@ impl LaunchIntent {
              app's own class loader and a payload a scenario cannot build. Refusing instead of \
              launching an Intent without the declared value."
         ))
+    }
+}
+
+impl ExtraValue {
+    /// Parse one `KEY=VALUE` spelling (the `--extra` flag of `acos launch` and
+    /// `acos-art launch`).
+    ///
+    /// `VALUE` is JSON first (`42`, `true`, `0.5`, `["a","b"]`,
+    /// `{"type":"long","value":7}`), then a bare word is a string
+    /// (`greeting=hello`). One parser for both binaries: they are two spellings
+    /// of the same wire value, so they must not disagree about what `true` or
+    /// `7` means.
+    ///
+    /// # Errors
+    /// A missing `=`, an empty key, or a value that starts like JSON and does
+    /// not parse (never a silently different type).
+    pub fn parse_key_value(raw: &str) -> Result<(String, Self), String> {
+        let (key, value) = raw
+            .split_once('=')
+            .ok_or_else(|| format!("--extra needs KEY=VALUE (got {raw:?})"))?;
+        if key.is_empty() {
+            return Err(format!("--extra {raw:?} has an empty key"));
+        }
+        let parsed = match serde_json::from_str::<Self>(value) {
+            Ok(value) => value,
+            Err(_) if !value.starts_with(['{', '[', '"']) => Self::String(value.to_string()),
+            Err(error) => return Err(format!("--extra {key}: {error}")),
+        };
+        Ok((key.to_string(), parsed))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ExtraValue, LaunchIntent};
+    use std::collections::BTreeMap;
+
+    fn extras(pairs: &[(&str, ExtraValue)]) -> LaunchIntent {
+        LaunchIntent {
+            action: None,
+            data: None,
+            extras: pairs
+                .iter()
+                .map(|(key, value)| ((*key).to_string(), value.clone()))
+                .collect::<BTreeMap<_, _>>(),
+        }
+    }
+
+    #[test]
+    fn the_json_wire_keeps_the_two_types_inference_cannot_recover() {
+        // `7` comes back an `int` and `1.5` a `double` unless the writer tags
+        // the type: that is a different Java type and a different `Bundle` tag,
+        // so the app would read `0` / `java.lang.Double`.
+        let intent = extras(&[
+            ("small_long", ExtraValue::Long(7)),
+            ("ratio", ExtraValue::Float(1.5)),
+            ("count", ExtraValue::Int(7)),
+            ("factor", ExtraValue::Double(1.5)),
+        ]);
+        let json = serde_json::to_value(&intent).expect("serialize");
+        let back: LaunchIntent = serde_json::from_value(json.clone()).expect("deserialize");
+        assert_eq!(back, intent, "{json}");
+        assert_eq!(
+            json["extras"]["small_long"],
+            serde_json::json!({"type": "long", "value": 7}),
+            "a long is written in the explicit form"
+        );
+        assert_eq!(
+            json["extras"]["ratio"],
+            serde_json::json!({"type": "float", "value": 1.5}),
+            "a float is written in the explicit form"
+        );
+        // The unambiguous ones stay plain, which is what a scenario author
+        // wrote and what a written-back scenario should say.
+        assert_eq!(json["extras"]["count"], serde_json::json!(7));
+        assert_eq!(json["extras"]["factor"], serde_json::json!(1.5));
+    }
+
+    #[test]
+    fn the_cli_extra_spelling_is_json_first_then_a_bare_string() {
+        assert_eq!(
+            ExtraValue::parse_key_value("count=42").expect("int"),
+            ("count".to_string(), ExtraValue::Int(42))
+        );
+        assert_eq!(
+            ExtraValue::parse_key_value("big=5000000000").expect("long"),
+            ("big".to_string(), ExtraValue::Long(5_000_000_000))
+        );
+        assert_eq!(
+            ExtraValue::parse_key_value("ratio={\"type\":\"float\",\"value\":1.5}").expect("float"),
+            ("ratio".to_string(), ExtraValue::Float(1.5))
+        );
+        assert_eq!(
+            ExtraValue::parse_key_value("names=[\"a\",\"b\"]").expect("array"),
+            (
+                "names".to_string(),
+                ExtraValue::StringArray(vec!["a".to_string(), "b".to_string()])
+            )
+        );
+        assert_eq!(
+            ExtraValue::parse_key_value("greeting=hello").expect("bare string"),
+            (
+                "greeting".to_string(),
+                ExtraValue::String("hello".to_string())
+            )
+        );
+        // JSON-looking input that does not parse is an error, never a string
+        // that quietly means something else.
+        let error = ExtraValue::parse_key_value("ratio={type: float}").expect_err("not JSON");
+        assert!(error.contains("ratio"), "{error}");
+        assert!(ExtraValue::parse_key_value("novalue").is_err());
+        assert!(ExtraValue::parse_key_value("=1").is_err());
     }
 }

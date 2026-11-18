@@ -304,6 +304,11 @@ fn case_launch_intent_extras() -> Parcelable {
             "probe_long".to_string(),
             acos_protocol::ExtraValue::Long(5_000_000_000),
         ),
+        // A long that fits an int: the explicit form, and 8 bytes on the wire.
+        (
+            "probe_long_small".to_string(),
+            acos_protocol::ExtraValue::Long(7),
+        ),
         (
             "probe_boolean".to_string(),
             acos_protocol::ExtraValue::Boolean(true),

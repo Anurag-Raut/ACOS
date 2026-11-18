@@ -73,24 +73,11 @@ COMMON OPTIONS:
   --json             print the structured RunResult instead of a summary
 ";
 
-/// Parse one `--extra KEY=VALUE`: JSON first (`42`, `true`, `0.5`, `[..]`,
-/// `{"type":"long","value":7}`), then a bare string.
+/// Parse one `--extra KEY=VALUE` (see
+/// [`acos_protocol::ExtraValue::parse_key_value`]: JSON first, then a bare
+/// string; the same parser `acos launch` uses).
 fn parse_extra_arg(raw: &str) -> std::result::Result<(String, acos_protocol::ExtraValue), String> {
-    let (key, value) = raw
-        .split_once('=')
-        .ok_or_else(|| format!("--extra needs KEY=VALUE (got {raw:?})"))?;
-    if key.is_empty() {
-        return Err(format!("--extra {raw:?} has an empty key"));
-    }
-    let parsed = match serde_json::from_str::<acos_protocol::ExtraValue>(value) {
-        Ok(value) => value,
-        // A bare word is a string, not a JSON error the caller has to quote.
-        Err(_) if !value.starts_with(['{', '[', '"']) => {
-            acos_protocol::ExtraValue::String(value.to_string())
-        }
-        Err(error) => return Err(format!("--extra {key}: {error}")),
-    };
-    Ok((key.to_string(), parsed))
+    acos_protocol::ExtraValue::parse_key_value(raw)
 }
 
 fn main() -> ExitCode {

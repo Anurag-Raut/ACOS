@@ -25,6 +25,7 @@ import android.widget.TextView;
  * ACOSPROBE launch-extras string=hello
  * ACOSPROBE launch-extras int=42
  * ACOSPROBE launch-extras long=5000000000
+ * ACOSPROBE launch-extras long_small=7
  * ACOSPROBE launch-extras boolean=true
  * ACOSPROBE launch-extras float=1.5
  * ACOSPROBE launch-extras double=0.25
@@ -48,6 +49,10 @@ public class MainActivity extends Activity {
             probe("string", String.valueOf(extras.getString("probe_string")));
             probe("int", String.valueOf(extras.getInt("probe_int")));
             probe("long", String.valueOf(extras.getLong("probe_long")));
+            // Explicit `{type: long, value: 7}`: a value that FITS an int, so
+            // only the type tag on the wire can carry "long" (a plain number
+            // is inferred as an int, and `getLong` would read 0 from it).
+            probe("long_small", String.valueOf(extras.getLong("probe_long_small")));
             probe("boolean", String.valueOf(extras.getBoolean("probe_boolean")));
             probe("float", String.valueOf(extras.getFloat("probe_float")));
             probe("double", String.valueOf(extras.getDouble("probe_double")));

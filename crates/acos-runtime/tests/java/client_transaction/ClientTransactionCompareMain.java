@@ -152,6 +152,9 @@ public final class ClientTransactionCompareMain {
         intent.putExtra("probe_string", "hello");
         intent.putExtra("probe_int", 42);
         intent.putExtra("probe_long", 5000000000L);
+        // A `long` that fits an int: written as the 8-byte VAL_LONG, which is
+        // what the explicit `{type: long, value: 7}` form must reach.
+        intent.putExtra("probe_long_small", 7L);
         intent.putExtra("probe_boolean", true);
         intent.putExtra("probe_float", 1.5f);
         intent.putExtra("probe_double", 0.25d);
@@ -168,6 +171,7 @@ public final class ClientTransactionCompareMain {
         check("hello".equals(intent.getStringExtra("probe_string")), "string extra");
         check(intent.getIntExtra("probe_int", -1) == 42, "int extra");
         check(intent.getLongExtra("probe_long", -1) == 5000000000L, "long extra");
+        check(intent.getLongExtra("probe_long_small", -1) == 7L, "small long extra");
         check(intent.getBooleanExtra("probe_boolean", false), "boolean extra");
         check(intent.getFloatExtra("probe_float", -1f) == 1.5f, "float extra");
         check(intent.getDoubleExtra("probe_double", -1d) == 0.25d, "double extra");

@@ -31,6 +31,10 @@ fn launch_intent() -> LaunchIntent {
             ("probe_string".to_string(), ExtraValue::String("hello".to_string())),
             ("probe_int".to_string(), ExtraValue::Int(42)),
             ("probe_long".to_string(), ExtraValue::Long(5_000_000_000)),
+            // A `long` that fits an `int`: the explicit form is the only one
+            // whose type survives the JSON hop to the launcher, and the bytes
+            // must be the 8-byte `VAL_LONG` Java writes, not `VAL_INTEGER`.
+            ("probe_long_small".to_string(), ExtraValue::Long(7)),
             ("probe_boolean".to_string(), ExtraValue::Boolean(true)),
             ("probe_float".to_string(), ExtraValue::Float(1.5)),
             ("probe_double".to_string(), ExtraValue::Double(0.25)),
@@ -111,6 +115,7 @@ fn the_golden_decodes_to_the_declared_intent() {
         ("probe_string", Value::Str(Some("hello".to_string()))),
         ("probe_int", Value::Int(42)),
         ("probe_long", Value::Long(5_000_000_000)),
+        ("probe_long_small", Value::Long(7)),
         ("probe_boolean", Value::Bool(true)),
         ("probe_float", Value::Float(1.5)),
         ("probe_double", Value::Double(0.25)),

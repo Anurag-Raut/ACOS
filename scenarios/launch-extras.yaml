@@ -40,6 +40,10 @@ steps:
         probe_int: 42
         # Does not fit a Java int: a plain YAML integer infers `long`.
         probe_long: 5000000000
+        # Explicit form: a `long` that FITS an int. Only the type tag survives
+        # the JSON hop to the launcher, so this is the case a bare `7` cannot
+        # express (it would arrive as an `int` and `getLong` would read 0).
+        probe_long_small: {type: long, value: 7}
         probe_boolean: true
         # A plain YAML float infers `double`; the explicit form pins `float`.
         probe_float: {type: float, value: 1.5}
@@ -66,6 +70,7 @@ steps:
         - '^ACOSPROBE launch-extras string=hello$'
         - '^ACOSPROBE launch-extras int=42$'
         - '^ACOSPROBE launch-extras long=5000000000$'
+        - '^ACOSPROBE launch-extras long_small=7$'
         - '^ACOSPROBE launch-extras boolean=true$'
         - '^ACOSPROBE launch-extras float=1\.5$'
         - '^ACOSPROBE launch-extras double=0\.25$'

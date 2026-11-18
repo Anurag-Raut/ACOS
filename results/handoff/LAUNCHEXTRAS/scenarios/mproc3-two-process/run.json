@@ -1,0 +1,65 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 38510592,
+    "wall_ms": 10189
+  },
+  "ok": true,
+  "request_id": "req_43bcd_18e90a1a7e67c73d",
+  "result": {
+    "artifacts_dir": ".cache/lx-artifacts/mproc3-two-process",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794976572395279896,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-2d2bb735-60949492e8cb8af5/fixtures/build/apps/proc-a.apk",
+        "sha256": "29c337de13bcc03d954b1fbb33b8bab6b69ce2592ac64403f35778e0576f517c",
+        "sha256_12": "29c337de13bc",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794975386635191280,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-2d2bb735-60949492e8cb8af5/scenarios/mproc3-two-process.yaml",
+        "sha256": "cfd53ea0e2609983c7f2651de7b3921ba0b399fe82d492b29b4fb8d27d8f96fd",
+        "sha256_12": "cfd53ea0e260",
+        "size_bytes": 5479
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": ".cache/lx-artifacts/mproc3-two-process/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_proc-a",
+  "status": "pass"
+}

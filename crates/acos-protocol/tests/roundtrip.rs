@@ -1188,3 +1188,71 @@ fn verdict_and_mcp_round_trip() {
     assert_eq!(frame_file_name(19), "frames/19.png");
     assert_eq!(tree_file_name(19), "tree/19.json");
 }
+
+/// LAUNCHEXTRAS: the launch `Intent` crosses a **JSON** hop on every surface
+/// (scenario/CLI/MCP -> `ACOSLAUNCH_INTENT` -> the launcher; `acos serve`'s
+/// arguments; `RunRequest`/`LaunchRequest`), so an extra's Java type must
+/// survive `to_value`/`from_value` exactly. The two inference cannot recover
+/// are `long` (a plain JSON integer comes back an `int` when it fits, so the
+/// `Bundle` would carry `VAL_INTEGER` instead of `VAL_LONG`) and `float` (a
+/// plain JSON number is `f64` and comes back a `Double`, so the app reads
+/// `java.lang.Double` and `getFloat` returns the default).
+#[test]
+fn every_launch_extra_type_survives_the_json_wire() {
+    use acos_protocol::{ExtraValue, LaunchIntent};
+
+    let extras = BTreeMap::from([
+        (
+            "string".to_string(),
+            ExtraValue::String("hello".to_string()),
+        ),
+        ("int".to_string(), ExtraValue::Int(42)),
+        // A long that FITS an int: the only spelling that carries the type is
+        // the explicit one, and the writer must choose it.
+        ("long".to_string(), ExtraValue::Long(7)),
+        // The full-width long, for the other half of the class.
+        ("long_big".to_string(), ExtraValue::Long(5_000_000_000)),
+        ("boolean".to_string(), ExtraValue::Boolean(true)),
+        ("float".to_string(), ExtraValue::Float(1.5)),
+        ("double".to_string(), ExtraValue::Double(0.25)),
+        (
+            "string_array".to_string(),
+            ExtraValue::StringArray(vec!["alpha".to_string(), "beta".to_string()]),
+        ),
+        (
+            "parcelable".to_string(),
+            ExtraValue::Parcelable("android.os.Bundle".to_string()),
+        ),
+    ]);
+    for (key, extra) in &extras {
+        round_trip(extra);
+        let json = serde_json::to_value(extra).expect("serialize");
+        if matches!(extra, ExtraValue::Long(_) | ExtraValue::Float(_)) {
+            assert_eq!(
+                json.get("type").and_then(|kind| kind.as_str()),
+                Some(extra.type_name()),
+                "`{key}` must be written in the explicit form, not as a bare number: {json}"
+            );
+        }
+    }
+
+    // The whole Intent, which is what is actually put in the environment and
+    // in the request: the JSON hop must not move a single extra's type.
+    let intent = LaunchIntent {
+        action: Some("dev.acos.fixtures.launchextras.ACTION".to_string()),
+        data: Some("acos://launch/extras?source=scenario".to_string()),
+        extras: extras.clone(),
+    };
+    round_trip(&intent);
+    let json = serde_json::to_value(&intent).expect("serialize");
+    let back: LaunchIntent = serde_json::from_value(json.clone()).expect("deserialize");
+    assert_eq!(
+        back, intent,
+        "the launch Intent changed over the JSON hop: {json}"
+    );
+
+    // A Float value that is not exactly representable in decimal stays the same
+    // `f32` it was (the explicit form writes the shortest `f32` spelling).
+    round_trip(&ExtraValue::Float(0.1));
+    round_trip(&ExtraValue::Float(f32::MAX));
+}
