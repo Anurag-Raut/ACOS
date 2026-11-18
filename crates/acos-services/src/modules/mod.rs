@@ -4,6 +4,7 @@ pub mod accessibility;
 pub mod biometric;
 pub mod bluetooth;
 pub mod location;
+pub mod media_session;
 pub mod network;
 pub mod notifications;
 pub mod permissions;
@@ -12,6 +13,7 @@ pub mod tail_stubs;
 pub mod telephony;
 pub mod vibrator;
 pub mod webview;
+pub mod wifi;
 
 /// The host APK a module's declared `system_app` installs (ADR-0029: the
 /// launcher stages it before the guest boots, `module::system_apks`).

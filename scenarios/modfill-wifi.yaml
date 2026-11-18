@@ -1,0 +1,194 @@
+# MODFILL: `net.wifi` at `scripted` — a real WifiManager/ConnectivityManager app.
+#
+# Honest expectations (each line is a value the framework returned):
+#   * the SSID/BSSID/RSSI/frequency/link speed are what the launch config
+#     scripted; nothing is measured (the module's report says so);
+#   * `setWifiEnabled(false)` is refused (`false`) for a target-34 app exactly as
+#     on a phone, state unchanged;
+#   * the default network is consistent with the radio: `disconnect` -> NetworkCallback
+#     `onLost`, `getActiveNetwork()` null; `connect` -> `onAvailable`; Wi-Fi off ->
+#     lost; and the network is never VALIDATED and DhcpInfo is zero because the
+#     `network` module is not attached (no fake connectivity).
+version: 1
+name: modfill-wifi
+description: >-
+  net.wifi scripted: WifiInfo/ScanResult parcels read by WifiManager, WIFI_STATE_CHANGED /
+  STATE_CHANGE / RSSI_CHANGED / SCAN_RESULTS broadcasts, ScanResultsCallback, and the
+  default-network NetworkCallback loss/availability driven by control ops.
+app: ../fixtures/build/apps/wifi-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+services:
+  - id: net.wifi
+    profile: scripted
+    config:
+      ssid: Office
+      bssid: "aa:bb:cc:dd:ee:01"
+      rssi: -48
+      frequency: 2437
+      link_speed: 72
+      networks:
+        - {ssid: Office, bssid: "aa:bb:cc:dd:ee:01", rssi: -48, frequency: 2437}
+        - {ssid: Guest, bssid: "aa:bb:cc:dd:ee:02", rssi: -81, frequency: 2462, capabilities: "[ESS]"}
+steps:
+  - launch:
+      activity: dev.acos.fixtures.wifiprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY wifi=present"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Info"}}
+  - wait_for:
+      selector: {text: {contains: "INFO enabled=true state=3 ssid=\"Office\" bssid=aa:bb:cc:dd:ee:01 rssi=-48 freq=2437 speed=72 netid=0 supp=COMPLETED level=4 5ghz=false"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Listen"}}
+  - wait_for:
+      selector: {text: {contains: "LISTEN registered"}}
+      timeout_ms: 20000
+  # The default-network callback registered on the associated network.
+  - wait_for:
+      selector: {text: {contains: "NETCB available"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "NETCB caps wifi=true validated=false"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Toggle"}}
+  - wait_for:
+      selector: {text: {contains: "TOGGLE accepted=false enabled=true"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Net"}}
+  - wait_for:
+      selector: {text: {contains: "NET active=true wifi=true validated=false"}}
+      timeout_ms: 20000
+  # No `network` module -> the DHCP lease is empty, not invented.
+  - tap:
+      selector: {text: {exact: "Dhcp"}}
+  - wait_for:
+      selector: {text: {contains: "DHCP ip=0 gateway=0 dns1=0 lease=0"}}
+      timeout_ms: 20000
+  # RSSI_CHANGED
+  - service_ctl:
+      module: net.wifi
+      op: rssi
+      args: {rssi: -73}
+  - wait_for:
+      selector: {text: {contains: "BCAST rssi=-73"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Info"}}
+  - wait_for:
+      selector: {text: {contains: "rssi=-73 freq=2437"}}
+      timeout_ms: 20000
+  # App-initiated scan -> SCAN_RESULTS_AVAILABLE + ScanResultsCallback
+  - tap:
+      selector: {text: {exact: "Scan"}}
+  - wait_for:
+      selector: {text: {contains: "SCAN started=true"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "BCAST scan_results updated=true"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "SCANCB available"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Results"}}
+  - wait_for:
+      selector: {text: {contains: "RESULTS n=2 [Office aa:bb:cc:dd:ee:01 -73 2437 [WPA2-PSK-CCMP][ESS]] [Guest aa:bb:cc:dd:ee:02 -81 2462 [ESS]]"}}
+      timeout_ms: 20000
+  # Agent replaces the scan list.
+  - service_ctl:
+      module: net.wifi
+      op: scan
+      args:
+        results:
+          - {ssid: Cafe, bssid: "aa:bb:cc:dd:ee:03", rssi: -60, frequency: 5180, capabilities: "[WPA2-PSK-CCMP][ESS]"}
+  - tap:
+      selector: {text: {exact: "Results"}}
+  - wait_for:
+      selector: {text: {contains: "RESULTS n=1 [Cafe aa:bb:cc:dd:ee:03 -60 5180"}}
+      timeout_ms: 20000
+  # Disconnect: the default network is lost consistently.
+  - service_ctl:
+      module: net.wifi
+      op: disconnect
+  - wait_for:
+      selector: {text: {contains: "BCAST network=DISCONNECTED ssid=null"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "NETCB lost"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Net"}}
+  - wait_for:
+      selector: {text: {contains: "NET active=false wifi=false validated=false"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Info"}}
+  - wait_for:
+      selector: {text: {contains: "ssid=<unknown ssid> bssid=null rssi=-127 freq=-1 speed=-1 netid=-1 supp=DISCONNECTED"}}
+      timeout_ms: 20000
+  # Reconnect to another network.
+  - service_ctl:
+      module: net.wifi
+      op: connect
+      args: {ssid: Cafe, bssid: "aa:bb:cc:dd:ee:03", rssi: -60, frequency: 5180}
+  - wait_for:
+      selector: {text: {contains: "BCAST network=CONNECTED ssid=\"Cafe\" bssid=aa:bb:cc:dd:ee:03"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Net"}}
+  - wait_for:
+      selector: {text: {contains: "NET active=true wifi=true validated=false"}}
+      timeout_ms: 20000
+  # Radio off: WIFI_STATE_CHANGED DISABLING -> DISABLED and the network is lost.
+  - service_ctl:
+      module: net.wifi
+      op: enable
+      args: {on: false}
+  - wait_for:
+      selector: {text: {contains: "BCAST wifi_state=1 previous=0"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Scan"}}
+  - wait_for:
+      selector: {text: {contains: "SCAN started=false"}}
+      timeout_ms: 20000
+  - assert_log:
+      tag: wifiprobe
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - "READY wifi=present"
+        - "NETCB available"
+        - "TOGGLE accepted=false enabled=true"
+        - "BCAST rssi=-73"
+        - "BCAST scan_results updated=true"
+        # The default-network callback is delivered before the broadcast for the
+        # same transition (the module moves the network first, then announces).
+        - "NETCB lost"
+        - "BCAST network=DISCONNECTED ssid=null"
+        - "NETCB available"
+        - "BCAST network=CONNECTED"
+        - "BCAST wifi_state=0 previous=3"
+        - "NETCB lost"
+        - "BCAST wifi_state=1 previous=0"
+        - "SCAN started=false"
+  - assert_no_crash: {}

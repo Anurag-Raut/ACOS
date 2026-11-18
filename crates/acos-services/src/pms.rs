@@ -1876,6 +1876,15 @@ impl PmsService {
         // re-pointed here, before any guest can ask.
         let mut guard = self.state.lock().unwrap();
         state.runtime_permissions = guard.runtime_permissions.clone();
+        // MODFILL: the feature table outlives a package replacement too. A
+        // service module turns its system features on at attach
+        // (`ModuleManifest::features`), and the session attaches its modules
+        // *before* it installs the launched APK, so a fresh `FeatureTable` here
+        // silently withdrew every module feature (`android.hardware.wifi`,
+        // `.telephony`, `.bluetooth`, ...) at launch while the module stayed
+        // attached: `hasSystemFeature` disagreed with the attached set, and
+        // `WifiManager` (whose factory is gated on FEATURE_WIFI) was null.
+        state.features = guard.features.clone();
         state.publish_uid_grants();
         if let Some(store) = state.runtime_permissions.clone() {
             let primary = state.primary();

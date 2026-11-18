@@ -21,6 +21,8 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `hw.biometric` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | biometrics: scripted canAuthenticate and BiometricPrompt authenticate results (no hardware, no prompt UI) | `auth` | `state`, `set`, `auth`, `reset` |
 | `network` | `off`, `real`, needs `pasta`, `acos-netd` | `at-launch` | `host-tool` | 2 | 100 | real internet through the acos-netd relay (one pasta per host, one netns+veth per session, dnsproxyd in the guest); hot online/offline/latency/loss controls and the explicit host-port opt-in; no `stub`/`scripted` profile (a fake network would be a fake success) | `connectivity`, feature `android.hardware.wifi` | `status`, `offline`, `online`, `delay`, `hostport` |
 | `webview` | `off`, `real`, needs `acos-webview`, `chrome-headless-shell` | `at-launch` | `host-tool` | 4 | 11 | a real WebView: the `com.android.webview` provider package installed in the session plus the shared host Chromium behind the session's gate socket (one broker per host, ~130-140 MiB once, started on the first connect); `off` is Android's own no-provider path, and there is no stub/scripted profile | app `com.android.webview` | `status` |
+| `net.wifi` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | Wi-Fi client radio: stub (one SSID from config) / scripted (connect, disconnect, rssi, scan -> WIFI_STATE_CHANGED, NETWORK_STATE_CHANGED, RSSI_CHANGED, SCAN_RESULTS, NetworkCallback loss/availability); no real radio, no hotspot/P2P/configured networks | `wifi`, feature `android.hardware.wifi`, broadcast `android.net.wifi.WIFI_STATE_CHANGED`, broadcast `android.net.wifi.STATE_CHANGE`, broadcast `android.net.wifi.RSSI_CHANGED`, broadcast `android.net.wifi.SCAN_RESULTS` | `state`, `enable`, `connect`, `disconnect`, `rssi`, `scan`, `reset` |
+| `media.session` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | media sessions: stub (record what apps publish) / scripted (agent play, pause, next, seek reach MediaSession.Callback); no media-key routing, queue, volume, remote sessions or router | `media_session`, `media_router` | `sessions`, `play`, `pause`, `stop`, `next`, `previous`, `fast_forward`, `rewind`, `seek`, `skip_to_item`, `custom_action`, `reset` |
 | `hw.usb` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | USB host: stub (no USB hardware), empty device list and no configured functions | `usb` | — |
 | `system.dropbox` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | DropBox: stub (no system DropBox), no entries and no enabled tags | `dropbox` | — |
 | `hw.nfc` | `off` | `hot` | `in-process` | 1 | 1 | NFC: off (no NFC hardware) | `nfc` | — |
@@ -96,6 +98,25 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `network` | `delay` | {ms, jitter_ms, loss_pct} — shape this session's veth; `0/0/0` clears it |
 | `network` | `hostport` | {port, on?} — the explicit host-loopback opt-in (Metro's `localhost`) |
 | `webview` | `status` | none — the provider package and APK this session installs, the gate socket, whether the broker is listening, the frame resolution rule and the measured budget |
+| `net.wifi` | `state` | none — the radio, the associated access point, the scan list and the call counters |
+| `net.wifi` | `enable` | {on, autoconnect?} (scripted) — WIFI_STATE_CHANGED; off drops the connection (refused while the `network` module is `real`: use `acos_net offline`) |
+| `net.wifi` | `connect` | {ssid?, bssid?, rssi?, frequency?, link_speed?} (scripted) — associate: NETWORK_STATE_CHANGED (CONNECTED) and onAvailable on the default network |
+| `net.wifi` | `disconnect` | none (scripted) — NETWORK_STATE_CHANGED (DISCONNECTED) and onLost on the default network (refused while the `network` module is `real`) |
+| `net.wifi` | `rssi` | {rssi} (scripted) — change the associated RSSI; RSSI_CHANGED |
+| `net.wifi` | `scan` | {results?: [{ssid, bssid?, rssi?, frequency?, capabilities?}]} (scripted) — replace the scan list and complete a scan: SCAN_RESULTS_AVAILABLE and every IScanResultsCallback |
+| `net.wifi` | `reset` | none — clear the call counters and unsupported-call list |
+| `media.session` | `sessions` | none — every session: package, tag, active, playback state, metadata, delivered commands |
+| `media.session` | `play` | {session?} (scripted) — ISessionCallback.onPlay reaches MediaSession.Callback.onPlay |
+| `media.session` | `pause` | {session?} (scripted) — onPause |
+| `media.session` | `stop` | {session?} (scripted) — onStop |
+| `media.session` | `next` | {session?} (scripted) — onSkipToNext |
+| `media.session` | `previous` | {session?} (scripted) — onSkipToPrevious |
+| `media.session` | `fast_forward` | {session?} (scripted) — onFastForward |
+| `media.session` | `rewind` | {session?} (scripted) — onRewind |
+| `media.session` | `seek` | {session?, position} (scripted) — onSeekTo(position ms) |
+| `media.session` | `skip_to_item` | {session?, id} (scripted) — onSkipToQueueItem(id) |
+| `media.session` | `custom_action` | {session?, action} (scripted) — onCustomAction(action, null) |
+| `media.session` | `reset` | none — clear the recorded `unsupported` calls |
 
 ## Names with no module attached
 
