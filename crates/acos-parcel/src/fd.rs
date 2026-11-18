@@ -36,6 +36,16 @@ impl ParcelFd {
         Ok(Self { fd })
     }
 
+    /// A memfd of exactly `len` bytes: the stand-in for `ashmem_create_region(name,
+    /// size)`, whose region has its size from creation (`ashmem_get_size_region`
+    /// reads it; hwui refuses a zero-size stats buffer).
+    pub fn memfd_sized(name: &str, len: u64) -> Result<Self, ParcelError> {
+        let fd = Self::memfd(name)?;
+        rustix::fs::ftruncate(fd.as_fd(), len)
+            .map_err(|e| ParcelError::Fd(format!("ftruncate({name}, {len}): {e}")))?;
+        Ok(fd)
+    }
+
     /// Duplicate a borrowed descriptor so the parcel owns its own copy.
     pub fn dup(fd: BorrowedFd<'_>) -> Result<Self, ParcelError> {
         let owned = rustix::io::dup(fd).map_err(|e| ParcelError::Fd(format!("dup: {e}")))?;

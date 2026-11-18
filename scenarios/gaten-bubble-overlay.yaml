@@ -21,7 +21,8 @@
 #   * a **tap on the bubble** starts the app's lookup: the service receives the
 #     gesture and requests a screenshot from the accessibility module, which
 #     serves it from the composited frame (`screenshots: [{display_id: 0,
-#     status: 0}]`, `TAKE_SCREENSHOT_SUCCESS`);
+#     status: 0}]`, `TAKE_SCREENSHOT_SUCCESS`); the app then freezes the screen
+#     in its lookup overlay and hands the frame to OCR (see GATENE2E below);
 #   * an **enable-set change** (the accessibility module's `enable`/`disable`
 #     control ops, which write the same two `Settings.Secure` keys the Settings UI
 #     writes) binds and unbinds the service the way
@@ -33,27 +34,30 @@
 # pixel/event settle can never complete; the harness's content-stable rule backs
 # UI/text/window assertions and is the right one for this screen (P12/SE2).
 #
+# GATENE2E (v0.4.0 exit): the tap's whole path is asserted, deterministically:
+#   * the screenshot record is *awaited* (`service_ctl … timeout_ms`), not read
+#     once: the app requests it from a worker thread after the tap returns;
+#   * the app's HARDWARE-bitmap wrap + CPU copy ran (software GL, GLSHIP) and its
+#     ML Kit pipeline received the 1080x2400 frame (`assert_log`, awaited);
+#   * the lookup overlay is a new full-screen accessibility-overlay window, the
+#     bubble is hidden while it is up (`assert_windows`, `assert_not_visible`),
+#     and `gaten-lookup-overlay` is the picture of it.
+# Three guest-side causes had to be fixed for that to be reachable (the run used
+# to abort the RenderThread right after the screenshot was served): the guest had
+# no memfd-backed ashmem, the graphics-stats buffer was zero-sized, and a window
+# that asks for hardware acceleration itself (Gaten's lookup overlay) started a
+# `ThreadedRenderer` the guest cannot run. See results/handoff/GATENE2E/README.md.
+#
 # What this scenario does NOT cover, and why:
-#   * the lookup's **OCR result sheet**. Capturing and delivering the screenshot
-#     works (the record above), but binding a *strict* observation to the tap
-#     kills the guest: once the app wraps the screenshot `HardwareBuffer` in a
-#     `Bitmap` on a worker thread, a probe request that lands in that window
-#     segfaults in `android::GraphicBufferMapper::getAllocationSize`
-#     (`libui.so`, whose HAL mapper object is null in a gralloc-less guest; the
-#     shim interposes the mapper's own entry points, not this in-library call).
-#     `settle: fast` keeps the assertion off that window; the OCR sheet and the
-#     native allocation-size gap belong to the accessibility/screenshot track
-#     (see results/handoff/GATENBOOT2/README.md §"the tap", which keeps the
-#     crash stack);
+#   * the lookup's **word sheet**: Gaten shows it when the user taps a recognised
+#     word on the frozen frame, which needs the OCR result and a second tap on
+#     it; the scenario stops at "the overlay is up and OCR was handed the frame"
+#     and asserts nothing about words it has not seen;
+#   * a HARDWARE bitmap drawn *into a View* (known unsupported: ACOS windows are
+#     software canvases; docs/LATER.md). Gaten copies the screenshot to ARGB_8888
+#     first, so this path does not reach it;
 #   * dragging needs paced `dispatchGesture` (A11YPACE) and is not attempted here.
 #
-# Measured stability (2026-11-17/18, 20 consecutive runs): the tap step above is
-# the only timing-sensitive one. Gaten's lookup cannot finish in this image (no
-# ML Kit recognition pack), so the bubble hides for the lookup and re-shows a
-# moment later; the harness requires every tap to change the UI tree, and that
-# hide/re-show can fall between two probe samples (measured 1 in 20). Everything
-# else in the scenario is deterministic (window stack, tree content, the two
-# unbind/bind reconciliations).
 version: 1
 name: gaten-bubble-overlay
 description: >-
@@ -149,27 +153,47 @@ steps:
   # after the last interaction, and a hidden bubble is not a selector target.
 
   # A11YPACE: the tap's effect is *transient* — the lookup hides the bubble and
-  # re-shows it a moment later, and the lookup itself cannot finish in this
-  # image (no ML Kit recognition pack), so the post-settle tree can look exactly
-  # like the pre-tap tree. The tap therefore claims delivery only
-  # (`expect_change: false`, the same spelling `expect_change: true` uses for a
-  # pixel claim): the assertion that the tap reached the service is the
-  # screenshot record below, which does not depend on how long the bubble hid.
-  # Without this, the tap's implicit "the tree changed" rule sampled a
-  # hide/re-show and failed 1 run in 20 (GATENBOOT2 §5).
+  # re-shows it later, so the post-settle tree can look like the pre-tap tree.
+  # The tap therefore claims delivery only (`expect_change: false`); what the tap
+  # *did* is asserted below, from the module's record, the app's log and the
+  # window stack — never from a sample taken at an arbitrary moment.
   - tap:
       selector: {content_desc: {exact: "Screen lookup"}}
       settle: fast
       expect_change: false
+  # GATENE2E: the app requests the screenshot from a worker thread *after* the
+  # tap returns (measured: ~150 ms in a healthy run, never "already there"), so
+  # the record is awaited with a deadline instead of read once: `timeout_ms`
+  # re-reads the read-only status until it holds the record, and the step fails
+  # with the last reply if it never does.
   - service_ctl:
       module: accessibility
       op: status
+      timeout_ms: 30000
       expect:
         id: accessibility
         op: status
         value:
           service_bound: true
           screenshots: [{display_id: 0, status: 0}]
+  # What Gaten does with the screenshot it was handed (the log is guest-asserted
+  # evidence, the run is trusted): `Bitmap.wrapHardwareBuffer` + the HARDWARE ->
+  # ARGB_8888 copy ran through hwui's GL readback (software GL, GLSHIP), the
+  # lookup overlay was added, and the app's ML Kit pipeline received the frame.
+  # `ImageMetadata: 1080x2400` is the OCR scheduler's own line for the captured
+  # buffer: it appears only after the copy and the overlay show.
+  - assert_log:
+      tag: native
+      patterns: ['ImageMetadata: 1080x2400']
+      timeout_ms: 60000
+  # The lookup overlay, as a picture and in the window stack: the frozen, dimmed
+  # screen with the lookup frame, in a new full-screen accessibility overlay that
+  # holds input focus. The bubble is hidden while it is up.
+  - capture: {name: gaten-lookup-overlay, format: png, settle: content}
+  - assert_windows:
+      order: [application, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY]
+  - assert_not_visible: {selector: {content_desc: {exact: "Screen lookup"}, include_invisible: true}}
   # ... and switching the service off in the settings table unbinds it
   # (`removeServiceLocked` -> `unbindService` -> `scheduleUnbindService` +
   # `scheduleStopService`).

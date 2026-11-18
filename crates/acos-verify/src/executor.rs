@@ -1886,7 +1886,26 @@ fn service_ctl_step(backend: &mut dyn Backend, ctl: &ServiceCtlStep) -> StepExec
         config: ctl.config.clone(),
         args: ctl.args.clone(),
     };
-    match backend.service_ctl(&request) {
+    // `timeout_ms`: the read-only op is re-issued until the reply holds `expect`
+    // (a state the app reaches asynchronously). The *last* reply is the step's
+    // evidence either way, and a timeout is the same `AssertionFailed` as a
+    // single sample that does not match: the wait never turns a miss into a pass.
+    let deadline = ctl
+        .timeout_ms
+        .map(|ms| Instant::now() + Duration::from_millis(ms));
+    let mut outcome = backend.service_ctl(&request);
+    if let (Some(deadline), Some(expected)) = (deadline, ctl.expect.as_ref()) {
+        let mut pause_ms = 50u64;
+        while let Ok(reply) = &outcome {
+            if json_subset(expected, reply).is_none() || Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(pause_ms));
+            pause_ms = (pause_ms * 2).min(250);
+            outcome = backend.service_ctl(&request);
+        }
+    }
+    match outcome {
         Ok(reply) => {
             let mut exec = StepExec::pass();
             let summary = summarize_reply(&reply);
@@ -1903,9 +1922,12 @@ fn service_ctl_step(backend: &mut dyn Backend, ctl: &ServiceCtlStep) -> StepExec
                     ProtocolError::new(
                         acos_protocol::ErrorCode::AssertionFailed,
                         format!(
-                            "service_ctl {} {}: the reply does not match `expect` at {path}",
+                            "service_ctl {} {}: the reply does not match `expect` at {path}{}",
                             request.module,
-                            request.kind()
+                            request.kind(),
+                            ctl.timeout_ms
+                                .map(|ms| format!(" after waiting {ms} ms"))
+                                .unwrap_or_default()
                         ),
                     )
                     .with_hint(
