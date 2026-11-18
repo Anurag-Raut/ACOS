@@ -1,0 +1,96 @@
+   Compiling serde_core v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling acos-dex v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-800392d7-bb87b01f3dcc4499/crates/acos-dex)
+    Finished `test` profile [unoptimized] target(s) in 1.63s
+     Running unittests src/lib.rs (.cache/hyg4-target/debug/deps/acos_dex-43a7e58b6f2631a5)
+
+running 13 tests
+test encoded::tests::boolean_and_null ... ok
+test encoded::tests::ints_sign_extend ... ok
+test hash::tests::adler32_known ... ok
+test hiddenapi::tests::rejects_truncated_item ... ok
+test mutf8::tests::ascii ... ok
+test hiddenapi::tests::offsets_with_zero_groups ... ok
+test mutf8::tests::embedded_nul ... ok
+test hash::tests::sha1_known ... ok
+test mutf8::tests::non_ascii_bmp ... ok
+test mutf8::tests::lone_surrogate ... ok
+test mutf8::tests::supplementary ... ok
+test opcode::tests::table_has_no_duplicates_and_all_sizes_match ... ok
+test mutf8::tests::missing_nul ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/boot_jars.rs (.cache/hyg4-target/debug/deps/boot_jars-2741239c49470c2b)
+
+running 2 tests
+test boot_classpath_parse_and_verify ... ok
+test boot_classpath_dexdump_differential ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.77s
+
+     Running tests/corruption.rs (.cache/hyg4-target/debug/deps/corruption-489fefdd28fe9c7b)
+
+running 13 tests
+test bad_magic ... ok
+test truncated_file ... ok
+test unsupported_version ... ok
+test bad_checksum ... ok
+test parse_accepts_slice_and_arc ... ok
+test bad_endian_tag ... ok
+test strict_accepts_valid_signature ... ok
+test bad_signature_accepted_by_default ... ok
+test bad_signature_strict_rejected ... ok
+test out_of_range_string_offset ... ok
+test out_of_range_type_index ... ok
+test multiple_byte_mutations_never_panic ... ok
+test seeded_single_byte_mutations_never_panic ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.99s
+
+     Running tests/decode.rs (.cache/hyg4-target/debug/deps/decode-7a9cb8321a507d0b)
+
+running 8 tests
+test sparse_switch_payload ... ok
+test every_defined_opcode_decodes ... ok
+test fill_array_data_payload ... ok
+test format_names_and_sizes ... ok
+test unused_opcodes_are_rejected ... ok
+test format_operand_extraction ... ok
+test packed_switch_payload ... ok
+test truncated_instruction_is_error ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fixtures.rs (.cache/hyg4-target/debug/deps/fixtures-66df75f50bc1abb2)
+
+running 13 tests
+test annotations_directory_parses ... ok
+test try_catch_tables ... ok
+test known_classes_and_methods ... ok
+test line_tables_decode ... ok
+test fill_array_data_payloads ... ok
+test invoke_polymorphic_present ... ok
+test packed_and_sparse_switch_payloads ... ok
+test static_values_decode ... ok
+test method_handles_present_in_invoke_custom_dex ... ok
+test disassembly_is_dexdump_like ... ok
+test non_ascii_and_supplementary_strings ... ok
+test invoke_custom_and_call_sites ... ok
+test all_fixtures_parse_and_verify ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/legacy_apks.rs (.cache/hyg4-target/debug/deps/legacy_apks-cd10bafee22fa0bf)
+
+running 1 test
+test legacy_apk_dex_parse_and_verify ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_dex
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
