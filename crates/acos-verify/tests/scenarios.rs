@@ -2441,3 +2441,139 @@ fn a_first_attempt_pass_records_no_attempts_array() {
         "a single attempt is the step's own outcome, not a history"
     );
 }
+
+// ---------------------------------------------------------------------------
+// GATENE2E: `service_ctl … timeout_ms` waits for an asynchronous module state
+// ---------------------------------------------------------------------------
+
+/// A module whose `status` reply holds the awaited record only from the
+/// `ready_at`-th read on (the app's worker thread requests it a moment after
+/// the tap that started it).
+struct CtlBackend {
+    manifest: Option<ManifestInfo>,
+    ready_at: u64,
+    reads: u64,
+}
+
+impl Backend for CtlBackend {
+    fn id(&self) -> &'static str {
+        "ctl-poll-mock"
+    }
+
+    fn protocol_backend(&self) -> ProtocolBackend {
+        ProtocolBackend::AcosNative
+    }
+
+    fn fidelity(&self) -> Fidelity {
+        Fidelity::NativeRuntime
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            static_manifest: true,
+            launch: true,
+            services: true,
+            ..Capabilities::default()
+        }
+    }
+
+    fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
+        let info = acos_verify::manifest::load_manifest(apk)?;
+        self.manifest = Some(info.clone());
+        Ok(info)
+    }
+
+    fn launch(&mut self, _request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
+        Ok(LaunchOutcome {
+            session_id: "s_ctl".to_string(),
+            package: String::new(),
+            frame: None,
+            screenshot_png: None,
+            crashed: None,
+            detail: serde_json::json!({}),
+        })
+    }
+
+    fn service_ctl(
+        &mut self,
+        _request: &acos_verify::backend::ServiceCtlRequest,
+    ) -> Result<serde_json::Value, BackendError> {
+        self.reads += 1;
+        let records = if self.reads >= self.ready_at {
+            serde_json::json!([{"display_id": 0, "status": 0}])
+        } else {
+            serde_json::json!([])
+        };
+        Ok(serde_json::json!({"screenshots": records}))
+    }
+}
+
+fn run_ctl_scenario(step: &str, ready_at: u64) -> (RunOutcome, u64) {
+    let yaml = format!(
+        r#"
+version: 1
+name: ctl-poll
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {{mode: offscreen, width: 1080, height: 2400, density_dpi: 420}}
+services:
+  - id: accessibility
+    profile: real
+steps:
+  - launch: {{activity: dev.acos.fixtures.helloviews/.MainActivity}}
+  - service_ctl: {{{step}}}
+"#
+    );
+    let scenario = Scenario::from_yaml_str(&yaml).expect("valid scenario");
+    let artifacts = scratch("ctl-poll");
+    let mut backend = CtlBackend {
+        manifest: None,
+        ready_at,
+        reads: 0,
+    };
+    let outcome = run_log_scenario(&scenario, &artifacts, &mut backend);
+    let reads = backend.reads;
+    let _ = std::fs::remove_dir_all(&artifacts);
+    (outcome, reads)
+}
+
+const CTL_EXPECT: &str =
+    "module: accessibility, op: status, expect: {screenshots: [{display_id: 0, status: 0}]}";
+
+#[test]
+fn service_ctl_without_timeout_samples_once_and_fails_on_a_not_yet_state() {
+    let (outcome, reads) = run_ctl_scenario(CTL_EXPECT, 3);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    assert_eq!(reads, 1, "no `timeout_ms`: exactly one sample");
+}
+
+#[test]
+fn service_ctl_timeout_waits_for_the_state_the_app_reaches_later() {
+    let (outcome, reads) = run_ctl_scenario(&format!("{CTL_EXPECT}, timeout_ms: 5000"), 3);
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "{:?}",
+        outcome.verdict.failure
+    );
+    assert_eq!(reads, 3, "re-read until the record is there, then stop");
+}
+
+#[test]
+fn service_ctl_timeout_never_turns_a_miss_into_a_pass() {
+    let started = std::time::Instant::now();
+    let (outcome, reads) = run_ctl_scenario(&format!("{CTL_EXPECT}, timeout_ms: 300"), 10_000);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    assert!(reads >= 2, "it polled: {reads}");
+    assert!(
+        started.elapsed() >= std::time::Duration::from_millis(300),
+        "it consumed its deadline"
+    );
+    let message = outcome
+        .verdict
+        .failure
+        .as_ref()
+        .map(|f| f.error.message.clone())
+        .unwrap_or_default();
+    assert!(message.contains("after waiting 300 ms"), "{message}");
+}

@@ -715,6 +715,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // record is evidence for a pass as well as for a failure (a clean run ends
     // with guest_exit=0), and a caller that keeps only the artifacts keeps it.
     drop(guarded);
+    if trust == crate::trust::Trust::Trusted {
+        merge_final_logd(&artifacts);
+    }
     let session_modules = live_module_rows
         .and_then(|rows| rows.lock().ok().map(|rows| rows.clone()))
         .filter(|rows| !rows.is_empty())
@@ -736,6 +739,62 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         session_id.clone(),
     );
     finish_run(&envelope, &args, &artifacts, Some(trust))
+}
+
+/// The verifier reads the guest's log **between steps**, so the entries the
+/// guest wrote after its last flush (the lookup a tap started, and for a guest
+/// that died the assertion text that says why) never reached `logs/logcat.txt`.
+/// The launcher keeps the whole sink in `art-frames/logd-final.jsonl` at exit;
+/// append what the artifact is missing (entries with a `seq` past its last one).
+/// Guest-asserted, so the caller only runs this for a trusted run.
+pub(crate) fn merge_final_logd(artifacts: &Path) {
+    let dump = artifacts.join("art-frames").join("logd-final.jsonl");
+    let Ok(text) = std::fs::read_to_string(&dump) else {
+        return;
+    };
+    let logcat = artifacts.join(acos_protocol::artifacts::logcat_file_name());
+    let Ok(mut current) = std::fs::read_to_string(&logcat) else {
+        return;
+    };
+    let last_seq = current
+        .lines()
+        .filter_map(|line| line.split_whitespace().nth(1)?.parse::<u64>().ok())
+        .max()
+        .unwrap_or(0);
+    let stamp = std::fs::read_to_string(artifacts.join("art-frames").join("session-exit.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v.get("utc_ms").and_then(|m| m.as_u64()))
+        .unwrap_or(0);
+    let mut added = 0usize;
+    for line in text.lines() {
+        let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        let seq = entry.get("seq").and_then(|v| v.as_u64()).unwrap_or(0);
+        if seq <= last_seq {
+            continue;
+        }
+        let level = match entry.get("prio").and_then(|v| v.as_i64()).unwrap_or(4) {
+            2 => 'V',
+            3 => 'D',
+            5 => 'W',
+            6 | 7 => 'E',
+            _ => 'I',
+        };
+        current.push_str(&format!(
+            "{:>6}  {:>5}  {} {}: {}\n",
+            stamp,
+            seq,
+            level,
+            entry.get("tag").and_then(|v| v.as_str()).unwrap_or(""),
+            entry.get("message").and_then(|v| v.as_str()).unwrap_or("")
+        ));
+        added += 1;
+    }
+    if added > 0 {
+        let _ = std::fs::write(&logcat, current);
+    }
 }
 
 /// Put the engine choice and mode into the JSON verdict, enforce that preview is
@@ -1385,4 +1444,41 @@ pub fn resolve_idle_kill_seconds(scenario: &Path) -> Result<Option<u64>, Protoco
         value = Some(secs);
     }
     Ok(value)
+}
+
+#[cfg(test)]
+mod final_logd_merge_tests {
+    use super::merge_final_logd;
+
+    /// GATENE2E: entries the verifier never flushed (the guest's last words, here
+    /// a fatal assertion) reach `logs/logcat.txt`; entries it already has do not
+    /// repeat, and without a dump the file is untouched.
+    #[test]
+    fn merge_appends_only_the_missing_tail() {
+        let dir = std::env::temp_dir().join(format!("merge-logd-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("art-frames")).unwrap();
+        std::fs::create_dir_all(dir.join("logs")).unwrap();
+        let logcat = dir.join("logs/logcat.txt");
+        let head = "--------- beginning of main\n  1000      1  I t: one\n  1000      2  I t: two\n";
+        std::fs::write(&logcat, head).unwrap();
+        merge_final_logd(&dir); // no dump: untouched
+        assert_eq!(std::fs::read_to_string(&logcat).unwrap(), head);
+        std::fs::write(
+            dir.join("art-frames/logd-final.jsonl"),
+            concat!(
+                "{\"seq\":1,\"prio\":4,\"tag\":\"t\",\"message\":\"one\"}\n",
+                "{\"seq\":2,\"prio\":4,\"tag\":\"t\",\"message\":\"two\"}\n",
+                "{\"seq\":3,\"prio\":7,\"tag\":\"x\",\"message\":\"assertion failed: boom\"}\n"
+            ),
+        )
+        .unwrap();
+        merge_final_logd(&dir);
+        merge_final_logd(&dir); // idempotent
+        let text = std::fs::read_to_string(&logcat).unwrap();
+        assert_eq!(text.matches("one").count(), 1);
+        assert_eq!(text.matches("assertion failed: boom").count(), 1);
+        assert!(text.contains("E x: assertion failed: boom"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

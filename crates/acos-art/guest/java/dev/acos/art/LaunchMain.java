@@ -316,8 +316,36 @@ public final class LaunchMain {
         }
     }
 
+    /**
+     * GATENE2E: the guest paints every window on a software {@code Canvas}
+     * ({@code ViewRootImpl.drawSoftware}); it has no window GPU renderer
+     * (docs/LATER.md "GPU-drawn windows"). The host already clears
+     * {@code FLAG_HARDWARE_ACCELERATED} on the app and activities, but a window
+     * the app adds itself can ask for acceleration explicitly (Gaten's lookup
+     * overlay sets {@code FLAG_HARDWARE_ACCELERATED}); {@code ViewRootImpl.
+     * enableHardwareAcceleration} then calls {@code ThreadedRenderer.create},
+     * whose {@code ProcessInitializer} aborts the RenderThread
+     * ({@code DeviceInfo::updateDisplayInfo}: no SurfaceFlinger physical
+     * display). {@code ThreadedRenderer.sRendererEnabled} is the framework's own
+     * switch for "this process must not do accelerated rendering" (low-end
+     * persistent processes): with it false the window falls back to the software
+     * path and {@code Canvas.isHardwareAccelerated()} is false, exactly what an
+     * app sees on a device without a window GPU. The GL provider stays available
+     * for bitmap readbacks (hwui's {@code RenderProxy}), which do not use it.
+     */
+    static void disableWindowRenderer() {
+        try {
+            Class<?> tr = Class.forName("android.view.ThreadedRenderer");
+            tr.getField("sRendererEnabled").setBoolean(null, false);
+            System.out.println("ACOSLAUNCH MARK window-renderer software (ThreadedRenderer.sRendererEnabled=false)");
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH MARK window-renderer-disable failed " + unwrap(t));
+        }
+    }
+
     static void run(long t0) throws Throwable {
         registerNatives();
+        disableWindowRenderer();
         new File(sOut).mkdirs();
         Looper.prepareMainLooper();
         // A real Android process answers `IApplicationThread` transactions on a

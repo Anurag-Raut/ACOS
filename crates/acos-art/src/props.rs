@@ -426,6 +426,21 @@ impl Props {
             // loop -- R1's log flood trigger -- cannot start.
             ("servicemanager.ready", "true"),
             ("ro.build.version.release", "14"),
+            // libcutils `ashmem-dev.cpp::has_memfd_support()` is false without
+            // these two properties (it logs "memfd: ro.vndk.version not defined"),
+            // which sends every ashmem call down the `/dev/ashmem` ioctl path --
+            // and the guest has no `/dev/ashmem`; every buffer ACOS hands out is a
+            // memfd (the gralloc shim, `IGraphicsStats.requestBufferForProcess`,
+            // `ParcelFd::memfd`). hwui's `ProfileDataContainer::switchStorageTo
+            // Ashmem` then called `ashmem_get_size_region(memfd)` ->
+            // `__ashmem_check_failure` -> `LOG_ALWAYS_FATAL("illegal fd=...")` and
+            // the first thing in the app to start the RenderThread (the Gaten
+            // lookup's screenshot copy) aborted (GATENE2E). `sys.use_memfd=true`
+            // is the documented switch for "this device uses memfd-backed
+            // ashmem" (the same file's own header); the kernel here has memfd +
+            // F_SEAL_FUTURE_WRITE, so libcutils' self-detection passes.
+            ("sys.use_memfd", "true"),
+            ("ro.vndk.version", "34"),
             ("ro.build.version.codename", "REL"),
             ("ro.build.version.all_codenames", "REL"),
             ("ro.build.version.security_patch", "2024-01-01"),
@@ -643,6 +658,9 @@ mod tests {
     fn defaults_are_servable() {
         let p = Props::android34();
         assert_eq!(p.get("ro.build.version.sdk"), Some("34"));
+        // GATENE2E: libcutils only uses memfd-backed ashmem with these two set.
+        assert_eq!(p.get("sys.use_memfd"), Some("true"));
+        assert_eq!(p.get("ro.vndk.version"), Some("34"));
         assert_eq!(p.get("dalvik.vm.heapgrowthlimit"), Some("192m"));
         let text = p.to_string();
         assert!(text.contains("ro.debuggable=1\n"));

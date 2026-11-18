@@ -1230,6 +1230,15 @@
             "string",
             "null"
           ]
+        },
+        "timeout_ms": {
+          "description": "Wait for `expect` instead of sampling it once (1..=120000 ms).\n\nFor a state the app reaches *asynchronously* (a screenshot the app requests from a worker thread after a tap, a service that binds a moment after the setting is written): the read-only op is re-issued until the reply contains `expect`, and the step fails with the **last** reply when the deadline passes. Only legal with `expect` and the read-only op `status`: a polled op must be idempotent, and a wait with no expectation would be a sleep (`wait` is that step).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [

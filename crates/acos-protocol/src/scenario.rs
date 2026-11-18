@@ -1013,6 +1013,17 @@ pub struct ServiceCtlStep {
     /// `start_result`, `dismiss` an empty `posted`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expect: Option<Value>,
+    /// Wait for `expect` instead of sampling it once (1..=120000 ms).
+    ///
+    /// For a state the app reaches *asynchronously* (a screenshot the app
+    /// requests from a worker thread after a tap, a service that binds a moment
+    /// after the setting is written): the read-only op is re-issued until the
+    /// reply contains `expect`, and the step fails with the **last** reply when
+    /// the deadline passes. Only legal with `expect` and the read-only op
+    /// `status`: a polled op must be idempotent, and a wait with no expectation
+    /// would be a sleep (`wait` is that step).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
 }
 
 /// `call_activity_method` (optional; debug/source-owned builds only).
@@ -2118,6 +2129,26 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                         v.push(format!("{path}.args"), "args must be an object");
                     }
                 }
+                if let Some(timeout) = ctl.timeout_ms {
+                    if !(1..=120_000).contains(&timeout) {
+                        v.push(
+                            format!("{path}.timeout_ms"),
+                            "timeout_ms must be between 1 and 120000",
+                        );
+                    }
+                    if ctl.expect.is_none() {
+                        v.push(
+                            format!("{path}.timeout_ms"),
+                            "`timeout_ms` waits for `expect`; without one it is a sleep (use `wait`)",
+                        );
+                    }
+                    if ctl.op != "status" {
+                        v.push(
+                            format!("{path}.timeout_ms"),
+                            "`timeout_ms` re-issues the op, so it only applies to the read-only op `status`",
+                        );
+                    }
+                }
                 // A control op drives a module that is attached in *this* run:
                 // the scenario's `services:` block attaches it at launch, or an
                 // earlier `service_ctl {op: attach}` step does. A step that can
@@ -2320,6 +2351,27 @@ steps:
         let yaml = "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nsteps:\n  - tap: {x: 1, y: 2, settle: fast, expect_change: true}\n";
         let scenario = Scenario::from_yaml_str_unvalidated(yaml).expect("parses");
         assert!(!scenario.validate().is_ok());
+    }
+
+    /// GATENE2E: `service_ctl.timeout_ms` is a wait for `expect`, so it needs one,
+    /// and it re-issues the op, so only the read-only `status` may carry it.
+    #[test]
+    fn gatene2e_service_ctl_timeout_rules() {
+        let head = "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nservices:\n  - id: accessibility\n    profile: real\nsteps:\n";
+        let ok = format!("{head}  - service_ctl: {{module: accessibility, op: status, expect: {{service_bound: true}}, timeout_ms: 5000}}\n");
+        let scenario = Scenario::from_yaml_str(&ok).expect("valid");
+        assert_eq!(scenario.steps[0].service_ctl.as_ref().unwrap().timeout_ms, Some(5000));
+        assert!(scenario.to_yaml_string().unwrap().contains("timeout_ms: 5000"));
+        for (step, why) in [
+            ("{module: accessibility, op: status, timeout_ms: 5000}", "no expect"),
+            ("{module: accessibility, op: enable, expect: {a: 1}, timeout_ms: 5000}", "not status"),
+            ("{module: accessibility, op: status, expect: {a: 1}, timeout_ms: 0}", "zero"),
+            ("{module: accessibility, op: status, expect: {a: 1}, timeout_ms: 999999}", "too long"),
+        ] {
+            let yaml = format!("{head}  - service_ctl: {step}\n");
+            let scenario = Scenario::from_yaml_str_unvalidated(&yaml).expect("parses");
+            assert!(!scenario.validate().is_ok(), "{why} must be rejected");
+        }
     }
 
     const EXPECT_HANDLED: &str = r#"

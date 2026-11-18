@@ -3741,6 +3741,7 @@ fn write_session_exit(
         // `System.exit`, a kill) still has the framework's own logd trail and
         // its last stdout/stderr lines. Bounded, newest last.
         "logd_tail": logd_tail(&result.logs, 24),
+        "logd_final": FINAL_LOGD_FILE,
         "stdout_tail": stdout_tail(&result.stdout, 32),
         "stderr_tail": stdout_tail(&result.stderr, 16),
         "disk_free_bytes": disk_free_bytes(out),
@@ -3768,6 +3769,45 @@ fn write_session_exit(
         out.join("session-exit.json"),
         serde_json::to_vec_pretty(&doc).unwrap_or_default(),
     );
+    write_final_logd(out, &result.logs, logd_dropped(&result.notes));
+}
+
+/// Name of the full logd dump next to `session-exit.json` (JSON lines, one
+/// `{seq, prio, tag, message}` per entry, `seq` = 1-based ordinal in the guest's
+/// log sink). The verifier flushes the guest's log only *between steps*, so every
+/// entry written after the last flush -- and, for a guest that died, the entries
+/// that explain *why* (a native abort's assertion text) -- is otherwise lost
+/// from `logs/logcat.txt`. `acos verify` merges the entries it is missing.
+pub const FINAL_LOGD_FILE: &str = "logd-final.jsonl";
+
+/// Entries the sink dropped from the front (`logd: K entries kept of T (D
+/// dropped, ...)`), so a dump's `seq` stays the sink's absolute ordinal.
+fn logd_dropped(notes: &[String]) -> u64 {
+    notes
+        .iter()
+        .find(|n| n.starts_with("logd: "))
+        .and_then(|n| n.split('(').nth(1))
+        .and_then(|n| n.split_whitespace().next())
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0)
+}
+
+fn write_final_logd(out: &Path, logs: &[crate::LogEntry], dropped: u64) {
+    use std::io::Write as _;
+    let Ok(file) = fs::File::create(out.join(FINAL_LOGD_FILE)) else {
+        return;
+    };
+    let mut writer = std::io::BufWriter::new(file);
+    for (index, entry) in logs.iter().enumerate() {
+        let line = serde_json::json!({
+            "seq": dropped + index as u64 + 1,
+            "prio": entry.prio,
+            "tag": entry.tag,
+            "message": entry.message,
+        });
+        let _ = writeln!(writer, "{line}");
+    }
+    let _ = writer.flush();
 }
 
 /// A panic inside the launcher is a harness bug and must leave a record with the
@@ -10472,5 +10512,37 @@ mod rel3h_unhandled_input_tests {
         assert_eq!(json["strict_rule"], serde_json::json!("event"));
         assert_eq!(json["pixels_changed"], serde_json::json!(false));
         assert_eq!(json["ack_ms"], serde_json::json!(7));
+    }
+}
+
+/// GATENE2E: the final logd dump keeps the sink's absolute ordinals.
+#[cfg(test)]
+mod final_logd_tests {
+    use super::*;
+
+    #[test]
+    fn dump_seq_follows_the_sinks_ordinal_even_after_drop_oldest() {
+        assert_eq!(logd_dropped(&["logd: 5 entries".to_string()]), 0);
+        assert_eq!(
+            logd_dropped(&[
+                "cgroup: x".to_string(),
+                "logd: 3 entries kept of 10 (7 dropped, cap 3 entries)".to_string()
+            ]),
+            7
+        );
+        let dir = std::env::temp_dir().join(format!("final-logd-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let logs = vec![
+            crate::LogEntry { prio: 6, tag: "a".into(), message: "first kept".into() },
+            crate::LogEntry { prio: 7, tag: "b".into(), message: "last".into() },
+        ];
+        write_final_logd(&dir, &logs, 7);
+        let text = std::fs::read_to_string(dir.join(FINAL_LOGD_FILE)).unwrap();
+        let seqs: Vec<u64> = text
+            .lines()
+            .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap()["seq"].as_u64().unwrap())
+            .collect();
+        assert_eq!(seqs, vec![8, 9]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

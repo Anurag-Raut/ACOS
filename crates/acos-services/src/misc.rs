@@ -1937,7 +1937,11 @@ impl ServiceObject for GraphicsStatsService {
                     .unwrap()
                     .requests
                     .push(process.to_string());
-                let fd = ParcelFd::memfd("acos-gfxstats").ok();
+                // The real service hands out an ashmem region of `sizeof(ProfileData)`
+                // (hwui's `ProfileDataContainer::switchStorageToAshmem` rejects
+                // anything smaller: "Ashmem region is too small! Received 0,
+                // required 584"). One page covers it.
+                let fd = ParcelFd::memfd_sized("acos-gfxstats", 4096).ok();
                 vec![Value::TypedObject(Parcelable::ordered(
                     "android.os.ParcelFileDescriptor",
                     vec![Value::Int(0), Value::RawFd(fd.map(RawFdValue))],
