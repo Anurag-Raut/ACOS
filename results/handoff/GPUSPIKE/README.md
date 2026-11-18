@@ -46,7 +46,7 @@ Branch `gpuspike` from `glspike4` (`ffb485af`), 2026-11-18. Private
 | waydroid.cfg | `vendor_type=MAINLINE`, `arch=x86_64`, **`vendor_datetime=1792667170` = 2026-10-22T11:06:10Z** (`ro.vendor.build.date`: Thu Oct 22 13:06:10 CEST 2026), `system_datetime=1790539062` (2026-09-27), `binder_protocol=aidl3` |
 | build | `waydroid/lineage_waydroid_x86_64/waydroid_x86_64:13/TQ3A.230901.001/aleasto10221306:userdebug/test-keys` — **Android 13 (SDK 33)**, our guest is Android 14 |
 | Mesa | **26.0.8** (`GL_VERSION=OpenGL ES 3.2 Mesa 26.0.8`; radeonsi uses **ACO**, not LLVM, for shaders); LLVM **22.0.0** (`libLLVM22.so`, a mandatory DT_NEEDED of the driver, 105 MB) |
-| licences | Mesa, libdrm: MIT; LLVM: Apache-2.0 WITH LLVM-exception; minigbm / gbm gralloc: BSD-3-Clause (ChromiumOS / Android-x86); (hwcomposer.waydroid: Apache-2.0, **not** staged) |
+| licences | Mesa, libdrm: MIT; LLVM: Apache-2.0 WITH LLVM-exception; minigbm / gbm gralloc: BSD-3-Clause expected (ChromiumOS / Android-x86; per-file notices are in the image's `/etc/NOTICE.xml.gz`, not individually audited here); (`hwcomposer.waydroid`: licence not checked, **not** staged) |
 | extraction | `debugfs rdump /lib64` into `.cache/gpu-scratch/vendor` (no loop mount, no root, no waydroid interaction); props from the image's `/waydroid.prop` + `/var/lib/waydroid/waydroid_base.prop` (read-only) |
 
 Staged file list, size and sha256 for every file: `manifest.json` (19 entries =
@@ -132,7 +132,7 @@ staged dir); `dt_needed.txt` (the DT_NEEDED lists).
    → `hwbuffer_screenshot ok=true … mean=16 #FF101010` (**wrong pixels**, expected
    `#FFF8F8FA`) and `OpenGLRenderer: Failed to allocate a hardware bitmap` →
    `gles_png_hardware ok=false`. Same scenario on ANGLE/SwiftShader passes (GLSPIKE4)
-   because SwiftShader imports the memfd directly through ANGLE's own path.
+   (why it works there was not re-derived in this spike; GLSPIKE4 §4 records that the memfd import works through ANGLE).
    `scenarios/gles-mesa-host.yaml` = `gles-software.yaml` with `provider=mesa`.
 
 ## 4. Measurements (indicative: shared slots, host load ~6, 3 interleaved reps, not exclusive)
@@ -204,7 +204,7 @@ ACOS's last hop is C1, so the equivalent is "C1 reads/waits dmabufs".
 | 3 | **Fences** — shim reports acquire/release `-1` ("software, already done") | real `sync_file` fds from Mesa's `eglSwapBuffers` (`EGL_ANDROID_native_fence_sync`) must flow through `queueBuffer`/BLAST transactions (`BINDER_TYPE_FD` already proven) | 2–3 d |
 | 4 | **C1 input** — `surface_client.rs` lines ~125–140/305–335 (`GraphicBufferMeta`, caps "1 fd", `stride*4*h`, memfd `mmap`) | accept multi-fd GPU handles; `mmap` the dmabuf with `DMA_BUF_IOCTL_SYNC`, wait on the acquire fence before reading; honour real stride/format from the handle; keep memfd path for flag-off | 4–6 d |
 | 5 | **Window flag + WMS** — `FLAG_HARDWARE_ACCELERATED` clearing (app.rs/launcher, `LaunchMain.java`) | per-flag keep the bit so `ViewRootImpl.enableHardwareAcceleration` creates the `ThreadedRenderer`; relayout/insets already right (W54) | 1–2 d + fixing newly reachable paths (surface insets, `RenderThread` threads under seccomp, `CanvasContext` first-frame stalls) 3–5 d |
-| 6 | **Process/host model** — a render node per session, DRM contexts per session, 18 MiB/session beyond the 84 MiB measured is kernel-side; the host RAM/guard model (`guarded.sh`, cgroup) does not see GPU memory | per-session GPU memory budget + quota check, device-loss handling (what happens when the GPU resets: today a hung guest, needs `EGL_CONTEXT_LOST`/watchdog policy) | 3–5 d |
+| 6 | **Process/host model** — a render node and DRM context per session (GPU/GTT memory is kernel-side and was not measured here); the host RAM/guard model (`guarded.sh`, cgroup) does not see GPU memory | per-session GPU memory budget + quota check, device-loss handling (what happens when the GPU resets: today a hung guest, needs `EGL_CONTEXT_LOST`/watchdog policy) | 3–5 d |
 | 7 | **Screenshot/observation parity** — `art-frames`, `acos shotz`, md5 frame tests (`md5_frame_tests.rs`) | GPU output is not bit-identical to the Skia-CPU reference (GPU `mediump`, AA, filtering differ by small deltas); the verify/assert-pixel contract needs a tolerance or a software-reference mode | 3–5 d + owner policy |
 | 8 | **Test/gate matrix** | all gates ×{GPU window, software window}, N=10 memory, device without a GPU/render-node fallback | 4–6 d |
 
