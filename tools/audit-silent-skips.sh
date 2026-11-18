@@ -5,6 +5,7 @@
 #
 #   tools/audit-silent-skips.sh          # list the sites, exit 1 if any
 #
+# Reviewed non-test sites are listed in tools/silent-skip-allowlist.txt.
 # A site is an `eprintln!`/`println!`/`print!` whose text says skip/skipping/
 # SKIP (not a comment), with a `return`, `continue` or `Ok(())` within the next
 # three lines, or any `SKIP` literal that is printed. Sites converted to
@@ -30,6 +31,16 @@ while IFS= read -r file; do
       }
     }' "$file"
 done < <(find crates -name '*.rs' -not -path '*/target/*' | grep -v '/acos-test-support/' | sort) > .cache/hyg3-audit.txt 2>/dev/null
+# Drop the reviewed non-test sites listed in silent-skip-allowlist.txt.
+allow="tools/silent-skip-allowlist.txt"
+if [ -f "$allow" ]; then
+  while IFS=$'\t' read -r apath needle; do
+    case "$apath" in ''|'#'*) continue ;; esac
+    grep -v -F "$apath:" .cache/hyg3-audit.txt | cat > .cache/hyg3-audit.tmp
+    grep -F "$apath:" .cache/hyg3-audit.txt | grep -v -F "$needle" >> .cache/hyg3-audit.tmp || true
+    mv .cache/hyg3-audit.tmp .cache/hyg3-audit.txt
+  done < "$allow"
+fi
 hits=$(wc -l < .cache/hyg3-audit.txt | tr -d ' ')
 cat .cache/hyg3-audit.txt
 echo "SILENT-SKIP SITES: $hits"

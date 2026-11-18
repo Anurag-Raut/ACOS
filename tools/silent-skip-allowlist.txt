@@ -1,0 +1,5 @@
+# Reviewed sites that print "skip" but are not test prerequisites (HYG3).
+# Format: <path>	<substring of the printed line>   (TAB separated; # = comment)
+crates/acos-binder-peer/build.rs	NDK not found; skipping libacos_binder_driver.so
+crates/acos-dex/examples/dexdump.rs	skip {path}: {e}
+crates/acos-vm/src/natives/native_mem.rs	region {} skipped: cap exceeded
