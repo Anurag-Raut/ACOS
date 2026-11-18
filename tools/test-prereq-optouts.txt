@@ -1,0 +1,3 @@
+# Tests whose prerequisite cannot exist on this host. Format: <test-name> <prerequisite and why it cannot exist here>.
+# test-crates.sh runs the gate with --skip for each name below; a direct run of the test fails loudly.
+# Empty: every converted prerequisite exists on the workstation (HYG3). spike_net_boundary (pasta) is NOT listed: it is red until pasta is discoverable (see results/handoff/HYG3/README.md).
