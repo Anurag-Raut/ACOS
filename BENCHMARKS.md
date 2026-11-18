@@ -2158,3 +2158,22 @@ daemon (1.36 MiB), not a booted framework, because ACOS has no session-less boot
 framework; the marginal column exists so the reader can see the row without that
 baseline. (4) M6's spread (14.1%) is close to the 15% gate under a shared host; a
 quieter window would tighten the CI but cannot turn a TIE into a PASS.
+
+## 13. Density cohort N=1/2/5/10/20 (DENSITY20b, 2026-11-18)
+
+Evidence: `results/handoff/DENSITY20/README.md` (+ raw json). Counter app, 3 tasks per session, 0 false passes,
+every rep verified all tasks. Metric: verified tasks per GiB-minute, PSS integral of the whole daemon tree.
+Shared-slot runs (host load 1-20): **indicative**, not a CI-gated result. Software GL, cached shared-fixed boot image.
+
+| Row (2026-11-18) | N=1 | N=2 | N=5 | N=10 | N=10 zygote-on | N=20 | N=20 zygote-on |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| verified tasks / GiB-min (M11, PSS) | 198 | 418 (foreign-diluted, invalid) | 557 | 863 | 1095 | 881 | 1116 |
+| PSS per session (MiB) | 233.9 | 109.7 (invalid) | 75.4 | 56.1 | 40.3 | 46.7 | 32.3 |
+| marginal unique cost per extra session (MiB) | n/a | n/a | 37.2 (fit N=5/10/20) | | 24.2 (fit N=10/20) | | |
+
+Method finding: PSS in a shared slot is diluted by other agents' guests mapping the same files; N=2 fell below one solo
+guest (marginal -14.5 MiB) for that reason. The marginal is reported as the fitted slope / private MiB per session (they agree: 37.0 vs 37.2).
+Emulator comparison (recorded baseline ~3300 MiB PSS per instance, §3; not re-measured): 70x (exec) to 102x (zygote) less memory
+per instance at N=20; 12.4 tasks/GiB-min warm (favourable bound), 1.9 with its 25.2 s cold boot, vs 863-1116 here. The §3 row cites
+`EXPERIMENTS.md` E1.1, which is the dexdump differential; the source of that figure needs re-pointing.
+Ranked savings at N=20 (935 MiB tree): zygote warm-fork default 290 MiB measured; heap/anon trimming est. 60-120 MiB; KSM est. 60-150 MiB (uncertain).
