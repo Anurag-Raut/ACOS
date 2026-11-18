@@ -143,11 +143,11 @@ tools/art-runtime/run-exclusive.sh --task CONFKIT -- tools/guarded.sh --mem 22G 
 # the generated document
 cargo run -p acos-services --example gen-modules-docs > docs/MODULES.md
 
-# one proof run (this is `.cache/run-batch.sh <scenario>`, which sets a private
+# one proof run (`results/handoff/CONFKIT/run-batch.sh <scenario>`, which sets a private
 # ACOS_RUNTIME_DIR/ACOS_SESSION_SOCKET, ACOS_VIEW_TEST_DIR, ACOS_ART_BIN and
 # ACOS_WEBVIEW_CACHE, and writes evidence/<name>/{verdict.json,steps/,logs/})
 tools/art-runtime/run-exclusive.sh --task CONFKIT -- tools/guarded.sh --mem 16G --time 900 -- \
-  .cache/run-batch.sh gaten-bubble webview-probe sysui1-shade sensors-scripted
+  results/handoff/CONFKIT/run-batch.sh gaten-bubble webview-probe sysui1-shade sensors-scripted
 ```
 
 Prerequisites that are easy to miss: `fixtures/build` must be built
