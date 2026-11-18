@@ -99,6 +99,12 @@ fn is_fresh(artifact: &Path, deps: &[PathBuf]) -> bool {
     let Ok(a) = std::fs::metadata(artifact) else {
         return false;
     };
+    // An empty artifact is a build that was killed half-way (d8 creates the file
+    // before writing it); trusting it would fail every later run on a cache that
+    // never heals.
+    if a.len() == 0 {
+        return false;
+    }
     let Ok(at) = a.modified() else { return false };
     deps.iter().all(|d| {
         std::fs::metadata(d)

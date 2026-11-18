@@ -75,6 +75,14 @@ const REAL_CORELIB_ONLY: &[&str] = &[
     // and `java.lang.reflect.Proxy`; verified against ART by
     // `tools/diff-dexprogs.sh --corelib real`.
     "27_annotations_reflection",
+    // Framework-backed (`android.database.sqlite.*`): the bootstrap corelib has
+    // no android.database, and the host JVM cannot run it either (its checked-in
+    // reference is the JVM's "Unable to initialize main class", exit 1). The
+    // real output is compared on ART by
+    // `tools/oracle/run-framework-dexprog-art.sh` (fixtures/expected-art).
+    // It was invisible to this test only while `build-fixtures.sh` kept
+    // deleting its build (MERGEFIX2); with the fixture built it must be named.
+    "28_sqlite_basic",
 ];
 
 #[test]
