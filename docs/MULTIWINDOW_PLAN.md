@@ -1,8 +1,7 @@
 # Multi-window plan (v0.4.1, track MULTIWIN1)
 
-Status: **plan + slice 1**. The plan is the deliverable; slice 1 is built on the
-same branch where the time budget allowed (see §9 for exactly what is in the
-tree and what is not).
+Status: **plan complete; slice 1 designed, not built** (stopped by the disk
+guard, see §9). One owner decision is open (§7 item 5); no ADR conflict.
 
 Inputs: `docs/OWNER_DIRECTION_2026-11-18.md` (near-total compatibility, reuse
 AOSP behaviour, modules are attachable building blocks), ADR-0029 (modules,
@@ -197,6 +196,45 @@ Everything below is measured on this tree (branch `multiwin1`, base `modules`).
 * What split screen needs from C1 is **nothing new**: task origin = layer
   position, task size = buffer/frame size. `destinationFrame`/crop already
   exist for BLAST and are the freeform/PiP scaling path if it is ever needed.
+
+---
+
+### 3.5 Seams found while sizing slice 1 (MULTIWIN1b, measured on this tree)
+
+1. **The activity override, not the process configuration, carries the task
+   rect.** `applyRotation` calls `handleActivityConfigurationChanged(r, <empty
+   override>, ...)` because a rotation is a *display* change. A task rect is the
+   opposite: AOSP keeps the process/global `Configuration` display-level and
+   puts `windowConfiguration.{bounds,appBounds,windowingMode}` plus the
+   task-relative `screenWidthDp/HeightDp` in the **activity's override
+   configuration** (`MergedConfiguration.overrideConfiguration`,
+   `ActivityThread.performActivityConfigurationChanged` merges
+   `global + override`). So `applyWindow` must pass a *non-empty* override and
+   leave `handleConfigurationChanged` alone (otherwise every other activity in
+   the process would also be told it is in multi-window mode).
+2. **`rotatedConfiguration` is built from guest statics** (`PANEL_W/H`,
+   `APP_W/H`, `STATUS_INSET`, `NAV_INSET`, `LaunchMain.java:1373-1405`), not
+   from the host's WMS. `applyWindow` must take the rect from the host
+   (`WINDOW l t r b mode`) and never recompute geometry guest-side; the dp
+   values use the display density the guest already knows
+   (`(px / density + 0.5)`, `TaskFragment.java:2360-2370`).
+3. **The control thread cannot answer a module control.** A module's `control`
+   runs on the *peer* thread (`launch.rs` `services`/`ctl` → `modules.control`),
+   while the guest's `GuestProbeChannel` (stdin/FIFO) and the "reply bound to a
+   fresh probe sample" wait live in the *launcher* command loop (`rotate`,
+   `launch.rs:8148-8240`). A multi-window op needs both halves (mutate
+   `WmsState` + write `WINDOW …` to the owning guest + wait for a fresh probe),
+   so the module needs one new seam; see decision 5 in §7.
+4. **Per-process guest channel.** `ROTATE` writes to the primary guest only.
+   For split, `WINDOW` must go to the process that owns the task's top activity
+   (`top_process`, MPROC5; secondary guests have their own probe channel).
+   Slice 1 is single-task and single-process, so it is unaffected; slice 2
+   must route by task owner.
+5. **Fixtures exist.** `fixtures/apps/two-activity` declares
+   `configChanges="orientation|screenSize|keyboardHidden"` on both activities,
+   so it is the slice-1/2 subject (in-place `onConfigurationChanged`); the
+   relaunch half of slice 3 needs a sibling that declares nothing (`counter`
+   already declares nothing and is what ROT4 relaunches).
 
 ---
 
@@ -400,6 +438,30 @@ implementation detail):
    `docs/ERROR_CODES.md` conventions (it is a structured `UNSUPPORTED_*`, not a
    new family).
 
+5. **How a module control reaches the launcher's guest channel** (new, found
+   in MULTIWIN1b, §3.5.3). This is a seam between the module framework and the
+   launcher, not a compositor/ADR change, but it adds a host→guest command path
+   that modules do not have today, so the owner picks:
+   * **(A) `ServiceHost` guest-command outbox (recommended).** The module's
+     `control` mutates `WmsState` (a `wms` handle published like `atms`) and
+     pushes a typed `GuestCommand::Window{…}` into an outbox on the host; the
+     launcher's `services` handler drains it after `control.submit`, writes the
+     line to the owning guest, waits for a fresh probe (the `rotate` rule) and
+     returns the tree in the same reply. *Pros:* one reusable seam (rotation,
+     PiP, future guest-driven controls can use it), the module stays the owner
+     of its behaviour and its honest report. *Cons:* touches `host.rs` and the
+     launcher loop (two crates), ~0.5 d extra.
+   * **(B) A launcher `window` command beside `rotate`; the module is only the
+     attach gate/status.** `service_ctl multiwindow.enter_split` is forwarded to
+     the launcher command. *Pros:* smallest diff, no framework change.
+     *Cons:* the module's `control` would be a forwarder with no behaviour of
+     its own, which the honest-report check (ADR-0029 item 7) is awkward about;
+     every later windowing feature grows the launcher loop instead of a module.
+   * **(C) Guest-side polling of the WMS task record** (the guest asks the host
+     for its task rect on every probe). *Pros:* no host→guest write path.
+     *Cons:* latency and a new always-on request on the hot path; rejected by
+     the performance track.
+
 ---
 
 ## 8. What slice 1 changes (concrete)
@@ -417,15 +479,19 @@ implementation detail):
    * a test that a task rect yields the task frame and a `Configuration` whose
      `windowingMode` is the task's, and that clearing restores the exact
      full-screen bytes.
-3. `crates/acos-art/src/launch.rs`: a `WINDOW <mode> <l> <t> <r> <b>` control
-   command next to `ROTATE`; the reply is bound to a fresh probe sample (the
-   same rule as `rotate`: never answer with a stale tree).
+3. `crates/acos-art/src/launch.rs`: a `WINDOW <mode> <l> <t> <r> <b>` guest
+   line next to `ROTATE`, written by the launcher after it drains the module's
+   guest-command outbox (decision 5 A); the reply is bound to a fresh probe
+   sample (the same rule as `rotate`: never answer with a stale tree).
 4. `crates/acos-art/guest/java/dev/acos/art/LaunchMain.java`:
-   `applyWindow(want)` = build the task `Configuration`, set
-   `windowConfiguration.{bounds, appBounds, windowingMode}`,
-   `screenWidthDp/HeightDp`, then the same
-   `handleConfigurationChanged` + `ActivityRelaunchItem`/`handleActivityConfigurationChanged`
-   decision `applyRotation` uses.
+   `applyWindow(mode, l, t, r, b)` = build the **activity override**
+   `Configuration` (not the process one, §3.5.1): `windowConfiguration.{bounds,
+   appBounds, windowingMode}` + `screenWidthDp/HeightDp`, then
+   `handleActivityConfigurationChanged(record, override, …)` when
+   `getRealConfigChanged()` covers `CONFIG_SCREEN_SIZE`, or the ROT4
+   `ActivityRelaunchItem` path (extract the relaunch block of `applyRotation`
+   into a shared helper) when it does not. `exit` passes the display-level
+   override (mode 1, display bounds).
 5. `crates/acos-services/src/modules/multiwindow.rs` + registry row + generated
    `docs/MODULES.md`: the module, its manifest and its controls (slice 1:
    `enter`, `exit`, `status`; `enter_split` refuses `bottom` by name until
@@ -437,6 +503,11 @@ Nothing in slice 1 changes a wire codec, the compositor, or the peer protocol.
 
 ## 9. Slice 1 status on this branch
 
-See `results/handoff/MULTIWIN1/README.md` for the measured state (what is
-committed, what the probe scenario asserted, and what is left). The plan above
-is independent of how far slice 1 got: slices 2–5 start from it either way.
+**Slice 1 is not built.** The plan is complete and reviewed against the tree
+(§3.5 lists what the continuation found), but the build/ART step was stopped by
+the host disk guard (`df -h /` = 87–88 % at the start and still rising while the
+other tracks run, against the 85–86 % stop rule), so no code was written that
+could not be verified. `results/handoff/MULTIWIN1/README.md` holds the exact
+build order, files and acceptance commands for whoever runs slice 1 next, plus
+the one open owner decision (§7 item 5) that selects its shape. Slices 2–5 start
+from this plan either way.
