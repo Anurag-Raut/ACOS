@@ -52,6 +52,15 @@ METRICS = [
     ("screenshot", "Fresh PNG screenshot", "ms", "lower",
      "m5_screenshot_ms", "screenshot_ms",
      "ACOS PNG shot vs `adb exec-out screencap -p`."),
+    ("install", "Install -> APK ready to launch", "ms", "lower",
+     "m9_apk_ready_ms", "install_ms",
+     "MERGE040D(c): ACOS's counterpart of `adb install`. ACOS: the launcher's own "
+     "stage ladder, `launch-entry` -> `guest-exec` (ingest of the package facts / "
+     "manifest / dex list, staging into `<data>/app`, native-lib extraction, and "
+     "the DEX/classpath preparation), measured for a fresh session per rep. "
+     "Emulator: `adb install -r -t` (decompress + write into /data/app + dexopt), "
+     "its *first* install — the emulator's more expensive number, so the pairing "
+     "is conservative for ACOS. Reinstall (warm) is in the baseline for the record."),
     ("reset", "Reset -> first correct screen", "ms", "lower",
      "m6_reset_strict_ms", "reset_ms",
      "ACOS app reset vs `am force-stop` + `pm clear` + launch to the launcher-frame change."),
