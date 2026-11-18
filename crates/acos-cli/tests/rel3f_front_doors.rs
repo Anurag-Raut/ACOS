@@ -335,8 +335,7 @@ fn session_list_json_stdout_is_only_the_document() {
 #[test]
 fn launch_forwards_the_session_label_to_the_daemon() {
     let apk = workspace_path("fixtures/build/apps/counter.apk");
-    if !apk.is_file() {
-        eprintln!("SKIP launch_forwards_the_session_label_to_the_daemon: fixture missing");
+    if acos_test_support::require_prereq(apk.is_file(), "launch_forwards_the_session_label_to_the_daemon", "fixture missing").is_none() {
         return;
     }
     let (socket, captured, daemon) = fake_daemon_capturing(json!({}));

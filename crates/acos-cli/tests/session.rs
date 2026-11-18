@@ -81,8 +81,7 @@ fn timing_free_ladder(stages: &Value) -> Value {
 #[test]
 fn launch_counter_reports_the_honest_stage_ladder() {
     let apk = workspace_path("../../fixtures/build/apps/counter.apk");
-    if !apk.is_file() {
-        eprintln!("SKIP launch_counter...: counter.apk fixture missing");
+    if acos_test_support::require_prereq(apk.is_file(), "launch_counter_reports_the_honest_stage_ladder", "counter.apk fixture missing").is_none() {
         return;
     }
     let out = run(&[
@@ -107,7 +106,7 @@ fn launch_counter_reports_the_honest_stage_ladder() {
         if message.to_ascii_lowercase().contains("boot classpath")
             || message.to_ascii_lowercase().contains("bootclasspath")
         {
-            eprintln!("SKIP launch_counter...: boot classpath missing: {message}");
+            acos_test_support::require_prereq(false, "launch_counter_reports_the_honest_stage_ladder", &format!("launch_counter...: boot classpath missing: {message}"));
             return;
         }
         panic!("launch produced no ladder: {message}");
@@ -244,8 +243,7 @@ fn launch_counter_reports_the_honest_stage_ladder() {
 #[test]
 fn warm_boot_cache_reaches_first_frame_on_every_launch() {
     let apk = workspace_path("../../fixtures/build/apps/counter.apk");
-    if !apk.is_file() {
-        eprintln!("SKIP warm_boot_cache_reaches_first_frame_on_every_launch: fixture missing");
+    if acos_test_support::require_prereq(apk.is_file(), "warm_boot_cache_reaches_first_frame_on_every_launch", "fixture missing").is_none() {
         return;
     }
     // A private cache directory so an ambient warm cache cannot mask the bug
@@ -276,7 +274,7 @@ fn warm_boot_cache_reaches_first_frame_on_every_launch() {
             .unwrap_or("")
             .to_ascii_lowercase();
         if message.contains("boot classpath") || message.contains("bootclasspath") {
-            eprintln!("SKIP warm_boot_cache... ({label}): boot classpath missing: {message}");
+            acos_test_support::require_prereq(false, "warm_boot_cache_reaches_first_frame_on_every_launch", &format!("warm_boot_cache... ({label}): boot classpath missing: {message}"));
             return Value::Null;
         }
         v
