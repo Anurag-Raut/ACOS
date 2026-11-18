@@ -87,7 +87,6 @@ public class MainApplication extends Application implements ReactApplication {
           .putString("debug_http_host", BuildVariant.METRO_HOST)
           .commit();
     }
-    if (BuildVariant.DEBUG) { com.facebook.common.logging.FLog.setMinimumLoggingLevel(android.util.Log.DEBUG); } // TEMP-METRO2
     super.onCreate();
     // RN 0.81 merges its separate JNI libraries (react_featureflagsjni,
     // reactnativejni, fabricjni, ...) into libreactnative.so. Register the OSS

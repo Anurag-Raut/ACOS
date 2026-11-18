@@ -1,0 +1,13 @@
+pasta pasta 2026_10_02.cba3570
+metro up pid=1108687 port=8081 project=/home/Qui/.t3/worktrees/acos/t3-1502dc2b-001b8647d15c8356/.cache/metro1/app2
+host_bundle http=200 bytes=4937649
+netd_up rc=0 pasta="pasta_version": "2026_10_02.cba3570"
+hostport_add rc=0 {  "up": true,  "supervisor": {    "pid": 1109254,    "exe": "/home/Qui/.t3/worktrees/acos/t3-1502dc2b-001b8647d15c8356/.cache/metro2-target/release/acos-netd",    "build_id": "cba0109b56fdcccd",    "
+launch rc=0 stage=pass
+session=s_cli
+text_found 'Hello ACOS' after 0s (observe-before.json)
+reload#1 nodes=8 explicit_id_errors=0 finished_thread=0
+reload#2 nodes=8 explicit_id_errors=0 finished_thread=0
+reload#3 nodes=8 explicit_id_errors=0 finished_thread=0
+reload#4 nodes= explicit_id_errors=0 finished_thread=0
+reload#5 nodes= explicit_id_errors=0 finished_thread=0

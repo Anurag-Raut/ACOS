@@ -549,3 +549,50 @@ fn window_surface_destroy_drops_its_blast_child() {
         "no layer is left to draw after the window is destroyed"
     );
 }
+
+/// METRO2c: a destroyed layer gives its handle binder back. The pool is
+/// pre-allocated (`LAYER_HANDLE_POOL`), so before this a session could only ever
+/// create that many layers *in total*: a React Native dev loop (each reload
+/// shows and dismisses a popup window = two layers) failed `createSurface` on
+/// the 4th reload and the guest aborted in `BLASTBufferQueue`. Create and
+/// destroy several times the pool size; every `createSurface` must succeed and
+/// a dead handle must stay refused until it is reissued.
+#[test]
+fn destroyed_layers_return_their_handles_so_a_long_session_never_exhausts_the_pool() {
+    let mut rig = rig();
+    let pool = surface_client::LAYER_HANDLE_POOL;
+    let mut last_dead: Option<BinderId> = None;
+    for round in 0..(pool * 4) {
+        let (handle, _id) = rig.create_surface(&format!("window-{round}"), None);
+        let dropped = rig
+            .state
+            .lock()
+            .expect("state")
+            .destroy_layer_tree(handle);
+        assert_eq!(dropped, 1, "round {round}: the layer is destroyed");
+        last_dead = Some(handle);
+    }
+    assert!(last_dead.is_some());
+    // The live set is still bounded: `pool` live layers fit, one more does not.
+    let mut live = Vec::new();
+    for i in 0..pool {
+        live.push(rig.create_surface(&format!("live-{i}"), None).0);
+    }
+    let mut data = Parcel::new();
+    data.write_interface_token(ISURFACE_COMPOSER_CLIENT)
+        .expect("token");
+    data.write_string16("one-too-many").expect("name");
+    data.write_int32(0);
+    data.write_strong_binder_opt(None);
+    data.write_int32(1);
+    data.write_int32(0);
+    data.set_data_position(0);
+    let mut reply = Parcel::new();
+    let over = rig
+        .host
+        .transact(rig.client, CREATE_SURFACE, &mut data, &mut reply, 0);
+    assert!(
+        over.is_err(),
+        "more live layers than the pool is still refused, never a fabricated handle"
+    );
+}

@@ -1,6 +1,6 @@
 # METRO — the React Native dev loop on ACOS (v0.5.0)
 
-**Status: METRO1 landed the network leg; the reload leg is diagnosed and open.**
+**Status: METRO1 landed the network leg; METRO2c root-caused the reload leg (RN legacy-arch race + one ACOS pool-leak bug, fixed) and proved Fast Refresh as the deterministic path — `results/handoff/METRO2/REPORT.md`.**
 Owner context: `docs/PLAN_2026-11-16.md` §3.3 (network module, host-port opt-in),
 ADR-0030 (+ amendments 1–3) and `docs/OWNER_DIRECTION_2026-11-18.md`
 (~100 % compatibility, beat the stock emulator, attachable building blocks,
@@ -77,6 +77,19 @@ still show the pre-edit text.
 - Verdict data: `{reload: {delivered: true, context: "new", first_frame_after_ms,
   tree_nodes_before/after, stale_roots: 0}}` — a reload that leaves a stale root
   is a named failure, never a pass.
+
+#### METRO2c outcome (2026-11-18)
+
+The "stale tree" had three causes, only one of them in ACOS: (a) the driver reloaded
+before Metro had rebuilt (fixed: wait until the dev server serves the new text);
+(b) RN 0.81's **legacy-architecture** reload races the old tree's JS unmount against
+the new context's `addRootView` on the same `ReactRootView` — lost by a few ms on
+ACOS because context creation is fast (measured, §2 of the report), so the tree
+doubles; (c) a real ACOS bug, the 16-entry layer-handle pool was never refilled, so
+the guest aborted on the 4th reload (fixed, `surface_client.rs`). RN's recommended
+path for a component edit, **Fast Refresh over `/hot`**, needs no context restart and
+passes 5/5 (`tools/metro/metro2-verdict.py`). An explicit full reload stays
+best-effort on the legacy arch and is reported with `stale_roots`/`explicit_id_errors`.
 
 ### METRO3 — fast refresh (HMR) over the `/hot` websocket
 Same wiring as METRO2 but the incremental path: an edit that only touches a

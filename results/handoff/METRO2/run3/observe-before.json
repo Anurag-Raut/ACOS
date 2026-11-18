@@ -1,0 +1,439 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "ui.tree"
+  ],
+  "fidelity": "art-reference",
+  "metrics": {
+    "wall_ms": 0
+  },
+  "ok": true,
+  "request_id": "req_10216b_18e91a72212e3943",
+  "result": {
+    "animations": "on",
+    "engine": "art",
+    "engine_frozen": false,
+    "evidence": {
+      "frame": "host-observed",
+      "input_acks": "guest-asserted",
+      "logs": "guest-asserted",
+      "state_change": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "evidence_label": "guest-asserted",
+    "extra_apks": [],
+    "frame": {
+      "buffer_generation": 8,
+      "captured_at": "2026-11-18T09:43:24.041Z",
+      "frame_number": 2,
+      "frame_seq": 3,
+      "identity": "C1 buffer metadata (no pixel copy)",
+      "md5": "",
+      "pixels": false
+    },
+    "insets": "report",
+    "last_frame_seq": 3,
+    "max_nodes": 2000,
+    "modules": [
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "accessibility",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.permissions",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.notifications",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "sensors",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "feedback.vibrator",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "location",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "net.telephony",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.bluetooth",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.biometric",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "real",
+        "id": "network",
+        "profile": "real",
+        "reason": "real internet through the acos-netd relay; relay session acos-s_cli",
+        "state": "attached"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "webview",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.usb",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.dropbox",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.nfc",
+        "profile": "off",
+        "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.wallpaper",
+        "profile": "off",
+        "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.print",
+        "profile": "off",
+        "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.search",
+        "profile": "off",
+        "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.usage",
+        "profile": "off",
+        "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.dpm",
+        "profile": "off",
+        "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.role",
+        "profile": "off",
+        "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "geo.country",
+        "profile": "off",
+        "reason": "off: a detected country is a location claim ACOS cannot back",
+        "state": "off"
+      }
+    ],
+    "node_count": 8,
+    "package": "dev.acos.fixtures.rnhello",
+    "session_id": "s_cli",
+    "settle": {
+      "bound": "strict-event",
+      "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+      "mode": "strict",
+      "probe_seq": 11,
+      "settled": true,
+      "strict_rule": "event",
+      "tree_age_ms": 39
+    },
+    "stage_reached": "first_frame",
+    "timing": {
+      "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+      "read": {
+        "absorb_ms": 0,
+        "guest_command_ms": 41
+      },
+      "total_ms": 43
+    },
+    "tree": {
+      "compact": true,
+      "cursor": 0,
+      "max_nodes": 2000,
+      "next_cursor": null,
+      "node_count": 8,
+      "nodes": [
+        {
+          "bounds": "[376,1053][705,1138]",
+          "checked": false,
+          "class": "com.facebook.react.views.text.ReactTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_",
+          "package": "",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "selected": false,
+          "text": "Hello ACOS",
+          "visible": true,
+          "window": "main"
+        },
+        {
+          "bounds": "[352,1148][729,1199]",
+          "checked": false,
+          "class": "com.facebook.react.views.text.ReactTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_",
+          "package": "",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "selected": false,
+          "text": "React Native + Hermes",
+          "visible": true,
+          "window": "main"
+        },
+        {
+          "bounds": "[453,1231][628,1324]",
+          "checked": false,
+          "class": "com.facebook.react.views.view.ReactViewGroup",
+          "clickable": true,
+          "content_desc": "TAP ME",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_",
+          "package": "",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "selected": false,
+          "text": "",
+          "visible": true,
+          "window": "main"
+        },
+        {
+          "bounds": "[474,1252][607,1303]",
+          "checked": false,
+          "class": "com.facebook.react.views.text.ReactTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n8_",
+          "package": "",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "selected": false,
+          "text": "TAP ME",
+          "visible": true,
+          "window": "main"
+        },
+        {
+          "bounds": "[465,1355][615,1412]",
+          "checked": false,
+          "class": "com.facebook.react.views.text.ReactTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_",
+          "package": "",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "selected": false,
+          "text": "count: 0",
+          "visible": true,
+          "window": "main"
+        },
+        {
+          "bounds": "[26,2146][1054,2272]",
+          "checked": false,
+          "class": "com.facebook.react.views.view.ReactViewGroup",
+          "clickable": true,
+          "content_desc": "!, The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For more information, please see https://reactnative.dev/blog/2024/10/23/the-new-architecture-is-here",
+          "enabled": true,
+          "focused": false,
+          "id": "n9_",
+          "package": "",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "selected": false,
+          "text": "",
+          "visible": true,
+          "window": "main"
+        },
+        {
+          "bounds": "[74,2185][100,2233]",
+          "checked": false,
+          "class": "com.facebook.react.views.text.ReactTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n12_",
+          "package": "",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "selected": false,
+          "text": "!",
+          "visible": true,
+          "window": "main"
+        },
+        {
+          "bounds": "[161,2180][958,2238]",
+          "checked": false,
+          "class": "com.facebook.react.views.text.ReactTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n11_",
+          "package": "",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "selected": false,
+          "text": "The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For more information, please see https://reactnative.dev/blog/2024/10/23/the-new-architecture-is-here",
+          "visible": true,
+          "window": "main"
+        }
+      ],
+      "note": "compact view: visible text/content_desc nodes in reading order; full tree: /home/Qui/.t3/worktrees/acos/t3-1502dc2b-001b8647d15c8356/.cache/m/rt/art-sessions/s_cli/tree/3.json",
+      "returned": 8,
+      "truncated": false,
+      "windows": [
+        {
+          "bounds": [
+            0,
+            0,
+            1080,
+            2400
+          ],
+          "focus": true,
+          "id": "7510edc",
+          "kind": "application",
+          "label": "main",
+          "touchable": true,
+          "type_name": "TYPE_BASE_APPLICATION",
+          "z": 0
+        }
+      ]
+    },
+    "tree_next_cursor": null,
+    "tree_path": "/home/Qui/.t3/worktrees/acos/t3-1502dc2b-001b8647d15c8356/.cache/m/rt/art-sessions/s_cli/tree/3.json",
+    "truncated": false,
+    "trust": "trusted",
+    "windows": 1
+  },
+  "session_id": "s_cli",
+  "status": "pass"
+}

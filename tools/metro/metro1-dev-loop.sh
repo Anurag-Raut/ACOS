@@ -187,7 +187,7 @@ PY
 fi
 
 # The JS source change a developer would make (same file Metro serves).
-python3 - "$APP/index.js" <<'PY'
+python3 - "$APP/${METRO_EDIT_FILE:-index.js}" <<'PY'
 import sys
 p=sys.argv[1]
 s=open(p).read()
@@ -195,13 +195,29 @@ assert "Hello ACOS" in s, "index.js changed under us; nothing to edit"
 open(p,"w").write(s.replace("Hello ACOS", "Hello Metro (reloaded)"))
 print("edited", p)
 PY
-cp "$APP/index.js" "$OUT/index.js.after"
-grep -n "Hello Metro" "$OUT/index.js.after" | tee -a "$LOG"
+cp "$APP/${METRO_EDIT_FILE:-index.js}" "$OUT/edited.js.after"
+grep -n "Hello Metro" "$OUT/edited.js.after" | tee -a "$LOG"
+
+# A developer saves, Metro rebuilds, THEN presses `r`. Reloading before Metro has
+# seen the edit makes the app fetch (and faithfully re-run) the OLD bundle, which
+# is not a guest bug: wait until the dev server itself serves the new text.
+for _ in $(seq 1 60); do
+    curl -s -m 60 "http://127.0.0.1:$PORT/index.bundle?platform=android&dev=true&minify=false&app=rnhello&modulesOnly=false&runModule=true" \
+        | grep -q "Hello Metro (reloaded)" && break
+    sleep 1
+done
+note "metro_serves_new_text_before_reload=$(curl -s -m 60 "http://127.0.0.1:$PORT/index.bundle?platform=android&dev=true&minify=false&app=rnhello&modulesOnly=false&runModule=true" | grep -c 'Hello Metro (reloaded)')"
 
 # Metro's reload broadcast: what `r` in the React Native CLI does.
+if [ "${METRO_NO_RELOAD:-0}" = "1" ]; then
+    # Fast Refresh arm (METRO3's path, RN's recommended one for a component
+    # edit): no reload is sent; the HMR update on /hot has to land by itself.
+    note "reload SKIPPED (METRO_NO_RELOAD=1): waiting for the HMR update"
+else
 curl -s -m 10 -o "$OUT/reload-response.txt" -w 'reload http=%{http_code}\n' \
     "http://127.0.0.1:$PORT/reload" | tee -a "$LOG"
 note "reload_body=$(cat "$OUT/reload-response.txt")"
+fi
 
 if ! wait_for_text "Hello Metro" after 90; then
     # Is the *server* the problem or the guest? Re-ask the same URL the app asks.

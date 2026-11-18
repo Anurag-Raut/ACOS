@@ -759,6 +759,20 @@ impl SurfaceState {
             // Dropping `layer.latest` closes this process's memfd dup.
             self.stats.remove(&handle);
             self.destroyed.insert(handle);
+            // Give the handle binder back. The pool is pre-allocated (a
+            // `createSurface` has no `&mut ServiceHost` to mint a node), so a
+            // destroyed layer that kept its handle leaked one of the
+            // `LAYER_HANDLE_POOL` entries for the life of the session: every
+            // window/popup/dialog consumed two (the window surface and its
+            // BLAST child) and the Nth one failed `createSurface` with
+            // `layer-handle pool exhausted` -> `BLASTBufferQueue: mSurfaceControl
+            // must not be NULL` -> SIGABRT (a React Native dev loop hit it on
+            // the 4th reload: each reload shows and dismisses a loading popup).
+            // Reuse is FIFO (`take_handle` pops the tail, this inserts at the
+            // head) so a handle is the last one handed out again, and the
+            // `destroyed` tombstone above stays until `create_layer` reissues
+            // it, so a late transaction naming the dead layer is still refused.
+            self.handle_pool.insert(0, BinderId(handle));
         }
         self.destroyed_layers += dropped as u64;
         self.released_buffers += released;
