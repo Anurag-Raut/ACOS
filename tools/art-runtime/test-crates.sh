@@ -32,6 +32,18 @@ time_limit=${ACOS_TEST_TIME:-2400}
 # Unset the opt-out: this command's contract is "no skips".
 unset ACOS_ALLOW_ART_SKIP ACOS_ALLOW_TEST_SKIP
 
+# A private runtime dir and session socket for every run (BRIEF_COMMON_0316,
+# HYG4): the daemon tests must never reach the owner's ~/.local daemon or the
+# shared /tmp/acos-<uid> fallback. The socket path must fit SUN_LEN (107 bytes).
+rt_dir="$wt/.cache/rt-$task"
+mkdir -p -m 700 "$rt_dir"
+export ACOS_RUNTIME_DIR="$rt_dir"
+export ACOS_SESSION_SOCKET="$rt_dir/session.sock"
+if [ "${#ACOS_SESSION_SOCKET}" -gt 107 ]; then
+  echo "FAIL: ACOS_SESSION_SOCKET is ${#ACOS_SESSION_SOCKET} bytes (SUN_LEN is 107); use a shorter task name" >&2
+  exit 2
+fi
+
 # The documented opt-out list (HYG3): tests whose prerequisite cannot exist on
 # this host. Each one FAILS loudly when run directly (require_prereq); the gate
 # excludes it with libtest `--skip` and prints the list, so it is never a silent
