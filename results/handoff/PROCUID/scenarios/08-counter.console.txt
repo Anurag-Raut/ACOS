@@ -1,6 +1,6 @@
 verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
   engine: art (mode: live)
   services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
-  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/counter.yaml (sha 45506d6ab497), apk /home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/fixtures/build/apps/counter.apk (sha 8170835e70f2), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/counter.yaml (sha 45506d6ab497), apk /home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/fixtures/build/apps/counter.apk (sha bd51e860d959), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
   artifacts: results/handoff/PROCUID/scenarios/08-counter
   steps: 24

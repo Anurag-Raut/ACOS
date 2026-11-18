@@ -4,27 +4,27 @@
       "actual": {
         "bounds": [
           42,
-          368,
+          494,
           273,
-          494
+          620
         ],
         "hint": "",
-        "node": "n4_dev.acos.fixtures.proca:id/start_b",
-        "text": "Start B",
+        "node": "n4_dev.acos.fixtures.proca:id/bind_b",
+        "text": "Bind B",
         "visible": true
       },
       "expected": {
         "bounds": null,
         "selector": {
-          "id": "start_b"
+          "id": "bind_b"
         },
         "text": {
-          "exact": "Start B"
+          "exact": "Bind B"
         }
       },
       "kind": "text",
       "matched_node_ids": [
-        "n4_dev.acos.fixtures.proca:id/start_b"
+        "n4_dev.acos.fixtures.proca:id/bind_b"
       ],
       "passed": true
     }
@@ -62,7 +62,7 @@
     "reason": "strict-event",
     "settled": true,
     "strict_rule": "event",
-    "tree_age_ms": 39,
+    "tree_age_ms": 38,
     "waited_ms": 0,
     "waited_ms_source": "step"
   },

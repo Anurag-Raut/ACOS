@@ -21,7 +21,7 @@
               2400
             ],
             "focus": true,
-            "id": "550a56a",
+            "id": "d725f63",
             "kind": "application",
             "label": "main",
             "touchable": true,
@@ -36,7 +36,7 @@
               488
             ],
             "focus": false,
-            "id": "160d58",
+            "id": "14315b5",
             "kind": "accessibility_overlay",
             "label": "window-2032#1",
             "touchable": false,
@@ -68,7 +68,7 @@
     "doc": "docs/SANDBOX_CERTIFICATION.md",
     "section": "§8.7"
   },
-  "duration_ms": 1,
+  "duration_ms": 0,
   "evidence": [
     {
       "kind": "tree",
@@ -89,8 +89,8 @@
   "settle": {
     "ack_ms": 5,
     "bound": "strict-event",
-    "first_change_ms": 88,
-    "frame_ms": 1033,
+    "first_change_ms": 79,
+    "frame_ms": 1010,
     "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
     "mode": "strict",
     "pixels_changed": true,

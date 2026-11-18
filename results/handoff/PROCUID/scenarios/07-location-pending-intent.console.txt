@@ -1,6 +1,6 @@
 verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
   engine: art (mode: live)
   services: core:real, location:scripted attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, net.telephony, hw.bluetooth, hw.biometric, network, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
-  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/location-pending-intent.yaml (sha ea54a29a0244), apk /home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/fixtures/build/apps/location-probe.apk (sha aacbe84e2c67), engine art, fidelity art-reference
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/location-pending-intent.yaml (sha ea54a29a0244), apk /home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/fixtures/build/apps/location-probe.apk (sha 48c679d0723b), engine art, fidelity art-reference
   artifacts: results/handoff/PROCUID/scenarios/07-location-pending-intent
   steps: 18

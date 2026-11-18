@@ -1,6 +1,6 @@
 verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
   engine: art (mode: live)
   services: core:real, system.permissions:real attached; off: accessibility, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
-  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/binderpid.yaml (sha 5fc00955cfe6), apk /home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/fixtures/build/apps/proc-a.apk (sha 888f1b858e44), engine art, fidelity art-reference
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/binderpid.yaml (sha 570d8cfea45a), apk /home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/fixtures/build/apps/proc-a.apk (sha 2dc939890552), engine art, fidelity art-reference
   artifacts: results/handoff/PROCUID/scenarios/01-binderpid
-  steps: 11
+  steps: 7

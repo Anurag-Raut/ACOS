@@ -2,16 +2,18 @@
   "assertions": [
     {
       "actual": {
-        "matched_lines": 1,
+        "matched_lines": 2,
         "sample": [
-          "AcosProcB: ACOSPROBE b identity pkg=dev.acos.fixtures.procb uid=10193 pid=2 calling-uid=10193 calling-pid=2 uid-pkg=dev.acos.fixtures.procb internet=-1 self=-1"
+          "AcosProcB: ACOSPROBE b identity pkg=dev.acos.fixtures.procb uid=10193 pid=2 calling-uid=10193 calling-pid=2 uid-pkg=dev.acos.fixtures.procb internet=-1 self=-1 data=/data/app-data/dev.acos.fixtures.procb data-exists=1 data-owner=10193",
+          "AcosProcB: ACOSPROBE b transact code=1 in=ping -> out=echo:ping pid=2 caller-uid=10192 caller-pid=242621"
         ]
       },
       "expected": {
         "min_matches": 1,
         "ordered": true,
         "patterns": [
-          "^ACOSPROBE b identity pkg=dev\\.acos\\.fixtures\\.procb uid=10193 pid=[1-9][0-9]* calling-uid=10193 calling-pid=[1-9][0-9]* uid-pkg=dev\\.acos\\.fixtures\\.procb internet=-?[0-9]+ self=-1$"
+          "^ACOSPROBE b identity pkg=dev\\.acos\\.fixtures\\.procb uid=10193 pid=[1-9][0-9]* calling-uid=10193 calling-pid=[1-9][0-9]* uid-pkg=dev\\.acos\\.fixtures\\.procb internet=-?[0-9]+ self=-1 data=/data/app-data/dev\\.acos\\.fixtures\\.procb data-exists=1 data-owner=10193$",
+          "^ACOSPROBE b transact code=1 in=ping -> out=echo:ping pid=[1-9][0-9]* caller-uid=10192 caller-pid=[1-9][0-9]*$"
         ],
         "since_previous_step": false,
         "tag": null

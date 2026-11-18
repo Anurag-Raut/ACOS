@@ -20,22 +20,22 @@
     "doc": "docs/SANDBOX_CERTIFICATION.md",
     "section": "§8.7"
   },
-  "duration_ms": 528,
+  "duration_ms": 534,
   "evidence": [
     {
       "kind": "tree",
-      "path": "tree/7.json"
+      "path": "tree/8.json"
     },
     {
       "kind": "frame",
-      "path": "frames/7.png"
+      "path": "frames/8.png"
     },
     {
       "kind": "step",
       "path": "steps/06-tap.json"
     }
   ],
-  "frame_seq": 7,
+  "frame_seq": 8,
   "index": 6,
   "input": {
     "expect_change": "auto",
@@ -99,8 +99,8 @@
   "settle": {
     "ack_ms": 5,
     "bound": "host-window-removal",
-    "first_change_ms": 121,
-    "frame_ms": 226,
+    "first_change_ms": 90,
+    "frame_ms": 233,
     "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
     "mode": "strict",
     "pixels_changed": true,
@@ -108,7 +108,7 @@
     "settled": true,
     "state_changed": null,
     "strict_rule": "event",
-    "waited_ms": 528,
+    "waited_ms": 534,
     "waited_ms_source": "step"
   },
   "status": "pass",

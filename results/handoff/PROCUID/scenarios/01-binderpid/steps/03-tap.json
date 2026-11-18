@@ -49,44 +49,44 @@
       "hit": {
         "clickable": true,
         "consumer": {
-          "bounds": "[42,368][273,494]",
+          "bounds": "[42,494][273,620]",
           "class": "android.widget.Button",
           "clickable": true,
           "content_desc": "",
           "enabled": true,
           "focused": false,
-          "id": "n4_dev.acos.fixtures.proca:id/start_b",
+          "id": "n4_dev.acos.fixtures.proca:id/bind_b",
           "password": false,
-          "resource_id": "dev.acos.fixtures.proca:id/start_b",
+          "resource_id": "dev.acos.fixtures.proca:id/bind_b",
           "scrollable": false,
-          "text": "Start B",
-          "visible_bounds": "[42,368][273,494]",
+          "text": "Bind B",
+          "visible_bounds": "[42,494][273,620]",
           "window": "main"
         },
         "method": "tree-geometry",
         "node": {
-          "bounds": "[42,368][273,494]",
+          "bounds": "[42,494][273,620]",
           "class": "android.widget.Button",
           "clickable": true,
           "content_desc": "",
           "enabled": true,
           "focused": false,
-          "id": "n4_dev.acos.fixtures.proca:id/start_b",
+          "id": "n4_dev.acos.fixtures.proca:id/bind_b",
           "password": false,
-          "resource_id": "dev.acos.fixtures.proca:id/start_b",
+          "resource_id": "dev.acos.fixtures.proca:id/bind_b",
           "scrollable": false,
-          "text": "Start B",
-          "visible_bounds": "[42,368][273,494]",
+          "text": "Bind B",
+          "visible_bounds": "[42,494][273,620]",
           "window": "main"
         },
         "suggest": null
       },
       "point": {
         "x": 157,
-        "y": 431
+        "y": 557
       },
       "selector": {
-        "selector": "id==\"start_b\""
+        "selector": "id==\"bind_b\""
       }
     }
   },
@@ -99,8 +99,8 @@
   "settle": {
     "ack_ms": 5,
     "bound": "strict-event",
-    "first_change_ms": 75,
-    "frame_ms": 933,
+    "first_change_ms": 70,
+    "frame_ms": 929,
     "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
     "mode": "strict",
     "pixels_changed": true,

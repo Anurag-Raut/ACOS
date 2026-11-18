@@ -26,7 +26,7 @@
     "evidence": {
       "artifacts": "results/handoff/PROCUID/scenarios/01-binderpid",
       "engine_report": "results/handoff/PROCUID/scenarios/01-binderpid/engine.json",
-      "pruned_session_captures": 4,
+      "pruned_session_captures": 3,
       "retention": "results/handoff/PROCUID/scenarios/01-binderpid/retention.json",
       "verdict": "results/handoff/PROCUID/scenarios/01-binderpid/verdict.json"
     },
@@ -250,9 +250,9 @@
     ],
     "session_exit": {
       "abi": null,
-      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=98MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1537509-i1581836.scope)",
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=71MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p242615-i212044.scope)",
       "code": null,
-      "disk_free_bytes": 212886786048,
+      "disk_free_bytes": 208668946432,
       "guest_crash": null,
       "guest_exit": 0,
       "guest_signal": null,
@@ -264,9 +264,9 @@
       "retryable": false,
       "stage": "teardown-evidence"
     },
-    "session_id": "verify-1537497",
+    "session_id": "verify-242603",
     "timing": {
-      "attributed_ms": 2934,
+      "attributed_ms": 1399,
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
@@ -275,13 +275,13 @@
         "mode": "shared-fixed"
       },
       "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
-      "session_start_ms": 150,
+      "session_start_ms": 142,
       "steps": [
         {
           "index": 0,
           "status": "pass",
           "step": "launch",
-          "wall_ms": 155
+          "wall_ms": 171
         },
         {
           "index": 1,
@@ -305,7 +305,7 @@
           "index": 4,
           "status": "pass",
           "step": "assert_text",
-          "wall_ms": 279
+          "wall_ms": 242
         },
         {
           "index": 5,
@@ -316,42 +316,18 @@
         {
           "index": 6,
           "status": "pass",
-          "step": "tap",
-          "wall_ms": 538
-        },
-        {
-          "index": 7,
-          "status": "pass",
-          "step": "assert_text",
-          "wall_ms": 0
-        },
-        {
-          "index": 8,
-          "status": "pass",
-          "step": "tap",
-          "wall_ms": 976
-        },
-        {
-          "index": 9,
-          "status": "pass",
-          "step": "assert_text",
-          "wall_ms": 0
-        },
-        {
-          "index": 10,
-          "status": "pass",
-          "step": "assert_log",
+          "step": "assert_no_crash",
           "wall_ms": 0
         }
       ],
-      "unattributed_ms": 29,
+      "unattributed_ms": 25,
       "unit": "ms",
-      "verdict_wall_ms": 2963
+      "verdict_wall_ms": 1424
     },
     "trust": "trusted",
     "unsupported_steps": []
   },
   "provenance_rule": null,
-  "request_id": "req_1775d9_18e8eb598399d220",
+  "request_id": "req_3b3ab_18e909d668efd43f",
   "verdict_status": "pass"
 }

@@ -4,9 +4,9 @@
       "actual": {
         "matched_lines": 5,
         "sample": [
-          "AcosA11yProbe: screenshot_result kind=capture status=0 width=1080 height=2400 format=1 usage=257 color_space=sRGB IEC61966-2.1 (Linear) timestamp=21032945",
-          "AcosA11yProbe: screenshot_pixel unavailable=hardware_bitmap_needs_egl",
           "AcosA11yProbe: screenshot_result kind=interval status=3",
+          "AcosA11yProbe: screenshot_result kind=capture status=0 width=1080 height=2400 format=1 usage=257 color_space=sRGB IEC61966-2.1 (Linear) timestamp=1617521",
+          "AcosA11yProbe: screenshot_pixel unavailable=hardware_bitmap_needs_egl",
           "AcosA11yProbe: screenshot_result kind=display status=4",
           "AcosA11yProbe: screenshot_result kind=secure status=6"
         ]

@@ -1,12 +1,12 @@
 {
   "frame": {
-    "frame_seq": 10,
-    "produced_at": "2026-11-17T19:20:32.789Z",
+    "frame_seq": 6,
+    "produced_at": "2026-11-18T04:39:04.539Z",
     "cause_id": "art",
     "width": 1080,
     "height": 2400,
     "density": 420,
-    "content_hash": "25db9ec7eab314597391c7b1b4273a69",
+    "content_hash": "586953f2010cd265c54c5d220ea2a9a0",
     "meaningful": true,
     "display_origin": [
       0,
@@ -135,7 +135,7 @@
                       "id": "n4_dev.acos.fixtures.proca:id/status",
                       "class": "android.widget.TextView",
                       "resource_id": "dev.acos.fixtures.proca:id/status",
-                      "text": "A started B",
+                      "text": "A transact echo:ping",
                       "hint": "",
                       "content_desc": "",
                       "bounds": [
@@ -161,7 +161,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "5974923",
+                      "window_id": "e8fb557",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -196,7 +196,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "5974923",
+                      "window_id": "e8fb557",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -231,7 +231,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "5974923",
+                      "window_id": "e8fb557",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -266,7 +266,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "5974923",
+                      "window_id": "e8fb557",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -274,7 +274,7 @@
                   ],
                   "package": "",
                   "window": "main",
-                  "window_id": "5974923",
+                  "window_id": "e8fb557",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -282,7 +282,7 @@
               ],
               "package": "",
               "window": "main",
-              "window_id": "5974923",
+              "window_id": "e8fb557",
               "window_type": "TYPE_BASE_APPLICATION",
               "window_kind": "application",
               "window_z": 0
@@ -373,7 +373,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "5974923",
+                      "window_id": "e8fb557",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -402,7 +402,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "5974923",
+                      "window_id": "e8fb557",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -410,7 +410,7 @@
                   ],
                   "package": "",
                   "window": "main",
-                  "window_id": "5974923",
+                  "window_id": "e8fb557",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -439,7 +439,7 @@
                   "children": [],
                   "package": "",
                   "window": "main",
-                  "window_id": "5974923",
+                  "window_id": "e8fb557",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -447,7 +447,7 @@
               ],
               "package": "",
               "window": "main",
-              "window_id": "5974923",
+              "window_id": "e8fb557",
               "window_type": "TYPE_BASE_APPLICATION",
               "window_kind": "application",
               "window_z": 0
@@ -455,7 +455,7 @@
           ],
           "package": "",
           "window": "main",
-          "window_id": "5974923",
+          "window_id": "e8fb557",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -490,7 +490,7 @@
           "children": [],
           "package": "",
           "window": "main",
-          "window_id": "5974923",
+          "window_id": "e8fb557",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -525,7 +525,7 @@
           "children": [],
           "package": "",
           "window": "main",
-          "window_id": "5974923",
+          "window_id": "e8fb557",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -533,7 +533,7 @@
       ],
       "package": "",
       "window": "main",
-      "window_id": "5974923",
+      "window_id": "e8fb557",
       "window_type": "TYPE_BASE_APPLICATION",
       "window_kind": "application",
       "window_z": 0
@@ -543,7 +543,7 @@
   "text_available": true,
   "windows": [
     {
-      "id": "5974923",
+      "id": "e8fb557",
       "label": "main",
       "type_name": "TYPE_BASE_APPLICATION",
       "kind": "application",

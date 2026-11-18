@@ -48,7 +48,7 @@
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 1543650,
+      "guest_process_group": 245285,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -254,7 +254,7 @@
       "ok": true,
       "package": "dev.acos.fixtures.locationprobe",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-1543619-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-245266-1/view.sock",
       "width": 1080
     },
     {
@@ -550,7 +550,7 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 41,
+      "probe_seq": 44,
       "x": 540.0,
       "y": 902.0
     },
@@ -568,7 +568,7 @@
       "frame_seq": 5,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 42
+      "probe_seq": 45
     },
     {
       "cmd": "logs",
@@ -825,7 +825,7 @@
       "frame_seq": 6,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 45
+      "probe_seq": 48
     },
     {
       "cmd": "logs",
@@ -1074,9 +1074,9 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 151,
+      "kept": 149,
       "ok": true,
-      "total": 151
+      "total": 149
     },
     {
       "cmd": "logs",
@@ -1545,18 +1545,18 @@
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 158,
+      "kept": 156,
       "ok": true,
-      "total": 158
+      "total": 156
     },
     {
-      "buffer_generation": 63,
+      "buffer_generation": 62,
       "cmd": "tree",
-      "frame_number": 63,
+      "frame_number": 62,
       "frame_seq": 7,
       "ok": true,
-      "png": "results/handoff/PROCUID/scenarios/07-location-pending-intent/art-frames/live-frames/acos-c1-layer3-frame-63-g63-c7.png",
-      "probe_seq": 52
+      "png": "results/handoff/PROCUID/scenarios/07-location-pending-intent/art-frames/live-frames/acos-c1-layer3-frame-62-g62-c7.png",
+      "probe_seq": 50
     },
     {
       "cmd": "logs",

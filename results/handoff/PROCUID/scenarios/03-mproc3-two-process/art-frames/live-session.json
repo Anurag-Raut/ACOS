@@ -32,7 +32,7 @@
   "retention": {
     "note": "passing run: intermediate C1 captures were pruned; the frames a step declared are in frames/<seq>.png",
     "policy": "referenced",
-    "pruned_captures": 7
+    "pruned_captures": 9
   },
   "steps": [
     {
@@ -44,11 +44,11 @@
         "input_hash": "ff39b037f1d6b9ff",
         "mode": "shared-fixed"
       },
-      "buffer_generation": 2,
+      "buffer_generation": 1,
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 1537983,
+      "guest_process_group": 243463,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -254,7 +254,7 @@
       "ok": true,
       "package": "dev.acos.fixtures.proca",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-1537973-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-243437-1/view.sock",
       "width": 1080
     },
     {
@@ -305,7 +305,7 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 43,
+      "probe_seq": 42,
       "x": 157.0,
       "y": 431.0
     },
@@ -323,16 +323,25 @@
       "frame_seq": 4,
       "ok": true,
       "png_pruned": true,
+      "probe_seq": 43
+    },
+    {
+      "buffer_generation": 59,
+      "cmd": "tree",
+      "frame_number": 59,
+      "frame_seq": 5,
+      "ok": true,
+      "png_pruned": true,
       "probe_seq": 44
     },
     {
       "buffer_generation": 67,
       "cmd": "tree",
       "frame_number": 7,
-      "frame_seq": 5,
+      "frame_seq": 6,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 49
+      "probe_seq": 48
     },
     {
       "cmd": "logs",
@@ -357,23 +366,23 @@
     },
     {
       "cmd": "tree",
-      "frame_seq": 6,
+      "frame_seq": 7,
       "ok": true,
       "pixels": false,
-      "probe_seq": 50
+      "probe_seq": 49
     },
     {
       "buffer_generation": 76,
       "cmd": "tap",
       "frame_number": 7,
-      "frame_seq": 7,
+      "frame_seq": 8,
       "handled": [
         true,
         true
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 60,
+      "probe_seq": 59,
       "x": 157.0,
       "y": 643.0
     },
@@ -388,10 +397,10 @@
       "buffer_generation": 76,
       "cmd": "tree",
       "frame_number": 7,
-      "frame_seq": 8,
+      "frame_seq": 9,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 61
+      "probe_seq": 60
     },
     {
       "cmd": "logs",
@@ -418,7 +427,7 @@
       "idle_kill_secs": 2,
       "idle_ms": 2000,
       "package": "dev.acos.fixtures.procb",
-      "pid": 1538133,
+      "pid": 243578,
       "reason": "idle",
       "tag": 1,
       "window_sessions": 1
@@ -432,23 +441,23 @@
     },
     {
       "cmd": "tree",
-      "frame_seq": 9,
+      "frame_seq": 10,
       "ok": true,
       "pixels": false,
-      "probe_seq": 62
+      "probe_seq": 61
     },
     {
       "buffer_generation": 128,
       "cmd": "tap",
       "frame_number": 59,
-      "frame_seq": 10,
+      "frame_seq": 11,
       "handled": [
         true,
         true
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 98,
+      "probe_seq": 97,
       "x": 157.0,
       "y": 431.0
     },
@@ -463,7 +472,16 @@
       "buffer_generation": 128,
       "cmd": "tree",
       "frame_number": 59,
-      "frame_seq": 11,
+      "frame_seq": 12,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 98
+    },
+    {
+      "buffer_generation": 128,
+      "cmd": "tree",
+      "frame_number": 59,
+      "frame_seq": 13,
       "ok": true,
       "png_pruned": true,
       "probe_seq": 99
@@ -472,10 +490,10 @@
       "buffer_generation": 136,
       "cmd": "tree",
       "frame_number": 7,
-      "frame_seq": 12,
+      "frame_seq": 14,
       "ok": true,
-      "png": "results/handoff/PROCUID/scenarios/03-mproc3-two-process/art-frames/live-frames/acos-c1-layer11-frame-7-g136-c12.png",
-      "probe_seq": 104
+      "png": "results/handoff/PROCUID/scenarios/03-mproc3-two-process/art-frames/live-frames/acos-c1-layer11-frame-7-g136-c14.png",
+      "probe_seq": 102
     },
     {
       "cmd": "logs",
@@ -712,7 +730,7 @@
     {
       "capture_source": "acos-c1-buffer",
       "cmd": "close",
-      "frame_seq": 12,
+      "frame_seq": 14,
       "ok": true
     }
   ]

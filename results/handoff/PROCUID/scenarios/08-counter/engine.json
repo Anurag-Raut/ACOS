@@ -248,9 +248,9 @@
     ],
     "session_exit": {
       "abi": null,
-      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=110MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1545582-i1522006.scope)",
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=110MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p245617-i191807.scope)",
       "code": null,
-      "disk_free_bytes": 200194129920,
+      "disk_free_bytes": 208552833024,
       "guest_crash": null,
       "guest_exit": 0,
       "guest_signal": null,
@@ -262,9 +262,9 @@
       "retryable": false,
       "stage": "teardown-evidence"
     },
-    "session_id": "verify-1545571",
+    "session_id": "verify-245606",
     "timing": {
-      "attributed_ms": 3752,
+      "attributed_ms": 6125,
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
@@ -273,7 +273,7 @@
         "mode": "shared-fixed"
       },
       "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
-      "session_start_ms": 165,
+      "session_start_ms": 160,
       "steps": [
         {
           "index": 0,
@@ -291,7 +291,7 @@
           "index": 2,
           "status": "pass",
           "step": "assert_text",
-          "wall_ms": 1
+          "wall_ms": 0
         },
         {
           "index": 3,
@@ -315,7 +315,7 @@
           "index": 6,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 999
+          "wall_ms": 968
         },
         {
           "index": 7,
@@ -333,13 +333,13 @@
           "index": 9,
           "status": "pass",
           "step": "capture",
-          "wall_ms": 56
+          "wall_ms": 54
         },
         {
           "index": 10,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 986
+          "wall_ms": 1000
         },
         {
           "index": 11,
@@ -357,13 +357,13 @@
           "index": 13,
           "status": "pass",
           "step": "rotate",
-          "wall_ms": 291
+          "wall_ms": 199
         },
         {
           "index": 14,
           "status": "pass",
           "step": "assert_log",
-          "wall_ms": 0
+          "wall_ms": 1
         },
         {
           "index": 15,
@@ -375,7 +375,7 @@
           "index": 16,
           "status": "pass",
           "step": "rotate",
-          "wall_ms": 176
+          "wall_ms": 199
         },
         {
           "index": 17,
@@ -387,7 +387,7 @@
           "index": 18,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 990
+          "wall_ms": 987
         },
         {
           "index": 19,
@@ -405,7 +405,7 @@
           "index": 21,
           "status": "pass",
           "step": "back",
-          "wall_ms": 41
+          "wall_ms": 2505
         },
         {
           "index": 22,
@@ -420,14 +420,14 @@
           "wall_ms": 0
         }
       ],
-      "unattributed_ms": 1416,
+      "unattributed_ms": 17,
       "unit": "ms",
-      "verdict_wall_ms": 5168
+      "verdict_wall_ms": 6142
     },
     "trust": "trusted",
     "unsupported_steps": []
   },
   "provenance_rule": null,
-  "request_id": "req_179563_18e8eb5f43208c4d",
+  "request_id": "req_3bf66_18e909db1dbc1255",
   "verdict_status": "pass"
 }

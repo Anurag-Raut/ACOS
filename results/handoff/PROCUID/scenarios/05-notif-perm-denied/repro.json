@@ -1,8 +1,8 @@
 {
   "acos_version": "0.3.0",
-  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/fixtures/build/apps/notif-perm-probe.apk",
-  "apk_sha256": "bd4855970dfed21ea85b1bf3bb068de515d6cb7a4b3045c11d7cf34cecdb6047",
-  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/notif-perm-denied.yaml",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/fixtures/build/apps/notif-perm-probe.apk",
+  "apk_sha256": "9b2494fefafef81ea82a76640d67017370896941833076bc10875d50e91be095",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/notif-perm-denied.yaml",
   "scenario_sha256": "004fe036e96feadc91e5dc9b4a15eb1b8e978927b967de24a7823747f8d85535",
   "flags": [],
   "isolation": "process",

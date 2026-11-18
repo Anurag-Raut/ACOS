@@ -43,7 +43,7 @@
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 1538718,
+      "guest_process_group": 244488,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -249,7 +249,7 @@
       "ok": true,
       "package": "dev.acos.fixtures.notifpermprobe",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-1538709-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-244479-1/view.sock",
       "width": 1080
     },
     {

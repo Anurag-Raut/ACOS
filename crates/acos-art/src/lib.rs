@@ -1308,6 +1308,16 @@ fn guest_uid_override() -> Result<Option<Option<u32>>> {
         Err(e) => return Err(Error::InvalidGuestUid(e.to_string())),
         Ok(v) => v,
     };
+    parse_guest_uid_override(Some(&raw))
+}
+
+/// [`guest_uid_override`] without the environment: the seam's whole rule, so a
+/// unit test can pin it (`ACOS_ART_GUEST_UID` is process-wide and every test in
+/// this binary shares it).
+fn parse_guest_uid_override(raw: Option<&str>) -> Result<Option<Option<u32>>> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
     let value = raw.trim();
     if value.eq_ignore_ascii_case("host") {
         return Ok(Some(None));
@@ -1540,6 +1550,13 @@ impl<'a> Sandbox<'a> {
             if let Some(uid) = self.run_uid()? {
                 a.push("--unshare-user".into());
                 a.push("--uid".into());
+                a.push(uid.to_string().into());
+                // PROCUID: an app process's primary group is its own uid
+                // (`Process.myGid()` == uid on a device; the supplementary
+                // groups are the permissions' `inet` etc.). One id per process,
+                // mapped onto the caller's inside this process's own user
+                // namespace.
+                a.push("--gid".into());
                 a.push(uid.to_string().into());
             }
         }
@@ -2652,6 +2669,10 @@ mod tests {
             acos_services::pms::FIXTURE_UID.to_string(),
             "the default is the PMS fixture uid: {argv:?}"
         );
+        // The process's primary gid is its uid, exactly like a device app
+        // (`Process.myGid()` == `Process.myUid()`).
+        let gsep = argv.iter().position(|a| a == "--gid").expect("--gid");
+        assert_eq!(argv[gsep + 1], argv[sep + 1], "uid and gid are one id");
         // Two processes, two packages' uids: the second package's process runs as
         // the uid the package manager allocated for it.
         let second = 10_193u32;
@@ -2667,6 +2688,11 @@ mod tests {
             .collect();
         let sep2 = argv2.iter().position(|a| a == "--uid").expect("--uid");
         assert_eq!(argv2[sep2 + 1], second.to_string(), "argv: {argv2:?}");
+        assert_eq!(
+            argv2[sep2 + 3],
+            second.to_string(),
+            "the second process's gid is its own uid: {argv2:?}"
+        );
         assert_ne!(argv[sep + 1], argv2[sep2 + 1], "two apps, two uids");
         // A host-side staging step keeps the caller's uid (it is not an app).
         let mut sb3 = root.sandbox();
@@ -2681,7 +2707,49 @@ mod tests {
             !argv3.iter().any(|a| a == "--uid"),
             "staging is not an app process: {argv3:?}"
         );
+        assert!(
+            !argv3.iter().any(|a| a == "--gid"),
+            "staging is not an app process: {argv3:?}"
+        );
         let _ = fs::remove_dir_all(&data);
+    }
+
+    /// PROCUID: the explicit `ACOS_ART_GUEST_UID` seam takes **any** application
+    /// uid, because in a multi-process session the uid a caller wants to pin is a
+    /// package's uid (10193 for the second package), not only the PMS fixture
+    /// uid. It still refuses everything that is not an application uid: host uid
+    /// 1000 is `SYSTEM_UID`, which the framework takes privileged branches on.
+    #[test]
+    fn the_guest_uid_seam_takes_an_application_uid_and_nothing_else() {
+        assert!(
+            matches!(parse_guest_uid_override(None), Ok(None)),
+            "no override = the per-process uid"
+        );
+        assert_eq!(parse_guest_uid_override(Some("host")).unwrap(), Some(None));
+        assert_eq!(
+            parse_guest_uid_override(Some("10193")).unwrap(),
+            Some(Some(10_193)),
+            "a second package's uid is a valid pin"
+        );
+        assert_eq!(
+            parse_guest_uid_override(Some(" 10000 ")).unwrap(),
+            Some(Some(10_000)),
+            "the first application uid"
+        );
+        assert_eq!(
+            parse_guest_uid_override(Some("19999")).unwrap(),
+            Some(Some(19_999)),
+            "the last application uid"
+        );
+        for raw in ["1000", "0", "9999", "20000", "sudo", "10192.5"] {
+            assert!(
+                matches!(
+                    parse_guest_uid_override(Some(raw)),
+                    Err(Error::InvalidGuestUid(_))
+                ),
+                "{raw} must be refused (never a silent fallback)"
+            );
+        }
     }
 
     /// `flag src dst` appears as consecutive argv elements.

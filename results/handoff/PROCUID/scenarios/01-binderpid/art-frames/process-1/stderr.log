@@ -1,4 +1,4 @@
-ACOSART[render]: dlopen(libandroid_runtime.so) ok @0xdc4206c9ba72fe0d (default namespace, RTLD_GLOBAL)
+ACOSART[render]: dlopen(libandroid_runtime.so) ok @0xd5657deb2116f5fb (default namespace, RTLD_GLOBAL)
 ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)
-ACOSLAUNCH MARK crash-handler installed sigchain=0x7efd5d9a9d40
-E3G[warn]: 
+ACOSLAUNCH MARK crash-handler installed sigchain=0x7f6b79f5dd40
+E3G[warn]: peer socket closed (0)

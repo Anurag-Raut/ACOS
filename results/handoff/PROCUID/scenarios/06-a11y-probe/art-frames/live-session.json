@@ -48,7 +48,7 @@
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 1539689,
+      "guest_process_group": 244747,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -276,7 +276,7 @@
       "ok": true,
       "package": "dev.acos.fixtures.a11yprobe",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-1539633-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-244738-1/view.sock",
       "width": 1080
     },
     {
@@ -287,37 +287,37 @@
       "total": 89
     },
     {
-      "buffer_generation": 54,
+      "buffer_generation": 55,
       "cmd": "tree",
       "frame_number": 1,
       "frame_seq": 1,
       "ok": true,
-      "png": "results/handoff/PROCUID/scenarios/06-a11y-probe/art-frames/live-frames/acos-c1-layer6-frame-1-g54-c1.png",
-      "probe_seq": 34
+      "png": "results/handoff/PROCUID/scenarios/06-a11y-probe/art-frames/live-frames/acos-c1-layer6-frame-1-g55-c1.png",
+      "probe_seq": 37
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 168,
+      "kept": 169,
       "ok": true,
-      "total": 168
+      "total": 169
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 168,
+      "kept": 169,
       "ok": true,
-      "total": 168
+      "total": 169
     },
     {
       "cmd": "tree",
       "frame_seq": 2,
       "ok": true,
       "pixels": false,
-      "probe_seq": 35
+      "probe_seq": 38
     },
     {
-      "buffer_generation": 107,
+      "buffer_generation": 108,
       "cmd": "tap",
       "frame_number": 1,
       "frame_seq": 3,
@@ -327,96 +327,96 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 71,
+      "probe_seq": 75,
       "x": 540.0,
       "y": 1140.0
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 228,
+      "kept": 229,
       "ok": true,
-      "total": 228
+      "total": 229
     },
     {
       "cmd": "tree",
       "frame_seq": 4,
       "ok": true,
       "pixels": false,
-      "probe_seq": 72
+      "probe_seq": 76
     },
     {
-      "buffer_generation": 159,
+      "buffer_generation": 160,
       "cmd": "tap",
       "frame_number": 1,
       "frame_seq": 5,
@@ -425,143 +425,143 @@
         true
       ],
       "ok": true,
-      "png": "results/handoff/PROCUID/scenarios/06-a11y-probe/art-frames/live-frames/acos-c1-layer6-frame-1-g159-c5.png",
-      "probe_seq": 106,
+      "png": "results/handoff/PROCUID/scenarios/06-a11y-probe/art-frames/live-frames/acos-c1-layer6-frame-1-g160-c5.png",
+      "probe_seq": 112,
       "x": 539.0,
       "y": 1518.0
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 281,
+      "kept": 282,
       "ok": true,
-      "total": 281
+      "total": 282
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 296,
+      "kept": 297,
       "ok": true,
-      "total": 296
+      "total": 297
     },
     {
       "attached": [

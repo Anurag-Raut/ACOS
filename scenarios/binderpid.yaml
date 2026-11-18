@@ -30,12 +30,17 @@
 # asserted literally: a regex that admits "any 10xxx" could not tell a
 # per-package uid from a session-wide one, which is exactly the defect this
 # scenario exists to catch.
+#
+# proc-b's process is started by the **bind alone** (MPROC8): no activity is
+# launched in it, so `bindService` is the only reason it exists, exactly like a
+# device.
 version: 1
 name: binderpid
 description: >-
   proc-a and proc-b (two uids) each report their own binder identity and their
-  per-uid INTERNET permission, and proc-b's bound service reports proc-a as the
-  caller of a guest -> guest transaction.
+  per-uid INTERNET permission; proc-b's process starts from proc-a's bind alone
+  and its bound service reports proc-a as the caller of a guest -> guest
+  transaction.
 app: fixtures/build/apps/proc-a.apk
 extra_apks:
   - fixtures/build/apps/proc-b.apk
@@ -70,56 +75,31 @@ steps:
       clear_state: true
 
   - assert_text:
-      selector: {id: start_b}
-      text: {exact: "Start B"}
+      selector: {id: bind_b}
+      text: {exact: "Bind B"}
       timeout_ms: 20000
 
   # 1. proc-a's own identity: its uid is the package's, its own thread answers
   #    its own pid, the package manager resolves that uid to its package, and the
   #    session's runtime grant makes INTERNET granted for *its* uid (0).
   #    BINDERPID: the placeholder pid (4242) or a uid of 0 fails this pattern.
+  #    PROCUID: this process's own `getDataDir()` (`ApplicationInfo.dataDir`,
+  #    ACOS's `/data/app-data/<pkg>` for the framework's `/data/user/0/<pkg>`)
+  #    exists and the kernel reports it owned by the uid **this process runs
+  #    as** (10192; B below sees the same dir under its own uid, 10193).
   - assert_log:
       since_previous_step: false
       timeout_ms: 20000
       ordered: true
       patterns:
-        - '^ACOSPROBE a identity pkg=dev\.acos\.fixtures\.proca uid=10192 pid=[1-9][0-9]* calling-uid=10192 calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.proca internet=-?[0-9]+ self=0 by-name=0$'
+        - '^ACOSPROBE a identity pkg=dev\.acos\.fixtures\.proca uid=10192 pid=[1-9][0-9]* calling-uid=10192 calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.proca internet=-?[0-9]+ self=0 by-name=0 data=/data/app-data/dev\.acos\.fixtures\.proca data-exists=1 data-owner=10192$'
 
-  # 2. Spawn proc-b (its own guest process, its own uid in the same session) by
-  #    starting its Activity. `Application.onCreate` runs once per process and
-  #    reports the process's own identity plus the per-uid permission answer.
-  - tap:
-      selector: {id: start_b}
-
-  - assert_text:
-      selector: {id: finish}
-      text: {exact: "Finish B"}
-      timeout_ms: 60000
-
-  # B's process reports the identity *it* has: its **own** uid (10193, the one
-  # the package manager allocated for proc-b), the framework resolving that uid
-  # to proc-b's package, and a permission answer for that uid — not A's.
-  # `self=-1` is `checkSelfPermission(INTERNET)` denied for proc-b's uid while A
-  # above answered `self=0` for the same permission: one grant, two apps, two
-  # answers. Before PROCUID both processes ran as one uid (A's), so B reported
-  # A's uid, A's package and A's grant.
-  - assert_log:
-      since_previous_step: false
-      timeout_ms: 30000
-      ordered: true
-      patterns:
-        - '^ACOSPROBE b identity pkg=dev\.acos\.fixtures\.procb uid=10193 pid=[1-9][0-9]* calling-uid=10193 calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.procb internet=-?[0-9]+ self=-1$'
-
-  # 3. Back to A, then bind B's already-running service: a guest -> guest
-  #    transaction whose target reports the caller it saw.
-  - tap:
-      selector: {id: finish}
-
-  - assert_text:
-      selector: {id: start_b}
-      text: {exact: "Start B"}
-      timeout_ms: 60000
-
+  # 2. Spawn proc-b with the **bind alone** — no activity: `bindService` is the
+  #    only thing that asks for proc-b's process, exactly like MPROC8
+  #    (`scenarios/mproc8-bind-only.yaml`). `Application.onCreate` runs once per
+  #    process and reports the process's own identity plus the per-uid permission
+  #    answer. (BINDERPID started B's Activity here first, because a bind-only
+  #    spawn used to never receive its create/bind; that workaround is gone.)
   - tap:
       selector: {id: bind_b}
 
@@ -128,10 +108,25 @@ steps:
       text: {exact: "A transact echo:ping"}
       timeout_ms: 60000
 
-  # B's `onTransact` sees A as the caller: A's uid (10192, its own — not 1000 =
-  # system_server, and not B's 10193) and A's host-visible pid.
+  # 3. B's process reports the identity *it* has: its **own** uid (10193, the one
+  #    the package manager allocated for proc-b), the framework resolving that uid
+  #    to proc-b's package, its own data dir owned by that uid, and a permission
+  #    answer for that uid — not A's. `self=-1` is
+  #    `checkSelfPermission(INTERNET)` denied for proc-b's uid while A above
+  #    answered `self=0` for the same permission: one grant, two apps, two
+  #    answers. Before PROCUID both processes ran as one uid (A's), so B reported
+  #    A's uid, A's package and A's grant.
+  #
+  #    The transaction line follows: A bound B's service and transacted, so B's
+  #    `onTransact` sees A as the caller — A's uid (10192) and A's host-visible
+  #    pid, never 1000 (`system_server`) and never B's uid.
   - assert_log:
       since_previous_step: false
-      timeout_ms: 20000
+      timeout_ms: 30000
+      ordered: true
       patterns:
+        - '^ACOSPROBE b identity pkg=dev\.acos\.fixtures\.procb uid=10193 pid=[1-9][0-9]* calling-uid=10193 calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.procb internet=-?[0-9]+ self=-1 data=/data/app-data/dev\.acos\.fixtures\.procb data-exists=1 data-owner=10193$'
         - '^ACOSPROBE b transact code=1 in=ping -> out=echo:ping pid=[1-9][0-9]* caller-uid=10192 caller-pid=[1-9][0-9]*$'
+
+  - assert_no_crash:
+      timeout_ms: 5000

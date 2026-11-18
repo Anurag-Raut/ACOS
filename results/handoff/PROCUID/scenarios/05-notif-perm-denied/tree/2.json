@@ -1,7 +1,7 @@
 {
   "frame": {
     "frame_seq": 2,
-    "produced_at": "2026-11-17T19:20:34.635Z",
+    "produced_at": "2026-11-18T04:39:15.570Z",
     "cause_id": "art",
     "width": 1080,
     "height": 2400,
@@ -161,7 +161,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "7e5d012",
+                      "window_id": "24f6e67",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -196,7 +196,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "7e5d012",
+                      "window_id": "24f6e67",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -231,7 +231,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "7e5d012",
+                      "window_id": "24f6e67",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -239,7 +239,7 @@
                   ],
                   "package": "",
                   "window": "main",
-                  "window_id": "7e5d012",
+                  "window_id": "24f6e67",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -247,7 +247,7 @@
               ],
               "package": "",
               "window": "main",
-              "window_id": "7e5d012",
+              "window_id": "24f6e67",
               "window_type": "TYPE_BASE_APPLICATION",
               "window_kind": "application",
               "window_z": 0
@@ -338,7 +338,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "7e5d012",
+                      "window_id": "24f6e67",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -367,7 +367,7 @@
                       "children": [],
                       "package": "",
                       "window": "main",
-                      "window_id": "7e5d012",
+                      "window_id": "24f6e67",
                       "window_type": "TYPE_BASE_APPLICATION",
                       "window_kind": "application",
                       "window_z": 0
@@ -375,7 +375,7 @@
                   ],
                   "package": "",
                   "window": "main",
-                  "window_id": "7e5d012",
+                  "window_id": "24f6e67",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -404,7 +404,7 @@
                   "children": [],
                   "package": "",
                   "window": "main",
-                  "window_id": "7e5d012",
+                  "window_id": "24f6e67",
                   "window_type": "TYPE_BASE_APPLICATION",
                   "window_kind": "application",
                   "window_z": 0
@@ -412,7 +412,7 @@
               ],
               "package": "",
               "window": "main",
-              "window_id": "7e5d012",
+              "window_id": "24f6e67",
               "window_type": "TYPE_BASE_APPLICATION",
               "window_kind": "application",
               "window_z": 0
@@ -420,7 +420,7 @@
           ],
           "package": "",
           "window": "main",
-          "window_id": "7e5d012",
+          "window_id": "24f6e67",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -455,7 +455,7 @@
           "children": [],
           "package": "",
           "window": "main",
-          "window_id": "7e5d012",
+          "window_id": "24f6e67",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -490,7 +490,7 @@
           "children": [],
           "package": "",
           "window": "main",
-          "window_id": "7e5d012",
+          "window_id": "24f6e67",
           "window_type": "TYPE_BASE_APPLICATION",
           "window_kind": "application",
           "window_z": 0
@@ -498,7 +498,7 @@
       ],
       "package": "",
       "window": "main",
-      "window_id": "7e5d012",
+      "window_id": "24f6e67",
       "window_type": "TYPE_BASE_APPLICATION",
       "window_kind": "application",
       "window_z": 0
@@ -508,7 +508,7 @@
   "text_available": true,
   "windows": [
     {
-      "id": "7e5d012",
+      "id": "24f6e67",
       "label": "main",
       "type_name": "TYPE_BASE_APPLICATION",
       "kind": "application",

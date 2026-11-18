@@ -46,39 +46,39 @@
         "backend": "acos-art-session",
         "context": "tap",
         "frame_seq": 3,
-        "reason": "newer-store",
+        "reason": "queue",
         "settle": {
-          "ack_ms": 10,
+          "ack_ms": 15,
           "animating": false,
           "bound": "timeout",
-          "first_change_ms": 628,
+          "first_change_ms": 489,
           "frame_ms": null,
           "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
           "mode": "strict",
           "pixels_changed": true,
           "probe": {
             "guest_stall_pending_ms": null,
-            "newest_sample_age_ms": 17,
+            "newest_sample_age_ms": 8,
             "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
             "stale_samples": 0,
             "wake_failures": 0,
-            "wakes_sent": 33
+            "wakes_sent": 29
           },
-          "reason": "newer-store",
+          "reason": "queue",
           "settled": false,
           "state_changed": null,
           "strict_rule": "event"
         }
       },
       "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure and never a pass. For a screen that animates forever in pixels (React Native `Animated`, a custom `ValueAnimator`), `animations:off` does not help: use `settle: content` on the step (content-stable: the UI tree's text, nodes and state stop changing even while the pixels keep moving). Tree/text assertions and `wait_for` accept it too, and `wait_for`/`assert_*` fall back to it by default. The latest tree/frame is kept in the step evidence.",
-      "message": "tap: strict settle timed out (newer-store); the step is a non-pass because the screen was still changing when the deadline elapsed",
+      "message": "tap: strict settle timed out (queue); the step is a non-pass because the screen was still changing when the deadline elapsed",
       "retryable": true
     },
     "step_index": 1,
     "summary": "step 1 (tap) timeout"
   },
   "fidelity": "art-reference",
-  "finished_at": "2026-11-17T19:21:04.791Z",
+  "finished_at": "2026-11-18T04:39:42.301Z",
   "insets": "report",
   "isolation": "process",
   "mode": "live",
@@ -285,7 +285,7 @@
   "notes": [
     "stopped at step 1 (tap): timeout; later steps were not executed",
     "scenario expected `pass`, engine produced `timeout` — result is a truthful partial",
-    "artifacts: referenced (keep-all): 12 file(s) / 1.2 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json",
+    "artifacts: referenced (keep-all): 12 file(s) / 1.1 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json",
     "fidelity: module `accessibility` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
@@ -319,8 +319,8 @@
     "engine": "art",
     "fidelity": "art-reference",
     "scenario": {
-      "mtime_ns": 1794941177218888067,
-      "path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/gaten-backstack.yaml",
+      "mtime_ns": 1794976306710322271,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/gaten-backstack.yaml",
       "sha256": "a3389de15c41da9aba167ae4ddeeed35bf09661a41cf42c801b2c2bdf8bd8720",
       "sha256_12": "a3389de15c41",
       "size_bytes": 3898
@@ -350,30 +350,30 @@
     "fidelity": "art-reference",
     "flags": [],
     "isolation": "process",
-    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/gaten-backstack.yaml",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/gaten-backstack.yaml",
     "scenario_sha256": "a3389de15c41da9aba167ae4ddeeed35bf09661a41cf42c801b2c2bdf8bd8720"
   },
-  "request_id": "req_1797e9_18e8eb609e71e590",
+  "request_id": "req_3c1cf_18e909dcad735693",
   "resources": {
-    "events": 260,
+    "events": 258,
     "frames_captured": 1,
-    "memory_mib": 240,
-    "peak_rss_bytes": 252682240,
+    "memory_mib": 241,
+    "peak_rss_bytes": 253022208,
     "sessions": 1,
     "steps": 2,
-    "wall_ms": 11746
+    "wall_ms": 11622
   },
   "scenario": {
     "name": "gaten-backstack",
-    "path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/gaten-backstack.yaml",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/gaten-backstack.yaml",
     "sha256": "a3389de15c41da9aba167ae4ddeeed35bf09661a41cf42c801b2c2bdf8bd8720"
   },
   "schema_version": 1,
   "session_exit": {
     "abi": null,
-    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=265MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1546285-i1510169.scope)",
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=252MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p246245-i266036.scope)",
     "code": null,
-    "disk_free_bytes": 199888125952,
+    "disk_free_bytes": 208275021824,
     "guest_crash": null,
     "guest_exit": 0,
     "guest_signal": null,
@@ -386,12 +386,12 @@
     "stage": "teardown-evidence"
   },
   "session_id": "s_art_gaten-dev-f344272-x86_64-release-unsigned",
-  "started_at": "2026-11-17T19:20:53.045Z",
+  "started_at": "2026-11-18T04:39:30.679Z",
   "status": "timeout",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 1563,
+      "duration_ms": 1539,
       "evidence": [
         {
           "kind": "step",
@@ -410,7 +410,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 10182,
+      "duration_ms": 10082,
       "error": {
         "class": "infra_timeout",
         "code": "TIMEOUT",
@@ -419,32 +419,32 @@
           "backend": "acos-art-session",
           "context": "tap",
           "frame_seq": 3,
-          "reason": "newer-store",
+          "reason": "queue",
           "settle": {
-            "ack_ms": 10,
+            "ack_ms": 15,
             "animating": false,
             "bound": "timeout",
-            "first_change_ms": 628,
+            "first_change_ms": 489,
             "frame_ms": null,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
             "mode": "strict",
             "pixels_changed": true,
             "probe": {
               "guest_stall_pending_ms": null,
-              "newest_sample_age_ms": 17,
+              "newest_sample_age_ms": 8,
               "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
               "stale_samples": 0,
               "wake_failures": 0,
-              "wakes_sent": 33
+              "wakes_sent": 29
             },
-            "reason": "newer-store",
+            "reason": "queue",
             "settled": false,
             "state_changed": null,
             "strict_rule": "event"
           }
         },
         "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure and never a pass. For a screen that animates forever in pixels (React Native `Animated`, a custom `ValueAnimator`), `animations:off` does not help: use `settle: content` on the step (content-stable: the UI tree's text, nodes and state stop changing even while the pixels keep moving). Tree/text assertions and `wait_for` accept it too, and `wait_for`/`assert_*` fall back to it by default. The latest tree/frame is kept in the step evidence.",
-        "message": "tap: strict settle timed out (newer-store); the step is a non-pass because the screen was still changing when the deadline elapsed",
+        "message": "tap: strict settle timed out (queue); the step is a non-pass because the screen was still changing when the deadline elapsed",
         "retryable": true
       },
       "evidence": [
@@ -480,7 +480,7 @@
               "scrollable": false,
               "text": "",
               "visible_bounds": "[0,0][1080,2400]",
-              "window": "window-1#1"
+              "window": "main"
             },
             "suggest": {
               "bounds": "[58,2117][1022,2253]",
@@ -495,7 +495,7 @@
               "scrollable": false,
               "text": "",
               "visible_bounds": "[58,2117][1022,2253]",
-              "window": "main"
+              "window": "window-1#0"
             }
           },
           "point": {

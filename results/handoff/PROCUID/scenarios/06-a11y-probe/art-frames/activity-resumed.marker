@@ -4,7 +4,7 @@ lifecycle=onCreate,onStart,onResume
 resumed=true
 called=true
 stopped=false
-window=com.android.internal.policy.PhoneWindow@80c4847
+window=com.android.internal.policy.PhoneWindow@aaabc65
 timeout_ms=12000
 first_traversal=traversed=true app_visible=true skip=traversal:view_not_visible
 draw_skip=traversal:view_not_visible

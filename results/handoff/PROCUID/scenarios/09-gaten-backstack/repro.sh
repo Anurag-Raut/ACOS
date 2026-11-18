@@ -3,6 +3,6 @@
 set -eu
 acos verify \
   --apk /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk \
-  --scenario /home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/gaten-backstack.yaml \
+  --scenario /home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/gaten-backstack.yaml \
   --artifacts "${1:?usage: sh repro.sh <new-artifacts-dir>}" \
   --required-fidelity art-reference

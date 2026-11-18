@@ -2,8 +2,8 @@
   "animations": "on",
   "app": {
     "package": "dev.acos.fixtures.notifpermprobe",
-    "path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/fixtures/build/apps/notif-perm-probe.apk",
-    "sha256": "bd4855970dfed21ea85b1bf3bb068de515d6cb7a4b3045c11d7cf34cecdb6047"
+    "path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/fixtures/build/apps/notif-perm-probe.apk",
+    "sha256": "9b2494fefafef81ea82a76640d67017370896941833076bc10875d50e91be095"
   },
   "backend": "acos-native",
   "certification": "certified-with-limits",
@@ -37,7 +37,7 @@
   },
   "extra_apks": [],
   "fidelity": "art-reference",
-  "finished_at": "2026-11-17T19:20:34.640Z",
+  "finished_at": "2026-11-18T04:39:15.573Z",
   "insets": "report",
   "isolation": "process",
   "mode": "live",
@@ -266,17 +266,17 @@
   ],
   "provenance": {
     "apk": {
-      "mtime_ns": 1794942518709983480,
-      "path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/fixtures/build/apps/notif-perm-probe.apk",
-      "sha256": "bd4855970dfed21ea85b1bf3bb068de515d6cb7a4b3045c11d7cf34cecdb6047",
-      "sha256_12": "bd4855970dfe",
+      "mtime_ns": 1794975490514862663,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/fixtures/build/apps/notif-perm-probe.apk",
+      "sha256": "9b2494fefafef81ea82a76640d67017370896941833076bc10875d50e91be095",
+      "sha256_12": "9b2494fefafe",
       "size_bytes": 12756
     },
     "engine": "art",
     "fidelity": "art-reference",
     "scenario": {
-      "mtime_ns": 1794941248685286270,
-      "path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/notif-perm-denied.yaml",
+      "mtime_ns": 1794975406454889509,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/notif-perm-denied.yaml",
       "sha256": "004fe036e96feadc91e5dc9b4a15eb1b8e978927b967de24a7823747f8d85535",
       "sha256_12": "004fe036e96f",
       "size_bytes": 2438
@@ -287,8 +287,8 @@
   "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
   "reproducer": {
     "acos_version": "0.3.0",
-    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/fixtures/build/apps/notif-perm-probe.apk",
-    "apk_sha256": "bd4855970dfed21ea85b1bf3bb068de515d6cb7a4b3045c11d7cf34cecdb6047",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/fixtures/build/apps/notif-perm-probe.apk",
+    "apk_sha256": "9b2494fefafef81ea82a76640d67017370896941833076bc10875d50e91be095",
     "backend": "acos-native",
     "display": {
       "density_dpi": 420,
@@ -299,30 +299,30 @@
     "fidelity": "art-reference",
     "flags": [],
     "isolation": "process",
-    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/notif-perm-denied.yaml",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/notif-perm-denied.yaml",
     "scenario_sha256": "004fe036e96feadc91e5dc9b4a15eb1b8e978927b967de24a7823747f8d85535"
   },
-  "request_id": "req_177af3_18e8eb5c89df6e76",
+  "request_id": "req_3bb82_18e909d94023126f",
   "resources": {
     "events": 90,
     "frames_captured": 4,
     "memory_mib": 15,
-    "peak_rss_bytes": 16035840,
+    "peak_rss_bytes": 16207872,
     "sessions": 1,
     "steps": 5,
-    "wall_ms": 183
+    "wall_ms": 174
   },
   "scenario": {
     "name": "notif-perm-denied",
-    "path": "/home/Qui/.t3/worktrees/acos/t3-8e08fc7d-641fdb5b7092eb8a/scenarios/notif-perm-denied.yaml",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-ca5420a3-71bbf9dbb1a182eb/scenarios/notif-perm-denied.yaml",
     "sha256": "004fe036e96feadc91e5dc9b4a15eb1b8e978927b967de24a7823747f8d85535"
   },
   "schema_version": 1,
   "session_exit": {
     "abi": null,
-    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=43MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1538874-i1445736.scope)",
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=56MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p244631-i295210.scope)",
     "code": null,
-    "disk_free_bytes": 212182253568,
+    "disk_free_bytes": 208877559808,
     "guest_crash": null,
     "guest_exit": 0,
     "guest_signal": null,
@@ -335,12 +335,12 @@
     "stage": "teardown-evidence"
   },
   "session_id": "s_art_notif-perm-probe",
-  "started_at": "2026-11-17T19:20:34.457Z",
+  "started_at": "2026-11-18T04:39:15.399Z",
   "status": "pass",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 119,
+      "duration_ms": 116,
       "evidence": [
         {
           "kind": "step",
@@ -359,7 +359,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 57,
+      "duration_ms": 54,
       "evidence": [
         {
           "kind": "tree",
@@ -388,7 +388,7 @@
         "settled": true,
         "strict_rule": "event",
         "tree_age_ms": 40,
-        "waited_ms": 56,
+        "waited_ms": 54,
         "waited_ms_source": "step"
       },
       "status": "pass",
@@ -491,7 +491,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 0,
+      "duration_ms": 1,
       "evidence": [
         {
           "kind": "tree",

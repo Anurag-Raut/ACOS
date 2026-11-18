@@ -32,7 +32,7 @@
   "retention": {
     "note": "passing run: intermediate C1 captures were pruned; the frames a step declared are in frames/<seq>.png",
     "policy": "referenced",
-    "pruned_captures": 2
+    "pruned_captures": 3
   },
   "steps": [
     {
@@ -44,11 +44,11 @@
         "input_hash": "ff39b037f1d6b9ff",
         "mode": "shared-fixed"
       },
-      "buffer_generation": 2,
+      "buffer_generation": 1,
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 1537790,
+      "guest_process_group": 243128,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -254,7 +254,7 @@
       "ok": true,
       "package": "dev.acos.fixtures.proca",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-1537780-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-243116-1/view.sock",
       "width": 1080
     },
     {
@@ -305,7 +305,7 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 43,
+      "probe_seq": 40,
       "x": 157.0,
       "y": 557.0
     },
@@ -323,16 +323,25 @@
       "frame_seq": 4,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 44
+      "probe_seq": 41
+    },
+    {
+      "buffer_generation": 59,
+      "cmd": "tree",
+      "frame_number": 59,
+      "frame_seq": 5,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 42
     },
     {
       "buffer_generation": 60,
       "cmd": "tree",
       "frame_number": 60,
-      "frame_seq": 5,
+      "frame_seq": 6,
       "ok": true,
-      "png": "results/handoff/PROCUID/scenarios/02-mproc8-bind-only/art-frames/live-frames/acos-c1-layer3-frame-60-g60-c5.png",
-      "probe_seq": 46
+      "png": "results/handoff/PROCUID/scenarios/02-mproc8-bind-only/art-frames/live-frames/acos-c1-layer3-frame-60-g60-c6.png",
+      "probe_seq": 44
     },
     {
       "cmd": "logs",
@@ -566,7 +575,7 @@
     {
       "capture_source": "acos-c1-buffer",
       "cmd": "close",
-      "frame_seq": 5,
+      "frame_seq": 6,
       "ok": true
     }
   ]

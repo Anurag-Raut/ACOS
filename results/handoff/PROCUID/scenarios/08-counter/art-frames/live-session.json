@@ -44,11 +44,11 @@
         "input_hash": "ff39b037f1d6b9ff",
         "mode": "shared-fixed"
       },
-      "buffer_generation": 2,
+      "buffer_generation": 1,
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 1545582,
+      "guest_process_group": 245617,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -254,7 +254,7 @@
       "ok": true,
       "package": "dev.acos.fixtures.counter",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-1545573-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-245608-1/view.sock",
       "width": 1080
     },
     {
@@ -342,7 +342,7 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 44,
+      "probe_seq": 43,
       "x": 157.0,
       "y": 431.0
     },
@@ -374,7 +374,7 @@
       "frame_seq": 5,
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 45
+      "probe_seq": 44
     },
     {
       "cmd": "logs",
@@ -388,7 +388,7 @@
       "frame_seq": 6,
       "ok": true,
       "pixels": false,
-      "probe_seq": 46
+      "probe_seq": 45
     },
     {
       "buffer_generation": 111,
@@ -433,7 +433,7 @@
       "probe_seq": 82,
       "rotation": 1,
       "tree": {
-        "emit_us": 452,
+        "emit_us": 474,
         "node_budget": 2000,
         "nodes": [
           {
@@ -721,7 +721,7 @@
           {
             "bounds": "[0,0][2400,1080]",
             "focus": true,
-            "id": "2564ac1",
+            "id": "63e8e1d",
             "touch": true,
             "type": 1,
             "window": "main",
@@ -768,7 +768,7 @@
       "probe_seq": 89,
       "rotation": 0,
       "tree": {
-        "emit_us": 330,
+        "emit_us": 478,
         "node_budget": 2000,
         "nodes": [
           {
@@ -818,7 +818,7 @@
                             "clickable": true,
                             "content_description": "",
                             "enabled": true,
-                            "focused": true,
+                            "focused": false,
                             "hint": "",
                             "id": "dev.acos.fixtures.counter:id/inc",
                             "password": false,
@@ -1055,8 +1055,8 @@
         "windows": [
           {
             "bounds": "[0,0][1080,2400]",
-            "focus": false,
-            "id": "f7ce468",
+            "focus": true,
+            "id": "46f17b4",
             "touch": true,
             "type": 1,
             "window": "main",
@@ -1135,12 +1135,9 @@
     {
       "cmd": "key",
       "frame_seq": 12,
-      "handled": [
-        true,
-        true
-      ],
+      "handled": [],
       "ok": true,
-      "probe_seq": 134,
+      "probe_seq": 133,
       "window_gone": true,
       "x": 0.0,
       "y": 0.0

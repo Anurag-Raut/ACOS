@@ -160,11 +160,28 @@ public class ProcAActivity extends Activity {
         } catch (Throwable t) {
             byName = "EX:" + t.getClass().getSimpleName();
         }
+        // PROCUID: the data directory this process can write is its own, and the
+        // kernel says it belongs to the uid the process runs as — `dataDir` is
+        // what PMS answered for this package (`/data/user/0/<pkg>`), which is
+        // also what `/data/data/<pkg>` names.
+        String dataPath = "?";
+        String dataExists = "?";
+        String dataOwner = "?";
+        try {
+            java.io.File dir = getDataDir();
+            dataPath = dir.getAbsolutePath();
+            dataExists = dir.isDirectory() ? "1" : "0";
+            dataOwner = String.valueOf(android.system.Os.stat(dataPath).st_uid);
+        } catch (Throwable t) {
+            dataOwner = "EX:" + t.getClass().getSimpleName();
+        }
         Log.i(TAG, "ACOSPROBE a identity pkg=" + getPackageName()
                 + " uid=" + uid + " pid=" + pid
                 + " calling-uid=" + callingUid + " calling-pid=" + callingPid
                 + " uid-pkg=" + owner
-                + " internet=" + perm + " self=" + self + " by-name=" + byName);
+                + " internet=" + perm + " self=" + self + " by-name=" + byName
+                + " data=" + dataPath + " data-exists=" + dataExists
+                + " data-owner=" + dataOwner);
     }
 
     @Override

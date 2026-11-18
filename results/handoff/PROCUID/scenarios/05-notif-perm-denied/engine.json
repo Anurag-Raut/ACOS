@@ -247,9 +247,9 @@
     ],
     "session_exit": {
       "abi": null,
-      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=43MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1538874-i1445736.scope)",
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=56MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p244631-i295210.scope)",
       "code": null,
-      "disk_free_bytes": 212182253568,
+      "disk_free_bytes": 208877559808,
       "guest_crash": null,
       "guest_exit": 0,
       "guest_signal": null,
@@ -261,9 +261,9 @@
       "retryable": false,
       "stage": "teardown-evidence"
     },
-    "session_id": "verify-1538803",
+    "session_id": "verify-244610",
     "timing": {
-      "attributed_ms": 176,
+      "attributed_ms": 171,
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
@@ -272,19 +272,19 @@
         "mode": "shared-fixed"
       },
       "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
-      "session_start_ms": 266,
+      "session_start_ms": 225,
       "steps": [
         {
           "index": 0,
           "status": "pass",
           "step": "launch",
-          "wall_ms": 119
+          "wall_ms": 116
         },
         {
           "index": 1,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 57
+          "wall_ms": 54
         },
         {
           "index": 2,
@@ -296,7 +296,7 @@
           "index": 3,
           "status": "pass",
           "step": "assert_text",
-          "wall_ms": 0
+          "wall_ms": 1
         },
         {
           "index": 4,
@@ -305,14 +305,14 @@
           "wall_ms": 0
         }
       ],
-      "unattributed_ms": 7,
+      "unattributed_ms": 3,
       "unit": "ms",
-      "verdict_wall_ms": 183
+      "verdict_wall_ms": 174
     },
     "trust": "trusted",
     "unsupported_steps": []
   },
   "provenance_rule": null,
-  "request_id": "req_177af3_18e8eb5c89df6e76",
+  "request_id": "req_3bb82_18e909d94023126f",
   "verdict_status": "pass"
 }

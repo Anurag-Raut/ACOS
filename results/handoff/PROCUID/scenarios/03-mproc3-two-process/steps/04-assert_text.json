@@ -38,18 +38,18 @@
   "evidence": [
     {
       "kind": "tree",
-      "path": "tree/5.json"
+      "path": "tree/6.json"
     },
     {
       "kind": "frame",
-      "path": "frames/5.png"
+      "path": "frames/6.png"
     },
     {
       "kind": "step",
       "path": "steps/04-assert_text.json"
     }
   ],
-  "frame_seq": 5,
+  "frame_seq": 6,
   "index": 4,
   "provenance": {
     "tree": "guest-asserted"
@@ -58,11 +58,11 @@
     "bound": "strict-event",
     "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
     "mode": "strict",
-    "probe_seq": 49,
+    "probe_seq": 48,
     "reason": "strict-event",
     "settled": true,
     "strict_rule": "event",
-    "tree_age_ms": 34,
+    "tree_age_ms": 36,
     "waited_ms": 0,
     "waited_ms_source": "step"
   },

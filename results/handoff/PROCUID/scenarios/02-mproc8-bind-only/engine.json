@@ -26,7 +26,7 @@
     "evidence": {
       "artifacts": "results/handoff/PROCUID/scenarios/02-mproc8-bind-only",
       "engine_report": "results/handoff/PROCUID/scenarios/02-mproc8-bind-only/engine.json",
-      "pruned_session_captures": 2,
+      "pruned_session_captures": 3,
       "retention": "results/handoff/PROCUID/scenarios/02-mproc8-bind-only/retention.json",
       "verdict": "results/handoff/PROCUID/scenarios/02-mproc8-bind-only/verdict.json"
     },
@@ -250,9 +250,9 @@
     ],
     "session_exit": {
       "abi": null,
-      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=67MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1537790-i1534788.scope)",
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=69MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p243128-i239916.scope)",
       "code": null,
-      "disk_free_bytes": 212885876736,
+      "disk_free_bytes": 208652959744,
       "guest_crash": null,
       "guest_exit": 0,
       "guest_signal": null,
@@ -264,9 +264,9 @@
       "retryable": false,
       "stage": "teardown-evidence"
     },
-    "session_id": "verify-1537778",
+    "session_id": "verify-243114",
     "timing": {
-      "attributed_ms": 1297,
+      "attributed_ms": 1408,
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
@@ -275,13 +275,13 @@
         "mode": "shared-fixed"
       },
       "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
-      "session_start_ms": 166,
+      "session_start_ms": 288,
       "steps": [
         {
           "index": 0,
           "status": "pass",
           "step": "launch",
-          "wall_ms": 156
+          "wall_ms": 170
         },
         {
           "index": 1,
@@ -293,13 +293,13 @@
           "index": 2,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 989
+          "wall_ms": 988
         },
         {
           "index": 3,
           "status": "pass",
           "step": "assert_text",
-          "wall_ms": 152
+          "wall_ms": 250
         },
         {
           "index": 4,
@@ -314,14 +314,14 @@
           "wall_ms": 0
         }
       ],
-      "unattributed_ms": 17,
+      "unattributed_ms": 24,
       "unit": "ms",
-      "verdict_wall_ms": 1314
+      "verdict_wall_ms": 1432
     },
     "trust": "trusted",
     "unsupported_steps": []
   },
   "provenance_rule": null,
-  "request_id": "req_1776f2_18e8eb5a5441af39",
+  "request_id": "req_3b5aa_18e909d6ea6151be",
   "verdict_status": "pass"
 }

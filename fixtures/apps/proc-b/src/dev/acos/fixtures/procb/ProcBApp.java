@@ -43,11 +43,26 @@ public class ProcBApp extends Application {
         } catch (Throwable t) {
             self = "EX:" + t.getClass().getSimpleName();
         }
+        // PROCUID: B's own data directory exists and belongs to B's uid — the
+        // same check A makes, against the uid this process runs as (10193).
+        String dataPath = "?";
+        String dataExists = "?";
+        String dataOwner = "?";
+        try {
+            java.io.File dir = getDataDir();
+            dataPath = dir.getAbsolutePath();
+            dataExists = dir.isDirectory() ? "1" : "0";
+            dataOwner = String.valueOf(android.system.Os.stat(dataPath).st_uid);
+        } catch (Throwable t) {
+            dataOwner = "EX:" + t.getClass().getSimpleName();
+        }
         Log.i(TAG, "ACOSPROBE b identity pkg=" + getPackageName()
                 + " uid=" + uid + " pid=" + Process.myPid()
                 + " calling-uid=" + Binder.getCallingUid()
                 + " calling-pid=" + Binder.getCallingPid()
                 + " uid-pkg=" + owner
-                + " internet=" + perm + " self=" + self);
+                + " internet=" + perm + " self=" + self
+                + " data=" + dataPath + " data-exists=" + dataExists
+                + " data-owner=" + dataOwner);
     }
 }

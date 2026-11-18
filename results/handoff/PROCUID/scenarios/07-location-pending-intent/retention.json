@@ -3,7 +3,7 @@
   "decision": "prune-unreferenced",
   "reason": "passing run (mode `referenced`): declared evidence plus the first and last frame kept, intermediate frames and mirrored captures pruned",
   "kept_files": 38,
-  "kept_bytes": 1617078,
+  "kept_bytes": 1615832,
   "pruned_files": 4,
   "pruned_bytes": 670374,
   "pruned": [
