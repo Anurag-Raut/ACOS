@@ -30,11 +30,11 @@ fn reference_png() -> Option<PathBuf> {
 
 #[test]
 fn hello_views_scene_diff_vs_art_reference() {
-    let Some(ref_path) = reference_png() else {
-        eprintln!(
-            "SKIP hello_views_scene_diff_vs_art_reference: no reference at {}",
-            ref_path_display()
-        );
+    let Some(ref_path) = acos_test_support::require_some(
+        reference_png(),
+        "hello_views_scene_diff_vs_art_reference",
+        &format!("no reference at {}", ref_path_display()),
+    ) else {
         return;
     };
     let scene_path =
