@@ -102,6 +102,19 @@ pub struct PendingReply {
 }
 
 impl PendingReply {
+    /// Wait for the reply **without consuming it**, so a caller that has to make
+    /// progress first (produce the compositor frame the engine acks input on)
+    /// can wait again after that. `Err(Timeout)` leaves the request pending.
+    pub fn wait_shared(&self, timeout: Duration) -> Result<Value, CdpError> {
+        match self.rx.recv_timeout(timeout) {
+            Ok(result) => result,
+            Err(RecvTimeoutError::Timeout) => {
+                Err(CdpError::Timeout(timeout, format!("request {}", self.id)))
+            }
+            Err(RecvTimeoutError::Disconnected) => Err(CdpError::PipeClosed),
+        }
+    }
+
     pub fn wait(self, timeout: Duration) -> Result<Value, CdpError> {
         match self.rx.recv_timeout(timeout) {
             Ok(result) => result,
@@ -388,6 +401,18 @@ impl CdpClient {
         match self.child.lock() {
             Ok(mut child) => matches!(child.try_wait(), Ok(Some(_)) | Err(_)),
             Err(_) => true,
+        }
+    }
+
+    /// How the engine process ended, when it has (`exit status 1 (signal 11)`),
+    /// for the broker's restart line: a browser that died on a `CHECK` and one
+    /// that was stopped look the same from `exited()`.
+    pub fn exit_status(&self) -> Option<String> {
+        let mut child = self.child.lock().ok()?;
+        match child.try_wait() {
+            Ok(Some(status)) => Some(status.to_string()),
+            Ok(None) => None,
+            Err(e) => Some(format!("unknown ({e})")),
         }
     }
 

@@ -50,6 +50,10 @@ pub mod code {
     pub const UNSUPPORTED: &str = "UNSUPPORTED";
     pub const ENGINE_UNAVAILABLE: &str = "ENGINE_UNAVAILABLE";
     pub const ENGINE_CRASHED: &str = "ENGINE_CRASHED";
+    /// The engine was replaced after it died: the op needs a view whose target
+    /// died with it, so the guest must re-create the view (retryable). Distinct
+    /// from `NO_VIEW`, which means the id was never the session's.
+    pub const ENGINE_RESTARTED: &str = "ENGINE_RESTARTED";
     pub const INTERCEPT_FAILED: &str = "INTERCEPT_FAILED";
     pub const FRAME_FAILED: &str = "FRAME_FAILED";
     pub const INTERNAL: &str = "INTERNAL";

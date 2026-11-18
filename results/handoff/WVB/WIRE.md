@@ -93,14 +93,25 @@ A JSON message has one of three shapes:
   Exceptions that are ordered on the wire: `render` JSON then its BLOB.
 * Unknown `op` → `UNSUPPORTED`. Unknown JSON keys are ignored (forward
   compatibility). Unknown `event` names are ignored by the receiver.
+* Input acks (v1.1, `input.touch`/`input.tap`): under
+  `--enable-begin-frame-control` the engine routes a dispatched event **in** a
+  compositor frame and acknowledges it at the end of the frame that **follows**
+  that one. The broker produces that following frame itself (input priority) and
+  waits for the ack, so `acked` is engine truth, never a guess; `events` is how
+  many were sent, `frameMs`/`ackMs` split the time. `delivered:true` with
+  `acked:false` is honest: the event was dispatched and its frame produced, and
+  the broker says so in its log — it is never reported as a lost tap.
 
 ## 3. Error codes (stable strings)
 
 `BAD_REQUEST` (malformed JSON/params), `BAD_FRAME`, `PROTO_VERSION` (unsupported
 `proto`), `ALREADY_CONNECTED`, `NO_VIEW`, `VIEW_EXISTS`, `INVALID_VIEWPORT`,
 `NAVIGATION_FAILED`, `JS_EXCEPTION`, `TIMEOUT`, `UNSUPPORTED`,
-`ENGINE_UNAVAILABLE`, `ENGINE_CRASHED`, `INTERCEPT_FAILED`, `FRAME_FAILED`,
-`INTERNAL`. `message` is human text (< 2000 chars); `detail` is optional JSON.
+`ENGINE_UNAVAILABLE`, `ENGINE_CRASHED`, `ENGINE_RESTARTED`, `INTERCEPT_FAILED`,
+`FRAME_FAILED`, `INTERNAL`. `message` is human text (< 2000 chars); `detail` is
+optional JSON. `NO_VIEW` and `ENGINE_RESTARTED` are different facts: `NO_VIEW` is
+"this id was never the session's", `ENGINE_RESTARTED` is "it was, and its target
+died with the engine" (re-create it; the broker sent `engine.restarted`).
 An unsupported behaviour is an error, never a fabricated success.
 
 ## 4. Guest → host requests
@@ -142,8 +153,8 @@ DevTools taps `density` times too far right and down).
 | `view.history` | `{view, action:"back"\|"forward"\|"clear"}` | `{view, canGoBack, canGoForward}` |
 | `render` | `{view, format:"png"\|"rgba", timeoutMs?, ack?:bool}` | JSON `{view, seq, width, height, density, format, bytes, damage:{x,y,w,h}, engineMs, hasDamage, contentWidth, contentHeight, scrollX, scrollY}` **then** the BLOB (§1); the four scroll/content fields are v1.1. **v2 pixels:** `width`/`height` are the frame's real pixel size as the engine produced it, and the BLOB is exactly that. Measured (WV7): this pinned `chrome-headless-shell` cannot emit a device-resolution frame under `--enable-begin-frame-control` — `HeadlessExperimental.beginFrame`'s own `screenshot` captures at the CSS size and ignores `deviceScaleFactor` (a 900x560 device-pixel View came back 343x213 = /density), `Page.captureScreenshot` never answers (every variant times out), and `Page.screencastFrame` reports/carries the CSS size too. The broker therefore takes frames from the view's screencast (device-*surface* pixels, one `beginFrame` per `render`) and reports their real size; the guest scales them into the View (letterboxing, `FILTER_BITMAP`). A device-resolution PNG needs an engine that honours `deviceScaleFactor` in a capture path, which this one does not. |
 | `ax` | `{view, maxNodes?, includeIgnored?}` | `{view, count, truncated, nodes:[…]}` (§4.4) |
-| `input.touch` | `{view, action:"down"\|"move"\|"up"\|"cancel", points:[{id,x,y,radiusX?,radiusY?,force?}], holdMs?}` | `{view, delivered:true}` |
-| `input.tap` | `{view, x, y, holdMs?}` | `{view, delivered:true}` (convenience: down→frame→up) |
+| `input.touch` | `{view, action:"down"\|"move"\|"up"\|"cancel", points:[{id,x,y,radiusX?,radiusY?,force?}], holdMs?}` | `{view, delivered:true, acked, events, frameMs, ackMs}` |
+| `input.tap` | `{view, x, y, holdMs?}` | `{view, delivered:true, acked, events, frameMs, ackMs}` (convenience: down→frame→up) |
 | `input.scroll` | `{view, x, y, dx, dy}` | `{view, delivered:true}` |
 | `input.key` | `{view, action:"down"\|"up"\|"press", key, code?, keyCode?, modifiers?:[alt,ctrl,meta,shift]}` | `{view, delivered:true}` |
 | `input.text` | `{view, text}` | `{view, delivered:true}` (IME commit → `Input.insertText`) |
@@ -296,7 +307,10 @@ the page (Android's `@JavascriptInterface` rule, enforced host-side).
 * Crash: Chromium's pid and its `--remote-debugging-pipe` EOF are watched. On
   loss the broker restarts the engine, re-`hello`s nothing (the guest keeps its
   socket), emits `engine.restarted`, and every subsequent view op on an old
-  view id answers `NO_VIEW`.
+  view id answers `ENGINE_RESTARTED` — the restart, not `NO_VIEW`: the id was
+  the session's and the engine took the target with it. The broker also logs the
+  engine's exit status and stderr tail, and the number of views it dropped, so
+  the restart cannot be mistaken for a bookkeeping fault.
 * Every response is exactly one JSON frame; the only message that emits two
   frames is `render` (JSON + BLOB).
 
