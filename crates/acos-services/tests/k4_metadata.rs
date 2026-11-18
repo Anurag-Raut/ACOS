@@ -337,8 +337,13 @@ fn a_meta_data_bundle_round_trips_through_the_bundle_codec() {
 fn from_apk_carries_the_manifest_meta_data() {
     let path = acos_services::workspace_path("fixtures/build/apps/service-provider.apk")
         .unwrap_or_else(|| std::path::PathBuf::from("fixtures/build/apps/service-provider.apk"));
-    if !path.is_file() {
-        eprintln!("skip from_apk_carries_the_manifest_meta_data: fixture APK not built");
+    if acos_test_support::require_prereq(
+        path.is_file(),
+        "from_apk_carries_the_manifest_meta_data",
+        "fixture APK not built: fixtures/build/apps/service-provider.apk (tools/build-apps.sh)",
+    )
+    .is_none()
+    {
         return;
     }
     let state = PmsState::from_apk(&path).expect("from_apk");
