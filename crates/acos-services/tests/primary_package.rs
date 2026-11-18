@@ -36,7 +36,24 @@ fn an_attach_without_a_package_keeps_the_seeded_primary_name() {
         record.package_name, PACKAGE,
         "the primary record names the package the launcher started"
     );
-    assert_eq!(record.uid, FIXTURE_UID, "the attach's own uid is untouched");
+    // PROCUID: `ProcessRecord.uid` starts **unknown** (`0`): `attachApplication`
+    // carries no uid either, and the attach must never claim the launched
+    // package's uid for a process it cannot identify (a secondary app would run
+    // as another app's uid). The peer's handshake names the credential, and
+    // `process_started` fills an unknown uid in place without touching the
+    // name.
+    assert_eq!(
+        record.uid, 0,
+        "the attach leaves the uid unknown rather than guessing it"
+    );
+    atms.process_started(0, "", FIXTURE_UID, 4242);
+    let record = atms.process(0).expect("record");
+    assert_eq!(record.uid, FIXTURE_UID, "the handshake names the real uid");
+    assert_eq!(record.pid, 4242, "and the pid the kernel reported");
+    assert_eq!(
+        record.package_name, PACKAGE,
+        "a uid with no package leaves the seeded name alone"
+    );
 
     // A process the launcher did not name stays unnamed rather than invented.
     atms.attach_application_for(3, 0x3000_0001, 9, "");
