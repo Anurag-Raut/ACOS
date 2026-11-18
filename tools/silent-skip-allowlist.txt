@@ -3,3 +3,9 @@
 crates/acos-binder-peer/build.rs	NDK not found; skipping libacos_binder_driver.so
 crates/acos-dex/examples/dexdump.rs	skip {path}: {e}
 crates/acos-vm/src/natives/native_mem.rs	region {} skipped: cap exceeded
+# HYG4: product code (not a test) whose message says skipped; the behaviour is a documented
+# fallback or a tool's summary row, not a test assertion being dropped.
+crates/acos-cli/src/engine/host_mem.rs	eprintln!(
+crates/acos-services/src/surface_client.rs	eprintln!(
+crates/acos-art/src/main.rs	println!(
+crates/acos-binder-peer/build.rs	println!(

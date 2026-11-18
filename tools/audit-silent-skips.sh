@@ -21,9 +21,18 @@ while IFS= read -r file; do
       for (i = 1; i <= NR; i++) {
         l = line[i]
         if (l ~ /^[[:space:]]*\/\//) continue
-        if (l ~ /(e?print(ln)?!)[[:space:]]*\(/ && tolower(l) ~ /skip/) {
-          silent = 0
+        # A print macro whose text (on this line or in the next three, for a
+        # multi-line `eprintln!(\n "SKIP ..."\n)`) says skip, followed by a
+        # return/continue/Ok(()) within six lines (HYG4: the one-line-only rule
+        # missed multi-line prints, e.g. corpus.rs, text_coverage.rs).
+        if (l ~ /(e?print(ln)?!)[[:space:]]*\(/) {
+          said = 0
           for (j = i; j <= i + 3 && j <= NR; j++) {
+            if (tolower(line[j]) ~ /skip/) { said = 1; break }
+          }
+          if (!said) continue
+          silent = 0
+          for (j = i; j <= i + 6 && j <= NR; j++) {
             if (line[j] ~ /(return|continue|Ok\(\(\)\))/) { silent = 1; break }
           }
           if (silent) printf "%s:%d: %s\n", F, i, l

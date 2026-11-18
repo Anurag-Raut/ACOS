@@ -14,3 +14,6 @@ two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate the rea
 the_default_arm_lays_out_at_the_view_width_and_ignores_meta_viewport the real engine (ACOS_WEBVIEW_TEST=1; release gate runs it)
 the_wide_arm_honours_meta_viewport_and_the_980_default_and_overview_fits_it the real engine (ACOS_WEBVIEW_TEST=1; release gate runs it)
 a_broker_in_its_own_scope_outlives_the_session_scope_that_spawned_it a real engine and a systemd --user transient scope (ACOS_WEBVIEW_TEST=1; release gate runs it)
+engine_gate the real engine measured against the ADR-0031 gate (ACOS_WEBVIEW_TEST=1; release gate runs it)
+frame_pulls_are_fair_between_two_views_one_of_them_slow the real engine (ACOS_WEBVIEW_TEST=1; release gate runs it)
+hostile_live_run_is_gated_and_recorded_separately the real-ART hostile run; opt-in by ACOS_S8_LIVE_HOSTILE=1 (recorded in results/art-runtime/S8.md); the release gate runs it explicitly with the env set, see tools/art-runtime/test-s8-live.sh
