@@ -26,24 +26,26 @@
 //! | 12 | `getTorchStrengthLevel(String)` | `0` (no flash) |
 //! | 18 | `isConcurrentSessionConfigurationSupported(...)` | `false` |
 //! | 19 | `reportExtensionSessionStats(...)` | `null` |
-//! | 3 | `getCameraCharacteristics(...)` | structured `UNSUPPORTED_ANDROID_API` — see below |
+//! | 3 | `getCameraCharacteristics(String, int, boolean)` | a real `CameraMetadataNative`: the stub's `camera_metadata_t` ([`super::camera_metadata::characteristics`]) in `CameraMetadata::writeToParcel`'s framing; an unknown id is `ServiceSpecificException(ERROR_ILLEGAL_ARGUMENT)` |
 //! | 5 | `connectDevice(...)` | structured `UNSUPPORTED_ANDROID_API` — see below |
 //! | 1/8/16/17 | `injectCamera`, `setTorchMode`, `turnOnTorchWithStrengthLevel`, API-1 `connect` | structured `UNSUPPORTED_ANDROID_API` |
 //!
-//! `getCameraCharacteristics` is **not** a fabricated blob. The reply type is
-//! `android.hardware.camera2.impl.CameraMetadataNative`, whose
-//! `readFromParcel`/`writeToParcel` are JNI (`libcamera_client.so`'s
-//! `CameraMetadata`), and this guest ships no `libcamera_client.so`: a metadata
-//! blob written here would be parsed by *native* code ACOS does not have, so the
-//! honest answer is the structured error that names the missing piece. Serving
-//! it is slice 3 of `docs/CAMERA_PLAN.md` (the ACOS-side `CameraMetadata` codec
-//! plus its JNI seam), not a stub's job.
+//! `getCameraCharacteristics` is **not** a fabricated shortcut and the guest is
+//! not bypassed: `CameraMetadataNative.readFromParcel` is JNI into the image's
+//! own `libandroid_runtime.so` -> `libcamera_client.so` ->
+//! `libcamera_metadata.so`, which parse *and validate* the blob. This module
+//! writes the format that library reads (`camera_metadata.rs`), so
+//! `CameraCharacteristics.get(key)`, `StreamConfigurationMap` and CameraX's
+//! `Camera2CameraInfo` all run Google's code over ACOS's values. The values are
+//! those of a fixed-focus, no-flash, `LIMITED`-level back camera; nothing claims
+//! a capability the stub cannot honour.
 //!
 //! `connectDevice` returns `ICameraDeviceUser`; opening one leads to
-//! `configureStreams` + `processCaptureRequest`, i.e. gralloc buffers, and that
-//! is slice 4. Until then the call is refused by name instead of handing back a
-//! device binder that would fail later, in the middle of a session, with a
-//! shape no app can act on.
+//! `createStream`/`submitRequestList`, i.e. an `IGraphicBufferProducer` owned by
+//! the app's `ImageReader` that the service must dequeue frames from. That is
+//! slice 2 of `docs/CAMERA_PLAN.md`; until then the call is refused by name
+//! instead of handing back a device binder that would fail later, in the middle
+//! of a session, with a shape no app can act on.
 //!
 //! # Profiles
 //!
@@ -53,9 +55,9 @@
 //!   the `TOMBSTONES` row keeps it.
 //! * `stub` — one fixed back camera, fixed `CameraCharacteristics` values
 //!   (`config.camera` / the defaults), the table above.
-//! * `scripted` — same node, plus frames. **Not implemented yet** (slice 2:
-//!   `set_frame` with a host-side PNG/JPEG or the built-in test pattern, which
-//!   needs `connectDevice` and `ImageReader` surfaces from slice 3/4).
+//! * `scripted` — same node, plus frames. **Not implemented yet** (slice 3:
+//!   `set_frame` with a host-side PNG/JPEG or the built-in test pattern, on top
+//!   of slice 2's `connectDevice` and `ImageReader` buffer path).
 //!
 //! # Control ops
 //!
@@ -84,8 +86,9 @@ use std::sync::{Arc, Mutex};
 use serde_json::{json, Value};
 
 use crate::error::{Result, ServiceError};
-use crate::exception::write_no_exception;
+use crate::exception::{write_no_exception, EX_SERVICE_SPECIFIC};
 use crate::host::{CallResult, ServiceHost, ServiceObject};
+use crate::modules::camera_metadata;
 use crate::module::{
     AttachMode, Budget, ControlOp, Module, ModuleConfig, ModuleManifest, ModuleReport, Profile,
     SecurityClass, ServiceProvide,
@@ -176,6 +179,10 @@ pub struct StubCamera {
     /// `CameraInfo.orientation`, sensor degrees clockwise (`90` for a phone's
     /// back camera).
     pub orientation: i32,
+    /// Pixel-array width (`SENSOR_INFO_PIXEL_ARRAY_SIZE`).
+    pub width: i32,
+    /// Pixel-array height.
+    pub height: i32,
 }
 
 impl Default for StubCamera {
@@ -184,6 +191,8 @@ impl Default for StubCamera {
             id: "0".to_string(),
             facing: FACING_BACK,
             orientation: 90,
+            width: 4000,
+            height: 3000,
         }
     }
 }
@@ -200,7 +209,20 @@ impl StubCamera {
             },
             "facing_value": self.facing,
             "orientation": self.orientation,
+            "width": self.width,
+            "height": self.height,
         })
+    }
+
+    /// The `CameraCharacteristics` sensor description for this camera.
+    #[must_use]
+    pub fn sensor(&self) -> camera_metadata::Sensor {
+        camera_metadata::Sensor {
+            back: self.facing == FACING_BACK,
+            orientation: self.orientation,
+            width: self.width,
+            height: self.height,
+        }
     }
 }
 
@@ -259,7 +281,7 @@ impl CameraState {
     }
 }
 
-const CONTROL_OPS: [ControlOp; 4] = [
+const CONTROL_OPS: [ControlOp; 5] = [
     ControlOp {
         name: "status",
         args: "none — the served camera table and the transaction log",
@@ -267,6 +289,11 @@ const CONTROL_OPS: [ControlOp; 4] = [
     ControlOp {
         name: "camera",
         args: "none — the single camera's fixed description (what `getCameraInfo` answers)",
+    },
+    ControlOp {
+        name: "characteristics",
+        args: "none — the `CameraCharacteristics` the camera serves (hardware level, sensor, \
+               every metadata tag id/type/count), exactly what `getCameraCharacteristics` writes",
     },
     ControlOp {
         name: "calls",
@@ -281,10 +308,11 @@ const CONTROL_OPS: [ControlOp; 4] = [
 fn manifest_ref() -> &'static ModuleManifest {
     static MANIFEST: ModuleManifest = ModuleManifest {
         id: MODULE_ID,
-        version: "0.1.0",
-        summary: "camera service (`media.camera`): one fixed back camera whose id list and \
-                  CameraInfo answer from the config; no `real` profile (ACOS has no camera HAL), \
-                  no frames yet (slice 2)",
+        version: "0.2.0",
+        summary: "camera service (`media.camera`): one camera (id, facing, orientation, sensor \
+                  size from the config) with real CameraCharacteristics for CameraManager and \
+                  CameraX; opening it and frames are not implemented yet; no `real` profile \
+                  (ACOS has no camera HAL)",
         services: &[ServiceProvide {
             name: SERVICE_NAME,
             descriptor: DESCRIPTOR,
@@ -367,12 +395,13 @@ fn camera_from_config(config: &ModuleConfig) -> Result<StubCamera> {
         });
     };
     for key in map.keys() {
-        if !matches!(key.as_str(), "id" | "facing" | "orientation") {
+        if !matches!(key.as_str(), "id" | "facing" | "orientation" | "width" | "height") {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
                 detail: format!(
                     "config.camera.{key} is not implemented: this stub configures `id`, \
-                     `facing` and `orientation` only (frames arrive with the `scripted` profile)"
+                     `facing`, `orientation`, `width` and `height` only (frames arrive with \
+                     the `scripted` profile)"
                 ),
             });
         }
@@ -418,6 +447,16 @@ fn camera_from_config(config: &ModuleConfig) -> Result<StubCamera> {
             });
         }
         camera.orientation = orientation as i32;
+    }
+    for (key, slot) in [("width", &mut camera.width), ("height", &mut camera.height)] {
+        let Some(value) = map.get(key) else { continue };
+        let Some(pixels) = value.as_i64().filter(|v| (16..=8192).contains(v)) else {
+            return Err(ServiceError::ModuleRejected {
+                module: MODULE_ID,
+                detail: format!("config.camera.{key} must be an integer in 16..=8192, got {value}"),
+            });
+        };
+        *slot = pixels as i32;
     }
     Ok(camera)
 }
@@ -501,13 +540,74 @@ impl CameraService {
         self.state().listeners += 1;
         self.record(code::ADD_LISTENER, "addListener", None);
         write_no_exception(reply);
-        // CameraStatus[1]: {cameraId, status, unavailablePhysicalCameras, clientPackage}
+        // `writeTypedArray(CameraStatus[], 1)`: the length, then one
+        // `writeTypedObject` per element — a presence `int32 1`, then
+        // `CameraStatus.writeToParcel` (this image's dex: `writeString(cameraId)`,
+        // `writeInt(status)`, `writeStringArray(unavailablePhysicalCameras)`,
+        // `writeString(clientPackage)`). The service writes an empty
+        // `clientPackage` for a camera nobody has open.
+        reply.write_int32(1);
         reply.write_int32(1);
         reply.write_string16(&self.camera.id)?;
         reply.write_int32(STATUS_PRESENT);
         reply.write_int32(0); // String[0]: no unavailable physical cameras
-        reply.write_string16_opt(None)?; // clientPackage: null (nobody opened it)
+        reply.write_string16("")?;
         Ok(true)
+    }
+
+    /// `getCameraCharacteristics(String cameraId, int targetSdkVersion, boolean
+    /// overrideToPortrait)` -> `CameraMetadataNative` (`writeTypedObject`).
+    ///
+    /// The body is a real `camera_metadata_t` ([`camera_metadata::characteristics`])
+    /// in `CameraMetadata::writeToParcel`'s framing; the guest's
+    /// `libcamera_client.so` parses and validates it, so a blob it rejects fails
+    /// the app visibly (`CameraAccessException` / `IllegalArgumentException`).
+    /// An id the stub does not serve is the service's own
+    /// `ServiceSpecificException(ERROR_ILLEGAL_ARGUMENT)` (`CameraManager` turns it
+    /// into `IllegalArgumentException("Camera id ... does not exist")`... via
+    /// `ExceptionUtils.throwAsPublicException`).
+    fn camera_characteristics(
+        &self,
+        data: &mut acos_parcel::Parcel,
+        reply: &mut acos_parcel::Parcel,
+    ) -> Result<bool> {
+        let camera_id = data.read_string16_lenient();
+        let _target_sdk = data.read_int32().unwrap_or(0);
+        let _override_to_portrait = data.read_int32().unwrap_or(0);
+        self.record(
+            code::GET_CAMERA_CHARACTERISTICS,
+            "getCameraCharacteristics",
+            camera_id.clone(),
+        );
+        if camera_id.as_deref() != Some(self.camera.id.as_str()) {
+            return Ok(self.illegal_argument(
+                reply,
+                &format!(
+                    "Camera id {:?} does not exist (this stub serves {:?})",
+                    camera_id.unwrap_or_default(),
+                    self.camera.id
+                ),
+            ));
+        }
+        let blob = camera_metadata::characteristics(&self.camera.sensor()).to_bytes();
+        write_no_exception(reply);
+        reply.write_int32(1); // the typed object is present
+        camera_metadata::write_parcel(reply, &blob);
+        Ok(true)
+    }
+
+    /// A `ServiceSpecificException(ERROR_ILLEGAL_ARGUMENT)` reply
+    /// (`ICameraService.ERROR_ILLEGAL_ARGUMENT` = 2): exception code `-8`
+    /// (`EX_SERVICE_SPECIFIC`), the message, then the service-specific code.
+    fn illegal_argument(&self, reply: &mut acos_parcel::Parcel, message: &str) -> bool {
+        const ERROR_ILLEGAL_ARGUMENT: i32 = 2;
+        reply.write_int32(EX_SERVICE_SPECIFIC);
+        reply
+            .write_string16(message)
+            .expect("an in-memory string is writable");
+        reply.write_int32(0); // remote stack-trace header size
+        reply.write_int32(ERROR_ILLEGAL_ARGUMENT);
+        true
     }
 
     fn camera_for_index(&self, index: i32) -> Option<&StubCamera> {
@@ -676,26 +776,14 @@ impl ServiceObject for CameraService {
                 write_no_exception(reply);
                 Ok(true)
             }
-            // getCameraCharacteristics(String, int, boolean): slice 3.
-            code::GET_CAMERA_CHARACTERISTICS => {
-                let camera_id = data.read_string16_lenient();
-                Err(self.unsupported(
-                    code::GET_CAMERA_CHARACTERISTICS,
-                    &format!(
-                        "getCameraCharacteristics({}) — the reply is \
-                         `CameraMetadataNative`, whose readFromParcel is native \
-                         (libcamera_client.so) and this guest ships no camera client library; \
-                         see docs/CAMERA_PLAN.md slice 3",
-                        camera_id.unwrap_or_else(|| "<null>".to_string())
-                    ),
-                ))
-            }
-            // connectDevice(...): slice 4 (gralloc buffers + ImageReader).
+            // getCameraCharacteristics(String, int, boolean): CameraMetadataNative
+            code::GET_CAMERA_CHARACTERISTICS => self.camera_characteristics(data, reply),
+            // connectDevice(...): slice 2 (gralloc buffers + ImageReader).
             code::CONNECT_DEVICE => Err(self.unsupported(
                 code::CONNECT_DEVICE,
                 "connectDevice — a device binder would have to configure streams and deliver \
                  frames, which needs a gralloc-backed ImageReader surface; see \
-                 docs/CAMERA_PLAN.md slice 4",
+                 docs/CAMERA_PLAN.md slice 2",
             )),
             // API-1 connect, setTorchMode, turnOnTorchWithStrengthLevel, injectCamera
             code::CONNECT
@@ -737,7 +825,7 @@ impl Module for CameraModule {
                 detail: format!(
                     "{profile} is not implemented: there is no camera HAL or sensor to serve \
                      `real`, and `scripted` (agent-supplied frames) arrives with \
-                     docs/CAMERA_PLAN.md slice 2; use `stub`"
+                     docs/CAMERA_PLAN.md slice 3; use `stub`"
                 ),
             });
         }
@@ -778,6 +866,30 @@ impl Module for CameraModule {
                     .to_json(),
             })),
             "camera" => Ok(self.camera.to_json()),
+            "characteristics" => {
+                let metadata = camera_metadata::characteristics(&self.camera.sensor());
+                let blob = metadata.to_bytes();
+                let parsed = camera_metadata::validate(&blob).map_err(|detail| {
+                    ServiceError::ModuleRejected {
+                        module: MODULE_ID,
+                        detail: format!("the served characteristics are malformed: {detail}"),
+                    }
+                })?;
+                Ok(json!({
+                    "camera": self.camera.to_json(),
+                    "hardware_level": "LIMITED",
+                    "bytes": blob.len(),
+                    "entries": parsed
+                        .entries()
+                        .iter()
+                        .map(|e| json!({
+                            "tag": format!("{:#010x}", e.tag),
+                            "type": format!("{:?}", e.ty),
+                            "count": e.count,
+                        }))
+                        .collect::<Vec<_>>(),
+                }))
+            }
             "calls" => Ok(state
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -819,8 +931,9 @@ impl Module for CameraModule {
             report.reason = Some(format!(
                 "{} profile: one fixed {} camera (id {:?}, orientation {}), no frames; \
                  getCameraIdList/getCameraInfo answer from the config, \
-                 getCameraCharacteristics/connectDevice answer the structured \
-                 unsupported error until slices 3-4; {listeners} listener(s), \
+                 getCameraCharacteristics answers the camera's real metadata; \
+                 connectDevice answers the structured unsupported error until slice 2; \
+                 {listeners} listener(s), \
                  {calls} transaction(s) recorded, {unsupported} refused",
                 self.profile,
                 match self.camera.facing {
@@ -833,7 +946,7 @@ impl Module for CameraModule {
             report.details = Some(json!({
                 "cameras": [self.camera.to_json()],
                 "frames": false,
-                "controls": ["status", "camera", "calls", "reset"],
+                "controls": ["status", "camera", "characteristics", "calls", "reset"],
             }));
         }
         report
