@@ -323,6 +323,9 @@ pub fn run_scenario(
     let mut status = Status::Pass;
     let mut failure: Option<FailureClassification> = None;
     let mut notes: Vec<String> = Vec::new();
+    // HWFALLBACK: windows that asked for hardware acceleration and were painted
+    // in software, as `(window label, window id)`, in first-seen order.
+    let mut renderer_fallbacks: BTreeSet<(String, String)> = BTreeSet::new();
     // REL3H2: step-level warnings promoted to the verdict's
     // `provenance.warnings[]` (an unhandled input must not be a silent pass).
     let mut step_warnings: Vec<serde_json::Value> = Vec::new();
@@ -581,6 +584,14 @@ pub fn run_scenario(
             _ => None,
         };
         if let Some(observation) = &exec.observation {
+            for window in observation
+                .tree
+                .windows
+                .iter()
+                .filter(|window| window.renderer_fallback)
+            {
+                renderer_fallbacks.insert((window.label.clone(), window.id.clone()));
+            }
             let seq = observation.frame.frame_seq;
             step_result.frame_seq = Some(seq);
             // REL3C: a failed step whose bound tree is a one-node skeleton (the
@@ -751,6 +762,28 @@ pub fn run_scenario(
                 });
             }
         }
+    }
+
+    // ---- hardware renderer fallback (HWFALLBACK) ---------------------------
+    // The guest has no window GPU renderer: a window asking for
+    // FLAG_HARDWARE_ACCELERATED silently gets software rendering. Keep that
+    // fallback, but never silently: one structured note + provenance warning
+    // per window, naming the package and the window.
+    for (label, id) in &renderer_fallbacks {
+        let message = format!(
+            "hardware_renderer_fallback: package={} window={label} id={id}: the window asked for \
+             FLAG_HARDWARE_ACCELERATED; the guest has no window GPU renderer, so it was painted \
+             in software (Canvas.isHardwareAccelerated() is false)",
+            manifest.package
+        );
+        notes.push(message.clone());
+        step_warnings.push(serde_json::json!({
+            "code": "hardware_renderer_fallback",
+            "message": message,
+            "package": manifest.package,
+            "window": label,
+            "window_id": id,
+        }));
     }
 
     // ---- coordinate contract note (W58) -----------------------------------
@@ -1886,7 +1919,26 @@ fn service_ctl_step(backend: &mut dyn Backend, ctl: &ServiceCtlStep) -> StepExec
         config: ctl.config.clone(),
         args: ctl.args.clone(),
     };
-    match backend.service_ctl(&request) {
+    // `timeout_ms`: the read-only op is re-issued until the reply holds `expect`
+    // (a state the app reaches asynchronously). The *last* reply is the step's
+    // evidence either way, and a timeout is the same `AssertionFailed` as a
+    // single sample that does not match: the wait never turns a miss into a pass.
+    let deadline = ctl
+        .timeout_ms
+        .map(|ms| Instant::now() + Duration::from_millis(ms));
+    let mut outcome = backend.service_ctl(&request);
+    if let (Some(deadline), Some(expected)) = (deadline, ctl.expect.as_ref()) {
+        let mut pause_ms = 50u64;
+        while let Ok(reply) = &outcome {
+            if json_subset(expected, reply).is_none() || Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(pause_ms));
+            pause_ms = (pause_ms * 2).min(250);
+            outcome = backend.service_ctl(&request);
+        }
+    }
+    match outcome {
         Ok(reply) => {
             let mut exec = StepExec::pass();
             let summary = summarize_reply(&reply);
@@ -1903,9 +1955,12 @@ fn service_ctl_step(backend: &mut dyn Backend, ctl: &ServiceCtlStep) -> StepExec
                     ProtocolError::new(
                         acos_protocol::ErrorCode::AssertionFailed,
                         format!(
-                            "service_ctl {} {}: the reply does not match `expect` at {path}",
+                            "service_ctl {} {}: the reply does not match `expect` at {path}{}",
                             request.module,
-                            request.kind()
+                            request.kind(),
+                            ctl.timeout_ms
+                                .map(|ms| format!(" after waiting {ms} ms"))
+                                .unwrap_or_default()
                         ),
                     )
                     .with_hint(
@@ -5900,6 +5955,9 @@ mod rel3a_settle_tests {
         /// satisfies the text condition; every later one is content-stable but
         /// no longer holds it. A single-sample content pass returns here.
         flip_after_first_content: bool,
+        /// HWFALLBACK: report a window that asked for hardware acceleration and
+        /// was painted in software.
+        renderer_fallback: bool,
         frame_seq: u64,
         cached: Option<SessionObservation>,
     }
@@ -5914,6 +5972,7 @@ mod rel3a_settle_tests {
                 polls: 0,
                 content_polls: 0,
                 flip_after_first_content: false,
+                renderer_fallback: false,
                 frame_seq: 1,
                 cached: None,
             };
@@ -5955,6 +6014,15 @@ mod rel3a_settle_tests {
                 children,
             );
             tree.frame.frame_seq = self.frame_seq;
+            if self.renderer_fallback {
+                let mut overlay = acos_protocol::ui::WindowInfo::new(0);
+                overlay.label = "Overlay#1".to_string();
+                overlay.id = "ab12".to_string();
+                overlay.renderer_fallback = true;
+                let mut main = acos_protocol::ui::WindowInfo::new(1);
+                main.label = "main".to_string();
+                tree.windows = vec![overlay, main];
+            }
             tree
         }
 
@@ -6165,6 +6233,46 @@ mod rel3a_settle_tests {
     }
 
     const HEADER: &str = "version: 1\nname: rel3a\napp: dev.acos.fixtures.counter\nisolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, density_dpi: 420}\n";
+
+    /// HWFALLBACK: a window that asked for `FLAG_HARDWARE_ACCELERATED` and got
+    /// software rendering is named in the verdict (note + provenance warning),
+    /// once per window however many observations see it; a run whose windows
+    /// all rendered as asked has neither.
+    #[test]
+    fn hardware_renderer_fallback_is_a_visible_verdict_note() {
+        let yaml = format!(
+            "{HEADER}steps:\n  - wait_for: {{selector: {{id: title}}, timeout_ms: 4000}}\n  - wait_for: {{selector: {{id: title}}, timeout_ms: 4000}}\n"
+        );
+        let mut backend = AnimatingBackend::new(true);
+        backend.renderer_fallback = true;
+        backend.cached = Some(backend.observation(false, None));
+        let verdict = run(&yaml, backend).verdict;
+        let notes: Vec<&String> = verdict
+            .notes
+            .iter()
+            .filter(|n| n.starts_with("hardware_renderer_fallback:"))
+            .collect();
+        assert_eq!(notes.len(), 1, "one note per window: {:?}", verdict.notes);
+        assert!(notes[0].contains("package=dev.acos.fixtures.counter"), "{}", notes[0]);
+        assert!(notes[0].contains("window=Overlay#1"), "{}", notes[0]);
+        let warnings = verdict.provenance.as_ref().expect("provenance")["warnings"]
+            .as_array()
+            .expect("warnings")
+            .clone();
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w["code"] == "hardware_renderer_fallback" && w["window"] == "Overlay#1"),
+            "{warnings:?}"
+        );
+
+        let clean = run(&yaml, AnimatingBackend::new(true)).verdict;
+        assert!(
+            !clean.notes.iter().any(|n| n.contains("hardware_renderer_fallback")),
+            "{:?}",
+            clean.notes
+        );
+    }
 
     /// REL3A §1/§2: a `wait_for` on a forever-animating screen passes on the
     /// content-stable rule by default and says so in its step JSON.

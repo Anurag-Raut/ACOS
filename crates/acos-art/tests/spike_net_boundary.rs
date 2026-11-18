@@ -278,7 +278,11 @@ fn probe_root(tag: &str) -> Option<ArtRoot> {
     let root = match ArtRoot::resolve(None, Some(dir.join("data"))) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("SKIP {tag}: no ART sysroot ({e})");
+            acos_test_support::require_prereq(
+                false,
+                &format!("{tag} (spike net boundary)"),
+                &format!("no ART sysroot ({e}) — run tools/art-sysroot.sh"),
+            )?;
             return None;
         }
     };
@@ -505,14 +509,21 @@ fn rule_set(dump: &str) -> Vec<String> {
 #[test]
 fn guest_cannot_change_the_lan_drop_rules() {
     let _g = guard();
-    if pasta_binary().is_none() {
-        eprintln!(
-            "SKIP: no pasta binary (set ACOS_SPIKE_NET_PASTA or build .cache/spike-net/bin/pasta)"
-        );
+    let skipped_before = acos_test_support::skipped_count();
+    acos_test_support::require_prereq(
+        pasta_binary().is_some(),
+        "spike net boundary (LAN rules)",
+        "no pasta binary (set ACOS_SPIKE_NET_PASTA or build .cache/spike-net/bin/pasta)",
+    );
+    if acos_test_support::skipped_count() != skipped_before {
         return;
     }
     let Some(run) = run_guest("boundary", "net-guard", Duration::from_secs(90)) else {
-        eprintln!("SKIP: no ART sysroot");
+        acos_test_support::require_prereq(
+            false,
+            "spike net boundary (LAN rules)",
+            "no ART sysroot — run tools/art-sysroot.sh",
+        );
         return;
     };
     eprintln!("--- probe stdout ---\n{}", run.stdout);
@@ -664,15 +675,24 @@ fn guest_cannot_change_the_lan_drop_rules() {
 #[test]
 fn boundary_failure_never_starts_the_guest() {
     let _g = guard();
-    if pasta_binary().is_none() {
-        eprintln!("SKIP: no pasta binary");
+    let skipped_before = acos_test_support::skipped_count();
+    acos_test_support::require_prereq(
+        pasta_binary().is_some(),
+        "spike net boundary (fail-closed)",
+        "no pasta binary (set ACOS_SPIKE_NET_PASTA or build .cache/spike-net/bin/pasta)",
+    );
+    if acos_test_support::skipped_count() != skipped_before {
         return;
     }
     std::env::set_var("ACOS_SPIKE_NET", "1");
     std::env::set_var("ACOS_NET_ARM", "base");
     std::env::set_var("ACOS_SPIKE_NET_PASTA", pasta_binary().unwrap());
     let Some(root) = probe_root("boundary-fail") else {
-        eprintln!("SKIP: no ART sysroot");
+        acos_test_support::require_prereq(
+            false,
+            "spike net boundary (fail-closed)",
+            "no ART sysroot — run tools/art-sysroot.sh",
+        );
         return;
     };
     let dir = scratch("boundary-fail-run");

@@ -1,0 +1,10 @@
+run_id	scenario	variant	expected	verdict	false_pass	error.class	error.code	wall_ms	first_frame_ms	mem.cgroup_peak_mib	mem.cgroup_gib_min	mem.pss_mib	mem.anon_shmem_settled_mib	host.loadavg1	host.mem_available_mib
+01-gles-software-r1	scenarios/gles-software.yaml	good	pass	pass	false			1226.9	None	36.98	0.000534	22.88	None	3.63	55626.1
+02-gles-software-r2	scenarios/gles-software.yaml	good	pass	pass	false			1226.8	None	21.99	0.000299	24.52	None	3.63	55752.6
+03-gles-software-r3	scenarios/gles-software.yaml	good	pass	pass	false			1227.2	None	31.34	0.000312	33.47	None	3.58	55642.8
+04-webview-probe-r1	scenarios/webview-probe.yaml	good	pass	error	false	harness	GUEST_EXITED	12179.0	None	8.45	0.001544	18.88	None	3.58	55496.2
+05-webview-probe-r2	scenarios/webview-probe.yaml	good	pass	error	false	harness	GUEST_EXITED	12280.4	None	8.95	0.001496	19.1	None	3.41	55337.4
+06-webview-probe-r3	scenarios/webview-probe.yaml	good	pass	error	false	harness	GUEST_EXITED	12183.5	None	10.15	0.001658	19.07	None	2.8	55717.9
+07-webview-fair-r1	scenarios/webview-fair.yaml	good	pass	error	false	harness	GUEST_EXITED	12182.7	None	9.94	0.001711	19.08	None	2.84	54436.9
+08-webview-fair-r2	scenarios/webview-fair.yaml	good	pass	error	false	harness	GUEST_EXITED	12184.0	None	10.42	0.001581	18.91	None	4.41	54600.6
+09-webview-fair-r3	scenarios/webview-fair.yaml	good	pass	error	false	harness	GUEST_EXITED	12172.4	None	9.42	0.001403	18.89	None	3.96	54554.4

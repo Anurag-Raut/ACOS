@@ -36,6 +36,13 @@
 #   --out FILE             default results/bench/matrix-<stamp>.json
 #   --list                 print the selected scenarios and exit (no build, no ART)
 #
+# Release gate (owner direction 2026-11-18 §2): this matrix is the CORRECTNESS
+# half. The TIMING half must also show that ACOS beats the stock Android emulator
+# on every tracked metric -- run
+#   tools/art-runtime/emubench/emu_gate.py --acos <gate timing JSON> \
+#       --emu results/bench/emubench-2026-11-18.json
+# and require 0 metrics worse for ACOS (BENCHMARKS.md section 13).
+#
 # What each row carries: wall ms, cgroup memory.current peak + GiB-min integral
 # (sampled every 100 ms in the run's own systemd scope), PSS (secondary), the
 # cgroup anon+shmem value at --settle-s, the structured error {code,class,

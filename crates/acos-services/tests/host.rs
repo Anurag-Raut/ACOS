@@ -43,9 +43,14 @@ fn installing_a_package_from_apk_repoints_the_package_manager() {
     let apk = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/build/apps/counter.apk");
     if !apk.is_file() {
-        eprintln!(
-            "SKIP installing_a_package_from_apk_repoints_the_package_manager: {}",
-            apk.display()
+        acos_test_support::require_prereq(
+            false,
+            "installing_a_package_from_apk_repoints_the_package_manager",
+            &format!(
+                "{} is missing — run tools/build-apps.sh, or set \
+                 ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+                apk.display()
+            ),
         );
         return;
     }

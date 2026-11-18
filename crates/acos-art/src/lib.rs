@@ -32,6 +32,26 @@ pub mod build_cache;
 pub mod capture;
 pub mod cgroup;
 pub mod crash;
+// GLSPIKE: the opt-in, lazily loaded software GLES provider (`ACOS_GUEST_GLES`).
+pub mod gles;
+
+/// The provider contract's error is a layout error here: a missing provider, a
+/// manifest that disagrees with the staged bytes or a render node that is not a
+/// device are all "the tree is not what the run needs" (`acos-gles-provider`
+/// keeps the message; this launcher keeps one error type).
+impl From<acos_gles_provider::Error> for Error {
+    fn from(e: acos_gles_provider::Error) -> Self {
+        match e {
+            acos_gles_provider::Error::Layout(m) => Error::Layout(m),
+        }
+    }
+}
+
+/// The process environment is global: every test that mutates it takes this
+/// lock, in any module, so one test's `ACOS_GUEST_GLES`/`ACOS_ART_*` cannot
+/// leak into another's (they run on parallel threads).
+#[cfg(test)]
+pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 pub mod host_zygote;
 pub mod jvm;
 pub mod landlock;
@@ -1827,6 +1847,77 @@ impl<'a> Sandbox<'a> {
             a.push("--dir".into());
             a.push(d.into());
         }
+        // GLSHIP: the software GLES provider — the image's default
+        // (`angle-swiftshader`) when it is installed, `ACOS_GUEST_GLES=off` to
+        // turn it off, `ACOS_GUEST_GLES=<name>` to pick another (an explicitly
+        // named provider that is not installed is an error, never a silent
+        // fall back to the default).
+        //
+        // The image's own EGL loader (`Loader.cpp`'s
+        // `attempt_to_load_system_driver`) looks for
+        // `/vendor/lib64/egl/libEGL_<ro.hardware.egl>.so`,
+        // `libGLESv1_CM_<tag>.so` and `libGLESv2_<tag>.so`. Binding the staged
+        // provider there is the *whole* integration: no hook, no interposer,
+        // no change to libhwui. Nothing in the bound directory is mapped until
+        // libhwui's RenderThread first asks libEGL for a context, so a process
+        // that never touches GL pays no resident memory (only the mount entry);
+        // the digest is cached per staged inode set (`gles::verify`), so a
+        // launch that never touches GL pays one `stat` walk and no read of the
+        // 32 MB provider.
+        //
+        // A provider whose bytes do not match its manifest is a structured
+        // error here, never a different library reaching the loader
+        // (A11YPACE's stale-shim lesson). One selection rule (`gles::status`)
+        // and one verify cache for every provider (GLSHIP's `.verified`).
+        let gles_status = gles::status(r)?;
+        let mut gpu_landlock_plan: Option<PathBuf> = None;
+        if let Some(provider) = &gles_status.provider {
+            if !gles::lib_dir_ready(provider, r) {
+                return Err(Error::Layout(format!(
+                    "ACOS_GUEST_GLES={}: {} is not a directory (install the provider with \
+                     `tools/art-gles.sh`)",
+                    provider.name,
+                    gles::lib_dir(provider, r).display()
+                )));
+            }
+            let started = std::time::Instant::now();
+            gles::verify(provider, r)?;
+            if std::env::var_os("ACOS_GUEST_GLES_TRACE").is_some() {
+                eprintln!(
+                    "acos-art: {} [{}] (verify {}ms, staged {} bytes)",
+                    gles::describe(provider),
+                    gles_status.detail,
+                    started.elapsed().as_millis(),
+                    gles::staged_bytes(provider)
+                );
+            }
+            // One bind, three lookups: `/vendor/lib64/egl/libEGL_<tag>.so` is
+            // what `Loader::findLibrary` opens, `/vendor/lib64` is where
+            // the linker resolves that driver's own NEEDED entries, and
+            // `/vendor/lib64/hw/vulkan.<tag>.so` (GLSPIKE2) is the ICD the
+            // image's `libvulkan.so` opens when the provider carries one.
+            a.push("--ro-bind".into());
+            a.push(gles::lib_dir(provider, r).into());
+            a.push("/vendor/lib64".into());
+            // GPUSPIKE: a host-GPU provider (`mesa-host`) also names the one
+            // DRM *render* node it draws on. It is bound read-write at the same
+            // path (`--dev-bind` keeps the device node usable), only here, only
+            // for the selected provider, and only `/dev/dri/renderD<N>` passes
+            // validation: no card node (modesetting/master), no other device.
+            // Waydroid's own `gralloc.gbm.device` prop names the same path.
+            if let Some(node) = provider.render_node()? {
+                // The guest's Landlock plan handles WRITE_FILE and IOCTL_DEV, so
+                // the node is also granted in a plan that is bound over the
+                // default one for this run only (below, after /data/seccomp).
+                if self.seccomp_guest {
+                    gpu_landlock_plan =
+                        landlock::write_gpu_plan(&r.data.join("seccomp"), &node)?;
+                }
+                a.push("--dev-bind".into());
+                a.push(node.clone().into());
+                a.push(node.into());
+            }
+        }
         a.push("--ro-bind".into());
         a.push("/etc/passwd".into());
         a.push("/etc/passwd".into());
@@ -1857,6 +1948,11 @@ impl<'a> Sandbox<'a> {
             a.push("--ro-bind".into());
             a.push(dir.into());
             a.push("/data/seccomp".into());
+            if let Some(plan) = gpu_landlock_plan.take() {
+                a.push("--ro-bind".into());
+                a.push(plan.into());
+                a.push(landlock::GUEST_PLAN.into());
+            }
             // The program is installed by the preloaded stub's constructor, so
             // it lands after bionic finished loading and before ART's main.
         }
@@ -2557,6 +2653,7 @@ mod tests {
     /// comes from the per-run root; the shared `<data>` tree is never bound.
     #[test]
     fn run_root_makes_shared_inputs_read_only() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let data = scratch_dir("run-root");
         for d in [
             "system/environ",
@@ -2695,6 +2792,7 @@ mod tests {
     /// `<run>/wv/webview.sock` (or `$ACOS_WEBVIEW_SOCKET_DIR/webview.sock`).
     #[test]
     fn run_root_maps_the_webview_session_socket() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let data = scratch_dir("webview-socket");
         for d in [
             "system/environ",
@@ -2784,6 +2882,7 @@ mod tests {
     /// application uids without any host privilege.
     #[test]
     fn sandbox_runs_a_process_as_the_uid_its_package_owns() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let data = scratch_dir("uid");
         fs::create_dir_all(data.join("system/environ")).unwrap();
         fs::write(
@@ -2913,6 +3012,7 @@ mod tests {
     /// `--setenv` list and nothing else, and the debug/exec tail is intact.
     #[test]
     fn sandbox_argv_hardens_before_first_mount() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let data = scratch_dir("argv");
         fs::create_dir_all(data.join("system/environ")).unwrap();
         fs::write(

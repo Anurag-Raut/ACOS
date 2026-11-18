@@ -1,0 +1,191 @@
+{
+  "scenario": {
+    "name": "counter",
+    "path": "scenarios/counter.yaml",
+    "sha256": "45506d6ab497966ab212b8ea697ef480fa9a3fc477b4fb1e780cacc4b8569147",
+    "package": "dev.acos.fixtures.counter"
+  },
+  "engine": "art",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "verdict": "pass",
+  "display": {
+    "density_dpi": 420,
+    "height": 2400,
+    "mode": "offscreen",
+    "width": 1080
+  },
+  "steps": [
+    {
+      "index": 0,
+      "step": "launch",
+      "status": "pass",
+      "frame_seq": null,
+      "error": null
+    },
+    {
+      "index": 1,
+      "step": "wait_for",
+      "status": "pass",
+      "frame_seq": 2,
+      "error": null
+    },
+    {
+      "index": 2,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 2,
+      "error": null
+    },
+    {
+      "index": 3,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 2,
+      "error": null
+    },
+    {
+      "index": 4,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 2,
+      "error": null
+    },
+    {
+      "index": 5,
+      "step": "assert_log",
+      "status": "pass",
+      "frame_seq": null,
+      "error": null
+    },
+    {
+      "index": 6,
+      "step": "tap",
+      "status": "pass",
+      "frame_seq": 4,
+      "error": null
+    },
+    {
+      "index": 7,
+      "step": "assert_log",
+      "status": "pass",
+      "frame_seq": null,
+      "error": null
+    },
+    {
+      "index": 8,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 4,
+      "error": null
+    },
+    {
+      "index": 9,
+      "step": "capture",
+      "status": "pass",
+      "frame_seq": 5,
+      "error": null
+    },
+    {
+      "index": 10,
+      "step": "tap",
+      "status": "pass",
+      "frame_seq": 7,
+      "error": null
+    },
+    {
+      "index": 11,
+      "step": "assert_log",
+      "status": "pass",
+      "frame_seq": null,
+      "error": null
+    },
+    {
+      "index": 12,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 7,
+      "error": null
+    },
+    {
+      "index": 13,
+      "step": "rotate",
+      "status": "pass",
+      "frame_seq": 8,
+      "error": null
+    },
+    {
+      "index": 14,
+      "step": "assert_log",
+      "status": "pass",
+      "frame_seq": null,
+      "error": null
+    },
+    {
+      "index": 15,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 8,
+      "error": null
+    },
+    {
+      "index": 16,
+      "step": "rotate",
+      "status": "pass",
+      "frame_seq": 9,
+      "error": null
+    },
+    {
+      "index": 17,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 9,
+      "error": null
+    },
+    {
+      "index": 18,
+      "step": "tap",
+      "status": "pass",
+      "frame_seq": 11,
+      "error": null
+    },
+    {
+      "index": 19,
+      "step": "assert_log",
+      "status": "pass",
+      "frame_seq": null,
+      "error": null
+    },
+    {
+      "index": 20,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 11,
+      "error": null
+    },
+    {
+      "index": 21,
+      "step": "back",
+      "status": "pass",
+      "frame_seq": 12,
+      "error": null
+    },
+    {
+      "index": 22,
+      "step": "assert_no_crash",
+      "status": "pass",
+      "frame_seq": null,
+      "error": null
+    },
+    {
+      "index": 23,
+      "step": "assert_not_visible",
+      "status": "pass",
+      "frame_seq": 12,
+      "error": null
+    }
+  ],
+  "apk_sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
+  "artifacts_note": "full artifacts (tree/, frames/, steps/) were produced under .cache/parity1/runs/counter and are not committed"
+}

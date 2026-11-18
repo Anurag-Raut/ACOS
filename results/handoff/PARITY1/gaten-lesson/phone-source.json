@@ -1,0 +1,36 @@
+{
+  "source": "recorded-observations",
+  "tier": "physical-device (recorded capture)",
+  "coverage": "text-set+target",
+  "path": "results/phone/gaten-f344272/gaten-lesson/phone",
+  "device": {
+    "ro.build.fingerprint": "motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys",
+    "ro.build.version.sdk": "35",
+    "ro.build.version.release": "15",
+    "ro.product.model": "moto g35 5G",
+    "wm_size": "1080x2400",
+    "density_dpi": 400,
+    "font_scale": "1.0"
+  },
+  "failed_steps": [
+    7,
+    8,
+    10,
+    11,
+    13,
+    15,
+    16,
+    18,
+    19,
+    20,
+    23,
+    25,
+    27
+  ],
+  "files": {
+    "observations.json": {
+      "sha256": "64c228bc9fce798d2d1a26d24cf18b53ded33bd25a079f5c9f2e85131a86d7c4",
+      "bytes": 104677
+    }
+  }
+}

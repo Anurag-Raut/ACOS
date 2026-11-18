@@ -1,0 +1,6 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, system.permissions:real, system.notifications:real attached; off: accessibility, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-811c0ed0-62bb3573411e25eb/scenarios/notif-perm-granted.yaml (sha 376755928126), apk /home/Qui/.t3/worktrees/acos/t3-811c0ed0-62bb3573411e25eb/fixtures/build/apps/notif-perm-probe.apk (sha 07d18af016e1), engine art, fidelity art-reference
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-811c0ed0-62bb3573411e25eb/results/handoff/HYG2/runs/notif-perm-granted
+  steps: 10

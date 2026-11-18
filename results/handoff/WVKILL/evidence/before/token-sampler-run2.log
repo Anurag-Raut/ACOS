@@ -1,0 +1,96 @@
+T 12:08:50.475296945
+281874 bwrap ppid=281873 token=0
+281889 bwrap ppid=1 token=0
+281893 bwrap ppid=281874 token=0
+560562 bwrap ppid=128780 token=1
+560565 bwrap ppid=560562 token=1
+2141770 acos-webview ppid=1 token=1
+2142010 bwrap ppid=2141770 token=1
+2142013 bwrap ppid=2142010 token=1
+2142487 bash ppid=2142485 token=0
+T 12:08:50.816775946
+281874 bwrap ppid=281873 token=0
+281889 bwrap ppid=1 token=0
+281893 bwrap ppid=281874 token=0
+560562 bwrap ppid=128780 token=1
+560565 bwrap ppid=560562 token=1
+2141770 acos-webview ppid=1 token=1
+2142010 bwrap ppid=2141770 token=1
+2142013 bwrap ppid=2142010 token=1
+2142487 bash ppid=2142485 token=0
+2142499 bash ppid=2142487 token=0
+2142536 timeout ppid=2142499 token=0
+2142542 acos ppid=2142536 token=0
+2142551 acos-art ppid=2142542 token=1
+2142595 bwrap ppid=2142551 token=1
+2142598 bwrap ppid=2142595 token=1
+T 12:08:51.184287563
+281874 bwrap ppid=281873 token=0
+281889 bwrap ppid=1 token=0
+281893 bwrap ppid=281874 token=0
+560562 bwrap ppid=128780 token=1
+560565 bwrap ppid=560562 token=1
+2141770 acos-webview ppid=1 token=1
+2142010 bwrap ppid=2141770 token=1
+2142013 bwrap ppid=2142010 token=1
+2142487 bash ppid=2142485 token=0
+2142499 bash ppid=2142487 token=0
+2142536 timeout ppid=2142499 token=0
+2142542 acos ppid=2142536 token=0
+2142551  ppid= token=0
+2142595  ppid= token=0
+2142598  ppid= token=0
+T 12:08:51.550853589
+281874 bwrap ppid=281873 token=0
+281889 bwrap ppid=1 token=0
+281893 bwrap ppid=281874 token=0
+560562 bwrap ppid=128780 token=1
+560565 bwrap ppid=560562 token=1
+2141770 acos-webview ppid=1 token=1
+2142010 bwrap ppid=2141770 token=1
+2142013 bwrap ppid=2142010 token=1
+T 12:08:51.891571909
+281874 bwrap ppid=281873 token=0
+281889 bwrap ppid=1 token=0
+281893 bwrap ppid=281874 token=0
+560562 bwrap ppid=128780 token=1
+560565 bwrap ppid=560562 token=1
+2141770 acos-webview ppid=1 token=1
+2142010 bwrap ppid=2141770 token=1
+2142013 bwrap ppid=2142010 token=1
+T 12:08:52.234596288
+281874 bwrap ppid=281873 token=0
+281889 bwrap ppid=1 token=0
+281893 bwrap ppid=281874 token=0
+560562 bwrap ppid=128780 token=1
+560565 bwrap ppid=560562 token=1
+2141770 acos-webview ppid=1 token=1
+2142010 bwrap ppid=2141770 token=1
+2142013 bwrap ppid=2142010 token=1
+T 12:08:52.576532515
+281874 bwrap ppid=281873 token=0
+281889 bwrap ppid=1 token=0
+281893 bwrap ppid=281874 token=0
+560562 bwrap ppid=128780 token=1
+560565 bwrap ppid=560562 token=1
+2141770 acos-webview ppid=1 token=1
+2142010 bwrap ppid=2141770 token=1
+2142013 bwrap ppid=2142010 token=1
+T 12:08:52.919509674
+281874 bwrap ppid=281873 token=0
+281889 bwrap ppid=1 token=0
+281893 bwrap ppid=281874 token=0
+560562 bwrap ppid=128780 token=1
+560565 bwrap ppid=560562 token=1
+2141770 acos-webview ppid=1 token=1
+2142010 bwrap ppid=2141770 token=1
+2142013 bwrap ppid=2142010 token=1
+T 12:08:53.261245101
+281874 bwrap ppid=281873 token=0
+281889 bwrap ppid=1 token=0
+281893 bwrap ppid=281874 token=0
+560562 bwrap ppid=128780 token=1
+560565 bwrap ppid=560562 token=1
+2141770 acos-webview ppid=1 token=1
+2142010 bwrap ppid=2141770 token=1
+2142013 bwrap ppid=2142010 token=1

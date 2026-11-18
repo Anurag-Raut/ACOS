@@ -9,3 +9,7 @@ description = "Shared test-only helpers for ACOS (workspace fixture gate)."
 [lib]
 name = "acos_test_support"
 path = "src/lib.rs"
+
+[dependencies]
+# `prereq`: the per-process skip summary is printed from an `atexit` hook.
+libc = "0.2"

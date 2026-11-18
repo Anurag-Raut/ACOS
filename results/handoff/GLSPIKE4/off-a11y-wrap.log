@@ -1,0 +1,64 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "lifecycle",
+    "logs",
+    "static-manifest"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16957440,
+    "wall_ms": 937
+  },
+  "ok": true,
+  "request_id": "req_8918e_18e90c16071b726a",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-baa027c2-92822109faf07523/results/handoff/GLSPIKE4/off-a11y-wrap",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794979181163175267,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-baa027c2-92822109faf07523/fixtures/build/apps/a11y-probe.apk",
+        "sha256": "dbbb94fea8977c92f717869f551948d17eb71c4479ae7c6ae492e68086ccf8a0",
+        "sha256_12": "dbbb94fea897",
+        "size_bytes": 29310
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794978398359163972,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-baa027c2-92822109faf07523/scenarios/a11y-screenshot-wrap.yaml",
+        "sha256": "a9cb014a61506671fa39c4b845e4060485b1d9325ea2a1b33184acdca27f89b0",
+        "sha256_12": "a9cb014a6150",
+        "size_bytes": 3889
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-baa027c2-92822109faf07523/results/handoff/GLSPIKE4/off-a11y-wrap/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_a11y-probe",
+  "status": "pass"
+}

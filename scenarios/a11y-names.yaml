@@ -1,0 +1,66 @@
+# PARITYFIX F1: the accessible name ACOS publishes for each React Native node
+# shape is what AccessibilityNodeInfo reports (and so what `uiautomator dump`
+# prints on a phone): text = getText() ?: getHint(), content-desc =
+# AccessibilityNodeInfo.getContentDescription() (a delegate-composed description
+# included), never a name moved between the two attributes.
+#
+# The exact per-field values are pinned by tools/tests/test-a11y-names-tree.py
+# against this run's tree/*.json; the steps below are the selector contract an
+# agent uses.
+version: 1
+name: a11y-names
+description: >-
+  Launch a11y-names-probe and select each node by the attribute the platform
+  exposes its name under: the token field by its label (content_desc), its
+  placeholder as its text; a delegate-composed description by content_desc.
+app: fixtures/build/apps/a11y-names-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.a11ynames/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: token}
+      timeout_ms: 5000
+  # The label is the content-desc; the placeholder is the (hint-fallback) text.
+  - assert_text:
+      selector: {content_desc: {exact: "Personal access token"}}
+      text: {exact: "Paste your token"}
+  - assert_text:
+      selector: {content_desc: {exact: "Search dictionary"}}
+      text: {exact: "Search words"}
+  # A plain Text exposes its words as text, nothing else.
+  - assert_text:
+      selector: {text: {exact: "Recently looked up"}}
+      text: {exact: "Recently looked up"}
+  # Text and description are two attributes on one node.
+  - assert_text:
+      selector: {content_desc: {exact: "Connect WaniKani"}}
+      text: {exact: "Connect"}
+  # A labelled container: the label is its content-desc, the words are its
+  # child's text.
+  - assert_visible:
+      selector: {content_desc: {exact: "Open card"}}
+  - assert_text:
+      selector: {text: {exact: "card face"}}
+      text: {exact: "card face"}
+  # A description that exists only on the node info (accessibility delegate).
+  - assert_text:
+      selector: {content_desc: {exact: "Analytics, tab 2 of 4"}}
+      text: {exact: "Analytics"}

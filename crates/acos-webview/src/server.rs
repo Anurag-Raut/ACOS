@@ -237,7 +237,12 @@ fn start_server(
                                 }
                                 continue;
                             }
-                            let Some(session_id) = session_for(&mut stream, &mode) else {
+                            let Some(session_id) = session_for(
+                                &mut stream,
+                                &mode,
+                                live.iter().filter(|c| !c.closed()).count(),
+                                &stop,
+                            ) else {
                                 continue;
                             };
                             let conn = Arc::new(Conn::new(
@@ -338,24 +343,84 @@ fn start_server(
 /// The session id for a freshly accepted connection, answering the attach line
 /// in shared mode. `None` means the peer did not identify itself and the
 /// connection is dropped (it never became a session).
-fn session_for(stream: &mut UnixStream, mode: &AcceptMode) -> Option<String> {
+///
+/// **WVSCOPE:** the line carries the client's build id and the answer carries
+/// this daemon's (`results/handoff/WVB/WIRE.md` §0.1). A client of another build
+/// is refused with `BUILD_MISMATCH`; a daemon that has no session left then stops
+/// itself, so the newer build can start its own broker on the same endpoint
+/// instead of running a second one beside a daemon nobody uses. A client with a
+/// session attached is never signalled: that engine belongs to a live session.
+fn session_for(
+    stream: &mut UnixStream,
+    mode: &AcceptMode,
+    live_sessions: usize,
+    stop: &AtomicBool,
+) -> Option<String> {
     match mode {
         AcceptMode::Single(id) => Some(id.clone()),
         AcceptMode::Attached => {
             let line = read_line(stream, Duration::from_secs(5))?;
             let v: Value = serde_json::from_slice(&line).ok()?;
-            if v["attach"].as_u64() != Some(crate::gate::ATTACH_PROTO as u64) {
-                let _ =
-                    stream.write_all(b"{\"ok\":false,\"error\":\"attach version unsupported\"}\n");
-                return None;
-            }
+            let attach = v["attach"].as_u64();
             let sid = v["session"].as_str().unwrap_or("").to_string();
             let sid = if sid.is_empty() {
                 "session".to_string()
             } else {
                 sid
             };
-            stream.write_all(b"{\"ok\":true}\n").ok()?;
+            match attach {
+                // v1 (a gate that predates the build check). Served, because it
+                // is the *client* that must not trust a stranger; the answer
+                // still names this build so a v2 client can tell.
+                Some(1) => {
+                    eprintln!(
+                        "acos-webview: attach v1 (no build id) from a client of another build; \
+                         serving it (this broker is {})",
+                        crate::build_id()
+                    );
+                }
+                Some(n) if n == crate::gate::ATTACH_PROTO as u64 => {
+                    let client = v["build"].as_str().unwrap_or("");
+                    if client != crate::build_id() {
+                        let exiting = live_sessions == 0;
+                        eprintln!(
+                            "acos-webview: BUILD_MISMATCH: client build {} != broker build {} \
+                             ({} session(s) attached{})",
+                            if client.is_empty() { "<none>" } else { client },
+                            crate::build_id(),
+                            live_sessions,
+                            if exiting { "; exiting, nothing is left to serve" } else { "" }
+                        );
+                        let answer = json!({
+                            "ok": false,
+                            "code": crate::wire::code::BUILD_MISMATCH,
+                            "build": crate::build_id(),
+                            "sessions": live_sessions,
+                            "exiting": exiting,
+                        });
+                        let mut bytes = answer.to_string().into_bytes();
+                        bytes.push(b'\n');
+                        let _ = stream.write_all(&bytes);
+                        let _ = stream.flush();
+                        if exiting {
+                            stop.store(true, Ordering::SeqCst);
+                        }
+                        return None;
+                    }
+                }
+                _ => {
+                    let _ = stream.write_all(
+                        b"{\"ok\":false,\"error\":\"attach version unsupported\"}\n",
+                    );
+                    let _ = stream.flush();
+                    return None;
+                }
+            }
+            let mut bytes = json!({"ok": true, "build": crate::build_id()})
+                .to_string()
+                .into_bytes();
+            bytes.push(b'\n');
+            stream.write_all(&bytes).ok()?;
             stream.flush().ok()?;
             stream.set_read_timeout(None).ok()?;
             Some(sid)
@@ -751,6 +816,15 @@ impl Conn {
                 Ok(Outcome::Value(json!({
                     "proto": PROTO,
                     "session": session_id,
+                    // WYSIWYG about *which code* answers (WVSCOPE): a guest that
+                    // reconnects after a broker restart can tell whether it is
+                    // talking to the same build. The gate refuses a broker of
+                    // another build outright (WIRE.md §0.1); this is the same
+                    // fact on the guest wire.
+                    "broker": {
+                        "build": crate::build_id(),
+                        "pid": std::process::id(),
+                    },
                     "engine": {
                         "product": v.product,
                         "version": v.version,
@@ -775,6 +849,7 @@ impl Conn {
             "engineStatus" => {
                 let mut v = self.broker.engine_status();
                 v["unanswered"] = json!(self.unanswered.load(Ordering::SeqCst));
+                v["build"] = json!(crate::build_id());
                 Ok(Outcome::Value(v))
             }
             "memory" => {

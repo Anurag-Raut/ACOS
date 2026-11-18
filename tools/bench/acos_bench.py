@@ -43,6 +43,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import shutil
 import statistics
 import subprocess
@@ -180,6 +181,32 @@ METRICS = {
         "unit": "ms", "category": "latency", "direction": "lower",
         "method": "acos_observe_tree settle=fast; the fast tree must show the same "
                   "count text as a strict read (no stale tree)",
+    },
+    "m9_apk_ready_cold_ms": {
+        "metric": "M9", "label": "M9 APK ready, first launch in a fresh scratch",
+        "unit": "ms", "category": "latency", "direction": "lower",
+        "method": "same ladder as `m9_apk_ready_ms`, but for the first launch in "
+                  "an empty scratch: it also builds the launcher's shared caches "
+                  "(derive_classpath, linkerconfig, the guest launcher/render DEX, "
+                  "the shims). Recorded so the one-time cost is visible and never "
+                  "silently mixed into the per-APK number.",
+    },
+    "m9_apk_ready_ms": {
+        "metric": "M9", "label": "M9 APK ready (ingest + staging + dex prep)",
+        "unit": "ms", "category": "latency", "direction": "lower",
+        "method": "the launcher's own stage ladder (ACOS_ART_STAGE_TIMING=1): "
+                  "`launch-entry` -> `guest-exec`, i.e. from the APK path to the "
+                  "moment the guest can start it. Inside that window: ingest "
+                  "(package facts, manifest, dex list), staging (APK copy into "
+                  "`<data>/app`, native-lib extraction) and the DEX/classpath "
+                  "preparation. The emulator's `adb install` row is the same "
+                  "question (decompress + write + dexopt), so the install row "
+                  "compares instead of NOT_MEASURED. This is the steady-state "
+                  "per-APK number (the launcher's shared caches exist, as they "
+                  "do in every other bench phase); the one-time cache build the "
+                  "first launch in a fresh scratch pays is `m9_apk_ready_cold_ms`, "
+                  "recorded separately and never mixed in. Rungs have 10 ms "
+                  "granularity (one jiffy).",
     },
     "m8_tap_counter_strict_ms": {
         "metric": "M8", "label": "M8 tap -> settled, counter (strict)",
@@ -1297,6 +1324,138 @@ def phase_latency(args):
     }
 
 
+# --------------------------------------------------------------------------- #
+# Phase: install (M9 APK ready)
+# --------------------------------------------------------------------------- #
+APK_READY_START = "launch-entry"
+APK_READY_END = "guest-exec"
+STAGE_RE = re.compile(r"acos-art: stage (\S+) exec=(\d+)ms")
+
+
+def parse_stages(text):
+    """`acos-art: stage <name> exec=<ms>ms` -> [(name, ms)] in emission order.
+
+    The launcher's own instrumentation (`ACOS_ART_STAGE_TIMING`), not a
+    stopwatch: every rung is `CLOCK_BOOTTIME` minus the process start tick, so
+    "time from the APK path" is the delta between two rungs.
+    """
+    return [(m.group(1), int(m.group(2))) for m in STAGE_RE.finditer(text)]
+
+
+def apk_ready_from_stages(stages):
+    """APK ready: `launch-entry` -> `guest-exec`, with the in-window substages.
+
+    `None` when either rung is missing or the ladder is not monotone: a run that
+    did not reach `guest-exec` has no APK-ready number, and a fabricated one
+    would be a false pass.
+    """
+    # The ladder is monotone by construction (`exec` is time since process
+    # start). A ladder that is not is a parsing/clock fault, and timing it would
+    # publish a negative substage.
+    if any(b[1] < a[1] for a, b in zip(stages, stages[1:])):
+        return None
+    start = next((ms for name, ms in stages if name == APK_READY_START), None)
+    end = next((ms for name, ms in stages if name == APK_READY_END), None)
+    if start is None or end is None or end < start:
+        return None
+    sub, prev = {}, start
+    for name, ms in stages:
+        if start <= ms <= end:
+            sub[name] = ms - prev
+            prev = ms
+    return {"ms": end - start, "substages": sub, "start_ms": start, "end_ms": end}
+
+
+def newest_launcher_log(artifacts, since):
+    """The launcher stderr the *newest* session wrote at/after `since`."""
+    best, best_m = None, 0.0
+    for path in Path(artifacts).rglob("launcher.stderr.log"):
+        try:
+            m = path.stat().st_mtime
+        except OSError:
+            continue
+        if m + 1.0 >= since and m >= best_m:
+            best, best_m = path, m
+    return best
+
+
+def phase_install(args):
+    """M9: APK ready — the ACOS counterpart of the emulator's `install` row."""
+    set_arm(getattr(args, "animations", "on"))
+    reps = max(1, int(getattr(args, "reps", 5) or 5))
+    scratch = Path(args.scratch)
+    if scratch.exists():
+        shutil.rmtree(scratch)
+    scratch.mkdir(parents=True)
+    (scratch / "screens").mkdir()
+    artifacts = scratch / "sessions"
+    samples, teardowns, checks, errors = {}, [], {}, []
+    failures = StepFailures()
+    serve = d = None
+    try:
+        # The launcher's stage ladder only exists when the harness asks for it;
+        # the daemon passes its environment down to every launcher child.
+        serve = d2_warm.Serve(args.acos, scratch, max_sessions=2,
+                              extra_env={"ACOS_ART_STAGE_TIMING": "1"})
+        d = serve.client()
+        d.call("ping", {})
+
+        def measure(tag, i):
+            """One fresh session -> the APK-ready rungs of its launcher log."""
+            base = new_base(tag, i)
+            t_rep = time.time()
+            r = launch(d, base, "strict")
+            ok, _value = launch_ok(r)
+            if not ok:
+                failures.add("%s-%d" % (tag, i), "launch", r)
+            log = newest_launcher_log(artifacts, t_rep)
+            stages = parse_stages(log.read_text(errors="replace")) if log else []
+            ready = apk_ready_from_stages(stages)
+            if ready is None:
+                errors.append("rep %s-%d: no %s->%s stage ladder in %s (stages: %s)"
+                              % (tag, i, APK_READY_START, APK_READY_END, log,
+                                 [n for n, _ in stages][:12]))
+            destroy(d, base, teardowns, tag)
+            return ok, ready, log
+
+        # The first launch in a fresh scratch builds the launcher's shared
+        # caches (derive_classpath, linkerconfig, the guest launcher/render DEX,
+        # the shims). That is a one-time, tree-wide cost every later session and
+        # every other APK reuses, so it is recorded as its own row and never
+        # mixed into the per-APK number the gate compares.
+        ok, ready, log = measure("m9-cold", 0)
+        add(samples, "m9_apk_ready_cold_ms", None if ready is None else ready["ms"],
+            ok and ready is not None,
+            {"substages": None if ready is None else ready["substages"],
+             "log": None if log is None else str(log), "apk": str(COUNTER)})
+
+        for i in range(reps):
+            ok, ready, log = measure("m9-apk-ready", i)
+            add(samples, "m9_apk_ready_ms",
+                None if ready is None else ready["ms"],
+                ok and ready is not None,
+                {"substages": None if ready is None else ready["substages"],
+                 "log": None if log is None else str(log),
+                 "apk": str(COUNTER), "launch_ok": ok})
+        finish_samples(samples)
+        checks["apk_ready_n"] = samples.get("m9_apk_ready_ms", {}).get("n", 0)
+        checks["failed_steps"] = failures.total
+        ok = (not errors) and (not failures.total)
+        return {
+            "schema": "acos-bench-phase/2", "phase": "install", "utc": utc(),
+            "acos": args.acos, "binary_sha256": benchlib.sha256_file(args.acos),
+            "host_before": host_now(), "host_after": host_now(),
+            "env": {"animations": ARM["animations"],
+                    "ACOS_ART_STAGE_TIMING": "1"},
+            "samples": samples, "teardowns": teardowns, "checks": checks,
+            "failures": failures.summary(), "ok": ok, "errors": errors,
+            "survivors": d2_warm.survivors(scratch) if scratch.exists() else [],
+        }
+    finally:
+        if serve is not None:
+            serve.close()
+
+
 def make_reference(d, scratch):
     """P9/P7 rule: count 0, two identical settled captures, launch frame same.
 
@@ -2234,7 +2393,7 @@ def run_bundle(args):
         "loop1": phase_loop, "loop5": phase_loop, "loop10": phase_loop,
         "loop20": phase_loop, "loop30": phase_loop,
         "cold": phase_cold, "p11": phase_p11,
-        "scenarios": phase_scenarios,
+        "scenarios": phase_scenarios, "install": phase_install,
     }
     bundle = {"schema": "acos-bench-bundle/1", "utc": utc(), "phases": {},
               "host_before": host_now()}
@@ -2288,7 +2447,7 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--phase", choices=["latency", "memory", "loop1", "loop5",
                                         "loop10", "loop20", "loop30", "cold",
-                                        "p11", "scenarios"])
+                                        "p11", "scenarios", "install"])
     ap.add_argument("--bundle", default="",
                     help="comma-separated phases run in one lock acquisition")
     ap.add_argument("--acos", default=str(REPO / "target/release/acos"))
@@ -2340,7 +2499,7 @@ def main(argv=None):
         "loop1": phase_loop, "loop5": phase_loop, "loop10": phase_loop,
         "loop20": phase_loop, "loop30": phase_loop,
         "cold": phase_cold, "p11": phase_p11,
-        "scenarios": phase_scenarios,
+        "scenarios": phase_scenarios, "install": phase_install,
     }[args.phase]
     if args.phase in ("loop1", "loop5", "loop10", "loop20", "loop30"):
         args.n = {"loop1": 1, "loop5": 5, "loop10": 10, "loop20": 20,

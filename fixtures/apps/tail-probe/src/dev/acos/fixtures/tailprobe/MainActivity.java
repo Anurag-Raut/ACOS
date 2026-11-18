@@ -25,6 +25,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.lang.ref.WeakReference;
@@ -141,7 +142,16 @@ public final class MainActivity extends Activity {
         status.setTextIsSelectable(true);
         root.addView(status);
 
-        setContentView(root);
+        // CONFKIT: the status panel is the scenario's evidence channel and it
+        // grows with every line the probe logs. In a bare vertical LinearLayout
+        // the last child is squeezed to zero height once the lines pass the
+        // screen, so the newest line (the one a scenario waits for) becomes
+        // invisible: `call=RINGING` matched a node with bounds [24,2313][1056,2313]
+        // in tail-telephony. A real app scrolls its log; the ScrollView gives the
+        // TextView its full height and a `scroll` step can reach the last line.
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(root);
+        setContentView(scroll);
 
         telephony = getSystemService(TelephonyManager.class);
         registerSmsReceiver();

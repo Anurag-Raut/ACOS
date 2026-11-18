@@ -1,0 +1,88 @@
+--------- beginning of main
+1794990193866      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794990193866      2  I : Using CollectorTypeCC GC.
+1794990193866      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794990193866      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794990193866      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794990193866      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794990193866      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794990193866      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794990193866      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794990193866     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794990193866     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794990193866     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794990193866     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794990193866     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794990193866     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794990193866     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794990193866     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794990193866     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794990193866     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794990193866     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794990193866     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794990193866     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794990193866     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794990193866     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794990193866     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794990193866     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794990193866     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794990193866     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794990193866     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794990193866     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794990193866     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794990193866     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794990193866     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794990193866     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794990193866     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794990193866     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794990193866     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794990193866     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794990193866     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794990193866     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794990193866     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794990193866     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794990193866     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794990193866     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794990193866     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794990193866     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794990193866     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794990193866     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794990193866     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794990193866     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794990193866     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794990193866     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794990193866     53  D nativeloader: InitExtendedPublicLibraries: 
+1794990193866     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794990193866     55  D nativeloader: InitProductPublicLibraries: 
+1794990193866     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794990193866     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794990193866     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794990193866     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794990193866     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794990193866     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794990193866     62  W ziparchive: Unable to open '/data/app/multi-package-probe.dm': No such file or directory
+1794990193866     63  W ziparchive: Unable to open '/data/app/multi-package-probe.dm': No such file or directory
+1794990193866     64  D nativeloader: Configuring clns-2 for other apk /data/app/multi-package-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.multipkg
+1794990193866     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.multipkg/cache: chown failed: EINVAL (Invalid argument)
+1794990193866     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.multipkg/code_cache: chown failed: EINVAL (Invalid argument)
+1794990193866     67  V GraphicsEnvironment: Currently set values for:
+1794990193866     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794990193866     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794990193866     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.multipkg: false
+1794990193866     71  V GraphicsEnvironment: dev.acos.fixtures.multipkg is not listed in per-application setting
+1794990193866     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794990193866     73  W SystemServiceRegistry: No service published for: netstats
+1794990193866     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794990193866     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794990193866     76  I AcosMultiPkg: onCreate
+1794990193866     77  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794990193866     78  I AcosMultiPkg: ACOSPROBE ok pkg=dev.acos.fixtures.counter version=1.0 src=/data/app/counter.apk uid=10193
+1794990193866     79  I AcosMultiPkg: ACOSPROBE ai pkg=dev.acos.fixtures.counter flags=0x30083e46 src=/data/app/counter.apk
+1794990193866     80  I AcosMultiPkg: ACOSPROBE at-flags pkg=dev.acos.fixtures.counter src=/data/app/counter.apk
+1794990193866     81  I AcosMultiPkg: ACOSPROBE ctx appInfo=dev.acos.fixtures.counter pkg=dev.acos.fixtures.counter label=Counter app_name=Counter
+1794990193866     82  I AcosMultiPkg: ACOSPROBE uid 10193 -> [dev.acos.fixtures.counter]
+1794990193866     83  I AcosMultiPkg: ACOSPROBE done
+1794990193866     84  E logdw: dev.acos.fixtures.multipkg.MainActivity
+1794990193866     85  E logdw: dev.acos.fixtures.multipkg.MainActivity
+1794990193866     86  E logdw: dev.acos.fixtures.multipkg.MainActivity
+1794990193866     87  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED

@@ -1,0 +1,65 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16384000,
+    "wall_ms": 6077
+  },
+  "ok": true,
+  "request_id": "req_1387c_18e915d7539e9724",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/results/handoff/CONFKIT/evidence/sysui1-permission-deny",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794989574378901732,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/fixtures/build/apps/perm-probe.apk",
+        "sha256": "6b67daa72e6092871fa5a4b6305adb9398d5d0cb48d0199df5e6ad7577021f38",
+        "sha256_12": "6b67daa72e60",
+        "size_bytes": 12756
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794985751917693909,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/scenarios/sysui1-permission-deny.yaml",
+        "sha256": "2c5713df6181176719a832d797f00ee5f144fce347684a8754c055edeff22015",
+        "sha256_12": "2c5713df6181",
+        "size_bytes": 3137
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/results/handoff/CONFKIT/evidence/sysui1-permission-deny/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_perm-probe",
+  "status": "pass"
+}

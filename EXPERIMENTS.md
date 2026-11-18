@@ -5439,3 +5439,113 @@ so a non-clickable listener runs.
   `looperwake-bg-post` plus a NET6-style `netcb` TextView assertion on `modules`
   (and WV8); if it reproduces there, diff the module delivery thread against the
   plain-thread case before touching the guest runtime.
+
+## E15.1 / PARITY1 — per-step UI-tree parity harness (ACOS ART vs the phone) — MEASURED (harness + 5 scenarios; phone detached, recorded captures used)
+
+- **Date / commit:** 2026-11-18, branch `parity1` (base `modules` = `aaf518bf8`).
+- **Question / goal:** v0.5.0 needs a harness that runs **the same ACOS scenario**
+  on ACOS ART and on the moto g35 and diffs the UI trees after every step
+  (matches / list of differences per step), with an expected-difference allowlist.
+- **Method:** `tools/parity/run-parity.sh <scenario>` in three phases: ACOS
+  `verify --engine art` under `run-exclusive.sh` + `guarded.sh` (private
+  `ACOS_RUNTIME_DIR`/`ACOS_SESSION_SOCKET`/`ACOS_VIEW_TEST_DIR`); the phone replay
+  via `tools/phone/replay_scenario.py` under the phone flock with a new
+  `--tree-dir` per-step tree dump and `--no-device-settings` (wake with
+  `KEYCODE_WAKEUP`, no `settings put`); then `tools/parity/diff_trees.py`.
+  Nodes pair by resource-id / text / content-desc / class-role+tree position,
+  bounds are compared in **dp with each side's own density** (400 vs 420 dpi),
+  and the expected-difference allowlist is applied. 23 pure checks:
+  `python3 tools/tests/test-parity-harness.py`.
+- **Inputs:** fixtures `counter.apk`, `form-validation.apk`; Gaten
+  `gaten-dev-f344272-x86_64-release-unsigned.apk` (both sides execute the same
+  JS bundle, PHONE2). Phone captures: `fixtures/reference-device/{counter,
+  form-validation}` (moto g35, API 35, 1080x2400 @400 dpi, recorded 2026-11-10)
+  and `results/phone/gaten-f344272/<scenario>/phone` (recorded 2026-11-14/15).
+- **Result:** counter 20/24 steps, 160 matched nodes, 204 differences (180
+  allowlisted, 24 = one finding class); form-validation 25/28, 225 nodes,
+  250/250 allowlisted, **0 findings**; gaten-backstack 24/25, gaten-lesson 27/29,
+  gaten-home 13/14 (labels+target coverage), 101–108 findings each, dominated by
+  the accessibility-name placement and the phone's AnkiDroid state.
+- **Finding:** (1) ACOS exposes RN accessible names under a different attribute
+  than the phone — and for the WaniKani token field exposes `content-desc
+  "Personal access token"` that the phone does not expose at all, so
+  `gaten-backstack` steps 13/15 pass only on ACOS: an ACOS **false pass**;
+  (2) after `rotate` to landscape, ACOS's `visible_bounds` is clipped to the
+  pre-rotation display width (1080 instead of 2400) on 8 nodes, 3 steps — an
+  ACOS tree/evidence bug; (3) the phone's AnkiDroid install state (no permission)
+  makes the Anki card differ from ACOS's "not installed" — environment, not a
+  defect; (4) `settle: fast` onboarding steps are timing, not evidence.
+- **Fidelity / evidence:** ACOS = art-reference; phone = physical-device
+  (recorded tier). Reports: `results/handoff/PARITY1/` (`report.md`/`report.json`
+  per scenario, `FINDINGS.md`, `runs.json`); docs `docs/PARITY.md`.
+- **Regression / false pass:** the two ACOS defects above are the false-pass
+  risk; the harness refuses an empty pass (a missing phone is exit 3, a
+  one-sided capture is `status: skipped`, and a phone replay failure excludes
+  the affected steps from findings).
+- **Conclusion / next:** fix F2 (display rect for visible clipping) and decide
+  the F1 accessibility-name model, then re-run the five scenarios with the phone
+  attached (the live path is implemented but was only smoke-tested before the
+  device detached).
+
+## EMUBENCH — can ACOS beat the stock Android emulator on every tracked metric? — MEASURED (better on 10 of 11 comparable rows; warm launch is a tie, flagged)
+
+- **Date / commit:** 2026-11-18; branch `emubench` from `modules` (473859c2) +
+  this commit. Owner direction 2026-11-18 §2 (the emulator is a tracked
+  baseline); ADR-0015 relaxed for this benchmark only (N=1/2/4, ≤2048 MiB guest
+  each, under the 90 % RAM ceiling, always shut down).
+- **Question / goal:** measure the stock emulator with the SAME apps, screen and
+  metric definitions ACOS uses, so every release gate can compare against it and
+  flag any metric where ACOS is worse.
+- **Method:** `tools/art-runtime/emubench/run-emubench.sh` drives four exclusive
+  phases (`n1-cold`, `n1-warm`, `n2`, `n4`) through
+  `run-exclusive.sh --exclusive` + `tools/guarded.sh --mem 24G`; the harness
+  (`emu_bench.py`, `--self-test` 10/0) measures cold boot → first app frame,
+  warm launch, tap → settled (counter + form), UI tree read, PNG screenshot,
+  install, reset, host PSS/RSS/anon+shmem + guest memory, idle CPU and verified
+  counter tasks per GiB-minute at N=1/2/4. Correctness oracle = the live
+  `uiautomator` tree at every check; 0 false passes. The first frame is the
+  launcher→app change, not a stored pixel reference: a cross-boot frame differs
+  by 1–3 units per channel on every pixel (measured), so a cross-session
+  pixel-identity gate is invalid here (P6's within-session gate is unaffected).
+- **Inputs:** `fixtures/build/apps/counter.apk`,
+  `form-validation.apk`; AVDs `emb-1…4` (API 34 google_apis x86_64, 2048 MiB,
+  4 vCPU, `swiftshader_indirect`, 1080×2400 @ 420 dpi); ACOS side = the
+  RELGATE2 v0.3.0 RC (`169bfa5e`, 2026-11-16) gate numbers + §12 W52 M11.
+- **Result:** every row ≥5 reps (cold 5 boots, warm 5, tap/tree/shot 10, reset 5,
+  snapshot 5, N phases 5 reps × 3 tasks/instance). Emulator medians: cold boot
+  12.7 s → first app frame 13.6 s; snapshot warm boot 1.07 s; warm launch
+  286 ms; tap → settled 1931 ms (counter) / 1946 ms (form); UI tree 1928 ms;
+  screenshot 527 ms; reset 531 ms; instance PSS 3578 MiB / anon+shmem 3532 MiB;
+  idle CPU 13.1 % of one core; throughput N=1/N=2/N=4 in the merged JSON.
+  ACOS is better on 10 of the 11 comparable metrics, by 1.7× (reset) to 62×
+  (memory); **warm launch is a tie** (ACOS 289 ms vs emulator 286 ms, within the
+  5 % noise floor) and is flagged, not claimed.
+- **Finding:** the emulator's cost is structural — one emulator per session
+  (3.5 GiB, 13 % of a core idle) versus ACOS's 57 MiB core and 0.4 %; and every
+  observation route (`uiautomator dump` ≈ 1.9 s, `screencap` ≈ 0.2–0.5 s) is
+  paid per call. ACOS's remaining weak row is warm launch, where its strict
+  settle costs the same as the emulator's launcher-frame change; its fast path
+  (143 ms) is already 2× better.
+- **Fidelity / evidence:** measured on the real stock emulator;
+  `results/bench/emubench-2026-11-18.json` (every sample + `free -m` per step),
+  `results/handoff/EMUBENCH/` (scripts, raw phase JSON, driver logs, gate),
+  `BENCHMARKS.md` §13 (the side-by-side table and the release-gate rule).
+- **Regression / false pass:** 0 false passes (a task counts only when both tree
+  checks pass). No emulator left running (driver postflight + independent `ps`).
+  Host usage peaked at 33.6 % (limit 85 %); the RAM guard was never tripped.
+- **Conclusion / next:** the baseline is now a release-gate input
+  (`emu_gate.py`, 0 metrics worse). Smallest next action: measure ACOS warm
+  launch at the same 5-rep resolution in the next gate and, if it stays a tie,
+  decide whether the strict-settle definition (which the emulator row does not
+  pay) or the launch path itself is the thing to change.
+
+## E15.2 / PARITYFIX — F1 (RN accessible names) and F2 (rotation clip) from the PARITY1 findings — F2 FIXED, F1 = INVALID PHONE EVIDENCE (live phone re-run still open; phone detached)
+
+- **Date / commit:** 2026-11-18, branch `parityfix` (`parity1` 4a9cf841 + `modules` 11ea5019).
+- **Question / goal:** PARITY1 reported (F1) an ACOS false pass - `content_desc "Personal access token"` on an RN token field that the phone's tree does not carry (gaten-backstack 13/15, gaten-lesson 19/20/23) - and (F2) `visible_bounds` clipped to the pre-rotation display after `rotate`. Find the one place each comes from and fix it.
+- **Method:** read the tree builder (`LaunchMain.appendViewJson`), the RN 0.81.4 sources (`BaseViewManager`, `ReactAccessibilityDelegate`) and the AOSP TextView/View accessibility code; measured the recorded phone captures; fixture + scenario + negative twin; before/after runs of the rotation scenario; regenerated the five parity reports.
+- **Result F2:** `displayBounds()` cached the first `DisplayMetrics` for the process; it now reads the live session display (`PANEL_W`x`PANEL_H`). `tools/tests/test-tree-display-clip.py --need-landscape` on `rot1-rotate`: 3/7 trees consistent before (trees 5/6/8, 8 nodes each, DecorView visible `[0,0,1080,1080]`), 7/7 after; counter parity report 24 -> 0 unexpected.
+- **Result F1:** ACOS already publishes `AccessibilityNodeInfo.getText/getHintText/getContentDescription` of each node (real framework + real RN delegate); the phone "evidence" was the 2026-11-14 recorded observations made with the pre-TREE1 agent-device mapping (every name filed as content-desc; **0 `text` nodes in all 18 recorded Gaten steps-sets**), so the "phone has no `Personal access token`" claim measured the mapping bug TREE1 fixed the same afternoon. The harness now carries `attribute_fidelity` (`a11y_source` recorded by `replay_scenario.py`); name-placement differences against an unverified capture are `attribute_placement_unverified`, not ACOS bugs and not passes. New fixture `a11y-names-probe` (+ `scenarios/a11y-names.yaml`, `scenarios/negative/a11y-names-wrong.yaml`, `tools/tests/test-a11y-names-tree.py`) pins the 7 RN-shaped nodes to AccessibilityNodeInfo semantics (7/7; negative fails `ELEMENT_NOT_FOUND`).
+- **Fidelity / evidence:** ACOS = art-reference; phone = recorded captures only (adb empty). `results/handoff/PARITYFIX/` (`FINDINGS.md`, reports, before/after, rotate regression); 34 harness checks (the 11 new ones error against the PARITY1 comparator); `cargo test`: acos-cli bin 208, acos-art w31_tree_evidence 3, scenario parsers 10 + 40.
+- **Regression / false pass:** all scenarios with a `rotate` step re-run on ART with unchanged verdicts, the rotation/counter negatives still fail at their own step; gaten-backstack 25/25, gaten-lesson 29/29, counter 24/24, form-validation 28/28 on ART. No assertion edited or weakened. Unproven, stated: `attribute_placement_unverified` is not "verified equal"; TREE1 §6's two live placements (`Open 猫`, `Analytics`) are unexplained and open.
+- **Conclusion / next:** with the phone attached run `tools/parity/run-parity.sh scenarios/gaten-backstack.yaml --phone-source live` (then lesson, home): the report becomes `verified` and any real name-placement difference reappears as a finding.

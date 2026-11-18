@@ -19,6 +19,11 @@ pub struct WireGuest {
     writer: Arc<Mutex<UnixStream>>,
     pending: Arc<Mutex<HashMap<String, SyncSender<Value>>>>,
     blobs: Mutex<Receiver<Blob>>,
+    /// `render` waiters, keyed by the request id the blob belongs to. Two pulls
+    /// in flight on one connection are answered out of order (WIRE.md §2 allows
+    /// it), so a blob is delivered to the request it names, never to "whoever
+    /// reads the channel first".
+    blob_waiters: Arc<Mutex<HashMap<String, SyncSender<Blob>>>>,
     /// Host→guest requests the broker sends (interception, JS calls) are
     /// answered "continue"/empty: these tests never ask the page for anything.
     seen: Arc<Mutex<Vec<(String, Value)>>>,
@@ -43,12 +48,9 @@ impl WireGuest {
         let stream =
             UnixStream::connect(path).unwrap_or_else(|e| panic!("connect {}: {e}", path.display()));
         if let Some(session) = session {
-            let attach = serde_json::json!({
-                "attach": acos_webview::gate::ATTACH_PROTO,
-                "session": session,
-            });
-            let mut line = attach.to_string().into_bytes();
-            line.push(b'\n');
+            // The production encoder, not a hand-written copy: the attach line's
+            // bytes are WIRE.md §0.1 and the gate's own test pins them.
+            let line = acos_webview::gate::encode_attach(session, acos_webview::build_id());
             let mut w = &stream;
             w.write_all(&line).expect("attach line");
             w.flush().expect("attach flush");
@@ -69,6 +71,12 @@ impl WireGuest {
                 Some(true),
                 "the shared daemon refused the attach: {answer}"
             );
+            // WVSCOPE: the daemon proves which build answers.
+            assert_eq!(
+                answer["build"].as_str(),
+                Some(acos_webview::build_id()),
+                "the daemon must report this build: {answer}"
+            );
         }
         stream
             .set_read_timeout(Some(Duration::from_secs(45)))
@@ -78,6 +86,7 @@ impl WireGuest {
         let (blob_tx, blob_rx) = sync_channel::<Blob>(8);
         let blob_rx = Mutex::new(blob_rx);
         let pending = Arc::new(Mutex::new(HashMap::<String, SyncSender<Value>>::new()));
+        let blob_waiters = Arc::new(Mutex::new(HashMap::<String, SyncSender<Blob>>::new()));
         let seen = Arc::new(Mutex::new(Vec::new()));
         let closed = Arc::new(AtomicBool::new(false));
         {
@@ -85,10 +94,17 @@ impl WireGuest {
             let seen = Arc::clone(&seen);
             let closed = Arc::clone(&closed);
             let writer = Arc::clone(&writer);
+            let blob_waiters = Arc::clone(&blob_waiters);
             std::thread::Builder::new()
                 .name("wire-guest".into())
                 .spawn(move || {
                     let mut reader = BufReader::new(read_half);
+                    // WIRE.md §1: a BLOB follows the JSON response it belongs to,
+                    // and the two are written back-to-back. Checking it here, on
+                    // the thread that sees the stream, is the ordering assertion
+                    // — with several `render`s in flight there is no per-caller
+                    // "next blob".
+                    let mut expect_blob_for: Option<String> = None;
                     loop {
                         match read_frame(&mut reader) {
                             Ok(Frame::Json(msg)) => {
@@ -110,12 +126,27 @@ impl WireGuest {
                                 if id.is_empty() {
                                     continue; // event
                                 }
+                                expect_blob_for = Some(id.clone());
                                 if let Some(tx) = pending.lock().unwrap().remove(&id) {
                                     let _ = tx.send(msg);
                                 }
                             }
                             Ok(Frame::Blob(b)) => {
-                                let _ = blob_tx.try_send(b);
+                                match expect_blob_for.take() {
+                                    Some(id) => assert_eq!(
+                                        id, b.id,
+                                        "the blob must belong to the JSON before it (stream order)"
+                                    ),
+                                    None => panic!("a blob with no JSON response before it: {}", b.id),
+                                }
+                                match blob_waiters.lock().unwrap().remove(&b.id) {
+                                    Some(tx) => {
+                                        let _ = tx.send(b);
+                                    }
+                                    None => {
+                                        let _ = blob_tx.try_send(b);
+                                    }
+                                }
                             }
                             Err(_) => {
                                 closed.store(true, Ordering::SeqCst);
@@ -131,6 +162,7 @@ impl WireGuest {
             pending,
             blobs: blob_rx,
             seen,
+            blob_waiters,
             next: AtomicU32::new(1),
             closed,
         }
@@ -181,6 +213,11 @@ impl WireGuest {
         let n = self.next.fetch_add(1, Ordering::SeqCst);
         let id = format!("g{n}");
         let rx = self.pending_for(&id);
+        let (blob_tx, blob_rx) = sync_channel::<Blob>(1);
+        self.blob_waiters
+            .lock()
+            .unwrap()
+            .insert(id.clone(), blob_tx);
         self.send(&json!({"id": id, "op": "render", "view": view, "format": "png"}))
             .expect("send render");
         let answer = rx
@@ -192,13 +229,13 @@ impl WireGuest {
             "render failed: {}",
             answer["error"]
         );
-        let blob = self
-            .blobs
-            .lock()
-            .unwrap()
+        // This request's own blob, by id: two pulls in flight on one connection
+        // are answered out of order and only the id says which is which. The
+        // ordering check (JSON then its BLOB) is on the reader thread.
+        let blob = blob_rx
             .recv_timeout(Duration::from_secs(45))
             .expect("render blob");
-        assert_eq!(blob.id, id, "the blob must belong to the JSON before it");
+        assert_eq!(blob.id, id, "the blob must belong to this request");
         (answer["result"].clone(), blob)
     }
 

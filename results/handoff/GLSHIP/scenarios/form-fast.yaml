@@ -1,0 +1,60 @@
+# form-fast: GLSHIP M8 probe (fast settle), NOT a gate.
+#
+# The tap/type path of scenarios/form-validation.yaml with `settle: fast` on the
+# input steps, so their `duration_ms` is the action→state latency. Used only by
+# results/handoff/GLSHIP/run-ab.sh. The gate is scenarios/form-validation.yaml.
+version: 1
+name: form-fast
+description: >-
+  Submit an empty form (tap), then type a name and submit again, all with the
+  fast settle; the inline error is checked by the following assert_text steps.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.formvalidation/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: submit}
+      timeout_ms: 5000
+
+  - tap:
+      selector: {id: submit}
+      settle: fast
+  - wait_for:
+      selector: {text: {exact: "Name is required"}}
+      timeout_ms: 5000
+
+  # Focusing the field does not change the tree, so it keeps the default
+  # (strict) settle; the fast steps are the submits and the type, which are the
+  # actions whose latency M8 measures.
+  - tap:
+      selector: {id: name}
+  - type:
+      selector: {id: name}
+      text: Ada
+      settle: fast
+  - tap:
+      selector: {id: submit}
+      settle: fast
+  - wait_for:
+      selector: {text: {exact: "Email is required"}}
+      timeout_ms: 5000

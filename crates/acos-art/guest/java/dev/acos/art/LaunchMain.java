@@ -316,8 +316,36 @@ public final class LaunchMain {
         }
     }
 
+    /**
+     * GATENE2E: the guest paints every window on a software {@code Canvas}
+     * ({@code ViewRootImpl.drawSoftware}); it has no window GPU renderer
+     * (docs/LATER.md "GPU-drawn windows"). The host already clears
+     * {@code FLAG_HARDWARE_ACCELERATED} on the app and activities, but a window
+     * the app adds itself can ask for acceleration explicitly (Gaten's lookup
+     * overlay sets {@code FLAG_HARDWARE_ACCELERATED}); {@code ViewRootImpl.
+     * enableHardwareAcceleration} then calls {@code ThreadedRenderer.create},
+     * whose {@code ProcessInitializer} aborts the RenderThread
+     * ({@code DeviceInfo::updateDisplayInfo}: no SurfaceFlinger physical
+     * display). {@code ThreadedRenderer.sRendererEnabled} is the framework's own
+     * switch for "this process must not do accelerated rendering" (low-end
+     * persistent processes): with it false the window falls back to the software
+     * path and {@code Canvas.isHardwareAccelerated()} is false, exactly what an
+     * app sees on a device without a window GPU. The GL provider stays available
+     * for bitmap readbacks (hwui's {@code RenderProxy}), which do not use it.
+     */
+    static void disableWindowRenderer() {
+        try {
+            Class<?> tr = Class.forName("android.view.ThreadedRenderer");
+            tr.getField("sRendererEnabled").setBoolean(null, false);
+            System.out.println("ACOSLAUNCH MARK window-renderer software (ThreadedRenderer.sRendererEnabled=false)");
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH MARK window-renderer-disable failed " + unwrap(t));
+        }
+    }
+
     static void run(long t0) throws Throwable {
         registerNatives();
+        disableWindowRenderer();
         new File(sOut).mkdirs();
         Looper.prepareMainLooper();
         // A real Android process answers `IApplicationThread` transactions on a
@@ -2289,6 +2317,10 @@ public final class LaunchMain {
         if (type >= 0) sb.append(",\"type\":").append(type);
         // FLAG_NOT_TOUCHABLE (0x10): the same bit the WMS reads.
         sb.append(",\"touch\":").append((flags & 0x10) == 0);
+        // HWFALLBACK: the window asked for FLAG_HARDWARE_ACCELERATED (0x01000000)
+        // but the guest has no window GPU renderer (disableWindowRenderer), so it
+        // paints in software. The host turns this into a verdict note.
+        if ((flags & 0x01000000) != 0) sb.append(",\"hw_fallback\":true");
         boolean focus = false;
         try {
             focus = root.hasWindowFocus();
@@ -2495,25 +2527,36 @@ public final class LaunchMain {
 
     /**
      * The display rect a window/visible rect is clipped against:
-     * `[0,0,w,h]` in display pixels, or all zeros when the display metrics are
-     * unavailable (then no display clipping is applied).
+     * `[0,0,w,h]` in display pixels of the session display **as it is at this
+     * capture**, or all zeros when the display size is unknown (then no display
+     * clipping is applied).
+     *
+     * <p>PARITYFIX F2: this used to be probed once from
+     * `v.getResources().getDisplayMetrics()` and cached for the process, so after
+     * a rotation every `visible_bounds` was still clipped to the pre-rotation
+     * width (landscape 2400x1080 clipped to 1080 wide). The session display is
+     * `PANEL_W` x `PANEL_H`, which `rotatedConfiguration()` swaps on every
+     * rotation (the same values `DisplayInfo.logicalWidth/Height` and the
+     * frame's display rect are built from); it is read here on every call, never
+     * cached. `DisplayMetrics` is only the fallback for a panel that was never
+     * sized.
      */
-    static final int[] sDisplayBounds = new int[]{0, 0, 0, 0};
-    static boolean sDisplayBoundsProbed;
-
     static int[] displayBounds(View v) {
-        if (!sDisplayBoundsProbed) {
-            sDisplayBoundsProbed = true;
+        int w = PANEL_W;
+        int h = PANEL_H;
+        if (w <= 0 || h <= 0) {
+            w = 0;
+            h = 0;
             try {
                 android.util.DisplayMetrics m = v.getResources().getDisplayMetrics();
                 if (m != null && m.widthPixels > 0 && m.heightPixels > 0) {
-                    sDisplayBounds[2] = m.widthPixels;
-                    sDisplayBounds[3] = m.heightPixels;
+                    w = m.widthPixels;
+                    h = m.heightPixels;
                 }
             } catch (Throwable ignored) {
             }
         }
-        return sDisplayBounds;
+        return new int[]{0, 0, w, h};
     }
 
     /**
@@ -3966,6 +4009,17 @@ public final class LaunchMain {
 
     // ------------------------------------------------------------- natives
 
+    /** True when the launcher selected a guest GLES provider (`acos.guest.gles` set). */
+    static boolean guestGlesSelected() {
+        try {
+            Class<?> c = Class.forName("android.os.SystemProperties");
+            Object v = c.getMethod("get", String.class, String.class).invoke(null, "acos.guest.gles", "");
+            return v != null && !String.valueOf(v).isEmpty();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     static void registerNatives() {
         RenderNat.load();
         String[] names = {
@@ -4143,6 +4197,29 @@ public final class LaunchMain {
                 rc = -1;
             }
             if (rc != 1) missing.append(' ').append(n).append('=').append(rc);
+        }
+        // GLSPIKE4: android.opengl.EGL14/GLES20 natives, ONLY when a guest GLES
+        // provider was selected (`ACOS_GUEST_GLES`, property `acos.guest.gles`
+        // from crates/acos-art/src/gles.rs). Default OFF is inert by
+        // construction: with no provider staged libEGL has no driver, and a
+        // registered EGL14 would turn a catchable UnsatisfiedLinkError in an
+        // app that uses it into libEGL's `couldn't find an OpenGL ES
+        // implementation` SIGABRT. The image's own libandroid_runtime exports
+        // the registrations (`register_android_opengl_jni_EGL14` / `_GLES20`,
+        // global scope); registering runs no Java class initialiser.
+        if (guestGlesSelected()) {
+            for (String n : new String[] {
+                    "register_android_opengl_jni_EGL14",
+                    "register_android_opengl_jni_EGL15",
+                    "register_android_opengl_jni_GLES20"}) {
+                int rc;
+                try {
+                    rc = RenderNat.register(n);
+                } catch (Throwable t) {
+                    rc = -1;
+                }
+                if (rc != 1) missing.append(' ').append(n).append('=').append(rc);
+            }
         }
         // Canvas.setCompatibilityVersion needs libhwui's graphics natives; this
         // is the same probe E2D used to unblock ActivityThread.systemMain().

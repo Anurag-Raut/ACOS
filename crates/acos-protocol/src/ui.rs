@@ -573,6 +573,12 @@ pub struct WindowInfo {
     /// an agent uses to explain why a tap passed through an overlay.
     #[serde(default)]
     pub touchable: bool,
+    /// The window asked for `FLAG_HARDWARE_ACCELERATED` but the guest has no
+    /// window GPU renderer, so it was painted in software (`Canvas.
+    /// isHardwareAccelerated()` is false). The verdict records a
+    /// `hardware_renderer_fallback` note for it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub renderer_fallback: bool,
 }
 
 impl WindowInfo {
@@ -587,6 +593,7 @@ impl WindowInfo {
             bounds: None,
             focus: false,
             touchable: false,
+            renderer_fallback: false,
         }
     }
 }
