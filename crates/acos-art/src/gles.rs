@@ -224,8 +224,38 @@ pub fn provider_name_from_env() -> Result<Option<String>> {
 }
 
 /// The `ro.hardware.egl` value for this run, or `None` when the flag is off.
-pub fn tag_from_env() -> Result<Option<String>> {
-    provider_name_from_env()
+///
+/// This is the manifest **tag**, never the `ACOS_GUEST_GLES` value: the loader
+/// appends it to `libEGL_`, and the provider directory is only a label (a
+/// provider called `angle-swiftshader` stages `libEGL_angle.so`). Serving the
+/// directory name instead makes the loader look for `libEGL_angle-swiftshader.so`,
+/// find nothing, and abort with its own `couldn't find an OpenGL ES
+/// implementation` fatal — measured on ART (results/handoff/GLSPIKE2).
+pub fn tag_from_env(root: &ArtRoot) -> Result<Option<String>> {
+    Ok(selected(root)?.map(|p| p.manifest.tag))
+}
+
+/// The `(ro.hardware.egl, ro.hardware.vulkan)` values the **selected**
+/// provider declares, or `None` when the flag is off.
+///
+/// `Props::for_launch()` runs in places that do not hold an [`ArtRoot`] (main's
+/// `props print`, the session/app writers), so this resolves the root the same
+/// way [`ArtRoot::resolve`] does. A missing sysroot is not an error here: a run
+/// with the flag on fails loudly in `Sandbox::command` (the bind source check)
+/// before any guest starts, and this is only the property table.
+pub fn selected_tags() -> Result<Option<(String, Option<String>)>> {
+    let Some(name) = provider_name_from_env()? else {
+        return Ok(None);
+    };
+    let root = match ArtRoot::resolve(None, None) {
+        Ok(r) => r,
+        Err(_) => return Ok(None),
+    };
+    let provider = load(&root, &name)?;
+    Ok(Some((
+        provider.manifest.tag.clone(),
+        provider.vulkan_tag().map(ToString::to_string),
+    )))
 }
 
 /// Load and verify `<data>/gles/<name>/manifest.json`.
@@ -366,25 +396,6 @@ pub fn describe(provider: &Provider) -> String {
         provider.manifest.licence,
         provider.manifest.source
     )
-}
-
-/// The `ro.hardware.vulkan` value the selected provider stages, if any.
-///
-/// `Props::for_launch()` runs in several places that do not hold an [`ArtRoot`]
-/// (main's `props print`, the session/app writers), so this resolves the root
-/// the same way [`ArtRoot::resolve`] does. A missing sysroot is not an error
-/// here: a run with the flag on fails loudly in `Sandbox::command` (the bind
-/// source check) before any guest starts, and this is only the property table.
-pub fn selected_vulkan_tag() -> Result<Option<String>> {
-    let Some(name) = provider_name_from_env()? else {
-        return Ok(None);
-    };
-    let root = match ArtRoot::resolve(None, None) {
-        Ok(r) => r,
-        Err(_) => return Ok(None),
-    };
-    let provider = load(&root, &name)?;
-    Ok(provider.vulkan_tag().map(ToString::to_string))
 }
 
 /// Total staged bytes (the on-disk cost of the provider, shared by all runs).

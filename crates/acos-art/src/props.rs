@@ -497,23 +497,29 @@ impl Props {
         // driver name it looks for in `/vendor/lib64/egl` (`Loader.cpp`,
         // `HAL_SUBNAME_KEY_PROPERTIES`). Default: the property stays unset, so
         // libEGL keeps its own "couldn't find an OpenGL ES implementation"
-        // fatal — exactly today's guest. With `ACOS_GUEST_GLES=<tag>` the run
-        // opted into a staged provider and the loader can find it.
-        if let Some(tag) = crate::gles::tag_from_env()? {
-            p.set("ro.hardware.egl", &tag);
-            // The probe fixtures read this to decide whether to take the GL
-            // path at all; an app on a device never needs it (it just draws).
-            p.set("acos.guest.gles", &tag);
-        }
+        // fatal — exactly today's guest. With `ACOS_GUEST_GLES=<provider>` the
+        // run opted into a staged provider and the loader can find it.
+        //
+        // The value is the manifest **tag** (`libEGL_<tag>.so`), not the
+        // provider directory: GLSPIKE2's `angle-swiftshader` provider stages
+        // `libEGL_angle.so`, so a run that served the directory name aborted
+        // inside libEGL one step before ANGLE.
+        //
         // GLSPIKE2: a provider that also stages a Vulkan ICD (ANGLE needs one)
         // declares `ro.hardware.vulkan`, and the image's own `libvulkan.so`
         // opens `/vendor/lib64/hw/vulkan.<tag>.so` from it (`hwvulkan module
         // open`, `vulkan.`, measured in the sysroot's libvulkan). Absent when
         // the provider carries no ICD: the property stays unset, exactly as in
         // the image today.
-        if let Some(vulkan) = crate::gles::selected_vulkan_tag()? {
-            p.set("ro.hardware.vulkan", &vulkan);
-            p.set("acos.guest.gles.vulkan", &vulkan);
+        if let Some((tag, vulkan)) = crate::gles::selected_tags()? {
+            p.set("ro.hardware.egl", &tag);
+            // The probe fixtures read this to decide whether to take the GL
+            // path at all; an app on a device never needs it (it just draws).
+            p.set("acos.guest.gles", &tag);
+            if let Some(vulkan) = vulkan {
+                p.set("ro.hardware.vulkan", &vulkan);
+                p.set("acos.guest.gles.vulkan", &vulkan);
+            }
         }
         Ok(p)
     }
@@ -822,5 +828,62 @@ mod tests {
             let doc = effective_heap_json();
             assert!(doc["error"].as_str().unwrap().contains(ENV_HEAPSTARTSIZE));
         });
+    }
+
+    /// GLSPIKE2: `ro.hardware.egl` is the provider's manifest **tag**, the value
+    /// the image's loader appends to `libEGL_`, never the `ACOS_GUEST_GLES`
+    /// directory name. A run whose property was the directory name aborted
+    /// inside libEGL with its own `couldn't find an OpenGL ES implementation`
+    /// fatal (measured: results/handoff/GLSPIKE2), one step before the driver.
+    /// The ICD the provider stages comes with it as `ro.hardware.vulkan`.
+    #[test]
+    fn the_gles_properties_are_the_manifest_tag_and_its_vulkan_icd() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("acos-props-gles-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let provider = dir.join("gles/angle-swiftshader");
+        std::fs::create_dir_all(provider.join("lib64/egl")).expect("dirs");
+        std::fs::create_dir_all(provider.join("lib64/hw")).expect("dirs");
+        std::fs::write(provider.join("lib64/egl/libEGL_angle.so"), b"driver").expect("write");
+        std::fs::write(provider.join("lib64/hw/vulkan.pastel.so"), b"icd").expect("write");
+        std::fs::write(
+            provider.join("manifest.json"),
+            r#"{"tag":"angle","vulkan_tag":"pastel","provider":"x","source":"y",
+                "version":"0","licence":"z","files":[
+                {"path":"lib64/egl/libEGL_angle.so","sha256":"00","size":6},
+                {"path":"lib64/hw/vulkan.pastel.so","sha256":"00","size":3}]}"#,
+        )
+        .expect("manifest");
+        let saved: Vec<(&str, Option<String>)> = ["ACOS_GUEST_GLES", "ACOS_GUEST_GLES_DIR"]
+            .iter()
+            .map(|k| (*k, std::env::var(k).ok()))
+            .collect();
+        for k in ["ACOS_GUEST_GLES", "ACOS_GUEST_GLES_DIR"] {
+            std::env::remove_var(k);
+        }
+        let result = (|| {
+            let off = Props::for_launch().expect("defaults");
+            assert_eq!(off.get("ro.hardware.egl"), None, "flag off: property unset");
+            assert_eq!(off.get("ro.hardware.vulkan"), None);
+            std::env::set_var("ACOS_GUEST_GLES", "angle-swiftshader");
+            std::env::set_var("ACOS_GUEST_GLES_DIR", dir.join("gles"));
+            Props::for_launch()
+        })();
+        for (k, v) in saved {
+            match v {
+                Some(v) => std::env::set_var(k, v),
+                None => std::env::remove_var(k),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        let on = result.expect("a staged provider is valid");
+        assert_eq!(
+            on.get("ro.hardware.egl"),
+            Some("angle"),
+            "the directory name is a label; the loader appends the tag"
+        );
+        assert_eq!(on.get("acos.guest.gles"), Some("angle"));
+        assert_eq!(on.get("ro.hardware.vulkan"), Some("pastel"));
+        assert_eq!(on.get("acos.guest.gles.vulkan"), Some("pastel"));
     }
 }
