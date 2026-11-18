@@ -1,0 +1,149 @@
+{
+  "abi": null,
+  "activity_resumed": true,
+  "application_created": true,
+  "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=285MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p137220-i172769.scope)",
+  "code": "GUEST_KILLED_BY_SIGNAL",
+  "disk_free_bytes": 225085018112,
+  "guard": "seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0",
+  "guest_crash": null,
+  "guest_crash_detail": null,
+  "guest_exit": null,
+  "guest_signal": 6,
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "kept_run_dir": "/home/Qui/Projects/acos/.cache/art-locks/data-MERGEFIX2-137166/runs/137211-0",
+  "logd": "logd: 286 entries",
+  "logd_tail": [
+    "W/AChoreographer: JNI environment is unavailable, skipping registration",
+    "E/GraphicsEnv: Failed to get gpu service",
+    "?/libEGL: assertion failed: !hnd couldn't find an OpenGL ES implementation, make sure one of persist.graphics.egl, ro.hardware.egl and ro.board.platform is set",
+    "F/: *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\nFatal signal 6 (SIGABRT), code -6 (SI_TKILL)\nOS: Linux 7.2.11-arch1-1 (x86_64)\nCmdline: <unset>\nThread: 59 \"RenderThread\"\nRegisters:\n    rax: 0x0000000000000000    rbx: 0x00007fa4bce6bdaf    rcx: 0x00007fa7712e33f4    rdx: 0x0000000000000006\n    rdi: 0x0000000000000002    rsi: 0x000000000000003b    rbp: 0x00007fa4bce6ae1d    rsp: 0x00007fa3c08b3e90\n    r8 : 0x00007fa3c08b3f68    r9 : 0x00007fa4bce6bdaf    r10: 0x0000000000000006    r11: 0x0000000000000202\n    r12: 0x0000000000000000    r13: 0x0000000000000011    r14: 0x000000e66be44770    r15: 0x00007fa4bce9c878\n    rip: 0x00007fa7712e33f4    eflags: 0x00000202 [ IF ]\n     cs: 0x00000033     gs: 0x00000000     fs: 0x00000000\n\nBacktrace:\n\t#00 pc 000013f4  /data/shim/libartshim.so (__android_log_assert+452) (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d)\n\n",
+    "F/: Fault message: ",
+    "E/logdw: failed to connect to tombstoned: No such file or directory",
+    "E/logdw: *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***",
+    "E/logdw: Build fingerprint: 'unknown'",
+    "E/logdw: Revision: 'unknown'",
+    "E/logdw: ABI: 'x86_64'",
+    "E/logdw: Timestamp: 2026-11-18 04:28:48.481852799+0000",
+    "E/logdw: Process uptime: 16s",
+    "E/logdw: Cmdline: /system/apex/com.android.art/bin/dalvikvm64 -Ximage:/data/img/boot.art -Xnorelocate -cp /data/app/launch-guest/classes.dex dev.acos.art.LaunchMain /data/app/gaten-dev-f344272-x86_64-release-unsigned.apk com.gaten /data/out/launch activity-resumed com.gaten.app.LauncherIconLight com.gaten.app.MainApplication 2131886720 /data/overlay/PixelConfigOverlayCommon.idmap 2131820670 2131820670 com.gaten.app.LauncherActivity 281591364 manifest",
+    "E/logdw: pid: 2, tid: 59, name: RenderThread  >>> /system/apex/com.android.art/bin/dalvikvm64 <<<",
+    "E/logdw: uid: 10192",
+    "E/logdw: signal 0 (SIGABRT), code -6 (SI_TKILL), fault addr --------",
+    "E/logdw: rax 0000000000000000  rbx 00007fa4bce6bdaf  rcx 00007fa7712e33f4  rdx 0000000000000006",
+    "E/logdw: r8  00007fa3c08b3f68  r9  00007fa4bce6bdaf  r10 0000000000000006  r11 0000000000000202",
+    "E/logdw: r12 0000000000000000  r13 0000000000000011  r14 000000e66be44770  r15 00007fa4bce9c878",
+    "E/logdw: rdi 0000000000000002  rsi 000000000000003b",
+    "E/logdw: rbp 00007fa4bce6ae1d  rsp 00007fa3c08b3e90  rip 00007fa7712e33f4",
+    "E/logdw: 1 total frames",
+    "E/logdw: backtrace:",
+    "E/logdw: #00 pc 00000000000013f4  /data/shim/libartshim.so (__android_log_assert+452) (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d)"
+  ],
+  "native_crash": {
+    "cmdline": "<unset>",
+    "code": -6,
+    "code_name": "SI_TKILL",
+    "fault_addr": "0x0",
+    "fault_pc": "000013f4",
+    "frames": [
+      {
+        "index": 0,
+        "map": "/data/shim/libartshim.so",
+        "offset": null,
+        "pc": "000013f4",
+        "symbol": "BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d"
+      }
+    ],
+    "shim": {
+      "code": -6,
+      "fault_addr": "0x0",
+      "pid": 2,
+      "signal": 6,
+      "source": "acos-shim",
+      "thread": "RenderThread",
+      "tid": 59
+    },
+    "signal": 6,
+    "signal_name": "SIGABRT",
+    "summary": "SIGABRT (6) fault_addr=0x0 in thread 59 \"RenderThread\": /data/shim/libartshim.so (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d)",
+    "thread": {
+      "name": "RenderThread",
+      "tid": 59
+    },
+    "unmapped_frames": 0
+  },
+  "native_crash_path": ".cache/runs/exp/gaten-bubble-overlay-wait/art/art-frames/native-crash.txt",
+  "notes": [
+    "shared-boot-image: /home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff (ACOS_ART_BOOT_IMAGE=shared-fixed; -Ximage:/data/img/boot.art -Xnorelocate; fixed base 0x70000000, no image ASLR; cache hit)",
+    "boot_image: mode=shared-fixed cache=hit dir=/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff input=ff39b037f1d6b9ff base=0x70000000",
+    "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=285MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p137220-i172769.scope)",
+    "seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0",
+    "logd: 286 entries",
+    "webview: module `webview` is off (no `com.android.webview` provider package, no gate socket): `WebView` takes Android's own no-provider path. Attach it with `services: [{id: webview, profile: real}]`."
+  ],
+  "outcome": "crash",
+  "retryable": false,
+  "route": "launch",
+  "stage": "teardown-evidence",
+  "stderr_tail": [
+    "W1118 04:28:33.559440 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderEndEndRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559441 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderTopEndRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559442 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBlockEndColor'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559443 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderTopLeftRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559445 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderEndStartRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559446 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderStartEndRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559448 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderTopRightRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559448 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderTopStartRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559449 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBlockStartColor'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559451 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBottomEndRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559453 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBottomLeftRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559453 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderStartStartRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559454 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBottomRightRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.559455 2342685824 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBottomStartRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.",
+    "W1118 04:28:33.561781 2341596288 ReactInstance.cpp:267] ReactInstance: evaluateJavaScript() with JS bundle",
+    "ACOSCRASH {\"source\":\"acos-shim\",\"signal\":6,\"code\":-6,\"fault_addr\":\"0x0\",\"pid\":2,\"tid\":59,\"thread\":\"RenderThread\"}"
+  ],
+  "stderr_tail_last": "ACOSCRASH {\"source\":\"acos-shim\",\"signal\":6,\"code\":-6,\"fault_addr\":\"0x0\",\"pid\":2,\"tid\":59,\"thread\":\"RenderThread\"}",
+  "stdout_tail": [
+    "[acos-art: capture truncated: 27302883 of 35691491 bytes dropped (cap 8388608 bytes); first dropped bytes: \"ACOSLAUNCH MARK resume-budget ms=45000 ready_ms=2000\\nACOSLAUNCH MARK natives registered\\nACOSLAUNCH MARK android-runtime ready rc=1\\nACOSLAUNCH MARK mainline-modules initialized\\nACOSLAUNCH MARK crash-handler rc=1\\nACOSLAUNCH MARK animations on=false scale=0.0\"]",
+    "…]},{\"class\":\"X4.e\",\"id\":\"\",\"text\":\"Settings\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[653,2551][769,2588]\",\"bounds_on_screen\":\"[653,2551][769,2588]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}]}]},{\"class\":\"b5.g\",\"id\":\"\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[564,2522][860,2648]\",\"bounds_on_screen\":\"[564,2522][860,2648]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"b5.g\",\"id\":\"\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[571,2522][867,2648]\",\"bounds_on_screen\":\"[571,2522][867,2648]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"b5.g\",\"id\":\"\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[571,2522][867,2648]\",\"bounds_on_screen\":\"[571,2522][867,2648]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":0,\"clickable\":true,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}]}]}]}]}]}]},{\"class\":\"b5.g\",\"id\":\"\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,0][0,0]\",\"bounds_on_screen\":\"[0,0][0,0]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":4,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}]}]}]},{\"class\":\"b5.g\",\"id\":\"\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,2400][1080,2400]\",\"bounds_on_screen\":\"[0,2400][1080,2400]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}]}]},{\"class\":\"android.view.View\",\"id\":\"android:id/navigationBarBackground\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,2337][1080,2400]\",\"bounds_on_screen\":\"[0,2337][1080,2400]\",\"visible_bounds\":\"[0,2337][1080,2400]\",\"visible\":false,\"visibility\":4,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}],\"window_count\":1,\"node_budget\":2000,\"truncated\":false,\"emit_us\":11162},\"settle\":{\"settled\":false,\"pending\":[\"queue\",\"window-unstable\"],\"frame_callbacks\":1,\"queue_due_ms\":-12,\"horizon_ms\":256,\"anim_callbacks\":[],\"draw_ms\":1794976128291,\"draw_seq\":545,\"window_stable_ms\":0,\"in_touch_mode\":true,\"window_gone\":false,\"task_finished\":false,\"view_generation\":600},\"animations\":{\"on\":false,\"scale\":0.0,\"applied\":true,\"source\":\"env:off\"}}",
+    "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {606d44b} dev.acos.art.LaunchMain$8$1@b3ccac",
+    "ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {4a9b468} android.accessibilityservice.AccessibilityService$$ExternalSyntheticLambda0@df2bd75: 0",
+    "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {4a9b468} android.accessibilityservice.AccessibilityService$$ExternalSyntheticLambda0@df2bd75",
+    "ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {c2d8822} android.view.Choreographer$FrameDisplayEventReceiver@b2982b3: 0",
+    "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {c2d8822} android.view.Choreographer$FrameDisplayEventReceiver@b2982b3",
+    "ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {c2d8822} android.view.Choreographer$FrameDisplayEventReceiver@b2982b3: 0",
+    "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {c2d8822} android.view.Choreographer$FrameDisplayEventReceiver@b2982b3",
+    "ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {c2d8822} android.view.Choreographer$FrameDisplayEventReceiver@b2982b3: 0",
+    "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {c2d8822} android.view.Choreographer$FrameDisplayEventReceiver@b2982b3"
+  ],
+  "stdout_tail_last": "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {c2d8822} android.view.Choreographer$FrameDisplayEventReceiver@b2982b3",
+  "utc_ms": 1794976128587,
+  "wall_ms": 15211
+}
