@@ -153,6 +153,8 @@ fn run_scenario(name: &str, scenario_text: &str, fault: &str, allow_untrusted: b
     command
         .env("ACOS_NO_DAEMON", "1")
         .env("ACOS_ART_BIN", &script)
+        // ZDEFAULT1: this is a fake exec-path launcher; the zygote is the default.
+        .env("ACOS_ART_ZYGOTE", "off")
         .env("FAKE_ART_OUT", &out)
         .env("FAKE_ART_FAULT", fault)
         .env("FAKE_ART_MARKER", &marker)
@@ -268,6 +270,8 @@ fn untrusted_flag_is_allowed_without_the_override() {
         .unwrap()
         .env("ACOS_NO_DAEMON", "1")
         .env("ACOS_ART_BIN", &script)
+        // ZDEFAULT1: this is a fake exec-path launcher; the zygote is the default.
+        .env("ACOS_ART_ZYGOTE", "off")
         .env("FAKE_ART_OUT", &out)
         .env("FAKE_ART_MARKER", &marker)
         .env_remove("ACOS_ALLOW_UNTRUSTED_FOR_TESTS")

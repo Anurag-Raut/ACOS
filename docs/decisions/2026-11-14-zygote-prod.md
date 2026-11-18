@@ -4,9 +4,11 @@ Owner decision implemented here: `DECISIONS.md` ADR-0026 decision 1.
 Inputs: `docs/decisions/2026-11-12-zygote-shared-art.md`, `results/art-runtime/Z7.md` (the gate
 measurement), `results/art-runtime/ZS-security-review.md` (F1–F13), `docs/SECURITY.md`.
 
-Status: **opt-in** (`ACOS_ART_ZYGOTE=on`). It becomes the default only after it wins the Z7 gate on
-the real agent loop at N=10 (≥ 25 % whole-system verified tasks/GiB-min against the optimised exec
-path, shared boot image included, 0 false passes) — that is P5 below, not this document.
+Status: **default** since 2026-11-18 (ZDEFAULT1; it was opt-in `ACOS_ART_ZYGOTE=on` until then). The
+default flip is gated on the Z7/P5 result (≥ 25 % whole-system verified tasks/GiB-min against the
+optimised exec path, shared boot image included, 0 false passes), recorded in `DECISIONS.md` ADR-0026
+(amendment 2026-11-18) and `results/handoff/ZDEFAULT1/README.md`. Plain exec stays one switch away:
+`ACOS_ART_ZYGOTE=off`.
 
 ---
 
@@ -119,8 +121,8 @@ trusted fixtures and the owner's agent loop; no claim is made for multi-tenant h
 
 | knob | default | meaning |
 |---|---|---|
-| `ACOS_ART_ZYGOTE` | unset/`off` | `on` selects the persistent zygote for `acos serve` sessions. Unset = **byte-identical to `main`**: same argv, same calls, same order, same replies. |
-| `ACOS_ART_ZYGOTE_BUILD` | built by `research/zygote-proto/z3/build.sh` | the guest dex + shims; a bad dir fails the launch (fail-closed), never falls back to exec |
+| `ACOS_ART_ZYGOTE` | **unset = on** (ZDEFAULT1, 2026-11-18) | Unset/`on`/`1`/`true`/`yes` select the persistent zygote for `acos serve` and `acos verify` sessions; `off`/`0`/`false`/`no`/`exec`/`disabled` select the plain exec path, which is **byte-identical to the pre-flip `main`** (same argv, same calls, same order, same replies). Until ZDEFAULT1 the default was off. |
+| `ACOS_ART_ZYGOTE_BUILD` | unset = the host builds and caches it (ZDEFAULT1, `acos-art/src/zygote_build.rs`; same recipe as `research/zygote-proto/z3/build.sh`, whose sources moved to `crates/acos-art/zygote/`) | the guest dex + shims; a bad dir fails the launch (fail-closed), never falls back to exec |
 | `ACOS_ART_ZYGOTE_IDLE_MS` | `30000` | keeper idle exit with no sessions |
 | `ACOS_ART_ZYGOTE_N` | `10` | pre-fork budget (how many children one zygote may host before a second keeper is used) |
 

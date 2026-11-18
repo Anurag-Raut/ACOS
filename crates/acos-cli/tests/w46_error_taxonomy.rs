@@ -182,6 +182,8 @@ fn run(name: &str, mode: &str, code: &str, facts: &str, extra_env: &[(&str, &str
     command
         .env("ACOS_NO_DAEMON", "1")
         .env("ACOS_ART_BIN", &script)
+        // ZDEFAULT1: this is a fake exec-path launcher; the zygote is the default.
+        .env("ACOS_ART_ZYGOTE", "off")
         .env("FAKE_W46_OUT", &out)
         .env("FAKE_W46_MODE", mode)
         .env("FAKE_W46_CODE", code)

@@ -136,6 +136,8 @@ fn run_scenario(name: &str, steps: &str, trust: &str, allow_untrusted: bool) -> 
     command
         .env("ACOS_NO_DAEMON", "1")
         .env("ACOS_ART_BIN", &script)
+        // ZDEFAULT1: this is a fake exec-path launcher; the zygote is the default.
+        .env("ACOS_ART_ZYGOTE", "off")
         .env("FAKE_ART_OUT", &out)
         .env_remove("ACOS_ALLOW_UNTRUSTED_FOR_TESTS")
         .args([

@@ -210,6 +210,8 @@ impl Daemon {
             .env_remove("ACOS_SESSION_SOCKET")
             .env("ACOS_CACHE_DIR", dir.join("cache"))
             .env("ACOS_ART_BIN", &fake)
+            // ZDEFAULT1: this is a fake exec-path launcher; the zygote is the default.
+            .env("ACOS_ART_ZYGOTE", "off")
             .env("FAKE_ART_OUT", &art_home)
             .stdout(Stdio::null())
             .stderr(Stdio::null())

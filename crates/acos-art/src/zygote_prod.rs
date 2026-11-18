@@ -67,6 +67,11 @@ pub const DEFAULT_ACK_TIMEOUT_MS: u64 = 30_000;
 /// 13 ms; a cold boot image or a debug build is far slower).
 pub const DEFAULT_READY_TIMEOUT_MS: u64 = 180_000;
 
+/// How often an ack file is polled. The keeper answers a verb in ~2 ms
+/// (ZDEFAULT1 measured fork 1.3 ms + ack 0.2 ms), so the old 5 ms poll added up to
+/// 5 ms of pure quantisation to every `spawn` and every `kill` (two per reset).
+pub const ACK_POLL: Duration = Duration::from_micros(250);
+
 /// What a keeper is valid for. A zygote's pre-fork heap only makes sense for one
 /// such tuple (§3), so one keeper per key.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -519,11 +524,18 @@ impl PersistentZygote {
     /// no contract or ack from the previous child (§4.2: "nothing the old child
     /// wrote survives").
     pub fn prepare_session(&mut self, tag: u32) -> ZygoteResult<PathBuf> {
-        // The previous session's resolver stops with its socket directory: a
-        // responder left on the old inode would leak a thread and serve nobody.
-        self.dns = None;
         let dir = self.session_dir(tag);
-        fs::create_dir_all(&dir)?;
+        Self::prepare_dirs(&dir)?;
+        self.attach_dns(tag)?;
+        Ok(dir)
+    }
+
+    /// The filesystem half of [`Self::prepare_session`]: empty `run` and `sock`
+    /// and no stale contract or ack. Touches only `<plan>/<tag>`, so a caller can
+    /// run it **without** the daemon-wide keeper lock (ZDEFAULT1: wiping a run
+    /// root takes milliseconds, and N concurrent resets must not queue on it).
+    pub fn prepare_dirs(dir: &Path) -> ZygoteResult<()> {
+        fs::create_dir_all(dir)?;
         for sub in ["run", "sock"] {
             let path = dir.join(sub);
             let _ = fs::remove_dir_all(&path);
@@ -545,14 +557,21 @@ impl PersistentZygote {
         ] {
             fs::create_dir_all(dir.join(sub))?;
         }
-        // NET2: `<plan>/<tag>/sock` is bound at `/dev/socket` in the zygote child,
-        // so the resolver proxy has to be served there (not in the launcher's
-        // directory, which the child never sees). Held until the next session.
-        self.dns =
-            crate::spike_net::serve_dnsproxyd_if_enabled(&dir.join("sock")).map_err(|e| {
-                ZygoteError::Io(format!("dnsproxyd in {}: {e}", dir.join("sock").display()))
-            })?;
-        Ok(dir)
+        Ok(())
+    }
+
+    /// NET2: `<plan>/<tag>/sock` is bound at `/dev/socket` in the zygote child,
+    /// so the resolver proxy has to be served there (not in the launcher's
+    /// directory, which the child never sees). Held until the next session; the
+    /// previous session's resolver stops with its socket directory (a responder
+    /// left on the old inode would leak a thread and serve nobody).
+    pub fn attach_dns(&mut self, tag: u32) -> ZygoteResult<()> {
+        self.dns = None;
+        let dir = self.session_dir(tag);
+        self.dns = crate::spike_net::serve_dnsproxyd_if_enabled(&dir.join("sock")).map_err(|e| {
+            ZygoteError::Io(format!("dnsproxyd in {}: {e}", dir.join("sock").display()))
+        })?;
+        Ok(())
     }
 
     /// Publish `<plan>/<tag>/binds`: the run root and sockets the child is told to
@@ -613,43 +632,93 @@ impl PersistentZygote {
     where
         F: FnMut() -> Option<String>,
     {
-        let argv = self.session_dir(tag).join("argv");
+        let argv = self.contract_path(tag);
         let started = Instant::now();
         while started.elapsed() < timeout {
             if argv.is_file() {
                 self.publish_binds(tag)?;
                 return Ok(());
             }
-            if !self.alive() {
-                return Err(self.dead_reason().unwrap_or(ZygoteError::Contract(
-                    "the keeper died before <tag>/argv".into(),
-                )));
-            }
-            if let Some(reason) = peer_gone() {
-                return Err(ZygoteError::Contract(format!(
-                    "the session launcher cannot publish `<plan>/{tag}/argv` and never will \
-                     (waited {} ms): {reason}",
-                    started.elapsed().as_millis()
-                )));
+            if let Some(error) = self.contract_blocker(tag, started, &mut peer_gone) {
+                return Err(error);
             }
             std::thread::sleep(Duration::from_millis(5));
         }
-        Err(ZygoteError::AckTimeout {
+        Err(self.contract_timeout(tag, started))
+    }
+
+    /// Where the session launcher publishes its contract (`<plan>/<tag>/argv`).
+    ///
+    /// ZDEFAULT1: the engine polls this path **without holding the daemon-wide
+    /// keeper lock** (the launcher takes ~100 ms to publish it; holding the lock
+    /// for that long made every other session's `kill`/`spawn` wait behind it:
+    /// N=20 concurrent resets queued on one mutex).
+    pub fn contract_path(&self, tag: u32) -> PathBuf {
+        self.session_dir(tag).join("argv")
+    }
+
+    /// One poll's worth of "the contract can never arrive": the keeper died, or
+    /// the peer that has to produce it is gone. `None` = keep waiting.
+    pub fn contract_blocker<F>(
+        &mut self,
+        tag: u32,
+        started: Instant,
+        peer_gone: &mut F,
+    ) -> Option<ZygoteError>
+    where
+        F: FnMut() -> Option<String>,
+    {
+        if !self.alive() {
+            return Some(self.dead_reason().unwrap_or(ZygoteError::Contract(
+                "the keeper died before <tag>/argv".into(),
+            )));
+        }
+        peer_gone().map(|reason| {
+            ZygoteError::Contract(format!(
+                "the session launcher cannot publish `<plan>/{tag}/argv` and never will \
+                 (waited {} ms): {reason}",
+                started.elapsed().as_millis()
+            ))
+        })
+    }
+
+    /// The structured timeout for a contract that never arrived.
+    pub fn contract_timeout(&self, tag: u32, started: Instant) -> ZygoteError {
+        ZygoteError::AckTimeout {
             verb: "argv".into(),
             tag,
             waited_ms: started.elapsed().as_millis() as u64,
             tail: self.log_tail(20),
-        })
+        }
     }
 
     /// `spawn <tag>`: the zygote forks one fresh child for an already-published
     /// contract and acks it in `<plan>/<tag>/spawned` (§4.4).
     pub fn spawn(&mut self, tag: u32) -> ZygoteResult<ZygoteChild> {
+        let ack_path = self.spawn_begin(tag)?;
+        let ack = self.wait_ack(&ack_path, "spawn", tag)?;
+        self.spawn_end(tag, &ack)
+    }
+
+    /// First half of [`Self::spawn`]: clear the old ack and send the verb. The
+    /// caller waits for the returned ack file **without holding the keeper lock**
+    /// (ZDEFAULT1: the keeper serves verbs one at a time in ~2 ms, so a lock held
+    /// across each ack wait serialised every concurrent reset).
+    pub fn spawn_begin(&mut self, tag: u32) -> ZygoteResult<PathBuf> {
         let dir = self.session_dir(tag);
         let _ = fs::remove_file(dir.join("spawned"));
         let _ = fs::remove_file(dir.join("pid"));
         self.send(&format!("spawn {tag}"))?;
-        let ack = self.wait_ack(&dir.join("spawned"), "spawn", tag)?;
+        Ok(dir.join("spawned"))
+    }
+
+    /// Second half of [`Self::spawn`], given the parsed ack.
+    pub fn spawn_end(
+        &mut self,
+        tag: u32,
+        ack: &HashMap<String, String>,
+    ) -> ZygoteResult<ZygoteChild> {
+        let dir = self.session_dir(tag);
         let child_pid = ack
             .get("pid")
             .and_then(|v| v.parse().ok())
@@ -669,14 +738,53 @@ impl PersistentZygote {
     /// it; siblings and the zygote are untouched (§4.1, §6: by pid/group, never
     /// by `cgroup.kill`).
     pub fn kill(&mut self, tag: u32) -> ZygoteResult<Option<u32>> {
+        let (ack_path, previous) = self.kill_begin(tag)?;
+        let ack = self.wait_ack(&ack_path, "kill", tag)?;
+        Ok(self.kill_end(tag, &ack, previous))
+    }
+
+    /// First half of [`Self::kill`] (see [`Self::spawn_begin`]): returns the ack
+    /// file and the pid the child had.
+    pub fn kill_begin(&mut self, tag: u32) -> ZygoteResult<(PathBuf, Option<u32>)> {
         let dir = self.session_dir(tag);
         let previous = self.child_pid_of(tag);
         let _ = fs::remove_file(dir.join("reaped"));
         let _ = fs::remove_file(dir.join("spawned"));
         self.send(&format!("kill {tag}"))?;
-        let ack = self.wait_ack(&dir.join("reaped"), "kill", tag)?;
+        Ok((dir.join("reaped"), previous))
+    }
+
+    /// Second half of [`Self::kill`], given the parsed ack.
+    pub fn kill_end(
+        &mut self,
+        tag: u32,
+        ack: &HashMap<String, String>,
+        previous: Option<u32>,
+    ) -> Option<u32> {
+        let dir = self.session_dir(tag);
         let _ = fs::remove_file(dir.join("pid"));
-        Ok(ack.get("pid").and_then(|v| v.parse().ok()).or(previous))
+        ack.get("pid").and_then(|v| v.parse().ok()).or(previous)
+    }
+
+    /// One poll of "the verb can never be acked": the keeper is gone, or the ack
+    /// timeout passed. `None` = keep waiting. Cheap enough to call under the lock
+    /// between lock-free ack-file polls.
+    pub fn ack_blocker(&mut self, verb: &str, tag: u32, started: Instant) -> Option<ZygoteError> {
+        if !self.alive() {
+            return Some(self.dead_reason().unwrap_or(ZygoteError::Dead {
+                status: None,
+                tail: self.log_tail(20),
+            }));
+        }
+        if started.elapsed() >= self.ack_timeout {
+            return Some(ZygoteError::AckTimeout {
+                verb: verb.into(),
+                tag,
+                waited_ms: started.elapsed().as_millis() as u64,
+                tail: self.log_tail(20),
+            });
+        }
+        None
     }
 
     /// §4: the whole reset — kill one child, wipe its run root, fork one fresh
@@ -755,7 +863,7 @@ impl PersistentZygote {
                     tail: self.log_tail(20),
                 }));
             }
-            std::thread::sleep(Duration::from_millis(5));
+            std::thread::sleep(ACK_POLL);
         }
         Err(ZygoteError::AckTimeout {
             verb: verb.into(),

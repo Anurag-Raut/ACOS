@@ -213,7 +213,9 @@ public final class ZygoteApp {
 
     /** Fork exactly one session (Z4's child body) and publish its pid. */
     private static int z4ForkOne(String sessions, int tag, long t0) throws Throwable {
+        long tCmd = now();
         String[] argv = readArgv(sessions + "/" + tag + "/argv");
+        long tArgv = now();
         ZygoteHooks.preFork();
         long tFork = now();
         int pid = dev.acos.z1.Nat.fork();
@@ -255,11 +257,18 @@ public final class ZygoteApp {
             LaunchMain.main(argv);
             return -1;
         }
+        long tForked = now();
         ZygoteHooks.postForkCommon();
+        long tPost = now();
         writeText(sessions + "/" + tag + "/pid", Integer.toString(pid));
         writeText(sessions + "/" + tag + "/spawned", "pid=" + pid + " epoch=" + zygoteEpoch);
         say("ZP1 forked tag=" + tag + " child=" + pid + " threads=" + threads()
-                + " total_ms=" + (now() - t0) / 1000000L);
+                + " total_ms=" + (now() - t0) / 1000000L
+                + " read_argv_us=" + (tArgv - tCmd) / 1000L
+                + " preFork_us=" + (tFork - tArgv) / 1000L
+                + " fork_us=" + (tForked - tFork) / 1000L
+                + " postForkCommon_us=" + (tPost - tForked) / 1000L
+                + " ack_us=" + (now() - tPost) / 1000L);
         return pid;
     }
 

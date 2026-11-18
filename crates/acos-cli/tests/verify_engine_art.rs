@@ -189,6 +189,8 @@ fn run_verify_scenario(name: &str, fault: &str, scenario: &Path) -> Run {
         .expect("acos binary")
         .env("ACOS_NO_DAEMON", "1")
         .env("ACOS_ART_BIN", &script)
+        // ZDEFAULT1: this is a fake exec-path launcher; the zygote is the default.
+        .env("ACOS_ART_ZYGOTE", "off")
         .env("FAKE_ART_OUT", &out)
         .env("FAKE_ART_PIDFILE", &pidfile)
         .env("FAKE_ART_FAULT", fault)

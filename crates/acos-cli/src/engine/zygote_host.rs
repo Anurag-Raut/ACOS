@@ -23,7 +23,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use acos_art::zygote_prod::{
     PersistentZygote, ZygoteChild, ZygoteError, ZygoteKey, ZygoteRegistry,
@@ -352,7 +352,18 @@ impl ZygoteHost {
         let keeper = keepers
             .keeper_mut(key)
             .expect("the keeper was just inserted");
-        keeper.prepare_session(tag)?;
+        // ZDEFAULT1: the keeper lock is daemon-wide, and wiping a run root takes
+        // milliseconds, so the filesystem half of the preparation runs outside it
+        // (it only touches `<plan>/<tag>`, which no other session uses; the tag
+        // was allocated above, or is this session's own on a reset).
+        let session_dir = self.session_dir(key, tag);
+        drop(keepers);
+        PersistentZygote::prepare_dirs(&session_dir)?;
+        let mut keepers = self.lock();
+        let keeper = keepers
+            .keeper_mut(key)
+            .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
+        keeper.attach_dns(tag)?;
         Ok(tag)
     }
 
@@ -368,26 +379,145 @@ impl ZygoteHost {
         key: &ZygoteKey,
         tag: u32,
         timeout: Duration,
-        peer_gone: F,
+        mut peer_gone: F,
     ) -> Result<ZygoteChild, ZygoteError>
     where
         F: FnMut() -> Option<String>,
     {
-        let mut keepers = self.lock();
-        let keeper = keepers
-            .keeper_mut(key)
-            .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
-        keeper.wait_contract_with(tag, timeout, peer_gone)?;
-        keeper.spawn(tag)
+        // ZDEFAULT1: the wait for the launcher's contract runs **outside** the
+        // daemon-wide keeper lock, which is only taken for the microseconds of
+        // each liveness check and for the `spawn` itself. The old code held it
+        // across the whole wait (~100 ms per launcher), so with N concurrent
+        // resets every session's `kill`/`spawn` queued behind the slowest
+        // launcher's contract.
+        let lock_started = Instant::now();
+        let argv = {
+            let mut keepers = self.lock();
+            let keeper = keepers
+                .keeper_mut(key)
+                .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
+            keeper.contract_path(tag)
+        };
+        let started = Instant::now();
+        let mut lock_wait_ms = lock_started.elapsed().as_millis() as u64;
+        loop {
+            if argv.is_file() {
+                break;
+            }
+            if started.elapsed() >= timeout {
+                let mut keepers = self.lock();
+                let keeper = keepers
+                    .keeper_mut(key)
+                    .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
+                return Err(keeper.contract_timeout(tag, started));
+            }
+            {
+                let t = Instant::now();
+                let mut keepers = self.lock();
+                lock_wait_ms += t.elapsed().as_millis() as u64;
+                let keeper = keepers
+                    .keeper_mut(key)
+                    .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
+                if let Some(error) = keeper.contract_blocker(tag, started, &mut peer_gone) {
+                    return Err(error);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let contract_ms = started.elapsed().as_millis() as u64;
+        let t = Instant::now();
+        let ack_path = {
+            let mut keepers = self.lock();
+            lock_wait_ms += t.elapsed().as_millis() as u64;
+            let keeper = keepers
+                .keeper_mut(key)
+                .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
+            keeper.publish_binds(tag)?;
+            keeper.spawn_begin(tag)?
+        };
+        let spawn_started = Instant::now();
+        let ack = self.wait_ack_unlocked(key, tag, "spawn", &ack_path)?;
+        let child = {
+            let mut keepers = self.lock();
+            let keeper = keepers
+                .keeper_mut(key)
+                .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
+            keeper.spawn_end(tag, &ack)
+        };
+        super::art::dm6_trace(serde_json::json!({
+            "event": "zygote_spawn",
+            "tag": tag,
+            "contract_wait_ms": contract_ms,
+            "lock_wait_ms": lock_wait_ms,
+            "spawn_ack_ms": spawn_started.elapsed().as_millis() as u64,
+            "unix_ms": super::art::now_unix_ms(),
+        }));
+        child
+    }
+
+    /// Wait for a verb's ack file **without holding the keeper lock**: the file
+    /// is read lock-free, and the lock is taken only for the liveness/timeout
+    /// check between polls (a dead keeper or a timed-out ack is the same
+    /// structured error the locked path returns).
+    fn wait_ack_unlocked(
+        &self,
+        key: &ZygoteKey,
+        tag: u32,
+        verb: &str,
+        path: &Path,
+    ) -> Result<std::collections::HashMap<String, String>, ZygoteError> {
+        let started = Instant::now();
+        let mut polls = 0u32;
+        loop {
+            if let Some(kv) = acos_art::zygote_prod::read_kv(path) {
+                if !kv.is_empty() {
+                    return Ok(kv);
+                }
+            }
+            // Liveness every ~2 ms (8 polls), not every poll: `alive()` does a
+            // `try_wait` and two `stat`s.
+            polls += 1;
+            if polls % 8 == 0 {
+                let mut keepers = self.lock();
+                let keeper = keepers
+                    .keeper_mut(key)
+                    .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
+                if let Some(error) = keeper.ack_blocker(verb, tag, started) {
+                    return Err(error);
+                }
+            }
+            std::thread::sleep(acos_art::zygote_prod::ACK_POLL);
+        }
     }
 
     /// Kill one child's process group (§4.1: by group, never `cgroup.kill`).
     pub fn kill(&self, key: &ZygoteKey, tag: u32) -> Result<Option<u32>, ZygoteError> {
-        let mut keepers = self.lock();
-        let keeper = keepers
-            .keeper_mut(key)
-            .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
-        keeper.kill(tag)
+        let lock_started = Instant::now();
+        let (ack_path, previous) = {
+            let mut keepers = self.lock();
+            let keeper = keepers
+                .keeper_mut(key)
+                .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
+            keeper.kill_begin(tag)?
+        };
+        let lock_wait_ms = lock_started.elapsed().as_millis() as u64;
+        let kill_started = Instant::now();
+        let ack = self.wait_ack_unlocked(key, tag, "kill", &ack_path)?;
+        let result = {
+            let mut keepers = self.lock();
+            let keeper = keepers
+                .keeper_mut(key)
+                .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
+            Ok(keeper.kill_end(tag, &ack, previous))
+        };
+        super::art::dm6_trace(serde_json::json!({
+            "event": "zygote_kill",
+            "tag": tag,
+            "lock_wait_ms": lock_wait_ms,
+            "kill_ack_ms": kill_started.elapsed().as_millis() as u64,
+            "unix_ms": super::art::now_unix_ms(),
+        }));
+        result
     }
 
     /// The keeper's `epoch=<n>`. Unchanged across a reset, new after a restart.

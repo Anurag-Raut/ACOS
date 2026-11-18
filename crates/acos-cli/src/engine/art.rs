@@ -1533,7 +1533,7 @@ mod spawner {
 }
 
 /// Host milliseconds since the Unix epoch.
-fn now_unix_ms() -> u64 {
+pub(crate) fn now_unix_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
@@ -1548,7 +1548,7 @@ fn rfc3339(unix_ms: u64) -> String {
 /// D-M6 (trace-only, env-gated): append one JSON line describing a host-side
 /// stop phase. Off unless `DM6_RESET_TRACE` names a file. Never changes a reply,
 /// an error or a control-flow decision.
-fn dm6_trace(event: serde_json::Value) {
+pub(crate) fn dm6_trace(event: serde_json::Value) {
     if let Some(path) = std::env::var_os("DM6_RESET_TRACE") {
         if let Ok(mut file) = std::fs::OpenOptions::new()
             .create(true)
@@ -1558,6 +1558,11 @@ fn dm6_trace(event: serde_json::Value) {
             let _ = writeln!(file, "{event}");
         }
     }
+}
+
+/// Whether `DM6_RESET_TRACE` names a file (the trace is otherwise inert).
+fn dm6_trace_enabled() -> bool {
+    std::env::var_os("DM6_RESET_TRACE").is_some()
 }
 
 /// W7: the process's requested app-window inset model, as the env spelling.
@@ -3908,6 +3913,40 @@ impl ArtSession {
         self.reap_session_leftovers();
     }
 
+    /// SIGKILL the launcher and its process group **through proof that it is
+    /// still ours**: the leader has not been waited yet (`self.child` is still
+    /// held), so its pid, and therefore the group id it leads
+    /// (`process_group(0)` at spawn), cannot have been recycled. The same
+    /// reasoning, and the same calls, as [`Self::kill_group`]'s drop path (F4).
+    /// Returns whether a signal was sent.
+    fn sigkill_leader_group(&self) -> bool {
+        let Some(child) = self.child.as_ref() else {
+            return false;
+        };
+        let pid = child.id() as i32;
+        if pid <= 1 || Some(pid) != self.process_group {
+            return false;
+        }
+        dm6_trace(serde_json::json!({
+            "event": "sigkill.group",
+            "session": self.artifacts.display().to_string(),
+            "process_group": pid,
+            "fast": true,
+            "unix_ms": now_unix_ms(),
+        }));
+        if let Some(fd) = self.leader_pidfd.as_ref() {
+            pidfd_send_signal(fd, libc::SIGKILL);
+        }
+        // SAFETY: the leader is unreaped, so `-pid` names this session's group
+        // and nothing else; `pid` is never this process's own group (`> 1`, and
+        // `process_group(0)` gave the launcher a group of its own).
+        unsafe {
+            note_group_signal();
+            libc::kill(-pid, libc::SIGKILL);
+        }
+        true
+    }
+
     /// Stop the guest and prove its whole process group is gone. Shared by
     /// `close` and `reset` (the latter relaunches in a fresh process).
     fn shutdown(&mut self) -> Result<(), BackendError> {
@@ -3940,9 +3979,26 @@ impl ArtSession {
         // which `close`/`reset` obtain right after this stop. So: signal, then
         // prove — never wait out a lifecycle the shim cannot deliver.
         let grace = Duration::from_millis(teardown_grace_ms_for(self.zygote.is_some()));
-        let deadline = Instant::now() + grace;
+        // ZDEFAULT1: with no lifecycle to wait for (grace 0, a zygote session) the
+        // launcher's group is signalled **now**, while its leader is provably
+        // still unreaped. Measured at N=20 (`DM6_RESET_TRACE`): the zygote stop
+        // cost 92 ms p50 against the exec stop's 40 ms because the signal came
+        // only after `group_survivors()` and `sigkill_group()` had each walked
+        // all of `/proc` (descendants + every process's `environ`, several times
+        // per stop, on a host with thousands of processes). The exec path never
+        // pays that scan because its guest exits on `close` and the one
+        // `kill(-pgid, 0)` proof is already empty; this gives the zygote the same
+        // shape: signal, one syscall proof, no scan.
+        let pre_signalled = grace.is_zero() && self.zygote.is_some() && self.sigkill_leader_group();
+        let deadline = Instant::now()
+            + if pre_signalled {
+                // The SIGKILL is already delivered; this only bounds the reap.
+                Duration::from_millis(DEFAULT_TEARDOWN_GRACE_MS)
+            } else {
+                grace
+            };
         let exited = self.wait_for_exit(deadline);
-        let path = if exited {
+        let path = if exited && !pre_signalled {
             TeardownPath::Lifecycle
         } else {
             TeardownPath::Killed
@@ -4029,7 +4085,14 @@ impl ArtSession {
         // a process this session does **not** own (another agent verifying the
         // same scenario). Reported in the trace, never signalled: a name match
         // is not ownership.
-        let foreign_mentions = self.foreign_artifacts_mentions();
+        // ZDEFAULT1: this is a trace-only value (it feeds nothing but the
+        // `DM6_RESET_TRACE` line below), and finding it walks every process's
+        // `cmdline`. Compute it only when the trace is on.
+        let foreign_mentions = if dm6_trace_enabled() {
+            self.foreign_artifacts_mentions()
+        } else {
+            Vec::new()
+        };
         self.proven_empty = true;
         self.reported_group = self.process_group.or(self.reported_group);
         self.process_group = None;
