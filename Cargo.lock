@@ -30,6 +30,7 @@ name = "acos-arm64"
 version = "0.3.0"
 dependencies = [
  "acos-sandbox",
+ "acos-test-support",
  "libc",
  "serde",
  "serde_json",
