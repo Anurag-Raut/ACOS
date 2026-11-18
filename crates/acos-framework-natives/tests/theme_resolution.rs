@@ -213,12 +213,20 @@ fn build_manager(apk_path: &PathBuf) -> AssetManager {
 
 #[test]
 fn theme_device_default_light_dark_action_bar() {
-    let Some(aapt) = find_aapt() else {
-        eprintln!("aapt not found; skipping theme test");
+    let Some(aapt) = acos_test_support::require_some(
+        find_aapt(),
+        "theme_device_default_light_dark_action_bar",
+        "aapt not found; skipping theme test",
+    ) else {
         return;
     };
-    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
-        eprintln!("framework-res.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk"),
+        "theme_device_default_light_dark_action_bar",
+        "framework-res.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
@@ -375,8 +383,13 @@ fn style_bag_string_keeps_its_asset_cookie() {
     // `assetCookie = source_index + 1` so `TypedArray.loadStringValueAt` reads
     // `mAssets.getPooledStringForCookie(...)` instead of the (null for
     // `obtainStyledAttributes(styleRes, ...)`) XML pool.
-    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
-        eprintln!("framework-res.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk"),
+        "style_bag_string_keeps_its_asset_cookie",
+        "framework-res.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
@@ -438,8 +451,13 @@ fn theme_color(mgr: &AssetManager, theme: u64, attr: u32) -> (u32, u32) {
 /// action bar the phone comparison shows ACOS is *not* supposed to draw.
 #[test]
 fn device_default_dark_action_bar_resolves_to_neutral_900() {
-    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
-        eprintln!("framework-res.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk"),
+        "device_default_dark_action_bar_resolves_to_neutral_900",
+        "framework-res.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
@@ -531,8 +549,13 @@ fn device_default_dark_action_bar_resolves_to_neutral_900() {
 /// survives the overlay.
 #[test]
 fn dark_action_bar_overlay_keeps_device_default_primaries() {
-    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
-        eprintln!("framework-res.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk"),
+        "dark_action_bar_overlay_keeps_device_default_primaries",
+        "framework-res.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
@@ -689,14 +712,22 @@ fn retrieve_attributes_clears_unset_slots() {
 /// overridden id.
 #[test]
 fn static_overlay_overrides_framework_bool() {
-    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
-        eprintln!("framework-res.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk"),
+        "static_overlay_overrides_framework_bool",
+        "framework-res.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
-    if !acos_test_support::have_fixture(
-        ".cache/boot/android-34/overlays/PixelConfigOverlayCommon.apk",
-    ) {
-        eprintln!("PixelConfigOverlayCommon.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/overlays/PixelConfigOverlayCommon.apk"),
+        "static_overlay_overrides_framework_bool",
+        "PixelConfigOverlayCommon.apk missing from the boot cache (.cache/boot/android-34/overlays)",
+    )
+    .is_none()
+    {
         return;
     }
     let root = workspace_root();

@@ -56,8 +56,13 @@ fn device_config() -> ResConfig {
 
 fn main() {
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
-    if !apk_path.exists() {
-        eprintln!("framework-res.apk missing; skipping benchmark");
+    if acos_test_support::require_prereq(
+        apk_path.exists(),
+        "main",
+        "framework-res.apk missing; skipping benchmark",
+    )
+    .is_none()
+    {
         return;
     }
 
