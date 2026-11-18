@@ -5439,3 +5439,54 @@ so a non-clickable listener runs.
   `looperwake-bg-post` plus a NET6-style `netcb` TextView assertion on `modules`
   (and WV8); if it reproduces there, diff the module delivery thread against the
   plain-thread case before touching the guest runtime.
+## EMUBENCH — can ACOS beat the stock Android emulator on every tracked metric? — MEASURED (better on 10 of 11 comparable rows; warm launch is a tie, flagged)
+
+- **Date / commit:** 2026-11-18; branch `emubench` from `modules` (473859c2) +
+  this commit. Owner direction 2026-11-18 §2 (the emulator is a tracked
+  baseline); ADR-0015 relaxed for this benchmark only (N=1/2/4, ≤2048 MiB guest
+  each, under the 90 % RAM ceiling, always shut down).
+- **Question / goal:** measure the stock emulator with the SAME apps, screen and
+  metric definitions ACOS uses, so every release gate can compare against it and
+  flag any metric where ACOS is worse.
+- **Method:** `tools/art-runtime/emubench/run-emubench.sh` drives four exclusive
+  phases (`n1-cold`, `n1-warm`, `n2`, `n4`) through
+  `run-exclusive.sh --exclusive` + `tools/guarded.sh --mem 24G`; the harness
+  (`emu_bench.py`, `--self-test` 10/0) measures cold boot → first app frame,
+  warm launch, tap → settled (counter + form), UI tree read, PNG screenshot,
+  install, reset, host PSS/RSS/anon+shmem + guest memory, idle CPU and verified
+  counter tasks per GiB-minute at N=1/2/4. Correctness oracle = the live
+  `uiautomator` tree at every check; 0 false passes. The first frame is the
+  launcher→app change, not a stored pixel reference: a cross-boot frame differs
+  by 1–3 units per channel on every pixel (measured), so a cross-session
+  pixel-identity gate is invalid here (P6's within-session gate is unaffected).
+- **Inputs:** `fixtures/build/apps/counter.apk`,
+  `form-validation.apk`; AVDs `emb-1…4` (API 34 google_apis x86_64, 2048 MiB,
+  4 vCPU, `swiftshader_indirect`, 1080×2400 @ 420 dpi); ACOS side = the
+  RELGATE2 v0.3.0 RC (`169bfa5e`, 2026-11-16) gate numbers + §12 W52 M11.
+- **Result:** every row ≥5 reps (cold 5 boots, warm 5, tap/tree/shot 10, reset 5,
+  snapshot 5, N phases 5 reps × 3 tasks/instance). Emulator medians: cold boot
+  12.7 s → first app frame 13.6 s; snapshot warm boot 1.07 s; warm launch
+  286 ms; tap → settled 1931 ms (counter) / 1946 ms (form); UI tree 1928 ms;
+  screenshot 527 ms; reset 531 ms; instance PSS 3578 MiB / anon+shmem 3532 MiB;
+  idle CPU 13.1 % of one core; throughput N=1/N=2/N=4 in the merged JSON.
+  ACOS is better on 10 of the 11 comparable metrics, by 1.7× (reset) to 62×
+  (memory); **warm launch is a tie** (ACOS 289 ms vs emulator 286 ms, within the
+  5 % noise floor) and is flagged, not claimed.
+- **Finding:** the emulator's cost is structural — one emulator per session
+  (3.5 GiB, 13 % of a core idle) versus ACOS's 57 MiB core and 0.4 %; and every
+  observation route (`uiautomator dump` ≈ 1.9 s, `screencap` ≈ 0.2–0.5 s) is
+  paid per call. ACOS's remaining weak row is warm launch, where its strict
+  settle costs the same as the emulator's launcher-frame change; its fast path
+  (143 ms) is already 2× better.
+- **Fidelity / evidence:** measured on the real stock emulator;
+  `results/bench/emubench-2026-11-18.json` (every sample + `free -m` per step),
+  `results/handoff/EMUBENCH/` (scripts, raw phase JSON, driver logs, gate),
+  `BENCHMARKS.md` §13 (the side-by-side table and the release-gate rule).
+- **Regression / false pass:** 0 false passes (a task counts only when both tree
+  checks pass). No emulator left running (driver postflight + independent `ps`).
+  Host usage peaked at 33.6 % (limit 85 %); the RAM guard was never tripped.
+- **Conclusion / next:** the baseline is now a release-gate input
+  (`emu_gate.py`, 0 metrics worse). Smallest next action: measure ACOS warm
+  launch at the same 5-rep resolution in the next gate and, if it stays a tie,
+  decide whether the strict-settle definition (which the emulator row does not
+  pay) or the launch path itself is the thing to change.

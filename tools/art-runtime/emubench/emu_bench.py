@@ -1053,7 +1053,9 @@ def merge(paths, out):
         doc["errors"].extend(d.get("errors", []))
         doc["reps"].extend(d.get("reps", []))
         for k, v in d.get("rows", {}).items():
-            doc["rows"][k] = v          # a metric belongs to exactly one phase
+            # keep every phase's samples: a metric measured in two phases
+            # (install in n1-cold and in the N phases) must not be overwritten
+            doc["rows"][k if k not in doc["rows"] else "%s.%s" % (ph, k)] = v
     doc["host_log"].sort(key=lambda e: e.get("t", 0))
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     Path(out).write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
