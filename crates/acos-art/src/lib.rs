@@ -1630,10 +1630,16 @@ impl<'a> Sandbox<'a> {
         self
     }
 
+    /// Every `(name, value)` this sandbox sets for the guest, in order (ZDEFAULT1:
+    /// the zygote contract carries them to the forked child).
+    pub fn env_pairs(&self) -> &[(String, String)] {
+        &self.env
+    }
+
     /// The uid the guest's user namespace maps its own uid onto.
     ///
     /// `Ok(None)` = keep the host caller's uid (`ACOS_ART_GUEST_UID=host`).
-    fn run_uid(&self) -> Result<Option<u32>> {
+    pub fn run_uid(&self) -> Result<Option<u32>> {
         if let Some(explicit) = guest_uid_override()? {
             return Ok(explicit);
         }

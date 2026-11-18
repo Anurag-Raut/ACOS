@@ -50,6 +50,9 @@ public final class Nat {
      */
     public static native int resetLogSink();
 
+    /** ZDEFAULT1: {@code setenv(name, value, 1)} in this process (0 = ok). */
+    public static native int setEnv(String name, String value);
+
     /** R3 test seam: 0 = SIGSEGV on an unmapped page, 1 = SIGABRT. */
     public static native int crashTest(int mode);
 }

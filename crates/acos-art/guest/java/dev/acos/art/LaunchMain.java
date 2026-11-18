@@ -77,6 +77,22 @@ public final class LaunchMain {
     static String sActivityLabelText = "";
     /** Static-RRO overlay idmaps (`/data/overlay/<name>.idmap`, `,`-separated). */
     static String sOverlayIdmaps = "";
+
+    /** ZDEFAULT1: per-session environment a zygote child received from its session
+     * launcher. A forked child's {@code System.getenv} map is the one the keeper
+     * cached before the fork, so every environment read in this class goes
+     * through {@link #env}, which consults this map first. {@code null} on the
+     * exec path (the process environment is already the session's). */
+    static volatile java.util.Map<String, String> sEnvOverride;
+
+    static String env(String name) {
+        java.util.Map<String, String> over = sEnvOverride;
+        if (over != null) {
+            String v = over.get(name);
+            if (v != null) return v;
+        }
+        return System.getenv(name);
+    }
     /**
      * W27: the alias target (`ActivityInfo.targetActivity`). Empty for a plain
      * activity; when set, `ActivityThread.performLaunchActivity` replaces the
@@ -167,12 +183,12 @@ public final class LaunchMain {
         // default from the APK shape and forwards it; an explicit value from
         // the environment is clammped to a sane deadline.
         try {
-            String resume = System.getenv("ACOSLAUNCH_RESUME_MS");
+            String resume = env("ACOSLAUNCH_RESUME_MS");
             if (resume != null && resume.trim().length() > 0) {
                 long ms = Long.parseLong(resume.trim());
                 if (ms >= 1000L && ms <= 600000L) sResumeMs = ms;
             }
-            String ready = System.getenv("ACOSLAUNCH_RESUME_READY_MS");
+            String ready = env("ACOSLAUNCH_RESUME_READY_MS");
             if (ready != null && ready.trim().length() > 0) {
                 long ms = Long.parseLong(ready.trim());
                 // A readiness bound of zero or "infinite" is not a bound.
@@ -183,7 +199,7 @@ public final class LaunchMain {
         // P12: per-session animation scales. The host forwards `ACOS_ANIMATIONS`
         // (default `on`: real framework animation behaviour).
         try {
-            String anim = System.getenv("ACOS_ANIMATIONS");
+            String anim = env("ACOS_ANIMATIONS");
             if (anim != null && anim.trim().length() > 0) {
                 String v = anim.trim();
                 if ("off".equalsIgnoreCase(v)) {
@@ -214,7 +230,7 @@ public final class LaunchMain {
         // unless `ACOS_ART_KEYSTORE=on` so a normal run keeps the honest
         // "AndroidKeyStore not found" failure until the K5b fix list lands.
         try {
-            String ks = System.getenv("ACOS_ART_KEYSTORE");
+            String ks = env("ACOS_ART_KEYSTORE");
             String mode = ks == null ? "" : ks.trim();
             if ("on".equalsIgnoreCase(mode) || "1".equals(mode) || "software".equalsIgnoreCase(mode)) {
                 SoftwareKeyStore.install("/data/app-data/" + sPkg);
@@ -361,7 +377,7 @@ public final class LaunchMain {
         // declaring them would be a double registration. A session whose modules
         // declare none forwards nothing. Adding a module never touches this
         // code: it is one reflective loop over the manifest's data.
-        String initializers = System.getenv("ACOSLAUNCH_INITIALIZERS");
+        String initializers = env("ACOSLAUNCH_INITIALIZERS");
         if (initializers != null && !initializers.isEmpty()) {
             for (String entry : initializers.split(";")) {
                 if (entry.isEmpty()) continue;
@@ -454,7 +470,7 @@ public final class LaunchMain {
             throw e.getCause() != null ? e.getCause() : e;
         }
         System.out.println("ACOSLAUNCH MARK attach-returned startSeq=" + seq);
-        if (System.getenv("ACOSLAUNCH_PROBE") != null) probeDisplayInfoParcel();
+        if (env("ACOSLAUNCH_PROBE") != null) probeDisplayInfoParcel();
 
         // The framework's own main-thread message tracing (`Looper.setMessageLogging`,
         // the facility AMS and `Looper`-based tools use): every dispatched message
@@ -498,8 +514,8 @@ public final class LaunchMain {
         // allowlist (`ACOSLAUNCH_PROBE`, not `ACOSLAUNCH_FRAME_PROBE`), so both
         // spellings enable the diagnostic probe. The frame probe's own name is
         // preferred; `ACOSLAUNCH_PROBE` is the one the launcher actually forwards.
-        if (System.getenv("ACOSLAUNCH_FRAME_PROBE") != null
-                || System.getenv("ACOSLAUNCH_PROBE") != null) {
+        if (env("ACOSLAUNCH_FRAME_PROBE") != null
+                || env("ACOSLAUNCH_PROBE") != null) {
             postFrameProbe();
         }
         try {
@@ -1838,7 +1854,7 @@ public final class LaunchMain {
                     // session an ended control thread ends the demand probe, so
                     // it must be named, never swallowed (SETTLE5).
                     sProbeControlDead = true;
-                    if (System.getenv("ACOSLAUNCH_INTERACTIVE") != null) {
+                    if (env("ACOSLAUNCH_INTERACTIVE") != null) {
                         System.out.println("ACOSLAUNCH MARK probe-control-exit reason="
                                 + unwrap(t));
                         System.out.flush();
@@ -2058,7 +2074,7 @@ public final class LaunchMain {
      * knob, 0 = at the first frame).
      */
     static void maybeEarlyRelease() {
-        final String knob = System.getenv("ACOS_ART_EARLY_GC");
+        final String knob = env("ACOS_ART_EARLY_GC");
         if (knob != null && knob.trim().equals("0")) return;
         final long delayMs = envLong("ACOS_ART_GC_DELAY_MS", 0L);
         Thread t = new Thread(new Runnable() {
@@ -2105,7 +2121,7 @@ public final class LaunchMain {
 
     static long envLong(String name, long fallback) {
         try {
-            String value = System.getenv(name);
+            String value = env(name);
             if (value != null && value.length() > 0) return Long.parseLong(value);
         } catch (Throwable ignored) {
         }
@@ -3065,7 +3081,7 @@ public final class LaunchMain {
                                     System.out.flush();
                                     return result;
                                 }
-                                if (System.getenv("ACOSLAUNCH_HOST_SCHEDULES") != null) {
+                                if (env("ACOSLAUNCH_HOST_SCHEDULES") != null) {
                                     // MPROC7 (ADR-0029 amendment): this process's
                                     // launches are host-built. The request is
                                     // already recorded host-side; the peer
@@ -3368,7 +3384,7 @@ public final class LaunchMain {
         // `IApplicationThread.scheduleTransaction` instead of marshalling its
         // own. The primary process keeps the local path (its token is the one
         // the guest itself must report back).
-        if (System.getenv("ACOSLAUNCH_HOST_SCHEDULES") != null) {
+        if (env("ACOSLAUNCH_HOST_SCHEDULES") != null) {
             System.out.println("ACOSLAUNCH MARK waiting-for-host-transaction activity="
                     + sActivity);
             System.out.flush();
@@ -3514,8 +3530,8 @@ public final class LaunchMain {
                 // tree sample every ~50 ms. The host's line-JSON session reads
                 // these samples as the app's live UI; nothing is mutated.
                 // Off unless the launcher forwards the variable.
-                if (System.getenv("ACOSLAUNCH_LIVE_PROBE") != null) {
-                    if (System.getenv("ACOSLAUNCH_GEOM_TRACE") != null) startGeometryTrace(activity);
+                if (env("ACOSLAUNCH_LIVE_PROBE") != null) {
+                    if (env("ACOSLAUNCH_GEOM_TRACE") != null) startGeometryTrace(activity);
                     startLiveProbe(activity);
                     System.out.println("ACOSLAUNCH MARK live-probe-started");
                     System.out.flush();
@@ -3527,7 +3543,7 @@ public final class LaunchMain {
                 // Holding here keeps the real looper alive, which is the only
                 // way to observe the frame path without inventing a second
                 // stop point. Off unless the launcher forwards the variable.
-                String hold = System.getenv("ACOSLAUNCH_HOLD_MS");
+                String hold = env("ACOSLAUNCH_HOLD_MS");
                 if (hold != null) {
                     try {
                         long ms = Long.parseLong(hold);
@@ -4333,7 +4349,7 @@ public final class LaunchMain {
         // `context.getApplicationInfo().metaData` sees its own declaration
         // instead of `null`. The host parses it with the same model PMS answers
         // `getApplicationInfo(GET_META_DATA)` from.
-        String appMeta = System.getenv("ACOSLAUNCH_APP_META");
+        String appMeta = env("ACOSLAUNCH_APP_META");
         if (appMeta != null) ai.metaData = metaBundle(appMeta);
         set(ai, "compileSdkVersion", 34);
         set(ai, "appComponentFactory", "android.app.AppComponentFactory");
@@ -4402,7 +4418,7 @@ public final class LaunchMain {
 
     static String env(String name, String fallback) {
         try {
-            String v = System.getenv(name);
+            String v = env(name);
             if (v != null && v.trim().length() > 0) return v.trim();
         } catch (Throwable ignored) {
         }
@@ -4411,7 +4427,7 @@ public final class LaunchMain {
 
     static int envInt(String name, int fallback) {
         try {
-            String v = System.getenv(name);
+            String v = env(name);
             if (v != null && v.trim().length() > 0) return Integer.parseInt(v.trim());
         } catch (Throwable ignored) {
         }
@@ -4435,7 +4451,7 @@ public final class LaunchMain {
         int layout = Configuration.SCREENLAYOUT_LAYOUTDIR_LTR
                 | Configuration.SCREENLAYOUT_SIZE_NORMAL
                 | Configuration.SCREENLAYOUT_LONG_YES;
-        String env = System.getenv("ACOSLAUNCH_SCREEN_LAYOUT");
+        String env = env("ACOSLAUNCH_SCREEN_LAYOUT");
         if (env != null) {
             try {
                 layout = Integer.decode(env.trim());
@@ -4543,7 +4559,7 @@ public final class LaunchMain {
      */
     static Object providerList(ApplicationInfo ai) throws Throwable {
         java.util.List<Object> list = new java.util.ArrayList<Object>();
-        String spec = System.getenv("ACOSLAUNCH_PROVIDERS");
+        String spec = env("ACOSLAUNCH_PROVIDERS");
         if (spec != null && spec.length() > 0) {
             for (String rec : spec.split("\n")) {
                 if (rec.length() == 0) continue;
@@ -4932,7 +4948,7 @@ public final class LaunchMain {
      * ACTION_MAIN/CATEGORY_LAUNCHER Intent exactly as before.
      */
     static android.content.Intent hostLaunchIntent() throws Throwable {
-        String hex = System.getenv("ACOSLAUNCH_INTENT_BYTES");
+        String hex = env("ACOSLAUNCH_INTENT_BYTES");
         if (hex == null || hex.isEmpty()) return null;
         int n = hex.length() / 2;
         byte[] bytes = new byte[n];
@@ -5729,7 +5745,7 @@ public final class LaunchMain {
      * main thread's). Unset: nothing happens. Only the launch guest calls this.
      */
     static void crashTestIfRequested(Object thread, Object activity) {
-        String mode = System.getenv("ACOSLAUNCH_CRASH_TEST");
+        String mode = env("ACOSLAUNCH_CRASH_TEST");
         if (mode == null || mode.isEmpty()) return;
         mode = mode.trim();
         System.out.println("ACOSLAUNCH MARK crash-test mode=" + mode);

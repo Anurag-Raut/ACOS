@@ -2560,6 +2560,22 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_resetLogSink(JNIEnv* env, jclass kl
     return 1;
 }
 
+// ZDEFAULT1: a zygote child applies the per-session environment its launcher
+// published (`<plan>/<tag>/env`) to the process environment, so native readers
+// (`getenv`) see it as they would on the exec path. The Java side reads it
+// through `LaunchMain.env`. Returns 0 on success, -1 on a bad argument.
+JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_setEnv(JNIEnv* env, jclass klass, jstring name, jstring value) {
+    (void)klass;
+    if (name == NULL || value == NULL) return -1;
+    const char* n = (*env)->GetStringUTFChars(env, name, NULL);
+    const char* v = (*env)->GetStringUTFChars(env, value, NULL);
+    int rc = -1;
+    if (n != NULL && v != NULL && n[0] != '\0') rc = setenv(n, v, 1);
+    if (n != NULL) (*env)->ReleaseStringUTFChars(env, name, n);
+    if (v != NULL) (*env)->ReleaseStringUTFChars(env, value, v);
+    return rc;
+}
+
 JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_installCrashHandler(JNIEnv* env, jclass klass) {
     (void)env;
     (void)klass;

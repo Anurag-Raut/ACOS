@@ -373,8 +373,9 @@ class Serve:
             env["ACOS_BOOT_IMAGE_CACHE"] = str(boot_image_cache)
         art_bin = env.get("ACOS_ART_BIN") or str(Path(acos).with_name("acos-art"))
         env["ACOS_ART_BIN"] = art_bin
-        if not zygote_off:
-            env["ACOS_ART_ZYGOTE"] = "on"
+        # ZDEFAULT1: the zygote is the product default, so the exec arm must say
+        # so explicitly (`off`); before the flip an unset variable meant exec.
+        env["ACOS_ART_ZYGOTE"] = "off" if zygote_off else "on"
         self.argv = [acos, "serve", "--socket", self.socket_path, "--engine", "art",
                      "--idle-timeout", str(idle),
                      "--max-sessions", str(max(8, n + 4)),

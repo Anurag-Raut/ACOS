@@ -2273,18 +2273,6 @@ pub(crate) fn launch_session(
     // Z4 research seam: publish this session's contract for the zygote. The
     // directory already exists (the driver prepared it); the guest argv is one
     // argument per line (the 15 production arguments).
-    if let Some(dir) = &session_dir {
-        write_zygote_session(
-            dir,
-            &run,
-            &sockets.0,
-            &sock,
-            &staging,
-            &out,
-            &package,
-            &guest_args,
-        )?;
-    }
     // MPROC4 step 3b: one `SecondarySpec` per installed extra package. These
     // are the *same* session inputs the primary got (this run's staged APK, the
     // same package manager facts), so a secondary process is a second guest of
@@ -2832,6 +2820,28 @@ pub(crate) fn launch_session(
     // research artefact, a product would wait on an `Option<Child>` plus a
     // session-owned liveness source). Only meaningful together with
     // `ACOS_ZYGOTE_SESSION`, so the production path cannot reach it.
+    // ZDEFAULT1: publish the session's contract now that the sandbox is fully
+    // configured: the guest argv **and** the two facts a forked child cannot
+    // derive from it. The zygote child inherits the keeper's environment and
+    // maps uid 0, so without these a session ran with another session's (the
+    // keeper's) launch Intent, module initializers and package state, and as uid
+    // 0 instead of the package uid (`Process.myUid()`): measured by the full
+    // scenario matrix (`launch-extras`, `sysui1-permission-*`, `binderpid`).
+    // `argv` is written last: it is what the host waits for.
+    if let Some(dir) = &session_dir {
+        write_zygote_session(
+            dir,
+            &run,
+            &sockets.0,
+            &sock,
+            &staging,
+            &out,
+            &package,
+            &guest_args,
+            sb.run_uid()?,
+            sb.env_pairs(),
+        )?;
+    }
     let no_stub = session_dir.is_some()
         && zygote_app.is_none()
         && std::env::var_os("ACOS_ZYGOTE_NO_STUB").is_some();
@@ -4193,6 +4203,8 @@ fn write_zygote_session(
     out: &Path,
     package: &str,
     guest_args: &[String],
+    guest_uid: Option<u32>,
+    env: &[(String, String)],
 ) -> Result<()> {
     fs::create_dir_all(dir)?;
     let doc = serde_json::json!({
@@ -4211,6 +4223,39 @@ fn write_zygote_session(
         serde_json::to_vec_pretty(&doc).map_err(|e| Error::Layout(e.to_string()))?,
     )?;
     fs::rename(&tmp, dir.join("session.json"))?;
+    // The uid the child's user namespace maps its own uid onto (`host` = keep
+    // the caller's uid, the `ACOS_ART_GUEST_UID=host` seam).
+    let tmp = dir.join("uid.tmp");
+    fs::write(
+        &tmp,
+        match guest_uid {
+            Some(uid) => format!("{uid}\n"),
+            None => "host\n".to_string(),
+        },
+    )?;
+    fs::rename(&tmp, dir.join("uid"))?;
+    // The guest environment this session's sandbox would have set on the exec
+    // path, one `NAME=value` per line. The keeper's own preload and zygote seams
+    // are the keeper's, never rewritten per child. A value with a newline cannot
+    // be carried faithfully: refuse it rather than truncate it.
+    let mut env_text = String::new();
+    for (name, value) in env {
+        if name == "LD_PRELOAD" || name.starts_with("ACOS_ZYGOTE_") {
+            continue;
+        }
+        if name.contains(['=', '\n']) || value.contains('\n') {
+            return Err(Error::Layout(format!(
+                "guest environment entry {name:?} cannot be published in the zygote contract"
+            )));
+        }
+        env_text.push_str(name);
+        env_text.push('=');
+        env_text.push_str(value);
+        env_text.push('\n');
+    }
+    let tmp = dir.join("env.tmp");
+    fs::write(&tmp, env_text)?;
+    fs::rename(&tmp, dir.join("env"))?;
     let mut argv = String::new();
     for a in guest_args {
         argv.push_str(a);

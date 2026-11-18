@@ -215,6 +215,10 @@ public final class ZygoteApp {
     private static int z4ForkOne(String sessions, int tag, long t0) throws Throwable {
         long tCmd = now();
         String[] argv = readArgv(sessions + "/" + tag + "/argv");
+        // ZDEFAULT1: this session's environment (the launcher publishes it
+        // before `argv`), read pre-fork like argv: after the sandbox is entered
+        // `/sessions` is no longer readable.
+        java.util.Map<String, String> sessionEnv = readSessionEnv(sessions + "/" + tag + "/env");
         long tArgv = now();
         ZygoteHooks.preFork();
         long tFork = now();
@@ -237,6 +241,7 @@ public final class ZygoteApp {
             // `/dev/socket/logdw` is its session's; the log connection it
             // inherited from the keeper still points at the keeper's sink.
             z4ResetLogSink(tag);
+            z4ApplySessionEnv(tag, sessionEnv);
             ZygoteHooks.postForkChild(0, false, false, null);
             say("ZP1 child tag=" + tag + " pgrp_rc=" + pgrp
                     + " pid_in_ns=" + dev.acos.z1.Nat.sandboxRc(7)
@@ -270,6 +275,43 @@ public final class ZygoteApp {
                 + " postForkCommon_us=" + (tPost - tForked) / 1000L
                 + " ack_us=" + (now() - tPost) / 1000L);
         return pid;
+    }
+
+    /** ZDEFAULT1: the per-session environment file (`NAME=value` lines). Absent or
+     * empty = no overrides (an old launcher), never an error. */
+    private static java.util.Map<String, String> readSessionEnv(String path) {
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        try {
+            BufferedReader in = new BufferedReader(new FileReader(path));
+            try {
+                String line;
+                while ((line = in.readLine()) != null) {
+                    int eq = line.indexOf('=');
+                    if (eq > 0) out.put(line.substring(0, eq), line.substring(eq + 1));
+                }
+            } finally {
+                in.close();
+            }
+        } catch (Throwable t) {
+            say("ZP1 env_read_fail path=" + path + " err=" + t.getClass().getSimpleName());
+        }
+        return out;
+    }
+
+    /** ZDEFAULT1: make the session's environment this child's: the process
+     * environment (native `getenv`) and {@link LaunchMain#env} (Java; the keeper's
+     * cached `System.getenv` map is stale in a forked child). */
+    private static void z4ApplySessionEnv(int tag, java.util.Map<String, String> sessionEnv) {
+        int applied = 0;
+        for (java.util.Map.Entry<String, String> e : sessionEnv.entrySet()) {
+            try {
+                if (Nat.setEnv(e.getKey(), e.getValue()) == 0) applied++;
+            } catch (Throwable t) {
+                say("ZP1 child tag=" + tag + " setenv_fail " + e.getKey() + " " + t);
+            }
+        }
+        LaunchMain.sEnvOverride = sessionEnv;
+        say("ZP1 child tag=" + tag + " env_applied=" + applied + "/" + sessionEnv.size());
     }
 
     /** ZDEFAULT1: drop the keeper's guest-log connection (see {@code artshim.c}). */

@@ -541,7 +541,7 @@ impl PersistentZygote {
             let _ = fs::remove_dir_all(&path);
             fs::create_dir_all(&path)?;
         }
-        for name in ["argv", "binds", "session.json", "spawned", "reaped", "pid"] {
+        for name in ["argv", "binds", "env", "uid", "session.json", "spawned", "reaped", "pid"] {
             let _ = fs::remove_file(dir.join(name));
         }
         // The child binds its own run root; the directories it mounts must exist

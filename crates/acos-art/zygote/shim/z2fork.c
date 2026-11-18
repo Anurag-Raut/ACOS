@@ -321,7 +321,7 @@ static long z2_prctl_name(const char *name) {
 /* unshare(CLONE_NEWUSER) and map exactly the one uid/gid the parent user
  * namespace allows an unprivileged process to map: our own.  Returns 0 or
  * -errno; the mapping errors are folded into the return value (-1000-n). */
-static long z2_setup_user_ns(int *uid_out, int *gid_out) {
+static long z2_setup_user_ns_as(int *uid_out, int *gid_out, long inner_uid) {
   long uid = z2_sys0(SYS_getuid);
   long gid = z2_sys0(SYS_getgid);
   *uid_out = (int)uid;
@@ -331,7 +331,11 @@ static long z2_setup_user_ns(int *uid_out, int *gid_out) {
   char buf[96];
   char *p;
   z2_write_file("/proc/self/setgroups", "deny", 4);
-  p = z2_append(buf, "0 ");
+  /* ZDEFAULT1: the inner uid. 0 (the Z2/Z4 research default) made every forked
+   * app run as uid 0, so `Process.myUid()` and `/proc/self/status` disagreed with
+   * the exec path (`bwrap --uid N`) and with PMS's answer for the package. */
+  p = z4_append_int(buf, (int)inner_uid);
+  p = z2_append(p, " ");
   p = z2_append_int(p, uid, 0);
   p = z2_append(p, " 1\n");
   r = z2_write_file("/proc/self/uid_map", buf, p - buf);
@@ -342,6 +346,10 @@ static long z2_setup_user_ns(int *uid_out, int *gid_out) {
   r = z2_write_file("/proc/self/gid_map", buf, p - buf);
   if (r < 0) return -1100 + r;
   return 0;
+}
+
+static long z2_setup_user_ns(int *uid_out, int *gid_out) {
+  return z2_setup_user_ns_as(uid_out, gid_out, 0);
 }
 
 EXPORT jint Java_dev_acos_z1_Nat_setupUserNs(void) {
@@ -605,13 +613,37 @@ EXPORT jint Java_dev_acos_z1_Nat_spawnSandboxed(void *env, void *cls, jint tag) 
  *
  * Slots: 0 userns, 1 mntns, 2 pidns, 3 mount_private, 4 binds_rc, 5 binds_n,
  *        6 proc, 7 app_pid_in_ns, 8 reaper_pid, 13 uid_before, 14 gid_before. */
+/* ZDEFAULT1: `/sessions/<tag>/uid` = the package uid the exec path gives the
+ * guest (`bwrap --uid N`), or `host` / absent = keep 0 (the historical zygote
+ * mapping). Read before the namespace exists, from the keeper's own mount view. */
+static long z4_read_uid(int tag) {
+  char path[64];
+  char *p = z2_append(path, "/sessions/");
+  p = z4_append_int(p, tag);
+  p = z2_append(p, "/uid");
+  *p = 0;
+  long fd = z2_sys4(SYS_openat, AT_FDCWD, (long)path, 0 /* O_RDONLY */, 0);
+  if (fd < 0) return 0;
+  char buf[32];
+  long n = z2_sys3(SYS_read, fd, (long)buf, (long)sizeof(buf) - 1);
+  z2_sys1(SYS_close, fd);
+  if (n <= 0) return 0;
+  long v = 0;
+  for (long i = 0; i < n; i++) {
+    if (buf[i] < '0' || buf[i] > '9') break;
+    v = v * 10 + (buf[i] - '0');
+    if (v > 4000000) return 0;
+  }
+  return v;
+}
+
 EXPORT jint Java_dev_acos_z1_Nat_spawnSession(void *env, void *cls, jint tag) {
   int uid = 0, gid = 0;
   z2_rc[13] = uid;
   z2_rc[14] = gid;
   z2_prctl_name("z4ns");
 
-  z2_rc[0] = z2_setup_user_ns(&uid, &gid);
+  z2_rc[0] = z2_setup_user_ns_as(&uid, &gid, z4_read_uid(tag));
   z2_rc[13] = uid;
   z2_rc[14] = gid;
   if (z2_rc[0] == 0) {
