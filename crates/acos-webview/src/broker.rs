@@ -685,7 +685,7 @@ impl Broker {
                 inner
                     .browser
                     .as_ref()
-                    .map(|b| (b.version.clone(), b.uptime())),
+                    .map(|b| (b.version.clone(), b.uptime(), b.cdp.pid())),
                 inner.generation,
                 inner.last_activity.elapsed(),
             )
@@ -705,7 +705,8 @@ impl Broker {
             "openViews": self.open_views(),
             "idleShutdownInMs": idle_left,
             "frames": frames,
-            "engine": browser.as_ref().map(|(v, up)| json!({
+            "engine": browser.as_ref().map(|(v, up, pid)| json!({
+                "pid": pid,
                 "product": v.product,
                 "version": v.version,
                 "revision": v.revision,

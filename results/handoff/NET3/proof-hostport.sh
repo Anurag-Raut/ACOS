@@ -23,8 +23,14 @@ WT=$(cd "$HERE/../../.." && pwd)
 OUT=${1:-$HERE/run}
 mkdir -p "$OUT"
 BIN=${BIN:-$WT/.cache/net3-target/release/acos-netd}
-PASTA=${ACOS_NET_PASTA:?set ACOS_NET_PASTA to the pinned static pasta}
-export ACOS_NET_PASTA=$PASTA
+# NETREAL: ACOS_NET_PASTA stays optional. Unset (or empty), the relay finds the
+# pinned pasta the supported way (<root>/libexec/pasta; see `acos-netd pasta`).
+if [ -n "${ACOS_NET_PASTA:-}" ]; then
+  export ACOS_NET_PASTA
+else
+  unset ACOS_NET_PASTA
+  "$BIN" pasta >/dev/null 2>&1 || { echo "no pinned pasta (acos-netd pasta: missing)" >&2; exit 2; }
+fi
 MAP=169.254.2.1
 LOG=$OUT/proof.log
 : >"$LOG"
@@ -193,6 +199,18 @@ hog_ev=$(sed -n 's/^memory_events=//p' "$OUT/memhog.log" | head -1)
 # `oom_kill > 0` from the scope's memory.events before systemd removes it.
 oom_witness=no
 { [ "${hog_py:-0}" = 137 ] || [ -s "$OUT/oom.txt" ]; } && oom_witness=yes
+# Third witness (NETREAL): systemd's own record of the scope. A scope whose
+# whole cgroup is killed at once (oom.group) lives ~80 ms, shorter than the
+# watcher's poll, and takes the guest's own `python_exit` with it; the user
+# manager still journals `<scope>: Failed with result 'oom-kill'`, naming the
+# scope this very guest was in.
+if [ "$oom_witness" = no ] && [ -n "$hog_cgroup" ] && command -v journalctl >/dev/null 2>&1; then
+  scope_unit=$(basename "$hog_cgroup")
+  if journalctl --user --no-pager --since "-10min" 2>/dev/null | grep -F "$scope_unit" | grep -q "oom-kill"; then
+    oom_witness=yes
+    echo "journal: $scope_unit Failed with result 'oom-kill'" >>"$OUT/oom.txt"
+  fi
+fi
 if [ -n "$hog_cgroup" ] && [ "$hog_cgroup" != "/" ] && [ "${hog_mem:-0}" = 1073741824 ] \
    && [ "$oom_witness" = yes ] && [ "${hog_exit:-0}" != 0 ]; then
   say "check=guest_cgroup_enforced PASS cgroup=$hog_cgroup memory.max=$hog_mem oom_killed=$(head -1 "$OUT/oom.txt") run_exit=$hog_exit python_exit=${hog_py:-killed-with-the-unit} [$hog_ev]"
@@ -205,7 +223,14 @@ python3 -c 'b=bytearray(1500*1024*1024); print("unguarded-ok", len(b))' >>"$OUT/
 say "check=cgroup_limit_is_the_scope PASS outside-any-scope: $(tail -1 "$OUT/memhog.log")"
 
 # --- leak ---------------------------------------------------------------------
-"$BIN" status >"$OUT/status-final.json" 2>&1
+# A killed guest's session is detached by the supervisor's tick (every 500 ms,
+# `supervisor::TICK`) once its owner is gone, so "no leak" is read after that
+# bound (<= 5 s here), not inside it.
+for _ in $(seq 1 25); do
+  "$BIN" status >"$OUT/status-final.json" 2>&1
+  grep -q '"session_rules": 0' "$OUT/status-final.json" && break
+  sleep 0.2
+done
 fwd=$(ps -eo pid,args | awk '/acos-netd forward/ && !/awk/ {n++} END {print n+0}')
 say "check=no_leak $(grep -o '"relay_veths": \[[^]]*\]' "$OUT/status-final.json") $(grep -o '"session_rules": [0-9]*' "$OUT/status-final.json") forwarders=$fwd"
 "$BIN" shutdown >/dev/null 2>&1

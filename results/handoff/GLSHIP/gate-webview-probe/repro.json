@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-494c6621-431117b030d42b5b/fixtures/build/apps/webview-probe.apk",
+  "apk_sha256": "617c9d2b14a4354766accda64bcc9e2cbdc48e636eba3630c11f7f602cc4bf51",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-494c6621-431117b030d42b5b/scenarios/webview-probe.yaml",
+  "scenario_sha256": "1b0e89f02f8f70e4f49fa90635c99895effdbb2cda8f171465305e74cfe8f1e8",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

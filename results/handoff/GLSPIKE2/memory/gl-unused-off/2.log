@@ -1,0 +1,97 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected text exactly \"Increment\", got text \"INCREMENT\" / hint \"\"",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 15933440,
+    "wall_ms": 212
+  },
+  "ok": false,
+  "request_id": "req_3e20a_18e909ec4c48a276",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/results/handoff/GLSPIKE2/memory/gl-unused-off/2",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 3,
+      "index": 3,
+      "kind": "assert_text",
+      "message": "expected text exactly \"Increment\", got text \"INCREMENT\" / hint \"\"",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ASSERTION_FAILED",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Increment\", got text \"INCREMENT\" / hint \"\"",
+        "retryable": false
+      },
+      "step_index": 3,
+      "summary": "step 3 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794521207401108938,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/fixtures/build/apps/counter.apk",
+        "sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
+        "sha256_12": "8170835e70f2",
+        "size_bytes": 12756
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794975386888203751,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/scenarios/counter.yaml",
+        "sha256": "45506d6ab497966ab212b8ea697ef480fa9a3fc477b4fb1e780cacc4b8569147",
+        "sha256_12": "45506d6ab497",
+        "size_bytes": 4302
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art… [ACOS: result.result.provenance.warnings[0].message bounded for size — 302 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        }
+      ]
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/results/handoff/GLSPIKE2/memory/gl-unused-off/2/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_counter",
+  "status": "fail"
+}
+verify: ASSERTION_FAILED (assertion): expected text exactly "Increment", got text "INCREMENT" / hint "" [class=assertion, retryable=false]

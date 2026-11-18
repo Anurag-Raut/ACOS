@@ -1,0 +1,58 @@
+# MODTAIL proof: every scripted module detached is the honest missing path.
+#
+# No module is attached, so the same fixture prints what AOSP's clients answer
+# with a missing service, and every module row in the verdict says `off` with its
+# reason. Nothing here is a stub success.
+version: 1
+name: tail-detached
+description: >-
+  The tail fixture with no module attached: TelephonyManager answers
+  SIM_STATE_UNKNOWN/PHONE_TYPE_NONE/lines null, there is no Bluetooth adapter,
+  and BiometricManager reports the missing service. The verdict's module rows say
+  off with the AOSP reason.
+app: ../fixtures/build/apps/tail-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.tailprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "TELEPHONY sim=UNKNOWN phone=NONE"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Bluetooth"}}
+  - wait_for:
+      selector: {text: {contains: "BLUETOOTH none (no adapter)"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Biometric"}}
+  - wait_for:
+      selector: {text: {contains: "BIOMETRIC unavailable=UnsupportedOperationException"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Vibrator"}}
+  # `vibrator_manager` is a tombstone when the module is off: `hasVibrator()`
+  # answers the structured UnsupportedOperationException, which the probe
+  # reports instead of crashing. The line is below the fold, so the step scrolls
+  # the status panel to it.
+  - scroll_until:
+      selector: {text: {contains: "VIBRATOR unavailable=UnsupportedOperationException"}}
+      direction: up
+      max_attempts: 8
+  - wait_for:
+      selector: {text: {contains: "VIBRATOR unavailable=UnsupportedOperationException"}}
+      timeout_ms: 20000

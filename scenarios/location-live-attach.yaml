@@ -1,0 +1,103 @@
+# MODLOC3 evidence: the app starts with `location` **detached**, caches its
+# `LocationManager`, and a live attach is visible through that same cached proxy.
+#
+# This is the property MODLOC2 §5b could not have: with `location` declaring
+# `replaces: ["location"]` the attach replaced the binder, and
+# `SystemServiceRegistry` keeps one `LocationManager` (and its `ILocationManager`
+# proxy) per process, so the guest kept talking to the freed handle.
+#
+# ADR-0029 note (MODSENS) fixes the shape: `core` publishes the node
+# (`core_module::FILLED_BY_MODULE`), the `location` module fills it on attach, a
+# detach empties it back to the honest disabled answer. Every step below goes
+# through the object the app created while the service answered the OFF node:
+#
+#   1. launch with no `services:` entry -> `core`'s off node answers: the app shows
+#      the honest unavailable state (its first call, `getAllProviders`, is a
+#      structured UNSUPPORTED_ANDROID_API naming the module and the attach call);
+#   2. `service_ctl {op: attach}` -> the module fills the SAME binder;
+#   3. "Check again" -> the cached `LocationManager` now reports the phone's
+#      providers and registers a listener through that binder;
+#   4. `service_ctl set_location` -> the listener registered in step 3 (through the
+#      proxy the app resolved before the attach) receives the fix;
+#   5. `service_ctl {op: detach}` -> the node is emptied in place; the next
+#      "Check again" shows the honest state again, with no stale fix.
+version: 1
+name: location-live-attach
+description: "location: the app starts detached and caches LocationManager; a live attach is received by the same proxy, and a detach empties it again."
+app: fixtures/build/apps/location-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.locationprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 20000
+  # 1. Detached at launch: the framework client was constructed against the
+  # disabled-device node and shows the honest unavailable state.
+  - assert_text:
+      selector: {id: state}
+      text: {contains: "state=unavailable"}
+  - assert_text:
+      selector: {id: state}
+      text: {contains: "not attached"}
+  - assert_text:
+      selector: {id: last}
+      text: {exact: "last=none"}
+  - assert_text:
+      selector: {id: fix}
+      text: {exact: "fix=none"}
+  # 2. The live attach: the module fills the node `core` published.
+  - service_ctl:
+      module: location
+      op: attach
+      profile: scripted
+      config: {permissions: fine}
+  # 3. The SAME cached `LocationManager` re-runs the whole probe (the app's own
+  # button handler) and now sees the phone's providers.
+  - tap: {selector: {id: check}}
+  - wait_for:
+      selector: {id: state, text: {contains: "state=ready providers=fused,gps,network,passive"}}
+      timeout_ms: 20000
+  # 4. A fix driven after the attach reaches the listener registered through that
+  # cached proxy: the proof that the binder did not change under the guest.
+  - service_ctl:
+      module: location
+      op: set_location
+      args: {lat: 37.4220, lng: -122.0841, accuracy: 4.0, provider: gps}
+  - wait_for:
+      selector: {id: fix, text: {contains: "37.4220,-122.0841"}}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: fix}
+      text: {contains: "count=1"}
+  - assert_text:
+      selector: {id: last}
+      text: {contains: "last=37.4220,-122.0841"}
+  # 5. Detach empties the node in place: the cached proxy keeps working and gets
+  # the honest disabled answer again, never a stale fix.
+  - service_ctl: {module: location, op: detach}
+  - tap: {selector: {id: check}}
+  - wait_for:
+      selector: {id: state, text: {contains: "state=unavailable"}}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: last}
+      text: {exact: "last=none"}
+  - assert_text:
+      selector: {id: fix}
+      text: {exact: "fix=none"}

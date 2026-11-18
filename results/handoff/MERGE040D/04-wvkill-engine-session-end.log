@@ -1,0 +1,120 @@
+   Compiling acos-webview v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-731ba222-d99d1e6ddb8cbfd7/crates/acos-webview)
+   Compiling syn v3.0.10
+   Compiling thiserror-impl v2.0.21
+   Compiling serde_derive v1.0.229
+   Compiling thiserror v2.0.21
+   Compiling serde v1.0.229
+warning: field `view` is never read
+   --> crates/acos-webview/src/fair.rs:177:5
+    |
+176 | struct Running {
+    |        ------- field in this struct
+177 |     view: u64,
+    |     ^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-webview` (lib) generated 1 warning
+warning: fields `blobs`, `seen`, and `closed` are never read
+  --> crates/acos-webview/tests/common/mod.rs:21:5
+   |
+18 | pub struct WireGuest {
+   |            --------- fields in this struct
+...
+21 |     blobs: Mutex<Receiver<Blob>>,
+   |     ^^^^^
+...
+29 |     seen: Arc<Mutex<Vec<(String, Value)>>>,
+   |     ^^^^
+30 |     next: AtomicU32,
+31 |     pub closed: Arc<AtomicBool>,
+   |         ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `connect_attached` and `seen` are never used
+   --> crates/acos-webview/tests/common/mod.rs:43:12
+    |
+ 34 | impl WireGuest {
+    | -------------- associated items in this implementation
+...
+ 43 |     pub fn connect_attached(path: &Path, session: &str) -> Self {
+    |            ^^^^^^^^^^^^^^^^
+...
+252 |     pub fn seen(&self) -> Vec<(String, Value)> {
+    |            ^^^^
+
+warning: fields `blobs`, `blob_waiters`, `seen`, and `closed` are never read
+  --> crates/acos-webview/tests/common/mod.rs:21:5
+   |
+18 | pub struct WireGuest {
+   |            --------- fields in this struct
+...
+21 |     blobs: Mutex<Receiver<Blob>>,
+   |     ^^^^^
+...
+26 |     blob_waiters: Arc<Mutex<HashMap<String, SyncSender<Blob>>>>,
+   |     ^^^^^^^^^^^^
+...
+29 |     seen: Arc<Mutex<Vec<(String, Value)>>>,
+   |     ^^^^
+30 |     next: AtomicU32,
+31 |     pub closed: Arc<AtomicBool>,
+   |         ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `connect_attached`, `hello`, `render`, and `seen` are never used
+   --> crates/acos-webview/tests/common/mod.rs:43:12
+    |
+ 34 | impl WireGuest {
+    | -------------- associated items in this implementation
+...
+ 43 |     pub fn connect_attached(path: &Path, session: &str) -> Self {
+    |            ^^^^^^^^^^^^^^^^
+...
+203 |     pub fn hello(&self) -> Value {
+    |            ^^^^^
+...
+212 |     pub fn render(&self, view: i64) -> (Value, Blob) {
+    |            ^^^^^^
+...
+252 |     pub fn seen(&self) -> Vec<(String, Value)> {
+    |            ^^^^
+
+warning: function `assert_png` is never used
+   --> crates/acos-webview/tests/common/mod.rs:258:8
+    |
+258 | pub fn assert_png(bytes: &[u8]) {
+    |        ^^^^^^^^^^
+
+warning: `acos-webview` (test "engine_session_end") generated 2 warnings
+warning: `acos-webview` (test "broker_build") generated 3 warnings
+    Finished `test` profile [unoptimized] target(s) in 2.48s
+     Running tests/broker_build.rs (.cache/merge040d-target/debug/deps/broker_build-b0ca9f8e028a9e01)
+
+running 2 tests
+test another_builds_daemon_with_sessions_is_refused_and_this_build_uses_its_own ... ok
+test another_builds_idle_daemon_exits_and_this_build_takes_the_endpoint ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+     Running tests/broker_scope.rs (.cache/merge040d-target/debug/deps/broker_scope-e5def29029a3d2ae)
+
+running 1 test
+test a_broker_in_its_own_scope_outlives_the_session_scope_that_spawned_it ... 
+running 1 test
+test a_broker_in_its_own_scope_outlives_the_session_scope_that_spawned_it ... 
+running 1 test
+test a_broker_in_its_own_scope_outlives_the_session_scope_that_spawned_it ... acos-webview-gate: warning: spawn scope disabled by ACOS_WEBVIEW_SCOPE=0 (setsid fallback)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.79s
+
+     Running tests/engine_session_end.rs (.cache/merge040d-target/debug/deps/engine_session_end-176f7622554b0838)
+
+running 1 test
+test ending_one_session_does_not_kill_the_shared_engine_of_the_other ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.27s
+

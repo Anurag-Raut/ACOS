@@ -1,0 +1,12 @@
+package=dev.acos.fixtures.counter
+activity=dev.acos.fixtures.counter.MainActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@c791ad3
+timeout_ms=12000
+first_traversal=traversed=true source=onDraw skip=none
+draw_skip=none
+back_dispatcher=ahead_of_time=false mDefaultBackCallback=null top_callback=null
+resume_ready=first-traversal

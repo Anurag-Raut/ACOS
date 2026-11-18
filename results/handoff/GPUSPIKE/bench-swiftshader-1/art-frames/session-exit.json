@@ -1,0 +1,95 @@
+{
+  "abi": null,
+  "activity_resumed": true,
+  "application_created": true,
+  "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=123MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p835559-i889091.scope)",
+  "code": null,
+  "disk_free_bytes": 236062015488,
+  "guard": "seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0",
+  "guest_crash": null,
+  "guest_crash_detail": null,
+  "guest_exit": 0,
+  "guest_signal": null,
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "kept_run_dir": null,
+  "logd": "logd: 218 entries",
+  "logd_tail": [
+    "W/SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n",
+    "W/SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n",
+    "W/SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n",
+    "W/SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n",
+    "W/SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n",
+    "W/SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n",
+    "E/GraphicsEnv: Failed to get gpu service",
+    "E/GraphicsEnv: Failed to get gpu service",
+    "E/GraphicsEnv: Failed to get gpu service",
+    "E/GraphicsEnv: Failed to get gpu service",
+    "I/ANGLE: Version (2.1.24303 git hash: 54447ed6f702), Renderer (Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)))",
+    "E/GraphicsEnv: Failed to get gpu service",
+    "I/EglProbe: hw: png->HARDWARE config=HARDWARE",
+    "I/EglProbe: hw: png copy(ARGB_8888) starting",
+    "W/AcosPriority: setpriority(-4) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)",
+    "W/AChoreographer: AChoreographer: No JVM provided!",
+    "W/AChoreographer: JNI environment is unavailable, skipping registration",
+    "D/libEGL: dlopen (libGLESv2_angle.so) success at d2b0f8bd",
+    "E/GraphicsEnv: Failed to get gpu service",
+    "I/EglProbe: hw: png copy ok=true took_us=39342 left=#FFFF0000 right=#FF0000FF",
+    "I/EglProbe: hw: wrapHardwareBuffer config=HARDWARE",
+    "I/EglProbe: hw: wrapped copy(ARGB_8888) starting",
+    "I/EglProbe: hw: wrapped copy ok=true took_us=425 p00=#00000000",
+    "I/EglProbe: end"
+  ],
+  "native_crash": null,
+  "native_crash_path": null,
+  "notes": [
+    "shared-boot-image: /home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff (ACOS_ART_BOOT_IMAGE=shared-fixed; -Ximage:/data/img/boot.art -Xnorelocate; fixed base 0x70000000, no image ASLR; cache hit)",
+    "boot_image: mode=shared-fixed cache=hit dir=/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff input=ff39b037f1d6b9ff base=0x70000000",
+    "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=123MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p835559-i889091.scope)",
+    "seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0",
+    "logd: 218 entries",
+    "webview: module `webview` is off (no `com.android.webview` provider package, no gate socket): `WebView` takes Android's own no-provider path. Attach it with `services: [{id: webview, profile: real}]`."
+  ],
+  "outcome": "ok",
+  "retryable": false,
+  "route": "launch",
+  "stage": "teardown-evidence",
+  "stderr_tail": [
+    "ACOSART[render]: dlopen(libandroid_runtime.so) ok @0xfe65e82fef774981 (default namespace, RTLD_GLOBAL)",
+    "ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)",
+    "ACOSLAUNCH MARK crash-handler installed sigchain=0x7f54706e7d40"
+  ],
+  "stderr_tail_last": "ACOSLAUNCH MARK crash-handler installed sigchain=0x7f54706e7d40",
+  "stdout_tail": [
+    "…ext\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,0][1080,2337]\",\"bounds_on_screen\":\"[0,0][1080,2337]\",\"visible_bounds\":\"[0,0][1080,2337]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"android.widget.FrameLayout\",\"id\":\"android:id/content\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,275][1080,2337]\",\"bounds_on_screen\":\"[0,275][1080,2337]\",\"visible_bounds\":\"[0,275][1080,2337]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"android.widget.TextView\",\"id\":\"\",\"text\":\"EglProbe running\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,275][1080,2337]\",\"bounds_on_screen\":\"[0,275][1080,2337]\",\"visible_bounds\":\"[0,275][1080,2337]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]},{\"class\":\"com.android.internal.widget.ActionBarContainer\",\"id\":\"android:id/action_bar_container\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][1080,275]\",\"bounds_on_screen\":\"[0,128][1080,275]\",\"visible_bounds\":\"[0,128][1080,275]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"android.widget.Toolbar\",\"id\":\"android:id/action_bar\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][1080,275]\",\"bounds_on_screen\":\"[0,128][1080,275]\",\"visible_bounds\":\"[0,128][1080,275]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"android.widget.TextView\",\"id\":\"\",\"text\":\"EglProbe\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[42,166][256,237]\",\"bounds_on_screen\":\"[42,166][256,237]\",\"visible_bounds\":\"[42,166][256,237]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.widget.ActionMenuView\",\"id\":\"\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[1080,128][1080,275]\",\"bounds_on_screen\":\"[1080,128][1080,275]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]},{\"class\":\"com.android.internal.widget.ActionBarContextView\",\"id\":\"android:id/action_context_bar\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][0,128]\",\"bounds_on_screen\":\"[0,128][0,128]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":8,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}]},{\"class\":\"android.view.View\",\"id\":\"android:id/navigationBarBackground\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,2337][1080,2400]\",\"bounds_on_screen\":\"[0,2337][1080,2400]\",\"visible_bounds\":\"[0,2337][1080,2400]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.view.View\",\"id\":\"android:id/statusBarBackground\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,0][1080,128]\",\"bounds_on_screen\":\"[0,0][1080,128]\",\"visible_bounds\":\"[0,0][1080,128]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}],\"window_count\":1,\"node_budget\":2000,\"truncated\":false,\"emit_us\":533},\"settle\":{\"settled\":true,\"pending\":[],\"frame_callbacks\":0,\"queue_due_ms\":-1,\"horizon_ms\":256,\"anim_callbacks\":[],\"draw_ms\":0,\"draw_seq\":0,\"window_stable_ms\":65,\"in_touch_mode\":true,\"window_gone\":false,\"task_finished\":false,\"view_generation\":0},\"animations\":{\"on\":true,\"scale\":1.0,\"applied\":true,\"source\":\"env:on\"}}",
+    "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c65d709} dev.acos.art.LaunchMain$8$1@70bdac5"
+  ],
+  "stdout_tail_last": "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c65d709} dev.acos.art.LaunchMain$8$1@70bdac5",
+  "utc_ms": 1794980975554,
+  "wall_ms": 2505
+}

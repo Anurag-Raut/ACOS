@@ -18,8 +18,9 @@ tools/release/install.sh --prefix ~/.local --from-target target
 ```
 
 Options: `--prefix DIR` (default `$ACOS_PREFIX`, else `~/.local`), `--version V`
-(default `0.3.0`), `--from-target DIR`, `--force`, `--register-mcp`. It prints
-the install size and the next steps. No root, no downloads. `--force` is
+(default `0.3.0`), `--from-target DIR`, `--pasta PATH`, `--force`,
+`--register-mcp`. It prints the install size and the next steps. No root, no
+downloads. `--force` is
 required only when the version directory already exists and was not left by this
 installer for that version.
 
@@ -37,7 +38,8 @@ re-register after moving the prefix. Other MCP clients get the equivalent
 <prefix>/bin/acos-mcp             wrapper (same)
 <prefix>/share/acos/current -> 0.3.0
 <prefix>/share/acos/0.3.0/
-  bin/{acos,acos-art,acos-mcp}
+  bin/{acos,acos-art,acos-mcp,acos-netd}
+  libexec/pasta                   the pinned static transport (ADR-0030)
   VERSION, MANIFEST.txt
   .cache/art/sysroot/             ART sysroot, the framework (~860 MB)
   .cache/boot/android-34/         fonts, static overlays, BOOTCLASSPATH (~250 MB)
@@ -79,6 +81,55 @@ install needs no separate build step:
   used — a wrong or missing provider is visible in the reply, never a WebView
   that paints nothing.
 
+### The network module's transport: `libexec/pasta`
+
+ADR-0030's `network` module (`network:real`) runs a session's traffic through one
+**static `pasta` build of a pinned tag** per host, and the tag is not a
+detail: it is the transport the relay's boundary, host-port opt-in and
+online/offline controls were measured on. So the binary has one documented home
+and one lookup rule (`crates/acos-netd-ctl/src/pasta.rs`):
+
+| order | location |
+| --- | --- |
+| 1 | `$ACOS_NET_PASTA` — an explicit path (a spike, a locally built binary) |
+| 2 | `<root>/libexec/pasta` — `$ACOS_HOME` when installed, else the checkout root |
+| 3 | `$ACOS_PREFIX/share/acos/current/libexec/pasta` |
+| 4 | `pasta` on `PATH` |
+
+An install carries its own copy: `tools/release/install.sh` copies the binary it
+finds (`--pasta PATH`, `$ACOS_NET_PASTA`, `<repo>/libexec/pasta`, or `pasta` on
+`PATH`) to `<prefix>/share/acos/<version>/libexec/pasta`, after checking the
+tag it reports and the sha256 recorded in
+`research/spike-net/artifacts/passt-build.txt` (tag `2026_10_02.cba3570`,
+sha256 `314c37e8…edf60`). A binary that is not that build is **not** installed:
+the installer prints the recipe and the install keeps working without a network.
+
+Building it yourself is four commands (no root, no downloads beyond the source):
+
+```bash
+git clone --depth 1 -b 2026_10_02.cba3570 https://passt.top/passt pasta-src
+make -C pasta-src static VERSION=2026_10_02.cba3570
+sha256sum pasta-src/pasta   # must be 314c37e878bd6ffe43200735800d5efd4859d81d46b0450358a103c36c0edf60
+install -m 755 pasta-src/pasta "$ACOS_HOME/libexec/pasta"    # or: install.sh --pasta …
+```
+
+`pasta` is GPL-2.0-or-later (its own `LICENSES/` ship with the source); it is a
+separate executable, never linked into ACOS.
+
+Who reports it:
+
+* `acos doctor` prints `pasta: <version> (<path> [<source>])` when it resolves,
+  and `pasta: missing (searched: …)` otherwise — a `warn`, because the default
+  network profile is `off` and nothing else needs it;
+* `acos-netd pasta [--json]` prints the same resolution and exits 1 when it is
+  missing, so a script (the scenario runners) resolves a scenario's
+  `needs_env: [pasta]` with the product's own rule;
+* the relay's `status` names both the version it found and the expected tag
+  (`cargo`/`PASTA_TAG`), so a wrong binary is visible, never silently used;
+* `tools/run-matrix.sh` skips a `needs_env: [pasta]` scenario (and says so in
+  `skipped_needs_env`) instead of turning it into a red row that is not the
+  scenario's fault.
+
 ### Mutable state
 
 Created on demand, always under the same root — never in the checkout, never in
@@ -109,6 +160,9 @@ for building fixtures:
 * runtime: `bwrap`, `systemd-run` (memory cgroup), the Android SDK's `aapt2` and
   `d8`, `android.jar` (`platforms/android-34`), `java`/`javac`, and the NDK's
   `x86_64-linux-android34-clang` (the JNI shims are compiled on a cold launch);
+* the `network` module's `real` profile only: the pinned `pasta` (above);
+  without it `doctor` says `pasta: missing`, the module refuses to attach with
+  `NETWORK_UNAVAILABLE`, and the `needs_env: [pasta]` scenarios are skipped;
 * fixtures only: `zipalign`, `apksigner`, `keytool`, `tools/apk_append.py`.
 
 With `ACOS_HOME` set, doctor checks the install itself (root, `VERSION`, sysroot,

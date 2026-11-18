@@ -138,13 +138,22 @@ fn stub_session(
         }
     }
     let attach: Value = serde_json::from_slice(&line).expect("attach line is JSON");
-    assert_eq!(attach["attach"], json!(1));
+    assert_eq!(attach["attach"], json!(2), "WIRE.md §0.1 attach v2");
     assert!(
         attach["session"].as_str().unwrap_or("").len() > 0,
         "attach must name the session: {attach}"
     );
+    // A gate only trusts a daemon that reports the same build (WVSCOPE).
+    assert_eq!(
+        attach["build"].as_str(),
+        Some(acos_webview::build_id()),
+        "the gate must send its build id: {attach}"
+    );
     attaches.fetch_add(1, Ordering::SeqCst);
-    stream.write_all(b"{\"ok\":true}\n").expect("attach ack");
+    let ack = json!({"ok": true, "build": acos_webview::build_id()});
+    stream
+        .write_all(format!("{ack}\n").as_bytes())
+        .expect("attach ack");
     stream.set_read_timeout(Some(Duration::from_secs(30))).ok();
     // Then echo the wire.
     let mut reader = BufReader::new(stream.try_clone().expect("clone"));

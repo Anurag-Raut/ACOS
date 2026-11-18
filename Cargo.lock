@@ -40,6 +40,7 @@ name = "acos-art"
 version = "0.3.0"
 dependencies = [
  "acos-binder-peer",
+ "acos-gles-provider",
  "acos-netd",
  "acos-parcel",
  "acos-protocol",
@@ -76,6 +77,7 @@ dependencies = [
  "acos-apk",
  "acos-art",
  "acos-dex",
+ "acos-gles-provider",
  "acos-jni",
  "acos-mcp",
  "acos-native-loader",
@@ -128,6 +130,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "acos-gles-provider"
+version = "0.3.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "acos-jni"
 version = "0.3.0"
 dependencies = [
@@ -150,6 +161,7 @@ dependencies = [
 name = "acos-mcp"
 version = "0.3.0"
 dependencies = [
+ "acos-gles-provider",
  "acos-jni",
  "acos-netd",
  "acos-protocol",
@@ -298,6 +310,7 @@ dependencies = [
  "acos-parcel",
  "acos-protocol",
  "acos-sfgeom",
+ "acos-test-support",
  "acos-wm",
  "proptest",
  "rustix",
@@ -323,6 +336,9 @@ dependencies = [
 [[package]]
 name = "acos-test-support"
 version = "0.3.0"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "acos-verify"

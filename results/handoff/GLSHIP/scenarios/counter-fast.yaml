@@ -1,0 +1,62 @@
+# counter-fast: GLSHIP M8 probe (fast settle), NOT a gate.
+#
+# Same app and same taps as scenarios/counter.yaml, but every input step asks
+# for `settle: fast`, so the tap step's `duration_ms` is the action→state
+# latency with the fast rule (the M8 "fast" column). Used only by
+# results/handoff/GLSHIP/run-ab.sh, 5 reps per arm, default provider vs
+# `ACOS_GUEST_GLES=off`. The pass/fail gate is scenarios/counter.yaml.
+version: 1
+name: counter-fast
+description: >-
+  Launch counter, tap inc/inc/reset with the fast settle and check the count
+  after each. A latency probe: the tap steps carry the fast rule (that is the
+  M8 fast latency); every claim is made by the following strict `wait_for`,
+  because a fast settle is navigation-only and never assertion evidence.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 5000
+
+  - tap:
+      selector: {id: inc}
+      settle: fast
+  - wait_for:
+      selector: {text: {exact: "1"}}
+      timeout_ms: 5000
+
+  - tap:
+      selector: {id: inc}
+      settle: fast
+  - wait_for:
+      selector: {text: {exact: "2"}}
+      timeout_ms: 5000
+
+  - tap:
+      selector: {id: reset}
+      settle: fast
+  - wait_for:
+      selector: {text: {exact: "0"}}
+      timeout_ms: 5000

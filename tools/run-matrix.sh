@@ -36,6 +36,13 @@
 #   --out FILE             default results/bench/matrix-<stamp>.json
 #   --list                 print the selected scenarios and exit (no build, no ART)
 #
+# Release gate (owner direction 2026-11-18 §2): this matrix is the CORRECTNESS
+# half. The TIMING half must also show that ACOS beats the stock Android emulator
+# on every tracked metric -- run
+#   tools/art-runtime/emubench/emu_gate.py --acos <gate timing JSON> \
+#       --emu results/bench/emubench-2026-11-18.json
+# and require 0 metrics worse for ACOS (BENCHMARKS.md section 13).
+#
 # What each row carries: wall ms, cgroup memory.current peak + GiB-min integral
 # (sampled every 100 ms in the run's own systemd scope), PSS (secondary), the
 # cgroup anon+shmem value at --settle-s, the structured error {code,class,
@@ -323,9 +330,37 @@ def read_scenario(path):
 
 # Host capabilities a scenario may name in `needs_env` (acos-protocol's
 # KNOWN_NEEDS_ENV). Present == the scenario may run.
+#
+# The answer is the *product's* rule, not a second one: `acos doctor --json`
+# reports the `pasta` check from `crates/acos-netd-ctl/src/pasta.rs` (the same
+# lookup the relay supervisor and `tools/release/install.sh` use, which includes
+# `<runtime root>/libexec/pasta`). A row that is skipped therefore means "this
+# host cannot run the arm honestly", which is exactly what `needs_env` declares.
+_NEEDS_ENV_CACHE = {}
+
+
+def doctor_capabilities():
+    """Capabilities `acos doctor` says are present, asked once per run."""
+    if "caps" in _NEEDS_ENV_CACHE:
+        return _NEEDS_ENV_CACHE["caps"]
+    caps = {}
+    try:
+        out = subprocess.run([ACOS, "doctor", "--json"], capture_output=True,
+                             text=True, timeout=120)
+        report = json.loads(out.stdout or "{}")
+        for check in report.get("checks") or []:
+            caps[check.get("name")] = (check.get("status") == "ok",
+                                       check.get("detail") or "")
+    except Exception as exc:  # noqa: BLE001 - a missing answer is "not present"
+        caps["__error__"] = (False, str(exc))
+    _NEEDS_ENV_CACHE["caps"] = caps
+    return caps
+
+
 def needs_env_present(name):
     if name == "pasta":
-        return bool(os.environ.get("ACOS_SPIKE_NET_PASTA") or shutil.which("pasta"))
+        present, _ = doctor_capabilities().get("pasta", (False, ""))
+        return present
     return False
 
 
@@ -701,10 +736,17 @@ def main():
         # scenario's fault (net-check/network:real need the pinned pasta).
         missing = [name for name in meta["needs_env"] if not needs_env_present(name)]
         if missing:
+            # Say what the product said, not just "not present": `acos doctor`'s
+            # own line for the capability is the reason (e.g. `pasta: missing
+            # (searched: …)`), so the next action is in the report.
+            said = {name: doctor_capabilities().get(name, (False, ""))[1]
+                    for name in missing}
             skipped.append({"scenario": scenario, "needs_env": missing,
+                            "doctor": said,
                             "reason": "host capability missing: " + ", ".join(missing)})
-            print("run-matrix: SKIP %s: needs %s (not present)"
-                  % (scenario, ", ".join(missing)), file=sys.stderr)
+            print("run-matrix: SKIP %s: needs %s (not present: %s)"
+                  % (scenario, ", ".join(missing),
+                     "; ".join(f"{k}: {v}" for k, v in said.items())), file=sys.stderr)
             continue
         for rep in range(1, REPS + 1):
             idx += 1

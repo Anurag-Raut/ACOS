@@ -79,6 +79,17 @@ steps:
       selector: {id: finish}
       text: {exact: "Finish B"}
 
+  # PROCUID README §7 item 2 (HYG2): proc-b is the session's **second** app, so
+  # its uid is not the primary package's. A `PendingIntent` created here must
+  # answer *this* process from `getCreatorUid()`/`getCreatorPackage()` — both read
+  # `IActivityManager.getInfoForIntentSender`, whose creator uid used to be the
+  # fixture uid for every record, so the verdict was `BAD` for a second app.
+  # The verdict compares against `Process.myUid()`/`getPackageName()`, so it
+  # cannot pass on a constant.
+  - assert_text:
+      selector: {id: creator}
+      text: {contains: "verdict=ok"}
+
   # The lifecycle of both processes, in order: B resumed (in its own process),
   # A paused and then stopped (its own `IApplicationThread` received the items).
   # No tag filter: the ordered sequence spans two processes (AcosProcA and

@@ -24,6 +24,9 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 proptest = "1"
+# HYG2: the one rule for a missing test prerequisite (fail loudly, counted skip
+# only under ACOS_ALLOW_ART_SKIP=1).
+acos-test-support = { path = "../acos-test-support" }
 
 [[example]]
 name = "scan-parcelables"

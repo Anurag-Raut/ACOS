@@ -1,0 +1,15 @@
+# pinned pasta, found by the product's own rule
+netd_pasta rc=0 2026_10_02.cba3570 runtime_root pinned=True
+sha256 314c37e878bd6ffe43200735800d5efd4859d81d46b0450358a103c36c0edf60
+doctor: [ok  ] pasta              2026_10_02.cba3570 (/home/Qui/.t3/worktrees/acos/t3-a2b5f6fb-3b52a9c9158c9fa8/libexec/pasta [runtime_root])
+relay_start rc=0 "pasta_version": "2026_10_02.cba3570" 
+arm=off exit=0 verdict=pass steps=8/8 scenario=scenarios/net-network-off.yaml
+arm=check-off exit=0 verdict=pass steps=9/9 scenario=scenarios/net-check-offline.yaml
+arm=check exit=0 verdict=pass steps=10/10 scenario=scenarios/net-check.yaml
+arm=real exit=0 verdict=pass steps=9/9 scenario=scenarios/net-network-real.yaml
+arm=offline exit=0 verdict=pass steps=14/14 scenario=scenarios/net-network-offline.yaml
+arm=https-proof exit=0 verdict=pass steps=12/12 scenario=scenarios/net-https-proof.yaml
+hostport exit=0 check=no_leak "relay_veths": [] "session_rules": 0 forwarders=0
+--- relay left behind ---
+acos-netd: {"error":{"code":"supervisor-gone","message":"/home/Qui/.t3/worktrees/acos/t3-a2b5f6fb-3b52a9c9158c9fa8/.cache/ns/netd.sock: No such file or directory (os error 2)"},"ok":false}
+netd_shutdown rc=1

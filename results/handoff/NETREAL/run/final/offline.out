@@ -1,0 +1,6 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, network:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-a2b5f6fb-3b52a9c9158c9fa8/scenarios/net-network-offline.yaml (sha 5160bb99d15e), apk /home/Qui/.t3/worktrees/acos/t3-a2b5f6fb-3b52a9c9158c9fa8/fixtures/build/apps/net-check.apk (sha 11c5dfbe0197), engine art, fidelity art-reference
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-a2b5f6fb-3b52a9c9158c9fa8/results/handoff/NETREAL/run/final/offline
+  steps: 14

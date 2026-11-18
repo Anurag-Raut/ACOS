@@ -29,6 +29,31 @@ pub fn runtime_root() -> Option<PathBuf> {
     runtime_root_with(acos_home())
 }
 
+/// The guest sysroot (`<root>/.cache/art/sysroot`): `$ACOS_ART_SYSROOT`, else the
+/// productised location, then the feasibility scratch. Same rule as
+/// `acos_art::ArtRoot::resolve`, kept here because `acos-cli` does not link the
+/// launcher.
+#[must_use]
+pub fn sysroot() -> Option<PathBuf> {
+    sysroot_from(runtime_root())
+}
+
+/// [`sysroot`] with the runtime root passed in (testable).
+#[must_use]
+pub fn sysroot_from(root: Option<PathBuf>) -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os("ACOS_ART_SYSROOT") {
+        return Some(PathBuf::from(dir));
+    }
+    let root = root?;
+    for candidate in [".cache/art/sysroot", ".cache/art-exp/sysroot"] {
+        let dir = root.join(candidate);
+        if dir.join("system/apex").is_dir() {
+            return Some(dir);
+        }
+    }
+    None
+}
+
 /// [`runtime_root`] with the install root passed in, so tests can prove both
 /// arms without mutating the process environment.
 #[must_use]
@@ -62,6 +87,29 @@ mod tests {
     fn acos_home_wins() {
         let home = PathBuf::from("/nonexistent/acos-home-test");
         assert_eq!(runtime_root_with(Some(home.clone())), Some(home));
+    }
+
+    #[test]
+    fn the_sysroot_is_the_one_the_launcher_resolves() {
+        // MERGE040D(a): `acos doctor` reports the GL provider from the same
+        // sysroot the launcher binds, so this rule must match
+        // `acos_art::ArtRoot::resolve`: `.cache/art/sysroot` under the runtime
+        // root, else the feasibility scratch, and only when it is a sysroot.
+        let root = PathBuf::from("/nonexistent/cli-root-test");
+        assert_eq!(sysroot_from(Some(root.clone())), None, "no sysroot there");
+        let scratch = std::env::temp_dir().join(format!(
+            "acos-cli-sysroot-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        std::fs::create_dir_all(scratch.join(".cache/art/sysroot/system/apex")).expect("dirs");
+        assert_eq!(
+            sysroot_from(Some(scratch.clone())),
+            Some(scratch.join(".cache/art/sysroot"))
+        );
+        std::fs::remove_dir_all(&scratch).ok();
     }
 
     #[test]

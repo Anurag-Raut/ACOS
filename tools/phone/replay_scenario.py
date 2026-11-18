@@ -274,11 +274,17 @@ def visible_descs(nodes):
 # phone source
 # ---------------------------------------------------------------------------
 class Phone:
-    def __init__(self, serial, agent_device, adb):
+    def __init__(self, serial, agent_device, adb, no_device_settings=False):
         self.serial = serial
         self.ad = agent_device
         self.adb_bin = adb
         self.commands = []
+        # PARITY1: a parity run may not change device settings (it is not the
+        # device owner's session). With this set the replay never writes
+        # `stay_on_while_plugged_in`; it keeps the screen on with a wake key
+        # event instead, which is not a setting.
+        self.no_device_settings = no_device_settings
+        self._awake_checked = 0.0
 
     def adb(self, *args, timeout=120):
         cmd = [self.adb_bin, "-s", self.serial, *args]
@@ -303,6 +309,28 @@ class Phone:
         return {"rc": rc, "stdout": out, "stderr": err, "json": data}
 
     # -- reads -------------------------------------------------------------
+    def ensure_awake(self):
+        """Wake a dozing screen and dismiss a non-secure keyguard.
+
+        The accessibility tree only contains the app's window while the
+        display is on: a dozing phone dumps SystemUI's windows and nothing of
+        the app (PARITY1 saw exactly that). `KEYCODE_WAKEUP` is a key event,
+        not a setting; nothing is written to `settings`.
+        """
+        now = time.time()
+        if now - self._awake_checked < 2.0:
+            return
+        self._awake_checked = now
+        rc, out, _ = self.shell("dumpsys", "power", timeout=60)
+        m = re.search(r"mWakefulness=(\w+)", out or "")
+        if m and m.group(1) != "Awake":
+            self.shell("input", "keyevent", "KEYCODE_WAKEUP", timeout=60)
+            time.sleep(0.6)
+        rc, out, _ = self.shell("dumpsys", "window", timeout=60)
+        if re.search(r"isKeyguardShowing=true", out or ""):
+            self.shell("wm", "dismiss-keyguard", timeout=60)
+            time.sleep(0.4)
+
     def dump_nodes(self, timeout=120):
         """The platform's own tree: `uiautomator dump` -> AccessibilityNodeInfo.
 
@@ -313,6 +341,7 @@ class Phone:
         (agent-device's snapshot is kept only as a fallback: its `label` is a
         computed name, not a node field -- see node_view.)
         """
+        self.ensure_awake()
         remote = "/sdcard/acos-a11y-dump.xml"
         rc, out, err = self.shell("uiautomator", "dump", remote, timeout=timeout)
         if rc != 0:
@@ -336,10 +365,16 @@ class Phone:
             if len(nums) != 4:
                 continue
             nodes.append({
+                "index": int(a.get("index") or 0),
                 "text": a.get("text") or "",
                 "content_desc": a.get("content-desc") or "",
                 "hint": "",
                 "identifier": a.get("resource-id") or "",
+                "focused": a.get("focused") == "true",
+                "selected": a.get("selected") == "true",
+                "focusable": a.get("focusable") == "true",
+                "long_clickable": a.get("long-clickable") == "true",
+                "scrollable": a.get("scrollable") == "true",
                 "enabled": a.get("enabled") == "true",
                 "checked": a.get("checked") == "true",
                 "clickable": a.get("clickable") == "true",
@@ -418,7 +453,8 @@ class Phone:
 
 
 def replay_phone(args, doc, steps, out_dir):
-    dev = Phone(args.serial, args.agent_device, args.adb)
+    dev = Phone(args.serial, args.agent_device, args.adb,
+                no_device_settings=getattr(args, "no_device_settings", False))
     rc, out, _ = dev.shell("pm", "list", "packages")
     installed = [ln.strip().replace("package:", "") for ln in (out or "").splitlines()
                  if ln.startswith("package:")]
@@ -431,10 +467,11 @@ def replay_phone(args, doc, steps, out_dir):
     # the one the user is looking at; a dozing display or the keyguard makes a
     # whole replay read an empty/invisible tree (0 texts, every selector
     # ELEMENT_NOT_FOUND). Wake the device first, and keep it awake for the run.
-    dev.shell("input", "keyevent", "KEYCODE_WAKEUP")
-    dev.shell("wm", "dismiss-keyguard")
-    rc, before_stayon, _ = dev.shell("settings", "get", "global", "stay_on_while_plugged_in")
-    dev.shell("svc", "power", "stayon", "true")
+    dev.ensure_awake()
+    before_stayon = None
+    if not args.no_device_settings:
+        rc, before_stayon, _ = dev.shell("settings", "get", "global", "stay_on_while_plugged_in")
+        dev.shell("svc", "power", "stayon", "true")
 
     facts = {}
     for key in (
@@ -672,10 +709,26 @@ def replay_phone(args, doc, steps, out_dir):
         rec["visible_texts"] = visible_texts(nodes)
         rec["visible_descs"] = visible_descs(nodes)
         rec["visible_labels"] = sorted(set(rec["visible_texts"]) | set(rec["visible_descs"]))
+        # PARITYFIX: which tool produced this tree. Only `uiautomator-dump`
+        # keeps text and content-desc as the two AccessibilityNodeInfo
+        # attributes; the agent-device fallback does not, and a parity run must
+        # know before it compares which attribute a name sits under.
+        rec["a11y_source"] = snap.get("source")
         rec["screen"] = {"activity": dev.focused_activity(), "package": pkg,
                          "app_bundle_in_snapshot": snap.get("app")}
         rec["screenshot"] = dev.screenshot(out_dir, base)
         rec["node_count"] = len(nodes)
+        # PARITY1: the per-step tree itself, so a parity run can diff nodes
+        # rather than only the text set. One file per step, same pre-order the
+        # live snapshot read.
+        tree_dir = getattr(args, "tree_dir", None) or out_dir
+        os.makedirs(tree_dir, exist_ok=True)
+        with open(os.path.join(tree_dir, f"tree-{idx:02d}-{safe_name(kind)}.json"),
+                  "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": 1, "source": "phone", "step": idx,
+                       "a11y_source": snap.get("source"),
+                       "kind": kind, "selector": selector,
+                       "screen": rec["screen"], "nodes": nodes}, fh, indent=2)
         # A `type` step's target is re-read AFTER the text landed: ACOS records
         # the post-action tree for every step, so the phone must too (otherwise
         # the target still shows the pre-typing value and looks like a diff).
@@ -690,12 +743,18 @@ def replay_phone(args, doc, steps, out_dir):
         log(f"phone step {idx:02d} {kind} -> {rec['status']}")
 
     observations["finished"] = NOW()
+    sources = {st.get("a11y_source") for st in observations["steps"]
+               if st.get("a11y_source")}
+    observations["a11y_source"] = (sources.pop() if len(sources) == 1
+                                  else ("mixed" if sources else None))
     observations["commands"] = dev.commands
-    # restore the display setting this run changed
-    keep = (before_stayon or "0").strip()
-    dev.shell("svc", "power", "stayon", "false")
-    if keep not in ("", "0", "null"):
-        dev.shell("settings", "put", "global", "stay_on_while_plugged_in", keep)
+    # restore the display setting this run changed (never written at all when
+    # the caller asked for a no-device-settings replay)
+    if not args.no_device_settings:
+        keep = (before_stayon or "0").strip()
+        dev.shell("svc", "power", "stayon", "false")
+        if keep not in ("", "0", "null"):
+            dev.shell("settings", "put", "global", "stay_on_while_plugged_in", keep)
     # leave the device tidy: close the session and go home
     dev.ag("close", timeout=120)
     dev.ag("home", timeout=120)
@@ -865,6 +924,11 @@ def main(argv=None):
     ap.add_argument("--agent-device", default="agent-device")
     ap.add_argument("--require-lock", action="store_true",
                     help="hold the shared phone flock for the whole replay")
+    ap.add_argument("--tree-dir", help="write tree-<NN>-<step>.json per step "
+                    "(default: the --out directory; a no-op for --source acos)")
+    ap.add_argument("--no-device-settings", action="store_true",
+                    help="never write a device setting (stay_on_while_plugged_in); "
+                    "keeps the screen awake with KEYCODE_WAKEUP instead")
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.scenario):

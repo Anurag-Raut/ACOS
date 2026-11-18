@@ -20,6 +20,11 @@ acos-jni = { path = "../acos-jni" }
 # module, and advertised verbatim here (no second copy to drift from).
 acos-netd = { path = "../acos-netd" }
 acos-protocol = { path = "../acos-protocol" }
+# GLSHIP: `acos_capabilities` reports the guest's software GL provider
+# (`gles: angle-swiftshader | none`) from the small contract crate the launcher
+# also uses (`acos-gles-provider`: selection rule, manifest, verify cache), so
+# this server does not depend on the ART launcher (`acos-art`) for one line.
+acos-gles-provider = { path = "../acos-gles-provider" }
 acos-runtime = { path = "../acos-runtime" }
 acos-sandbox = { path = "../acos-sandbox" }
 # ADR-0029 item 6: `acos_capabilities` and the help limits section are generated

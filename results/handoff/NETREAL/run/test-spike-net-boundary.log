@@ -1,0 +1,414 @@
+warning: acos-binder-peer@0.3.0: built /home/Qui/.t3/worktrees/acos/t3-a5a259ba-5c8f56b61591cdaf/.cache/netrealb-target/debug/build/acos-binder-peer-f45e34fef9d893ae/out/libacos_binder_driver.so
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:574:13
+    |
+574 |         let mut r = self.request(&Request::KillPasta { hold })?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:584:13
+    |
+584 |         let mut r = self.request(&Request::Shutdown)?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-netd-ctl` (lib) generated 2 warnings (run `cargo fix --lib -p acos-netd-ctl` to apply 2 suggestions)
+warning: field `view` is never read
+   --> crates/acos-webview/src/fair.rs:177:5
+    |
+176 | struct Running {
+    |        ------- field in this struct
+177 |     view: u64,
+    |     ^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-webview` (lib) generated 1 warning
+warning: unused attribute
+    --> crates/acos-services/src/atms.rs:2048:5
+     |
+2048 |     #[must_use]
+     |     ^^^^^^^^^^^ help: remove this attribute
+     |
+note: attribute also specified here
+    --> crates/acos-services/src/atms.rs:2039:5
+     |
+2039 |     #[must_use]
+     |     ^^^^^^^^^^^
+     = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+     = note: `#[warn(unused_attributes)]` on by default
+
+warning: unreachable pattern
+   --> crates/acos-services/src/intents.rs:151:21
+    |
+146 |                     Extra::Short(number) => serde_json::json!(number),
+    |                     -------------------- matches all the relevant values
+...
+151 |                     Extra::Short(short) => serde_json::json!(short),
+    |                     ^^^^^^^^^^^^^^^^^^^ no value can reach this
+    |
+    = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-services/src/modules/notifications.rs:341:13
+    |
+341 |         let mut store = store
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2741:9
+     |
+2721 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+2741 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3167:9
+     |
+3105 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+3167 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3246:9
+     |
+3229 |         FieldOp::Icon => {
+     |         ------------- matches all the relevant values
+...
+3246 |         FieldOp::Icon => {
+     |         ^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3250:9
+     |
+3233 |         FieldOp::ArraySet => match value {
+     |         ----------------- matches all the relevant values
+...
+3250 |         FieldOp::ArraySet => match value {
+     |         ^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5116:9
+     |
+5062 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         -------------------- matches all the relevant values
+...
+5116 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         ^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5199:9
+     |
+5157 |         FieldOp::BoolCond(inner) => {
+     |         ------------------------ matches all the relevant values
+...
+5199 |         FieldOp::BoolCond(inner) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unused variable: `intent`
+   --> crates/acos-services/src/service_bind.rs:292:13
+    |
+292 |         let intent = bind_intent(package, class);
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_intent`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: constant `ACTION_MASK` is never used
+   --> crates/acos-services/src/a11y_native.rs:102:7
+    |
+102 | const ACTION_MASK: i32 = 0xff;
+    |       ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:693:7
+    |
+693 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SERVICE_MANAGER_DESCRIPTOR` is never used
+  --> crates/acos-services/src/host.rs:82:7
+   |
+82 | const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `acos-services` (lib) generated 13 warnings (run `cargo fix --lib -p acos-services` to apply 2 suggestions)
+warning: unused imports: `F_DEATH` and `RSP_DEAD`
+  --> crates/acos-binder-peer/src/peer.rs:44:12
+   |
+44 |     Frame, F_DEATH, F_HELLO, F_REF, F_REP, F_REQ, F_RSP, F_TXN, INTERFACE_TRANSACTION,
+   |            ^^^^^^^
+45 |     PING_TRANSACTION, PROTOCOL_VERSION, REF_RELEASE, RSP_DEAD, TF_ONE_WAY, TF_STATUS_CODE,
+   |                                                      ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused variable: `objects`
+    --> crates/acos-binder-peer/src/peer.rs:2667:13
+     |
+2667 |     let mut objects: Vec<usize> = Vec::new();
+     |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_objects`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+    --> crates/acos-binder-peer/src/peer.rs:2667:9
+     |
+2667 |     let mut objects: Vec<usize> = Vec::new();
+     |         ----^^^^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `net`
+   --> crates/acos-netd/src/plan.rs:274:29
+    |
+274 | pub fn session_offline_cmds(net: &SessionNet, netns_pid: u32) -> Vec<String> {
+    |                             ^^^ help: if this is intentional, prefix it with an underscore: `_net`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+  --> crates/acos-netd/src/lib.rs:99:16
+   |
+99 |         let Ok(mut conn) = conn else { continue };
+   |                ----^^^^
+   |                |
+   |                help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: function `handle` is never used
+   --> crates/acos-netd/src/lib.rs:215:4
+    |
+215 | fn handle(relay: &Arc<Mutex<supervisor::Relay>>, req: Request) -> Reply {
+    |    ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `cgroup` is never read
+  --> crates/acos-netd/src/supervisor.rs:69:5
+   |
+49 | struct Session {
+   |        ------- field in this struct
+...
+69 |     cgroup: Option<String>,
+   |     ^^^^^^
+
+warning: methods `start_forwarder` and `restart_pasta` are never used
+   --> crates/acos-netd/src/supervisor.rs:948:8
+    |
+127 | impl Relay {
+    | ---------- methods in this implementation
+...
+948 |     fn start_forwarder(&mut self, s: &mut Session, port: u16) -> Result<(), ProtoError> {
+    |        ^^^^^^^^^^^^^^^
+...
+983 |     fn restart_pasta(&mut self) -> Result<(), ProtoError> {
+    |        ^^^^^^^^^^^^^
+
+warning: `acos-binder-peer` (lib) generated 3 warnings (run `cargo fix --lib -p acos-binder-peer` to apply 2 suggestions)
+warning: `acos-netd` (lib) generated 5 warnings (run `cargo fix --lib -p acos-netd` to apply 1 suggestion)
+warning: unused variable: `started`
+   --> crates/acos-art/src/boot_image.rs:919:13
+    |
+919 |         let started = Instant::now();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_started`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/launch.rs:810:9
+    |
+810 |     let mut cmd = shared.command(spec, app_meta, providers)?;
+    |         ----^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `webview_gate`
+    --> crates/acos-art/src/launch.rs:3343:9
+     |
+3343 |     let webview_gate = webview_gate;
+     |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_webview_gate`
+
+warning: method `cache_str` is never used
+   --> crates/acos-art/src/boot_image.rs:598:8
+    |
+597 | impl CacheOutcome {
+    | ----------------- method in this implementation
+598 |     fn cache_str(&self) -> &'static str {
+    |        ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `guest_lib_dir` is never read
+   --> crates/acos-art/src/launch.rs:596:5
+    |
+582 | struct SecondarySpec {
+    |        ------------- field in this struct
+...
+596 |     guest_lib_dir: String,
+    |     ^^^^^^^^^^^^^
+    |
+    = note: `SecondarySpec` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `argv` is never read
+   --> crates/acos-art/src/launch.rs:638:5
+    |
+630 | struct SecondaryGuest {
+    |        -------------- field in this struct
+...
+638 |     argv: Vec<String>,
+    |     ^^^^
+
+warning: field `animations_on` is never read
+    --> crates/acos-art/src/launch.rs:3579:5
+     |
+3556 | struct ProbeSample {
+     |        ----------- field in this struct
+...
+3579 |     animations_on: Option<bool>,
+     |     ^^^^^^^^^^^^^
+     |
+     = note: `ProbeSample` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `adler32` is never used
+    --> crates/acos-art/src/launch.rs:9381:4
+     |
+9381 | fn adler32(data: &[u8]) -> u32 {
+     |    ^^^^^^^
+
+warning: field `spawn_requests` is never read
+    --> crates/acos-art/src/launch.rs:9527:5
+     |
+9522 | struct PeerSummary {
+     |        ----------- field in this struct
+...
+9527 |     spawn_requests: u64,
+     |     ^^^^^^^^^^^^^^
+
+warning: function `write_out` is never used
+    --> crates/acos-art/src/launch.rs:9726:4
+     |
+9726 | fn write_out(fd: RawFd, outs: Vec<Frame>, context: &str) -> std::io::Result<()> {
+     |    ^^^^^^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> crates/acos-art/src/lib.rs:1064:20
+     |
+1064 |     pub fn sandbox(&self) -> Sandbox {
+     |                    ^^^^^     ------- the same lifetime is hidden here
+     |                    |
+     |                    the lifetime is elided here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+     = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+     |
+1064 |     pub fn sandbox(&self) -> Sandbox<'_> {
+     |                                     ++++
+
+warning: `acos-art` (lib) generated 11 warnings (run `cargo fix --lib -p acos-art` to apply 1 suggestion)
+   Compiling acos-art v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-a5a259ba-5c8f56b61591cdaf/crates/acos-art)
+warning: unreachable pattern
+   --> crates/acos-art/src/main.rs:237:13
+    |
+181 |             "--data" => data = Some(PathBuf::from(next(&mut i)?)),
+    |             -------- matches all the relevant values
+...
+237 |             "--data" => flag_data = Some(next(&mut i)?),
+    |             ^^^^^^^^ no value can reach this
+    |
+    = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: unused variable: `rest`
+   --> crates/acos-art/src/main.rs:114:13
+    |
+114 |     let mut rest: Vec<String> = Vec::new();
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_rest`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:114:9
+    |
+114 |     let mut rest: Vec<String> = Vec::new();
+    |         ----^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:173:13
+    |
+173 |         let mut next = |i: &mut usize| -> Result<String> {
+    |             ----^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-art` (bin "acos-art") generated 4 warnings (run `cargo fix --bin "acos-art"` to apply 2 suggestions)
+    Finished `test` profile [unoptimized] target(s) in 0.25s
+     Running tests/spike_net_boundary.rs (.cache/netrealb-target/debug/deps/spike_net_boundary-7c09a65337257fdc)
+
+running 2 tests
+acos-art: build-cache HIT b4d7b18ebb0f /home/Qui/.t3/worktrees/acos/t3-a5a259ba-5c8f56b61591cdaf/.cache/art/build-cache/b4d7b18ebb0f0994edc4520d6be770418e174b01fc1fec198dd52f9c1782e75f
+--- probe stdout ---
+probe: uid 10192
+probe: cap-eff 0000000000000000
+probe: userns 4026533575
+probe: netns 4026533319
+probe: connect-public OK
+probe: connect-lan Operation now in progress
+probe: connect-host-loopback Connection refused
+probe: socket-netlink DENIED:EACCES
+probe: socket-inet ALLOWED
+probe: so-mark DENIED:EPERM
+probe: socket-raw-inet DENIED:EPERM
+probe: iptables-binary PRESENT
+probe: iptables-flush exit=1
+probe: iptables-flush-output iptables: Failed to initialize nft: Permission denied
+
+probe: done
+
+--- shim stderr ---
+Can't run AVX2 build, using non-AVX2 version: No such file or directory
+Couldn't get any nameserver address
+acos-net: shim netns=net:[4026533319] userns=user:[4026533312] cap-eff=000001ffffffffff
+acos-net: rules=installed chain=-N acos-net-drop;-A acos-net-drop -d 192.168.0.0/16 -j DROP;-A acos-net-drop -d 10.0.0.0/8 -j DROP;-A acos-net-drop -d 172.16.0.0/12 -j DROP;-A acos-net-drop -d 169.254.0.0/16 -j DROP;-A acos-net-drop -d 100.64.0.0/10 -j DROP;-P OUTPUT ACCEPT;-A OUTPUT -j acos-net-drop;
+acos-net: rules=after chain=-N acos-net-drop;-A acos-net-drop -d 192.168.0.0/16 -j DROP;-A acos-net-drop -d 10.0.0.0/8 -j DROP;-A acos-net-drop -d 172.16.0.0/12 -j DROP;-A acos-net-drop -d 169.254.0.0/16 -j DROP;-A acos-net-drop -d 100.64.0.0/10 -j DROP;-P OUTPUT ACCEPT;-A OUTPUT -j acos-net-drop; guest-exit=0
+
+--- boundary ---
+acos-net: shim netns=net:[4026533319] userns=user:[4026533312] cap-eff=000001ffffffffff
+acos-net: rules=installed chain=-N acos-net-drop;-A acos-net-drop -d 192.168.0.0/16 -j DROP;-A acos-net-drop -d 10.0.0.0/8 -j DROP;-A acos-net-drop -d 172.16.0.0/12 -j DROP;-A acos-net-drop -d 169.254.0.0/16 -j DROP;-A acos-net-drop -d 100.64.0.0/10 -j DROP;-P OUTPUT ACCEPT;-A OUTPUT -j acos-net-drop;
+acos-net: rules=after chain=-N acos-net-drop;-A acos-net-drop -d 192.168.0.0/16 -j DROP;-A acos-net-drop -d 10.0.0.0/8 -j DROP;-A acos-net-drop -d 172.16.0.0/12 -j DROP;-A acos-net-drop -d 169.254.0.0/16 -j DROP;-A acos-net-drop -d 100.64.0.0/10 -j DROP;-P OUTPUT ACCEPT;-A OUTPUT -j acos-net-drop; guest-exit=0
+
+guest pid 529719 cmd="/data/probe net-guard " cap-eff=Some("0000000000000000") userns=Some("4026533575")
+test guest_cannot_change_the_lan_drop_rules ... ok
+acos-art: build-cache HIT b4d7b18ebb0f /home/Qui/.t3/worktrees/acos/t3-a5a259ba-5c8f56b61591cdaf/.cache/art/build-cache/b4d7b18ebb0f0994edc4520d6be770418e174b01fc1fec198dd52f9c1782e75f
+--- boundary ---
+acos-net: boundary=failed reason=no-iptables exit=111
+
+--- probe stdout ---
+
+test boundary_failure_never_starts_the_guest ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.19s
+
