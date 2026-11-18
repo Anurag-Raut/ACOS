@@ -15,7 +15,8 @@ use std::sync::Once;
 pub mod prereq;
 
 pub use prereq::{
-    art_inputs, art_sysroot, art_warm_data, require_art, require_prereq, skip_allowed,
+    art_inputs, art_sysroot, art_warm_data, require_art, require_prereq, require_some,
+    skip_allowed,
     skipped_count, ArtInputs, ALLOW_ANY_SKIP_ENV, ALLOW_SKIP_ENV, WARM_DATA_ENV,
 };
 

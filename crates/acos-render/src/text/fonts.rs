@@ -671,8 +671,7 @@ mod tests {
     #[test]
     fn parses_the_real_fonts_xml_if_available() {
         let dirs = candidate_font_dirs();
-        let Some(dir) = dirs.iter().find(|d| d.join("fonts.xml").exists()) else {
-            eprintln!("SKIP: no Android fonts.xml found (set ACOS_FONT_DIR)");
+        let Some(dir) = acos_test_support::require_some(dirs.iter().find(|d| d.join("fonts.xml").exists()), "parses_the_real_fonts_xml_if_available", "no Android fonts.xml found (set ACOS_FONT_DIR)") else {
             return;
         };
         let fc = FontCollection::load_from_dir(dir).expect("load fonts");
@@ -705,8 +704,7 @@ mod tests {
     #[test]
     fn resolve_weight_picks_bold_entry() {
         let dirs = candidate_font_dirs();
-        let Some(dir) = dirs.iter().find(|d| d.join("fonts.xml").exists()) else {
-            eprintln!("SKIP: no Android fonts.xml found");
+        let Some(dir) = acos_test_support::require_some(dirs.iter().find(|d| d.join("fonts.xml").exists()), "resolve_weight_picks_bold_entry", "no Android fonts.xml found") else {
             return;
         };
         let fc = FontCollection::load_from_dir(dir).unwrap();

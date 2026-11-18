@@ -41,16 +41,11 @@ export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts
 export ACOS_VIEW_TEST_DIR="$ACOS_WT/.cache/lv"
 mkdir -p "$ACOS_WT/.cache/lv"
 
-_acos_shared=/home/Qui/Projects/acos/.cache
-mkdir -p "$ACOS_WT/.cache/boot"
-for _acos_link in boot/android-34 art gaten; do
-    _acos_dst="$ACOS_WT/.cache/$_acos_link"
-    _acos_src="$_acos_shared/$_acos_link"
-    if [ -e "$_acos_src" ] && [ ! -e "$_acos_dst" ]; then
-        ln -sfn "$_acos_src" "$_acos_dst"
-    fi
-done
-unset _acos_link _acos_dst _acos_src _acos_shared
+# The shared prerequisites (boot, art, gaten, qemu-user, bionic-arm64, flutter-1,
+# corpus) are linked from the main checkout, and the arm64 seccomp guard is built
+# once per worktree, by tools/link-worktree-prereqs.sh (HYG4). Idempotent.
+bash "$ACOS_WT/tools/link-worktree-prereqs.sh" || \
+    echo "acos-env: link-worktree-prereqs reported a missing prerequisite (see above)" >&2
 
 # --- small target dirs ------------------------------------------------------
 export CARGO_PROFILE_DEV_DEBUG=0

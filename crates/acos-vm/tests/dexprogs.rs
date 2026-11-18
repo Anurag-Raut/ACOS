@@ -80,10 +80,7 @@ const REAL_CORELIB_ONLY: &[&str] = &[
 #[test]
 fn dexprogs_match_jvm_reference() {
     if !acos_test_support::have_fixture("fixtures/build/dexprogs") {
-        eprintln!(
-            "SKIP dexprogs_match_jvm_reference: fixtures/build/dexprogs is absent \
-             (run tools/build-fixtures.sh)"
-        );
+        acos_test_support::require_prereq(false, "dexprogs_match_jvm_reference", "dexprogs_match_jvm_reference: fixtures/build/dexprogs is absent (run tools/build-fixtures.sh)");
         return;
     }
     let names = fixture_names();
@@ -126,8 +123,7 @@ fn dexprogs_match_jvm_reference() {
 /// still covered by the normal pass and by `tools/diff-dexprogs.sh --gc-stress`.)
 #[test]
 fn dexprogs_pass_gc_stress() {
-    if !acos_test_support::have_fixture("fixtures/build/dexprogs") {
-        eprintln!("SKIP dexprogs_pass_gc_stress: fixtures/build/dexprogs is absent");
+    if acos_test_support::require_prereq(acos_test_support::have_fixture("fixtures/build/dexprogs"), "dexprogs_pass_gc_stress", "fixtures/build/dexprogs is absent").is_none() {
         return;
     }
     let names = fixture_names();

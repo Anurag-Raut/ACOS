@@ -1,0 +1,11 @@
+## 1. default path, qemu missing: the test FAILS and names the remedy
+test dynamic_aarch64_bionic_guest_runs_confined ... FAILED
+FAIL dynamic_aarch64_bionic_guest_runs_confined: missing prerequisite: ARM64_UNAVAILABLE: qemu-aarch64 path is not a regular file — remedy: extract qemu-aarch64 user-locally with `tools/fetch-qemu-aarch64.sh` (or set ACOS_QEMU_AARCH64=/path/to/qemu-aarch64)
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+exit=101
+
+## 2. explicit opt-out (ACOS_ALLOW_TEST_SKIP=1): a counted skip, summary printed
+SKIP dynamic_aarch64_bionic_guest_runs_confined: ARM64_UNAVAILABLE: qemu-aarch64 path is not a regular file — remedy: extract qemu-aarch64 user-locally with `tools/fetch-qemu-aarch64.sh` (or set ACOS_QEMU_AARCH64=/path/to/qemu-aarch64) [ACOS_ALLOW_ART_SKIP is set; skip #1 in this process]
+test dynamic_aarch64_bionic_guest_runs_confined ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+SKIP SUMMARY: 1 test(s) skipped in this process because ACOS_ALLOW_ART_SKIP is set; the default path must show 0.

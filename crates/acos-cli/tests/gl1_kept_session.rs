@@ -253,8 +253,7 @@ fn counter_apk() -> Option<PathBuf> {
 #[test]
 #[ignore = "boots a real ART guest; run under tools/guarded.sh"]
 fn a_kept_session_survives_the_launching_client() {
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/counter.apk is missing");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "a_kept_session_survives_the_launching_client", "fixtures/build/apps/counter.apk is missing") else {
         return;
     };
     let daemon = Daemon::start("kept");
@@ -358,8 +357,7 @@ fn a_kept_session_survives_the_launching_client() {
 #[test]
 #[ignore = "boots a real ART guest; run under tools/guarded.sh"]
 fn a_sigkilled_daemon_takes_its_guests_with_it() {
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/counter.apk is missing");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "a_sigkilled_daemon_takes_its_guests_with_it", "fixtures/build/apps/counter.apk is missing") else {
         return;
     };
     let mut daemon = Daemon::start("sigkill");
@@ -466,12 +464,10 @@ fn launch_and_destroy(daemon: &Daemon, apk: &Path) -> (Value, Duration) {
 #[test]
 #[ignore = "boots a real ART guest; run under tools/guarded.sh"]
 fn explicit_destruction_is_bounded_and_leaves_nothing_behind() {
-    let Some(counter) = counter_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/counter.apk is missing");
+    let Some(counter) = acos_test_support::require_some(counter_apk(), "explicit_destruction_is_bounded_and_leaves_nothing_behind", "fixtures/build/apps/counter.apk is missing") else {
         return;
     };
-    let Some(thread_heavy) = thread_heavy_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/thread-heavy.apk is missing (tools/build-apps.sh)");
+    let Some(thread_heavy) = acos_test_support::require_some(thread_heavy_apk(), "explicit_destruction_is_bounded_and_leaves_nothing_behind", "fixtures/build/apps/thread-heavy.apk is missing (tools/build-apps.sh)") else {
         return;
     };
     let daemon = Daemon::start("destroy");
@@ -523,8 +519,7 @@ fn explicit_destruction_is_bounded_and_leaves_nothing_behind() {
 #[test]
 #[ignore = "boots a real ART guest; run under tools/guarded.sh"]
 fn a_guest_that_never_ends_is_killed_after_the_bounded_grace() {
-    let Some(thread_heavy) = thread_heavy_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/thread-heavy.apk is missing");
+    let Some(thread_heavy) = acos_test_support::require_some(thread_heavy_apk(), "a_guest_that_never_ends_is_killed_after_the_bounded_grace", "fixtures/build/apps/thread-heavy.apk is missing") else {
         return;
     };
     // A zero grace forces the kill path: no waiting on the app's threads.

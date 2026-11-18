@@ -1405,8 +1405,16 @@ mod tests {
     fn corpus_editor_provider_meta_data_is_a_reference() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../.cache/corpus/k1/apks/org.billthefarmer.editor_196_1.96.apk");
-        if !path.is_file() {
-            eprintln!("skip corpus_editor_provider_meta_data_is_a_reference: corpus not present");
+        if acos_test_support::require_prereq(
+            path.is_file(),
+            "corpus_editor_provider_meta_data_is_a_reference",
+            &format!(
+                "{} is absent — put the corpus APK under .cache/corpus/k1/apks",
+                path.display()
+            ),
+        )
+        .is_none()
+        {
             return;
         }
         let apk = crate::Apk::open(&path).expect("open editor APK");

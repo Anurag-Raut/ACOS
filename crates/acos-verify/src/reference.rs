@@ -409,8 +409,17 @@ mod tests {
     #[test]
     fn parses_reference_tree_and_logs() {
         let dir = reference_dir("hello-views");
-        if !dir.is_dir() {
-            eprintln!("SKIP parses_reference_tree_and_logs: reference missing");
+        if acos_test_support::require_prereq(
+            dir.is_dir(),
+            "parses_reference_tree_and_logs",
+            &format!(
+                "no ART reference capture at {} — capture it with tools/oracle/ \
+                 (fixtures/reference/art-api34-x86_64)",
+                dir.display()
+            ),
+        )
+        .is_none()
+        {
             return;
         }
         let raw = std::fs::read_to_string(dir.join("ui_initial.json")).unwrap();
@@ -430,8 +439,17 @@ mod tests {
     #[test]
     fn backend_replays_initial_state() {
         let dir = reference_dir("hello-views");
-        if !dir.is_dir() {
-            eprintln!("SKIP backend_replays_initial_state: reference missing");
+        if acos_test_support::require_prereq(
+            dir.is_dir(),
+            "backend_replays_initial_state",
+            &format!(
+                "no ART reference capture at {} — capture it with tools/oracle/ \
+                 (fixtures/reference/art-api34-x86_64)",
+                dir.display()
+            ),
+        )
+        .is_none()
+        {
             return;
         }
         let apk =

@@ -363,9 +363,7 @@ fn case_launch_item(info: &Parcelable) -> Parcelable {
 #[test]
 fn real_java_client_transaction_matches_the_host_encoder() {
     let Some(dex) = compile_case("ClientTransactionCompareMain") else {
-        eprintln!(
-            "SKIP real_java_client_transaction_matches_the_host_encoder: toolchain unavailable"
-        );
+        acos_test_support::require_prereq(false, "real_java_client_transaction_matches_the_host_encoder", "real_java_client_transaction_matches_the_host_encoder: toolchain unavailable");
         return;
     };
 
@@ -376,9 +374,7 @@ fn real_java_client_transaction_matches_the_host_encoder() {
         .join("fixtures/build/apps/multi-activity.apk")
         .is_file()
     {
-        eprintln!(
-            "SKIP real_java_client_transaction_matches_the_host_encoder: fixtures/build absent"
-        );
+        acos_test_support::require_prereq(false, "real_java_client_transaction_matches_the_host_encoder", "real_java_client_transaction_matches_the_host_encoder: fixtures/build absent");
         return;
     }
 

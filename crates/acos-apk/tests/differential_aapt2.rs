@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use acos_apk::{Apk, XmlNode};
+use acos_test_support::require_prereq;
 
 fn find_aapt2() -> Option<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
@@ -457,7 +458,12 @@ fn compare_xmltree(apk: &Path, text: &str, mismatches: &mut Vec<String>) {
 #[test]
 fn differential_against_aapt2() {
     let Some(aapt2) = find_aapt2() else {
-        eprintln!("differential_aapt2: SKIP (aapt2 not found)");
+        let _ = require_prereq(
+            false,
+            "differential_against_aapt2",
+            "no aapt2 on PATH or under the Android SDK — install build-tools and set \
+             ANDROID_HOME (fixtures/build/apps is the input corpus)",
+        );
         return;
     };
     let apks = fixture_apks();

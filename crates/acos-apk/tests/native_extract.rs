@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use acos_apk::error::{NATIVE_LIB_NOT_FOUND, UNSUPPORTED_ABI, ZIP_SLIP};
 use acos_apk::{AbiGate, Apk, HOST_ABI};
+use acos_test_support::require_prereq;
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -122,7 +123,11 @@ fn extract_writes_only_into_the_destination() {
 #[test]
 fn hello_jni_fixture_apk_gates_and_extracts() {
     let Some(apk_path) = hello_jni_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/hello-jni.apk absent (run tools/build-fixtures.sh)");
+        let _ = require_prereq(
+            false,
+            "hello_jni_fixture_apk_gates_and_extracts",
+            "fixtures/build/apps/hello-jni.apk is absent — run tools/build-apps.sh",
+        );
         return;
     };
     let apk = Apk::open(&apk_path).expect("open fixture apk");

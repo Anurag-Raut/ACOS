@@ -73,11 +73,13 @@ fn pid_alive(pid: u32) -> bool {
 /// end to end with real Chromium behind it.
 #[test]
 fn two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate() {
-    if !engine_test_enabled() {
-        println!(
-            "SKIP gate_engine: set ACOS_WEBVIEW_TEST=1 (and run it under \
-             tools/art-runtime/run-exclusive.sh) to start the real engine"
-        );
+    if acos_test_support::require_prereq(
+        engine_test_enabled(),
+        "two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+    )
+    .is_none()
+    {
         return;
     }
     let root = scratch("two-sessions");

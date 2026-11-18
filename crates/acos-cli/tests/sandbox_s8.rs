@@ -438,8 +438,7 @@ fn hostile_live_run_is_gated_and_recorded_separately() {
     // The real-ART hostile run needs the sysroot and an acos-art binary. It is
     // opt-in so `cargo test -p acos-cli` stays host-light; the recorded command
     // and result are in results/art-runtime/S8.md.
-    if std::env::var("ACOS_S8_LIVE_HOSTILE").ok().as_deref() != Some("1") {
-        eprintln!("skipping live hostile run (set ACOS_S8_LIVE_HOSTILE=1)");
+    if acos_test_support::require_prereq(std::env::var("ACOS_S8_LIVE_HOSTILE").ok().as_deref() == Some("1"), "hostile_live_run_is_gated_and_recorded_separately", "live hostile run (set ACOS_S8_LIVE_HOSTILE=1)").is_none() {
         return;
     }
     let apk = workspace().join("fixtures/build/apps/hostile-probe.apk");
