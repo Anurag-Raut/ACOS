@@ -2527,25 +2527,36 @@ public final class LaunchMain {
 
     /**
      * The display rect a window/visible rect is clipped against:
-     * `[0,0,w,h]` in display pixels, or all zeros when the display metrics are
-     * unavailable (then no display clipping is applied).
+     * `[0,0,w,h]` in display pixels of the session display **as it is at this
+     * capture**, or all zeros when the display size is unknown (then no display
+     * clipping is applied).
+     *
+     * <p>PARITYFIX F2: this used to be probed once from
+     * `v.getResources().getDisplayMetrics()` and cached for the process, so after
+     * a rotation every `visible_bounds` was still clipped to the pre-rotation
+     * width (landscape 2400x1080 clipped to 1080 wide). The session display is
+     * `PANEL_W` x `PANEL_H`, which `rotatedConfiguration()` swaps on every
+     * rotation (the same values `DisplayInfo.logicalWidth/Height` and the
+     * frame's display rect are built from); it is read here on every call, never
+     * cached. `DisplayMetrics` is only the fallback for a panel that was never
+     * sized.
      */
-    static final int[] sDisplayBounds = new int[]{0, 0, 0, 0};
-    static boolean sDisplayBoundsProbed;
-
     static int[] displayBounds(View v) {
-        if (!sDisplayBoundsProbed) {
-            sDisplayBoundsProbed = true;
+        int w = PANEL_W;
+        int h = PANEL_H;
+        if (w <= 0 || h <= 0) {
+            w = 0;
+            h = 0;
             try {
                 android.util.DisplayMetrics m = v.getResources().getDisplayMetrics();
                 if (m != null && m.widthPixels > 0 && m.heightPixels > 0) {
-                    sDisplayBounds[2] = m.widthPixels;
-                    sDisplayBounds[3] = m.heightPixels;
+                    w = m.widthPixels;
+                    h = m.heightPixels;
                 }
             } catch (Throwable ignored) {
             }
         }
-        return sDisplayBounds;
+        return new int[]{0, 0, w, h};
     }
 
     /**

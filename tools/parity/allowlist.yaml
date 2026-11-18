@@ -1,0 +1,154 @@
+# Expected-difference allowlist for tools/parity/run-parity.sh.
+#
+# Every entry here is a difference the harness EXPECTS between ACOS's ART
+# session (Android 14 / API 34 image, 1080x2400 @ 420 dpi, offscreen) and the
+# moto g35 (Android 15 / API 35, 1080x2400 @ 400 dpi, 1080x2400 physical).
+# An entry is a documented platform difference, not a pass: the reports still
+# count it, name the reason, and list it under "Documented platform
+# differences". A difference that matches no entry is a finding.
+#
+# Match keys (`match:`):
+#   scenario       glob on the scenario name (default: any)
+#   phone_source   glob on the phone source: live | recorded-snapshot |
+#                  recorded-observations (default: any)
+#   kind           glob or list of globs on the difference kind
+#   node           glob or list of globs on the node key
+#                  (id:<resource-id>, text:<text>, desc:<desc>, class:<class>)
+#   field          glob on the compared field (text, enabled, checked, ...)
+#   explained_by   only when the comparator attached that explanation
+#   acos_visible   only when the ACOS node's own `visible` flag is this value
+#   spans_display  the node fills the whole display on both sides
+#   max_delta_dp   only bounds differences whose largest edge delta is <= this
+#
+# Add an entry only with a reason that names the platform cause and the
+# evidence for it. Prefer one entry per cause over one per node.
+version: 1
+entries:
+  # ---------------------------------------------------------------------
+  # Density: the two screens are the same number of pixels but a different
+  # number of dp. A node that fills the display therefore cannot have the same
+  # dp extent, whatever the app does.
+  # ---------------------------------------------------------------------
+  - id: display-dp-size
+    match:
+      kind: bounds_changed
+      spans_display: true
+    reason: >-
+      The phone is 1080x2400 @400dpi = 432x960dp; the ACOS reference session is
+      1080x2400 @420dpi = 411x914dp. A node that spans the display (the window
+      root) necessarily has a different dp extent. Bounds are compared in dp so
+      that dp-sized children match exactly; this single entry covers the one
+      node whose size is the display itself.
+
+  - id: display-width-follows-screen
+    match:
+      kind: bounds_changed
+      explained_by: display_width
+    reason: >-
+      A match_parent or right-aligned node follows the display's dp width: the
+      phone's display is 432 dp wide and the ACOS reference session's is 411 dp
+      (both 1080 px, 400 vs 420 dpi), so such a node is up to 20.6 dp wider or
+      sits up to 20.6 dp further right. The comparator only marks a node with
+      `display_width` when its anchored dp margin(s) to the display edge match
+      and no other edge moved; a genuine size change is not covered.
+
+  - id: display-height-follows-screen
+    match:
+      kind: bounds_changed
+      explained_by: display_height
+    reason: >-
+      The same density property on the vertical axis: the phone's display is
+      960 dp tall, the ACOS reference session's 914 dp (both 2400 px, 400 vs
+      420 dpi). A node anchored to the bottom edge shifts by that difference
+      while keeping its dp height.
+
+  # ---------------------------------------------------------------------
+  # API 35 edge-to-edge: Android 15 draws the app window under the navigation
+  # bar, so a full-width node reaches y=2400. The API-34 image ends the window
+  # at y=2337 (above the 63 px navigation bar).
+  # ---------------------------------------------------------------------
+  - id: api35-edge-to-edge
+    match:
+      kind: bounds_changed
+      explained_by: edge_to_edge
+    reason: >-
+      API 35 draws the app window edge-to-edge (bottom == display bottom);
+      the API-34 image ends the app window above the navigation bar. The
+      comparator marks a full-width node that reaches the phone's display
+      bottom but not ACOS's as `edge_to_edge`; the app's own dp layout inside
+      it still has to match. Evidence: fixtures/reference-device/COMPARISON.md
+      ("API 35 vs API 34 ... shift the content origin").
+
+  # ---------------------------------------------------------------------
+  # Window-frame origin: the status bar band is 128 px @420 dpi on the API-34
+  # image and 108 px @400 dpi on the phone. Every node in the frame is
+  # translated by the same (dx, dy); the comparator measures that shift once
+  # per step from the content node's top-left edge.
+  # ---------------------------------------------------------------------
+  - id: window-frame-origin-shift
+    match:
+      kind: bounds_changed
+      explained_by: decor_shift
+    reason: >-
+      The status bar band is 128 px (48.8 dp) on the API-34 image and 108 px
+      (43.2 dp) on the Android 15 phone, so the whole app frame sits ~5.6 dp
+      higher on the phone and every node in it is translated by that amount.
+      The comparator measures the frame shift from `android:id/content`'s
+      top-left edge and marks a size-preserving translation with it; a node
+      that moved by anything else is not covered by this entry.
+
+  # ---------------------------------------------------------------------
+  # Capture-tool scope: the recorded agent-device snapshots do not expose the
+  # framework decor chrome that a live `uiautomator dump` does. This entry is
+  # scoped to recorded sources only -- on a live run the same ids are present
+  # on both sides, and an entry here would hide a real difference.
+  # Evidence: fixtures/reference-device/COMPARISON.md, "agent-device vs
+  # uiautomator snapshot scope".
+  # ---------------------------------------------------------------------
+  - id: recorded-capture-tool-scope
+    match:
+      phone_source: "recorded-*"
+      kind: extra_in_acos
+      node:
+        - "id:android:id/action_bar_container"
+        - "id:android:id/action_bar"
+        - "id:android:id/action_context_bar"
+        - "id:android:id/statusBarBackground"
+        - "id:android:id/navigationBarBackground"
+        # In-dialog framework chrome the agent-device snapshot prunes but the
+        # live `uiautomator dump` and ACOS both expose (COMPARISON.md lists
+        # exactly these ids as `element_absent_on_device`).
+        - "id:android:id/topPanel"
+        - "id:android:id/title_template"
+        - "id:android:id/titleDividerNoCustom"
+        - "id:android:id/contentPanel"
+        - "class:com.android.internal.widget.ButtonBarLayout"
+        # The dialog's ScrollView wraps its content in a LinearLayout that the
+        # agent-device snapshot does not expose (the framework child is real:
+        # ACOS runs the same AlertController). Live `uiautomator dump` shows it.
+        - "class:container@id:android:id/scrollView#0"
+    reason: >-
+      The recorded agent-device accessibility snapshot does not expose the
+      framework's DecorView chrome (action bar container/toolbar, the
+      status/navigation bar backgrounds). A live `uiautomator dump` does
+      expose them, so this is a capture-tool scope difference in the recorded
+      tier, not a missing UI element. Evidence:
+      fixtures/reference-device/COMPARISON.md, and the live counter dump in
+      results/handoff/PARITY1/ (uiautomator lists statusBarBackground).
+
+  # ---------------------------------------------------------------------
+  # Nodes ACOS itself marks as not visible. Both capture tools omit invisible
+  # zero-area framework nodes, so their absence is not an agent-visible
+  # difference -- and only nodes ACOS says are invisible are covered.
+  # ---------------------------------------------------------------------
+  - id: acos-invisible-node
+    match:
+      kind: extra_in_acos
+      acos_visible: false
+    reason: >-
+      ACOS's tree exposes framework nodes it marks `visible: false` (a
+      zero-width ActionMenuView overflow menu, a collapsed
+      ActionBarContextView). Neither `uiautomator dump` nor agent-device
+      reports a node with no visible area, so the phone has no counterpart.
+      An agent cannot see or act on these; the entry is limited to nodes ACOS
+      itself marks invisible.

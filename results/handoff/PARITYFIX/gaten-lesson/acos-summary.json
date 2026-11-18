@@ -1,0 +1,152 @@
+{
+ "scenario": "gaten-lesson",
+ "verdict": "pass",
+ "engine": "art",
+ "steps": [
+  {
+   "step": "launch",
+   "status": "pass",
+   "frame_seq": null
+  },
+  {
+   "step": "tap",
+   "status": "pass",
+   "frame_seq": 3
+  },
+  {
+   "step": "tap",
+   "status": "pass",
+   "frame_seq": 4
+  },
+  {
+   "step": "tap",
+   "status": "pass",
+   "frame_seq": 5
+  },
+  {
+   "step": "tap",
+   "status": "pass",
+   "frame_seq": 6
+  },
+  {
+   "step": "wait_for",
+   "status": "pass",
+   "frame_seq": 7
+  },
+  {
+   "step": "capture",
+   "status": "pass",
+   "frame_seq": 8
+  },
+  {
+   "step": "tap",
+   "status": "pass",
+   "frame_seq": 10
+  },
+  {
+   "step": "wait_for",
+   "status": "pass",
+   "frame_seq": 11
+  },
+  {
+   "step": "capture",
+   "status": "pass",
+   "frame_seq": 12
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 12
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 12
+  },
+  {
+   "step": "back",
+   "status": "pass",
+   "frame_seq": 13
+  },
+  {
+   "step": "wait_for",
+   "status": "pass",
+   "frame_seq": 14
+  },
+  {
+   "step": "capture",
+   "status": "pass",
+   "frame_seq": 15
+  },
+  {
+   "step": "tap",
+   "status": "pass",
+   "frame_seq": 17
+  },
+  {
+   "step": "wait_for",
+   "status": "pass",
+   "frame_seq": 18
+  },
+  {
+   "step": "capture",
+   "status": "pass",
+   "frame_seq": 19
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 19
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 19
+  },
+  {
+   "step": "tap",
+   "status": "pass",
+   "frame_seq": 21
+  },
+  {
+   "step": "type",
+   "status": "pass",
+   "frame_seq": 22
+  },
+  {
+   "step": "capture",
+   "status": "pass",
+   "frame_seq": 23
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 23
+  },
+  {
+   "step": "back",
+   "status": "pass",
+   "frame_seq": 24
+  },
+  {
+   "step": "back",
+   "status": "pass",
+   "frame_seq": 25
+  },
+  {
+   "step": "wait_for",
+   "status": "pass",
+   "frame_seq": 26
+  },
+  {
+   "step": "capture",
+   "status": "pass",
+   "frame_seq": 27
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 27
+  }
+ ]
+}

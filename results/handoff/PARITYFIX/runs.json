@@ -1,0 +1,3355 @@
+{
+ "base_head": "052a7c42451ae3db2815b13cc24fe844923b04ca",
+ "phone_attached": false,
+ "runs": {
+  "counter": {
+   "phone_source": "recorded-snapshot",
+   "attribute_fidelity": "n/a",
+   "summary": {
+    "steps": 24,
+    "compared_steps": 20,
+    "skipped_steps": 4,
+    "matched_nodes": 160,
+    "exact_matches": 0,
+    "differences": 180,
+    "allowed": 180,
+    "unexpected": 0,
+    "coverage": "full-tree",
+    "findings": 0,
+    "invalid_differences": 0,
+    "invalid_steps": [],
+    "phone_failed_steps": []
+   },
+   "findings": []
+  },
+  "form-validation": {
+   "phone_source": "recorded-snapshot",
+   "attribute_fidelity": "n/a",
+   "summary": {
+    "steps": 28,
+    "compared_steps": 25,
+    "skipped_steps": 3,
+    "matched_nodes": 225,
+    "exact_matches": 0,
+    "differences": 250,
+    "allowed": 250,
+    "unexpected": 0,
+    "coverage": "full-tree",
+    "findings": 0,
+    "invalid_differences": 0,
+    "invalid_steps": [],
+    "phone_failed_steps": []
+   },
+   "findings": []
+  },
+  "gaten-backstack": {
+   "phone_source": "recorded-observations",
+   "attribute_fidelity": "unverified",
+   "summary": {
+    "steps": 25,
+    "compared_steps": 24,
+    "skipped_steps": 1,
+    "matched_nodes": 329,
+    "exact_matches": 0,
+    "differences": 331,
+    "allowed": 0,
+    "unexpected": 331,
+    "coverage": "text-set+target",
+    "findings": 115,
+    "invalid_differences": 0,
+    "invalid_steps": [],
+    "phone_failed_steps": []
+   },
+   "findings": [
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "attr:accessible-name-placement",
+     "steps": [
+      1,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 23
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "desc:Anki, Collection, Anki is not installed., Open the Anki installation flow., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks · Anki, Study history will appear here., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+     "steps": [
+      8,
+      11,
+      20
+     ],
+     "count": 3
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Fri: upcoming",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Sat: upcoming",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Thu: upcoming",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Wed: study activity unknown, today",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki, Collection, Anki is not installed., Open the Anki installation flow., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks · Anki, Study history will appear here., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+     "steps": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 11
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki, Not connected, Open Anki",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Daily streak. Anki study days follow your collection's rollover.",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Look up Japanese anywhere. Step 1 of 3.",
+     "steps": [
+      1,
+      2
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:New per day. A whole number from 1 to 20.",
+     "steps": [
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18
+     ],
+     "count": 7
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Personal access token",
+     "steps": [
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18
+     ],
+     "count": 7
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Search Japanese dictionary",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 1 of 3",
+     "steps": [
+      1
+     ],
+     "count": 1
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Accuracy",
+     "steps": [
+      22
+     ],
+     "count": 1
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Answer accuracy will appear here.",
+     "steps": [
+      23
+     ],
+     "count": 1
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Connect",
+     "steps": [
+      12
+     ],
+     "count": 1
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "text:New per day",
+     "steps": [
+      16
+     ],
+     "count": 1
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Not connected",
+     "steps": [
+      10,
+      17
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Recently looked up",
+     "steps": [
+      5
+     ],
+     "count": 1
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Anki is not installed.",
+     "steps": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 11
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Install",
+     "steps": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 11
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Open Anki",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Open the Anki installation flow.",
+     "steps": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 11
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Study history will appear here.",
+     "steps": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 11
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Allow Gaten to read collection statistics.",
+     "steps": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 11
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Fri: study activity unknown",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Sat: study activity unknown, today",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Thu: study activity unknown",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Wed: study activity unknown",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki access needed.",
+     "steps": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 11
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks · Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+     "steps": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 11
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki, Permission needed, Grant access",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Grant access",
+     "steps": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 15
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Permission needed",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Waiting for permission.",
+     "steps": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 11
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Your level history will appear here.",
+     "steps": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+     ],
+     "count": 11
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "desc:Analytics",
+     "steps": [
+      7
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "desc:Anki, Collection, Anki is not installed., Open the Anki installation flow., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks · Anki, Study history will appear here., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+     "steps": [
+      8,
+      11,
+      20
+     ],
+     "count": 3
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "desc:Set up Gaten",
+     "steps": [
+      1
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "text:Accuracy",
+     "steps": [
+      22
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "text:Answer accuracy will appear here.",
+     "steps": [
+      23
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "text:Connect",
+     "steps": [
+      12
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "text:New per day",
+     "steps": [
+      16
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "text:Not connected",
+     "steps": [
+      10,
+      17
+     ],
+     "count": 2
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "text:Recently looked up",
+     "steps": [
+      5
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Back",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Skip Anki setup",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Skip WaniKani setup and finish",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 1 of 2, Install AnkiDroid, current",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 2 of 2, Allow access, not started",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 2 of 3",
+     "steps": [
+      2,
+      3
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 3 of 3",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Study with Anki. Step 2 of 3.",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Skip",
+     "steps": [
+      2,
+      3,
+      4
+     ],
+     "count": 3
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "bounds_changed",
+     "key": "text:Skip",
+     "steps": [
+      2,
+      3,
+      4
+     ],
+     "count": 3
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:2 / 3",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:3 / 3",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:A separate app from Google Play.",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Allow access",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Connect WaniKani",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Install AnkiDroid",
+     "steps": [
+      2,
+      3
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Look up Japanese anywhere",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Read decks, record answers, add words.",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Skip",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Study with Anki",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:0",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:1",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:3 / 3",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Allow Gaten to read your AnkiDroid collection.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Allow access",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Analytics",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Mon: study activity unknown",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Sun: upcoming",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Tue: study activity unknown",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:AnkiDroid is installed",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect WaniKani",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Create a token",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Daily streak",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Fri",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Gaten",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Home",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Lookup mode off. Open screen lookup settings.",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Mon",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Need a token? Show me how",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:No recent searches found",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Not connected",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Paste it here",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Paste your token",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Read decks, record answers, add words.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Recently looked up",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Sat",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Settings",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Show",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Show token",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Skip WaniKani setup and finish",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 1 of 2, AnkiDroid is installed, done",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 1 of 2, Create a token, available",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 2 of 2, Allow access, current",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 2 of 2, Paste it here, current",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Study with Anki",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Sun",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Thu",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Tue",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:WaniKani",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:WaniKani, Not connected, Connect",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Wed",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:days",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:猫, ねこ, neko...",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    }
+   ]
+  },
+  "gaten-lesson": {
+   "phone_source": "recorded-observations",
+   "attribute_fidelity": "unverified",
+   "summary": {
+    "steps": 29,
+    "compared_steps": 27,
+    "skipped_steps": 2,
+    "matched_nodes": 74,
+    "exact_matches": 0,
+    "differences": 159,
+    "allowed": 0,
+    "unexpected": 159,
+    "coverage": "text-set+target",
+    "findings": 86,
+    "invalid_differences": 494,
+    "invalid_steps": [
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27
+    ],
+    "phone_failed_steps": [
+     7,
+     15,
+     20
+    ]
+   },
+   "findings": [
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "attr:accessible-name-placement",
+     "steps": [
+      1,
+      2,
+      3,
+      5,
+      6
+     ],
+     "count": 5
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Fri: upcoming",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Sat: upcoming",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Thu: upcoming",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Wed: study activity unknown, today",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki, Not connected, Open Anki",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Daily streak. Anki study days follow your collection's rollover.",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Look up Japanese anywhere. Step 1 of 3.",
+     "steps": [
+      1,
+      2,
+      3
+     ],
+     "count": 3
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Search Japanese dictionary",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 1 of 3",
+     "steps": [
+      1
+     ],
+     "count": 1
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Recently looked up",
+     "steps": [
+      5
+     ],
+     "count": 1
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Open Anki",
+     "steps": [
+      5,
+      6
+     ],
+     "count": 2
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Fri: study activity unknown",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Sat: study activity unknown, today",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Thu: study activity unknown",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Wed: study activity unknown",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki, Permission needed, Grant access",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Grant access",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Permission needed",
+     "steps": [
+      3,
+      4,
+      5,
+      6
+     ],
+     "count": 4
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "desc:Set up Gaten",
+     "steps": [
+      1
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "text:Recently looked up",
+     "steps": [
+      5
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Back",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Skip Anki setup",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 1 of 2, Install AnkiDroid, current",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 2 of 2, Allow access, not started",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 2 of 3",
+     "steps": [
+      2,
+      3,
+      4
+     ],
+     "count": 3
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Study with Anki. Step 2 of 3.",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Skip",
+     "steps": [
+      2,
+      3,
+      4
+     ],
+     "count": 3
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "bounds_changed",
+     "key": "text:Skip",
+     "steps": [
+      2,
+      3,
+      4
+     ],
+     "count": 3
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:2 / 3",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:A separate app from Google Play.",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Allow access",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Install AnkiDroid",
+     "steps": [
+      2,
+      3,
+      4
+     ],
+     "count": 3
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Look up Japanese anywhere",
+     "steps": [
+      2,
+      3
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+     "steps": [
+      2,
+      3
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Read decks, record answers, add words.",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Skip",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Study with Anki",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:0",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:1",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:3 / 3",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Allow Gaten to read your AnkiDroid collection.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Allow access",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Analytics",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Mon: study activity unknown",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Sun: upcoming",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Tue: study activity unknown",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:AnkiDroid is installed",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect WaniKani",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Create a token",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Daily streak",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Fri",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Gaten",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Home",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Lookup mode off. Open screen lookup settings.",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Mon",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Need a token? Show me how",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:No recent searches found",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Not connected",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Paste it here",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Paste your token",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Read decks, record answers, add words.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Recently looked up",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Sat",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Settings",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Show",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Show token",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Skip WaniKani setup and finish",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 1 of 2, AnkiDroid is installed, done",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 1 of 2, Create a token, available",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 2 of 2, Allow access, current",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 2 of 2, Paste it here, current",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Study with Anki",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Sun",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Thu",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Tue",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:WaniKani",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:WaniKani, Not connected, Connect",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Wed",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:days",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:猫, ねこ, neko...",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    }
+   ]
+  },
+  "gaten-home": {
+   "phone_source": "recorded-observations",
+   "attribute_fidelity": "unverified",
+   "summary": {
+    "steps": 14,
+    "compared_steps": 13,
+    "skipped_steps": 1,
+    "matched_nodes": 211,
+    "exact_matches": 0,
+    "differences": 266,
+    "allowed": 0,
+    "unexpected": 266,
+    "coverage": "text-set+target",
+    "findings": 107,
+    "invalid_differences": 0,
+    "invalid_steps": [],
+    "phone_failed_steps": []
+   },
+   "findings": [
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "attr:accessible-name-placement",
+     "steps": [
+      1,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 12
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "desc:Anki, Collection, Anki is not installed., Open the Anki installation flow., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks · Anki, Study history will appear here., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+     "steps": [
+      11,
+      13
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Fri: upcoming",
+     "steps": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 5
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Sat: upcoming",
+     "steps": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 5
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Thu: upcoming",
+     "steps": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 5
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki Wed: study activity unknown, today",
+     "steps": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 5
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki, Collection, Anki is not installed., Open the Anki installation flow., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks · Anki, Study history will appear here., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+     "steps": [
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 4
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Anki, Not connected, Open Anki",
+     "steps": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 5
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Daily streak. Anki study days follow your collection's rollover.",
+     "steps": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 5
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Look up Japanese anywhere. Step 1 of 3.",
+     "steps": [
+      1,
+      2
+     ],
+     "count": 2
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Search Japanese dictionary",
+     "steps": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 5
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 1 of 3",
+     "steps": [
+      1
+     ],
+     "count": 1
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Anki",
+     "steps": [
+      9
+     ],
+     "count": 1
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Daily streak",
+     "steps": [
+      7
+     ],
+     "count": 1
+    },
+    {
+     "classification": "evidence-validity/attribute-placement-unverified",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Recently looked up",
+     "steps": [
+      5,
+      8
+     ],
+     "count": 2
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Anki is not installed.",
+     "steps": [
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Install",
+     "steps": [
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Open Anki",
+     "steps": [
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 5
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Open the Anki installation flow.",
+     "steps": [
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-in-acos",
+     "kind": "label_only_in_acos",
+     "key": "label:Study history will appear here.",
+     "steps": [
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Allow Gaten to read collection statistics.",
+     "steps": [
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Fri: study activity unknown",
+     "steps": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 7
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Sat: study activity unknown, today",
+     "steps": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 7
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Thu: study activity unknown",
+     "steps": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 7
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Wed: study activity unknown",
+     "steps": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 7
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki access needed.",
+     "steps": [
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks · Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+     "steps": [
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki, Permission needed, Grant access",
+     "steps": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 7
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Grant access",
+     "steps": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 11
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Permission needed",
+     "steps": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "count": 7
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Waiting for permission.",
+     "steps": [
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 4
+    },
+    {
+     "classification": "labels/only-on-phone",
+     "kind": "label_only_on_phone",
+     "key": "label:Your level history will appear here.",
+     "steps": [
+      10,
+      11,
+      12,
+      13
+     ],
+     "count": 4
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "desc:Analytics",
+     "steps": [
+      10
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "desc:Anki, Collection, Anki is not installed., Open the Anki installation flow., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks · Anki, Study history will appear here., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+     "steps": [
+      11,
+      13
+     ],
+     "count": 2
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "desc:Set up Gaten",
+     "steps": [
+      1
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "text:Anki",
+     "steps": [
+      9
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "text:Daily streak",
+     "steps": [
+      7
+     ],
+     "count": 1
+    },
+    {
+     "classification": "layout/bounds",
+     "kind": "bounds_changed",
+     "key": "text:Recently looked up",
+     "steps": [
+      5,
+      8
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Back",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Skip Anki setup",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Skip WaniKani setup and finish",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 1 of 2, Install AnkiDroid, current",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 2 of 2, Allow access, not started",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 2 of 3",
+     "steps": [
+      2,
+      3
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Step 3 of 3",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "label:Study with Anki. Step 2 of 3.",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "attribute_placement_unverified",
+     "key": "text:Skip",
+     "steps": [
+      2,
+      3,
+      4
+     ],
+     "count": 3
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "bounds_changed",
+     "key": "text:Skip",
+     "steps": [
+      2,
+      3,
+      4
+     ],
+     "count": 3
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:2 / 3",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:3 / 3",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:A separate app from Google Play.",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Allow access",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Connect WaniKani",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Install AnkiDroid",
+     "steps": [
+      2,
+      3
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Look up Japanese anywhere",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Read decks, record answers, add words.",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Skip",
+     "steps": [
+      4
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_in_acos",
+     "key": "label:Study with Anki",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:0",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:1",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:3 / 3",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Allow Gaten to read your AnkiDroid collection.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Allow access",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Analytics",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Mon: study activity unknown",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Sun: upcoming",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Anki Tue: study activity unknown",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:AnkiDroid is installed",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect WaniKani",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Create a token",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Daily streak",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Fri",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Gaten",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Home",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Lookup mode off. Open screen lookup settings.",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Mon",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Need a token? Show me how",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:No recent searches found",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Not connected",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Paste it here",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Paste your token",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Read decks, record answers, add words.",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Recently looked up",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Sat",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Settings",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Show",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Show token",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Skip WaniKani setup and finish",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 1 of 2, AnkiDroid is installed, done",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 1 of 2, Create a token, available",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 2 of 2, Allow access, current",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Step 2 of 2, Paste it here, current",
+     "steps": [
+      3
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Study with Anki",
+     "steps": [
+      2
+     ],
+     "count": 1
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Sun",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Thu",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Tue",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:WaniKani",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:WaniKani, Not connected, Connect",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:Wed",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:days",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    },
+    {
+     "classification": "timing/unslept-step",
+     "kind": "label_only_on_phone",
+     "key": "label:猫, ねこ, neko...",
+     "steps": [
+      3,
+      4
+     ],
+     "count": 2
+    }
+   ]
+  }
+ }
+}
