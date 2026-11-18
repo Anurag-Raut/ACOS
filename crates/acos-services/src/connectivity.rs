@@ -489,12 +489,42 @@ pub fn default_network_capabilities() -> Parcelable {
 /// is a [`Value::NamedParcelable`] holding [`Parcelable::Null`].
 #[must_use]
 pub fn default_link_properties() -> Parcelable {
-    let (addrs, dns, dhcp, routes) = if spike_net_enabled() {
+    link_properties(spike_net_enabled())
+}
+
+/// [`default_link_properties`] with the network gate passed in (testable: the
+/// gate is process-global).
+///
+/// REL3P2's oracle replaced the old flat `writeInt` count fields with
+/// [`FieldOp::Counted`] element lists, so a non-empty list's elements are
+/// `Value::Cond { present: true, values }` — one value per op of the collapsed
+/// loop body (`writeParcelable(LinkAddress)` → [`FieldOp::Named`] → a
+/// `NamedParcelable`; `writeAddress(InetAddress)` → `writeByteArray` +
+/// `writeBoolean(hasScopeId)` + `writeInt(scopeId)`). The old bare
+/// `Value::Parcelable`/`Value::ByteArray` elements made the writer reject its
+/// own value (`expected counted element`) and panicked the launcher the first
+/// time a real session asked for a network callback (NETREAL). The empty arms
+/// below are unchanged: a zero count is the same `writeInt(0)` either way.
+#[must_use]
+pub fn link_properties(networked: bool) -> Parcelable {
+    let counted = |values: Vec<Value>| Value::Cond {
+        present: true,
+        values,
+    };
+    let (addrs, dns, dhcp, routes) = if networked {
         (
-            Value::List(Some(vec![Value::Parcelable(guest_link_address())])),
-            Value::List(Some(vec![Value::ByteArray(Some(dns_server_bytes()))])),
+            Value::List(Some(vec![counted(vec![Value::NamedParcelable(
+                guest_link_address(),
+            )])])),
+            Value::List(Some(vec![counted(vec![
+                Value::ByteArray(Some(dns_server_bytes())),
+                Value::Bool(false), // hasScopeId (an IPv4 address)
+                Value::Int(0),      // scopeId
+            ])])),
             Value::ByteArray(Some(dhcp_server_bytes())),
-            Value::List(Some(vec![Value::Parcelable(default_route())])),
+            Value::List(Some(vec![counted(vec![Value::NamedParcelable(
+                default_route(),
+            )])])),
         )
     } else {
         (
@@ -555,7 +585,7 @@ fn default_route() -> Parcelable {
     Parcelable::ordered(
         "android.net.RouteInfo",
         vec![
-            Value::Parcelable(Parcelable::ordered(
+            Value::NamedParcelable(Parcelable::ordered(
                 "android.net.IpPrefix",
                 vec![
                     Value::ByteArray(Some(vec![0, 0, 0, 0])),
@@ -1142,6 +1172,66 @@ mod link_properties_tests {
         }
     }
 
+    /// One element of a `FieldOp::Counted` list, in the shape the writer accepts
+    /// and the reader produces (`Value::Cond { present: true, values }`).
+    fn counted(value: &Value) -> Vec<Value> {
+        match value {
+            Value::Cond {
+                present: true,
+                values,
+            } => values.clone(),
+            other => panic!("expected a counted element, got {other:?}"),
+        }
+    }
+
+    /// The payload the relay actually sends (a `NetworkCallback`'s
+    /// `LinkProperties`) must survive `write_payload` and read back as the value
+    /// it was built from.
+    ///
+    /// This is the test the real-network arms needed and did not have: the old
+    /// value put a bare `LinkAddress` parcelable where `LinkProperties`' spec
+    /// expects a counted element, so the *writer* rejected its own value and the
+    /// launcher panicked at the first callback on a networked session (NETREAL).
+    /// A shape assertion alone could not see that; writing the bytes can.
+    #[test]
+    fn the_wire_payload_round_trips_on_both_arms() {
+        for networked in [false, true] {
+            let value = link_properties(networked);
+            let mut parcel = Parcel::new();
+            crate::parcelable::write_payload(&mut parcel, &value)
+                .unwrap_or_else(|e| panic!("networked={networked}: write: {e}"));
+            parcel.set_data_position(0);
+            let back = crate::parcelable::read_payload("android.net.LinkProperties", &mut parcel)
+                .unwrap_or_else(|e| panic!("networked={networked}: read: {e}"));
+            assert_eq!(back, value, "networked={networked}: byte round trip");
+        }
+    }
+
+    /// A `NetworkCallback`'s whole `Message` bundle is written the same way: the
+    /// four registration messages are exactly what a networked session sends.
+    #[test]
+    fn callback_messages_encode_on_both_arms() {
+        let request = Parcelable::ordered(
+            "android.net.NetworkRequest",
+            vec![
+                Value::NamedParcelable(default_network_capabilities()),
+                Value::Int(0),
+                Value::Int(1),
+                Value::Str(Some("default".to_string())),
+            ],
+        );
+        for networked in [false, true] {
+            let with_flag_value = with_flag(networked, || callback_messages(&request));
+            assert_eq!(with_flag_value.len(), 4, "networked={networked}");
+            for (code, _, parcel) in with_flag_value {
+                assert!(
+                    parcel.data_size() > 0,
+                    "networked={networked}: message {code} wrote bytes"
+                );
+            }
+        }
+    }
+
     /// Item 5 parity: with the network attached, `getLinkProperties()` describes
     /// the interface the namespace really has — the guest address, the DNS
     /// server DHCP handed out, and a default route through pasta's gateway.
@@ -1158,8 +1248,9 @@ mod link_properties_tests {
 
         let addrs = list(&fields[1]);
         assert_eq!(addrs.len(), 1, "one link address");
-        let Value::Parcelable(Parcelable::Ordered { class, values }) = &addrs[0] else {
-            panic!("a LinkAddress parcelable");
+        let addr = counted(&addrs[0]);
+        let Value::NamedParcelable(Parcelable::Ordered { class, values }) = &addr[0] else {
+            panic!("a named LinkAddress parcelable");
         };
         assert_eq!(class, "android.net.LinkAddress");
         assert_eq!(
@@ -1171,7 +1262,14 @@ mod link_properties_tests {
 
         let dns = list(&fields[2]);
         assert_eq!(dns.len(), 1, "one DNS server");
-        assert_eq!(dns[0], Value::ByteArray(Some(NET_DNS_SERVER.to_vec())));
+        let dns_element = counted(&dns[0]);
+        assert_eq!(
+            dns_element[0],
+            Value::ByteArray(Some(NET_DNS_SERVER.to_vec())),
+            "the resolver DHCP handed the namespace"
+        );
+        assert_eq!(dns_element[1], Value::Bool(false), "an IPv4 address has no scope id");
+        assert_eq!(dns_element[2], Value::Int(0));
 
         assert_eq!(fields[3], Value::List(Some(Vec::new())), "no private DNS");
         assert_eq!(
@@ -1182,8 +1280,9 @@ mod link_properties_tests {
 
         let routes = list(&fields[11]);
         assert_eq!(routes.len(), 1, "one default route");
-        let Value::Parcelable(Parcelable::Ordered { class, values }) = &routes[0] else {
-            panic!("a RouteInfo parcelable");
+        let route = counted(&routes[0]);
+        let Value::NamedParcelable(Parcelable::Ordered { class, values }) = &route[0] else {
+            panic!("a named RouteInfo parcelable");
         };
         assert_eq!(class, "android.net.RouteInfo");
         assert_eq!(
