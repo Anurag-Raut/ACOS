@@ -1,0 +1,699 @@
+{
+ "config": {
+  "avds": [
+   "emb-1",
+   "emb-2"
+  ],
+  "cores": 4,
+  "gpu": "swiftshader_indirect",
+  "guest_mb": 2048,
+  "host_ceiling_pct": 85.0,
+  "host_per_instance_reserve_mib": 4400,
+  "ports": [
+   5554,
+   5556
+  ],
+  "snapshot_cold": false,
+  "window": false
+ },
+ "errors": [],
+ "generated_utc": "2026-11-18T06:24:13Z",
+ "host": {
+  "cpu_model": "AMD Ryzen 9 9950X 16-Core Processor",
+  "kernel": "7.2.11-arch1-1",
+  "loadavg1": 5.25830078125,
+  "mem_available_mib": 44687,
+  "mem_total_mib": 61908,
+  "swap_free_mib": 0,
+  "swap_total_mib": 0,
+  "threads": 32
+ },
+ "host_log": [
+  {
+   "free_m": "Mem:           61908       17113        9335         651       36763       44795",
+   "load1": 2.0,
+   "mem_available_mib": 44795,
+   "mem_total_mib": 61908,
+   "step": "n2 rep1: before starts",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982820.657,
+   "used_pct": 27.64
+  },
+  {
+   "free_m": "Mem:           61908       17113        9335         651       36763       44795",
+   "load1": 2.0,
+   "mem_available_mib": 44795,
+   "mem_total_mib": 61908,
+   "step": "n2 rep1: before start of instance 1",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982820.658,
+   "used_pct": 27.64
+  },
+  {
+   "free_m": "Mem:           61908       17113        9335         651       36763       44795",
+   "load1": 2.0,
+   "mem_available_mib": 44795,
+   "mem_total_mib": 61908,
+   "step": "n2 rep1: before start of instance 2",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982820.659,
+   "used_pct": 27.64
+  },
+  {
+   "free_m": "Mem:           61908       23536        2593         651       37081       38372",
+   "load1": 3.17,
+   "mem_available_mib": 38372,
+   "mem_total_mib": 61908,
+   "step": "n2 rep1: all 2 booted",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982837.778,
+   "used_pct": 38.02
+  },
+  {
+   "free_m": "Mem:           61908       23872        2214         651       37124       38036",
+   "load1": 3.8,
+   "mem_available_mib": 38036,
+   "mem_total_mib": 61908,
+   "step": "n2 rep1: tasks starting",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982841.128,
+   "used_pct": 38.56
+  },
+  {
+   "free_m": "Mem:           61908       17246        8780         651       37184       44661",
+   "load1": 4.2,
+   "mem_available_mib": 44661,
+   "mem_total_mib": 61908,
+   "step": "n2 rep1: after shutdown",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982866.171,
+   "used_pct": 27.86
+  },
+  {
+   "free_m": "Mem:           61908       17246        8780         651       37184       44661",
+   "load1": 4.2,
+   "mem_available_mib": 44661,
+   "mem_total_mib": 61908,
+   "step": "n2 rep2: before starts",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982866.172,
+   "used_pct": 27.86
+  },
+  {
+   "free_m": "Mem:           61908       17246        8780         651       37184       44661",
+   "load1": 4.2,
+   "mem_available_mib": 44661,
+   "mem_total_mib": 61908,
+   "step": "n2 rep2: before start of instance 1",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982866.173,
+   "used_pct": 27.86
+  },
+  {
+   "free_m": "Mem:           61908       17246        8780         651       37184       44661",
+   "load1": 4.2,
+   "mem_available_mib": 44661,
+   "mem_total_mib": 61908,
+   "step": "n2 rep2: before start of instance 2",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982866.175,
+   "used_pct": 27.86
+  },
+  {
+   "free_m": "Mem:           61908       23874        2136         654       37203       38034",
+   "load1": 4.59,
+   "mem_available_mib": 38034,
+   "mem_total_mib": 61908,
+   "step": "n2 rep2: all 2 booted",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982883.553,
+   "used_pct": 38.56
+  },
+  {
+   "free_m": "Mem:           61908       24074        1927         654       37212       37834",
+   "load1": 4.87,
+   "mem_available_mib": 37834,
+   "mem_total_mib": 61908,
+   "step": "n2 rep2: tasks starting",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982886.933,
+   "used_pct": 38.89
+  },
+  {
+   "free_m": "Mem:           61908       17270        8722         654       37221       44637",
+   "load1": 3.89,
+   "mem_available_mib": 44637,
+   "mem_total_mib": 61908,
+   "step": "n2 rep2: after shutdown",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982911.716,
+   "used_pct": 27.9
+  },
+  {
+   "free_m": "Mem:           61908       17270        8722         654       37221       44637",
+   "load1": 3.89,
+   "mem_available_mib": 44637,
+   "mem_total_mib": 61908,
+   "step": "n2 rep3: before starts",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982911.717,
+   "used_pct": 27.9
+  },
+  {
+   "free_m": "Mem:           61908       17270        8722         654       37221       44637",
+   "load1": 3.89,
+   "mem_available_mib": 44637,
+   "mem_total_mib": 61908,
+   "step": "n2 rep3: before start of instance 1",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982911.718,
+   "used_pct": 27.9
+  },
+  {
+   "free_m": "Mem:           61908       17270        8722         654       37221       44637",
+   "load1": 3.89,
+   "mem_available_mib": 44637,
+   "mem_total_mib": 61908,
+   "step": "n2 rep3: before start of instance 2",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982911.72,
+   "used_pct": 27.9
+  },
+  {
+   "free_m": "Mem:           61908       23845        2138         654       37230       38063",
+   "load1": 4.64,
+   "mem_available_mib": 38063,
+   "mem_total_mib": 61908,
+   "step": "n2 rep3: all 2 booted",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982928.587,
+   "used_pct": 38.52
+  },
+  {
+   "free_m": "Mem:           61908       24026        1949         655       37240       37882",
+   "load1": 5.15,
+   "mem_available_mib": 37882,
+   "mem_total_mib": 61908,
+   "step": "n2 rep3: tasks starting",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982931.83,
+   "used_pct": 38.81
+  },
+  {
+   "free_m": "Mem:           61908       17362        8593         655       37259       44546",
+   "load1": 4.89,
+   "mem_available_mib": 44546,
+   "mem_total_mib": 61908,
+   "step": "n2 rep3: after shutdown",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982956.047,
+   "used_pct": 28.04
+  },
+  {
+   "free_m": "Mem:           61908       17362        8593         655       37259       44546",
+   "load1": 4.89,
+   "mem_available_mib": 44546,
+   "mem_total_mib": 61908,
+   "step": "n2 rep4: before starts",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982956.049,
+   "used_pct": 28.04
+  },
+  {
+   "free_m": "Mem:           61908       17362        8593         655       37259       44546",
+   "load1": 4.89,
+   "mem_available_mib": 44546,
+   "mem_total_mib": 61908,
+   "step": "n2 rep4: before start of instance 1",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982956.05,
+   "used_pct": 28.04
+  },
+  {
+   "free_m": "Mem:           61908       17362        8593         655       37259       44546",
+   "load1": 4.89,
+   "mem_available_mib": 44546,
+   "mem_total_mib": 61908,
+   "step": "n2 rep4: before start of instance 2",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982956.051,
+   "used_pct": 28.04
+  },
+  {
+   "free_m": "Mem:           61908       23849        2096         655       37270       38059",
+   "load1": 5.53,
+   "mem_available_mib": 38057,
+   "mem_total_mib": 61908,
+   "step": "n2 rep4: all 2 booted",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982973.657,
+   "used_pct": 38.53
+  },
+  {
+   "free_m": "Mem:           61908       24079        1860         655       37276       37828",
+   "load1": 5.57,
+   "mem_available_mib": 37828,
+   "mem_total_mib": 61908,
+   "step": "n2 rep4: tasks starting",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794982976.673,
+   "used_pct": 38.9
+  },
+  {
+   "free_m": "Mem:           61908       17303        8616         654       37294       44604",
+   "load1": 4.05,
+   "mem_available_mib": 44604,
+   "mem_total_mib": 61908,
+   "step": "n2 rep4: after shutdown",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794983004.733,
+   "used_pct": 27.95
+  },
+  {
+   "free_m": "Mem:           61908       17303        8616         654       37294       44604",
+   "load1": 4.05,
+   "mem_available_mib": 44604,
+   "mem_total_mib": 61908,
+   "step": "n2 rep5: before starts",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794983004.734,
+   "used_pct": 27.95
+  },
+  {
+   "free_m": "Mem:           61908       17303        8616         654       37294       44604",
+   "load1": 4.05,
+   "mem_available_mib": 44604,
+   "mem_total_mib": 61908,
+   "step": "n2 rep5: before start of instance 1",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794983004.735,
+   "used_pct": 27.95
+  },
+  {
+   "free_m": "Mem:           61908       17303        8616         654       37294       44604",
+   "load1": 4.05,
+   "mem_available_mib": 44604,
+   "mem_total_mib": 61908,
+   "step": "n2 rep5: before start of instance 2",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794983004.737,
+   "used_pct": 27.95
+  },
+  {
+   "free_m": "Mem:           61908       23826        2085         651       37300       38082",
+   "load1": 4.55,
+   "mem_available_mib": 38082,
+   "mem_total_mib": 61908,
+   "step": "n2 rep5: all 2 booted",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794983022.598,
+   "used_pct": 38.49
+  },
+  {
+   "free_m": "Mem:           61908       23898        2007         651       37305       38009",
+   "load1": 4.67,
+   "mem_available_mib": 38009,
+   "mem_total_mib": 61908,
+   "step": "n2 rep5: tasks starting",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794983025.702,
+   "used_pct": 38.6
+  },
+  {
+   "free_m": "Mem:           61908       17221        8671         651       37318       44687",
+   "load1": 5.26,
+   "mem_available_mib": 44687,
+   "mem_total_mib": 61908,
+   "step": "n2 rep5: after shutdown",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794983053.191,
+   "used_pct": 27.82
+  },
+  {
+   "free_m": "Mem:           61908       17221        8671         651       37318       44687",
+   "load1": 5.26,
+   "mem_available_mib": 44687,
+   "mem_total_mib": 61908,
+   "step": "phase n2: end",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1794983053.202,
+   "used_pct": 27.82
+  }
+ ],
+ "phase": "n2",
+ "reps": [
+  {
+   "anon_shmem_mib_total": 6929.2685546875,
+   "boot_ms": {
+    "emulator-5554": 13173.91353200037,
+    "emulator-5556": 15166.249547000007
+   },
+   "cpu_pct_per_instance": 166.1666902868062,
+   "failures": [],
+   "gib_integral": 2.3713835867946385,
+   "gib_mean": 6.795727300643921,
+   "host_cpu_pct_all": 332.3333805736124,
+   "n": 2,
+   "pss_mib_per_instance": 3479.4123779296874,
+   "pss_mib_total": 6958.824755859375,
+   "rep": 1,
+   "sample_count": 20,
+   "started": 1794982820.657,
+   "stopped": {
+    "emulator-5554": null,
+    "emulator-5556": null
+   },
+   "task_ms": [
+    7359.609316999922,
+    6946.010315999956,
+    6631.286727999395,
+    7408.992028000284,
+    6861.00448399975,
+    6626.905127999635
+   ],
+   "tasks": 6,
+   "tasks_per_gib_min": 2.5301684777662246,
+   "verified": 6,
+   "wall_s": 20.937128421000125
+  },
+  {
+   "anon_shmem_mib_total": 6852.046875,
+   "boot_ms": {
+    "emulator-5554": 13119.479713000146,
+    "emulator-5556": 15228.626883000288
+   },
+   "cpu_pct_per_instance": 153.73656681129216,
+   "failures": [],
+   "gib_integral": 2.307214029350596,
+   "gib_mean": 6.695760250091553,
+   "host_cpu_pct_all": 307.4731336225843,
+   "n": 2,
+   "pss_mib_per_instance": 3428.229248046875,
+   "pss_mib_total": 6856.45849609375,
+   "rep": 2,
+   "sample_count": 20,
+   "started": 1794982866.172,
+   "stopped": {
+    "emulator-5554": null,
+    "emulator-5556": null
+   },
+   "task_ms": [
+    7020.784843000001,
+    6863.370211999609,
+    6580.971533000593,
+    7230.977326000357,
+    6824.787526000364,
+    6618.597179000062
+   ],
+   "tasks": 6,
+   "tasks_per_gib_min": 2.6005389719690637,
+   "verified": 6,
+   "wall_s": 20.674701093000294
+  },
+  {
+   "anon_shmem_mib_total": 6980.6616443452385,
+   "boot_ms": {
+    "emulator-5554": 12730.056452000099,
+    "emulator-5556": 14781.7921879996
+   },
+   "cpu_pct_per_instance": 163.3118124646352,
+   "failures": [],
+   "gib_integral": 2.4065254111360157,
+   "gib_mean": 6.838193802606492,
+   "host_cpu_pct_all": 326.6236249292704,
+   "n": 2,
+   "pss_mib_per_instance": 3501.155226934524,
+   "pss_mib_total": 7002.310453869048,
+   "rep": 3,
+   "sample_count": 21,
+   "started": 1794982911.717,
+   "stopped": {
+    "emulator-5554": null,
+    "emulator-5556": null
+   },
+   "task_ms": [
+    7203.65952299926,
+    6902.82339299938,
+    6606.5323770008035,
+    7638.6431850005465,
+    6926.842789999682,
+    6549.115757000436
+   ],
+   "tasks": 6,
+   "tasks_per_gib_min": 2.493221127952961,
+   "verified": 6,
+   "wall_s": 21.115447856000173
+  },
+  {
+   "anon_shmem_mib_total": 6984.2484375,
+   "boot_ms": {
+    "emulator-5554": 13369.668387000274,
+    "emulator-5556": 15290.330496000024
+   },
+   "cpu_pct_per_instance": 158.1324554249651,
+   "failures": [],
+   "gib_integral": 2.390175910650394,
+   "gib_mean": 6.855598783493042,
+   "host_cpu_pct_all": 316.2649108499302,
+   "n": 2,
+   "pss_mib_per_instance": 3510.0665771484373,
+   "pss_mib_total": 7020.133154296875,
+   "rep": 4,
+   "sample_count": 20,
+   "started": 1794982956.048,
+   "stopped": {
+    "emulator-5554": null,
+    "emulator-5556": null
+   },
+   "task_ms": [
+    7412.713419999818,
+    6907.672320999154,
+    6597.798826000144,
+    7292.4396580001485,
+    6972.455247000653,
+    6582.765991999622
+   ],
+   "tasks": 6,
+   "tasks_per_gib_min": 2.510275487785053,
+   "verified": 6,
+   "wall_s": 20.918749647999903
+  },
+  {
+   "anon_shmem_mib_total": 6818.6822265625,
+   "boot_ms": {
+    "emulator-5554": 13047.367324999868,
+    "emulator-5556": 15797.22926300019
+   },
+   "cpu_pct_per_instance": 154.61496240472238,
+   "failures": [],
+   "gib_integral": 2.3310146120727846,
+   "gib_mean": 6.70528016090393,
+   "host_cpu_pct_all": 309.22992480944475,
+   "n": 2,
+   "pss_mib_per_instance": 3433.1034423828123,
+   "pss_mib_total": 6866.206884765625,
+   "rep": 5,
+   "sample_count": 20,
+   "started": 1794983004.734,
+   "stopped": {
+    "emulator-5554": null,
+    "emulator-5556": null
+   },
+   "task_ms": [
+    7085.968881000554,
+    6973.7436309997065,
+    6632.7501380001195,
+    7256.384491999597,
+    6978.015423000215,
+    6623.284950000198
+   ],
+   "tasks": 6,
+   "tasks_per_gib_min": 2.5739864387485243,
+   "verified": 6,
+   "wall_s": 20.85831961799977
+  }
+ ],
+ "rows": {
+  "install_ms": {
+   "ci95_of_p50": [
+    520.1790959999926,
+    783.2984504998421
+   ],
+   "max": 855.0703869996141,
+   "min": 338.8681220003491,
+   "n": 10,
+   "n_failed": 0,
+   "n_total": 10,
+   "p5": 417.5673908003773,
+   "p50": 626.6431859999102,
+   "p90": 839.5173168998554,
+   "p95": 847.2938519497347,
+   "samples": [
+    855.0704,
+    520.1791,
+    750.8302,
+    577.3148,
+    728.8077,
+    637.371,
+    615.9153,
+    513.7554,
+    837.7892,
+    338.8681
+   ],
+   "spread_pct": 68.57594094215827,
+   "unit": "ms"
+  },
+  "n2_boot_ms": {
+   "ci95_of_p50": [
+    13755.92431999985,
+    14422.29829400003
+   ],
+   "max": 14422.29829400003,
+   "min": 13755.92431999985,
+   "n": 5,
+   "n_failed": 0,
+   "n_total": 5,
+   "p5": 13838.755763899917,
+   "p50": 14174.053298000217,
+   "p90": 14385.378753000077,
+   "p95": 14403.838523500053,
+   "samples": [
+    14170.0815,
+    14174.0533,
+    13755.9243,
+    14329.9994,
+    14422.2983
+   ],
+   "spread_pct": 3.9867407559407337,
+   "unit": "ms"
+  },
+  "n2_cpu_pct_per_instance": {
+   "ci95_of_p50": [
+    153.73656681129216,
+    166.1666902868062
+   ],
+   "max": 166.1666902868062,
+   "min": 153.73656681129216,
+   "n": 5,
+   "n_failed": 0,
+   "n_total": 5,
+   "p5": 153.9122459299782,
+   "p50": 158.1324554249651,
+   "p90": 165.0247391579378,
+   "p95": 165.59571472237198,
+   "samples": [
+    166.1667,
+    153.7366,
+    163.3118,
+    158.1325,
+    154.615
+   ],
+   "spread_pct": 7.388406612036486,
+   "unit": ""
+  },
+  "n2_pss_mib_per_instance": {
+   "ci95_of_p50": [
+    3428.229248046875,
+    3510.0665771484373
+   ],
+   "max": 3510.0665771484373,
+   "min": 3428.229248046875,
+   "n": 5,
+   "n_failed": 0,
+   "n_total": 5,
+   "p5": 3429.2040869140624,
+   "p50": 3479.4123779296874,
+   "p90": 3506.5020370628718,
+   "p95": 3508.2843071056545,
+   "samples": [
+    3479.4124,
+    3428.2292,
+    3501.1552,
+    3510.0666,
+    3433.1034
+   ],
+   "spread_pct": 2.272803899106846,
+   "unit": ""
+  },
+  "n2_task_ms": {
+   "ci95_of_p50": [
+    6844.078868999986,
+    6975.879526999961
+   ],
+   "max": 6975.879526999961,
+   "min": 6844.078868999986,
+   "n": 5,
+   "n_failed": 0,
+   "n_total": 5,
+   "p5": 6855.96457519996,
+   "p50": 6914.833091499531,
+   "p90": 6961.553229799938,
+   "p95": 6968.7163783999495,
+   "samples": [
+    6903.5074,
+    6844.0789,
+    6914.8331,
+    6940.0638,
+    6975.8795
+   ],
+   "spread_pct": 1.6305788109129726,
+   "unit": "ms"
+  },
+  "n2_tasks_per_gib_min": {
+   "ci95_of_p50": [
+    2.493221127952961,
+    2.6005389719690637
+   ],
+   "max": 2.6005389719690637,
+   "min": 2.493221127952961,
+   "n": 5,
+   "n_failed": 0,
+   "n_total": 5,
+   "p5": 2.496631999919379,
+   "p50": 2.5301684777662246,
+   "p90": 2.589917958680848,
+   "p95": 2.595228465324956,
+   "samples": [
+    2.5302,
+    2.6005,
+    2.4932,
+    2.5103,
+    2.574
+   ],
+   "spread_pct": 3.8968339963125063,
+   "unit": ""
+  }
+ },
+ "schema": "emubench/1"
+}

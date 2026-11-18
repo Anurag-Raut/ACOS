@@ -2158,3 +2158,211 @@ daemon (1.36 MiB), not a booted framework, because ACOS has no session-less boot
 framework; the marginal column exists so the reader can see the row without that
 baseline. (4) M6's spread (14.1%) is close to the 15% gate under a shared host; a
 quieter window would tighten the CI but cannot turn a TIE into a PASS.
+
+---
+
+## 13. Stock emulator baseline (EMUBENCH, 2026-11-18)
+
+**Status: the stock Android emulator is a tracked ACOS baseline. ACOS is better
+on 10 of the 11 comparable metrics; warm launch is a tie (+0.8 %, inside the 5 %
+noise floor) and is flagged, not claimed.** Owner direction 2026-11-18 §2: *"the
+stock emulator is a tracked baseline (boot, launch, tap-to-result latency,
+UI-tree read, screenshot, install, memory per instance, CPU, and verified tasks
+per GiB-minute at N concurrent instances). Every release gate compares against it
+and flags any metric where ACOS is worse."* This section is that comparison: the
+measured emulator column, the ACOS column from the last release gate, the
+better/worse verdict per metric, and the gate rule a release must satisfy.
+
+Raw record: `results/bench/emubench-2026-11-18.json` (every sample, every
+`free -m` host step, per-rep task detail, failures). Harness:
+`tools/art-runtime/emubench/emu_bench.py`, driver `run-emubench.sh`, gate
+`emu_gate.py`. Evidence bundle: `results/handoff/EMUBENCH/`.
+
+### 13.1 What is relaxed, and the limits that are not
+
+ADR-0015 allows **one** emulator at ≤2048 MiB. The owner relaxed it *for this
+benchmark only*: N=1, 2 and 4 concurrent instances, each ≤2048 MiB guest RAM,
+only while the host stays under the 90 % RAM ceiling, always shut down. Every
+limit is enforced in code, not by convention:
+
+| Limit | How it is enforced | Evidence |
+|---|---|---|
+| ≤ 2048 MiB guest RAM | `hw.ramSize=2048` written into every AVD config and `-memory 2048` on the command line | `phase-*.json` `config.guest_mb`, `cmd-*.txt` |
+| N ≤ 4 | the phase list is fixed (`n1-cold`, `n1-warm`, `n2`, `n4`); one AVD and one port per instance | `config.ports` |
+| Host usage < 85 % (abort) / 90 % (hard ceiling) | `MemAvailable` is read **before every instance start**; the start is refused if `MemAvailable − 4.3 GiB` would fall below 15 % of `MemTotal`. `free -m` is logged at every step | `host_log[]` (`used_pct`, `free_m`) |
+| Always shut down | every phase stops all instances in `finally`, plus SIGINT/SIGTERM handlers; the driver verifies no `qemu-system-x86_64` survives and force-kills leftovers **by PID** (never `pkill -f`) | driver log `PASS no qemu-system process is running` |
+
+### 13.2 Configuration
+
+| Item | Value |
+|---|---|
+| AVD | `emb-1…4` under `$WT/.cache/avd` (`ANDROID_AVD_HOME`), Pixel 6 profile |
+| Emulator | `/home/Qui/Android/Sdk/emulator/emulator` 35.6.11.0 (build 13610412), KVM |
+| System image | `system-images;android-34;google_apis;x86_64` (API 34, x86_64) — the same API level as ACOS's image |
+| Guest RAM / vCPU | 2048 MiB / 4 |
+| GPU | `swiftshader_indirect` (software; no GPU passthrough, as the brief allows) |
+| Flags | `-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 4 -no-metrics`; **cold rows add `-no-snapshot`**, warm-boot rows load the quickboot snapshot |
+| Display | 1080×2400 @ 420 dpi — the same screen and density as the ACOS reference frames |
+| Apps | `fixtures/build/apps/counter.apk` (`dev.acos.fixtures.counter`), `form-validation.apk` (`dev.acos.fixtures.formvalidation`) — byte-identical APKs to the ACOS rows |
+| Device route | `adb` 1.0.41, always `-s emulator-55xx` (the owner's phone was never addressed) |
+
+### 13.3 Method — the same definitions as §1
+
+The emulator exposes no ACOS API, so each metric is measured with the fastest
+*standard* Android route, which is the route an agent using the emulator would
+pay. Nothing is estimated; every row is a wall-clock sample.
+
+| Metric | Route | Correctness oracle | Resolution |
+|---|---|---|---|
+| cold boot → first app frame | process start → `sys.boot_completed` → launch → first frame whose app region differs from the idle **launcher** frame | live `uiautomator` tree reads `count == 0` | one screencap (~200 ms) |
+| warm launch | `am force-stop` → `am start -W` → same launcher-frame change | tree reads `count == 0` | one screencap |
+| tap → settled UI result | `adb shell input tap` on the node centre, then `uiautomator dump` until the expected state appears | counter: `count` text `0→1`; form: the `Name is required` error text | one tree dump (~2 s) |
+| UI tree read | `adb exec-out uiautomator dump /dev/tty` (one fresh `app_process` per call) | non-empty tree with text | — |
+| screenshot | `adb exec-out screencap -p` (PNG validated) | valid 1080×2400 PNG, not black | — |
+| install | `adb install -r -t <apk>` | `Success` | — |
+| reset | tap to a non-zero count, `am force-stop` + `pm clear` + launch → launcher-frame change | tree reads `count == 0` | one screencap |
+| memory per instance | `/proc/<qemu>/smaps_rollup` Pss / Rss, `/proc/<qemu>/status` RssAnon+RssShmem, guest `dumpsys meminfo` | — | 2 s sampling |
+| CPU | `/proc/<qemu>/stat` utime+stime delta over a 10 s idle window | — | — |
+| verified tasks / GiB-minute | N concurrent instances, each running the counter scenario equivalent: launch → verify 0 → tap increment → verify 1 → reset. Tasks are counted only when **both** tree checks pass | tree, 0 false passes | 1 s memory sampler |
+
+Two deliberate differences from the P6 emulator run (`results/art-runtime/P6.md`):
+
+1. **First frame = "app content visible", not "pixel-identical to a stored
+   reference".** A frame captured in one emulator boot differs from the same
+   screen in another boot by 1–3 units per channel on *every* pixel (measured:
+   `#191c1e` → `#1a1b21`, `#f0f0f3` → `#f1f0f7`; 98 % of pixels "differ", 0.0 %
+   of pixels differ by more than 8). A cross-session pixel-identity gate is
+   therefore not a valid criterion here; the launcher→app change plus the tree
+   read is. P6's within-session pixel gate is unaffected and still stands.
+2. **The warm-boot row uses a quickboot snapshot** (owner: "a snapshot for warm
+   rows"), reported separately from the cold boot.
+
+### 13.4 Side-by-side
+
+ACOS column: the last release gate (`results/release/v0.3.0-gate/timing/02-ab/`,
+RELGATE2, v0.3.0 RC `169bfa5e`, 2026-11-16, n=60 strict samples per latency row;
+M11 from §12 W52 at N=10). Emulator column: this run, median of ≥5 reps (n as
+stated). "Better" names the side that wins the metric.
+
+| Metric | ACOS | Emulator | Unit | Better | Delta | Verdict |
+|---|---:|---:|---|---|---:|---|
+| Cold boot -> first app frame | 4200 | 13632 | ms | ACOS | -69.2 % | better |
+| Warm launch -> app frame | 288.4 | 286.1 | ms | emulator | +0.8 % | worse |
+| Tap -> settled UI result (counter) | 949.2 | 1931 | ms | ACOS | -50.8 % | better |
+| Tap -> settled UI result (form) | 920.0 | 1946 | ms | ACOS | -52.7 % | better |
+| UI tree read with text | 41.4 | 1928 | ms | ACOS | -97.9 % | better |
+| Fresh PNG screenshot | 11.7 | 527.1 | ms | ACOS | -97.8 % | better |
+| Reset -> first correct screen | 308.8 | 530.8 | ms | ACOS | -41.8 % | better |
+| Instance memory, PSS | 234.9 | 3578.0 | MiB | ACOS | -93.4 % | better |
+| Instance memory, anon+shmem | 57.1 | 3531.6 | MiB | ACOS | -98.4 % | better |
+| Idle CPU | 0.4 | 13.1 | % of one core | ACOS | -96.7 % | better |
+| Verified tasks / GiB-minute | 62.84 | 2.54 | tasks/GiB-min | ACOS | -96.0 % | better |
+
+Delta is `(ACOS − emulator) / emulator` for the latency and memory rows and
+`(emulator − ACOS) / ACOS` for throughput; **negative always means ACOS is
+better**. The verdict column is the gate's: `better`, `worse` (worse but inside
+the 5 % noise floor) and `WORSE` (worse beyond it). Generated by
+`tools/art-runtime/emubench/emu_gate.py`; the raw gate output is
+`results/handoff/EMUBENCH/gate/gate.txt` + `gate.json`.
+
+**Rows the gate table cannot pair, and rows it pairs only in one direction.**
+
+* **Install — no ACOS counterpart.** ACOS ingests the APK instead of installing
+  it into a system image, so there is nothing to time on the ACOS side; the row
+  is `NOT_MEASURED` for ACOS, never a win. Emulator: first install
+  **1359 ms** p50 (n=5, cold phase, `adb install -r -t counter.apk`),
+  reinstall **276 ms** p50 (n=20, warm, the app already present).
+* **Warm boot from a snapshot — 1071 ms** p50, p90 1194 ms (n=5). ACOS has no
+  snapshot concept; for scale, ACOS's *cold* core→first-frame is 4200 ms (3.9×
+  the emulator's snapshot boot) and the emulator's own cold boot is 12.7 s
+  (3.0× ACOS).
+* **Warm launch is the one row ACOS does not win** — ACOS 288.4 ms strict vs
+  emulator 286.1 ms (p90 448 ms, spread 77.7 %), i.e. +0.8 %, inside the 5 %
+  noise floor but **not better**. It is flagged, not claimed. Two things must be
+  read with it: (a) the ACOS number is its *strict* settle, which pays a strict
+  tree read the emulator row does not time (the tree check happens after the
+  frame), so the tie is generous to the emulator; (b) ACOS's fast-settle row for
+  the same launch is **143.4 ms**, 2× better than the emulator.
+* **Throughput, all N.** The emulator is one instance per session, so the
+  per-GiB rate is flat in N and N=4 is its most favourable point:
+
+| N | verified tasks | wall | GiB (mean, PSS) | tasks/GiB-min p50 | p90 | CPU % / instance | MiB / instance |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 2 | 6/6 per rep (30/30) | 20.9 s | 6.78 | **2.53** | 2.59 | 158 % | 3479 |
+| 4 | 12/12 per rep (60/60) | 21.0 s | 13.45 | **2.54** | 2.57 | 116 % | 3454 |
+
+  ACOS's 62.84 is at **N=10** (BENCHMARKS.md §12, W52) with a whole-job
+  anon+shmem integral, so the comparison is ACOS's hardest point against the
+  emulator's easiest one; 0 false passes on both sides.
+
+### 13.5 Release-gate rule
+
+The emulator rows are part of the release gate, not a report:
+
+1. A candidate release must run `tools/art-runtime/emubench/emu_gate.py --acos
+   <gate timing JSON> --emu results/bench/emubench-2026-11-18.json` (or a
+   re-measured baseline when the host changed) and show **0 metrics worse for
+   ACOS**.
+2. Any metric where ACOS is worse than the emulator **blocks promotion** or needs
+   an explicit owner decision recorded in `DECISIONS.md`. A metric only one side
+   measured is `NOT_MEASURED`, never a pass.
+3. Re-measure the baseline when the host, kernel, emulator binary or system image
+   changes; the emulator is not a fixed reference. The baseline JSON carries the
+   host, image fingerprint and per-step `free -m`.
+4. The gate is a *correctness-and-latency* gate: `false_pass == 0` from the
+   scenario matrix still outranks it (§2 rule 7).
+5. The gate may run without the ART lock only for the emulator side (it is not an
+   ACOS ART run); the ACOS side must come from an exclusive, guarded bench run.
+
+### 13.6 Findings and caveats
+
+1. **The emulator's cost is structural, not a tuning artefact.** One session
+   costs a whole instance: **3.45–3.58 GiB** of host PSS, **13 %** of a core
+   idle, **1.9 s** for one UI-tree read and **0.5 s** for one screenshot. ACOS's
+   core is 57 MiB anon+shmem / 235 MiB PSS with 0.4 % idle CPU and 41 ms strict
+   tree reads. Nothing in the emulator's numbers is a bug; the architecture is
+   the number.
+2. **Warm launch is the only row ACOS does not beat** (+0.8 %, inside noise).
+   Smallest next action is a decision, not a patch: either the strict-settle
+   definition is right and the launch path must improve, or the row should be
+   compared at the same observation boundary (ACOS strict vs emulator
+   launcher-frame change + a timed tree read, which would move the emulator row
+   to ≈2.2 s). Recorded for the owner; nothing was changed here.
+3. **A cross-boot frame is not pixel-identical** — every pixel differs by 1–3
+   units per channel between two boots of the same AVD on the same screen
+   (`#191c1e` → `#1a1b21`, `#f0f0f3` → `#f1f0f7`; 98 % of pixels "differ",
+   0.0 % by more than 8). This is why the first-frame criterion here is the
+   launcher→app change plus a tree read, and why P6's pixel-identity criterion
+   is only valid *within* one emulator session. Any future ACOS-vs-emulator
+   pixel-parity work must capture both sides in the same session or use a
+   per-channel tolerance.
+4. **Noisy rows are labelled, not hidden** (BENCHMARKS.md §2 rule: spread
+   (p95−p5)/p50 > 15 % is noisy): cold launch after boot 148 %, warm launch
+   77.7 %, reset 27.8 %, idle CPU 18.5 %, cold `am start -W` 26.4 %, install
+   264 % (it depends on whether the app was already present). The rows the gate
+   uses (tap, tree, screenshot, memory, throughput) are 1–8 %.
+5. **Host usage never approached the ceiling**: peak **49.9 %** at N=4
+   (`host_log` in the merged JSON, 110 `free -m` samples), limit 85 %/90 %; the
+   guard was never tripped. N=4 costs ≈13.5 GiB of host memory.
+6. **Not claimed**: N>4 (owner limit), GPU passthrough, any non-standard emulator
+   route (no persistent tree service, no scrcpy), or any timing number taken
+   outside an exclusive lock acquisition. The four phases were four separate
+   `run-exclusive.sh --exclusive` acquisitions under `guarded.sh --mem 24G`, so
+   no other agent's ART run overlapped them; the host still carried other
+   agents' non-ART work (load1 2–10, recorded per step).
+
+### 13.7 Reproduce
+
+```sh
+# unit checks (no emulator)
+python3 -I tools/art-runtime/emubench/emu_bench.py --self-test      # 10 checks, 0 failed
+
+# full baseline: 4 exclusive lock acquisitions, ~20 min, always shuts down
+tools/art-runtime/emubench/run-emubench.sh
+tools/art-runtime/emubench/run-emubench.sh --smoke                  # wiring only, never a claim
+
+# gate: compare a gate's ACOS numbers against the committed baseline
+tools/art-runtime/emubench/emu_gate.py \
+    --acos results/release/v0.3.0-gate/timing/02-ab/v030.json \
+    --emu results/bench/emubench-2026-11-18.json --noise 5
+```
