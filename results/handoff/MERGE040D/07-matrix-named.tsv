@@ -1,0 +1,9 @@
+run_id	scenario	variant	expected	verdict	false_pass	error.class	error.code	wall_ms	first_frame_ms	mem.cgroup_peak_mib	mem.cgroup_gib_min	mem.pss_mib	mem.anon_shmem_settled_mib	host.loadavg1	host.mem_available_mib
+01-counter-r1	scenarios/counter.yaml	good	pass	pass	false			3839.0	None	23.25	0.000796	34.3	None	8.95	54455.0
+02-form-validation-r1	scenarios/form-validation.yaml	good	pass	pass	false			7360.6	None	27.33	0.001836	39.42	None	8.32	54295.0
+03-a11y-probe-r1	scenarios/a11y-probe.yaml	good	pass	pass	false			4845.5	None	37.16	0.001851	43.38	None	7.81	54362.7
+04-a11y-screenshot-wrap-r1	scenarios/a11y-screenshot-wrap.yaml	good	pass	pass	false			1227.1	None	22.63	0.000308	33.66	None	7.51	54452.6
+05-back-layers-r1	scenarios/back-layers.yaml	good	pass	pass	false			4542.7	None	20.84	0.00081	34.02	None	7.14	54422.1
+06-gaten-backstack-r1	scenarios/gaten-backstack.yaml	good	pass	pass	false			12297.8	None	426.92	0.065624	171.77	None	7.05	54144.8
+07-mproc3-two-process-r1	scenarios/mproc3-two-process.yaml	good	pass	pass	false			6656.0	None	32.49	0.001474	44.52	None	6.72	53819.1
+08-sysui1-shade-r1	scenarios/sysui1-shade.yaml	good	pass	pass	false			1226.5	None	12.52	0.000201	25.7	None	6.26	54246.0
