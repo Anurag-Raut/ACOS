@@ -878,6 +878,15 @@ fn guest_cannot_overwrite_boot_art_or_the_classpath() {
     let Some(()) = require_art() else { return };
     let scratch = scratch("canary");
     let data = seed_data(&scratch);
+    // The launcher rewrites `<data>/acos.properties` from `Props::for_launch()`
+    // on every run (it is a derived table, not a guest-writable input). The warm
+    // copy can predate the current defaults (for example the software-GL
+    // properties once the provider is installed), so refresh it before the
+    // "before" snapshot: the host-side proof then compares what the *guest* did,
+    // not the launcher's own regeneration.
+    acos_art::Props::for_launch()
+        .and_then(|props| props.write(&data.join("acos.properties")))
+        .expect("refresh the derived property table before the snapshot");
     let Some(dex) = build_canary_dex(&scratch) else {
         let _ = std::fs::remove_dir_all(&scratch);
         return;
