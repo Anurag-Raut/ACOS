@@ -46,4 +46,16 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/pending" />
+
+    <TextView
+        android:id="@+id/tls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/pending" />
+
+    <TextView
+        android:id="@+id/tlsneg"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/pending" />
 </LinearLayout>

@@ -126,6 +126,9 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** First IPv4 address the app resolved for example.com (for the TLS negative probe). */
+    private volatile String resolvedIp = "";
+
     private volatile long fetchStartedAt;
     private volatile boolean fetchRunning;
     private final java.util.concurrent.atomic.AtomicBoolean fetchDumped =
@@ -337,6 +340,12 @@ public class MainActivity extends Activity {
                         }
                         sb.append(a.getHostAddress());
                     }
+                    for (java.net.InetAddress a : all) {
+                        if (a instanceof java.net.Inet4Address) {
+                            resolvedIp = a.getHostAddress();
+                            break;
+                        }
+                    }
                     diag("resolve ok in " + (android.os.SystemClock.uptimeMillis() - t0)
                             + " ms addrs=" + sb);
                 } catch (Throwable th) {
@@ -369,6 +378,7 @@ public class MainActivity extends Activity {
                     int code = c.getResponseCode();
                     diag("fetch code=" + code);
                     text = "HTTP " + code;
+                    showTls(c);
                     Log.i(TAG, "response code=" + code + " url=" + c.getURL()
                             + " server=" + c.getHeaderField("Server")
                             + " cfray=" + c.getHeaderField("cf-ray")
@@ -405,6 +415,7 @@ public class MainActivity extends Activity {
                 Log.i(TAG, "fetch result=" + text);
                 diag("fetch result=" + text);
                 fetchRunning = false;
+                tlsNegativeProbe();
                 final String shown = text;
                 runOnUiThread(new Runnable() {
                     @Override
@@ -414,5 +425,83 @@ public class MainActivity extends Activity {
                 });
             }
         }, "net-check-fetch").start();
+    }
+
+    private void setText(final TextView view, final String text) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                view.setText(text);
+            }
+        });
+    }
+
+    /**
+     * NETREAL: what the TLS session of the real fetch looked like, as the app
+     * sees it: the negotiated cipher suite and the server's certificate chain.
+     * The default TrustManager (the image's CA store) and the default hostname
+     * verifier already accepted it before `getResponseCode` returned, so this
+     * line is evidence about *that* connection, never a second check that could
+     * disagree with it. Nothing about the device or the user is sent anywhere
+     * beyond the plain GET.
+     */
+    private void showTls(HttpURLConnection c) {
+        String line;
+        try {
+            if (!(c instanceof javax.net.ssl.HttpsURLConnection)) {
+                line = "tls=none";
+            } else {
+                javax.net.ssl.HttpsURLConnection h = (javax.net.ssl.HttpsURLConnection) c;
+                java.security.cert.Certificate[] chain = h.getServerCertificates();
+                StringBuilder sb = new StringBuilder("tls=ok cipher=");
+                sb.append(h.getCipherSuite()).append(" chain=").append(chain.length);
+                if (chain.length > 0 && chain[0] instanceof java.security.cert.X509Certificate) {
+                    java.security.cert.X509Certificate leaf =
+                            (java.security.cert.X509Certificate) chain[0];
+                    sb.append(" leaf=").append(leaf.getSubjectX500Principal().getName());
+                    sb.append(" issuer=").append(leaf.getIssuerX500Principal().getName());
+                    sb.append(" notAfter=").append(leaf.getNotAfter().getTime());
+                }
+                line = sb.toString();
+            }
+        } catch (Throwable t) {
+            line = "tls-exc=" + t.getClass().getName();
+        }
+        Log.i(TAG, "tls " + line);
+        diag("tls " + line);
+        setText((TextView) findViewById(R.id.tls), line);
+    }
+
+    /**
+     * NETREAL: certificate validation is live, not decorative. The same host is
+     * fetched by its IP address; the certificate names `example.com`, not the
+     * address, so the platform's hostname verification must refuse it. A `200`
+     * here would mean the relay (or the framework) lets an unverified peer
+     * through — the line then says `ACCEPTED` and the scenario fails.
+     */
+    private void tlsNegativeProbe() {
+        String ip = resolvedIp;
+        String line;
+        if (ip.isEmpty()) {
+            line = "tlsneg=skipped no-ipv4";
+        } else {
+            try {
+                HttpURLConnection c =
+                        (HttpURLConnection) new URL("https://" + ip + "/").openConnection();
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(15000);
+                c.setInstanceFollowRedirects(false);
+                int code = c.getResponseCode();
+                line = "tlsneg=ACCEPTED code=" + code;
+                c.disconnect();
+            } catch (javax.net.ssl.SSLException e) {
+                line = "tlsneg=rejected " + e.getClass().getName();
+            } catch (Throwable t) {
+                line = "tlsneg=error " + t.getClass().getName();
+            }
+        }
+        Log.i(TAG, line);
+        diag(line);
+        setText((TextView) findViewById(R.id.tlsneg), line);
     }
 }
