@@ -413,7 +413,7 @@ fn rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button() {
         }),
     };
 
-    let out_dir = repo_root().join("results/rn");
+    let out_dir = acos_test_support::test_artifacts_dir("rn");
     let _ = std::fs::create_dir_all(&out_dir);
     let _ = std::fs::write(
         out_dir.join("w157a-ops.json"),

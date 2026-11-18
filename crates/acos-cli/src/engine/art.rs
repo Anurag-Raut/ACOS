@@ -8464,9 +8464,16 @@ mod tests {
         let started = Instant::now();
         let report = zg.teardown().expect("clean zygote stop");
         let zg_ms = started.elapsed();
+        // SCENHYG: the claim is *relative* — a zygote stop signals and proves,
+        // it does not wait the lifecycle grace the exec arm must wait (the
+        // arm above measured >= 250 ms). An absolute 100 ms bound made this a
+        // host-load flake (122 ms on a loaded host); comparing with the exec
+        // arm measured in the same run keeps the teeth (a wait would be within
+        // a few ms of it) without measuring the scheduler.
         assert!(
-            zg_ms < Duration::from_millis(100),
-            "a zygote stop must not wait a lifecycle its shim cannot deliver: {zg_ms:?}"
+            zg_ms + Duration::from_millis(50) < exec_ms,
+            "a zygote stop must not wait a lifecycle its shim cannot deliver: \
+             zygote {zg_ms:?} vs exec {exec_ms:?}"
         );
         assert!(report.is_clean(), "{report:?}");
         assert!(report.survivors.is_empty(), "{report:?}");

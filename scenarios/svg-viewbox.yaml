@@ -32,7 +32,16 @@ fallback: forbid
 api_level: 34
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
-expectation: pass
+# SCENHYG: declared honestly - this is the RED reproduction described above, not
+# a test that is expected to be green. `canvasIsViewPx=false` is the open GR1
+# graphics-layer defect (the software ViewRootImpl canvas is the window, not the
+# view's own device pixels); the file stays in the tree on purpose. Re-point to
+# `pass` when the defect is fixed.
+expectation: non_pass
+expectation_reason: >-
+  GR1 open graphics-layer defect: a view's onDraw canvas is the window, not the
+  view's device pixels (canvasIsViewPx=false), so the viewBox ink overflows.
+expect_error: {code: ASSERTION_FAILED}
 budgets: {memory_mib: 512, wall_ms: 60000}
 steps:
   - launch: {activity: dev.acos.fixtures.svgviewbox/.MainActivity, clear_state: true}

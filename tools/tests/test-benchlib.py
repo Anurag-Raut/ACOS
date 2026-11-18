@@ -449,7 +449,13 @@ def test_classify_error():
     eq("element-not-found is assertion", bl.classify_error("ELEMENT_NOT_FOUND")["class"],
        "assertion")
     eq("unsupported class", bl.classify_error("UNSUPPORTED_RN_KEY")["class"], "unsupported")
-    eq("timeout class", bl.classify_error("TIMEOUT")["class"], "infra_timeout")
+    # SCENHYG: a verify-reported TIMEOUT is the scenario's own step deadline (a
+    # real non-pass), while only the runner's rc=124 wall-clock kill is an
+    # infrastructure timeout. Three designed TIMEOUT negatives were counted
+    # `infra_timeout`, so `negative_all_correct` could never be true.
+    eq("step timeout class", bl.classify_error("TIMEOUT")["class"], "step_timeout")
+    eq("harness timeout class",
+       bl.classify_error("TIMEOUT", deadline="harness")["class"], "infra_timeout")
     eq("timeout retryable", bl.classify_error("TIMEOUT")["retryable"], True)
     eq("crash class", bl.classify_error("APP_CRASHED")["class"], "app_crash")
     eq("unknown stays unknown", bl.classify_error("NOT_A_REAL_CODE")["class"], "unknown")

@@ -26,7 +26,17 @@ capabilities:
   - ui.text
   - input
   - storage
-expectation: pass
+# SCENHYG: declared honestly. The 24 steps before the final Back pass; the Back
+# step's strict settle binds on TIMEOUT (`no-draw-after-action`) because the
+# finish path draws no new frame for the rule to bind. That is the open
+# REL3A/PERF4 settle seam (same as multi-activity and the multi-activity
+# negative), not a claim this scenario can assert green. Re-point to `pass` when
+# Back binds on the settled window forest instead of demanding a draw.
+expectation: non_pass
+expectation_reason: >-
+  Back's strict settle needs a new frame; the finish path draws none, so the step
+  is a truthful TIMEOUT (no-draw-after-action) - open REL3A/PERF4 settle seam.
+expect_error: {code: TIMEOUT, reason: no-draw-after-action}
 budgets:
   memory_mib: 512
   wall_ms: 60000

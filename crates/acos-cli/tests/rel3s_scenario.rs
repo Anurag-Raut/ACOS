@@ -343,6 +343,7 @@ version: 1
 name: rel3h-end-of-list
 app: fixtures/build/apps/scroll-list.apk
 expectation: non_pass
+expectation_reason: "test fixture: a scroll search that must miss (end-of-list / unconsumed swipe)"
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 steps:
@@ -433,6 +434,7 @@ version: 1
 name: rel3h2-unconsumed-swipe
 app: fixtures/build/apps/tap-targets.apk
 expectation: non_pass
+expectation_reason: "test fixture: a scroll search that must miss (end-of-list / unconsumed swipe)"
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 animations: off

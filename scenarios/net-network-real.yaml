@@ -27,7 +27,15 @@ capabilities:
 services:
   - id: network
     profile: real
+# SCENHYG: needs a host capability, declared instead of leaving a red row that
+# is not the scenario's fault. This arm attaches network:real, which needs the pinned host pasta binary (ADR-0030).
+# Without pasta the runner skips the file and says so; with pasta the scenario
+# must pass.
 expectation: pass
+needs_env: [pasta]
+expectation_reason: >-
+  Needs the pinned host `pasta` binary for a real session netns; without it the
+  arm cannot be honest, so it is skipped rather than failed.
 budgets:
   memory_mib: 512
   wall_ms: 120000

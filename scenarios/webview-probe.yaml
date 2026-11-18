@@ -111,6 +111,23 @@ steps:
       timeout_ms: 30000
   # Tap the page's button by the text the accessibility tree exposes; the page's
   # own JS changes #out to "tapped" and calls the Java bridge.
+  #
+  # SCENHYG (measured 2026-11-17, 10 runs): this step's click is lost 2-4 times in
+  # 10 while the OTHER view (the viewport page, created at launch) is pulling a
+  # frame: the tap step still reports `handled: true` (the guest's WebView always
+  # consumes the touch) with `acked: 2` and a ~2.0-2.4 s `ack_ms`, the page never
+  # logs `JS->Java: tapped`, and this assertion sees no "tapped" node for its
+  # whole timeout. The cause is the engine-wide, serialised frame pull in the
+  # host broker (one `beginFrame` at a time; input on the same workers), which
+  # starves the second view's input/JS when the other one is rendering. Two
+  # aggravating factors were removed in SCENHYG (no frame pull between a
+  # gesture's phases; a non-final touch phase no longer waits the full CDP reply
+  # budget): 4/10 failures before, 2/10 after. The ROOT fix is WVFAIR's fair
+  # frame-pull gate (`crates/acos-webview/src/fair.rs` on branch `wvfair`:
+  # per-view coalescing, input frames first, render off the shared workers;
+  # measured 41-140 ms tap acks and webview-probe 3/3). This scenario stays
+  # `expectation: pass`: it must pass, and the residual flake is a broker defect,
+  # not a scenario expectation to weaken.
   - tap:
       selector: {text: {exact: "Tap me"}}
   - assert_text:

@@ -1008,6 +1008,28 @@ fn apply_expectation(
                 ));
             }
         }
+        Expectation::Unsupported => {
+            if *status == Status::Pass {
+                let error = ProtocolError::new(
+                    ErrorCode::Internal,
+                    "an unsupported-expected scenario produced status=pass; the engine claimed a capability the scenario says it lacks".to_string(),
+                )
+                .with_hint("This is a harness or capability-reporting failure, never a successful test. Check the module/profile the scenario names and the assertion that passed.");
+                notes.push("unsupported expectation was violated by a pass".to_string());
+                *status = Status::Error;
+                *failure = Some(FailureClassification {
+                    code: ErrorCode::Internal,
+                    step_index: None,
+                    summary: "unsupported-expected scenario produced a pass".to_string(),
+                    error,
+                });
+            } else if *status != Status::Unsupported {
+                notes.push(format!(
+                    "scenario expected `unsupported` but engine produced `{}`; see expectation_reason for the gap it declares",
+                    status
+                ));
+            }
+        }
     }
     // SE2b: a negative that declares the failure it expects must produce
     // exactly that failure. "It went red somehow" is not proof: a control that

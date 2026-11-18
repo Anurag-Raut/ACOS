@@ -21,7 +21,15 @@ display:
 capabilities:
   - lifecycle
   - ui.text
-expectation: pass
+# SCENHYG: declared honestly. This run is untrusted on purpose, and the S8/W44
+# rule is that an untrusted run may not pass on a guest-asserted tree
+# (`UNTRUSTED_TREE_ASSERTION`). Its check is that the refusal happens - a pass
+# here would be the bug - so the pinned outcome is that structured failure.
+expectation: non_pass
+expectation_reason: >-
+  Untrusted run: a guest-asserted tree may not justify a pass, so the designed
+  outcome is INSUFFICIENT_HOST_EVIDENCE (UNTRUSTED_TREE_ASSERTION).
+expect_error: {code: INSUFFICIENT_HOST_EVIDENCE}
 budgets:
   memory_mib: 512
   wall_ms: 120000

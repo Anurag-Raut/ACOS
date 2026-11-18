@@ -19,9 +19,17 @@
 # No network, no login, no permissions, no taps: the question is only how far
 # the launch path gets and what the FIRST error is.
 #
-# `expectation: pass` is intentional: this row must not be able to "pass" by
-# accident. A truthful partial (fail/unsupported/timeout) is the expected
-# outcome today and is reported as such (`notes` says so), never hidden.
+# SCENHYG: declared honestly. This debug Gaten APK predates the shipped image build
+# and no longer starts; the live Gaten coverage is scenarios/gaten-*.yaml. The
+# launch ends before the first frame (GUEST_EXITED), which is a structured error,
+# not a pass; the scenario pins that code so it cannot go red for something
+# unrelated. (The old "`expectation: pass` is intentional: this row must not be
+# able to pass by accident" remained true; the honest spelling is non_pass.)
+expectation: non_pass
+expectation_reason: >-
+  The APK cannot start on this image (GUEST_EXITED before the first frame); the
+  scenario proves the structured refusal, never a pass.
+expect_error: {code: GUEST_EXITED}
 version: 1
 name: w25-gaten-launch
 description: >-
@@ -41,7 +49,6 @@ display:
 capabilities:
   - lifecycle
   - ui.text
-expectation: pass
 budgets:
   memory_mib: 2048
   wall_ms: 300000

@@ -191,7 +191,7 @@
       ]
     },
     "Expectation": {
-      "description": "What the scenario expects. Used to make negative tests explicit.",
+      "description": "What the scenario expects. Used to make negative tests explicit.\n\nEvery scenario in the corpus declares one, and the declaration is enforced at run time: `pass` is the only value that may produce a pass, and a scenario that cannot (or should not) produce one says so here instead of leaving a red row looking like a regression. `expectation_reason` is the one-line why (`non_pass`/`unsupported`) and is required for those values.",
       "oneOf": [
         {
           "description": "The scenario must produce `status: pass`.",
@@ -211,6 +211,13 @@
           "description": "The scenario must produce any non-pass status (crash/unsupported/... count).",
           "enum": [
             "non_pass"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The engine cannot provide what the scenario asks, by design or by a known gap. The run must report `unsupported` (or the code `expect_error` pins); a pass is a harness failure, never a successful test.",
+          "enum": [
+            "unsupported"
           ],
           "type": "string"
         }
@@ -2352,6 +2359,13 @@
       "default": "pass",
       "description": "Expected outcome."
     },
+    "expectation_reason": {
+      "description": "One line saying **why** the expectation is not `pass` (the known reason: an open defect, an engine gap, a security rule). Required for `non_pass`/`unsupported` and for `needs_env`; refused for `pass`, so an honest declaration and a green row cannot disagree silently.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "extra_apks": {
       "description": "MPROC1: extra APKs installed into the session beside `app`, each at its own uid and reachable through `PackageManager`/`createPackageContext`.\n\nPaths are workspace-relative or absolute, resolved like `app`. A scenario that names packages here is self-contained: the run installs exactly this set, or fails with a structured error naming the APK.",
       "items": {
@@ -2389,6 +2403,13 @@
     "name": {
       "description": "Human/agent-readable name (also used in the verdict).",
       "type": "string"
+    },
+    "needs_env": {
+      "description": "Host capabilities the scenario needs before it can run (see [`KNOWN_NEEDS_ENV`]). A runner must skip the scenario when one is absent and say so, instead of running it into a failure that is not its own.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "output": {
       "allOf": [

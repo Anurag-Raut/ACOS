@@ -1,0 +1,142 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ELEMENT_OFFSCREEN",
+    "hint": "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the… [ACOS: result.error.hint bounded for size — 295 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …ect. Scroll it into view first (or use a visible element); do not treat it as a pass.",
+    "message": "selector id==\"error\" matched no visible node, but it matches a node that is not visible to the user (text \"\" content_desc \"\" class android.widget.TextView bounds [42,679]… [ACOS: result.error.message bounded for size — 330 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …pass class — scroll it into view or target a visible node, never treat it as a pass",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16388096,
+    "wall_ms": 2162
+  },
+  "ok": false,
+  "request_id": "req_ce903_18e8e515f77f403e",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-aa065f95-064e8d2a8d945bad/results/handoff/SCENHYG/probe1/T07-form-good",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 8,
+      "index": 8,
+      "kind": "assert_text",
+      "message": "… [ACOS: identical to result.error.message (330 bytes), not repeated; it begins: selector id==\"error\" matched no visible node, but it matches a node that is not visible to the user (text \"\" content_desc \"\" class android.widget.TextView bounds [42,679][42,730] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass] …",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ELEMENT_OFFSCREEN",
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_OFFSCREEN",
+        "hint": "… [ACOS: identical to result.error.hint (295 bytes), not repeated; it begins: The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass.] …",
+        "message": "… [ACOS: identical to result.error.message (330 bytes), not repeated; it begins: selector id==\"error\" matched no visible node, but it matches a node that is not visible to the user (text \"\" content_desc \"\" class android.widget.TextView bounds [42,679][42,730] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass] …",
+        "retryable": false
+      },
+      "step_index": 8,
+      "summary": "step 8 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794521210303166283,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-aa065f95-064e8d2a8d945bad/fixtures/build/apps/form-validation.apk",
+        "sha256": "d8c277d7476a54f8a09288962fd3d9a864ad53b934350721af81725cb3ba7aa9",
+        "sha256_12": "d8c277d7476a",
+        "size_bytes": 12756
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794935949254089315,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-aa065f95-064e8d2a8d945bad/scenarios/suite/T07-form-good.yaml",
+        "sha256": "4ed09030e0f3b35e405783943f0c7c23bb4a44fbbbc347e0463edeadc9ae19ea",
+        "sha256_12": "4ed09030e0f3",
+        "size_bytes": 1392
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art… [ACOS: result.result.provenance.warnings[0].message bounded for size — 302 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        },
+        {
+          "acked": 6,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+          "message": "step 3 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 6,
+          "step": 3,
+          "step_kind": "type",
+          "target": null,
+          "unhandled": [
+            6,
+            8,
+            10
+          ]
+        },
+        {
+          "acked": 30,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+          "message": "step 5 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 30,
+          "step": 5,
+          "step_kind": "type",
+          "target": null,
+          "unhandled": [
+            14,
+            16,
+            18,
+            20,
+            22,
+            24,
+            26,
+            28,
+            30,
+            32,
+            34,
+            36,
+            38,
+            40,
+            42
+          ]
+        }
+      ]
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-aa065f95-064e8d2a8d945bad/results/handoff/SCENHYG/probe1/T07-form-good/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_form-validation",
+  "status": "fail"
+}

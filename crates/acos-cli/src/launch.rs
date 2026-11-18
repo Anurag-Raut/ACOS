@@ -372,11 +372,19 @@ fn run_keep(
             .iter()
             .map(|path| json!(path.display().to_string()))
             .collect::<Vec<_>>(),
-        "idle_kill_seconds": args.idle_kill_seconds,
         "timeout_ms": args.timeout.saturating_mul(1000),
         "services": services,
         "label": args.label.clone(),
     });
+    // Optional wire fields are *omitted*, never sent as JSON null: the daemon's
+    // argument validation treats a present-but-null `idle_kill_seconds` as an
+    // invalid integer (`null` is not a JSON `None` on the wire), so sending the
+    // key unconditionally made every `acos launch --keep` fail with
+    // INVALID_ARGUMENT (GL1 kept-session tests, 2026-11-17). One rule: a field
+    // whose Rust value is `None` is absent from the request.
+    if let Some(seconds) = args.idle_kill_seconds {
+        daemon_args["idle_kill_seconds"] = json!(seconds);
+    }
     // The engine is forwarded verbatim: the daemon must answer with the engine
     // that actually ran and must never fall back to another one.
     if let Some(engine) = engine {

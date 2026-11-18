@@ -262,13 +262,23 @@ def utc():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
 
+import shutil
+
+
 def sha256(path):
     return benchlib.sha256_file(os.path.join(ROOT, path)) if path and not os.path.isabs(path) \
         else benchlib.sha256_file(path)
 
 
 def read_scenario(path):
-    """Minimal first-level YAML field reader (no PyYAML dependency)."""
+    """Minimal first-level YAML field reader (no PyYAML dependency).
+
+    Besides name/app it reads the honest declaration this runner has to obey:
+
+    * ``expectation`` (pass | fail | non_pass | unsupported),
+    * ``expect_error`` (the code/reason a negative pins), and
+    * ``needs_env`` (host capabilities the run needs; skipped when absent).
+    """
     with open(os.path.join(ROOT, path), errors="replace") as f:
         text = f.read()
     def field(name):
@@ -277,16 +287,78 @@ def read_scenario(path):
     expectation = (field("expectation") or "pass").lower()
     name = field("name") or os.path.splitext(os.path.basename(path))[0]
     app = field("app")
+    # `expect_error: {code: TIMEOUT, reason: x}` or a block form with one key
+    # per line. A negative that pins its failure must be counted correct only
+    # when the run produced exactly that code/reason.
+    expect_error = None
+    m = re.search(r"(?m)^expect_error:\s*\{([^}]*)\}\s*$", text)
+    if m:
+        expect_error = {}
+        for part in m.group(1).split(","):
+            if ":" in part:
+                key, value = part.split(":", 1)
+                expect_error[key.strip()] = value.strip().strip('"\'')
+    else:
+        m = re.search(r"(?ms)^expect_error:\s*\n((?:[ \t]+\w+:.*\n?)+)", text)
+        if m:
+            expect_error = {}
+            for line in m.group(1).splitlines():
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    expect_error[key.strip()] = value.strip().strip('"\'')
+    needs = []
+    m = re.search(r"(?m)^needs_env:\s*\[(.*?)\]\s*$", text)
+    if m:
+        needs = [w.strip().strip('"\'') for w in m.group(1).split(",") if w.strip()]
     norm = path.replace(os.sep, "/")
-    if "/negative/" in norm:
+    if "/negative/" in norm or expectation in ("fail", "non_pass", "unsupported"):
         variant = "negative"
-    elif expectation == "fail":
-        variant = "wrong"
     else:
         variant = "good"
     return {"name": name, "app": app, "expectation": expectation,
             "expected": "pass" if expectation == "pass" else "fail",
+            "expect_error": expect_error, "needs_env": needs,
             "variant": variant, "sha256": sha256(path)}
+
+
+# Host capabilities a scenario may name in `needs_env` (acos-protocol's
+# KNOWN_NEEDS_ENV). Present == the scenario may run.
+def needs_env_present(name):
+    if name == "pasta":
+        return bool(os.environ.get("ACOS_SPIKE_NET_PASTA") or shutil.which("pasta"))
+    return False
+
+
+def declared_failure_matches(row, meta):
+    """The run's error matches the code/reason the scenario pins."""
+    expected = meta.get("expect_error")
+    if not expected:
+        return None                      # nothing pinned
+    err = row.get("error") or {}
+    if (err.get("code") or "") != (expected.get("code") or ""):
+        return False
+    reason = expected.get("reason")
+    if reason and (err.get("reason") or "") != reason:
+        return False
+    return True
+
+
+def negative_is_correct(row, meta):
+    """A negative is correct only when it did not pass AND matches its pin.
+
+    "It went red somehow" is not proof: a harness error (INTERNAL, GUEST_EXITED
+    without a declaration, an infrastructure timeout) on a negative proves
+    nothing about the scenario. A pinned `expect_error` is authoritative; an
+    unpinned `fail` accepts a real non-pass (assertion/app_crash/unsupported or
+    the scenario's own step deadline), never a harness or host-guard failure.
+    """
+    if row.get("verdict") == "pass":
+        return False
+    pinned = declared_failure_matches(row, meta)
+    if pinned is not None:
+        return pinned
+    cls = (row.get("error") or {}).get("class")
+    return cls in ("assertion", "app_crash", "unsupported", "step_timeout")
 
 
 def detect_engine_flag():
@@ -477,8 +549,11 @@ def run_one(scenario, rep, index):
     steps = verdict_obj.get("steps") or []
     status = doc.get("status") or verdict_obj.get("verdict")
     if rc == 124:
+        # Our own wall clock killed it: an infrastructure timeout, never a
+        # verdict about the app or the scenario.
         verdict = "error"
-        err = benchlib.classify_error("TIMEOUT", message="exceeded --timeout-s %d" % TIMEOUT_S)
+        err = benchlib.classify_error("TIMEOUT", deadline="harness",
+                                      message="exceeded --timeout-s %d" % TIMEOUT_S)
     elif not doc:
         verdict = "error"
         tail = ""
@@ -492,7 +567,9 @@ def run_one(scenario, rep, index):
     elif status == "pass":
         verdict = "pass"
         err = None
-    elif status == "fail":
+    elif status in ("fail", "timeout"):
+        # A verify-reported `timeout` is a verdict, not a harness error: the run
+        # finished and answered "this did not hold within its own deadline".
         verdict = "fail"
         e = doc.get("error") or (verdict_obj.get("failure") or {}).get("error") or {}
         failure = verdict_obj.get("failure") or {}
@@ -500,11 +577,22 @@ def run_one(scenario, rep, index):
                                       message=e.get("message"),
                                       hint=e.get("hint"))
         err["step_index"] = failure.get("step_index")
+        err["reason"] = ((e.get("details") or {}).get("reason")
+                         or err.get("reason"))
+    elif status == "unsupported":
+        # Only a scenario declared `unsupported` may call this a correct
+        # non-pass; the summary's negative_is_correct decides from the pin.
+        verdict = "fail"
+        e = doc.get("error") or {}
+        err = benchlib.classify_error(e.get("code") or "UNSUPPORTED_BACKEND",
+                                      message=e.get("message"), hint=e.get("hint"))
+        err["reason"] = (e.get("details") or {}).get("reason")
     else:
         verdict = "error"
         e = doc.get("error") or {}
         err = benchlib.classify_error(e.get("code") or "INTERNAL",
                                       message=e.get("message"), hint=e.get("hint"))
+        err["reason"] = (e.get("details") or {}).get("reason")
 
     false_pass = bool(meta["expected"] == "fail" and verdict == "pass")
     false_fail = bool(meta["expected"] == "pass" and verdict != "pass"
@@ -539,6 +627,9 @@ def run_one(scenario, rep, index):
         "apk_sha256": (verdict_obj.get("app") or {}).get("sha256") or sha256(meta["app"]),
         "variant": meta["variant"],
         "expected": meta["expected"],
+        "expectation": meta["expectation"],
+        "expect_error": meta["expect_error"],
+        "needs_env": meta["needs_env"],
         "verdict": verdict,
         "false_pass": false_pass,
         "false_fail": false_fail,
@@ -601,7 +692,20 @@ def main():
     stamp = os.path.splitext(os.path.basename(OUT))[0]
     rows = []
     idx = 0
+    skipped = []
     for scenario in SCENARIOS:
+        meta = read_scenario(scenario)
+        # `needs_env` is a declared host prerequisite, not an excuse: the
+        # scenario is not run at all when the capability is missing, and the
+        # matrix says so instead of turning it into a red row that is not the
+        # scenario's fault (net-check/network:real need the pinned pasta).
+        missing = [name for name in meta["needs_env"] if not needs_env_present(name)]
+        if missing:
+            skipped.append({"scenario": scenario, "needs_env": missing,
+                            "reason": "host capability missing: " + ", ".join(missing)})
+            print("run-matrix: SKIP %s: needs %s (not present)"
+                  % (scenario, ", ".join(missing)), file=sys.stderr)
+            continue
         for rep in range(1, REPS + 1):
             idx += 1
             print("run-matrix: [%d] %s rep %d/%d" % (idx, scenario, rep, REPS),
@@ -620,7 +724,16 @@ def main():
     false_fail = sum(1 for r in rows if r["false_fail"])
     negative = [r for r in rows if r["negative"]]
     unclassified = sum(1 for r in rows if (r["error"] or {}).get("class") == "unknown")
-    harness = classes.get("harness", 0) + classes.get("infra_timeout", 0)
+    # Only the harness's own failures count against the harness gate. A
+    # scenario's own step deadline (`step_timeout`) is a real non-pass, and a
+    # negative that declares that timeout is a correct negative.
+    harness = (classes.get("harness", 0) + classes.get("infra_timeout", 0)
+               + classes.get("host_guard", 0))
+    negative_correct = sum(1 for r in negative if negative_is_correct(r, r))
+    negative_pin_mismatch = [
+        r["run_id"] for r in negative
+        if r.get("expect_error") and declared_failure_matches(r, r) is False
+    ]
     summary = {
         "total_runs": len(rows),
         "passed": sum(1 for r in rows if r["verdict"] == "pass"),
@@ -629,17 +742,21 @@ def main():
         "false_pass": false_pass,
         "false_fail": false_fail,
         "negative_runs": len(negative),
-        "negative_correct": sum(1 for r in negative if r["verdict"] == "fail"),
+        "negative_correct": negative_correct,
+        "negative_expect_error_mismatch": negative_pin_mismatch,
         "unclassified": unclassified,
         "harness_or_timeout": harness,
+        "infra_timeout": classes.get("infra_timeout", 0),
+        "step_timeout": classes.get("step_timeout", 0),
+        "skipped_needs_env": skipped,
         "classes": classes,
         "verdict_eligible": VERDICT_ELIGIBLE,
         "gates": {
             "false_pass_zero": false_pass == 0,
             "unclassified_zero": unclassified == 0,
             "harness_timeout_within_2pct": harness <= max(1, int(0.02 * len(rows) + 0.999)),
-            "negative_all_correct": len(negative) == sum(1 for r in negative
-                                                         if r["verdict"] == "fail"),
+            "negative_all_correct": negative_correct == len(negative),
+            "no_infra_timeout": classes.get("infra_timeout", 0) == 0,
         },
     }
     result = {

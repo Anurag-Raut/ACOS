@@ -82,7 +82,8 @@
             "properties": {
               "code": {"type": "string"},
               "class": {"enum": ["assertion", "app_crash", "unsupported", "harness",
-                                 "infra_timeout", "host_guard", "unknown"]},
+                                 "infra_timeout",
+              "step_timeout", "host_guard", "unknown"]},
               "retryable": {"type": "boolean"},
               "hint": {"type": "string"},
               "message": {"type": ["string", "null"]},

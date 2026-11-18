@@ -1062,6 +1062,35 @@ impl EngineBackend {
     }
 }
 
+/// SCENHYG: which declared launch-intent fields the live launcher cannot honour.
+///
+/// An empty list means "the scenario's launch is exactly the Intent a session
+/// launcher builds". Only the fields the launcher cannot carry *at all* are
+/// listed: `intent_action`, `data` and `extras` (the launcher builds its own
+/// ACTION_MAIN/CATEGORY_LAUNCHER Intent and has no place for them). A declared
+/// `activity` is allowed: it is the executor's manifest-existence check, and the
+/// launcher may boot a splash/router entry that then starts it.
+fn refused_launch_intent_fields(request: &LaunchRequest) -> Vec<String> {
+    // `activity` is NOT in this list on purpose: a scenario names the Activity
+    // it asserts (Gaten's launcher entry is a splash/router
+    // `LauncherIconLight` -> `LauncherActivity`, which then starts
+    // `MainActivity`, and 20 gaten scenarios name `MainActivity`). The executor
+    // already refuses an activity the manifest does not declare; which entry the
+    // launcher boots is the engine's documented policy, not a silent drop.
+    let mut refused = Vec::new();
+    if let Some(action) = request.intent_action.as_deref() {
+        refused.push(format!("intent_action (`{action}`)"));
+    }
+    if let Some(data) = request.data.as_deref() {
+        refused.push(format!("data (`{data}`)"));
+    }
+    if !request.extras.is_empty() {
+        let keys: Vec<&str> = request.extras.keys().map(String::as_str).collect();
+        refused.push(format!("extras ({} string extra(s): {})", keys.len(), keys.join(", ")));
+    }
+    refused
+}
+
 impl Backend for EngineBackend {
     fn id(&self) -> &'static str {
         match self {
@@ -1129,6 +1158,35 @@ impl Backend for EngineBackend {
                 cause_id,
                 ..
             } => {
+                // SCENHYG (WVFAIR finding): a live session launcher builds its
+                // own `ACTION_MAIN`/`CATEGORY_LAUNCHER` Intent for the
+                // manifest's launcher component. A scenario's `activity`,
+                // `intent_action`, `data` and `extras` therefore cannot all be
+                // honoured, and they used to be dropped **silently**: a
+                // scenario declaring `extras:` ran against an Intent that never
+                // carried them and could assert a state the app never had. One
+                // rule: refuse the fields the launcher cannot honour, by name,
+                // before anything runs; never launch a different Intent than the
+                // scenario declared.
+                if session.engine() == Engine::Art {
+                    let refused = refused_launch_intent_fields(request);
+                    if !refused.is_empty() {
+                        let mut detail = format!(
+                            "the ART launcher launches the APK's launcher component with an \
+                             ACTION_MAIN/CATEGORY_LAUNCHER Intent; it cannot honour {}",
+                            refused.join(", ")
+                        );
+                        detail.push_str(
+                            ". Refusing instead of launching a different Intent than the scenario \
+                             declared. Drop the field (carrying it through the session-start \
+                             Intent is tracked in the launch-intent backlog).",
+                        );
+                        return Err(BackendError::Error {
+                            code: acos_protocol::ErrorCode::UnsupportedAndroidApi,
+                            detail,
+                        });
+                    }
+                }
                 *cause_id = request.cause_id.clone();
                 // SE2: the launch's first tree may be bound by the content rule
                 // (a screen whose pixels animate forever); strict stays the
@@ -3126,6 +3184,63 @@ mod engine_tests {
             cause_id: "req_engine_test:launch:0".to_string(),
             settle: acos_protocol::scenario::StepSettle::Strict,
         }
+    }
+
+    /// SCENHYG (WVFAIR finding): a scenario's `extras:` used to be dropped by
+    /// the live launcher with no error, so a run could assert an Intent state
+    /// the app never received. The refusal names the field and happens before
+    /// the launch; the fake session's `launch` is never reached.
+    #[test]
+    fn a_scenario_that_declares_extras_is_refused_loudly_not_silently_dropped() {
+        let dir = artifacts("launch-extras");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::live()));
+        let mut request = launch_request(&dir);
+        request.extras.insert("greeting".to_string(), "hello".to_string());
+        let err = backend
+            .launch(&request)
+            .expect_err("extras must be refused, not dropped");
+        match err {
+            acos_verify::backend::BackendError::Error { code, detail } => {
+                assert_eq!(code, acos_protocol::ErrorCode::UnsupportedAndroidApi);
+                assert!(detail.contains("extras"), "{detail}");
+                assert!(detail.contains("greeting"), "the extra is named: {detail}");
+            }
+            other => panic!("unexpected error {other:?}"),
+        }
+    }
+
+    /// The action/data/extras half of the same rule, as a pure decision: the
+    /// normal launch (the manifest launcher with no action/data/extras) is not
+    /// refused, and each declared-but-unrepresentable field is named. `activity`
+    /// is deliberately allowed: it is a manifest-existence check in the
+    /// executor, and 20 gaten scenarios name the Activity the app settles on
+    /// while the launcher entry is a splash/router.
+    #[test]
+    fn the_launch_intent_fields_a_session_cannot_honour_are_named() {
+        let dir = artifacts("launch-intent-fields");
+        let base = launch_request(&dir);
+        assert_eq!(
+            refused_launch_intent_fields(&base),
+            Vec::<String>::new(),
+            "the normal launch is not refused"
+        );
+        let mut other = base.clone();
+        other.activity = Some("dev.acos.fixtures.counter/.SecondActivity".to_string());
+        assert_eq!(
+            refused_launch_intent_fields(&other),
+            Vec::<String>::new(),
+            "a declared Activity is the executor's check, not a launch-intent refusal"
+        );
+        let mut action = base.clone();
+        action.intent_action = Some("android.intent.action.SEND".to_string());
+        let refused = refused_launch_intent_fields(&action);
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].contains("intent_action"), "{refused:?}");
+        let mut data = base.clone();
+        data.data = Some("content://x/y".to_string());
+        let refused = refused_launch_intent_fields(&data);
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].contains("data"), "{refused:?}");
     }
 
     #[test]
