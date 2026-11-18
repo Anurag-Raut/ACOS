@@ -596,3 +596,27 @@ fn destroyed_layers_return_their_handles_so_a_long_session_never_exhausts_the_po
         "more live layers than the pool is still refused, never a fabricated handle"
     );
 }
+
+/// MERGE040J: recycling and the larger pool compose. One session creates and
+/// destroys more than a thousand windows, with a few kept alive throughout, and
+/// every `createSurface` succeeds (the pool alone would give out after
+/// `LAYER_HANDLE_POOL` creations; recycling alone is what lets this run on).
+#[test]
+fn a_session_can_create_and_destroy_over_a_thousand_windows() {
+    let mut rig = rig();
+    let long_lived: Vec<_> = (0..4)
+        .map(|i| rig.create_surface(&format!("keeper-{i}"), None).0)
+        .collect();
+    let total = 1200usize;
+    assert!(total > 8 * surface_client::LAYER_HANDLE_POOL);
+    for round in 0..total {
+        let (handle, _id) = rig.create_surface(&format!("window-{round}"), None);
+        let dropped = rig.state.lock().expect("state").destroy_layer_tree(handle);
+        assert_eq!(dropped, 1, "round {round}: the layer is destroyed");
+    }
+    // The keepers survived every recycle: destroying one still drops exactly one layer.
+    for h in long_lived {
+        let dropped = rig.state.lock().expect("state").destroy_layer_tree(h);
+        assert_eq!(dropped, 1, "a long-lived layer is untouched by recycling");
+    }
+}
