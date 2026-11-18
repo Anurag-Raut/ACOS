@@ -53,7 +53,7 @@ fn launch_counter(session: &AgentSession, apk: &Path) -> bool {
     let report = match session.launch(apk) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("SKIP counter_interaction: launch failed: {e:?}");
+            acos_test_support::require_prereq(false, "launch_counter", &format!("counter_interaction: launch failed: {e:?}"));
             return false;
         }
     };
@@ -78,12 +78,10 @@ fn launch_counter(session: &AgentSession, apk: &Path) -> bool {
 #[test]
 fn counter_launch_publishes_a_real_frame_and_live_tree() {
     seed_boot_dir();
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP counter_launch_publishes_a_real_frame_and_live_tree: no fixture apk");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "counter_launch_publishes_a_real_frame_and_live_tree", "no fixture apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP counter_launch_publishes_a_real_frame_and_live_tree: no ACOS_BOOT_DIR");
+    if acos_test_support::require_prereq(boot_available(), "counter_launch_publishes_a_real_frame_and_live_tree", "no ACOS_BOOT_DIR").is_none() {
         return;
     }
 
@@ -168,12 +166,10 @@ fn counter_launch_publishes_a_real_frame_and_live_tree() {
 #[test]
 fn counter_tap_increment_updates_the_tree() {
     seed_boot_dir();
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP counter_tap_increment_updates_the_tree: no fixture apk");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "counter_tap_increment_updates_the_tree", "no fixture apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP counter_tap_increment_updates_the_tree: no ACOS_BOOT_DIR");
+    if acos_test_support::require_prereq(boot_available(), "counter_tap_increment_updates_the_tree", "no ACOS_BOOT_DIR").is_none() {
         return;
     }
 
@@ -218,12 +214,10 @@ fn counter_tap_increment_updates_the_tree() {
 #[test]
 fn counter_tap_repaints_the_count_region() {
     seed_boot_dir();
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP counter_tap_repaints_the_count_region: no fixture apk");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "counter_tap_repaints_the_count_region", "no fixture apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP counter_tap_repaints_the_count_region: no ACOS_BOOT_DIR");
+    if acos_test_support::require_prereq(boot_available(), "counter_tap_repaints_the_count_region", "no ACOS_BOOT_DIR").is_none() {
         return;
     }
 

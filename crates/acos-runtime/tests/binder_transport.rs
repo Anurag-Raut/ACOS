@@ -215,8 +215,7 @@ fn run_case(dex: &Path, main: &str) -> (Runtime, acos_vm::RunOutcome) {
 
 #[test]
 fn service_manager_get_service_returns_a_working_proxy() {
-    let Some(dex) = compile_case(&["RegistryMain"]) else {
-        eprintln!("SKIP service_manager_get_service_returns_a_working_proxy: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case(&["RegistryMain"]), "service_manager_get_service_returns_a_working_proxy", "javac/d8/android.jar unavailable") else {
         return;
     };
     let (_rt, outcome) = run_case(&dex, "RegistryMain");
@@ -340,8 +339,7 @@ fn run_fake_case(dex: &Path, main: &str) -> acos_vm::RunOutcome {
 
 #[test]
 fn fake_service_round_trips_binder_and_fd_and_reenters_the_looper() {
-    let Some(dex) = compile_case(&["BinderMain"]) else {
-        eprintln!("SKIP fake_service_round_trips_binder_and_fd_and_reenters_the_looper: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case(&["BinderMain"]), "fake_service_round_trips_binder_and_fd_and_reenters_the_looper", "javac/d8/android.jar unavailable") else {
         return;
     };
     let outcome = run_fake_case(&dex, "BinderMain");
