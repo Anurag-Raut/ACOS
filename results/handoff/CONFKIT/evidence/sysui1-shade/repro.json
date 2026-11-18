@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/fixtures/build/apps/notif-perm-probe.apk",
+  "apk_sha256": "0212553472ddf7ba5f1c26bf4dd887901dc3218d4a5353f8cec22a4cd16339e8",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/scenarios/sysui1-shade.yaml",
+  "scenario_sha256": "9dd515f6614338200312284d53f1ed73d0f8e4ec751d048f3339c7994e356709",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

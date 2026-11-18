@@ -1,0 +1,58 @@
+# MODTAIL proof: feedback.vibrator at `scripted` (the demo module).
+version: 1
+name: tail-vibrator
+description: >-
+  feedback.vibrator at `scripted`: Vibrator.hasVibrator() is true from the stub's
+  one vibrator, two `vibrate(VibrationEffect.createOneShot(...))` calls reach
+  IVibratorManagerService, and `acos_service_ctl {op: calls}` returns the recorded
+  patterns (CombinedVibration token, payload length, parcel hash) — the control
+  reply in the step evidence shows the two patterns differ.
+app: ../fixtures/build/apps/tail-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+services:
+  - id: feedback.vibrator
+    profile: scripted
+steps:
+  - launch:
+      activity: dev.acos.fixtures.tailprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Vibrator"}}
+  - wait_for:
+      selector: {text: {contains: "VIBRATOR hasVibrator=true"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Vibrate"}}
+  - wait_for:
+      selector: {text: {contains: "VIBRATED one-shot-250-128"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Vibrate2"}}
+  - wait_for:
+      selector: {text: {contains: "VIBRATED one-shot-250-255"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: feedback.vibrator
+      op: calls
+      args: {}
+  - service_ctl:
+      module: feedback.vibrator
+      op: patterns
+      args: {}
