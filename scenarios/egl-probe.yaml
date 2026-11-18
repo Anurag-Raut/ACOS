@@ -1,0 +1,31 @@
+# egl-probe (GLSPIKE4): diagnostic, not a gate. Runs fixtures/apps/egl-probe's raw
+# EGL14/EGL15 call ladder against the guest GLES provider (ACOS_GUEST_GLES=...)
+# and waits for the probe's closing line; the per-call results are in the
+# artifacts' logcat / session-exit logd_tail (tag EglProbe).
+version: 1
+name: egl-probe
+description: >-
+  Diagnostic: log every EGL call result (vendor/version/extensions, per-platform
+  display variants, config/context creation, ICD maps) for the staged provider.
+app: fixtures/build/apps/egl-probe.apk
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+capabilities:
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.eglprobe/.MainActivity
+      clear_state: true
+  - assert_log:
+      tag: EglProbe
+      ordered: false
+      timeout_ms: 90000
+      patterns:
+        - "begin pid="
+        - "^end$"

@@ -30,10 +30,13 @@
 # no software rasteriser of its own; `EGL_NOT_INITIALIZED` in GLSPIKE was the
 # missing ICD). A provider may carry
 #
-#   lib64/hw/vulkan.<vulkan-tag>.so   the ICD, at the path the image's own
-#                                     libvulkan.so opens
-#                                     (`hwvulkan module open`, `vulkan.<tag>`,
-#                                     named by ro.hardware.vulkan)
+#   lib64/hw/vulkan.<vulkan-tag>.so   the ICD at its canonical HAL path
+#   lib64/vulkan.<vulkan-tag>.so      the same file (hardlink) by the BARE name
+#                                     the image's libvulkan.so actually
+#                                     dlopens (`vulkan.<tag>.so` through
+#                                     libvndksupport, resolved over
+#                                     /vendor/lib64; GLSPIKE4). Named by
+#                                     ro.hardware.vulkan
 #
 # and then the manifest also carries vulkan_tag=<vulkan-tag>, which the launcher
 # turns into ro.hardware.vulkan. `--egl-tag` lets the provider directory be a
@@ -198,6 +201,14 @@ if [ -n "$VULKAN_ICD" ]; then
   # copy is enough; it is not dlopened by soname.
   mkdir -p "$tmp/lib64/hw"
   cp "$VULKAN_ICD" "$tmp/lib64/hw/vulkan.${VULKAN_TAG}.so"
+  # GLSPIKE4: NOT only through its HAL path. The image's libvulkan.so loads the
+  # ICD with libvndksupport's `android_load_sphal_library("vulkan.<tag>.so")` --
+  # the BARE name -- and with no sphal namespace that is a default-namespace
+  # dlopen over `/vendor/${LIB}` (not `/vendor/${LIB}/hw`). Without this second
+  # name the guest logs `vndksupport: Could not load vulkan.<tag>.so from
+  # default namespace`, vkCreateInstance fails and ANGLE's eglInitialize reports
+  # EGL_NOT_INITIALIZED while libEGL still returns EGL_TRUE. One inode.
+  ln "$tmp/lib64/hw/vulkan.${VULKAN_TAG}.so" "$tmp/lib64/vulkan.${VULKAN_TAG}.so"
 fi
 for base in "${DRIVER_FILES[@]}"; do
   cp "$SRC_DIR/${base}_${EGL_TAG}.so" "$tmp/lib64/egl/"

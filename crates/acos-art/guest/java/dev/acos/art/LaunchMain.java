@@ -3852,6 +3852,17 @@ public final class LaunchMain {
 
     // ------------------------------------------------------------- natives
 
+    /** True when the launcher selected a guest GLES provider (`acos.guest.gles` set). */
+    static boolean guestGlesSelected() {
+        try {
+            Class<?> c = Class.forName("android.os.SystemProperties");
+            Object v = c.getMethod("get", String.class, String.class).invoke(null, "acos.guest.gles", "");
+            return v != null && !String.valueOf(v).isEmpty();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     static void registerNatives() {
         RenderNat.load();
         String[] names = {
@@ -4029,6 +4040,29 @@ public final class LaunchMain {
                 rc = -1;
             }
             if (rc != 1) missing.append(' ').append(n).append('=').append(rc);
+        }
+        // GLSPIKE4: android.opengl.EGL14/GLES20 natives, ONLY when a guest GLES
+        // provider was selected (`ACOS_GUEST_GLES`, property `acos.guest.gles`
+        // from crates/acos-art/src/gles.rs). Default OFF is inert by
+        // construction: with no provider staged libEGL has no driver, and a
+        // registered EGL14 would turn a catchable UnsatisfiedLinkError in an
+        // app that uses it into libEGL's `couldn't find an OpenGL ES
+        // implementation` SIGABRT. The image's own libandroid_runtime exports
+        // the registrations (`register_android_opengl_jni_EGL14` / `_GLES20`,
+        // global scope); registering runs no Java class initialiser.
+        if (guestGlesSelected()) {
+            for (String n : new String[] {
+                    "register_android_opengl_jni_EGL14",
+                    "register_android_opengl_jni_EGL15",
+                    "register_android_opengl_jni_GLES20"}) {
+                int rc;
+                try {
+                    rc = RenderNat.register(n);
+                } catch (Throwable t) {
+                    rc = -1;
+                }
+                if (rc != 1) missing.append(' ').append(n).append('=').append(rc);
+            }
         }
         // Canvas.setCompatibilityVersion needs libhwui's graphics natives; this
         // is the same probe E2D used to unblock ActivityThread.systemMain().

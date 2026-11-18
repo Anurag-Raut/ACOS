@@ -846,12 +846,14 @@ mod tests {
         std::fs::create_dir_all(provider.join("lib64/hw")).expect("dirs");
         std::fs::write(provider.join("lib64/egl/libEGL_angle.so"), b"driver").expect("write");
         std::fs::write(provider.join("lib64/hw/vulkan.pastel.so"), b"icd").expect("write");
+        std::fs::write(provider.join("lib64/vulkan.pastel.so"), b"icd").expect("write");
         std::fs::write(
             provider.join("manifest.json"),
             r#"{"tag":"angle","vulkan_tag":"pastel","provider":"x","source":"y",
                 "version":"0","licence":"z","files":[
                 {"path":"lib64/egl/libEGL_angle.so","sha256":"00","size":6},
-                {"path":"lib64/hw/vulkan.pastel.so","sha256":"00","size":3}]}"#,
+                {"path":"lib64/hw/vulkan.pastel.so","sha256":"00","size":3},
+                {"path":"lib64/vulkan.pastel.so","sha256":"00","size":3}]}"#,
         )
         .expect("manifest");
         let saved: Vec<(&str, Option<String>)> = ["ACOS_GUEST_GLES", "ACOS_GUEST_GLES_DIR"]

@@ -59,6 +59,11 @@ steps:
         # halves are #FF0000 / #0000FF, so the sampled corners are the claim.
         - "gles_png_hardware ok=true config=HARDWARE"
         - "gles_draw kind=png_hardware ok=true .*config=HARDWARE .*mean=[0-9]+ samples"
-        # (iii) the same bitmap inside a real View.
-        - "gles_view ok=true drawable=set"
+        # ... and the pixels themselves, read back through hwui's GPU path.
+        - "gles_draw kind=png_hardware ok=true .*16,16=#FFFF0000 48,16=#FF0000FF"
+        # (iii) the same bitmap inside a real View is a MEASURED WALL, not a GL
+        # one (GLSPIKE4): ACOS windows are drawn on a software Canvas, which the
+        # framework refuses to draw HARDWARE bitmaps on. The probe says so
+        # explicitly instead of crashing; `acos.probe.gles_view=1` runs it.
+        - "gles_view skipped=software_window_cannot_draw_hardware_bitmap"
   - assert_no_crash: {}

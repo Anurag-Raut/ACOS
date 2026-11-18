@@ -602,6 +602,16 @@ public class A11yProbeService extends AccessibilityService {
     // staged (`ACOS_GUEST_GLES=angle|mesa|…`) libEGL's own loader finds a
     // driver in `/vendor/lib64/egl`, so these run instead of aborting.
 
+    private static String systemProperty(String key) {
+        try {
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            Object v = sp.getMethod("get", String.class, String.class).invoke(null, key, "");
+            return v == null ? "" : (String) v;
+        } catch (Throwable failure) {
+            return "";
+        }
+    }
+
     /** `acos.guest.gles` from the per-run property table, or "" when unset. */
     private static String glesTag() {
         try {
@@ -638,7 +648,20 @@ public class A11yProbeService extends AccessibilityService {
         }
         // (iii) the same HARDWARE bitmap inside a real View, so the window
         //       path (ImageView -> draw) is covered as well as the Canvas path.
-        viewWithHardwareBitmap(hardwareBitmapForView());
+        //
+        // GLSPIKE4 (measured, results/handoff/GLSPIKE4/gles-sw*): with a working
+        // EGL this step still kills the app, because ACOS windows are drawn by
+        // `ViewRootImpl.drawSoftware` on a software Canvas and the framework
+        // throws `IllegalArgumentException: Software rendering doesn't support
+        // hardware bitmaps` from `BaseCanvas.throwIfHwBitmapInSwMode` in the
+        // looper (LOOPER_THREW). It is a window-renderer wall, not a GL wall, so
+        // it is opt-in (`acos.probe.gles_view=1`) rather than a default arm.
+        if ("1".equals(systemProperty("acos.probe.gles_view"))) {
+            viewWithHardwareBitmap(hardwareBitmapForView());
+        } else {
+            Log.i(TAG, "gles_view skipped=software_window_cannot_draw_hardware_bitmap"
+                    + " (opt-in acos.probe.gles_view=1)");
+        }
     }
 
     /** Draw {@code src} into a software bitmap and report a sampled pixel. */
@@ -650,10 +673,22 @@ public class A11yProbeService extends AccessibilityService {
         try {
             int w = Math.min(src.getWidth(), 64);
             int h = Math.min(src.getHeight(), 64);
+            final Bitmap.Config srcConfig = src.getConfig();
+            // GLSPIKE4: a software Canvas can never draw a HARDWARE bitmap (the
+            // framework throws "Software rendering doesn't support hardware
+            // bitmaps", on a device too). What an app does is read the pixels
+            // back through hwui's GPU path, `Bitmap.copy(ARGB_8888)`; that is
+            // the call that needs a working EGL context.
+            Bitmap readable = srcConfig == Bitmap.Config.HARDWARE
+                    ? src.copy(Bitmap.Config.ARGB_8888, false) : src;
+            if (readable == null) {
+                Log.i(TAG, "gles_draw kind=" + kind + " ok=false reason=copy_returned_null");
+                return;
+            }
             Bitmap target = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             android.graphics.Canvas canvas = new android.graphics.Canvas(target);
             canvas.drawColor(0xFF101010);
-            canvas.drawBitmap(src, null, new Rect(0, 0, w, h), null);
+            canvas.drawBitmap(readable, null, new Rect(0, 0, w, h), null);
             // Sample four interior points plus the whole-tile mean, so the
             // claim is "the drawing landed", not "a buffer was allocated".
             StringBuilder samples = new StringBuilder();
@@ -666,7 +701,7 @@ public class A11yProbeService extends AccessibilityService {
                         .append("=#").append(String.format("%08X", px));
             }
             Log.i(TAG, "gles_draw kind=" + kind + " ok=true src=" + src.getWidth() + "x"
-                    + src.getHeight() + " config=" + src.getConfig() + " dst=" + w + "x" + h
+                    + src.getHeight() + " config=" + srcConfig + " dst=" + w + "x" + h
                     + " mean=" + (sum / 12) + " samples" + samples);
             target.recycle();
         } catch (Throwable failure) {

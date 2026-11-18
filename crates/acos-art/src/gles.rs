@@ -89,7 +89,9 @@ pub struct GlesManifest {
     /// `ro.hardware.egl` value, e.g. `angle`.
     pub tag: String,
     /// `ro.hardware.vulkan` value when the provider also carries a Vulkan ICD
-    /// (`lib64/hw/vulkan.<vulkan_tag>.so`), e.g. `pastel` for SwiftShader.
+    /// (`lib64/hw/vulkan.<vulkan_tag>.so` **and** the same file at
+    /// `lib64/vulkan.<vulkan_tag>.so`, see [`Provider::icd_path`]), e.g.
+    /// `pastel` for SwiftShader.
     ///
     /// GLSPIKE2: ANGLE's Vulkan backend is only as good as the ICD the image's
     /// `libvulkan.so` can find, and `libvulkan.so` names that ICD from this
@@ -144,14 +146,32 @@ impl Provider {
         self.manifest.vulkan_tag.as_deref()
     }
 
-    /// `<provider>/lib64/hw/vulkan.<vulkan_tag>.so`, the ICD the image's
-    /// `libvulkan.so` opens through `hw_get_module("vulkan", tag)`. It lives in
-    /// the same `lib64/` the launcher binds at `/vendor/lib64`, so no second
-    /// bind is needed.
+    /// `<provider>/lib64/hw/vulkan.<vulkan_tag>.so`, the ICD's canonical
+    /// (HAL) path. It lives in the same `lib64/` the launcher binds at
+    /// `/vendor/lib64`, so no second bind is needed.
+    ///
+    /// GLSPIKE4 (measured, `results/handoff/GLSPIKE4/README.md`): the image's
+    /// `libvulkan.so` does **not** open that path. It calls libvndksupport's
+    /// `android_load_sphal_library("vulkan.<tag>.so")` with the **bare name**,
+    /// which in a guest with no `sphal` namespace is a default-namespace
+    /// `dlopen` over `namespace.default.search.paths` — `/vendor/lib64`, not
+    /// `/vendor/lib64/hw`. The same bytes therefore also have to exist at
+    /// [`Provider::icd_soname_path`] or `vkCreateInstance` fails and ANGLE's
+    /// `eglInitialize` reports `EGL_NOT_INITIALIZED` without ever mapping the
+    /// ICD.
     #[must_use]
     pub fn icd_path(&self, root: &ArtRoot) -> Option<PathBuf> {
         let tag = self.vulkan_tag()?;
         Some(self.lib_dir(root).join("hw").join(format!("vulkan.{tag}.so")))
+    }
+
+    /// `<provider>/lib64/vulkan.<vulkan_tag>.so`: the ICD by the bare name the
+    /// guest's default-namespace `dlopen` can resolve (a hardlink of
+    /// [`Provider::icd_path`], one inode).
+    #[must_use]
+    pub fn icd_soname_path(&self, root: &ArtRoot) -> Option<PathBuf> {
+        let tag = self.vulkan_tag()?;
+        Some(self.lib_dir(root).join(format!("vulkan.{tag}.so")))
     }
 
     /// The host directory the guest's `/vendor/lib64` is bound to.
@@ -309,11 +329,18 @@ pub fn load(root: &ArtRoot, name: &str) -> Result<Provider> {
         )));
     }
     if let Some(vt) = manifest.vulkan_tag.as_deref() {
-        let icd = format!("lib64/hw/vulkan.{vt}.so");
-        if !manifest.files.iter().any(|f| f.path == icd) {
-            return Err(Error::Layout(format!(
-                "ACOS_GUEST_GLES={name}: manifest vulkan_tag is {vt:?} but it stages no {icd}"
-            )));
+        // Both names: the HAL path and the bare soname the guest's default
+        // namespace resolves (GLSPIKE4; see `Provider::icd_path`).
+        for icd in [
+            format!("lib64/hw/vulkan.{vt}.so"),
+            format!("lib64/vulkan.{vt}.so"),
+        ] {
+            if !manifest.files.iter().any(|f| f.path == icd) {
+                return Err(Error::Layout(format!(
+                    "ACOS_GUEST_GLES={name}: manifest vulkan_tag is {vt:?} but it stages no {icd} \
+                     (reinstall with `tools/art-gles.sh`)"
+                )));
+            }
         }
     }
     Ok(Provider {
@@ -329,7 +356,10 @@ pub fn load(root: &ArtRoot, name: &str) -> Result<Provider> {
 /// a *known* driver is loaded, so a shared prebuilt that drifted cannot reach
 /// libEGL as a different library than the report describes.
 pub fn verify(provider: &Provider, root: &ArtRoot) -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
     let dir = provider.dir(root);
+    let mut hashed: std::collections::HashMap<(u64, u64), String> =
+        std::collections::HashMap::new();
     for f in &provider.manifest.files {
         let path = dir.join(&f.path);
         let meta = fs::metadata(&path).map_err(|e| {
@@ -348,14 +378,26 @@ pub fn verify(provider: &Provider, root: &ArtRoot) -> Result<()> {
                 f.size
             )));
         }
-        let bytes = fs::read(&path).map_err(|e| {
-            Error::Layout(format!(
-                "ACOS_GUEST_GLES={}: {} is unreadable ({e})",
-                provider.name,
-                path.display()
-            ))
-        })?;
-        let got = crate::build_cache::sha256_hex(&bytes);
+        // The provider stages every driver (and the ICD) under two names that
+        // are hardlinks of one inode (`lib64/` + `lib64/egl/`, `lib64/hw/`).
+        // Hash each inode once: same inode, same bytes, and the second name is
+        // still compared against its own manifest entry below.
+        let key = (meta.dev(), meta.ino());
+        let got = match hashed.get(&key) {
+            Some(h) => h.clone(),
+            None => {
+                let bytes = fs::read(&path).map_err(|e| {
+                    Error::Layout(format!(
+                        "ACOS_GUEST_GLES={}: {} is unreadable ({e})",
+                        provider.name,
+                        path.display()
+                    ))
+                })?;
+                let h = crate::build_cache::sha256_hex(&bytes);
+                hashed.insert(key, h.clone());
+                h
+            }
+        };
         if got != f.sha256 {
             return Err(Error::Layout(format!(
                 "ACOS_GUEST_GLES={}: {} sha256 {got} != manifest {} (reinstall with \
@@ -475,6 +517,12 @@ mod tests {
             fs::write(&icd, icd_body).expect("icd");
             files.push(GlesFile {
                 path: format!("lib64/hw/vulkan.{vt}.so"),
+                sha256: crate::build_cache::sha256_hex(icd_body),
+                size: icd_body.len() as u64,
+            });
+            fs::write(base.join(format!("lib64/vulkan.{vt}.so")), icd_body).expect("icd soname");
+            files.push(GlesFile {
+                path: format!("lib64/vulkan.{vt}.so"),
                 sha256: crate::build_cache::sha256_hex(icd_body),
                 size: icd_body.len() as u64,
             });
@@ -629,6 +677,55 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// GLSPIKE4: a provider that stages the ICD only at the HAL path
+    /// (`lib64/hw/vulkan.<tag>.so`, GLSPIKE2's layout) is rejected: the guest's
+    /// `libvulkan.so` opens the **bare** `vulkan.<tag>.so`, which only exists in
+    /// the default namespace's search path if the file is also at `lib64/`.
+    /// Before the fix this manifest loaded and the guest failed `eglInitialize`
+    /// with `Could not load vulkan.pastel.so from default namespace`.
+    #[test]
+    fn an_icd_staged_only_at_the_hal_path_is_rejected() {
+        let dir = scratch("icd-hw-only");
+        let r = root(&dir);
+        let base = r.sysroot.join("gles/angle-swiftshader");
+        fs::create_dir_all(&base).expect("dirs");
+        fs::write(
+            base.join(MANIFEST),
+            r#"{"tag":"angle","vulkan_tag":"pastel","provider":"x","source":"y",
+                "version":"0","licence":"z","files":[
+                {"path":"lib64/egl/libEGL_angle.so","sha256":"00","size":1},
+                {"path":"lib64/hw/vulkan.pastel.so","sha256":"00","size":1}]}"#,
+        )
+        .expect("manifest");
+        let e = load(&r, "angle-swiftshader").expect_err("must fail");
+        assert!(e.to_string().contains("lib64/vulkan.pastel.so"), "{e}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_icd_soname_path_is_the_bare_name_in_the_bound_lib_dir() {
+        let dir = scratch("icd-soname");
+        let r = root(&dir);
+        let p = install_with(
+            &dir,
+            "angle-swiftshader",
+            b"driver bytes",
+            "angle",
+            Some(("pastel", b"icd bytes")),
+        );
+        let soname = p.icd_soname_path(&r).expect("soname");
+        assert_eq!(
+            soname,
+            dir.join("sysroot/gles/angle-swiftshader/lib64/vulkan.pastel.so"),
+            "bound at /vendor/lib64, which is in namespace.default.search.paths"
+        );
+        assert!(soname.is_file());
+        // no ICD, no soname path
+        let q = install(&dir, "angle", b"d", "angle");
+        assert!(q.icd_soname_path(&r).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_provider_dir_name_is_a_label_and_the_tag_names_the_files() {
         let dir = scratch("label");
@@ -652,7 +749,37 @@ mod tests {
         let described = describe(&p);
         assert!(described.contains("tag=angle"), "{described}");
         assert!(described.contains("vulkan=pastel"), "{described}");
-        assert_eq!(staged_bytes(&p), 12 + 9);
+        assert_eq!(staged_bytes(&p), 12 + 9 + 9);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// GLSPIKE4: the two names of a hardlinked file are hashed once, but each
+    /// name is still checked against its own manifest entry.
+    #[test]
+    fn hardlinked_names_are_hashed_once_and_each_checked() {
+        let dir = scratch("hardlinks");
+        let r = root(&dir);
+        let p = install_with(
+            &dir,
+            "angle-swiftshader",
+            b"driver bytes",
+            "angle",
+            Some(("pastel", b"icd bytes")),
+        );
+        let hw = p.icd_path(&r).expect("icd");
+        let soname = p.icd_soname_path(&r).expect("soname");
+        fs::remove_file(&soname).expect("rm");
+        fs::hard_link(&hw, &soname).expect("link");
+        verify(&p, &r).expect("one inode, both entries agree");
+        // a manifest whose second name claims other bytes must still fail
+        let mut drifted = p.clone();
+        for f in &mut drifted.manifest.files {
+            if f.path.ends_with("lib64/vulkan.pastel.so") {
+                f.sha256 = "00".into();
+            }
+        }
+        let e = verify(&drifted, &r).expect_err("second name is checked too");
+        assert!(e.to_string().contains("vulkan.pastel.so"), "{e}");
         let _ = fs::remove_dir_all(&dir);
     }
 
