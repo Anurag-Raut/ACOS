@@ -1157,14 +1157,7 @@ impl View {
         for reply in [down, up] {
             let _ = reply.wait(Duration::from_secs(2));
         }
-        // The trailing pull below paints whatever the page invalidated after
-        // `onTouchEvent`. The two pulls *inside* the gesture above are
-        // `render_input`, i.e. fair-gate `Input` priority: they are granted
-        // ahead of every queued guest `render`, so a second view's pull cannot
-        // stretch the tap's down->up gap into a long press. That is what the
-        // SCENHYG symptom (webview-probe failed 4/10) was: a plain `render`
-        // here, waiting behind another view's frame.
-        let _ = self.render("png", self.browser.frame_timeout);
+        let _ = first;
         Ok(())
     }
 
