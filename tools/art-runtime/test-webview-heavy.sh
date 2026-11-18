@@ -8,12 +8,13 @@
 # this script runs exactly those names, with the env set, under the ART lock and the
 # guard. A skipped test is a failure here, the same as in test-crates.sh.
 # The engine is downloaded once (SHA-pinned) into ACOS_WEBVIEW_CACHE, which defaults
-# to the worktree's .cache/webview-engine.
+# to the worktree's .cache/wv (short: socket paths must fit SUN_LEN).
 set -uo pipefail
 task=${1:?usage: $0 <TASK>}
 wt=$PWD
 export ACOS_WEBVIEW_TEST=1
-export ACOS_WEBVIEW_CACHE=${ACOS_WEBVIEW_CACHE:-$wt/.cache/webview-engine}
+# short name: the broker socket path under it must fit SUN_LEN (107 bytes)
+export ACOS_WEBVIEW_CACHE=${ACOS_WEBVIEW_CACHE:-$wt/.cache/wv}
 mkdir -p "$ACOS_WEBVIEW_CACHE"
 log=${ACOS_TEST_LOG:-$wt/.cache/test-logs/$task-$(date -u +%Y%m%dT%H%M%SZ).log}
 mkdir -p "$(dirname "$log")"
