@@ -1,6 +1,7 @@
 package dev.acos.fixtures.procb;
 
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
@@ -66,6 +67,44 @@ public class ProcBActivity extends Activity {
                 + " pid=" + android.os.Process.myPid();
         Log.i(TAG, line);
         status.setText("B\n" + line);
+
+        // PROCUID README §7 item 2: this process is the **second** app of the
+        // session (its uid is not the primary package's), so a pending intent
+        // created here must answer *this* process as its creator.
+        // `PendingIntent.getCreatorUid()`/`getCreatorPackage()` both read
+        // `IActivityManager.getInfoForIntentSender`, whose creator uid used to
+        // be the fixture uid for every record: the verdict line said BAD for a
+        // second app. The comparison is against this process's own uid and
+        // package, so the check cannot be satisfied by a constant.
+        showPendingIntentCreator();
+    }
+
+    /**
+     * Create a real {@link PendingIntent} here and render the creator identity
+     * the system reports for it, with the verdict of comparing it to this
+     * process's own {@code Process.myUid()} / package name.
+     */
+    private void showPendingIntentCreator() {
+        TextView creatorView = (TextView) findViewById(R.id.creator);
+        Intent target = new Intent("dev.acos.fixtures.procb.PI");
+        target.setPackage(getPackageName());
+        int flags = PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT;
+        PendingIntent pi = PendingIntent.getBroadcast(this, 7, target, flags);
+        if (pi == null) {
+            String none = "ACOSPROBE b pi none";
+            Log.i(TAG, none);
+            creatorView.setText(none);
+            return;
+        }
+        int creatorUid = pi.getCreatorUid();
+        String creatorPackage = pi.getCreatorPackage();
+        boolean ok = creatorUid == android.os.Process.myUid()
+                && getPackageName().equals(creatorPackage);
+        String line = "ACOSPROBE b pi creator=" + creatorUid + "/" + creatorPackage
+                + " mine=" + android.os.Process.myUid() + "/" + getPackageName()
+                + " verdict=" + (ok ? "ok" : "BAD");
+        Log.i(TAG, line);
+        creatorView.setText(line);
     }
 
     /**

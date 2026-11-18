@@ -158,6 +158,16 @@ pub struct PendingIntentRecord {
     pub kind: i32,
     /// The creating package.
     pub package: String,
+    /// The **creating** process's uid, i.e. `PendingIntentRecord.uid`
+    /// (`ActivityManagerService.getIntentSender` stores
+    /// `Binder.getCallingUid()` in the record, not the package's primary uid).
+    ///
+    /// `getInfoForIntentSender` answers it as `PendingIntentInfo.mCreatorUid`,
+    /// which is what `PendingIntent.getCreatorUid()` returns
+    /// (`PendingIntent.java:1600` `getCachedInfo`). PROCUID README §7 item 2: it
+    /// used to be the fixture uid for every record, so a pending intent created
+    /// by a second app reported the primary package's uid.
+    pub uid: i32,
     /// The caller's request code.
     pub request_code: i32,
     /// The flags the record was created with (including
@@ -207,6 +217,7 @@ impl PendingIntentRecord {
         serde_json::json!({
             "kind": self.kind,
             "package": self.package,
+            "uid": self.uid,
             "request_code": self.request_code,
             "flags": self.flags,
             "cancelled": self.cancelled,
@@ -392,6 +403,10 @@ impl SenderTable {
         self.records[slot] = Some(PendingIntentRecord {
             kind,
             package: package.to_string(),
+            // `ActivityManagerService.getIntentSender` records
+            // `Binder.getCallingUid()`; the dispatcher pushed the caller's
+            // identity for this transaction, so this is the creating process.
+            uid: acos_parcel::calling_uid() as i32,
             request_code,
             flags: key_flags,
             intents,

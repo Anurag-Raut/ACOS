@@ -379,13 +379,21 @@ fn forbidden_syscall_is_denied_and_logged_in_the_guest() {
     let _g = guard();
     let dir = scratch("seccomp-probe");
     let Some(probe) = build_probe(&dir) else {
-        eprintln!("SKIP: no static-capable host cc for the probe");
+        acos_test_support::require_prereq(
+            false,
+            "seccomp probe test",
+            "no static-capable host cc for the probe (a musl/static gcc is needed)",
+        );
         return;
     };
     let root = match ArtRoot::resolve(None, Some(dir.join("data"))) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("SKIP seccomp probe: no ART sysroot ({e})");
+            acos_test_support::require_prereq(
+                false,
+                "seccomp probe test",
+                &format!("no ART sysroot ({e}) — run tools/art-sysroot.sh"),
+            );
             return;
         }
     };

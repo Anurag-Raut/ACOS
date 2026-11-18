@@ -310,6 +310,7 @@ dependencies = [
  "acos-parcel",
  "acos-protocol",
  "acos-sfgeom",
+ "acos-test-support",
  "acos-wm",
  "proptest",
  "rustix",
@@ -335,6 +336,9 @@ dependencies = [
 [[package]]
 name = "acos-test-support"
 version = "0.3.0"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "acos-verify"

@@ -26,10 +26,13 @@
 //! the launcher pid this test spawned plus this test's private data root, and
 //! the kill path re-derives it rather than trusting the caller.
 //!
-//! The suite skips (with a reason, exit 0) when the ART sysroot or the cached
-//! guest dex is absent: those are 1 GB+ host artefacts produced by
-//! `tools/art-sysroot.sh` / one warm `acos-art render-app`, not something a
-//! `cargo test` may download or build.
+//! The suite **fails** when the ART sysroot or the cached guest dex is absent
+//! (HYG2): those are 1 GB+ host artefacts produced by `tools/art-sysroot.sh` /
+//! one warm `acos-art render-app`, not something a `cargo test` may download or
+//! build, but a test that asserts nothing must not report a pass. The one
+//! counted-skip path is `ACOS_ALLOW_ART_SKIP=1`, which prints the reason and a
+//! `SKIP SUMMARY` count at exit; `tools/art-runtime/test-crates.sh` exports the
+//! warm data inside the lock so the default path runs these cases.
 //!
 //! ART is started through `tools/guarded.sh` by the acceptance command; inside
 //! the test, runs are serialised on one mutex so a suite run never has two
@@ -74,37 +77,19 @@ fn bin() -> &'static str {
 }
 
 fn sysroot() -> PathBuf {
-    std::env::var_os("ACOS_ART_SYSROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo_root().join(".cache/art/sysroot"))
+    acos_test_support::art_sysroot(&repo_root())
 }
 
 fn warm_data() -> PathBuf {
-    std::env::var_os("ACOS_ART_DATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo_root().join(".cache/art/data"))
+    acos_test_support::art_warm_data(&repo_root())
 }
 
-/// `None` = the host lacks the (large, out-of-repo-build) ART inputs; the test
-/// prints why and passes without asserting anything.
+/// `None` = the host lacks the (large, out-of-repo-build) ART inputs. HYG2: that
+/// is a **failure** naming the missing artefact, not a silent skip — a `cargo
+/// test` that reports `ok` while every ART case skipped is the false-green this
+/// helper replaced (BACKSETTLE README §6, `suite3.log`).
 fn require_art() -> Option<()> {
-    let sysroot = sysroot();
-    if !sysroot.join("system/apex").is_dir() {
-        eprintln!(
-            "SKIP cleanup test: no ART sysroot at {} — run tools/art-sysroot.sh",
-            sysroot.display()
-        );
-        return None;
-    }
-    if !warm_data().join("app/guest/classes.dex").is_file() {
-        eprintln!(
-            "SKIP cleanup test: no cached guest dex under {} — run \
-             `acos-art render-app --apk fixtures/build/apps/counter.apk` once",
-            warm_data().display()
-        );
-        return None;
-    }
-    Some(())
+    acos_test_support::require_art(&repo_root(), "cleanup test").map(|_| ())
 }
 
 /// The root every test's scratch dir lives under.
@@ -802,11 +787,17 @@ fn toolchain_d8() -> Option<PathBuf> {
     None
 }
 
-/// Compile the canary DEX (javac + d8). `None` = the host lacks the toolchain,
-/// which is a skip, not a failure (`d8` comes from the Android SDK).
+/// Compile the canary DEX (javac + d8). A host without the Android
+/// build-tools is a missing prerequisite (HYG2: a loud failure, or a counted
+/// skip under `ACOS_ALLOW_ART_SKIP=1`), never a silent pass.
 fn build_canary_dex(scratch: &Path) -> Option<PathBuf> {
     let Some(d8) = toolchain_d8() else {
-        eprintln!("SKIP canary test: no d8 (Android build-tools) on this host");
+        acos_test_support::require_prereq(
+            false,
+            "canary test",
+            "no d8 (Android build-tools) on this host — install the Android SDK \
+             build-tools, or set ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+        )?;
         return None;
     };
     let src = scratch.join("canary/Canary.java");
@@ -838,7 +829,11 @@ fn build_canary_dex(scratch: &Path) -> Option<PathBuf> {
         .status()
         .ok()?;
     if !st.success() {
-        eprintln!("SKIP canary test: javac failed");
+        acos_test_support::require_prereq(
+            false,
+            "canary test",
+            "javac failed to compile the canary — the JDK on PATH is not usable",
+        )?;
         return None;
     }
     let out = scratch.join("canary/dex");
@@ -852,7 +847,11 @@ fn build_canary_dex(scratch: &Path) -> Option<PathBuf> {
         .collect();
     class_files.sort();
     if class_files.is_empty() {
-        eprintln!("SKIP canary test: javac produced no class files");
+        acos_test_support::require_prereq(
+            false,
+            "canary test",
+            "javac produced no class files",
+        )?;
         return None;
     }
     let st = Command::new(&d8)
@@ -862,7 +861,11 @@ fn build_canary_dex(scratch: &Path) -> Option<PathBuf> {
         .status()
         .ok()?;
     if !st.success() {
-        eprintln!("SKIP canary test: d8 failed ({})", d8.display());
+        acos_test_support::require_prereq(
+            false,
+            "canary test",
+            &format!("d8 failed ({})", d8.display()),
+        )?;
         return None;
     }
     let dex = out.join("classes.dex");
@@ -1154,9 +1157,13 @@ fn r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans() {
     let Some(()) = require_art() else { return };
     let dex = repo_root().join("fixtures/build/dexprogs/01_hello/classes.dex");
     if !dex.is_file() {
-        eprintln!(
-            "SKIP watchdog test: no {} (build the dex corpus)",
-            dex.display()
+        acos_test_support::require_prereq(
+            false,
+            "watchdog test",
+            &format!(
+                "no {} — build the dex corpus (tools/build-fixtures.sh)",
+                dex.display()
+            ),
         );
         return;
     }
