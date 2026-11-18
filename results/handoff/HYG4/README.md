@@ -63,10 +63,11 @@ excluded, `SKIP COUNT` checked) with `--no-fail-fast` so one failure does not hi
    (`/data/acos.properties`) changes hash during the canary run. It fails deterministically: alone, under the
    lock, and without the private runtime env (`logs/hyg4-art-canary-stdout.log`, `logs/hyg4-acos-art-stdout.log`).
    `src/lib.rs:241` says other launches rewrite `acos.properties`. I did not change any production code on this
-   path (every changed `src/` line is inside a test module), so I expect it is inherited from the HYG3 base. **I
-   have not confirmed that by running it at 26d034f2e.** Smallest next action: run that one test at
-   26d034f2e in a scratch worktree; if it fails there too, decide whether the canary's premise (no writer during
-   the run) or the launch path needs fixing.
+   path (every changed `src/` line is inside a test module). **Confirmed pre-existing:** run alone at the HYG3
+   base 26d034f2e (scratch worktree, same ART lock and guard) it fails with the same md5 values
+   (`logs/hyg4-base-canary.log`). Smallest next action: decide whether the canary's premise (no writer during
+   the run) or the launch path that rewrites `acos.properties` needs fixing; that is a test-design decision, so I
+   did not change it.
 
 ## Other things the orchestrator should know
 
@@ -84,7 +85,7 @@ excluded, `SKIP COUNT` checked) with `--no-fail-fast` so one failure does not hi
 
 ## Evidence
 
-- `logs/` — the final run of every gate (27 files, 1.1 MB).
+- `logs/` — the final run of every gate (28 files, 1.1 MB), plus `hyg4-base-canary.log` (the canary at 26d034f2e).
 - `audit-start-187.txt` — the audit output at the start of this pass (one-line rule).
 - `../HYG3/audit-remaining.txt` — updated to `SILENT-SKIP SITES: 0`.
 - Scratch and caches removed at the end: `.cache/hyg4-target`, `fixtures/build` copy, `.cache/wv` (engine, ~280 MB).
