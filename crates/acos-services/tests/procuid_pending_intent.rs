@@ -24,6 +24,9 @@ use acos_services::ServiceHost;
 const ACTIVITY_MANAGER: &str = "android.app.IActivityManager";
 /// `getIntentSender` (API-34 table, code 62).
 const GET_INTENT_SENDER: u32 = 62;
+/// `getIntentSenderWithFeature` (code 63) — the form the framework's
+/// `PendingIntent.getBroadcast`/`getActivity` actually call.
+const GET_INTENT_SENDER_WITH_FEATURE: u32 = 63;
 /// `getInfoForIntentSender` (code 65).
 const GET_INFO_FOR_INTENT_SENDER: u32 = 65;
 
@@ -158,6 +161,47 @@ fn a_pending_intent_answers_the_uid_of_the_app_that_created_it() {
     assert_eq!(
         pending_intent_info_as(&mut host, UID_B, 4102, sender_b).1,
         UID_B
+    );
+}
+
+/// The framework calls `getIntentSenderWithFeature` (code 63), whose argument
+/// list inserts the `featureId` **after** the package name. The host read
+/// argument `1 + base` as the package, i.e. the feature id — null for every
+/// `PendingIntent.getBroadcast`, so the record's package was empty and
+/// `PendingIntent.getCreatorPackage()` answered `""` in the guest (found by the
+/// `mproc3-two-process` ART probe: `creator=10193/ mine=10193/…`).
+#[test]
+fn the_with_feature_form_keeps_the_package_name_out_of_the_feature_id_slot() {
+    let mut host = installed_host();
+    push_calling_identity(UID_B as u32, 4102);
+    let mut data = Parcel::new();
+    data.write_interface_token(ACTIVITY_MANAGER).expect("token");
+    data.write_int32(acos_services::pending_intent::TYPE_BROADCAST);
+    data.write_string16_opt(Some(PACKAGE_B)).expect("package");
+    // The feature id: null, exactly what `PendingIntent.getBroadcast` passes.
+    data.write_string16_opt(None).expect("featureId");
+    data.write_strong_binder_opt(None); // activity token: null
+    data.write_string16_opt(None).expect("who");
+    data.write_int32(3); // requestCode
+    data.write_int32(1); // one intent
+    data.write_int32(1); // present
+    let intent = acos_services::ams::IntentFacts::action("dev.acos.fixtures.procb.PI");
+    write_payload(&mut data, &intent.to_parcelable()).expect("intent");
+    data.write_int32(-1); // resolvedTypes: null
+    data.write_int32(acos_services::pending_intent::FLAG_IMMUTABLE);
+    data.write_int32(0); // options
+    data.write_int32(0); // userId
+    let mut reply = transact(&mut host, GET_INTENT_SENDER_WITH_FEATURE, data);
+    acos_parcel::registry::pop_calling_identity();
+    assert_eq!(reply.read_int32().expect("exception header"), 0);
+    let sender = reply
+        .read_strong_binder()
+        .expect("the reply parses")
+        .expect("a sender");
+    assert_eq!(
+        pending_intent_info_as(&mut host, UID_A, 4101, sender.0),
+        (PACKAGE_B.to_string(), UID_B),
+        "the creator package is the package argument, not the feature id"
     );
 }
 

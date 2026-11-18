@@ -2805,9 +2805,19 @@ pub fn dispatch(
         // Intent[] intents, String[] resolvedTypes, flags, Bundle options,
         // userId)`.
         "getIntentSender" | "getIntentSenderWithFeature" => {
+            // HYG2/PROCUID §7: the `WithFeature` variant inserts the
+            // `featureId` **after** the package
+            // (`getIntentSenderWithFeature(int type, String packageName,
+            // String featureId, IBinder token, ...)`, image AIDL code 63), so
+            // the package is argument 1 in *both* forms and only the arguments
+            // from `resultWho` on shift by one. Reading `1 + base` here took
+            // the feature id as the package, which is null for every
+            // `PendingIntent.getBroadcast/getActivity` (the framework passes a
+            // null feature) — so the record's package was empty and
+            // `PendingIntent.getCreatorPackage()` answered "".
             let base = usize::from(method.name == "getIntentSenderWithFeature");
             let kind = value(0).and_then(Value::as_int).unwrap_or(0);
-            let package = value(1 + base).and_then(Value::as_str).unwrap_or_default();
+            let package = value(1).and_then(Value::as_str).unwrap_or_default();
             let request_code = value(4 + base).and_then(Value::as_int).unwrap_or(0);
             let intents: Vec<IntentFacts> = match args.get(5 + base) {
                 Some(Value::List(Some(items))) => items
