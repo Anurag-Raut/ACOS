@@ -60,9 +60,13 @@ bounds, and more than one resumed activity.
    configuration to cause relaunches"*). What *does* relaunch is a change the
    activity does not declare in `android:configChanges` — in split screen that
    is usually `CONFIG_SCREEN_SIZE`, because `screenWidthDp`/`screenHeightDp`
-   are **relative to the task bounds and density**, computed by
-   `Task.computeConfigResourceOverrides` (`ActivityRecord.java:8389-8397`), not
-   by the display. So:
+   are **relative to the task bounds and density**:
+   `TaskFragment.computeConfigResourceOverrides`
+   (`TaskFragment.java:2213`, dp values at `:2360-2370`) computes them from the
+   task's stable-inset bounds (`(stable.width() / density + 0.5f)`, capped at
+   the parent's dp), and `smallestScreenWidthDp` *inherits* the display's for a
+   split task (only floating/PiP recompute it, `:2384-2393`).
+   `ActivityRecord.java:8389-8397` states the same in prose. So:
    * an activity declaring `screenSize` gets `onConfigurationChanged` +
      `onMultiWindowModeChanged` and relays out in place;
    * an activity that declares nothing is recreated through
@@ -86,6 +90,13 @@ bounds, and more than one resumed activity.
    is ≥ `DEFAULT_MINIMAL_SPLIT_SCREEN_DISPLAY_SIZE_DP`. A non-resizable activity
    (`ActivityInfo.resizeMode`, manifest `android:resizeableActivity=false`) is
    not put in split by the server.
+   **Measured on this image** (`aapt2 dump resources
+   .cache/boot/android-34/framework-res.apk`): `bool/config_supportsMultiWindow
+   = true`, `bool/config_supportsSplitScreenMultiWindow = true` (watch: false),
+   `integer/config_supportsNonResizableMultiWindow = 0`. So the app-side gate
+   already answers `true` in an ACOS guest (nothing sets `ro.config.low_ram`),
+   and a non-resizable activity must be refused — no module has to fake the
+   feature flags.
 8. **Input and focus are per window.** AOSP has one focused window and one
    focused task; the other split activity is resumed but not focused. The
    window stack already models this in ACOS (LAYER1): `focus_target()` is the
