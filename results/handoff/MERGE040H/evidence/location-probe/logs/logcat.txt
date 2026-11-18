@@ -1,0 +1,115 @@
+--------- beginning of main
+1794996306648      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794996306648      2  I : Using CollectorTypeCC GC.
+1794996306648      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794996306648      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794996306648      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794996306648      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794996306648      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794996306648      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794996306648      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794996306648     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794996306648     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794996306648     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794996306648     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794996306648     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794996306648     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794996306648     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794996306648     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794996306648     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794996306648     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794996306648     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794996306648     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794996306648     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794996306648     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794996306648     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794996306648     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794996306648     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794996306648     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794996306648     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794996306648     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794996306648     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794996306648     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794996306648     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794996306648     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794996306648     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794996306648     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794996306648     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794996306648     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794996306648     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794996306648     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794996306648     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794996306648     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794996306648     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794996306648     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794996306648     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794996306648     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794996306648     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794996306648     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794996306648     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794996306648     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794996306648     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794996306648     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794996306648     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64:/vendor/lib64, permitted_path=/data:/mnt/expand
+1794996306648     53  D nativeloader: InitExtendedPublicLibraries: 
+1794996306648     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794996306648     55  D nativeloader: InitProductPublicLibraries: 
+1794996306648     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794996306648     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794996306648     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794996306648     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794996306648     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794996306648     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794996306648     62  W ziparchive: Unable to open '/data/app/location-probe.dm': No such file or directory
+1794996306648     63  W ziparchive: Unable to open '/data/app/location-probe.dm': No such file or directory
+1794996306648     64  D nativeloader: Configuring clns-2 for other apk /data/app/location-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.locationprobe
+1794996306648     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.locationprobe/cache: chown failed: EINVAL (Invalid argument)
+1794996306648     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.locationprobe/code_cache: chown failed: EINVAL (Invalid argument)
+1794996306648     67  V GraphicsEnvironment: Currently set values for:
+1794996306648     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794996306648     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794996306648     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.locationprobe: false
+1794996306648     71  V GraphicsEnvironment: dev.acos.fixtures.locationprobe is not listed in per-application setting
+1794996306648     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794996306648     73  W SystemServiceRegistry: No service published for: netstats
+1794996306648     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794996306648     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794996306648     76  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794996306648     77  I AcosLocationProbe: providers=[fused, gps, network, passive] enabled=true gps=true
+1794996306648     78  I AcosLocationProbe: last=null
+1794996306648     79  I AcosLocationProbe: registered for gps updates
+1794996306648     80  D CompatibilityChangeReporter: Compat change id reported: 160794467; UID 10192; state: ENABLED
+1794996306648     81  D CompatibilityChangeReporter: Compat change id reported: 148963590; UID 10192; state: ENABLED
+1794996306648     82  D CompatibilityChangeReporter: Compat change id reported: 171317480; UID 10192; state: ENABLED
+1794996306648     83  I AcosLocationProbe: registered a PendingIntent for gps updates
+1794996306648     84  E LoadedApk: performReceive() called targeting raw IIntentReceiver for Intent { act=dev.acos.fixtures.locationprobe.FIX pkg=dev.acos.fixtures.locationprobe (has extras) }
+
+1794996306648     85  I AcosLocationProbe: geocoder present=false
+1794996306648     86  E logdw: dev.acos.fixtures.locationprobe.MainActivity
+1794996306648     87  E logdw: dev.acos.fixtures.locationprobe.MainActivity
+1794996306648     88  I AcosLocationProbe: reverse geocode results=0 first=null
+1794996306648     89  E logdw: dev.acos.fixtures.locationprobe.MainActivity
+1794996306648     90  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794996306648     91  I AcosLocationProbe: provider enabled gps
+1794996306648     92  I AcosLocationProbe: pending intent providerEnabled=true
+1794996306933     93  W acos-binder: incoming transaction seq=14 for unknown node 8: answering DEAD_OBJECT
+1794996306933     94  E LoadedApk: performReceive() called targeting raw IIntentReceiver for Intent { act=dev.acos.fixtures.locationprobe.FIX pkg=dev.acos.fixtures.locationprobe (has extras) }
+
+1794996306933     95  I AcosLocationProbe: last=Location[gps 37.422000,-122.084100 hAcc=4.0 et=+1h53m22s982ms]
+1794996306933     96  I AcosLocationProbe: fix #1 Location[gps 37.422000,-122.084100 hAcc=4.0 et=+1h53m22s982ms]
+1794996306933     97  I AcosLocationProbe: pending intent fix #1 37.4220,-122.0841 provider=gps
+1794996308029     98  E LoadedApk: performReceive() called targeting raw IIntentReceiver for Intent { act=dev.acos.fixtures.locationprobe.FIX pkg=dev.acos.fixtures.locationprobe (has extras) }
+
+1794996308029     99  I AcosLocationProbe: last=Location[gps 37.423000,-122.085000 hAcc=5.0 et=+1h53m23s307ms]
+1794996308029    100  I AcosLocationProbe: fix #2 Location[gps 37.423000,-122.085000 hAcc=5.0 et=+1h53m23s307ms]
+1794996308029    101  I AcosLocationProbe: pending intent fix #2 37.4230,-122.0850 provider=gps
+1794996308029    102  E LoadedApk: performReceive() called targeting raw IIntentReceiver for Intent { act=dev.acos.fixtures.locationprobe.FIX pkg=dev.acos.fixtures.locationprobe (has extras) }
+
+1794996308029    103  I AcosLocationProbe: last=Location[gps 37.424000,-122.086000 hAcc=5.0 et=+1h53m23s558ms]
+1794996308029    104  I AcosLocationProbe: fix #3 Location[gps 37.424000,-122.086000 hAcc=5.0 et=+1h53m23s558ms]
+1794996308029    105  I AcosLocationProbe: pending intent fix #3 37.4240,-122.0860 provider=gps
+1794996308029    106  E LoadedApk: performReceive() called targeting raw IIntentReceiver for Intent { act=dev.acos.fixtures.locationprobe.FIX pkg=dev.acos.fixtures.locationprobe (has extras) }
+
+1794996308029    107  I AcosLocationProbe: last=Location[gps 37.425000,-122.087000 hAcc=5.0 et=+1h53m23s808ms]
+1794996308029    108  I AcosLocationProbe: fix #4 Location[gps 37.425000,-122.087000 hAcc=5.0 et=+1h53m23s808ms]
+1794996308029    109  I AcosLocationProbe: pending intent fix #4 37.4250,-122.0870 provider=gps

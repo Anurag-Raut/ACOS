@@ -1,0 +1,143 @@
+# MODFILL: `media.session` at `scripted` — a real MediaSession app.
+#
+# The app publishes metadata + playback state like a music player and answers
+# MediaSession.Callback by changing its state. The agent reads the published
+# state (`service_ctl sessions`) and sends play/pause/next/seek/custom_action
+# that reach MediaSession.Callback with the agent as the caller package.
+#
+# Honest limits: `MediaSessionManager.getActiveSessions` (needs a notification
+# listener grant on a phone) is NOT modelled — the line records what the app saw;
+# there is no media-key routing, queue, volume or MediaRouter.
+version: 1
+name: modfill-media
+description: >-
+  media.session scripted: MediaSession.setMetadata/setPlaybackState reach the module (read via
+  service_ctl sessions), a MediaController reads them back and is called back, and agent
+  play/pause/next/seek/custom_action reach MediaSession.Callback.
+app: ../fixtures/build/apps/media-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+services:
+  - id: media.session
+    profile: scripted
+steps:
+  - launch:
+      activity: dev.acos.fixtures.mediaprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY mediaprobe"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Create"}}
+  - wait_for:
+      selector: {text: {contains: "CREATE ok tag=acos-music pkg=dev.acos.fixtures.mediaprobe"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Publish"}}
+  - wait_for:
+      selector: {text: {contains: "PUBLISH state=PLAYING track=Blue in Green pos=0"}}
+      timeout_ms: 20000
+  # A controller on the token is told about the published change.
+  - wait_for:
+      selector: {text: {contains: "CTLCB state=PLAYING pos=0"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "CTLCB title=Blue in Green"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Controller"}}
+  - wait_for:
+      selector: {text: {contains: "CTL state=PLAYING pos=0 actions=310 title=Blue in Green artist=Miles Davis duration=337000"}}
+      timeout_ms: 20000
+  # The agent reads what the app published.
+  - service_ctl:
+      module: media.session
+      op: sessions
+  # Agent commands -> MediaSession.Callback (the app republishes its state).
+  - service_ctl:
+      module: media.session
+      op: pause
+  - wait_for:
+      selector: {text: {contains: "CMD pause from=dev.acos.agent"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "PUBLISH state=PAUSED track=Blue in Green pos=0"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: media.session
+      op: next
+  - wait_for:
+      selector: {text: {contains: "CMD next from=dev.acos.agent track=So What"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "CTLCB title=So What"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: media.session
+      op: seek
+      args: {position: 90000}
+  - wait_for:
+      selector: {text: {contains: "CMD seek from=dev.acos.agent pos=90000"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: media.session
+      op: previous
+  - wait_for:
+      selector: {text: {contains: "CMD previous from=dev.acos.agent track=Blue in Green"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: media.session
+      op: custom_action
+      args: {action: like}
+  - wait_for:
+      selector: {text: {contains: "CMD custom from=dev.acos.agent action=like"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: media.session
+      op: play
+  - wait_for:
+      selector: {text: {contains: "CMD play from=dev.acos.agent"}}
+      timeout_ms: 20000
+  # An app's own MediaController (any app) reaches the same callback.
+  - tap:
+      selector: {text: {exact: "SelfPause"}}
+  - wait_for:
+      selector: {text: {contains: "CMD pause from=dev.acos.fixtures.mediaprobe"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "Active"}}
+  - wait_for:
+      selector: {text: {contains: "ACTIVE"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: media.session
+      op: sessions
+  - assert_log:
+      tag: mediaprobe
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - "CREATE ok"
+        - "PUBLISH state=PLAYING track=Blue in Green"
+        - "CTL state=PLAYING"
+        - "CMD pause from=dev.acos.agent"
+        - "CMD next from=dev.acos.agent track=So What"
+        - "CMD seek from=dev.acos.agent pos=90000"
+        - "CMD previous from=dev.acos.agent"
+        - "CMD custom from=dev.acos.agent action=like"
+        - "CMD play from=dev.acos.agent"
+        - "CMD pause from=dev.acos.fixtures.mediaprobe"
+  - assert_no_crash: {}
