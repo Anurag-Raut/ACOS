@@ -725,11 +725,24 @@ impl WindowLayerStack {
     /// overlay from a touchable one.
     #[must_use]
     pub fn hit_test(&self, p: PointI) -> Option<WindowId> {
+        self.hit_test_candidates(p).into_iter().next()
+    }
+
+    /// Every touchable window whose frame contains `p`, **topmost first**.
+    ///
+    /// `InputDispatcher::findTouchedWindowTargetsLocked` walks the stack from
+    /// the top and takes the first window that can actually receive the event;
+    /// a window without a live input channel is skipped, never silently
+    /// replaced by "the newest window" (`WVTAP`: touch is routed by *point*,
+    /// not by registration order or focus).
+    #[must_use]
+    pub fn hit_test_candidates(&self, p: PointI) -> Vec<WindowId> {
         self.ordered()
             .into_iter()
             .rev()
-            .find(|e| e.touchable() && e.frame.contains(p.x, p.y))
+            .filter(|e| e.touchable() && e.frame.contains(p.x, p.y))
             .map(|e| e.window)
+            .collect()
     }
 
     /// The window that takes focus: the topmost focusable, visible window,

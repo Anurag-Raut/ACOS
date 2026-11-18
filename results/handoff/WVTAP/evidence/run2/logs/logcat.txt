@@ -1,0 +1,189 @@
+--------- beginning of main
+1794941923876      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794941923876      2  I : Using CollectorTypeCC GC.
+1794941923876      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794941923876      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794941923876      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794941923876      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794941923876      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794941923876      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794941923876      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794941923876     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794941923876     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794941923876     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794941923876     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794941923876     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794941923876     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794941923876     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794941923876     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794941923876     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794941923876     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794941923876     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794941923876     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794941923876     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794941923876     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794941923876     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794941923876     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794941923876     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794941923876     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794941923876     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794941923876     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794941923876     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794941923876     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794941923876     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794941923876     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794941923876     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794941923876     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794941923876     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794941923876     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794941923876     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794941923876     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794941923876     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794941923876     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794941923876     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794941923876     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794941923876     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794941923876     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794941923876     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794941923876     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794941923876     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794941923876     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794941923876     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794941923876     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794941923876     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794941923876     53  D nativeloader: InitExtendedPublicLibraries: 
+1794941923876     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794941923876     55  D nativeloader: InitProductPublicLibraries: 
+1794941923876     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794941923876     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794941923876     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794941923876     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794941923876     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794941923876     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794941923876     62  W ziparchive: Unable to open '/data/app/webview-probe.dm': No such file or directory
+1794941923876     63  W ziparchive: Unable to open '/data/app/webview-probe.dm': No such file or directory
+1794941923876     64  D nativeloader: Configuring clns-2 for other apk /data/app/webview-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.webview
+1794941923876     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.webview/cache: chown failed: EINVAL (Invalid argument)
+1794941923876     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.webview/code_cache: chown failed: EINVAL (Invalid argument)
+1794941923876     67  V GraphicsEnvironment: Currently set values for:
+1794941923876     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794941923876     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794941923876     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.webview: false
+1794941923876     71  V GraphicsEnvironment: dev.acos.fixtures.webview is not listed in per-application setting
+1794941923876     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794941923876     73  W SystemServiceRegistry: No service published for: netstats
+1794941923876     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794941923876     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794941923876     76  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794941923876     77  D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED
+1794941923876     78  I WVProbe: hasSystemFeature(android.software.webview)=true
+1794941923876     79  I WVProbe: WebView.getCurrentWebViewPackage()=PackageInfo{d4fca10 com.android.webview}
+1794941923876     80  I WebViewFactory: Loading com.android.webview version 1.0 (code 1)
+1794941923876     81  W ziparchive: Unable to open '/data/app/webview-provider.dm': No such file or directory
+1794941923876     82  W ziparchive: Unable to open '/data/app/webview-provider.dm': No such file or directory
+1794941923876     83  D nativeloader: Configuring clns-3 for other apk /data/app/webview-provider.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib-extra/com.android.webview/x86_64, permitted_path=/data:/mnt/expand
+1794941923876     84  E WebViewLibraryLoader: can't load with relro file; address space not reserved
+1794941923876     85  I : WaitForGcToComplete blocked ClassLinker on Background for 5.797ms
+1794941923876     86  I ACOSWvProvider: create(WebViewDelegate present)
+1794941923876     87  I WVProbe: WebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{743970e VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview}
+1794941923876     88  I WVProbe: WebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{e923cc5 VFED..... ......I. 0,0-0,0 #7f010003 app:id/webview2}
+1794941923876     89  E logdw: dev.acos.fixtures.webview.MainActivity
+1794941923876     90  E logdw: dev.acos.fixtures.webview.MainActivity
+1794941923876     91  E logdw: dev.acos.fixtures.webview.MainActivity
+1794941923876     92  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794941923876     93  I ACOSWvProvider: view.create view=1 900x560 density=2.625 js=true
+1794941923876     94  I ACOSWvProvider: view.addJavascriptInterface acosBridge [report]
+1794941923876     95  I ACOSWvProvider: view.create view=2 900x560 density=2.625 js=true
+1794941923876     96  I ACOSWvProvider: view.settings applied useWideViewPort=true
+1794941923876     97  I ACOSWvProvider: view.settings applied loadWithOverviewMode=true
+1794941923876     98  I ACOSWvProvider: view.setViewport view=1 900x560 density=2.625
+1794941923876     99  I WVProbe: A laid out 900x560
+1794941923876    100  I ACOSWvProvider: view.setViewport view=2 900x560 density=2.625
+1794941923876    101  I WVProbe: B laid out 900x560
+1794941923876    102  I ACOSWvProvider: input.setFocus view=1 focused=false
+1794941923876    103  I ACOSWvProvider: input.setFocus view=1 focused=true
+1794941923876    104  I ACOSWvProvider: input.setFocus view=2 focused=false
+1794941923876    105  I ACOSWvProvider: onDraw view=1 900x560 dirty=true frame=none renderable=true attached=true
+1794941923876    106  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941923876    107  I ACOSWvProvider: requestFrame view=1 900x560 frame=none -> render #1
+1794941923876    108  I ACOSWvProvider: onDraw view=2 900x560 dirty=true frame=none renderable=true attached=true
+1794941923876    109  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941923876    110  I ACOSWvProvider: requestFrame view=2 900x560 frame=none -> render #1
+1794941923876    111  I ACOSWvProvider: view.loadUrl view=1 url=file:///android_asset/test.html
+1794941923876    112  I WVProbe: A loadUrl issued
+1794941923876    113  I ACOSWvProvider: view.loadUrl view=2 url=file:///android_asset/viewport-meta.html
+1794941923876    114  I WVProbe: B loadUrl issued
+1794941923876    115  I ACOSWvProvider: onDraw view=1 900x560 dirty=true frame=none renderable=true attached=true
+1794941923876    116  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941923876    117  I ACOSWvProvider: onDraw view=2 900x560 dirty=true frame=none renderable=true attached=true
+1794941923876    118  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941923876    119  I ACOSWvProvider: host request req.intercept id=h1
+1794941923876    120  I ACOSWvProvider: req.intercept asset test.html 436 bytes
+1794941924011    121  I ACOSWvProvider: host request req.intercept id=h2
+1794941924011    122  I ACOSWvProvider: req.intercept asset viewport-meta.html 328 bytes
+1794941924011    123  I ACOSWvProvider: view.loadUrl done view=1
+1794941924011    124  I WVProbe: A onPageFinished file:///android_asset/test.html
+1794941924011    125  I ACOSWvProvider: onDraw view=1 900x560 dirty=true frame=none renderable=true attached=true
+1794941924011    126  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 0, 0) bg=ffffffff
+1794941924011    127  I ACOSWvProvider: view.loadUrl done view=2
+1794941924011    128  I WVProbe: A viewport -> "343x1.00"
+1794941924011    129  I WVProbe: B onPageFinished file:///android_asset/viewport-meta.html
+1794941924011    130  I ACOSWvProvider: frame decoded view=1 343x213 seq=1 bytes=8536 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {1f83f7d}
+1794941924011    131  I WVProbe: A evaluateJavascript -> "acos asset page"
+1794941924011    132  I ACOSWvProvider: frame decoded view=2 343x213 seq=1 bytes=5342 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {1f83f7d}
+1794941924011    133  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 0, 0) bg=ffffffff
+1794941924011    134  I ACOSWvProvider: drawBitmap 343x213 -> 900x560 config=ARGB_8888 hw=false recycled=false
+1794941924011    135  I ACOSWvProvider: requestFrame view=1 900x560 frame=343x213 -> render #2
+1794941924011    136  I WVProbe: B viewport#0 -> "640x0.54"
+1794941924011    137  I WVProbe: B evaluateJavascript -> "acos meta page"
+1794941924011    138  I ACOSWvProvider: frame decoded view=1 343x213 seq=2 bytes=8536 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {1f83f7d}
+1794941924011    139  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 0, 0) bg=ffffffff
+1794941924011    140  I ACOSWvProvider: drawBitmap 343x213 -> 900x560 config=ARGB_8888 hw=false recycled=false
+1794941926526    141  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941926526    142  I ACOSWvProvider: drawBitmap 343x213 -> 900x560 config=ARGB_8888 hw=false recycled=false
+1794941926526    143  I ACOSWvProvider: requestFrame view=1 900x560 frame=343x213 -> render #3
+1794941926526    144  I ACOSWvProvider: onDraw view=2 900x560 dirty=true frame=present renderable=true attached=true
+1794941926526    145  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941926526    146  I ACOSWvProvider: host request js.call id=h3
+1794941926526    147  I ACOSWvProvider: drawBitmap 343x213 -> 900x560 config=ARGB_8888 hw=false recycled=false
+1794941926526    148  I ACOSWvProvider: requestFrame view=2 900x560 frame=343x213 -> render #2
+1794941926526    149  I WVProbe: JS->Java: tapped
+1794941926526    150  I ACOSWvProvider: frame decoded view=2 343x213 seq=2 bytes=5343 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {1f83f7d}
+1794941926526    151  I WVProbe: viewport arms: start (after the tap)
+1794941926526    152  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941926526    153  I ACOSWvProvider: drawBitmap 343x213 -> 900x560 config=ARGB_8888 hw=false recycled=false
+1794941926526    154  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941926526    155  I ACOSWvProvider: drawBitmap 343x213 -> 900x560 config=ARGB_8888 hw=false recycled=false
+1794941926526    156  I WVProbe: arm 2: wide, page without <meta viewport>
+1794941926526    157  I ACOSWvProvider: view.loadUrl view=2 url=data:text/html;base64,PCFkb2N0eXBlIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0ndXRmLTgnPjx0aXRsZT5hY29zIGRhdGEgcGFnZTwvdGl0bGU+PC9oZWFkPjxib2R5IHN0eWxlPSdmb250OjE4cHggc2Fucy1zZXJpZic+PGgxIGlkPWggc3R5bGU9J2ZvbnQtc2l6ZToyNHB4O21hcmdpbjo4cHggMCc+YWNvcyBkYXRhIHBhZ2U8L2gxPjxkaXYgaWQ9b3V0IHN0eWxlPSdmb250OjE2cHggc2Fucy1zZXJpZic+ZGF0YSBwYWdlIGJvZHk8L2Rpdj48L2JvZHk+PC9odG1sPg==
+1794941926526    158  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941926526    159  I ACOSWvProvider: drawBitmap 343x213 -> 900x560 config=ARGB_8888 hw=false recycled=false
+1794941926526    160  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941926526    161  I ACOSWvProvider: view.loadUrl done view=2
+1794941926526    162  I ACOSWvProvider: drawBitmap 343x213 -> 900x560 config=ARGB_8888 hw=false recycled=false
+1794941926526    163  I ACOSWvProvider: requestFrame view=2 900x560 frame=343x213 -> render #3
+1794941926526    164  I WVProbe: B onPageFinished data:text/html;base64,…
+1794941926526    165  I ACOSWvProvider: frame decoded view=2 343x213 seq=3 bytes=3666 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {1f83f7d}
+1794941926526    166  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941926526    167  I ACOSWvProvider: drawBitmap 343x213 -> 900x560 config=ARGB_8888 hw=false recycled=false
+1794941926526    168  I ACOSWvProvider: requestFrame view=2 900x560 frame=343x213 -> render #4
+1794941926526    169  I WVProbe: B evaluateJavascript -> "acos data page"
+1794941926526    170  I WVProbe: B viewport#1 -> "980x0.35"
+1794941926526    171  I ACOSWvProvider: frame decoded view=2 343x213 seq=4 bytes=3666 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {1f83f7d}
+1794941926526    172  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941926526    173  I ACOSWvProvider: drawBitmap 343x213 -> 900x560 config=ARGB_8888 hw=false recycled=false
+1794941926526    174  I WVProbe: arm 3: back to the default (narrow) arm
+1794941926526    175  I ACOSWvProvider: view.settings applied useWideViewPort=false
+1794941926526    176  I ACOSWvProvider: view.settings applied loadWithOverviewMode=false
+1794941926526    177  I ACOSWvProvider: view.loadUrl view=2 url=data:text/html;base64,PCFkb2N0eXBlIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0ndXRmLTgnPjx0aXRsZT5hY29zIGRhdGEgcGFnZTwvdGl0bGU+PC9oZWFkPjxib2R5IHN0eWxlPSdmb250OjE4cHggc2Fucy1zZXJpZic+PGgxIGlkPWggc3R5bGU9J2ZvbnQtc2l6ZToyNHB4O21hcmdpbjo4cHggMCc+YWNvcyBkYXRhIHBhZ2U8L2gxPjxkaXYgaWQ9b3V0IHN0eWxlPSdmb250OjE2cHggc2Fucy1zZXJpZic+ZGF0YSBwYWdlIGJvZHk8L2Rpdj48L2JvZHk+PC9odG1sPg==
+1794941926526    178  I ACOSWvProvider: view.loadUrl done view=2
+1794941926526    179  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941926526    180  I ACOSWvProvider: requestFrame view=2 900x560 frame=343x213 -> render #5
+1794941926526    181  I WVProbe: B onPageFinished data:text/html;base64,…
+1794941926526    182  I ACOSWvProvider: frame decoded view=2 343x213 seq=5 bytes=7764 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {1f83f7d}
+1794941926526    183  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff
+1794941926526    184  I ACOSWvProvider: requestFrame view=2 900x560 frame=343x213 -> render #6
+1794941926526    185  I WVProbe: B evaluateJavascript -> "acos data page"
+1794941926526    186  I WVProbe: B viewport#2 -> "343x1.00"
+1794941926526    187  I ACOSWvProvider: frame decoded view=2 343x213 seq=6 bytes=7764 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {1f83f7d}
+1794941926526    188  I ACOSWvProvider: onDraw canvas=android.view.Surface$CompatibleCanvas clip=Rect(0, 0 - 900, 560) bg=ffffffff

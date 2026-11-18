@@ -1,0 +1,12 @@
+package=dev.acos.fixtures.webview
+activity=dev.acos.fixtures.webview.MainActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@8d567e4
+timeout_ms=12000
+first_traversal=unknown
+draw_skip=none
+back_dispatcher=ahead_of_time=false mDefaultBackCallback=null top_callback=null
+post_resume_failure=java.lang.RuntimeException: ACOS WebView provider: view.create failed: com.android.webview.chromium.AcosWebViewTransport$TransportException: NO_VIEW: NO_VIEW: the engine restarted; the session's context is gone and the provider must re-create its views

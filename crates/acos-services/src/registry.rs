@@ -298,7 +298,13 @@ pub fn install_with_handles_and_insets(
     )));
     let window_id = host.register_aux("android.view.IWindowId");
     let session_state = Arc::clone(&wms_state);
-    let input_host = crate::window_session::input_dispatch::InputHost::from_env();
+    // WVTAP: the input host owns the **one** input routing rule, so it needs the
+    // layer stack: a touch goes to the window under the point
+    // (`InputDispatcher::findTouchedWindowAt`), a key to the focused window.
+    // Passing the stack is what stops each caller from choosing a target by
+    // registration order or focus.
+    let input_host = crate::window_session::input_dispatch::InputHost::from_env()
+        .with_window_stack(Arc::clone(&wms_state));
     // MODA11Y4: `performGlobalAction(GLOBAL_ACTION_BACK)` goes through the same
     // InputChannel as a scenario `back`, so keep a handle before the session
     // service takes the original.

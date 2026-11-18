@@ -150,20 +150,40 @@ public final class AcosWebViewTransport {
             final String op;
             final BlockingQueue<Frame> frames = new LinkedBlockingQueue<>(1);
             private JSONObject held;
+            private byte[] heldBlob;
 
             Pending(String op) {
                 this.op = op;
             }
 
-            /** Hold a `render` response until its BLOB arrives (`WIRE.md` §1). */
+            /**
+             * Hold the JSON half of a `render` response until its BLOB arrives
+             * (`WIRE.md` §1). Both halves are matched to **this** request by
+             * the id they carry, so two views rendering at once never complete
+             * each other's request (WVTAP: the old code took "the first pending
+             * render", so with two WebViews one caller got the other view's
+             * pixels and the other waited out its 30 s timeout).
+             */
             synchronized void hold(JSONObject json) {
                 held = json;
+                flush();
             }
 
-            synchronized JSONObject release() {
+            /** Hold the BLOB half; completes the frame once the JSON is here. */
+            synchronized void holdBlob(byte[] blob) {
+                heldBlob = blob;
+                flush();
+            }
+
+            private void flush() {
+                if (held == null || heldBlob == null) {
+                    return;
+                }
                 JSONObject json = held;
+                byte[] blob = heldBlob;
                 held = null;
-                return json;
+                heldBlob = null;
+                frames.offer(new Frame(json, blob));
             }
         }
 
@@ -291,8 +311,7 @@ public final class AcosWebViewTransport {
                     } else if (kind == KIND_BLOB) {
                         // A BLOB follows its `render` JSON response; the JSON
                         // frame waiting on the queue is completed with it.
-                        byte[] blob = decodeBlob(body);
-                        dispatchBlob(blob);
+                        dispatchBlob(decodeBlob(body));
                     } else {
                         throw new TransportException("BAD_FRAME", "kind " + kind);
                     }
@@ -364,13 +383,17 @@ public final class AcosWebViewTransport {
         }
 
         /** `WIRE.md` §1 BLOB: nid, id, format, w, h, stride, seq, data. */
-        private byte[] decodeBlob(byte[] body) throws TransportException {
+        private BlobId decodeBlob(byte[] body) throws TransportException {
             int p = 0;
             int nid = readInt(body, p);
             p += 4;
             if (nid < 0 || p + nid > body.length) {
                 throw new TransportException("BAD_FRAME", "BLOB id length " + nid);
             }
+            // The BLOB carries the id of the `render` request it answers
+            // (`encode_blob` writes `blob.id`). It is the only thing that says
+            // *which* render it belongs to when two views pull at once.
+            String id = new String(body, p, nid, StandardCharsets.UTF_8);
             p += nid;
             if (p + 1 + 16 > body.length) {
                 throw new TransportException("BAD_FRAME", "BLOB header truncated");
@@ -380,7 +403,18 @@ public final class AcosWebViewTransport {
             p += 8; // seq
             byte[] data = new byte[body.length - p];
             System.arraycopy(body, p, data, 0, data.length);
-            return data;
+            return new BlobId(id, data);
+        }
+
+        /** A decoded BLOB: the request id it answers, and its pixels. */
+        private static final class BlobId {
+            final String id;
+            final byte[] data;
+
+            BlobId(String id, byte[] data) {
+                this.id = id;
+                this.data = data;
+            }
         }
 
         private static int readInt(byte[] b, int off) {
@@ -439,26 +473,21 @@ public final class AcosWebViewTransport {
             slot.frames.offer(frame);
         }
 
-        private void dispatchBlob(byte[] blob) {
-            // The BLOB of a `render` completes the response held for it.
+        private void dispatchBlob(BlobId blob) {
+            // The BLOB of a `render` completes **that** request, matched by the
+            // id the BLOB carries -- never "some pending render".
             Pending slot;
             synchronized (pending) {
-                slot = null;
-                for (Pending candidate : pending.values()) {
-                    if ("render".equals(candidate.op)) {
-                        slot = candidate;
-                        break;
-                    }
-                }
+                slot = pending.get(blob.id);
             }
-            if (slot == null) {
+            if (slot == null || !"render".equals(slot.op)) {
+                // No silent drop: a BLOB nobody asked for is a protocol fault
+                // (the wire's id is the only thing that binds it to a caller).
+                android.util.Log.w(WebViewChromiumCore.TAG, "BLOB for unknown render request " + blob.id
+                        + " (" + blob.data.length + " bytes) dropped");
                 return;
             }
-            JSONObject held = slot.release();
-            if (held == null) {
-                return;
-            }
-            slot.frames.offer(new Frame(held, blob));
+            slot.holdBlob(blob.data);
         }
     }
 }
