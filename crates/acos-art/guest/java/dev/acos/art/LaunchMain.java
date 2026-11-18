@@ -2317,6 +2317,10 @@ public final class LaunchMain {
         if (type >= 0) sb.append(",\"type\":").append(type);
         // FLAG_NOT_TOUCHABLE (0x10): the same bit the WMS reads.
         sb.append(",\"touch\":").append((flags & 0x10) == 0);
+        // HWFALLBACK: the window asked for FLAG_HARDWARE_ACCELERATED (0x01000000)
+        // but the guest has no window GPU renderer (disableWindowRenderer), so it
+        // paints in software. The host turns this into a verdict note.
+        if ((flags & 0x01000000) != 0) sb.append(",\"hw_fallback\":true");
         boolean focus = false;
         try {
             focus = root.hasWindowFocus();

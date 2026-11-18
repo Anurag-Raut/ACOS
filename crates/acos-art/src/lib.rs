@@ -2653,6 +2653,7 @@ mod tests {
     /// comes from the per-run root; the shared `<data>` tree is never bound.
     #[test]
     fn run_root_makes_shared_inputs_read_only() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let data = scratch_dir("run-root");
         for d in [
             "system/environ",
@@ -2791,6 +2792,7 @@ mod tests {
     /// `<run>/wv/webview.sock` (or `$ACOS_WEBVIEW_SOCKET_DIR/webview.sock`).
     #[test]
     fn run_root_maps_the_webview_session_socket() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let data = scratch_dir("webview-socket");
         for d in [
             "system/environ",
@@ -2880,6 +2882,7 @@ mod tests {
     /// application uids without any host privilege.
     #[test]
     fn sandbox_runs_a_process_as_the_uid_its_package_owns() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let data = scratch_dir("uid");
         fs::create_dir_all(data.join("system/environ")).unwrap();
         fs::write(
@@ -3009,6 +3012,7 @@ mod tests {
     /// `--setenv` list and nothing else, and the debug/exec tail is intact.
     #[test]
     fn sandbox_argv_hardens_before_first_mount() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let data = scratch_dir("argv");
         fs::create_dir_all(data.join("system/environ")).unwrap();
         fs::write(
