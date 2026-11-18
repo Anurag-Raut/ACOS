@@ -101,14 +101,11 @@ fn cpu_ticks() -> u64 {
 
 #[test]
 fn parked_looper_with_second_thread_burns_no_cpu() {
-    let Some(dex) = compile_block_mt() else {
-        eprintln!("SKIP parked_looper_with_second_thread_burns_no_cpu: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_block_mt(), "parked_looper_with_second_thread_burns_no_cpu", "javac/d8 unavailable") else {
         return;
     };
     if acos_vm::vm::default_boot_dir(None).is_none() {
-        eprintln!(
-            "SKIP parked_looper_with_second_thread_burns_no_cpu: boot-classpath cache absent"
-        );
+        acos_test_support::require_prereq(false, "parked_looper_with_second_thread_burns_no_cpu", "parked_looper_with_second_thread_burns_no_cpu: boot-classpath cache absent");
         return;
     }
     // The VM is not `Send`; build and run it entirely on the helper thread.
@@ -122,7 +119,7 @@ fn parked_looper_with_second_thread_burns_no_cpu() {
         }) {
             Ok(vm) => vm,
             Err(VmError::BootClasspathMissing(msg)) => {
-                eprintln!("SKIP parked_looper_with_second_thread_burns_no_cpu: {msg}");
+                acos_test_support::require_prereq(false, "parked_looper_with_second_thread_burns_no_cpu", &format!("parked_looper_with_second_thread_burns_no_cpu: {msg}"));
                 return;
             }
             Err(e) => panic!("Vm::new(CoreLib::Real) failed: {e}"),

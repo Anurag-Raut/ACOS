@@ -614,11 +614,11 @@ fn pipeline_generated_layouts_match_art_reference() {
 
     for scene in SCENES {
         if !acos_test_support::have_fixture(scene.reference) {
-            eprintln!("SKIP {}: missing reference {}", scene.app, scene.reference);
+            acos_test_support::require_prereq(false, "pipeline_generated_layouts_match_art_reference", &format!("{}: missing reference {}", scene.app, scene.reference));
             continue;
         }
         if !acos_test_support::have_fixture(&format!("fixtures/build/apps/{}.apk", scene.app)) {
-            eprintln!("SKIP {}: missing fixture apk", scene.app);
+            acos_test_support::require_prereq(false, "pipeline_generated_layouts_match_art_reference", &format!("{}: missing fixture apk", scene.app));
             continue;
         }
         eprintln!("RENDER-VIEWS scene {} start", scene.app);

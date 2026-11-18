@@ -218,7 +218,7 @@ fn font_natives_typeface_and_measure_on_the_real_framework() {
     let out = match run_case() {
         Ok(out) => out,
         Err(m) => {
-            eprintln!("SKIP font_natives_typeface_and_measure_on_the_real_framework: {m}");
+            acos_test_support::require_prereq(false, "font_natives_typeface_and_measure_on_the_real_framework", &format!("font_natives_typeface_and_measure_on_the_real_framework: {m}"));
             return;
         }
     };

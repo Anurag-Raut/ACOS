@@ -174,7 +174,7 @@ fn native_memory_round_trips_on_the_real_framework() {
     let out = match run_case() {
         Ok(out) => out,
         Err(m) => {
-            eprintln!("SKIP native_memory_round_trips_on_the_real_framework: {m}");
+            acos_test_support::require_prereq(false, "native_memory_round_trips_on_the_real_framework", &format!("native_memory_round_trips_on_the_real_framework: {m}"));
             return;
         }
     };
