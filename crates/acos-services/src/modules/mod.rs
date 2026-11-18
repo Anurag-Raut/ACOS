@@ -2,6 +2,7 @@
 
 pub mod accessibility;
 pub mod biometric;
+pub mod camera;
 pub mod bluetooth;
 pub mod location;
 pub mod network;

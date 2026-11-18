@@ -1141,9 +1141,9 @@ pub const TOMBSTONES: &[Tombstone] = &[
         name: "media.camera",
         descriptor: "android.hardware.ICameraService",
         module: "hw.camera",
-        reason: "no camera HAL",
+        reason: "no camera attached (module `hw.camera` is off)",
         reaction: AospReaction::Null,
-        evidence: "CameraManager reaches the camera service from native code (CameraManagerGlobal), not through the Java ServiceManager path; the module must provide the HAL seam, so a Java tombstone would be bypassed",
+        evidence: "CameraManagerGlobal.getCameraService() reads the name with ServiceManager.getService (the Java path, `CameraManager.java`) and its clients already build a working \"no camera on this device\" answer out of `null` (`getCameraIdList()` returns `new String[0]`, `getCameraCharacteristics` throws `IllegalArgumentException` for an unknown id), so a throwing tombstone would turn a handled path into a binder exception; the `hw.camera` module fills this name when attached (off/stub today, docs/CAMERA_PLAN.md)",
     },
     Tombstone {
         name: "media_session",
@@ -1296,6 +1296,7 @@ impl ModuleRegistry {
             Box::new(crate::modules::biometric::BiometricModule::new()),
             Box::new(crate::modules::network::NetworkModule::new()),
             Box::new(crate::modules::webview::WebviewModule::new()),
+            Box::new(crate::modules::camera::CameraModule::new()),
         ]
         .into_iter()
         .chain(crate::modules::tail_stubs::modules())
