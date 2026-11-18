@@ -1,0 +1,6 @@
+acos-webview: shared broker on /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d/.cache/rt-wvtail/fair20-16/broker.sock (engine=157.0.8103.78, idle=0s, pid=578368)
+acos-webview: input touch touchStart on view 2 NOT acked after 501ms
+acos-webview: input touch touchEnd on view 2 NOT acked after 451ms
+acos-webview: slow op view.evaluateJavascript view=2 id=g35 took 3819ms
+acos-webview: slow op render view=2 id=g34 took 3839ms
+acos-webview: slow op view.evaluateJavascript view=2 id=g36 took 3819ms

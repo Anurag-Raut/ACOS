@@ -1,0 +1,42 @@
+acos-webview: shared broker on /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d/.cache/rt-wvtail/fair20-15/broker.sock (engine=157.0.8103.78, idle=0s, pid=577749)
+acos-webview: input touch touchStart on view 2 NOT acked after 501ms
+acos-webview: input touch touchEnd on view 2 NOT acked after 552ms
+acos-webview: slow op view.evaluateJavascript view=2 id=g35 took 3819ms
+acos-webview: slow op view.evaluateJavascript view=2 id=g34 took 3819ms
+acos-webview: slow op render view=2 id=g33 took 3837ms
+acos-webview: slow op ax view=2 id=g45 took 2017ms
+acos-webview: slow op ax view=2 id=g42 took 2601ms
+acos-webview: engine pid=577759 generation=1 died (watcher restart): exit status signal: 9 (SIGKILL); stderr tail (last 32 line(s)):
+[1118/105151.840066:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105151.840282:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105151.840297:WARNING:dbus/object_proxy.cc:439] Failed to connect to NameOwnerChanged signal for object: /org/freedesktop/portal/desktop
+[1118/105151.840304:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105151.840308:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105151.846169:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1118/105151.846206:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105151.846463:WARNING:sandbox/policy/linux/sandbox_linux.cc:405] InitializeSandbox() called with multiple threads in process gpu-process.
+[1118/105151.847453:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1118/105151.898239:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105152.481993:ERROR:content/gpu/gpu_child_thread.cc:70] Mojo error in GPU process: Received bad user message: Got overlapping IssueExternalBeginFrame
+[1118/105152.658952:ERROR:content/browser/gpu/gpu_process_host.cc:1042] GPU process exited unexpectedly: exit_code=133
+[1118/105152.658965:WARNING:content/browser/gpu/gpu_process_host.cc:1501] The GPU process has crashed 1 time(s)
+[1118/105152.659087:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105152.659125:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105152.665283:WARNING:sandbox/policy/linux/sandbox_linux.cc:405] InitializeSandbox() called with multiple threads in process gpu-process.
+[1118/105152.665975:WARNING:content/browser/gpu/gpu_process_host.cc:1064] Reinitialized the GPU process after a crash. The reported initialization time was 5 ms
+[1118/105152.810402:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105152.990822:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.016520:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.166950:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.317448:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.342904:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.368347:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.519108:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.544610:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.695026:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.720565:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.746003:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.896388:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.921945:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+[1118/105153.947276:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+acos-webview: session wv: engine restarted (restart 1, generation 1), dropped 2 view(s): every target died with the engine

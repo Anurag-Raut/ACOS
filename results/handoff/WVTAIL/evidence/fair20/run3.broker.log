@@ -1,0 +1,21 @@
+acos-webview: shared broker on /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d/.cache/rt-wvtail/fair20-3/broker.sock (engine=157.0.8103.78, idle=0s, pid=560251)
+acos-webview: slow op view.evaluateJavascript view=2 id=g36 took 3840ms
+acos-webview: slow op view.evaluateJavascript view=2 id=g35 took 3840ms
+acos-webview: input touch touchStart on view 2 acked after 3840ms
+acos-webview: slow op input.touch view=2 id=g40 took 5372ms
+acos-webview: slow op ax view=2 id=g34 took 7701ms
+acos-webview: input touch touchEnd on view 2 acked after 1919ms
+acos-webview: slow op input.touch view=2 id=g41 took 3838ms
+acos-webview: slow op render view=2 id=g47 took 1919ms
+acos-webview: engine pid=560261 generation=1 died (watcher restart): exit status signal: 9 (SIGKILL); stderr tail (last 10 line(s)):
+[1118/105007.593552:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105007.593793:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105007.593808:WARNING:dbus/object_proxy.cc:439] Failed to connect to NameOwnerChanged signal for object: /org/freedesktop/portal/desktop
+[1118/105007.593817:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105007.593827:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105007.599468:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1118/105007.599495:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105007.600145:WARNING:sandbox/policy/linux/sandbox_linux.cc:405] InitializeSandbox() called with multiple threads in process gpu-process.
+[1118/105007.600754:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1118/105007.649099:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+acos-webview: session wv: engine restarted (restart 1, generation 1), dropped 2 view(s): every target died with the engine
