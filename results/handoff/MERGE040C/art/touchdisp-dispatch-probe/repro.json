@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/fixtures/build/apps/touch-probe.apk",
+  "apk_sha256": "57c392feeb1170129a14a9c7088091cb150fd137cc07922e7654445fbebb8527",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/scenarios/touchdisp-dispatch-probe.yaml",
+  "scenario_sha256": "db64daaa7d3aa54442668e962f0dda07b5e2becc2193dba8b772e25346bc7974",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

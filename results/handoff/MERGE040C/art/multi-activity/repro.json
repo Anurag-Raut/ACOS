@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/fixtures/build/apps/multi-activity.apk",
+  "apk_sha256": "0533d0fda738a794f7e5e38cbd69d81d4837a8930b711b0b9dbd96c49d6ef515",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/scenarios/multi-activity.yaml",
+  "scenario_sha256": "e214dd80e703219ed364c4265194560bc1fef753b348bc4cbff1d4358c01d3f1",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}
